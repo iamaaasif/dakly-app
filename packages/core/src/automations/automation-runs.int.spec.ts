@@ -8,6 +8,7 @@ import type { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
+import { countSmsParts } from '@dakly/contracts/sms';
 import { createDatabase } from '@dakly/db/client';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
@@ -649,8 +650,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             [runId],
           )
         ).rows;
+      let inFlight: Awaited<ReturnType<typeof retryFields>> = [];
       // The provider takes the message but the answer is lost.
       vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        inFlight = await retryFields();
         await sms.send(message);
         throw new Error('socket hang up');
       });
@@ -661,7 +664,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(started).toMatchObject({ outcome: 'sending', opt_out_url: expect.any(String) });
 
       expect(started.opt_out_url).toContain(`${firstLinkBase}/s/`);
-      expect(await retryFields()).toEqual([
+      expect(inFlight).toEqual([
         {
           destination_hash: expect.stringMatching(/^[a-f0-9]{64}$/u),
           opt_out_url: started.opt_out_url,
@@ -689,17 +692,21 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         text: `নতুন কালেকশন এসেছে\n${started.opt_out_url}`,
       });
       const link = await admin.pool.query(
-        'select kind,source_type,contact_id from tracked_links where code=$1',
-        [code],
+        "select kind,code from tracked_links where store_id=$1 and source_type='automation' and contact_id=$2",
+        [storeId, contact],
       );
-      expect(link.rows).toEqual([
-        { kind: 'sms_opt_out', source_type: 'automation', contact_id: contact },
-      ]);
+      expect(link.rows).toEqual([{ kind: 'sms_opt_out', code }]);
       expect(await retryFields()).toEqual([
         { destination_hash: null, opt_out_url: null, first_tried_at: daytime },
       ]);
       expect(await sendStep(runId!)).toEqual([
         expect.objectContaining({ outcome: 'sent', category: 'marketing', channel: 'sms' }),
+      ]);
+      const parts = countSmsParts(sent[0]!.text);
+      expect(await ledgerFor(runId!)).toEqual([
+        { kind: 'reserve', delta: -parts },
+        { kind: 'release', delta: parts },
+        { kind: 'charge', delta: -parts },
       ]);
       expect((await run(runId!)).current_step_key).toBe('end');
     });
@@ -807,7 +814,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const {
         runIds: [runId],
       } = await dueRuns(send('transactional'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValue(new Error('connection refused'));
+      const driver = vi.mocked(MailpitSmsDriver.prototype.send);
+      driver.mockImplementationOnce(async (message) => {
+        await sms.send(message);
+        throw new Error('socket hang up');
+      });
 
       await runDueStep(runner, runId!);
       const retrying = await admin.pool.query(
@@ -824,6 +835,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await wakeNow(runId!);
       await runDueStep(runner, runId!);
 
+      expect(sentFor(runId!)).toHaveLength(1);
+      expect(
+        driver.mock.calls.filter(([message]) => message.idempotencyKey === `run:${runId}:first`),
+      ).toHaveLength(1);
       const failed = await admin.pool.query(
         'select status,last_error,finished_at from automation_runs where id=$1',
         [runId],
@@ -837,6 +852,42 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
       // The provider may have taken it, so the credits stay reserved for reconciliation.
       expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+    });
+
+    it('waits out quiet hours that start during the retry phone lookup', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      clockNow = new Date(opensAt.getTime() + 11 * HOUR);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const driver = vi.mocked(MailpitSmsDriver.prototype.send);
+      driver.mockRejectedValueOnce(new Error('socket hang up'));
+      await runDueStep(runner, runId!);
+      await wakeNow(runId!);
+
+      const read = ContactsService.prototype.getPhoneForSend;
+      const phone = vi
+        .spyOn(ContactsService.prototype, 'getPhoneForSend')
+        .mockImplementationOnce(async function (storeId, contactId) {
+          const value = await read.call(this, storeId, contactId);
+          clockNow = new Date(opensAt.getTime() + 12 * HOUR);
+          return value;
+        });
+      try {
+        await runDueStep(runner, runId!);
+
+        expect(phone).toHaveBeenCalledTimes(1);
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await run(runId!)).toMatchObject({
+          status: 'waiting',
+          wake_at: new Date(opensAt.getTime() + 24 * HOUR - 30 * MINUTE),
+        });
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+        expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+      } finally {
+        phone.mockRestore();
+      }
     });
 
     it('releases credits and leaves the cap free when the final contact lookup fails', async () => {

@@ -141,6 +141,7 @@ describe('AutomationRunsService', () => {
   let recheckDefer: Date | undefined;
   let duringRecheck: () => void;
   let duringPhoneRead: () => void;
+  let finalQuietUntil: Date | undefined;
   let contactPhone: string;
   let reported: string[];
   let sent: OutgoingMessage[];
@@ -192,6 +193,7 @@ describe('AutomationRunsService', () => {
     recheckDefer = undefined;
     duringRecheck = () => undefined;
     duringPhoneRead = () => undefined;
+    finalQuietUntil = undefined;
     contactPhone = '01712345678';
     reported = [];
     sent = [];
@@ -279,6 +281,12 @@ describe('AutomationRunsService', () => {
         if (!(await lockWorkflow())) return undefined;
         return { decision, at: clockNow };
       },
+      recheckQuietHoursForDispatch: async () => ({
+        decision: finalQuietUntil
+          ? { action: 'defer' as const, until: finalQuietUntil }
+          : { action: 'send' as const },
+        at: clockNow,
+      }),
     };
     const reporter = { reportJob: (_error: unknown, id: string) => reported.push(id) };
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
@@ -659,6 +667,7 @@ describe('AutomationRunsService', () => {
       await start(send);
       providerError = undefined;
       clockNow = new Date(now.getTime() - 50);
+      databaseNow = now;
       repository.run = { ...repository.run, status: 'running', claimedAt: clockNow };
 
       await service.continueRun(
@@ -812,6 +821,7 @@ describe('AutomationRunsService', () => {
       'invalid URL',
       'transactional URL',
       'no first attempt time',
+      'future first attempt time',
       'known provider ID',
     ] as const)('does not submit an uncertain send again with %s', async (badData) => {
       providerError = new Error('connection reset');
@@ -821,6 +831,8 @@ describe('AutomationRunsService', () => {
       if (badData === 'invalid URL') previous.optOutUrl = 'https://links.dakly.test/other';
       if (badData === 'transactional URL') previous.optOutUrl = optOutUrl;
       if (badData === 'no first attempt time') delete previous.firstTriedAt;
+      if (badData === 'future first attempt time')
+        previous.firstTriedAt = new Date(now.getTime() + HOUR);
       if (badData === 'known provider ID') previous.providerMessageId = 'accepted-before-crash';
       providerError = undefined;
       repository.run = { ...repository.run, status: 'running', claimedAt: now };
@@ -866,6 +878,28 @@ describe('AutomationRunsService', () => {
       expect(repository.steps).toEqual([
         expect.objectContaining({ outcome: 'unconfirmed', firstTriedAt }),
       ]);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
+    });
+
+    it('defers a marketing retry when quiet hours start during the final phone read', async () => {
+      providerError = new Error('connection reset');
+      await start(send);
+      providerError = undefined;
+      const until = new Date(now.getTime() + HOUR);
+      duringPhoneRead = () => {
+        finalQuietUntil = until;
+      };
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toEqual([]);
+      expect(repository.run).toMatchObject({ status: 'waiting', wakeAt: until });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
     });
 
