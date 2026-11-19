@@ -151,6 +151,11 @@ describe('AutomationsService (Postgres)', () => {
       'AUTOMATION_TRIGGER_UNAVAILABLE',
     ],
     [
+      'a trigger that needs workflow link taps',
+      { ...welcome, trigger: { key: 'link_tapped', filters: [] } },
+      'AUTOMATION_TRIGGER_UNAVAILABLE',
+    ],
+    [
       'a trigger that needs channel connections',
       { ...welcome, trigger: { key: 'chat_started', filters: [] } },
       'AUTOMATION_TRIGGER_UNAVAILABLE',
@@ -293,15 +298,18 @@ describe('AutomationsService (Postgres)', () => {
   it('changes the live trigger only on publish', async () => {
     const automation = await draft();
     await service.publish(storeA, automation.id, owner);
-    const tapped: AutomationGraph = { ...welcome, trigger: { key: 'link_tapped', filters: [] } };
+    const tagged: AutomationGraph = {
+      ...welcome,
+      trigger: { key: 'tag_added', filters: [{ field: 'tag', tag: 'ভিআইপি' }] },
+    };
     const triggerType = async () =>
       (await admin.pool.query('select trigger_type from automations where id=$1', [automation.id]))
         .rows[0].trigger_type;
 
-    await service.change(storeA, automation.id, { graph: tapped }, staff);
+    await service.change(storeA, automation.id, { graph: tagged }, staff);
     expect(await triggerType()).toBe('consent_given');
     await service.publish(storeA, automation.id, owner);
-    expect(await triggerType()).toBe('link_tapped');
+    expect(await triggerType()).toBe('tag_added');
   });
 
   it('numbers two publishes at the same moment 1 and 2', async () => {

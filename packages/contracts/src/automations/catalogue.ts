@@ -95,7 +95,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     source: { event: 'message.tapped' },
     filters: { channel: 'optional' },
     needs: null,
-    availableBefore: 'channels',
+    availableBefore: null,
   },
   birthday: {
     source: { schedule: 'daily' },
