@@ -3443,6 +3443,32 @@ describe('every production shop route isolates its data', () => {
     expect((await success(b, 'GET', url, 200)).json().mediaFileIds).toEqual([ownPhoto]);
   });
 
+  it('keeps an unchanged expired photo editable in a Facebook draft', async () => {
+    const shop = await f.shop();
+    const fileId = await seedPostPhoto(shop);
+    const channelConnectionId = await seedChannel(shop);
+    const draft = await f.request(
+      shop.owner,
+      'POST',
+      '/posts',
+      {
+        mediaFileIds: [fileId],
+        targets: [{ channelConnectionId, captionOverride: null }],
+      },
+      { 'idempotency-key': randomUUID() },
+    );
+    expect(draft.statusCode, draft.body).toBe(201);
+    await f.admin.pool.query('update files set expires_at=$1 where store_id=$2 and id=$3', [
+      new Date('2000-01-01T00:00:00Z'),
+      shop.id,
+      fileId,
+    ]);
+    const edited = await success(shop, 'PATCH', `/posts/${draft.json().id}`, 200, {
+      caption: 'নতুন পাঞ্জাবি',
+    });
+    expect(edited.json()).toMatchObject({ caption: 'নতুন পাঞ্জাবি', mediaFileIds: [fileId] });
+  });
+
   it('requires JPEG photos before saving or approving an Instagram target', async () => {
     const shop = await f.shop();
     const page = await seedChannel(shop);
