@@ -412,11 +412,6 @@ export class AutomationRunsService {
       const planned = await this.authorizeFirstSend(claim, step, facts, null);
       return 'stop' in planned ? planned.stop : undefined;
     }
-    const at = await this.repository.schedulerTime(facts.storeId);
-    return {
-      ...failed(error.message, at),
-      claim,
-      step: { stepKey: claim.stepKey, kind: 'send', category: step.category, outcome: 'failed' },
-    };
+    throw error;
   }
 }

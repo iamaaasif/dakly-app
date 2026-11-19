@@ -962,24 +962,57 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(sentFor(second.runIds[0]!)).toHaveLength(1);
     });
 
-    it('never reserves when the preparation phone lookup fails', async () => {
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      const {
-        runIds: [runId],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      const phone = vi
-        .spyOn(ContactsService.prototype, 'getPhoneForSend')
-        .mockRejectedValueOnce(new Error('database unavailable'));
-      try {
+    it.each([false, true])(
+      'leaves a failed preparation for lease recovery, paused=%s',
+      async (pause) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const {
+          automationId,
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        const phone = vi
+          .spyOn(ContactsService.prototype, 'getPhoneForSend')
+          .mockImplementationOnce(async () => {
+            if (pause)
+              await admin.pool.query("update automations set status='paused' where id=$1", [
+                automationId,
+              ]);
+            throw new Error('database unavailable');
+          });
+        try {
+          await expect(runDueStep(runner, runId!)).rejects.toMatchObject({
+            code: 'MESSAGING_PREPARATION_FAILED',
+          });
+        } finally {
+          phone.mockRestore();
+        }
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([]);
+        expect(await ledgerFor(runId!)).toEqual([]);
+        expect(await run(runId!)).toMatchObject({ status: 'running', current_step_key: 'first' });
+        if (pause)
+          await admin.pool.query("update automations set status='active' where id=$1", [
+            automationId,
+          ]);
+        await admin.pool.query(
+          "update automation_runs set claimed_at=now() - interval '6 minutes' where id=$1",
+          [runId],
+        );
+        const oldJob = (await runner.queue.getJobs(['waiting'])).find(
+          (job) => job.data.automationRunId === runId,
+        );
+        await oldJob?.remove();
         await runDueStep(runner, runId!);
-      } finally {
-        phone.mockRestore();
-      }
-      expect(sentFor(runId!)).toEqual([]);
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'failed' })]);
-      expect(await ledgerFor(runId!)).toEqual([]);
-    });
+        expect(sentFor(runId!)).toHaveLength(1);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+        expect(await ledgerFor(runId!)).toEqual([
+          { kind: 'reserve', delta: -1 },
+          { kind: 'release', delta: 1 },
+          { kind: 'charge', delta: -1 },
+        ]);
+      },
+    );
 
     it.each([
       ['before gate', 'skip'],

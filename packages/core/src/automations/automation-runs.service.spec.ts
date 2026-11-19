@@ -128,7 +128,6 @@ describe('AutomationRunsService', () => {
   let sent: OutgoingMessage[];
   let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
-  let preparationError: Error | undefined;
   let schedulerUnavailable: 'during submission' | 'after authorization' | undefined;
   let submissionChecked: boolean;
   let submissionCommitted: boolean;
@@ -176,7 +175,6 @@ describe('AutomationRunsService', () => {
     decision = { action: 'send' };
     sent = [];
     providerError = undefined;
-    preparationError = undefined;
     schedulerUnavailable = undefined;
     submissionChecked = false;
     submissionCommitted = false;
@@ -250,7 +248,6 @@ describe('AutomationRunsService', () => {
         return { storeId, name: undefined };
       },
       send: async (_storeId: string, message: OutgoingMessage) => {
-        if (preparationError) throw preparationError;
         const { beforeSubmit, ...submitted } = message;
         const body = (await beforeSubmit?.('01711000201')) ?? submitted.body;
         if (providerError) throw providerError;
@@ -615,16 +612,16 @@ describe('AutomationRunsService', () => {
     });
 
     it('fails the run with the message of a refused send', async () => {
-      preparationError = new AppError('MESSAGING_CONTACT_HAS_NO_PHONE', {
+      providerError = new AppError('SMS_SEND_REFUSED', {
         status: 422,
-        message: 'This contact has no phone number',
+        message: 'The SMS provider refused the message',
       });
 
       await start(send);
 
       expect(repository.run).toMatchObject({
         status: 'failed',
-        lastError: 'This contact has no phone number',
+        lastError: 'The SMS provider refused the message',
       });
     });
   });
