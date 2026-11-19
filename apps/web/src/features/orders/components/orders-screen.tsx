@@ -140,10 +140,10 @@ function OrderStageNav({ query, counts }: OrderStageNavProps) {
             {orderStageLabels[stage]}
             {counts ? (
               <Badge
-                variant={isCurrent ? 'primary' : 'neutral'}
+                variant="neutral"
                 className={cn(
                   'ml-1 rounded-full px-2 py-0.5 text-xs tabular-nums',
-                  isCurrent && 'font-semibold',
+                  isCurrent && 'bg-primary font-semibold text-on-primary',
                 )}
               >
                 {counts[stage]}

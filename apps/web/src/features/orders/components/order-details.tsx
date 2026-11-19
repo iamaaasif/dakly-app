@@ -1,8 +1,8 @@
+import { MessageSquare, Phone } from 'lucide-react';
 import Link from 'next/link';
 import type { RefObject } from 'react';
 
 import type { OrderDetail } from '@dakly/contracts/orders';
-import { Badge } from '@dakly/ui/badge';
 import { cn } from '@dakly/ui/cn';
 
 import { courierLabels, orderStageLabels } from '../order-labels';
@@ -20,16 +20,7 @@ export type OrderDetailsProps = {
 export function OrderDetails({ order, stageRef }: OrderDetailsProps) {
   return (
     <div className="space-y-6">
-      <Badge
-        ref={stageRef}
-        tabIndex={-1}
-        role="status"
-        aria-label="Order stage"
-        className="rounded-full px-3 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-      >
-        {orderStageLabels[order.stage]}
-      </Badge>
-      <OrderStageTracker currentStage={order.stage} />
+      <OrderStageTracker currentStage={order.stage} stageRef={stageRef} />
       <DeliveryDetails order={order} />
       <ParcelDetails order={order} />
       <OrderItems order={order} />
@@ -38,37 +29,59 @@ export function OrderDetails({ order, stageRef }: OrderDetailsProps) {
   );
 }
 
-type OrderStageTrackerProps = { currentStage: OrderDetail['stage'] };
+type OrderStageTrackerProps = {
+  currentStage: OrderDetail['stage'];
+  stageRef: RefObject<HTMLSpanElement | null>;
+};
 
-function OrderStageTracker({ currentStage }: OrderStageTrackerProps) {
-  const steps: { stage: OrderDetail['stage']; label: string }[] = [
-    { stage: 'to_confirm', label: 'To confirm' },
-    { stage: 'to_pack', label: 'To pack' },
-    { stage: 'with_courier', label: 'With courier' },
-    { stage: 'delivered', label: 'Delivered' },
-  ];
+const trackerMilestones = ['Inquiry', 'Confirmed', 'Packed', 'With courier', 'Delivered'] as const;
+
+function milestoneStep(stage: OrderDetail['stage']): number {
+  switch (stage) {
+    case 'to_confirm':
+    case 'on_hold':
+      return 1;
+    case 'to_pack':
+      return 2;
+    case 'with_courier':
+      return 4;
+    case 'delivered':
+    case 'partially_delivered':
+      return 5;
+    default:
+      return 1;
+  }
+}
+
+function OrderStageTracker({ currentStage, stageRef }: OrderStageTrackerProps) {
+  const currentStep = milestoneStep(currentStage);
   return (
-    <div className="border-b border-border pb-3">
-      <div className="grid grid-cols-4 gap-1 text-center text-xs">
-        {steps.map(({ stage, label }) => {
-          const isCurrent = currentStage === stage;
+    <div className="space-y-2 border-b border-border pb-4">
+      <span
+        ref={stageRef}
+        tabIndex={-1}
+        role="status"
+        aria-label="Order stage"
+        className="sr-only focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      >
+        {orderStageLabels[currentStage]}
+      </span>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-muted">
+        <div
+          className="h-full rounded-full bg-primary transition-all duration-300"
+          style={{ width: `${(currentStep / 5) * 100}%` }}
+        />
+      </div>
+      <div className="grid grid-cols-5 text-center text-[11px]">
+        {trackerMilestones.map((milestone, index) => {
+          const isReached = index + 1 <= currentStep;
           return (
-            <div key={stage} className="flex flex-col items-center">
-              <span
-                className={cn(
-                  'truncate font-medium',
-                  isCurrent ? 'font-semibold text-text' : 'text-text-muted',
-                )}
-              >
-                {label}
-              </span>
-              <span
-                className={cn(
-                  'mt-1.5 h-1 w-full rounded-full transition-colors',
-                  isCurrent ? 'bg-primary' : 'bg-surface-muted',
-                )}
-              />
-            </div>
+            <span
+              key={milestone}
+              className={cn('truncate', isReached ? 'font-semibold text-text' : 'text-text-muted')}
+            >
+              {milestone}
+            </span>
           );
         })}
       </div>
@@ -86,31 +99,51 @@ function DeliveryDetails({ order }: DeliveryDetailsProps) {
     ['to_confirm', 'on_hold', 'to_pack'].includes(order.stage);
 
   return (
-    <section aria-label="Delivery details" className="space-y-2">
+    <section aria-label="Delivery details" className="space-y-3">
       <h3 className="text-sm font-semibold text-text">Delivery details</h3>
-      <div>
-        <p className="font-semibold wrap-anywhere text-text">{order.recipientName}</p>
-        <p className="text-sm text-text-muted">{formatPhone(order.recipientPhone)}</p>
-      </div>
-      <OrderRiskBadge risk={order.returnRisk} />
-      {showAdvanceWarning && (
-        <div className="rounded-lg border border-danger/20 bg-danger-soft p-3 text-xs text-danger">
-          <p className="font-medium">Ask for a small advance first</p>
-          <p className="mt-0.5 text-text-muted">These customers returned most past parcels.</p>
-          <div
-            aria-hidden="true"
-            className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-border"
-          >
-            <div className="h-full w-3/5 rounded-full bg-danger" />
-          </div>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="font-semibold wrap-anywhere text-text">{order.recipientName}</p>
+          <p className="text-sm text-text-muted">{formatPhone(order.recipientPhone)}</p>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <a
+            href={`tel:${order.recipientPhone}`}
+            tabIndex={-1}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-text hover:bg-surface-muted sm:min-h-8"
+          >
+            <Phone size={13} aria-hidden="true" />
+            Call
+          </a>
+          <a
+            href={`https://wa.me/880${order.recipientPhone.replace(/^0/, '')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            tabIndex={-1}
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-text hover:bg-surface-muted sm:min-h-8"
+          >
+            <MessageSquare size={13} aria-hidden="true" />
+            WhatsApp
+          </a>
+        </div>
+      </div>
       <p className="text-sm wrap-anywhere text-text-muted">
         {order.recipientAddress}, {order.recipientDistrict}
       </p>
       <BuyerDetails order={order} />
+      <div className="flex flex-wrap items-center gap-2">
+        <OrderRiskBadge risk={order.returnRisk} />
+        {showAdvanceWarning && (
+          <div className="flex items-center gap-2 text-xs text-danger">
+            <span className="font-medium">Ask for a small advance first</span>
+            <div aria-hidden="true" className="h-1.5 w-16 overflow-hidden rounded-full bg-border">
+              <div className="h-full w-3/5 rounded-full bg-danger" />
+            </div>
+          </div>
+        )}
+      </div>
       {order.hasRecipientPhoneMatch && (
-        <p className="mt-2 text-sm text-warning">
+        <p className="mt-1 text-sm text-warning">
           The delivery phone may match another customer profile.
         </p>
       )}
@@ -139,9 +172,10 @@ type BuyerDetailsProps = { order: OrderDetail };
 function BuyerDetails({ order }: BuyerDetailsProps) {
   const { data } = useSessionContext();
   const canOpenBuyer = data?.currentStore?.canViewCustomers && order.buyerContactId;
+  if (!order.buyerName) return null;
   return (
-    <p className="mt-2 wrap-anywhere text-text-muted">
-      Buyer {order.buyerName ?? 'Unnamed customer'}{' '}
+    <p className="mt-1 text-xs wrap-anywhere text-text-muted">
+      Buyer {order.buyerName}{' '}
       {canOpenBuyer && (
         <Link
           className="inline-flex min-h-11 min-w-11 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:min-h-10 sm:min-w-10"
