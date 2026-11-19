@@ -57,7 +57,7 @@ export class OrderReportingRepository {
     const totals = result.rows[0]!;
     return {
       ...totals,
-      netSpendPoisha: Number(totals.netSpendPoisha),
+      netSpendPoisha: BigInt(totals.netSpendPoisha),
       firstOrderAt: totals.firstOrderAt === null ? null : new Date(totals.firstOrderAt),
       lastOrderAt: totals.lastOrderAt === null ? null : new Date(totals.lastOrderAt),
     };

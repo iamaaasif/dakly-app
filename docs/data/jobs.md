@@ -41,6 +41,10 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 | `relay-outbox`                | Job scheduler, every second                | none (sweep)                                      | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
 | `wake-snoozed-notifications`  | Job scheduler, every 30 seconds            | none (sweep)                                      | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
 
+Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
+Order creation, stage changes and COD collection give the order ID, which the service uses to find
+the buyer. The subscriber recomputes the contact's row from current orders.
+
 ## outbound
 
 | Job                   | Started by                          | Payload                   | Makes a rerun harmless                                   |
@@ -57,10 +61,6 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 | sweep `start-due-campaigns` | Every minute from CAMP-3 sender | none                                        | `campaign_due_stores` finds due stores. Each tenant update starts up to 100 due campaigns and skips locked rows. |
 
 Per-store cap: one running campaign batch per store.
-
-Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
-Order creation, stage changes and COD collection give the order ID, which the service uses to find
-the buyer. The subscriber recomputes the contact's row from current orders.
 
 ## workflow
 
@@ -84,8 +84,9 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 ## bulk
 
 `sweep-contact-stats` runs daily and pages through `maintenance_store_ids`. It queues
-`reconcile-contact-stats` with `storeId`, once per store per sweep day. The repair recomputes
-contact stats in pages and leaves matching rows unchanged.
+`reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contact rows
+and queues the next cursor. After the last page, it takes the store's Best customers cutoff
+and uses it for the ranking pages. Page IDs deduplicate retries.
 
 | Job                        | Started by                               | Payload                                                       | Makes a rerun harmless                                                                                                                                                                                                                                        |
 | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

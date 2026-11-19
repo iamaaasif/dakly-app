@@ -1,20 +1,18 @@
 import { Inject } from '@nestjs/common';
-import { z } from 'zod';
 
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
-import { ContactStatsService } from '../contact-stats.service';
-
-export const RECONCILE_CONTACT_STATS = 'reconcile-contact-stats';
-
-const payload = z.strictObject({ storeId: z.uuid() });
+import {
+  ContactStatsSweepService,
+  RECONCILE_CONTACT_STATS,
+  reconcileContactStatsPayload,
+} from '../contact-stats-sweep.service';
 
 @HandlesJob({ queue: QUEUES.bulk, name: RECONCILE_CONTACT_STATS })
 export class ReconcileContactStatsJob implements JobHandler {
-  constructor(@Inject(ContactStatsService) private readonly stats: ContactStatsService) {}
+  constructor(@Inject(ContactStatsSweepService) private readonly stats: ContactStatsSweepService) {}
 
   async handle(data: unknown) {
-    const { storeId } = payload.parse(data);
-    await this.stats.reconcile(storeId);
+    await this.stats.reconcile(reconcileContactStatsPayload.parse(data));
   }
 }
