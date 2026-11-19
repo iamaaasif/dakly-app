@@ -191,6 +191,8 @@ export const paymentEvents = pgTable(
     fromStatus: text('from_status'),
     toStatus: text('to_status'),
     gatewayReference: text('gateway_reference'),
+    gateway: text('gateway', { enum: gateways }),
+    gatewayEventId: text('gateway_event_id'),
     eventPayload: jsonb('event_payload'),
     createdAt: createdAt(),
   },
@@ -201,6 +203,7 @@ export const paymentEvents = pgTable(
       foreignColumns: [paymentIntents.storeId, paymentIntents.id] as [AnyPgColumn, AnyPgColumn],
     }),
 
+    uniqueIndex('payment_events_gateway_event_key').on(table.gateway, table.gatewayEventId),
     index('payment_events_intent_idx').on(table.storeId, table.paymentIntentId, table.createdAt),
     index('payment_events_payment_intent_id_idx').on(table.paymentIntentId),
     check('payment_events_kind', isOneOf(table.kind, paymentEventKinds)),
