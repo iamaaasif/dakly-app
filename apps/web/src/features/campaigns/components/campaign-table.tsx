@@ -6,11 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 
 import {
   campaignChannelLabels,
-  campaignGoalLabels,
   campaignStatusColors,
   campaignStatusLabels,
 } from '../campaign-labels';
-import { formatDateTime } from '@/lib/format-date';
+
+const campaignMetrics = ['Sent', 'Clicked', 'Orders', 'Revenue'] as const;
 
 export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) {
   return (
@@ -22,11 +22,15 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
       </ul>
       <div className="hidden md:block">
         <Table aria-label="Campaigns">
-          <TableHeader>
+          <TableHeader className="bg-surface uppercase [&_th]:text-text-muted">
             <TableRow>
-              <TableHead>Campaign</TableHead>
+              <TableHead className="w-1/2">Campaign</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Scheduled for</TableHead>
+              {campaignMetrics.map((metric) => (
+                <TableHead key={metric} className="text-right">
+                  {metric}
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -35,7 +39,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
                 <TableCell className="whitespace-normal">
                   <Link
                     href={`/campaigns/${campaign.id}`}
-                    className="inline-flex min-h-10 min-w-10 items-center font-semibold wrap-anywhere text-text after:absolute after:inset-0 hover:underline focus-visible:outline-hidden focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus"
+                    className="inline-flex min-h-10 min-w-10 items-center text-base font-semibold wrap-anywhere text-text after:absolute after:inset-0 hover:underline focus-visible:outline-hidden focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus"
                   >
                     {campaign.name}
                   </Link>
@@ -44,15 +48,11 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
                 <TableCell>
                   <CampaignStatus status={campaign.status} />
                 </TableCell>
-                <TableCell className="tabular-nums">
-                  {campaign.scheduledFor ? (
-                    <time dateTime={campaign.scheduledFor}>
-                      {formatDateTime(campaign.scheduledFor)}
-                    </time>
-                  ) : (
-                    '—'
-                  )}
-                </TableCell>
+                {campaignMetrics.map((metric) => (
+                  <TableCell key={metric} className="text-right tabular-nums">
+                    <UnavailableMetric />
+                  </TableCell>
+                ))}
               </TableRow>
             ))}
           </TableBody>
@@ -75,7 +75,7 @@ function CampaignCard({ campaign }: { campaign: CampaignResponse }) {
           <div className="min-w-0">
             <span
               id={nameId}
-              className="inline-flex min-h-10 min-w-10 items-center font-semibold wrap-anywhere text-text group-hover:underline"
+              className="inline-flex min-h-10 min-w-10 items-center text-base font-semibold wrap-anywhere text-text group-hover:underline"
             >
               {campaign.name}
             </span>
@@ -83,23 +83,31 @@ function CampaignCard({ campaign }: { campaign: CampaignResponse }) {
           </div>
           <CampaignStatus status={campaign.status} />
         </div>
-        {campaign.scheduledFor && (
-          <p className="mt-2 text-sm text-text-muted">
-            Scheduled for{' '}
-            <time dateTime={campaign.scheduledFor}>{formatDateTime(campaign.scheduledFor)}</time>
-          </p>
-        )}
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          {campaignMetrics.map((metric) => (
+            <div key={metric} className="flex justify-between gap-2">
+              <dt className="text-text-muted">{metric}</dt>
+              <dd>
+                <UnavailableMetric />
+              </dd>
+            </div>
+          ))}
+        </dl>
       </Link>
     </li>
   );
 }
 
 function CampaignSubtitle({ campaign }: { campaign: CampaignResponse }) {
+  return <p className="text-sm text-text-muted">{campaignChannelLabels[campaign.channel]}</p>;
+}
+
+function UnavailableMetric() {
   return (
-    <p className="text-sm text-text-muted">
-      {campaignChannelLabels[campaign.channel]}
-      {campaign.goal && ` · ${campaignGoalLabels[campaign.goal]}`}
-    </p>
+    <>
+      <span className="sr-only">Unavailable</span>
+      <span aria-hidden="true">—</span>
+    </>
   );
 }
 

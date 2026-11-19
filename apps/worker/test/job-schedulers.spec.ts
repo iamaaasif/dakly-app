@@ -49,6 +49,7 @@ describe('Worker job schedulers', () => {
       scheduler('staff-alert-relay'),
       scheduler('relay-outbox', 1000),
       scheduler('wake-snoozed-notifications'),
+      scheduler('recover-webhook-events', 60000),
     ];
     expect(transactional.schedulers).toEqual([...sweeps, ...sweeps]);
     const bulkIntervals = [scheduler('staff-audit-maintenance'), scheduler('fail-stuck-imports')];
@@ -57,6 +58,7 @@ describe('Worker job schedulers', () => {
       scheduler('sweep-contact-stats', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('sweep-automation-birthdays', { pattern: '0 * * * *', tz: 'UTC' }),
       scheduler('sweep-analytics', { pattern: '0 0 * * *', tz: 'UTC' }),
+      scheduler('purge-webhook-events', { pattern: '0 0 * * *', tz: 'UTC' }),
       ...bulkIntervals,
     ]);
     expect(sync.schedulers).toEqual([

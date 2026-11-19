@@ -1,5 +1,5 @@
 {
-  "id": "e73fe960-0353-4f55-9070-52f7b76b23c6",
+  "id": "576afb87-c1bc-4529-ab30-51f2e797e07d",
   "prevId": "163772fa-b1a1-4cea-a2f0-0b04a5de22d6",
   "version": "7",
   "dialect": "postgresql",
@@ -9768,12 +9768,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "sender_identity_id": {
-          "name": "sender_identity_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "recipient_identity_id": {
           "name": "recipient_identity_id",
           "type": "uuid",
@@ -10019,28 +10013,6 @@
           "method": "btree",
           "with": {}
         },
-        "messages_sender_identity_idx": {
-          "name": "messages_sender_identity_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "sender_identity_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"messages\".\"sender_identity_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "messages_recipient_identity_idx": {
           "name": "messages_recipient_identity_idx",
           "columns": [
@@ -10147,21 +10119,6 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "messages_sender_identity_store_fk": {
-          "name": "messages_sender_identity_store_fk",
-          "tableFrom": "messages",
-          "tableTo": "contact_identities",
-          "columnsFrom": [
-            "store_id",
-            "sender_identity_id"
-          ],
-          "columnsTo": [
-            "store_id",
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
         "messages_recipient_identity_store_fk": {
           "name": "messages_recipient_identity_store_fk",
           "tableFrom": "messages",
@@ -10185,10 +10142,6 @@
         "messages_direction": {
           "name": "messages_direction",
           "value": "\"messages\".\"direction\" in ('in', 'out')"
-        },
-        "messages_inbound_sender": {
-          "name": "messages_inbound_sender",
-          "value": "\"messages\".\"direction\" <> 'in' or \"messages\".\"sender_identity_id\" is not null"
         },
         "messages_author_type": {
           "name": "messages_author_type",
@@ -18311,6 +18264,39 @@
           "columns": [
             {
               "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "webhook_events_recovery_idx": {
+          "name": "webhook_events_recovery_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

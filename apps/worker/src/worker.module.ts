@@ -27,6 +27,7 @@ import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
+import { MetaWebhookMaintenanceModule } from '@dakly/core/channels/meta-webhook-maintenance.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
 import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
@@ -114,6 +115,7 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     MetaWebhookRoutingModule,
+    MetaWebhookMaintenanceModule,
     MessagingModule,
     ChannelTokenHealthModule,
     ConversationReturnsModule,
