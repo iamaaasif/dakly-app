@@ -261,11 +261,12 @@ export class AutomationRunsService {
     const hasSms = step.channels.includes('sms');
     const lockedContactExists = await this.lockFirstSend(claim, facts, hasSms);
     if (lockedContactExists === undefined) return 'not_live';
-    const checkedAt = await this.repository.schedulerTime(storeId);
-    const initialLate = await this.readLateGateResult(facts, checkedAt);
-    if (initialLate) return initialLate;
     // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
-    if (!hasSms) return { decision: { action: 'skip', reason: 'window_closed' } };
+    if (!hasSms) {
+      const checkedAt = await this.repository.schedulerTime(storeId);
+      const late = await this.readLateGateResult(facts, checkedAt);
+      return late ?? { decision: { action: 'skip', reason: 'window_closed' } };
+    }
     const { decision, destination, at } = await this.sendPolicy.checkForSend(
       storeId,
       { contactId, channel: 'sms', category: step.category },

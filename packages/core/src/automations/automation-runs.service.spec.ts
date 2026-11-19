@@ -709,6 +709,24 @@ describe('AutomationRunsService', () => {
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
     });
 
+    it('exits on a refreshed goal when the send also becomes late during the lock wait', async () => {
+      const wakeAt = new Date(now.getTime() - 24 * HOUR + 30_000);
+      repository.beforeDispatchLock = () => {
+        tags = ['paid'];
+        databaseNow = new Date(now.getTime() + 60_000);
+      };
+
+      await start(send, {
+        wakeAt,
+        graph: { ...graphWith(send), goal: { kind: 'got_tag', tag: 'paid' } },
+      });
+
+      expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'goal' });
+      expect(repository.steps).toEqual([]);
+      expect(ledger).toEqual([]);
+      expect(sent).toEqual([]);
+    });
+
     it('retries a temporary error with back-off, then sends the same text once', async () => {
       providerError = new Error('connection reset');
       await runWithJobContext(() => start(send), jobId);
