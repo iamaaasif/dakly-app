@@ -611,7 +611,7 @@ describe('AutomationRunsService', () => {
       expect(reportJob).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ errorCode: 'INTERNAL_ERROR' }),
         'workflow-job-lease-1',
-        expect.stringMatching(/^[a-f0-9]{64}$/u),
+        { runId: RUN_ID, stepKey: 'first' },
       );
       expect(repository.run).toMatchObject({ status: 'failed', currentStepKey: 'first' });
       expect(repository.run.lastError).toContain('The SMS provider did not answer');
@@ -630,8 +630,17 @@ describe('AutomationRunsService', () => {
       expect(reportJob).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ errorCode: 'INTERNAL_ERROR' }),
         'workflow-job-lease-1',
-        expect.stringMatching(/^[a-f0-9]{64}$/u),
+        { runId: RUN_ID, stepKey: 'first' },
       );
+    });
+
+    it('rejects an uncertain response report without a worker job id', async () => {
+      providerError = new Error('connection reset');
+
+      await expect(start(send)).rejects.toThrow('Workflow SMS reporting requires a worker job ID');
+
+      expect(reportJob).not.toHaveBeenCalled();
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
     });
 
     it('does not send again a step that an earlier claim handed to the provider', async () => {
@@ -692,7 +701,7 @@ describe('AutomationRunsService', () => {
         status: 500,
         message: 'The provider response was incomplete',
       });
-      await start(send);
+      await runWithJobContext(() => start(send));
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);
     });
@@ -731,7 +740,7 @@ describe('AutomationRunsService', () => {
     it('keeps the credits reserved when the provider gives no answer', async () => {
       providerError = new Error('connection reset');
 
-      await start(send);
+      await runWithJobContext(() => start(send));
 
       expect(repository.run.status).toBe('failed');
       expect(ledger.map((entry) => entry.kind)).toEqual(['reserve']);

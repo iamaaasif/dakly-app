@@ -16,7 +16,6 @@ import {
   type RunFacts,
   type SendStep,
   type StepResult,
-  workflowOperationHash,
 } from './automation-step-rules';
 
 export const SMS_NO_ANSWER = 'The SMS provider did not answer';
@@ -69,12 +68,12 @@ export class AutomationSmsDeliveryService {
       attempt.error.code === 'SMS_SEND_REFUSED'
         ? attempt.error
         : undefined;
-    if ('error' in attempt && !refusal)
-      this.reporter.reportJob(
-        serializeError(attempt.error),
-        jobLogBindings().jobId,
-        workflowOperationHash(storeId, operationKey(claim)),
-      );
+    if ('error' in attempt && !refusal) {
+      const { jobId } = jobLogBindings();
+      if (!jobId) throw new Error('Workflow SMS reporting requires a worker job ID');
+      const { runId, stepKey } = claim;
+      this.reporter.reportJob(serializeError(attempt.error), jobId, { runId, stepKey });
+    }
     const now = await this.repository.schedulerTime(storeId);
     if ('receipt' in attempt) {
       const { providerMessageId, credits } = attempt.receipt;

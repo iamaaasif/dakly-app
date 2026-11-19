@@ -50,17 +50,16 @@ export class ErrorReporter implements OnApplicationShutdown {
 
   reportJob(
     error: ReturnType<typeof serializeError>,
-    jobId: string | undefined,
-    operationKeyHash?: string,
+    jobId: string,
+    step?: { runId: string; stepKey: string },
   ): void {
-    this.send(error, { jobId }, 'Job failed', operationKeyHash);
+    this.send(error, { jobId, ...step }, 'Job failed');
   }
 
   private send(
     error: ReturnType<typeof serializeError>,
-    context: { requestId: string } | { jobId?: string },
+    context: { requestId: string } | { jobId: string; runId?: string; stepKey?: string },
     message: string,
-    operationKeyHash?: string,
   ): void {
     // captureEvent enriches events with global users and breadcrumbs, even without integrations.
     this.client?.sendEvent({
@@ -69,7 +68,7 @@ export class ErrorReporter implements OnApplicationShutdown {
       level: 'error',
       message,
       tags: { ...context, errorClass: error.errorClass, errorCode: error.errorCode },
-      extra: { error, operationKeyHash },
+      extra: { error },
     });
   }
 

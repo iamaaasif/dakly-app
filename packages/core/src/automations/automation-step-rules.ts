@@ -150,10 +150,6 @@ export function messageBody(step: SendStep, optOutUrl: string | undefined): stri
   return optOutUrl ? `${step.message.text}\n${optOutUrl}` : step.message.text;
 }
 
-export function workflowOperationHash(storeId: string, key: string): string {
-  return hashCode(loadEnv().CODE_HASH_KEY, JSON.stringify(['workflow-operation', storeId, key]));
-}
-
 export function workflowDestinationHash(storeId: string, phone: string | null): string | null {
   return phone
     ? hashCode(loadEnv().CODE_HASH_KEY, JSON.stringify(['workflow-sms', storeId, phone]))
