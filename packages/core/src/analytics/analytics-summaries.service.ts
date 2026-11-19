@@ -31,13 +31,10 @@ export class AnalyticsSummariesService {
   ) {}
 
   async refreshOrder(storeId: string, orderId: string, event: { id: string; occurredAt: string }) {
-    if (await this.summaries.hasOrderEvent(storeId, event)) return;
     const now = this.clock.now();
     const timeZone = await this.stores.timeZone(storeId);
     const order = await this.orders.reportingAnchor(storeId, orderId, timeZone, now);
     if (!order) return;
-    // The minute job must exist before we record the event as handled.
-    if (order.retained) await this.scheduleOrderDay(storeId, order.day);
     await this.transaction.run(storeId, async () => {
       if (!(await this.summaries.recordEvent(storeId, event, now))) return;
       const { buyerContactId } = order;
@@ -45,7 +42,14 @@ export class AnalyticsSummariesService {
         await this.summaries.lockSummaries(storeId, buyerContactId);
         await this.refreshBuyer(storeId, buyerContactId, timeZone, this.clock.now());
       }
+      if (order.retained) await this.summaries.markOrderDayPending(storeId, order.day, now);
     });
+    if (!order.retained) return;
+    const pending = await this.summaries.pendingOrderDays(storeId, {
+      from: order.day,
+      through: order.day,
+    });
+    if (pending.length) await this.scheduleOrderDay(storeId, order.day);
   }
 
   async refreshOrderDays(storeId: string, period: ReportPeriod) {
@@ -56,6 +60,7 @@ export class AnalyticsSummariesService {
       const cutoff = retainedSince(reportDay(now, timeZone));
       const from = period.from < cutoff ? cutoff : period.from;
       if (from > period.through) return;
+      const pending = await this.summaries.pendingOrderDays(storeId, { ...period, from });
       const rows = await this.orders.dailyOrderMetrics(storeId, { ...period, from, timeZone });
       const byDay = new Map(rows.map((row) => [row.day, row]));
       const metrics = [];
@@ -68,6 +73,8 @@ export class AnalyticsSummariesService {
         );
       }
       await this.summaries.save(storeId, metrics, now);
+      // A new event may have marked the day after this refresh read its orders.
+      if (pending.length) await this.summaries.clearOrderDays(storeId, pending);
     });
   }
 

@@ -83,7 +83,7 @@ Per-store cap: one running campaign batch per store.
 | `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run |
 | `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                     |
 
-Failed `build-order-summary` jobs stay in the sync queue for seven days. Use the job ID from the worker error report to retry the failed job. The retry reads current orders for the original day and skips days outside retention.
+Use the job ID from a failed `build-order-summary` error report to retry while the job is still in the sync queue. The pending day marker lives in Postgres, so replaying an affected source event can requeue the day after the failed job is evicted. The retry reads current orders for the original day and skips days outside retention.
 
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 

@@ -1,12 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, notInArray, sql } from 'drizzle-orm';
+import { and, eq, gte, lte, notInArray, sql } from 'drizzle-orm';
 
 import { storeDailyMetrics } from '@dakly/db/schema/analytics';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+import type { ReportPeriod } from './report-period';
 
 type Metric = { day: string; metric: string; dimension?: string; value: bigint };
 
+type PendingOrderDay = { day: string; generation: string };
+
+const ORDER_PENDING = 'order_refresh_pending';
 const BUYER_ACTIVITY = 'buyer_activity';
 
 @Injectable()
@@ -22,21 +26,51 @@ export class AnalyticsRepository {
     );
   }
 
-  async hasOrderEvent(storeId: string, event: { id: string; occurredAt: string }) {
-    const [row] = await this.database.forStore(storeId, (tx) =>
+  markOrderDayPending(storeId: string, day: string, updatedAt: Date) {
+    return this.database.inTransaction(storeId, (tx) =>
       tx
-        .select({ dimension: storeDailyMetrics.dimension })
+        .insert(storeDailyMetrics)
+        .values({ storeId, day, metric: ORDER_PENDING, value: 1, updatedAt })
+        .onConflictDoUpdate({
+          target: [
+            storeDailyMetrics.storeId,
+            storeDailyMetrics.day,
+            storeDailyMetrics.metric,
+            storeDailyMetrics.dimension,
+          ],
+          set: { value: sql`${storeDailyMetrics.value} + 1`, updatedAt },
+        }),
+    );
+  }
+
+  pendingOrderDays(storeId: string, period: ReportPeriod) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          day: storeDailyMetrics.day,
+          generation: sql<string>`${storeDailyMetrics.value}::text`,
+        })
         .from(storeDailyMetrics)
         .where(
           and(
             eq(storeDailyMetrics.storeId, storeId),
-            eq(storeDailyMetrics.day, event.occurredAt.slice(0, 10)),
-            eq(storeDailyMetrics.metric, 'order_event'),
-            eq(storeDailyMetrics.dimension, event.id),
+            gte(storeDailyMetrics.day, period.from),
+            lte(storeDailyMetrics.day, period.through),
+            eq(storeDailyMetrics.metric, ORDER_PENDING),
           ),
         ),
     );
-    return row !== undefined;
+  }
+
+  clearOrderDays(storeId: string, pending: PendingOrderDay[]) {
+    const versions = sql.join(
+      pending.map(({ day, generation }) => sql`(${day}::date, ${generation}::bigint)`),
+      sql`, `,
+    );
+    return this.database.inTransaction(storeId, (tx) =>
+      tx.execute(sql`delete from store_daily_metrics
+        where store_id = ${storeId} and metric = ${ORDER_PENDING} and (day, value) in (${versions})`),
+    );
   }
 
   async recordEvent(storeId: string, event: { id: string; occurredAt: string }, now: Date) {
