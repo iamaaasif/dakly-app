@@ -25,7 +25,8 @@ export type AiRequest<T> = {
   tools?: readonly LlmTool[];
   signal?: AbortSignal;
 } & (
-  | { purpose: BillablePurpose; usageReference: string }
+  | { purpose: 'content'; usageReference: string; usageQuantity: number }
+  | { purpose: 'ask'; usageReference: string }
   | { purpose: Exclude<AiPurpose, BillablePurpose>; usageReference?: never }
 );
 
@@ -57,7 +58,11 @@ export class AiService {
     if (result.kind !== 'output' || request.usageReference === undefined) return result;
     return this.billOutput(
       storeId,
-      { unit: usageUnits[request.purpose], reference: request.usageReference },
+      {
+        unit: usageUnits[request.purpose],
+        reference: request.usageReference,
+        quantity: request.purpose === 'content' ? request.usageQuantity : 1,
+      },
       result,
       request.signal,
     );
@@ -82,13 +87,13 @@ export class AiService {
 
   private async billOutput<T>(
     storeId: string,
-    usage: Omit<ConsumeUsageInput, 'quantity'>,
+    usage: ConsumeUsageInput,
     result: AiResult<T>,
     signal?: AbortSignal,
   ): Promise<AiResult<T>> {
     if (signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
     try {
-      await this.usage.consume(storeId, { ...usage, quantity: 1 });
+      await this.usage.consume(storeId, usage);
     } catch (error) {
       if (error instanceof AppError && error.code === 'USAGE_ALLOWANCE_EXCEEDED')
         return { kind: 'failure', code: 'USAGE_ALLOWANCE_EXCEEDED' };
