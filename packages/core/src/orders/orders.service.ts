@@ -66,11 +66,13 @@ export class OrdersService {
     @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
-  contactOrderTotals = (storeId: string, contactId: string, timeZone: string) =>
-    this.reporting.contactOrderTotals(storeId, contactId, timeZone);
+  contactOrderTotals(storeId: string, contactId: string, timeZone: string) {
+    return this.reporting.contactOrderTotals(storeId, contactId, timeZone);
+  }
 
-  buyerContactId = (storeId: string, orderId: string) =>
-    this.reporting.buyerContactId(storeId, orderId);
+  buyerContactId(storeId: string, orderId: string) {
+    return this.reporting.buyerContactId(storeId, orderId);
+  }
 
   archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
     return this.transaction.run(storeId, async () => {
