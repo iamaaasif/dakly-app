@@ -65,7 +65,8 @@ Search rules:
   number finds nothing, and only an exact full number finds the contact.
 - Members without "See full phone numbers" can make 30 exact phone searches and 10
   contact writes that supply a phone per store per hour. Search hits and misses both
-  count. Creating a contact with a phone and editing a phone share the write limit.
+  count. Partial searches made up of digits `0` to `9` count too. Creating and
+  editing share the phone write limit.
   Each window starts with the first attempt. Over the limit, the API returns
   `429 CONTACT_PHONE_RATE_LIMITED`, records the refusal in the audit log without the
   phone number, and leaves contacts unchanged. Members with the permission are exempt.

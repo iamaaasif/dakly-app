@@ -7,7 +7,7 @@ import { OutboxModule } from '../platform/outbox/outbox.module';
 import { ContactDeletionService } from './contact-deletion.service';
 import { ContactIdentitiesRepository } from './contact-identities.repository';
 import { ContactIdentitiesService } from './contact-identities.service';
-import { ContactPhoneAccess } from './contact-phone-access.service';
+import { ContactPhoneAccessService } from './contact-phone-access.service';
 import { ContactsController } from './contacts.controller';
 import { ContactsRepository } from './contacts.repository';
 import { ContactsService } from './contacts.service';
@@ -23,7 +23,7 @@ import { OrderContactsRepository } from './order-contacts.repository';
     ContactsRepository,
     ContactIdentitiesRepository,
     ContactIdentitiesService,
-    ContactPhoneAccess,
+    ContactPhoneAccessService,
     ImportContactsRepository,
     OrderContactsRepository,
   ],

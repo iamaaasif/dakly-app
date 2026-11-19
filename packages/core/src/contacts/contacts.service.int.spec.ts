@@ -99,19 +99,24 @@ describe('ContactsService (Postgres)', () => {
 
     expect((await find(`+88${number}`)).items.map((item) => item.id)).toEqual([id]);
     const missing = phone();
-    for (let attempt = 1; attempt < 30; attempt++) expect((await find(missing)).items).toEqual([]);
+    const partial = number.slice(0, 5);
+    expect((await find(partial)).items).toEqual([]);
+    for (let attempt = 2; attempt < 30; attempt++) expect((await find(missing)).items).toEqual([]);
 
-    for (const term of [number, missing])
+    for (const term of [number, missing, partial])
       await expect(find(term)).rejects.toMatchObject({
         code: 'CONTACT_PHONE_RATE_LIMITED',
         status: 429,
       });
-    expect(await refusals('contact.phone_lookup_rate_limited')).toEqual([refusal, refusal]);
+    expect(await refusals('contact.phone_lookup_rate_limited')).toEqual([
+      refusal,
+      refusal,
+      refusal,
+    ]);
     expect((await find(number, full)).items[0]?.phone).toBe(number);
     expect((await find(number, masked, otherStoreId)).items).toEqual([]);
     expect((await find(number, masked, storeId, actor)).items[0]?.id).toBe(id);
     expect((await find('সুমি')).items.map((item) => item.id)).toContain(id);
-    expect((await find(number.slice(0, 5))).items).toEqual([]);
 
     const lookupTtl = await valkey.connection.ttl(lookupKey);
     expect(lookupTtl).toBeGreaterThan(3500);

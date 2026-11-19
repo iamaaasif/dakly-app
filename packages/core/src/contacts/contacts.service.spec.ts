@@ -7,7 +7,7 @@ import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import { ContactDeletionService } from './contact-deletion.service';
 import type { ContactIdentitiesRepository } from './contact-identities.repository';
-import { ContactPhoneAccess } from './contact-phone-access.service';
+import { ContactPhoneAccessService } from './contact-phone-access.service';
 import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 import type { ImportContactsRepository } from './import-contacts.repository';
@@ -58,7 +58,7 @@ describe('ContactsService', () => {
       } as unknown as ImportContactsRepository,
       {} as OrderContactsRepository,
       new ContactDeletionService(contacts, storeTransaction, outbox, clock),
-      new ContactPhoneAccess(
+      new ContactPhoneAccessService(
         { consume: async () => ({ allowed: true, retryAfter: 0 }) } as RateLimiter,
         {} as AuditService,
         storeTransaction,

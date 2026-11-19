@@ -13,7 +13,7 @@ import type {
 } from '@dakly/contracts/contacts';
 import { MAX_CONTACT_TAGS } from '@dakly/contracts/contacts';
 import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
-import { maskPhone } from '@dakly/contracts/phone';
+import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
 import type { SegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -22,11 +22,12 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ContactDeletionService } from './contact-deletion.service';
 import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
-import { ContactPhoneAccess } from './contact-phone-access.service';
+import { ContactPhoneAccessService } from './contact-phone-access.service';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
   type Contact,
+  type ContactFilter,
   type ContactRecipient,
   ContactsRepository,
   type TagChange,
@@ -68,15 +69,10 @@ export class ContactsService {
     @Inject(ImportContactsRepository) private readonly importContacts: ImportContactsRepository,
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
     @Inject(ContactDeletionService) private readonly deletion: ContactDeletionService,
-    @Inject(ContactPhoneAccess) private readonly phoneAccess: ContactPhoneAccess,
+    @Inject(ContactPhoneAccessService) private readonly phoneAccess: ContactPhoneAccessService,
   ) {}
 
-  async create(
-    storeId: string,
-    input: CreateContactInput,
-    access: Access,
-    actor: Actor,
-  ): Promise<ContactResponse> {
+  async create(storeId: string, input: CreateContactInput, access: Access, actor: Actor) {
     await this.phoneAccess.checkLimit(storeId, 'write', access.seeFullPhone, actor);
     const contact = await this.transaction.run(storeId, async () => {
       // A staff add is an intentional customer under the glossary, whatever its orders.
@@ -122,16 +118,16 @@ export class ContactsService {
   async list(
     storeId: string,
     query: ContactListQuery,
-    access: Access,
+    { seeFullPhone }: Access,
     actor: Extract<Actor, { kind: 'user' }>,
   ): Promise<ContactListResponse> {
     const { search, ...filter } = query;
-    const match = await this.phoneAccess.searchFilter(storeId, search, access.seeFullPhone, actor);
-    if (!match) return { items: [], nextCursor: null };
+    const match = searchFilter(search, seeFullPhone);
+    if (match.phone) await this.phoneAccess.checkLimit(storeId, 'lookup', seeFullPhone, actor);
     const rows = await this.contactsRepository.list(storeId, { ...filter, ...match });
     const items = rows
       .slice(0, query.limit)
-      .map((contact) => toContactResponse(contact, access.seeFullPhone));
+      .map((contact) => toContactResponse(contact, seeFullPhone));
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
@@ -384,6 +380,21 @@ export class ContactsService {
 }
 
 export type { TagChange } from './contacts.repository';
+
+// A partial number is a prefix search only for members who see full phones. Anyone may find a
+// contact by its exact full number; the result stays masked without the flag.
+function searchFilter(
+  search: string | undefined,
+  seeFullPhone: boolean,
+): Pick<ContactFilter, 'name' | 'phone' | 'phonePrefix'> {
+  if (!search) return {};
+  const fullPhone = bdMobileSchema.safeParse(search);
+  if (fullPhone.success) return { phone: fullPhone.data };
+  if (/^\d+$/.test(search)) return seeFullPhone ? { phonePrefix: search } : { phone: search };
+  // The trigram name index cannot narrow a search shorter than one trigram.
+  if (search.length < 3) throw contactError('CONTACT_SEARCH_TOO_SHORT');
+  return { name: search };
+}
 
 function importOutcome(
   contact: ImportMatch,
