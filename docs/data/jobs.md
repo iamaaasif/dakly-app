@@ -49,10 +49,10 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 
 ## outbound
 
-| Job                   | Started by                          | Payload                   | Makes a rerun harmless                                   |
-| --------------------- | ----------------------------------- | ------------------------- | -------------------------------------------------------- |
-| `send-message`        | Staff or AI reply saved as `queued` | `storeId`, `messageId`    | Message status; provider idempotency key = message id    |
-| `publish-post-target` | Due post (from `due_post_targets`)  | `storeId`, `postTargetId` | Status `publishing` set first; `external_post_id` unique |
+| Job                   | Started by                         | Payload                   | Makes a rerun harmless                                              |
+| --------------------- | ---------------------------------- | ------------------------- | ------------------------------------------------------------------- |
+| `SendMessageJob`      | `message.send_requested`           | `storeId`, `messageId`    | One job per outbox event. The provider reference is the message ID. |
+| `publish-post-target` | Due post (from `due_post_targets`) | `storeId`, `postTargetId` | Status `publishing` set first; `external_post_id` unique            |
 
 ## campaign
 
@@ -182,6 +182,8 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `campaign.approved`       | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
 | `conversation.started`    | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
 | `message.received`        | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
+| `message.send_requested`  | CHAT-2, `MessagingService` queues a channel message              | `messageId`                                                             | CHAT-2 `SendMessageJob` on `outbound`                        |
+| `message.sent`            | CHAT-2, the channel provider accepts a message                   | `messageId`, `conversationId`, `contactId`, `channel`                   | None yet                                                     |
 | `message.delivered`       | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
 | `message.read`            | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
 | `message.failed`          | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
