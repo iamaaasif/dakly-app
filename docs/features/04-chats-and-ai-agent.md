@@ -312,6 +312,8 @@ Agent tools take no store id, contact id or price; those come from the job. Tool
 
 Outbound: every message (AI or staff) is saved as `queued` with an idempotency key; a `send-message` job calls the driver and moves it to `sent` or `failed`. Receipts move it to `delivered` and `read`.
 
+The outbound message schema keeps the chosen recipient identity and the category used by the send gate. The identity belongs to the same store as the message. The Meta transport uses the selected connection's encrypted credentials and checks that the credential is still current before marking a rejected connection for reconnection.
+
 Hand-over: sets `needs_you` and `human`, records the reason (asked for a person, complaint, refund, discount, angry, out of scope, ready to buy, other), sends the holding reply once, notifies the assignee or Owner. Unclaimed after 10 minutes in working hours, the chat goes back to the AI. After a person's last message the AI returns after the return timer (default 30 minutes).
 
 Practice mode: each new channel starts with AI not live. The AI answers only the Test tab and the tester list. Go live runs the store's test questions (at least 3) and switches on only if all pass.

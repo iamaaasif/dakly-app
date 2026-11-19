@@ -27,6 +27,7 @@ import {
   messageAuthorTypes,
   messageDirections,
   messageKinds,
+  messageSendCategories,
   messageSourceTypes,
   messageStatuses,
   smsMessagePurposes,
@@ -36,7 +37,7 @@ import {
 import { users } from './auth';
 import { channelConnections, smsSenderIds } from './channels';
 import { createdAt, id, isOneOf, timestamptz, updatedAt } from './columns';
-import { contacts } from './contacts';
+import { contactIdentities, contacts } from './contacts';
 import { postTargets } from './social';
 import { stores } from './stores';
 
@@ -155,6 +156,8 @@ export const messages = pgTable(
     mediaText: text('media_text'),
     externalId: text('external_id'),
     idempotencyKey: text('idempotency_key'),
+    recipientIdentityId: uuid('recipient_identity_id'),
+    sendCategory: text('send_category', { enum: messageSendCategories }),
     status: text('status', { enum: messageStatuses }).notNull(),
     errorCode: text('error_code'),
     sourceType: text('source_type', { enum: messageSourceTypes }).notNull().default('chat'),
@@ -178,6 +181,14 @@ export const messages = pgTable(
       columns: [table.storeId, table.conversationId],
       foreignColumns: [conversations.storeId, conversations.id] as [AnyPgColumn, AnyPgColumn],
     }),
+    foreignKey({
+      name: 'messages_recipient_identity_store_fk',
+      columns: [table.storeId, table.recipientIdentityId],
+      foreignColumns: [contactIdentities.storeId, contactIdentities.id] as [
+        AnyPgColumn,
+        AnyPgColumn,
+      ],
+    }),
 
     uniqueIndex('messages_conversation_external_id_key')
       .on(table.conversationId, table.externalId)
@@ -194,12 +205,16 @@ export const messages = pgTable(
       .on(table.storeId, table.ratedAt)
       .where(sql`${table.aiRating} is not null`),
     index('messages_author_user_id_idx').on(table.authorUserId),
+    index('messages_recipient_identity_idx')
+      .on(table.storeId, table.recipientIdentityId)
+      .where(sql`${table.recipientIdentityId} is not null`),
     index('messages_rated_by_user_id_idx').on(table.ratedByUserId),
     check('messages_direction', isOneOf(table.direction, messageDirections)),
     check('messages_author_type', isOneOf(table.authorType, messageAuthorTypes)),
     check('messages_kind', isOneOf(table.kind, messageKinds)),
     check('messages_status', isOneOf(table.status, messageStatuses)),
     check('messages_source_type', isOneOf(table.sourceType, messageSourceTypes)),
+    check('messages_send_category', isOneOf(table.sendCategory, messageSendCategories)),
     check('messages_ai_rating', isOneOf(table.aiRating, aiRatings)),
     check(
       'messages_user_author',

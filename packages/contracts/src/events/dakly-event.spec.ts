@@ -74,6 +74,7 @@ const examples: DaklyEvent[] = [
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
   { type: 'contact.deleted', storeId, occurredAt, payload: { contactId } },
   { type: 'contact_stats.repaired', storeId, occurredAt, payload: { day: '2026-11-19' } },
+  { type: 'contact.birthday', storeId, occurredAt, payload: { contactId, day: '2026-11-16' } },
   {
     type: 'consent.changed',
     storeId,

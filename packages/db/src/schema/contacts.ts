@@ -85,6 +85,9 @@ export const contacts = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    index('contacts_birthday_idx')
+      .on(table.storeId, table.birthdayMonth, table.birthdayDay, table.id)
+      .where(sql`${table.deletedAt} is null and ${table.birthdayMonth} is not null`),
     uniqueIndex('contacts_store_id_id_key').on(table.storeId, table.id),
     foreignKey({
       name: 'contacts_import_id_store_fk',

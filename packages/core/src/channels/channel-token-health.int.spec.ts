@@ -21,6 +21,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS } from '../platform/time';
+import { ChannelConnectionsService } from './channel-connections.service';
 import { ChannelTokenHealthModule } from './channel-token-health.module';
 import { META_TOKEN_HEALTH_DRIVER } from './channel-token-health.service';
 import { CheckChannelTokenJob } from './jobs/check-channel-token.job';
@@ -310,4 +311,60 @@ it('queues stores beyond the first bounded lookup page', async () => {
     ]);
     await admin.pool.query('delete from stores where id = any($1::uuid[])', [fixtureStores]);
   }
+});
+
+it('reports a missing or mismatched Meta connection', async () => {
+  const connectionId = await connection('wrong-kind-fixture', null);
+  const connections = app.get(ChannelConnectionsService);
+  const message = {
+    channel: 'instagram',
+    externalConversationId: 'recipient-test',
+    text: 'Fixture reply',
+    operationKey: randomUUID(),
+  } as const;
+  for (const id of [randomUUID(), connectionId]) {
+    await expect(connections.sendMetaMessage(storeId, id, message)).rejects.toMatchObject({
+      code: 'CHANNEL_NOT_CONNECTED',
+    });
+  }
+});
+
+it('marks a rejected send credential and tells the owner', async () => {
+  const connectionId = await connection('revoked-send-token', null);
+  const connections = app.get(ChannelConnectionsService);
+  const message = {
+    channel: 'messenger',
+    externalConversationId: 'recipient-test',
+    text: 'Fixture reply',
+    operationKey: randomUUID(),
+  } as const;
+  await expect(
+    app
+      .get(StoreTransaction)
+      .run(storeId, () => connections.sendMetaMessage(storeId, connectionId, message)),
+  ).rejects.toMatchObject({ code: 'CHANNEL_SEND_INSIDE_TRANSACTION' });
+  const failedRecord = vi
+    .spyOn(connections, 'recordRejectedToken')
+    .mockRejectedValueOnce(new Error('Database connection lost'));
+  try {
+    await expect(connections.sendMetaMessage(storeId, connectionId, message)).rejects.toMatchObject(
+      {
+        code: 'auth_error',
+      },
+    );
+  } finally {
+    failedRecord.mockRestore();
+  }
+  const rejectedSend = connections.sendMetaMessage(storeId, connectionId, message);
+  await expect(rejectedSend).rejects.toMatchObject({ code: 'auth_error' });
+  await expect(rejectedSend).rejects.toBeInstanceOf(MetaRequestError);
+  const status = await admin.pool.query('select status from channel_connections where id = $1', [
+    connectionId,
+  ]);
+  expect(status.rows).toEqual([{ status: 'needs_reconnect' }]);
+  const notice = await admin.pool.query(
+    'select type, user_id from notifications where store_id = $1 and dedupe_key like $2',
+    [storeId, `channel.needs_reconnect:${connectionId}:%`],
+  );
+  expect(notice.rows).toEqual([{ type: 'channel.needs_reconnect', user_id: userId }]);
 });
