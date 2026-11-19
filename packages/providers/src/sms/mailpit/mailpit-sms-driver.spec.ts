@@ -128,6 +128,7 @@ describe('MailpitSmsDriver', () => {
     { name: 'negative count', page: { messages: [matchingCapture], messages_count: -1 } },
     { name: 'fractional count', page: { messages: [matchingCapture], messages_count: 1.5 } },
     { name: 'count below page size', page: { messages: [matchingCapture], messages_count: 0 } },
+    { name: 'an empty page before the reported count', page: { messages: [], messages_count: 1 } },
   ])('refuses before SMTP on a successful lookup with $name', async ({ page }) => {
     const connect = connectSmtpPeer((socket) => socket.push('554 refused\r\n'));
     vi.stubGlobal('fetch', async () => Response.json(page));
@@ -447,6 +448,60 @@ describe('MailpitSmsDriver', () => {
       testDriver().send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
     ).rejects.toBeInstanceOf(SmsSendRefused);
     expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses when both addresses fail to connect through Nodemailer', async () => {
+    const attempt = (code: string) =>
+      Object.assign(new Error('SMTP connect failed'), {
+        code,
+        syscall: 'connect',
+      });
+    const failure = Object.assign(
+      new AggregateError([attempt('EHOSTUNREACH'), attempt('ENETUNREACH')], 'SMTP connect failed'),
+      { code: 'ENETUNREACH' },
+    );
+    vi.spyOn(net, 'connect').mockImplementation(() => {
+      const socket = new Socket();
+      setImmediate(() => socket.destroy(failure));
+      return socket;
+    });
+    const lookup = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ messages: [], messages_count: 0 }));
+    vi.stubGlobal('fetch', lookup);
+
+    await expect(
+      testDriver().send({ to: '+8801700000000', text: 'SMS', idempotencyKey: 'campaign-1' }),
+    ).rejects.toBeInstanceOf(SmsSendRefused);
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  const connectionFailure = Object.assign(new Error('SMTP connect failed'), { syscall: 'connect' });
+
+  it.each([
+    { name: 'empty children', command: 'CONN', children: [] },
+    { name: 'non-Error children', command: 'CONN', children: [{ syscall: 'connect' }] },
+    {
+      name: 'mixed syscalls',
+      command: 'CONN',
+      children: [connectionFailure, Object.assign(new Error('Read failed'), { syscall: 'read' })],
+    },
+    { name: 'a DATA command', command: 'DATA', children: [connectionFailure] },
+  ])('keeps aggregate failures with $name unknown', async ({ command, children }) => {
+    const driver = testDriver();
+    vi.spyOn(driver['transport'], 'sendMail').mockRejectedValue(
+      Object.assign(new AggregateError(children, 'SMTP failed'), {
+        code: 'ESOCKET',
+        command,
+        originalCode: 'ECONNREFUSED',
+      }),
+    );
+
+    const error = await driver
+      .send({ to: '+8801700000000', text: 'SMS' })
+      .catch((cause: unknown) => cause);
+    expect(error).not.toBeInstanceOf(SmsSendRefused);
+    expect(error).toMatchObject({ code: 'SMS_SEND_FAILED' });
   });
 
   it('refuses a complete post-DATA 550 without a second lookup', async () => {
