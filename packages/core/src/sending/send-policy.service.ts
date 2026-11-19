@@ -10,7 +10,7 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { HOUR_MS } from '../platform/time';
-import { StoresService } from '../stores/stores.service';
+import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
 import { type MarketingSend, SendingRepository } from './sending.repository';
 
 export type SendCategory = 'staff_reply' | 'transactional' | 'marketing';
@@ -30,12 +30,13 @@ export type SendDecision =
 export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
-type CapReadOptions = { includeCommittedFuture?: boolean };
+type CapReadOptions = { excludeWorkflowStepId?: string; includeCommittedFuture?: boolean };
 
 // The most contacts one checkAudience call takes: its consent read's limit.
 export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
 
 const SEND: SendDecision = { action: 'send' };
+const WEEK_MS = 7 * 24 * HOUR_MS;
 
 function skip(reason: SkipReason): SendDecision {
   return { action: 'skip', reason };
@@ -67,6 +68,57 @@ export class SendPolicyService {
     return { decision: checked!.decision, destination: checked!.phone, at };
   }
 
+  async check(storeId: string, request: SendRequest): Promise<SendDecision> {
+    if (request.category === 'marketing') this.requireTransaction();
+    const reason = await this.recipientReason(storeId, request);
+    if (reason) return skip(reason);
+    if (request.category !== 'marketing') return SEND;
+
+    // Quiet hours come before the cap, so a deferred message is counted when it is sent.
+    const settings = await this.stores.sendingSettings(storeId);
+    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
+    if (quietUntil) return { action: 'defer', until: quietUntil };
+    await this.repository.lockContact(storeId, request.contactId);
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
+    return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
+  }
+
+  // The recipient and workflow stay locked while the runner prepares the final time and cap check.
+  async recheckRetryRecipient(storeId: string, request: Omit<SendRequest, 'at'>) {
+    const exists = await this.lockForDispatch(storeId, request.contactId);
+    const at = this.clock.now();
+    const reason = exists ? await this.recipientReason(storeId, { ...request, at }) : 'no_address';
+    return { decision: reason ? skip(reason) : SEND, at };
+  }
+
+  // Prepare cap evidence under the contact lock using settings locked at the start of the gate.
+  async prepareMarketingRetryCheck(
+    storeId: string,
+    {
+      contactId,
+      workflowStepId,
+      settings: { quietHours, timeZone, frequencyCap },
+    }: { contactId: string; workflowStepId: string; settings: StoreSendingSettings },
+  ) {
+    this.requireTransaction();
+    const readAt = this.clock.now();
+    const sends = await this.listWeekOfSends(storeId, [contactId], readAt, {
+      excludeWorkflowStepId: workflowStepId,
+      includeCommittedFuture: true,
+    });
+    return (): { decision: SendDecision; at: Date } => {
+      const at = this.clock.now();
+      const until = quietHoursEnd(at, quietHours, timeZone);
+      if (until) return { decision: { action: 'defer', until }, at };
+      // The loaded window may omit sends if the clock moved back during the query.
+      if (at < readAt) return { decision: { action: 'defer' as const, until: readAt }, at };
+      const weekStart = new Date(at.getTime() - WEEK_MS);
+      const counted = sends.filter((send) => send.sentAt > weekStart);
+      const reached = capReached(counted, { channel: 'sms', at }, frequencyCap);
+      return { decision: reached ? skip('frequency_cap') : SEND, at };
+    };
+  }
+
   private async lockForDispatch(storeId: string, contactId: string) {
     this.requireTransaction();
     await this.repository.lockContact(storeId, contactId);
@@ -79,24 +131,16 @@ export class SendPolicyService {
     }
   }
 
-  async check(storeId: string, request: SendRequest): Promise<SendDecision> {
-    if (request.category === 'marketing') this.requireTransaction();
+  private async recipientReason(
+    storeId: string,
+    request: SendRequest,
+  ): Promise<SkipReason | undefined> {
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     const [consent] =
       contact && request.category === 'marketing'
         ? await this.consents.current(storeId, [request.contactId], request.channel)
         : [];
-    const reason = recipientSkip(contact, consent?.status, request);
-    if (reason) return skip(reason);
-    if (request.category !== 'marketing') return SEND;
-
-    // Quiet hours come before the cap, so a deferred message is counted when it is sent.
-    const settings = await this.stores.sendingSettings(storeId);
-    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
-    if (quietUntil) return { action: 'defer', until: quietUntil };
-    await this.repository.lockContact(storeId, request.contactId);
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
-    return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
+    return recipientSkip(contact, consent?.status, request);
   }
 
   // Approval freezes these skips with the same rules, a page at a time and with no lock. The
@@ -158,7 +202,7 @@ export class SendPolicyService {
         : SEND;
   }
 
-  // Live checks count committed rows even if another worker's clock was ahead.
+  // Live dispatches count already-committed rows even if another worker’s clock was ahead.
   private listWeekOfSends(
     storeId: string,
     contactIds: string[],
@@ -166,7 +210,7 @@ export class SendPolicyService {
     capRead?: CapReadOptions,
   ) {
     return this.repository.listMarketingSends(storeId, contactIds, {
-      after: new Date(at.getTime() - 7 * 24 * HOUR_MS),
+      after: new Date(at.getTime() - WEEK_MS),
       until: at,
       ...capRead,
     });
