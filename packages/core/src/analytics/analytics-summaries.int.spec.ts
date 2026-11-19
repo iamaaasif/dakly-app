@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { Queue } from 'bullmq';
+import { Worker, type Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
@@ -29,7 +29,10 @@ Module({
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();
-        return { connection: toRedisConnection(env.REDIS_URL), prefix: env.QUEUE_PREFIX };
+        return {
+          connection: toRedisConnection(env.REDIS_URL),
+          prefix: `${env.QUEUE_PREFIX}:order-summaries`,
+        };
       },
     }),
   ],
@@ -132,6 +135,63 @@ describe('Daily order summaries', () => {
     expect(await ordersFor(fixture.a)).toContainEqual(
       expect.objectContaining({ day: '2026-10-26', value: '2' }),
     );
+  });
+
+  it('runs another refresh when an order commits while its day is being written', async () => {
+    const day = '2026-10-27';
+    const clock = vi.mocked(app.get(Clock).now);
+    clock.mockReturnValue(new Date('2026-11-19T06:00:59.990Z'));
+    const env = loadEnv();
+    const release = Promise.withResolvers<void>();
+    const summary = app.get(BuildOrderSummaryJob);
+    const worker = new Worker(
+      QUEUES.sync,
+      async (job) => {
+        await summary.handle(job.data);
+        await release.promise;
+      },
+      {
+        connection: toRedisConnection(env.REDIS_URL),
+        prefix: `${env.QUEUE_PREFIX}:order-summaries`,
+      },
+    );
+    const handler = app.get(SummarizeOrderCreated);
+    try {
+      const first = await order(fixture.a, `${day}T05:00:00Z`);
+      await handler.handle({ ...event(fixture.a, first), type: 'order.created' });
+      await expect
+        .poll(() => ordersFor(fixture.a))
+        .toContainEqual(expect.objectContaining({ day, value: '1' }));
+      const second = await order(fixture.a, `${day}T06:00:00Z`);
+      await handler.handle({ ...event(fixture.a, second), type: 'order.created' });
+      release.resolve();
+      await expect
+        .poll(() => ordersFor(fixture.a))
+        .toContainEqual(expect.objectContaining({ day, value: '2' }));
+    } finally {
+      release.resolve();
+      await worker.close();
+      clock.mockReturnValue(now);
+    }
+  });
+
+  it('does not restore a day that aged out while its refresh was queued', async () => {
+    const clock = vi.mocked(app.get(Clock).now);
+    clock.mockReturnValue(new Date('2026-11-19T17:59:59Z'));
+    try {
+      const orderId = await order(fixture.a, '2024-11-19T05:00:00Z');
+      await app.get(SummarizeOrderCreated).handle({
+        ...event(fixture.a, orderId),
+        type: 'order.created',
+      });
+      clock.mockReturnValue(new Date('2026-11-19T18:00:00Z'));
+      await finishOrderDay(fixture.a, '2024-11-19');
+      expect(await ordersFor(fixture.a)).not.toContainEqual(
+        expect.objectContaining({ day: '2024-11-19' }),
+      );
+    } finally {
+      clock.mockReturnValue(now);
+    }
   });
 
   it('retries the source event when the day could not be queued', async () => {
