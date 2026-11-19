@@ -195,8 +195,14 @@ function NavigationGroups({
   return (
     <div className="flex-1 space-y-4 overflow-y-auto p-3">
       {groups.map((group) => (
-        <div key={group.heading} className="space-y-1">
+        <div
+          key={group.heading}
+          role="group"
+          aria-label={`${group.heading} navigation`}
+          className="space-y-1"
+        >
           <p
+            aria-hidden="true"
             className={cn(
               'px-2 pt-2 text-xs font-semibold tracking-wide text-text-muted uppercase',
               collapsed && 'sr-only',

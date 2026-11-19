@@ -99,8 +99,30 @@ describe('navigationGroups', () => {
     ]);
   });
 
+  it('places Sales between Customers and Store information', () => {
+    const groups = navigationGroups(makeSession({ canViewOrders: true, canViewProducts: true }));
+    expect(groups.map((group) => group.heading)).toEqual([
+      'Workspace',
+      'Customers',
+      'Sales',
+      'Store information',
+      'Configuration',
+    ]);
+  });
+
   it('marks both as not visible when neither is permitted', () => {
     const groups = navigationGroups(makeSession({ canViewOrders: false, canViewProducts: false }));
+    const sales = groups.find((group) => group.heading === 'Sales');
+    expect(sales?.links.every((link) => !link.visible)).toBe(true);
+  });
+
+  it('handles session without active store', () => {
+    const groups = navigationGroups({
+      user: { id: 'user-1', name: 'Test User' },
+      hasMemberships: false,
+      currentStore: null,
+      contextTag: 'tag-1',
+    });
     const sales = groups.find((group) => group.heading === 'Sales');
     expect(sales?.links.every((link) => !link.visible)).toBe(true);
   });
