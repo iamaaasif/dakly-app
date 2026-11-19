@@ -55,7 +55,7 @@ async function success(
 }
 async function hidden(
   shop: Shop,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   url: (id: string) => string,
   id: string,
   payload?: (id: string) => object,
@@ -2145,16 +2145,20 @@ async function seedPostPhoto(shop: Shop) {
   return id;
 }
 
-async function postDraft(shop: Shop, channelConnectionId: string) {
+async function postDraft(
+  shop: Shop,
+  channelConnectionId: string,
+  captionOverride: string | null = '',
+) {
   const result = await f.request(
     shop.owner,
     'POST',
     '/posts',
-    { caption: 'নতুন পাঞ্জাবি', targets: [{ channelConnectionId, captionOverride: '' }] },
+    { caption: 'নতুন পাঞ্জাবি', targets: [{ channelConnectionId, captionOverride }] },
     { 'idempotency-key': randomUUID() },
   );
   expect(result.statusCode, result.body).toBe(201);
-  expect(result.json().targets[0]).toMatchObject({ channelConnectionId, captionOverride: '' });
+  expect(result.json().targets[0]).toMatchObject({ channelConnectionId, captionOverride });
   return result.json().id as string;
 }
 
@@ -2224,6 +2228,108 @@ for (const method of ['PATCH', 'DELETE'] as const) {
     expect(await f.row('posts', foreign)).toEqual(before);
   });
 }
+
+async function aiPostDraft(shop: Shop, actor = shop.owner) {
+  const channelConnectionId = await seedChannel(shop);
+  const draft = await f.request(
+    actor,
+    'POST',
+    '/posts',
+    {
+      caption: 'ঈদের পাঞ্জাবি',
+      isAiWritten: true,
+      targets: [{ channelConnectionId, captionOverride: null }],
+    },
+    { 'idempotency-key': randomUUID() },
+  );
+  expect(draft.statusCode, draft.body).toBe(201);
+  return draft.json().id as string;
+}
+
+fixture('POST /posts/:postId/approve', async () => {
+  const { a, b } = await pair();
+  const foreign = await aiPostDraft(a);
+  const own = await aiPostDraft(b);
+  const url = `/posts/${own}/approve`;
+  const approved = await success(b, 'POST', url, 200);
+  expect(approved.json()).toMatchObject({ id: own, approvedByUserId: b.owner.id });
+  const before = await f.row('posts', foreign);
+  await hidden(b, 'POST', (id) => `/posts/${id}/approve`, foreign);
+  expect(await f.row('posts', foreign)).toEqual(before);
+});
+
+fixture('POST /posts/:postId/schedule', async () => {
+  const { a, b } = await pair();
+  const own = await aiPostDraft(a);
+  const foreign = await aiPostDraft(b);
+  const scheduledFor = '2099-11-20T20:30:00+06:00';
+  const response = await success(a, 'POST', `/posts/${own}/schedule`, 200, { scheduledFor });
+  const target = response.json().targets[0];
+  expect(response.json()).toMatchObject({ id: own, approvedByUserId: a.owner.id });
+  expect(target).toMatchObject({ status: 'scheduled', scheduledFor: '2099-11-20T14:30:00.000Z' });
+  const scheduled = await f.admin.pool.query(
+    "select payload from outbox_events where store_id=$1 and type='post.scheduled'",
+    [a.id],
+  );
+  expect(scheduled.rows).toEqual([
+    {
+      payload: { postId: own, postTargetId: target.id, scheduledFor: target.scheduledFor },
+    },
+  ]);
+  const before = await f.row('posts', foreign);
+  await hidden(
+    a,
+    'POST',
+    (id) => `/posts/${id}/schedule`,
+    foreign,
+    () => ({ scheduledFor }),
+  );
+  expect(await f.row('posts', foreign)).toEqual(before);
+});
+
+fixture('GET /posts/queue-slots', async () => {
+  const { a, b } = await pair();
+  const own = await seedChannel(b);
+  const foreign = await seedChannel(a);
+  const result = await success(b, 'GET', `/posts/queue-slots?channelConnectionId=${own}`, 200);
+  expect(result.json()).toMatchObject({
+    channelConnectionId: own,
+    timeZone: 'Asia/Dhaka',
+    slots: expect.arrayContaining([{ weekday: 5, time: '20:30' }]),
+  });
+  await hidden(b, 'GET', (id) => `/posts/queue-slots?channelConnectionId=${id}`, foreign);
+});
+
+fixture('PUT /posts/queue-slots', async () => {
+  const { a, b } = await pair();
+  const own = await seedChannel(b);
+  const foreign = await seedChannel(a);
+  const slots = [{ weekday: 5, time: '19:30' }];
+  const saved = await success(b, 'PUT', '/posts/queue-slots', 200, {
+    channelConnectionId: own,
+    slots,
+  });
+  expect(saved.json()).toMatchObject({ channelConnectionId: own, slots });
+  const reloaded = await success(b, 'GET', `/posts/queue-slots?channelConnectionId=${own}`, 200);
+  expect(reloaded.json()).toEqual(saved.json());
+  const before = await f.row('channel_connections', foreign);
+  await hidden(
+    b,
+    'PUT',
+    () => '/posts/queue-slots',
+    foreign,
+    (id) => ({
+      channelConnectionId: id,
+      slots,
+    }),
+  );
+  expect(await f.row('channel_connections', foreign)).toEqual(before);
+  const audit = await f.admin.pool.query(
+    'select action from audit_log where store_id=$1 and entity_id=$2',
+    [b.id, own],
+  );
+  expect(audit.rows).toEqual([{ action: 'post.slots_saved' }]);
+});
 
 fixture('GET /channel-connections', async () => {
   const { a, b } = await pair();
@@ -3420,6 +3526,109 @@ describe('every production shop route isolates its data', () => {
       [shop.id, first.json().id],
     );
     expect(audits.rows).toEqual([{ action: 'post.created' }]);
+  });
+
+  it('refuses to approve or schedule an empty Facebook target', async () => {
+    const shop = await f.shop();
+    const post = await postDraft(shop, await seedChannel(shop));
+    const approve = await f.request(shop.owner, 'POST', `/posts/${post}/approve`);
+    const schedule = await f.request(shop.owner, 'POST', `/posts/${post}/schedule`, {
+      nextSlot: true,
+    });
+    for (const reply of [approve, schedule]) {
+      expect(reply.statusCode, reply.body).toBe(400);
+      expect(reply.json().error.code).toBe('POST_CONTENT_REQUIRED');
+    }
+    expect(await f.row('posts', post)).toMatchObject({ approved_at: null });
+  });
+
+  it('uses a saved account slot when adding a draft to the queue', async () => {
+    const shop = await f.shop();
+    const channelConnectionId = await seedChannel(shop);
+    const minute = 60_000;
+    const scheduledFor = Math.ceil((Date.now() + 45 * minute) / minute) * minute;
+    const local = new Date(scheduledFor + 360 * minute);
+    await success(shop, 'PUT', '/posts/queue-slots', 200, {
+      channelConnectionId,
+      slots: [{ weekday: local.getUTCDay(), time: local.toISOString().slice(11, 16) }],
+    });
+    const post = await postDraft(shop, channelConnectionId, null);
+    const queued = await success(shop, 'POST', `/posts/${post}/schedule`, 200, { nextSlot: true });
+    expect(queued.json().targets).toMatchObject([
+      { scheduledFor: new Date(scheduledFor).toISOString() },
+    ]);
+  });
+
+  it('reserves the next free local posting time when two drafts use the same account', async () => {
+    const shop = await f.shop();
+    await f.admin.pool.query("update stores set time_zone='Asia/Kathmandu' where id=$1", [shop.id]);
+    const connection = await seedChannel(shop);
+    const first = await postDraft(shop, connection, null);
+    const second = await postDraft(shop, connection, null);
+    const cutoff = 15 * 60_000;
+    const started = Date.now();
+    const scheduled = await Promise.all(
+      [first, second].map((id) =>
+        success(shop, 'POST', `/posts/${id}/schedule`, 200, { nextSlot: true }),
+      ),
+    );
+    const [earlier, later] = scheduled
+      .map((reply) => Date.parse(reply.json().targets[0].scheduledFor))
+      .sort((left, right) => left - right);
+    const localTime = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kathmandu',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    const earlierTime = localTime.format(earlier);
+    const laterTime = localTime.format(later);
+    expect([earlierTime, laterTime].sort()).toEqual(['12:30', '20:30']);
+    const hour = 60 * 60_000;
+    expect(earlier).toBeGreaterThanOrEqual(started + cutoff);
+    expect(earlier! - (earlierTime === '12:30' ? 16 : 8) * hour).toBeLessThan(Date.now() + cutoff);
+    expect(later! - earlier!).toBe((earlierTime === '12:30' ? 8 : 16) * hour);
+  });
+
+  it.each(['admin', 'marketer'] as const)('lets a %s approve their own AI draft', async (role) => {
+    const shop = await f.shop();
+    await f.admin.pool.query('update memberships set built_in_role=$1 where id=$2', [
+      role,
+      shop.membership,
+    ]);
+    const id = await aiPostDraft(shop, shop.member);
+    const approved = await f.request(shop.member, 'POST', `/posts/${id}/approve`);
+    expect(approved.statusCode, approved.body).toBe(200);
+    expect(approved.json()).toMatchObject({ approvedByUserId: shop.member.id });
+  });
+
+  it('refuses AI approval from a custom social editor and a support agent', async () => {
+    const shop = await f.shop();
+    const roleId = (
+      await success(shop, 'POST', '/roles', 201, {
+        name: 'পোস্ট সম্পাদক',
+        permissions: { ...permissions, areas: { social: 'edit' } },
+      })
+    ).json().id;
+    await f.admin.pool.query('update memberships set built_in_role=null, role_id=$1 where id=$2', [
+      roleId,
+      shop.membership,
+    ]);
+    const id = await aiPostDraft(shop, shop.member);
+    const rejected = await f.request(shop.member, 'POST', `/posts/${id}/approve`);
+    expect(rejected.statusCode, rejected.body).toBe(403);
+    expect(rejected.json().error.code).toBe('POST_APPROVAL_REQUIRED');
+    const schedule = await f.request(shop.member, 'POST', `/posts/${id}/schedule`, {
+      scheduledFor: '2099-11-20T20:30:00+06:00',
+    });
+    expect(schedule.statusCode, schedule.body).toBe(403);
+    expect(schedule.json().error.code).toBe('POST_APPROVAL_REQUIRED');
+    await f.admin.pool.query(
+      "update memberships set built_in_role='support_agent', role_id=null where id=$1",
+      [shop.membership],
+    );
+    expect((await f.request(shop.member, 'POST', `/posts/${id}/approve`)).statusCode).toBe(403);
+    expect(await f.row('posts', id)).toMatchObject({ approved_at: null });
   });
 
   it('keeps a draft create key private to its creator', async () => {
