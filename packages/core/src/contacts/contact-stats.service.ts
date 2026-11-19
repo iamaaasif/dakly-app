@@ -7,15 +7,8 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
-import {
-  type BestSpendCutoff,
-  ContactStatsRepository,
-  type ContactStatsWrite,
-} from './contact-stats.repository';
+import { ContactStatsRepository, type ContactStatsWrite } from './contact-stats.repository';
 
-type RepairRanking = { kind: 'keep' } | { kind: 'cutoff'; cutoff: BestSpendCutoff | null };
-
-const BATCH_SIZE = 100;
 const BEST_SPEND_POISHA = 2_000_000n;
 const INTENTIONAL_SOURCES: readonly ContactSource[] = [
   'manual',
@@ -41,7 +34,7 @@ export class ContactStatsService {
     if (contactId) await this.refresh(storeId, contactId);
   }
 
-  async refresh(storeId: string, contactId: string, ranking: 'live' | 'keep' = 'live') {
+  async refresh(storeId: string, contactId: string) {
     await this.transaction.run(storeId, async () => {
       const contact = await this.repository.lockContact(storeId, contactId);
       if (!contact) return;
@@ -53,7 +46,6 @@ export class ContactStatsService {
         totals,
         now,
         timeZone,
-        ranking,
       });
       await this.repository.save(storeId, contactId, {
         ...totals,
@@ -64,25 +56,6 @@ export class ContactStatsService {
     });
   }
 
-  async reconcilePage(storeId: string, after: string | null, ranking: RepairRanking) {
-    const batch =
-      ranking.kind === 'keep'
-        ? await this.repository.contactIds(storeId, after, BATCH_SIZE)
-        : await this.repository.contactsWithChangedRank(storeId, after, {
-            cutoff: ranking.cutoff,
-            minimum: BEST_SPEND_POISHA,
-            limit: BATCH_SIZE,
-          });
-    // The cutoff finds candidates. A live check covers orders committed since it was measured.
-    for (const { id } of batch)
-      await this.refresh(storeId, id, ranking.kind === 'keep' ? 'keep' : 'live');
-    return batch.length === BATCH_SIZE ? (batch.at(-1)?.id ?? null) : null;
-  }
-
-  bestSpendCutoff(storeId: string) {
-    return this.repository.bestSpendCutoff(storeId);
-  }
-
   private async lifecycleStage(
     storeId: string,
     contactId: string,
@@ -91,13 +64,11 @@ export class ContactStatsService {
       totals,
       now,
       timeZone,
-      ranking,
     }: {
       contact: NonNullable<Awaited<ReturnType<ContactStatsRepository['lockContact']>>>;
       totals: Awaited<ReturnType<OrdersService['contactOrderTotals']>>;
       now: Date;
       timeZone: string;
-      ranking: 'live' | 'keep';
     },
   ): Promise<ContactStatsWrite['lifecycleStage']> {
     if (!isCustomer(contact, totals.ordersCount)) return 'none';
@@ -108,21 +79,10 @@ export class ContactStatsService {
     if (sinceLast > (await this.stores.customerInactivityDays(storeId))) return 'stopped_buying';
     if (
       totals.netSpendPoisha > BEST_SPEND_POISHA &&
-      (await this.isBest(storeId, contactId, totals.netSpendPoisha, ranking))
+      (await this.repository.lifecycleStage(storeId, contactId)) === 'best'
     )
       return 'best';
     return purchaseStage(totals, sinceLast, daysSince);
-  }
-
-  private async isBest(
-    storeId: string,
-    contactId: string,
-    spend: bigint,
-    ranking: 'live' | 'keep',
-  ) {
-    if (ranking === 'keep')
-      return (await this.repository.lifecycleStage(storeId, contactId)) === 'best';
-    return this.repository.bestBySpend(storeId, contactId, spend, INTENTIONAL_SOURCES);
   }
 }
 

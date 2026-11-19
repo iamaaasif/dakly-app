@@ -7,7 +7,6 @@ import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { SessionsService } from '../sessions/sessions.service';
 import type { TeamService } from '../team/team.service';
-import type { MaintenanceStoresRepository } from './maintenance-stores.repository';
 import type { StoresRepository } from './stores.repository';
 import { StoresService } from './stores.service';
 
@@ -20,7 +19,6 @@ function serviceWith(sending: unknown) {
     unused as UsersService,
     unused as Clock,
     repository as unknown as StoresRepository,
-    unused as MaintenanceStoresRepository,
     unused as StoreTransaction,
     unused as TeamService,
     unused as BillingService,

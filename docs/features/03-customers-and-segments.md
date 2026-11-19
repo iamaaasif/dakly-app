@@ -530,7 +530,7 @@ Consent
 
 Stats: one `contact_stats` row per contact holds the non-cancelled order count, delivered count, returned count, net spend, first and last order, usual gap and lifecycle stage. Net spend uses the kept items after discount on paid deliveries. A late return removes that order's spend. Return risk is read from orders by delivery phone (D26), and lead temperature lives on the conversation.
 
-Contact creation, order creation, stage changes and COD collection refresh one contact from current orders in a store transaction. Replaying an event leaves the stats unchanged. The daily worker repairs up to 100 contacts per job and queues the next page. It repairs the order totals before ranking the Best customers. The top tenth is rounded down and ties use contact ID.
+Contact creation, order creation, stage changes and COD collection refresh one contact from current orders in a store transaction. Replaying an event leaves the stats unchanged. A refresh keeps an existing Best customers stage while the contact still qualifies above ৳20,000 and has not stopped buying. The nightly repair and store-wide ranking are a separate part of CUS-3.
 
 Segments
 

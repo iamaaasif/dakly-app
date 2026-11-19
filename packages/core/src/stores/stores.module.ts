@@ -6,7 +6,6 @@ import { BillingModule } from '../billing/billing.module';
 import { ClockModule } from '../platform/clock.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { TeamModule } from '../team/team.module';
-import { MaintenanceStoresRepository } from './maintenance-stores.repository';
 import { PlansController } from './plans.controller';
 import { StoreSettingsController } from './store-settings.controller';
 import { StoresController } from './stores.controller';
@@ -16,7 +15,7 @@ import { StoresService } from './stores.service';
 @Module({
   imports: [UsersModule, AuditModule, BillingModule, SessionsModule, TeamModule, ClockModule],
   controllers: [StoresController, PlansController, StoreSettingsController],
-  providers: [StoresService, StoresRepository, MaintenanceStoresRepository],
+  providers: [StoresService, StoresRepository],
   exports: [StoresService],
 })
 export class StoresModule {}
