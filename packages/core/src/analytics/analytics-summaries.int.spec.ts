@@ -1,26 +1,44 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
+import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { Queue } from 'bullmq';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { ContactStatsService } from '../contacts/contact-stats.service';
 import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
+import { QUEUES } from '../platform/queue/queues';
+import { toRedisConnection } from '../platform/queue/redis-connection';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
+import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, AnalyticsModule] })(TestModule);
+Module({
+  imports: [
+    DatabaseModule,
+    AnalyticsModule,
+    BullModule.forRootAsync({
+      useFactory: () => {
+        const env = loadEnv();
+        return { connection: toRedisConnection(env.REDIS_URL), prefix: env.QUEUE_PREFIX };
+      },
+    }),
+  ],
+})(TestModule);
 
 describe('Daily order summaries', () => {
   const fixture = new OwnerIsolationFixture();
   let app: INestApplicationContext;
+  let queue: Queue;
   const now = new Date('2026-11-19T06:00:00Z');
   let number = 1000;
 
@@ -30,6 +48,7 @@ describe('Daily order summaries', () => {
       fixture.b,
     ]);
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
+    queue = app.get(getQueueToken(QUEUES.sync));
     vi.spyOn(app.get(Clock), 'now').mockReturnValue(now);
   });
 
@@ -68,6 +87,13 @@ describe('Daily order summaries', () => {
     return { id: randomUUID(), storeId, occurredAt: now.toISOString(), payload: { orderId } };
   }
 
+  async function finishOrderDay(storeId: string, day: string) {
+    const jobs = await queue.getDelayed();
+    const job = jobs.find(({ data }) => data.storeId === storeId && data.day === day);
+    await app.get(BuildOrderSummaryJob).handle(job?.data);
+    await job?.remove();
+  }
+
   it('uses the creation day in each store’s time zone', async () => {
     const beforeMidnight = await order(fixture.a, '2026-11-08T17:59:59Z');
     const atMidnight = await order(fixture.a, '2026-11-08T18:00:00Z');
@@ -81,11 +107,48 @@ describe('Daily order summaries', () => {
     ] as const) {
       await handler.handle({ ...event(storeId, orderId), type: 'order.created' });
     }
+    await finishOrderDay(fixture.a, '2026-11-08');
+    await finishOrderDay(fixture.a, '2026-11-09');
+    await finishOrderDay(fixture.b, '2026-11-08');
     expect(await ordersFor(fixture.a)).toMatchObject([
       { day: '2026-11-08', value: '1' },
       { day: '2026-11-09', value: '1' },
     ]);
     expect(await ordersFor(fixture.b)).toMatchObject([{ day: '2026-11-08', value: '1' }]);
+  });
+
+  it('queues one refresh for two order events on the same store day', async () => {
+    const first = await order(fixture.a, '2026-10-26T05:00:00Z');
+    const second = await order(fixture.a, '2026-10-26T06:00:00Z');
+    const handler = app.get(SummarizeOrderCreated);
+    for (const orderId of [first, second]) {
+      await handler.handle({ ...event(fixture.a, orderId), type: 'order.created' });
+    }
+    const jobs = await queue.getDelayed();
+    expect(jobs.map(({ data, opts }) => ({ ...data, delay: opts.delay }))).toEqual([
+      { storeId: fixture.a, day: '2026-10-26', delay: 60000 },
+    ]);
+    await finishOrderDay(fixture.a, '2026-10-26');
+    expect(await ordersFor(fixture.a)).toContainEqual(
+      expect.objectContaining({ day: '2026-10-26', value: '2' }),
+    );
+  });
+
+  it('retries the source event when the day could not be queued', async () => {
+    const orderId = await order(fixture.a, '2026-11-04T05:00:00Z');
+    const data = { ...event(fixture.a, orderId), type: 'order.created' };
+    const handler = app.get(SummarizeOrderCreated);
+    const enqueue = vi.spyOn(queue, 'add').mockRejectedValueOnce(new Error('Queue unavailable'));
+    try {
+      await expect(handler.handle(data)).rejects.toThrow('Queue unavailable');
+      await handler.handle(data);
+      await finishOrderDay(fixture.a, '2026-11-04');
+      expect(await ordersFor(fixture.a)).toContainEqual(
+        expect.objectContaining({ day: '2026-11-04', value: '1' }),
+      );
+    } finally {
+      enqueue.mockRestore();
+    }
   });
 
   it('restates the original day after cancellation and leaves replay unchanged', async () => {
@@ -94,6 +157,7 @@ describe('Daily order summaries', () => {
       ...event(fixture.a, orderId),
       type: 'order.created',
     });
+    await finishOrderDay(fixture.a, '2026-11-01');
     await fixture.connection.pool.query(
       "update orders set stage='cancelled', cancel_reason='customer_cancelled' where id=$1",
       [orderId],
@@ -105,10 +169,10 @@ describe('Daily order summaries', () => {
       payload: { orderId, from: 'to_confirm', to: 'cancelled' },
     };
     await handler.handle(change);
+    await finishOrderDay(fixture.a, '2026-11-01');
     const restated = await ordersFor(fixture.a);
     expect(restated).toContainEqual(expect.objectContaining({ day: '2026-11-01', value: '0' }));
     expect(restated.some(({ day }) => day === '2026-11-19')).toBe(false);
-    vi.mocked(app.get(Clock).now).mockReturnValueOnce(new Date('2026-11-19T06:01:00Z'));
     await handler.handle(change);
     expect(await ordersFor(fixture.a)).toEqual(restated);
   });
@@ -125,6 +189,7 @@ describe('Daily order summaries', () => {
       type: 'order.stage_changed',
       payload: { orderId, from: 'with_courier', to: 'delivered' },
     });
+    await finishOrderDay(fixture.a, '2026-10-21');
     const metrics = async () =>
       (
         await fixture.connection.pool.query(
@@ -143,6 +208,7 @@ describe('Daily order summaries', () => {
       ...event(fixture.a, orderId),
       type: 'order.cod_collected',
     });
+    await finishOrderDay(fixture.a, '2026-10-21');
     expect(await metrics()).toEqual([
       { day: '2026-10-21', metric: 'delivered_orders', value: '1' },
       { day: '2026-10-21', metric: 'net_spend', value: '124500' },
@@ -157,6 +223,7 @@ describe('Daily order summaries', () => {
       payload: { orderId, from: 'delivered', to: 'returned' },
     };
     await handler.handle(returned);
+    await finishOrderDay(fixture.a, '2026-10-21');
     const restated = await metrics();
     expect(restated).toEqual([
       { day: '2026-10-21', metric: 'delivered_orders', value: '0' },
@@ -172,9 +239,11 @@ describe('Daily order summaries', () => {
     const created = { ...event(fixture.a, orderId), type: 'order.created' };
     const handler = app.get(SummarizeOrderCreated);
     await handler.handle(created);
+    await finishOrderDay(fixture.a, '2026-11-02');
     const before = await ordersFor(fixture.a);
     await order(fixture.a, '2026-11-02T12:30:00Z');
     await handler.handle(created);
+    expect(await queue.getDelayed()).toEqual([]);
     expect(await ordersFor(fixture.a)).toEqual(before);
   });
 

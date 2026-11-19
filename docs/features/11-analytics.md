@@ -222,9 +222,9 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 
 Each `buyer_activity` row records one buyer and day, with the first non-cancelled order day as its value. That lets a period count each repeat buyer once even when they order on several days. A cancellation can move the first order day, so the subscriber replaces that buyer's retained days.
 
-Each store’s lifecycle snapshot holds a count for each of the six stages. Contact stats publish an event when a stage changes.
+Contact stats publish `contact.lifecycle_changed` when a stage changes. The ANA-1 reports follow-up will use that event to write snapshots with a count for each of the six stages.
 
-The order event ID is recorded in the same transaction as its summary rows. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
+Order changes for the same store and original day share a refresh at the end of the current minute. The subscriber queues that refresh before recording the event ID with its buyer activity writes, so a queue failure can be retried. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 

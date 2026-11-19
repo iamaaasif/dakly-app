@@ -1,4 +1,6 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 
 import { lifecycleStages } from '@dakly/contracts/contacts';
 
@@ -7,8 +9,13 @@ import { ContactsService } from '../contacts/contacts.service';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { QUEUES } from '../platform/queue/queues';
+import { DAY_MS, JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { AnalyticsRepository } from './analytics.repository';
+import { reportDay, shiftReportDay, type ReportPeriod } from './report-period';
+
+export const BUILD_ORDER_SUMMARY = 'build-order-summary';
 
 @Injectable()
 export class AnalyticsSummariesService {
@@ -20,44 +27,69 @@ export class AnalyticsSummariesService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(Clock) private readonly clock: Clock,
+    @InjectQueue(QUEUES.sync) private readonly queue: Queue,
   ) {}
 
   async refreshOrder(storeId: string, orderId: string, event: { id: string; occurredAt: string }) {
+    if (await this.summaries.hasOrderEvent(storeId, event)) return;
+    const now = this.clock.now();
+    const timeZone = await this.stores.timeZone(storeId);
+    const order = await this.orders.reportingAnchor(storeId, orderId, timeZone, now);
+    if (!order) return;
+    // The minute job must exist before we record the event as handled.
+    if (order.retained) await this.scheduleOrderDay(storeId, order.day);
     await this.transaction.run(storeId, async () => {
-      await this.summaries.lockSummaries(storeId);
-      const now = this.clock.now();
       if (!(await this.summaries.recordEvent(storeId, event, now))) return;
+      const { buyerContactId } = order;
+      if (buyerContactId) {
+        await this.summaries.lockSummaries(storeId, buyerContactId);
+        await this.refreshBuyer(storeId, buyerContactId, timeZone, now);
+      }
+    });
+  }
+
+  async refreshOrderDays(storeId: string, period: ReportPeriod) {
+    await this.transaction.run(storeId, async () => {
+      await this.summaries.lockSummaries(storeId, 'orders');
       const timeZone = await this.stores.timeZone(storeId);
-      const order = await this.orders.reportingAnchor(storeId, orderId, timeZone, now);
-      if (!order) return;
-      const { day, buyerContactId } = order;
-      if (order.retained) {
-        const [totals = { orders: '0', deliveredOrders: '0', netSpend: '0' }] =
-          await this.orders.dailyOrderMetrics(storeId, {
-            from: day,
-            through: day,
-            timeZone,
-          });
-        await this.summaries.save(
-          storeId,
-          [
-            { day, metric: 'orders', value: BigInt(totals.orders) },
-            { day, metric: 'delivered_orders', value: BigInt(totals.deliveredOrders) },
-            { day, metric: 'net_spend', value: BigInt(totals.netSpend) },
-          ],
-          now,
+      const rows = await this.orders.dailyOrderMetrics(storeId, { ...period, timeZone });
+      const byDay = new Map(rows.map((row) => [row.day, row]));
+      const metrics = [];
+      for (let day = period.from; day <= period.through; day = shiftReportDay(day, 1)) {
+        const totals = byDay.get(day) ?? { orders: '0', deliveredOrders: '0', netSpend: '0' };
+        metrics.push(
+          { day, metric: 'orders', value: BigInt(totals.orders) },
+          { day, metric: 'delivered_orders', value: BigInt(totals.deliveredOrders) },
+          { day, metric: 'net_spend', value: BigInt(totals.netSpend) },
         );
       }
-      if (buyerContactId) await this.refreshBuyer(storeId, buyerContactId, timeZone, now);
+      await this.summaries.save(storeId, metrics, this.clock.now());
     });
+  }
+
+  private async scheduleOrderDay(storeId: string, day: string) {
+    const now = this.clock.now().getTime();
+    const dueAt = (Math.floor(now / MINUTE_MS) + 1) * MINUTE_MS;
+    await this.queue.add(
+      BUILD_ORDER_SUMMARY,
+      { storeId, day },
+      {
+        jobId: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}-${dueAt}`,
+        delay: dueAt - now,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
+        removeOnComplete: { age: DAY_MS / 1000 },
+        removeOnFail: 100,
+      },
+    );
   }
 
   async refreshLifecycle(storeId: string) {
     await this.transaction.run(storeId, async () => {
-      await this.summaries.lockSummaries(storeId);
+      await this.summaries.lockSummaries(storeId, 'lifecycle');
       const now = this.clock.now();
       const timeZone = await this.stores.timeZone(storeId);
-      const day = new Intl.DateTimeFormat('en-CA', { timeZone }).format(now);
+      const day = reportDay(now, timeZone);
       const rows = await this.contactStats.lifecycleCounts(storeId);
       const counts = new Map(rows.map(({ stage, count }) => [stage, count]));
       const metrics = lifecycleStages
