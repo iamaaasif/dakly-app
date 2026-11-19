@@ -201,6 +201,24 @@ export class SocialRepository {
     return match && { post: match.post, target: { ...match.target, scheduledFor } };
   }
 
+  pendingPublishTargets(storeId: string, before: Date, after: string | undefined, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: postTargets.id, scheduledFor: postTargets.scheduledFor })
+        .from(postTargets)
+        .where(
+          and(
+            eq(postTargets.storeId, storeId),
+            inArray(postTargets.status, ['scheduled', 'publishing']),
+            lte(postTargets.scheduledFor, before),
+            after ? gt(postTargets.id, after) : undefined,
+          ),
+        )
+        .orderBy(postTargets.id)
+        .limit(limit),
+    );
+  }
+
   async updatePublishTarget(
     storeId: string,
     current: {
@@ -208,6 +226,7 @@ export class SocialRepository {
       status: (typeof postTargets.$inferSelect)['status'];
       attempts: number;
       scheduledFor: Date;
+      publishedAt: Date | null;
     },
     changes: TargetWrite,
   ) {
@@ -222,6 +241,9 @@ export class SocialRepository {
             eq(postTargets.status, current.status),
             eq(postTargets.attempts, current.attempts),
             eq(postTargets.scheduledFor, current.scheduledFor),
+            current.publishedAt
+              ? eq(postTargets.publishedAt, current.publishedAt)
+              : isNull(postTargets.publishedAt),
           ),
         )
         .returning({ id: postTargets.id }),

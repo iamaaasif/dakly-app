@@ -1,6 +1,6 @@
 {
-  "id": "46e4e041-a0aa-4c59-a5a3-2651e0eeb124",
-  "prevId": "dd759595-9daa-48df-8fec-5849ae5d654b",
+  "id": "c8f16d24-212f-4b4a-a80a-f0c51fcd8220",
+  "prevId": "5da93585-c721-4c0c-b9d7-330104897769",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7514,12 +7514,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "balance_pause_revision": {
-          "name": "balance_pause_revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "is_ai_written": {
           "name": "is_ai_written",
           "type": "boolean",
@@ -7814,29 +7808,7 @@
             }
           ],
           "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'sending' or (\"campaigns\".\"status\" = 'cancelled' and \"campaigns\".\"settlement_pending_at\" is not null)",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_balance_paused_idx": {
-          "name": "campaigns_balance_paused_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'paused' and \"campaigns\".\"pause_reason\" = 'balance'",
+          "where": "(\"campaigns\".\"status\" = 'sending' and \"campaigns\".\"short_link_base\" is not null) or (\"campaigns\".\"status\" = 'cancelled' and \"campaigns\".\"settlement_pending_at\" is not null)",
           "concurrently": false,
           "method": "btree",
           "with": {}

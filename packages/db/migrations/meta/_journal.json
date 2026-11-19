@@ -411,8 +411,15 @@
     {
       "idx": 58,
       "version": "7",
-      "when": 1795125877443,
-      "tag": "0058_campaign_send_recovery",
+      "when": 1795123542384,
+      "tag": "0058_social_publish_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1795128957724,
+      "tag": "0059_campaign_send_recovery",
       "breakpoints": true
     },
     {

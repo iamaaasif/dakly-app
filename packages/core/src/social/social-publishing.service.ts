@@ -10,6 +10,7 @@ import {
 
 import { AuditService } from '../audit/audit.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -50,9 +51,41 @@ export class SocialPublishingService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresService) private readonly stores: StoresService,
   ) {}
+
+  async checkTarget(storeId: string, input: JobTarget) {
+    const match = await this.repository.findPublishTarget(storeId, input);
+    if (!match || match.target.status !== 'scheduled') return;
+    const { post, target } = match;
+    const { channelConnectionId, scheduledFor } = target;
+    let error: AppError | null = null;
+    try {
+      const { kind } = await this.credential(storeId, channelConnectionId, scheduledFor);
+      await this.photoKeys(storeId, post.mediaFileIds, kind, scheduledFor);
+    } catch (failure) {
+      if (!(failure instanceof AppError)) throw failure;
+      error = failure;
+    }
+    const errorCode = error && error.code;
+    if (target.errorCode === errorCode) return;
+    await this.recordTarget(storeId, target, {
+      action: 'post.preflight_checked',
+      errorCode,
+      errorMessage: error && error.message,
+    });
+  }
+
+  async settleExpiredTarget(storeId: string, input: JobTarget) {
+    const target = (await this.repository.findPublishTarget(storeId, input))?.target;
+    if (!target || this.attemptedRecently(target, this.clock.now())) return;
+    const error = target.publishedAt
+      ? undefined
+      : publishError(socialError('POST_PUBLISH_WINDOW_ENDED'), target.status);
+    await this.finish(storeId, target, error);
+  }
 
   async publishTarget(storeId: string, input: JobTarget, finalAttempt: boolean) {
     const match = await this.repository.findPublishTarget(storeId, input);
@@ -81,9 +114,12 @@ export class SocialPublishingService {
   private checkDue(target: PublishingTarget) {
     const now = this.clock.now();
     if (target.scheduledFor > now) throw socialError('POST_NOT_DUE');
+    if (this.attemptedRecently(target, now)) throw socialError('POST_PUBLISH_UNCONFIRMED');
+  }
+
+  private attemptedRecently(target: PublishingTarget, now: Date) {
     // A second delivery can see a claim before the first Meta request returns.
-    if (target.attempts > 0 && now.getTime() - target.updatedAt.getTime() < MINUTE_MS)
-      throw socialError('POST_PUBLISH_UNCONFIRMED');
+    return target.attempts > 0 && now.getTime() - target.updatedAt.getTime() < MINUTE_MS;
   }
 
   private async publishApproved(storeId: string, match: PendingPost, finalAttempt: boolean) {
@@ -338,10 +374,18 @@ export class SocialPublishingService {
               type: 'post.published',
               payload: { ...payload, externalPostId: target.externalPostId },
             });
-          return this.outbox.publish({
+          await this.outbox.publish({
             ...common,
             type: 'post.failed',
             payload: { ...payload, errorCode: error.code },
+          });
+          await this.notifications.notify(storeId, {
+            type: 'post.failed',
+            category: 'fix_now',
+            recipientPermission: 'social.edit',
+            title: 'A post could not be published',
+            body: error.message,
+            dedupeKey: `post.failed:${target.id}:${target.scheduledFor.toISOString()}`,
           });
         },
       },

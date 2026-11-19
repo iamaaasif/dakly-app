@@ -144,12 +144,19 @@ export class SendPolicyService {
     {
       contactId,
       workflowStepId,
+      campaignRecipientId,
       settings: { quietHours, timeZone, frequencyCap },
-    }: { contactId: string; workflowStepId: string; settings: StoreSendingSettings },
+    }: {
+      contactId: string;
+      workflowStepId?: string;
+      campaignRecipientId?: string;
+      settings: StoreSendingSettings;
+    },
   ) {
     this.requireTransaction();
     const sends = await this.listWeekOfSends(storeId, [contactId], this.clock.now(), {
       excludeWorkflowStepId: workflowStepId,
+      excludeCampaignRecipientId: campaignRecipientId,
       includeCommittedFuture: true,
     });
     return (): { decision: SendDecision; at: Date } => {
@@ -161,6 +168,11 @@ export class SendPolicyService {
       const reached = capReached(counted, { channel: 'sms', at }, frequencyCap);
       return { decision: reached ? skip('frequency_cap') : SEND, at };
     };
+  }
+
+  async prepareCampaignSendLimits(storeId: string, contactId: string, campaignRecipientId: string) {
+    const settings = await this.stores.sendingSettings(storeId, 'share');
+    return this.prepareMarketingRetryCheck(storeId, { contactId, campaignRecipientId, settings });
   }
 
   // Approval freezes these skips with the same rules, a page at a time and with no lock. The

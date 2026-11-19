@@ -11,8 +11,11 @@ import { WorkerModule } from './worker.module';
 // Same core modules as the API, no HTTP server. WorkerModule registers the job handlers, one
 // dispatcher per queue and the job schedulers. See docs/rules/jobs.md.
 async function bootstrap(): Promise<void> {
-  loadWorkerEnv();
-  const app = await NestFactory.createApplicationContext(WorkerModule, { bufferLogs: true });
+  const { metaChannel } = loadWorkerEnv();
+  const app = await NestFactory.createApplicationContext(
+    WorkerModule.register(metaChannel?.driver),
+    { bufferLogs: true },
+  );
   app.useLogger(app.get(PinoLogger));
   app.enableShutdownHooks();
   new Logger('Worker').log('Worker started');

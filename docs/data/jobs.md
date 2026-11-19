@@ -55,10 +55,12 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 
 ## outbound
 
-| Job                   | Started by                         | Payload                   | Makes a rerun harmless                                              |
-| --------------------- | ---------------------------------- | ------------------------- | ------------------------------------------------------------------- |
-| `SendMessageJob`      | `message.send_requested`           | `storeId`, `messageId`    | One job per outbox event. The provider reference is the message ID. |
-| `publish-post-target` | Due post (from `due_post_targets`) | `storeId`, `postTargetId` | Status `publishing` set first; `external_post_id` unique            |
+| Job                       | Started by                   | Payload                                                           | Makes a rerun harmless                                                            |
+| ------------------------- | ---------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `SendMessageJob`          | `message.send_requested`     | `storeId`, `messageId`                                            | One job per outbox event. The provider reference is the message ID.               |
+| `QueuePostOnScheduledJob` | `post.scheduled`             | The event, including `storeId`, `postTargetId` and `scheduledFor` | Check and publish job IDs include the target and its scheduled time.              |
+| `check-post-target`       | 24 hours before publish time | `storeId`, `postTargetId`, `scheduledFor`                         | Checks only the matching schedule and writes only when the warning changes.       |
+| `publish-post-target`     | At publish time              | `storeId`, `postTargetId`, `scheduledFor`                         | Claims the target before calling Meta. A saved receipt prevents a second publish. |
 
 ## campaign
 
@@ -83,6 +85,7 @@ Per-store cap: one running campaign batch per store.
 
 | Job                          | Started by                                              | Payload                          | Makes a rerun harmless                                                                              |
 | ---------------------------- | ------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `recover-post-targets`       | Every minute                                            | none (sweep)                     | Finds stores with targets due within 24 hours and restores jobs under their original IDs.           |
 | `refresh-post-metrics`       | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                                                  |
 | `queue-channel-token-checks` | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due`                            |
 | `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                                               |
@@ -192,7 +195,6 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `contact.birthday`         | CAMP-11 birthday sweep                                           | `contactId`, local `day`                                                | Birthday workflow trigger                                    |
 | `segment.saved`            | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
 | `campaign.approved`        | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet                                                     |
-| `campaign.sent`            | CAMP-3, campaign sender                                          | `campaignId`                                                            | None yet                                                     |
 | `conversation.started`     | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
 | `message.received`         | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 contact stats; AI-4 reply debounce                     |
 | `conversation.handed_over` | AI-4, `AiAgentService` hands over a conversation                 | `conversationId`, `reason`                                              | None yet                                                     |
