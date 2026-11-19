@@ -28,18 +28,20 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 
 ## transactional
 
-| Job                           | Started by                                 | Payload                                           | Makes a rerun harmless                                                                                     |
-| ----------------------------- | ------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `send-sign-in-code`           | Sign-in or sign-up request                 | `userId` or target, code id (no store)            | Code id in Valkey; sent once                                                                               |
-| `send-team-invite`            | Invite created                             | `storeId`, `membershipId`                         | Sender idempotency key = invite token hash                                                                 |
-| `send-order-confirmation`     | Order created, confirm by WhatsApp or SMS  | `storeId`, `orderId`                              | Outbound message idempotency key = order id + kind                                                         |
-| `send-payment-link`           | Advance requested                          | `storeId`, `paymentIntentId`                      | Event `sent` recorded once                                                                                 |
-| `send-notification`           | Outbox event a notification rule matches   | `storeId`, `notificationId`                       | Unique `(store_id, user_id, dedupe_key)`                                                                   |
-| `send-push`                   | Notification needing escalation (NOTIF-R2) | `storeId`, `notificationId`                       | Notification status checked                                                                                |
-| `StreamNotificationOnCreated` | `notification.created` outbox event        | the event (`storeId`, `notificationId`, `userId`) | Publishes ids to Valkey only; each open stream sends each of its last 1,000 row ids once                   |
-| `send-invoice-email`          | Invoice paid                               | `storeId`, `invoiceId`                            | Sender idempotency key = invoice id                                                                        |
-| `relay-outbox`                | Job scheduler, every second                | none (sweep)                                      | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
-| `wake-snoozed-notifications`  | Job scheduler, every 30 seconds            | none (sweep)                                      | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
+| Job                                 | Started by                                        | Payload                                                                                  | Makes a rerun harmless                                                                                     |
+| ----------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `send-sign-in-code`                 | Sign-in or sign-up request                        | `userId` or target, code id (no store)                                                   | Code id in Valkey; sent once                                                                               |
+| `send-team-invite`                  | Invite created                                    | `storeId`, `membershipId`                                                                | Sender idempotency key = invite token hash                                                                 |
+| `send-order-confirmation`           | Order created, confirm by WhatsApp or SMS         | `storeId`, `orderId`                                                                     | Outbound message idempotency key = order id + kind                                                         |
+| `send-payment-link`                 | Advance requested                                 | `storeId`, `paymentIntentId`                                                             | Event `sent` recorded once                                                                                 |
+| `send-notification`                 | Outbox event a notification rule matches          | `storeId`, `notificationId`                                                              | Unique `(store_id, user_id, dedupe_key)`                                                                   |
+| `send-push`                         | Notification needing escalation (NOTIF-R2)        | `storeId`, `notificationId`                                                              | Notification status checked                                                                                |
+| `StreamNotificationOnCreated`       | `channel.connected`                               | CHN-2, `MetaAuthorizationService.connect`                                                | `channelConnectionId`                                                                                      | None yet |
+| `channel.disconnected`              | CHN-2, `ChannelConnectionsService.disconnect`     | `channelConnectionId`                                                                    | None yet                                                                                                   |
+| `notification.created` outbox event | the event (`storeId`, `notificationId`, `userId`) | Publishes ids to Valkey only; each open stream sends each of its last 1,000 row ids once |
+| `send-invoice-email`                | Invoice paid                                      | `storeId`, `invoiceId`                                                                   | Sender idempotency key = invoice id                                                                        |
+| `relay-outbox`                      | Job scheduler, every second                       | none (sweep)                                                                             | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
+| `wake-snoozed-notifications`        | Job scheduler, every 30 seconds                   | none (sweep)                                                                             | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
 
 ## outbound
 
@@ -157,11 +159,13 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `message.failed`       | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
 | `message.tapped`       | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
 | `message.opted_out`    | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
+| `channel.connected`    | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.disconnected` | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
 | `notification.created` | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 
-[Feature 02](../features/02-channel-connections.md) lists `channel.connected`, `channel.needs_reconnect` and `channel.disconnected`. No M2 or M3 task emits them yet, so they are not in the catalogue.
+`channel.needs_reconnect` joins the catalogue with token health in CHN-4. See [feature 02](../features/02-channel-connections.md).
 
 ## Send-time and financial gates
 

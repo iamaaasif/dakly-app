@@ -5,6 +5,17 @@ import { channelConnections } from '@dakly/db/schema/channels';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
+type Connection = typeof channelConnections.$inferInsert;
+type MetaConnection = Pick<
+  Connection,
+  | 'kind'
+  | 'externalAccountId'
+  | 'displayName'
+  | 'accessTokenCiphertext'
+  | 'keyVersion'
+  | 'connectedByUserId'
+>;
+
 const connectionFields = {
   id: channelConnections.id,
   kind: channelConnections.kind,
@@ -28,6 +39,39 @@ export class ChannelConnectionsRepository {
         .where(eq(channelConnections.storeId, storeId))
         .orderBy(desc(channelConnections.connectedAt), desc(channelConnections.id)),
     );
+  }
+
+  saveMeta(storeId: string, account: MetaConnection, now: Date) {
+    return this.database.forStore(storeId, async (tx) => {
+      const [inserted] = await tx
+        .insert(channelConnections)
+        .values({ ...account, storeId, connectedAt: now, createdAt: now, updatedAt: now })
+        .onConflictDoNothing()
+        .returning({ id: channelConnections.id });
+      if (inserted) return { ...inserted, connected: true };
+
+      const [existing] = await tx
+        .select({ id: channelConnections.id, status: channelConnections.status })
+        .from(channelConnections)
+        .where(
+          and(
+            eq(channelConnections.storeId, storeId),
+            eq(channelConnections.kind, account.kind),
+            eq(channelConnections.externalAccountId, account.externalAccountId),
+            ne(channelConnections.status, 'disconnected'),
+          ),
+        )
+        .for('update');
+      if (!existing) return undefined;
+
+      await tx
+        .update(channelConnections)
+        .set({ ...account, status: 'active', tokenExpiresAt: null, updatedAt: now })
+        .where(
+          and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, existing.id)),
+        );
+      return { id: existing.id, connected: existing.status !== 'active' };
+    });
   }
 
   async disconnect(storeId: string, id: string, now: Date): Promise<boolean> {

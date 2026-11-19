@@ -677,6 +677,15 @@ async function metaGrant(shop: Shop, actor = shop.owner) {
   return { state: url.searchParams.get('state'), code: url.searchParams.get('code') };
 }
 
+async function secondShopSession(shop: Shop) {
+  const { token } = await app.get(SessionsService).create(shop.owner.id, { isRemembered: false });
+  const cookie = `${SESSION_COOKIE}=${token}`;
+  expect(
+    (await f.request(cookie, 'POST', '/me/active-store', { storeId: shop.id })).statusCode,
+  ).toBe(204);
+  return cookie;
+}
+
 async function metaCacheKey(shop: Shop, actor: Actor, kind: 'state' | 'selection', key: string) {
   const session = await app
     .get(SessionsService)
@@ -792,11 +801,7 @@ fixture('POST /channel-connections/meta/accounts', async () => {
   expect([wrongStore.statusCode, missing.statusCode]).toEqual([404, 404]);
   expect(wrongStore.json()).toEqual(missing.json());
   expect(await denyMetaStateOutsideItsShop(a, b, foreign)).toEqual(missing.json());
-  const other = await app.get(SessionsService).create(b.owner.id, { isRemembered: false });
-  const otherCookie = `${SESSION_COOKIE}=${other.token}`;
-  const selected = await f.request(otherCookie, 'POST', '/me/active-store', { storeId: b.id });
-  expect(selected.statusCode).toBe(204);
-  const wrongSession = await f.request(otherCookie, 'POST', metaAccounts, own);
+  const wrongSession = await f.request(await secondShopSession(b), 'POST', metaAccounts, own);
   expect(wrongSession.statusCode).toBe(404);
   expect(wrongSession.json()).toEqual(missing.json());
   await denyCustomMetaRole(b, own);
@@ -1663,6 +1668,89 @@ async function smsSender(shop: Shop, status: 'requested' | 'approved' = 'request
     await f.admin.pool.query("update sms_sender_ids set status='approved' where id=$1", [id]);
   return id;
 }
+const metaConnect = '/channel-connections/meta';
+const pageSelection = { kind: 'facebook_page', externalAccountId: '1001001' };
+const instagramSelection = { kind: 'instagram', externalAccountId: '1002001' };
+
+async function metaSelection(shop: Shop) {
+  const result = await success(shop, 'POST', metaAccounts, 201, await metaGrant(shop));
+  return result.json().selectionId as string;
+}
+
+async function expectSavedMetaCredential(shop: Shop, id: string, kind: string) {
+  const {
+    rows: [row],
+  } = await f.admin.pool.query(
+    'select store_id, kind, status, access_token_ciphertext, key_version from channel_connections where id=$1',
+    [id],
+  );
+  expect(row).toMatchObject({ store_id: shop.id, kind, status: 'active' });
+  const plaintext = app
+    .get(EnvelopeEncryption)
+    .decrypt(
+      { owner: 'store', storeId: shop.id, purpose: 'channel-access-token' },
+      { ciphertext: row.access_token_ciphertext, keyVersion: row.key_version },
+    );
+  expect(plaintext.toString()).toBe('fake-rina-page-credential');
+  plaintext.fill(0);
+}
+
+async function rejectMetaConflict(shop: Shop, accounts: (typeof pageSelection)[]) {
+  const selectionId = await metaSelection(shop);
+  const input = { selectionId, accounts };
+  const denied = await f.request(shop.owner, 'POST', metaConnect, input);
+  expect(denied.statusCode).toBe(409);
+  expect(denied.json().error.code).toBe('META_ACCOUNT_ALREADY_CONNECTED');
+  expect((await f.request(shop.owner, 'POST', metaConnect, input)).statusCode).toBe(404);
+  return { selectionId, denied };
+}
+
+fixture('POST /channel-connections/meta', async () => {
+  const { a, b } = await pair();
+  const selectionId = await metaSelection(a);
+  const input = { selectionId, accounts: [pageSelection, instagramSelection] };
+  const foreign = await f.request(b.owner, 'POST', metaConnect, input);
+  const other = await f.request(await secondShopSession(a), 'POST', metaConnect, input);
+  expect([foreign.statusCode, other.statusCode]).toEqual([404, 404]);
+  expect(foreign.json()).toEqual(other.json());
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    a.membership,
+  ]);
+  expect((await f.request(a.member, 'POST', metaConnect, input)).statusCode).toBe(403);
+
+  const connected = await success(a, 'POST', metaConnect, 201, input);
+  const { ids } = connected.json();
+  expect(ids).toHaveLength(2);
+  await expectSavedMetaCredential(a, ids[0], 'facebook_page');
+  await expectSavedMetaCredential(a, ids[1], 'instagram');
+  expect((await f.request(a.owner, 'POST', metaConnect, input)).statusCode).toBe(404);
+
+  await rejectMetaConflict(b, [pageSelection]);
+  const { selectionId: bSelection, denied: conflict } = await rejectMetaConflict(b, [
+    { kind: 'facebook_page', externalAccountId: '1001002' },
+    instagramSelection,
+  ]);
+  expect((await success(b, 'GET', '/channel-connections', 200)).json()).toEqual({ items: [] });
+  const events = await f.admin.pool.query(
+    'select payload from outbox_events where store_id=$1 and type=$2',
+    [a.id, 'channel.connected'],
+  );
+  expect(events.rows).toHaveLength(2);
+  expect(events.rows).toEqual(
+    expect.arrayContaining(ids.map((id: string) => ({ payload: { channelConnectionId: id } }))),
+  );
+  for (const value of [
+    selectionId,
+    bSelection,
+    'fake-meta-user-credential',
+    'fake-rina-page-credential',
+  ]) {
+    expect(connected.body).not.toContain(value);
+    expect(conflict.body).not.toContain(value);
+    expect(logs.contents()).not.toContain(value);
+  }
+});
+
 async function seedChannel(shop: Shop) {
   const id = randomUUID();
   await f.admin.pool.query(
@@ -1702,10 +1790,9 @@ fixture('DELETE /channel-connections/:channelConnectionId', async () => {
   const url = (id: string) => `/channel-connections/${id}`;
   const conversation = randomUUID();
   await f.admin.pool.query(
-    `with contact as (insert into contacts(id,store_id,name,source,kind) values($4,$1,'রিনা','messenger','chat_only') returning id)
-     insert into conversations(id,store_id,contact_id,channel_connection_id,channel)
-     select $2,$1,id,$3,'messenger' from contact`,
-    [b.id, conversation, own, randomUUID()],
+    `insert into conversations(id,store_id,contact_id,channel_connection_id,channel)
+     values($2,$1,$4,$3,'messenger')`,
+    [b.id, conversation, own, await contact(b)],
   );
   await hidden(b, 'DELETE', url, foreign);
   expect((await f.request(b.member, 'DELETE', url(own))).statusCode).toBe(403);

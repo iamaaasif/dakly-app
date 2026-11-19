@@ -4,8 +4,8 @@ import type { MetaAuthorizationDriver } from '@dakly/providers/channel/channel-d
 import { FakeMetaChannelDriver } from '@dakly/providers/channel/meta/fake-meta-channel-driver';
 import { MetaGraphChannelDriver } from '@dakly/providers/channel/meta/meta-graph-channel-driver';
 
-import { ClockModule } from '../platform/clock.module';
 import { CacheModule } from '../platform/cache/cache.module';
+import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
 import { CryptoModule } from '../platform/crypto/crypto.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';

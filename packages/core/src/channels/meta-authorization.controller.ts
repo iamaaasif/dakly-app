@@ -2,7 +2,9 @@ import { Body, Controller, Inject, Post } from '@nestjs/common';
 
 import {
   metaAuthorizationInputSchema,
+  metaSelectionInputSchema,
   type MetaAuthorizationInput,
+  type MetaSelectionInput,
 } from '@dakly/contracts/channels';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -40,5 +42,16 @@ export class MetaAuthorizationController {
     @Body(new ZodValidationPipe(metaAuthorizationInputSchema)) input: MetaAuthorizationInput,
   ) {
     return this.authorization.listAccounts(storeId, { userId, sessionId, access }, input);
+  }
+
+  @Post()
+  connect(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentSession() sessionId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Body(new ZodValidationPipe(metaSelectionInputSchema)) input: MetaSelectionInput,
+  ) {
+    return this.authorization.connect(storeId, { userId, sessionId, access }, input);
   }
 }
