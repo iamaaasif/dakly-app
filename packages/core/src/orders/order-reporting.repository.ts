@@ -46,7 +46,7 @@ export class OrderReportingRepository {
             isNotNull(orders.buyerContactId),
             after ? gt(orders.buyerContactId, after) : undefined,
             ne(orders.stage, 'cancelled'),
-            sql`${orders.createdAt} >= ${since}::date::timestamp at time zone ${timeZone}`,
+            retainedOrders(since, timeZone),
           ),
         )
         .orderBy(asc(orders.buyerContactId))
@@ -60,12 +60,7 @@ export class OrderReportingRepository {
       tx
         .select({ day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text` })
         .from(orders)
-        .where(
-          and(
-            eq(orders.storeId, storeId),
-            sql`${orders.createdAt} >= ${since}::date::timestamp at time zone ${timeZone}`,
-          ),
-        )
+        .where(and(eq(orders.storeId, storeId), retainedOrders(since, timeZone)))
         .orderBy(asc(orders.createdAt))
         .limit(1),
     );
@@ -167,4 +162,9 @@ export class OrderReportingRepository {
       lastOrderAt: totals.lastOrderAt === null ? null : new Date(totals.lastOrderAt),
     };
   }
+}
+
+function retainedOrders(since: string, timeZone: string) {
+  return sql`${orders.createdAt} >= (${since}::date - 1)::timestamp at time zone 'UTC'
+    and (${orders.createdAt} at time zone ${timeZone})::date >= ${since}::date`;
 }
