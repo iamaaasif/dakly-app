@@ -61,7 +61,7 @@ export class AutomationEntryRepository {
             eq(automationVersions.isStopped, false),
           ),
         )
-        .for('no key update', { of: automations }),
+        .for('share', { of: automations }),
     );
     return version;
   }
