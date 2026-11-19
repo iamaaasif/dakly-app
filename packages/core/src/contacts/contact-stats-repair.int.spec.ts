@@ -50,6 +50,7 @@ describe('Nightly contact stats repair', () => {
   afterAll(async () => {
     await app?.close();
     await fixture.connection.pool.query('delete from orders where store_id=$1', [fixture.b]);
+    await fixture.connection.pool.query('delete from outbox_events where store_id=$1', [fixture.b]);
     await fixture.close();
   });
 
@@ -116,6 +117,11 @@ describe('Nightly contact stats repair', () => {
          ($4,$2,1002,$5,'manual','user','delivered','নাবিলা','01710000006','Mirpur','Dhaka',2400000,2400000,'paid','2026-11-11T06:00:00Z')`,
       [firstOrder, fixture.b, firstId, randomUUID(), secondId],
     );
+    await fixture.connection.pool.query(
+      "update stores set time_zone='Atlantic/Azores' where id=$1",
+      [fixture.b],
+    );
+    vi.mocked(app.get(Clock).now).mockReturnValue(new Date(day + 'T00:15:00Z'));
     await totalsPage(fixture.b);
     const rank = await queue.getJob(`${RECONCILE_CONTACT_STATS}-${fixture.b}-${day}-rank-start`);
     expect(rank?.data.ranking.cutoff).toEqual({
@@ -128,12 +134,23 @@ describe('Nightly contact stats repair', () => {
     );
     await worker.handle(rank?.data);
     expect(await stored(firstId!)).toMatchObject({ lifecycle_stage: 'new', net_spend_poisha: '0' });
+    const completion = async () => {
+      const { rows } = await fixture.connection.pool.query(
+        "select payload from outbox_events where store_id=$1 and type='contact_stats.repaired' order by occurred_at",
+        [fixture.b],
+      );
+      return rows;
+    };
+    const completed = [{ payload: { day: '2026-11-18' } }];
+    expect(await completion()).toEqual(completed);
     expect(await stored(secondId!)).toMatchObject({
       lifecycle_stage: 'best',
       net_spend_poisha: '2400000',
     });
+    vi.mocked(app.get(Clock).now).mockReturnValue(new Date(day + 'T01:15:00Z'));
     await worker.handle(rank?.data);
     expect(await stored(secondId!)).toMatchObject({ lifecycle_stage: 'best' });
+    expect(await completion()).toEqual([...completed, { payload: { day } }]);
 
     await fixture.connection.pool.query(
       "update orders set stage='delivered', return_reason=null where id=$1",
@@ -144,8 +161,11 @@ describe('Nightly contact stats repair', () => {
       lifecycle_stage: 'new',
       net_spend_poisha: '2500000',
     });
-    vi.mocked(app.get(Clock).now).mockReturnValue(new Date('2026-11-20T06:00:00Z'));
+    vi.mocked(app.get(Clock).now)
+      .mockReturnValueOnce(new Date(day + 'T23:59:59Z'))
+      .mockReturnValue(new Date('2026-11-20T00:00:00Z'));
     await worker.handle(rank?.data);
     expect(await stored(firstId!)).toMatchObject({ lifecycle_stage: 'new' });
+    expect(await completion()).toEqual([...completed, { payload: { day } }]);
   });
 });

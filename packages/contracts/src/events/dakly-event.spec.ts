@@ -72,6 +72,8 @@ const examples: DaklyEvent[] = [
     payload: { productId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2' },
   },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
+  { type: 'contact.deleted', storeId, occurredAt, payload: { contactId } },
+  { type: 'contact_stats.repaired', storeId, occurredAt, payload: { day: '2026-11-19' } },
   { type: 'contact.birthday', storeId, occurredAt, payload: { contactId, day: '2026-11-16' } },
   {
     type: 'consent.changed',
@@ -116,6 +118,8 @@ const examples: DaklyEvent[] = [
     payload: { conversationId, contactId, connectionId, channel: 'instagram' },
   },
   { type: 'message.received', storeId, occurredAt, payload: message },
+  { type: 'message.send_requested', storeId, occurredAt, payload: { messageId } },
+  { type: 'message.sent', storeId, occurredAt, payload: message },
   { type: 'message.delivered', storeId, occurredAt, payload: message },
   { type: 'message.read', storeId, occurredAt, payload: message },
   { type: 'message.failed', storeId, occurredAt, payload: message },

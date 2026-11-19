@@ -10,7 +10,6 @@ import { MessagingService } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
@@ -20,15 +19,21 @@ import {
   type ClaimedRun,
   type DueRun,
   type RunClaim,
+  type SendingStep,
 } from './automation-runs.repository';
-import { AutomationSmsDeliveryService, SMS_NO_ANSWER } from './automation-sms-delivery.service';
+import {
+  AutomationSendRetryService,
+  endExpiredRetry,
+  hasRetryDetails,
+} from './automation-send-retry.service';
+import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 import {
   type Delivery,
   endWithUnknownOutcome,
   exited,
-  type GateResult,
   failed,
   firstSendStop,
+  type GateResult,
   goOn,
   holdOrEnd,
   holdsClaim,
@@ -44,14 +49,13 @@ import {
   type SendStep,
   type StepResult,
   workflowDestinationHash,
+  WORKFLOW_LEASE_MS,
 } from './automation-step-rules';
 
 // One sweep claims at most this many runs, and no more than the queue has room for.
 const MAX_QUEUED_STEPS = 1000;
 // And at most this many of one store's runs, so a backlog cannot hold back other stores.
 const CLAIMS_PER_STORE = 100;
-// Matches the lease compared by due_automation_runs in Postgres.
-const WORKFLOW_LEASE_MS = 5 * MINUTE_MS;
 const system = { kind: 'system' } as const;
 
 @Injectable()
@@ -67,6 +71,7 @@ export class AutomationRunsService {
     @Inject(WalletService) private readonly wallets: WalletService,
     @Inject(AutomationSmsDeliveryService)
     private readonly smsDelivery: AutomationSmsDeliveryService,
+    @Inject(AutomationSendRetryService) private readonly smsRetry: AutomationSendRetryService,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
   ) {}
 
@@ -118,13 +123,12 @@ export class AutomationRunsService {
   ): Promise<StepResult | undefined> {
     const now = await this.repository.schedulerTime(storeId);
     const step = run.graph.steps[claim.stepKey]!;
-    const isSending =
-      step.kind === 'send' &&
-      (await this.repository.hasSendingStep(storeId, claim.runId, claim.stepKey));
+    const started =
+      step.kind === 'send'
+        ? await this.repository.findSendingStep(storeId, claim.runId, claim.stepKey)
+        : undefined;
     const held = holdOrEnd(run, now);
-    // A send handed to the provider by an earlier claim is not sent again; its run ends.
-    if (isSending) return endWithUnknownOutcome(held ?? failed(SMS_NO_ANSWER, now));
-    if (held) return held;
+    if (held) return started ? endWithUnknownOutcome(held) : held;
     const facts: RunFacts = {
       storeId,
       graph: run.graph,
@@ -134,6 +138,7 @@ export class AutomationRunsService {
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
       wakeAt: run.wakeAt,
     };
+    if (step.kind === 'send' && started) return this.resend(claim, step, facts, started);
     const exitReason = await this.conditions.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
     if (
@@ -234,7 +239,13 @@ export class AutomationRunsService {
       const held = holdOrEnd(run, await this.repository.schedulerTime(storeId));
       return { stop: held && { ...held, claim: renewed } };
     }
-    if ('body' in started) return { claim: renewed, body: started.body, at: started.at };
+    if ('body' in started)
+      return {
+        claim: renewed,
+        body: started.body,
+        at: started.at,
+        firstTriedAt: started.firstTriedAt,
+      };
     return { stop: firstSendStop(renewed, step, started) };
   }
 
@@ -263,7 +274,7 @@ export class AutomationRunsService {
       channel: 'sms',
       category: step.category,
     });
-    const exitReason = await this.refreshExitReason(facts, at);
+    const exitReason = await this.conditions.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
     const firstTriedAt = await this.repository.schedulerTime(storeId);
     if (isLateSend(facts.wakeAt, firstTriedAt)) return { outcome: 'late' };
@@ -276,13 +287,7 @@ export class AutomationRunsService {
       { sentAt: at, firstTriedAt },
     );
     if (body === undefined) return { decision: noCredits };
-    return { decision, body, destination, at };
-  }
-
-  private async refreshExitReason(facts: RunFacts, at: Date) {
-    const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
-    const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
-    return this.conditions.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
+    return { decision, body, destination, at, firstTriedAt };
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
@@ -327,5 +332,26 @@ export class AutomationRunsService {
       optOutUrl: optOut?.url,
     });
     return messageBody(step, optOut?.url);
+  }
+
+  private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
+    const { storeId, wakeAt } = facts;
+    const preflight = await this.repository.schedulerTime(storeId);
+    if (
+      !hasRetryDetails(step, started, preflight) ||
+      endExpiredRetry(step, started.firstTriedAt, wakeAt, preflight)
+    ) {
+      const gate = await this.smsRetry.authorize(claim, step, facts);
+      return 'stop' in gate ? gate.stop : undefined;
+    }
+    facts.preparedSender = await this.messaging.prepareSender(storeId);
+    const prepared = await this.smsDelivery.prepare(facts);
+    const planned = await this.smsRetry.authorize(claim, step, facts, prepared?.to ?? null);
+    if ('stop' in planned) return planned.stop;
+    if (prepared)
+      return this.smsDelivery.deliver({ storeId, contactId: facts.contactId, step }, prepared, {
+        ...planned,
+        body: messageBody(step, started.optOutUrl ?? undefined),
+      });
   }
 }

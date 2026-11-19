@@ -29,6 +29,20 @@ export const messageReceivedEventSchema = z.strictObject({
   payload: messagePayloadSchema,
 });
 
+export const messageSendRequestedEventSchema = z.strictObject({
+  type: z.literal('message.send_requested'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: messagePayloadSchema.pick({ messageId: true }),
+});
+
+export const messageSentEventSchema = z.strictObject({
+  type: z.literal('message.sent'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: messagePayloadSchema,
+});
+
 export const messageDeliveredEventSchema = z.strictObject({
   type: z.literal('message.delivered'),
   storeId: z.uuid(),
