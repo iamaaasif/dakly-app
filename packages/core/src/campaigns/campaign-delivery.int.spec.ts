@@ -1,11 +1,10 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
-import { BullModule, getQueueToken } from '@nestjs/bullmq';
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import type { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createCampaignSchema } from '@dakly/contracts/campaigns';
@@ -27,8 +26,7 @@ import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsModule } from './campaigns.module';
 import { CampaignsService } from './campaigns.service';
-import { SEND_CAMPAIGN_BATCH, SendCampaignBatchJob } from './jobs/send-campaign-batch.job';
-import { StartDueCampaignsJob } from './jobs/start-due-campaigns.job';
+import { SendCampaignBatchJob } from './jobs/send-campaign-batch.job';
 
 class TestModule {}
 Module({
@@ -41,7 +39,7 @@ Module({
       prefix: `campaign-delivery-${randomUUID()}`,
     }),
   ],
-  providers: [SendCampaignBatchJob, StartDueCampaignsJob],
+  providers: [SendCampaignBatchJob],
 })(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
@@ -209,38 +207,7 @@ describe('Campaign sender (Postgres)', () => {
     return campaign;
   }
 
-  it('queues expired cancellation recovery independently of the active campaign', async () => {
-    const cancelled = await unknownFirstSend();
-    await campaigns.cancel(storeId, cancelled.id, actor);
-    const active = await sendingCampaign(1);
-    const queue = app.get<Queue>(getQueueToken(QUEUES.campaign));
-    const sweep = app.get(StartDueCampaignsJob);
-
-    try {
-      await sweep.handle({});
-      let waiting = await queue.getWaiting();
-      expect(waiting.map(({ data }) => data)).toEqual([{ storeId, campaignId: active.id }]);
-
-      clockNow = new Date(noon.getTime() + 6 * MINUTE);
-      await sweep.handle({});
-      waiting = await queue.getWaiting();
-      expect(waiting).toHaveLength(2);
-      expect(waiting.every(({ name }) => name === SEND_CAMPAIGN_BATCH)).toBe(true);
-      expect(waiting.map(({ data }) => data)).toEqual(
-        expect.arrayContaining([
-          { storeId, campaignId: active.id },
-          { storeId, campaignId: cancelled.id },
-        ]),
-      );
-    } finally {
-      for (const pending of await queue.getWaiting()) await pending.remove();
-      await campaigns.cancel(storeId, active.id, actor);
-      clockNow = new Date(noon.getTime() + 6 * MINUTE);
-      await sender.sendBatch(storeId, cancelled.id);
-    }
-  });
-
-  it('sends each recipient its opt-out link, then charges what was sent and emits campaign.sent', async () => {
+  it('sends each recipient its opt-out link and charges what was sent', async () => {
     const before = await wallets.balance(storeId, 'sms_credits');
     const { id, phones } = await sendingCampaign(3);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
@@ -268,11 +235,6 @@ describe('Campaign sender (Postgres)', () => {
       { kind: 'charge', quantity_delta: -3 },
     ]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
-    const { rows: events } = await admin.pool.query(
-      "select payload from outbox_events where store_id=$1 and type='campaign.sent' and payload->>'campaignId'=$2",
-      [storeId, id],
-    );
-    expect(events).toHaveLength(1);
   });
 
   it('keeps the approved opt-out base and one-part charge when the worker URL changes', async () => {

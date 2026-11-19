@@ -62,11 +62,11 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 
 ## campaign
 
-| Job                         | Started by                     | Payload                 | Makes a rerun harmless                                                                                                                                     |
-| --------------------------- | ------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `build-campaign-audience`   | Campaign scheduled or sent now | `storeId`, `campaignId` | Unique `campaign_recipients (campaign_id, contact_id)`                                                                                                     |
-| `send-campaign-batch`       | Sweep and after each batch     | `storeId`, `campaignId` | Claims up to 200 recipients. Defers during quiet hours and recovers expired in-flight attempts.                                                            |
-| sweep `start-due-campaigns` | Every minute                   | none                    | `campaign_send_work_stores` finds eligible stores. Start up to 100 due campaigns per store and enqueue sending and cancelled-claim recovery independently. |
+| Job                         | Started by                     | Payload                 | Makes a rerun harmless                                                                                                                      |
+| --------------------------- | ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `build-campaign-audience`   | Campaign scheduled or sent now | `storeId`, `campaignId` | Unique `campaign_recipients (campaign_id, contact_id)`                                                                                      |
+| `send-campaign-batch`       | Registered, schedule pending   | `storeId`, `campaignId` | Claims up to 200 recipients. Defers during quiet hours and recovers expired in-flight attempts.                                             |
+| sweep `start-due-campaigns` | Recurring schedule pending     | none                    | `campaign_send_work_stores` finds eligible stores. The top-up recovery part enables the sweep and enqueues the send and cancellation lanes. |
 
 Per-store cap: one running campaign batch per store.
 
@@ -191,7 +191,6 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `contact.birthday`         | CAMP-11 birthday sweep                                           | `contactId`, local `day`                                                | Birthday workflow trigger                                    |
 | `segment.saved`            | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
 | `campaign.approved`        | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet                                                     |
-| `campaign.sent`            | CAMP-3, campaign sender                                          | `campaignId`                                                            | None yet                                                     |
 | `conversation.started`     | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
 | `message.received`         | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 contact stats; AI-4 reply debounce                     |
 | `conversation.handed_over` | AI-4, `AiAgentService` hands over a conversation                 | `conversationId`, `reason`                                              | None yet                                                     |

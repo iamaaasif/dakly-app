@@ -68,32 +68,19 @@ export class SendPolicyService {
     request: Omit<SendRequest, 'at'> & SendWindow,
     lockedContactExists?: boolean,
   ) {
-    return (await this.prepareForSend(storeId, request, lockedContactExists))();
-  }
-
-  async prepareForSend(
-    storeId: string,
-    request: Omit<SendRequest, 'at'> & SendWindow,
-    lockedContactExists?: boolean,
-  ) {
     this.requireTransaction();
     const exists = lockedContactExists ?? (await this.lockForDispatch(storeId, request.contactId));
-    const startedAt = this.clock.now();
-    if (!exists)
-      return () => ({ decision: skip('no_address'), destination: null, at: this.clock.now() });
-    const evaluate = await this.prepareAudience(
+    const at = this.clock.now();
+    if (!exists) return { decision: skip('no_address'), destination: null, at };
+    const [checked] = await this.evaluateAudience(
       storeId,
-      { ...request, contactIds: [request.contactId], at: startedAt },
+      { ...request, contactIds: [request.contactId], at },
       {
         includeCommittedFuture: true,
         excludeCampaignRecipientId: request.excludeCampaignRecipientId,
       },
     );
-    return () => {
-      const at = new Date(Math.max(startedAt.getTime(), this.clock.now().getTime()));
-      const [checked] = evaluate(at);
-      return { decision: checked!.decision, destination: checked!.phone, at };
-    };
+    return { decision: checked!.decision, destination: checked!.phone, at };
   }
 
   // Workflow gates take this lock before locking the workflow, then pass the result to the check.
@@ -157,12 +144,19 @@ export class SendPolicyService {
     {
       contactId,
       workflowStepId,
+      campaignRecipientId,
       settings: { quietHours, timeZone, frequencyCap },
-    }: { contactId: string; workflowStepId: string; settings: StoreSendingSettings },
+    }: {
+      contactId: string;
+      workflowStepId?: string;
+      campaignRecipientId?: string;
+      settings: StoreSendingSettings;
+    },
   ) {
     this.requireTransaction();
     const sends = await this.listWeekOfSends(storeId, [contactId], this.clock.now(), {
       excludeWorkflowStepId: workflowStepId,
+      excludeCampaignRecipientId: campaignRecipientId,
       includeCommittedFuture: true,
     });
     return (): { decision: SendDecision; at: Date } => {
@@ -176,17 +170,22 @@ export class SendPolicyService {
     };
   }
 
+  async prepareCampaignSendLimits(storeId: string, contactId: string, campaignRecipientId: string) {
+    const settings = await this.stores.sendingSettings(storeId, 'share');
+    return this.prepareMarketingRetryCheck(storeId, { contactId, campaignRecipientId, settings });
+  }
+
   // Approval freezes these skips with the same rules, a page at a time and with no lock. The
   // check inside the send transaction can still skip a queued recipient, never send a skipped one.
   async checkAudience(storeId: string, request: AudienceRequest): Promise<AudienceDecision[]> {
-    return (await this.prepareAudience(storeId, request))();
+    return this.evaluateAudience(storeId, request);
   }
 
-  private async prepareAudience(
+  private async evaluateAudience(
     storeId: string,
     { contactIds, channel, category, at, windowClosesAt }: AudienceRequest & SendWindow,
     capRead?: CapReadOptions,
-  ): Promise<(decisionAt?: Date) => AudienceDecision[]> {
+  ): Promise<AudienceDecision[]> {
     const contacts = new Map(
       (await this.contacts.findRecipients(storeId, contactIds)).map((row) => [
         row.id,
@@ -201,14 +200,13 @@ export class SendPolicyService {
     const limits = isMarketing
       ? await this.audienceLimits(storeId, { contactIds, channel, at }, capRead)
       : undefined;
-    return (decisionAt = at) =>
-      contactIds.map((contactId) => {
-        const request = { channel, category, at: decisionAt, windowClosesAt };
-        const contact = contacts.get(contactId);
-        const reason = recipientSkip(contact, consentOf.get(contactId), request);
-        const decision = reason ? skip(reason) : (limits?.(contactId, decisionAt) ?? SEND);
-        return { contactId, phone: contact?.phone ?? null, decision };
-      });
+    const request = { channel, category, at, windowClosesAt };
+    return contactIds.map((contactId) => {
+      const contact = contacts.get(contactId);
+      const reason = recipientSkip(contact, consentOf.get(contactId), request);
+      const decision = reason ? skip(reason) : (limits?.(contactId) ?? SEND);
+      return { contactId, phone: contact?.phone ?? null, decision };
+    });
   }
 
   // The cap lock must last until the caller marks the message sending and commits.
@@ -221,26 +219,20 @@ export class SendPolicyService {
     storeId: string,
     { contactIds, channel, at }: Pick<AudienceRequest, 'contactIds' | 'channel' | 'at'>,
     capRead?: CapReadOptions,
-  ): Promise<(contactId: string, decisionAt: Date) => SendDecision> {
-    const live = capRead?.includeCommittedFuture;
-    const settings = await this.stores.sendingSettings(storeId, live ? 'share' : undefined);
+  ): Promise<(contactId: string) => SendDecision> {
+    const settings = await this.stores.sendingSettings(storeId);
     const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
-    if (!live && quietUntil) return () => ({ action: 'defer', until: quietUntil });
+    if (quietUntil) return () => ({ action: 'defer', until: quietUntil });
     const sendsOf = new Map<string, MarketingSend[]>();
     for (const send of await this.listWeekOfSends(storeId, contactIds, at, capRead)) {
       const own = sendsOf.get(send.contactId);
       if (own) own.push(send);
       else sendsOf.set(send.contactId, [send]);
     }
-    return (contactId, decisionAt) => {
-      const until = quietHoursEnd(decisionAt, settings.quietHours, settings.timeZone);
-      if (until) return { action: 'defer', until };
-      const cutoff = decisionAt.getTime() - WEEK_MS;
-      const sends = (sendsOf.get(contactId) ?? []).filter((send) => send.sentAt.getTime() > cutoff);
-      return capReached(sends, { channel, at: decisionAt }, settings.frequencyCap)
+    return (contactId) =>
+      capReached(sendsOf.get(contactId) ?? [], { channel, at }, settings.frequencyCap)
         ? skip('frequency_cap')
         : SEND;
-    };
   }
 
   // Live checks count committed rows even if another worker's clock was ahead.

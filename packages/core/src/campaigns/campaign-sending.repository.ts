@@ -81,27 +81,6 @@ export class CampaignSendingRepository {
     });
   }
 
-  // Keep the active lane and the cancellation lane independent of one another.
-  async firstWork(storeId: string, expiredBefore: Date) {
-    const active = sql`${campaigns.status} = 'sending' and ${campaigns.shortLinkBase} is not null`;
-    const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null
-      and not exists (
-        select 1 from campaign_recipients r
-        where r.store_id = ${storeId} and r.campaign_id = ${campaigns.id} and r.status = 'sending'
-        having bool_and(coalesce(r.claimed_at >= ${expiredBefore.toISOString()}::timestamptz, true))
-      )`;
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .selectDistinctOn([campaigns.status], {
-          campaignId: campaigns.id,
-          status: campaigns.status,
-        })
-        .from(campaigns)
-        .where(and(eq(campaigns.storeId, storeId), or(active, cancelled)))
-        .orderBy(asc(campaigns.status), asc(campaigns.startedAt), asc(campaigns.id)),
-    );
-  }
-
   async lockNextRecipient(
     storeId: string,
     campaign: Pick<Campaign, 'id' | 'status'>,

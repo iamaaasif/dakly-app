@@ -354,13 +354,13 @@ Each change is a guarded update. All four routes need `campaigns.edit` and retur
 
 ### Sender (CAMP-3)
 
-The SMS sender runs on the `campaign` queue in `apps/worker`. Every minute, `start-due-campaigns` gets up to 100 ordered store IDs from `campaign_send_work_stores` and saves its cursor in Valkey. It starts up to 100 due scheduled campaigns per store, skipping locked rows. The same sweep queues the earliest sending campaign with a saved link base and the earliest cancellation ready for recovery. Each store has independent send and cancellation queue deduplication. One store's failed sweep is logged and the sweep continues.
+The SMS send and recovery handler is registered on the `campaign` queue. Recurring dispatch starts with the top-up recovery part, after the API that settles in-flight claims is live.
 
 The batch claims up to 200 recipients and stops taking new claims once it has run for 15 seconds. It rechecks the frozen phone, consent, block, quiet hours and frequency cap under the campaign and contact locks. The committed claim is the cutoff for cancellation, pause, block and withdrawal. Calls to SMS providers happen after the transaction commits. The recipient keeps the same SMS opt-out code and operation key on every attempt. Quiet hours delay the batch until the gate reopens.
 
 A claim older than five minutes can recover. The sender saves a provider receipt before finishing its send. An expired claim with a saved receipt gets a provider lookup without resending. An unresolved claim without a receipt may retry in a sending campaign, up to three attempts. A cancellation, ineligible recipient or exhausted retry keeps the cost of an unresolved outcome without another submission. A definite refusal releases its credit while settlement is open. Late refusals after settlement go through ACC-14 reconciliation. A late acceptance can update the same unresolved outcome. Mailpit uses the same operation key for staging recovery. When a retry submits again without a saved receipt, the cap uses that attempt’s start time because the provider does not identify which attempt first accepted the message. Durable provider deduplication and store-wide daily pacing belong to ACC-14.
 
-When no queued or claimed recipient remains, the sender settles the reservation and emits `campaign.sent`. Cancelling uses the same settlement with a charge capped at the approval reservation. An older approval with no saved link base waits for the balance recovery follow-up.
+When no queued or claimed recipient remains, the sender settles the reservation and marks the campaign sent. The results part emits `campaign.sent`. Cancelling uses the same settlement with a charge capped at the approval reservation. The top-up recovery part prepares older approvals before dispatch starts.
 
 ### Frozen destinations and final send checks
 
