@@ -54,7 +54,9 @@ describe('Worker job schedulers', () => {
     expect(bulk.schedulers).toEqual([...bulkSweeps, ...bulkSweeps]);
     expect(sync.schedulers).toEqual([
       scheduler('queue-channel-token-checks', 86400000),
+      scheduler('queue-conversation-returns', 60000),
       scheduler('queue-channel-token-checks', 86400000),
+      scheduler('queue-conversation-returns', 60000),
     ]);
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),

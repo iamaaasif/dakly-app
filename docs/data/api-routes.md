@@ -130,6 +130,7 @@ atomically and retain business data when an extension is disabled.
 | `POST /conversations/:conversationId/messages` (idem)                                                                    | `chats`                                                           |
 | `PATCH /conversations/:conversationId` (status, assignee)                                                                | Chats extension, `chats.edit`                                     |
 | `POST /conversations/:conversationId/take-over`, `POST /conversations/:conversationId/return-to-ai`                      | Chats extension, `chats.edit`                                     |
+| `POST /conversations/:conversationId/notes`                                                                              | Chats extension, `chats.edit`                                     |
 | `POST /messages/:messageId/rating`                                                                                       | `chats`                                                           |
 | `GET /comments`, `POST /comments/:socialCommentId/reply`, `POST /comments/:socialCommentId/hide`                         | `chats`                                                           |
 | `GET /saved-replies`, `POST /saved-replies`, `PATCH /saved-replies/:savedReplyId`, `DELETE /saved-replies/:savedReplyId` | `chats`                                                           |

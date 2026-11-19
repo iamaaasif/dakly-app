@@ -7,9 +7,11 @@ import type {
   UpdateConversationInput,
   conversationResponders,
 } from '@dakly/contracts/chats';
+import type { Database } from '@dakly/db/client';
 import { conversations, messages } from '@dakly/db/schema/chats';
 import { contacts } from '@dakly/db/schema/contacts';
 
+import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const fields = {
@@ -53,7 +55,17 @@ type ConversationChange = UpdateConversationInput & {
 
 @Injectable()
 export class InboxRepository {
-  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+  constructor(
+    @Inject(TenantDatabase) private readonly database: TenantDatabase,
+    @Inject(DATABASE) private readonly globalDatabase: Database,
+  ) {}
+
+  async dueReturns() {
+    const result = await this.globalDatabase.execute<{ storeId: string; conversationId: string }>(
+      sql`select store_id as "storeId", conversation_id as "conversationId" from due_conversation_returns(100)`,
+    );
+    return result.rows;
+  }
 
   list(storeId: string, query: ConversationListQuery) {
     const [cursorAt, cursorId] = query.cursor?.split('_') ?? [];
@@ -124,6 +136,30 @@ export class InboxRepository {
         .orderBy(desc(messages.createdAt), desc(messages.id))
         .limit(query.limit + 1),
     );
+  }
+
+  async addNote(
+    storeId: string,
+    conversationId: string,
+    note: { body: string; authorUserId: string },
+    now: Date,
+  ) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(messages)
+        .values({
+          ...note,
+          storeId,
+          conversationId,
+          direction: 'out',
+          authorType: 'user',
+          kind: 'note',
+          status: 'received',
+          createdAt: now,
+        })
+        .returning(messageFields),
+    );
+    return row;
   }
 
   async update(storeId: string, id: string, change: ConversationChange, now: Date) {

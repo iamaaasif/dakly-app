@@ -2097,10 +2097,60 @@ for (const [path, responder] of [
     expect((await success(b, 'POST', url(own), 200)).json()).toMatchObject({
       status: 'open',
       responder,
+      aiResumesAt: null,
     });
+    if (path === 'take-over') {
+      await success(b, 'POST', url(own), 400, { returnAfterMinutes: 31 });
+      const earliest = Date.now() + 30 * 60_000;
+      const timed = await success(b, 'POST', url(own), 200, { returnAfterMinutes: 30 });
+      const deadline = Date.parse(timed.json().aiResumesAt);
+      expect(deadline).toBeGreaterThanOrEqual(earliest);
+      expect(deadline).toBeLessThanOrEqual(Date.now() + 30 * 60_000);
+      const handBack = await success(b, 'POST', `/conversations/${own}/return-to-ai`, 200);
+      expect(handBack.json()).toMatchObject({ responder: 'ai', aiResumesAt: null });
+    }
     expect(await f.row('conversations', foreign)).toMatchObject({ responder: 'ai' });
   });
 }
+
+fixture('POST /conversations/:conversationId/notes', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/notes`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  const body = 'গ্রাহককে কাল জানাতে হবে।';
+  await hidden(b, 'POST', url, foreign, () => ({ body }));
+  await success(b, 'POST', url(own), 400, { body: '   ' });
+  await f.admin.pool.query(
+    `update conversations set last_message_preview = 'Customer message',
+       last_message_at = now(), window_expires_at = now() + interval '1 day' where id = $1`,
+    [own],
+  );
+  const before = await f.row('conversations', own);
+  const added = await success(b, 'POST', url(own), 201, { body });
+  expect(added.json()).toMatchObject({
+    body,
+    kind: 'note',
+    authorType: 'user',
+    authorUserId: b.owner.id,
+    sentAt: null,
+  });
+  const thread = await success(b, 'GET', `/conversations/${own}/messages`, 200);
+  expect(thread.json().items).toMatchObject([{ id: added.json().id, kind: 'note', body }]);
+  expect(await f.row('conversations', own)).toMatchObject({
+    last_message_preview: before.last_message_preview,
+    last_message_at: before.last_message_at,
+    window_expires_at: before.window_expires_at,
+    unread_count: before.unread_count,
+    version: before.version + 1,
+  });
+  const events = await f.admin.pool.query(
+    "select type from outbox_events where store_id = $1 and type like 'message.%'",
+    [b.id],
+  );
+  expect(events.rows).toEqual([]);
+});
 
 fixture('GET /sms-sender-ids', async () => {
   const { a, b } = await pair(),

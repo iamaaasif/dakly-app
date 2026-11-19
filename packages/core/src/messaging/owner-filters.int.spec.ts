@@ -7,7 +7,7 @@ import { InboxRepository } from './inbox.repository';
 
 describe('inbox filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
-  const repository = new InboxRepository(f.tenant);
+  const repository = new InboxRepository(f.tenant, f.connection.db);
   const now = new Date('2026-11-19T06:00:00Z');
 
   beforeAll(() => f.setup());
@@ -65,5 +65,12 @@ describe('inbox filters without RLS assistance', () => {
     expect(await repository.update(f.b, second.id, { status: 'done' }, now)).toMatchObject({
       status: 'done',
     });
+    const note = { body: 'ভিতরের নোট', authorUserId: f.userB };
+    await expect(repository.addNote(f.b, first.id, note, now)).rejects.toMatchObject({
+      cause: { code: '23503' },
+    });
+    const added = await repository.addNote(f.b, second.id, note, now);
+    expect(added).toMatchObject({ ...note, kind: 'note' });
+    expect(await repository.messages(f.a, first.id, page)).toHaveLength(1);
   });
 });

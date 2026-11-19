@@ -1,10 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
   ConversationListQuery,
   ConversationMessageListQuery,
   ConversationMessageResponse,
   ConversationResponse,
+  CreateConversationNoteInput,
+  TakeOverConversationInput,
   UpdateConversationInput,
 } from '@dakly/contracts/chats';
 
@@ -12,12 +15,15 @@ import { AuditService } from '../audit/audit.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { InboxRepository } from './inbox.repository';
 import { messagingError } from './messaging.errors';
 
 type ConversationRow = NonNullable<Awaited<ReturnType<InboxRepository['find']>>>;
+type MessageRow = Awaited<ReturnType<InboxRepository['messages']>>[number];
+type UserActor = Extract<AuditEntry['actor'], { kind: 'user' }>;
 
 @Injectable()
 export class InboxService {
@@ -52,15 +58,29 @@ export class InboxService {
     await this.requireChats(storeId);
     await this.find(storeId, id);
     const rows = await this.repository.messages(storeId, id, query);
-    const items: ConversationMessageResponse[] = rows.slice(0, query.limit).map((row) => ({
-      ...row,
-      sentAt: row.sentAt?.toISOString() ?? null,
-    }));
+    const items = rows.slice(0, query.limit).map(messageResponse);
     const last = items.at(-1);
     return {
       items,
       nextCursor: last && rows.length > query.limit ? `${last.createdAt}_${last.id}` : null,
     };
+  }
+
+  addNote(storeId: string, id: string, actor: UserActor, input: CreateConversationNoteInput) {
+    return this.transaction.run(storeId, async () => {
+      await this.requireChats(storeId);
+      await this.find(storeId, id, 'no key update');
+      const now = this.clock.now();
+      const note = await this.repository.addNote(
+        storeId,
+        id,
+        { ...input, authorUserId: actor.userId },
+        now,
+      );
+      if (!note) throw messagingError('MESSAGING_PREPARATION_FAILED');
+      await this.repository.update(storeId, id, {}, now);
+      return messageResponse(note);
+    });
   }
 
   update(storeId: string, id: string, userId: string, input: UpdateConversationInput) {
@@ -76,26 +96,57 @@ export class InboxService {
         return conversationResponse(before);
       const after = await this.repository.update(storeId, id, input, this.clock.now());
       if (!after) throw messagingError('CONVERSATION_NOT_FOUND');
-      await this.recordChange(storeId, userId, before, after);
+      await this.recordChange(storeId, { kind: 'user', userId }, before, after);
       return conversationResponse(after);
     });
   }
 
-  setResponder(storeId: string, id: string, userId: string, responder: 'human' | 'ai') {
+  setResponder(
+    storeId: string,
+    id: string,
+    actor: UserActor,
+    change: ({ responder: 'human' } & TakeOverConversationInput) | { responder: 'ai' },
+  ) {
     return this.transaction.run(storeId, async () => {
       await this.requireChats(storeId);
       const before = await this.find(storeId, id, 'no key update');
-      if (before.responder === responder && before.aiResumesAt === null)
+      const now = this.clock.now();
+      const { responder } = change;
+      const aiResumesAt =
+        responder === 'human' && change.returnAfterMinutes
+          ? new Date(now.getTime() + change.returnAfterMinutes * MINUTE_MS)
+          : null;
+      if (before.responder === responder && before.aiResumesAt === null && aiResumesAt === null)
         return conversationResponse(before);
       const after = await this.repository.update(
         storeId,
         id,
-        { responder, aiResumesAt: null, handoverReason: null, handedOverAt: null },
-        this.clock.now(),
+        { responder, aiResumesAt, handoverReason: null, handedOverAt: null },
+        now,
       );
       if (!after) throw messagingError('CONVERSATION_NOT_FOUND');
-      await this.recordChange(storeId, userId, before, after);
+      await this.recordChange(storeId, actor, before, after);
       return conversationResponse(after);
+    });
+  }
+
+  async returnDue(storeId: string, id: string, actor: { kind: 'system' }) {
+    await this.transaction.run(storeId, async () => {
+      const before = await this.repository.find(storeId, id, 'no key update');
+      const now = this.clock.now();
+      if (!before?.aiResumesAt || before.aiResumesAt > now) return;
+      const canReturn =
+        before.responder === 'human' &&
+        (await this.contacts.findRecipient(storeId, before.contactId));
+      const after = await this.repository.update(
+        storeId,
+        id,
+        canReturn
+          ? { responder: 'ai', aiResumesAt: null, handoverReason: null, handedOverAt: null }
+          : { aiResumesAt: null },
+        now,
+      );
+      if (after) await this.recordChange(storeId, actor, before, after);
     });
   }
 
@@ -113,12 +164,12 @@ export class InboxService {
 
   private async recordChange(
     storeId: string,
-    userId: string,
+    actor: AuditEntry['actor'],
     before: ConversationRow,
     after: ConversationRow,
   ) {
     await this.audit.record(storeId, {
-      actor: { kind: 'user', userId },
+      actor,
       action: 'conversation.updated',
       entityType: 'conversation',
       entityId: after.id,
@@ -142,6 +193,10 @@ export class InboxService {
       },
     });
   }
+}
+
+function messageResponse(row: MessageRow): ConversationMessageResponse {
+  return { ...row, sentAt: row.sentAt?.toISOString() ?? null };
 }
 
 function conversationResponse({
