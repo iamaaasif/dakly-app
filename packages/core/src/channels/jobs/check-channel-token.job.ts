@@ -1,7 +1,6 @@
 import { Inject } from '@nestjs/common';
 import { z } from 'zod';
 
-import { bindVerifiedJobStore } from '../../platform/logging/job-context';
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
 import { CHECK_CHANNEL_TOKEN, ChannelTokenHealthService } from '../channel-token-health.service';
@@ -17,7 +16,6 @@ export class CheckChannelTokenJob implements JobHandler {
 
   async handle(data: unknown) {
     const { storeId } = payload.parse(data);
-    bindVerifiedJobStore(storeId);
     await this.tokens.checkStore(storeId);
   }
 }

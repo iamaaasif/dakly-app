@@ -18,7 +18,6 @@ import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { jobLogBindings, runWithJobContext } from '../platform/logging/job-context';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS } from '../platform/time';
@@ -163,7 +162,6 @@ it('discards an invalid-token result after the store rotates that credential', a
   const isTokenValid = driver.isTokenValid.bind(driver);
   const observed = vi.spyOn(driver, 'isTokenValid').mockImplementation(async (token) => {
     if (token !== 'revoked-during-rotation') return isTokenValid(token);
-    expect(jobLogBindings()).toMatchObject({ storeId, jobId: 'rotation-check' });
     expect(app.get(StoreTransaction).isOpen()).toBe(false);
     const secret = app
       .get(EnvelopeEncryption)
@@ -178,10 +176,7 @@ it('discards an invalid-token result after the store rotates that credential', a
     return false;
   });
   try {
-    await runWithJobContext(
-      () => app.get(CheckChannelTokenJob).handle({ storeId }),
-      'rotation-check',
-    );
+    await app.get(CheckChannelTokenJob).handle({ storeId });
     const { rows } = await admin.pool.query(
       'select status from channel_connections where id = $1',
       [id],
@@ -213,11 +208,43 @@ it('notifies again when a reconnected credential later becomes invalid', async (
   );
   await check.handle({ storeId });
   await check.handle({ storeId });
-  const { rows } = await admin.pool.query(
-    'select id from notifications where store_id = $1 and dedupe_key like $2',
+  const { rows: today } = await admin.pool.query(
+    'select dedupe_key from notifications where store_id = $1 and dedupe_key like $2',
     [storeId, `channel.needs_reconnect:${channelConnectionId}:%`],
   );
-  expect(rows).toHaveLength(2);
+  expect(today).toEqual([
+    { dedupe_key: `channel.needs_reconnect:${channelConnectionId}:2026-11-19` },
+  ]);
+  expect(
+    (
+      await admin.pool.query('select status from channel_connections where id = $1', [
+        channelConnectionId,
+      ])
+    ).rows,
+  ).toEqual([{ status: 'needs_reconnect' }]);
+  const sameDayEvents = await admin.pool.query(
+    "select id from outbox_events where store_id = $1 and type = 'channel.needs_reconnect' and payload->>'channelConnectionId' = $2",
+    [storeId, channelConnectionId],
+  );
+  expect(sameDayEvents.rows).toHaveLength(2);
+  await admin.pool.query("update channel_connections set status = 'active' where id = $1", [
+    channelConnectionId,
+  ]);
+  const clock = vi.mocked(app.get(Clock).now);
+  clock.mockReturnValue(new Date(now.getTime() + DAY_MS));
+  try {
+    await check.handle({ storeId });
+    const { rows: both } = await admin.pool.query(
+      'select dedupe_key from notifications where store_id = $1 and dedupe_key like $2 order by dedupe_key',
+      [storeId, `channel.needs_reconnect:${channelConnectionId}:%`],
+    );
+    expect(both).toEqual([
+      { dedupe_key: `channel.needs_reconnect:${channelConnectionId}:2026-11-19` },
+      { dedupe_key: `channel.needs_reconnect:${channelConnectionId}:2026-11-20` },
+    ]);
+  } finally {
+    clock.mockReturnValue(now);
+  }
 });
 
 it('continues with other credentials when Meta is temporarily unavailable', async () => {

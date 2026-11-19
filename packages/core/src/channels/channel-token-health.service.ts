@@ -10,7 +10,6 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
-import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
@@ -92,7 +91,7 @@ export class ChannelTokenHealthService {
     const plaintext = this.encryption.decrypt(
       { owner: 'store', storeId, purpose: 'channel-access-token' },
       {
-        ciphertext: token.ciphertext,
+        ciphertext,
         keyVersion: token.keyVersion,
       },
     );
@@ -130,14 +129,22 @@ export class ChannelTokenHealthService {
         occurredAt: now.toISOString(),
         payload: { channelConnectionId },
       });
-    } else if (!expiresAt || expiresAt.getTime() > now.getTime() + warningWindow) return;
-    const type = valid ? 'channel.token_expiring' : 'channel.needs_reconnect';
+      await this.notifications.notify(storeId, {
+        type: 'channel.needs_reconnect',
+        category: 'fix_now',
+        recipientPermission: 'storeSettings.edit',
+        title: 'Reconnect a channel',
+        dedupeKey: `channel.needs_reconnect:${channelConnectionId}:${now.toISOString().slice(0, 10)}`,
+      });
+      return;
+    }
+    if (!expiresAt || expiresAt.getTime() > now.getTime() + warningWindow) return;
     await this.notifications.notify(storeId, {
-      type,
+      type: 'channel.token_expiring',
       category: 'fix_now',
       recipientPermission: 'storeSettings.edit',
-      title: valid ? 'A channel connection expires soon' : 'Reconnect a channel',
-      dedupeKey: `${type}:${channelConnectionId}:${valid ? expiresAt?.toISOString() : newId()}`,
+      title: 'A channel connection expires soon',
+      dedupeKey: `channel.token_expiring:${channelConnectionId}:${expiresAt.toISOString()}`,
     });
   }
 }
