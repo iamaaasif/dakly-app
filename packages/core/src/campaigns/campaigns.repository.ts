@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, notInArray, sql } from 'drizzle-orm';
 
 import type {
   CampaignChannel,
@@ -207,8 +207,7 @@ export class CampaignsRepository {
     return row;
   }
 
-  // Holds a scheduled campaign while it goes back to draft or is cancelled, so the sweep that
-  // starts due campaigns (CAMP-3) waits for the change.
+  // Holds a scheduled campaign while it goes back to draft, so the due sweep skips it.
   async lockScheduled(
     storeId: string,
     id: string,
@@ -218,6 +217,23 @@ export class CampaignsRepository {
         .select({ ...campaignColumns, approvedAt: campaigns.approvedAt })
         .from(campaigns)
         .where(statusWhere(storeId, id, 'scheduled'))
+        .for('update'),
+    );
+    return row;
+  }
+
+  async lockCancellable(storeId: string, id: string) {
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
+      tx
+        .select({ ...campaignColumns, approvedAt: campaigns.approvedAt })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.storeId, storeId),
+            eq(campaigns.id, id),
+            notInArray(campaigns.status, ['sent', 'cancelled', 'failed']),
+          ),
+        )
         .for('update'),
     );
     return row;

@@ -201,21 +201,21 @@ atomically and retain business data when an extension is disabled.
 
 ## Campaigns and automations (09)
 
-| Route                                                                                                                                              | Permission    |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/estimate` (draft only), `GET /campaigns/:campaignId/recipients`        | `campaigns`   |
-| `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                    | `campaigns`   |
-| `POST /campaigns/:campaignId/approve` (also Owner or Admin while the store's approval setting is on)                                               | `campaigns`   |
-| `POST /campaigns/:campaignId/unschedule`, `POST /campaigns/:campaignId/cancel` (scheduled, until 5 minutes before the send)                        | `campaigns`   |
-| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`                                                                          | `campaigns`   |
-| `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                               | `campaigns`   |
-| `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                      | `automations` |
-| `POST /automations/:automationId/publish`, `POST /automations/:automationId/enable` (also Owner or Admin while the store's approval setting is on) | `automations` |
-| `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`                                                                 | `automations` |
-| `POST /automations/:automationId/versions/:versionId/stop` (Stop the old version)                                                                  | `automations` |
-| `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                       | `automations` |
-| `GET /automations/:automationId/trigger-preview`                                                                                                   | `automations` |
-| `GET /automations/:automationId/runs`                                                                                                              | `automations` |
+| Route                                                                                                                                                     | Permission    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/estimate` (draft only), `GET /campaigns/:campaignId/recipients`               | `campaigns`   |
+| `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                           | `campaigns`   |
+| `POST /campaigns/:campaignId/approve` (also Owner or Admin while the store's approval setting is on)                                                      | `campaigns`   |
+| `POST /campaigns/:campaignId/unschedule` (scheduled, until 5 minutes before the send), `POST /campaigns/:campaignId/cancel` (until the campaign finishes) | `campaigns`   |
+| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`                                                                                 | `campaigns`   |
+| `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                                      | `campaigns`   |
+| `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                             | `automations` |
+| `POST /automations/:automationId/publish`, `POST /automations/:automationId/enable` (also Owner or Admin while the store's approval setting is on)        | `automations` |
+| `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`                                                                        | `automations` |
+| `POST /automations/:automationId/versions/:versionId/stop` (Stop the old version)                                                                         | `automations` |
+| `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                              | `automations` |
+| `GET /automations/:automationId/trigger-preview`                                                                                                          | `automations` |
+| `GET /automations/:automationId/runs`                                                                                                                     | `automations` |
 
 `POST /campaigns/:campaignId/approve` takes no `Idempotency-Key` header: the draft row lock, `CAMPAIGN_NOT_DRAFT` (409) on a repeat and the wallet reservation key make a retry safe. A send-now route outside approval (CAMP-3) takes a real key.
 
