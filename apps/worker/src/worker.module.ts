@@ -16,13 +16,13 @@ import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module'
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
 import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
+import { EmailOwnerOnAutomationPaused } from '@dakly/core/automations/jobs/email-owner-on-automation-paused.job';
 import { RecordAutomationBirthdaysJob } from '@dakly/core/automations/jobs/record-automation-birthdays.job';
+import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
 import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
 import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
-import { EmailOwnerOnAutomationPaused } from '@dakly/core/automations/jobs/email-owner-on-automation-paused.job';
-import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
