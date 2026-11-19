@@ -1239,7 +1239,13 @@ for (const [method, action, status, start, expected] of [
       const previous = await f.row('automations', own);
       await success(b, 'POST', `/automations/${own}/publish`, 409, {
         name: 'Unready chat template',
-        graph: automationTemplates.chat_follow_up.graph,
+        graph: {
+          ...welcome,
+          trigger: {
+            key: 'chat_started',
+            filters: [{ field: 'channel', channels: ['messenger'] }],
+          },
+        },
       });
       expect(await f.row('automations', own)).toEqual(previous);
     }
