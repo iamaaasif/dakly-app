@@ -28,6 +28,7 @@ import type {
   RunStepChange,
 } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
+import { AutomationSendRetryService } from './automation-send-retry.service';
 import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 
 const STORE_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a01';
@@ -329,6 +330,12 @@ describe('AutomationRunsService', () => {
         return result;
       },
     };
+    const conditions = new AutomationConditionsService(
+      segments as unknown as SegmentsService,
+      sendPolicy as unknown as SendPolicyService,
+      contacts as unknown as ContactsService,
+      repository as unknown as AutomationRunsRepository,
+    );
     service = new AutomationRunsService(
       repository as unknown as AutomationRunsRepository,
       transaction as unknown as StoreTransaction,
@@ -344,10 +351,15 @@ describe('AutomationRunsService', () => {
         { reportJob } as unknown as ErrorReporter,
         repository as unknown as AutomationRunsRepository,
       ),
-      new AutomationConditionsService(
-        segments as unknown as SegmentsService,
+      new AutomationSendRetryService(
+        repository as unknown as AutomationRunsRepository,
+        transaction as unknown as StoreTransaction,
+        stores as unknown as StoresService,
         sendPolicy as unknown as SendPolicyService,
+        contacts as unknown as ContactsService,
+        conditions,
       ),
+      conditions,
     );
   });
 

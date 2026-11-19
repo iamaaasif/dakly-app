@@ -22,11 +22,10 @@ import {
   type SendingStep,
 } from './automation-runs.repository';
 import {
-  claimRetryDispatch,
+  AutomationSendRetryService,
   endExpiredRetry,
   hasRetryDetails,
-  recheckAutomationRetry,
-} from './automation-send-retry';
+} from './automation-send-retry.service';
 import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 import {
   type Delivery,
@@ -37,7 +36,6 @@ import {
   type GateResult,
   goOn,
   holdOrEnd,
-  holdOwnedClaim,
   holdsClaim,
   isLateSend,
   messageBody,
@@ -73,6 +71,7 @@ export class AutomationRunsService {
     @Inject(WalletService) private readonly wallets: WalletService,
     @Inject(AutomationSmsDeliveryService)
     private readonly smsDelivery: AutomationSmsDeliveryService,
+    @Inject(AutomationSendRetryService) private readonly smsRetry: AutomationSendRetryService,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
   ) {}
 
@@ -274,7 +273,7 @@ export class AutomationRunsService {
       channel: 'sms',
       category: step.category,
     });
-    const exitReason = await this.refreshExitReason(facts, at);
+    const exitReason = await this.conditions.refreshExitReason(facts, at);
     if (exitReason) return { exitReason, at };
     const firstTriedAt = await this.repository.schedulerTime(storeId);
     if (isLateSend(facts.wakeAt, firstTriedAt)) return { outcome: 'late' };
@@ -288,12 +287,6 @@ export class AutomationRunsService {
     );
     if (body === undefined) return { decision: noCredits };
     return { decision, body, destination, at, firstTriedAt };
-  }
-
-  private async refreshExitReason(facts: RunFacts, at: Date) {
-    const tags = await this.contacts.findTags(facts.storeId, facts.contactId);
-    const tappedStepKeys = await this.repository.listTappedStepKeys(facts.storeId, facts.runId);
-    return this.conditions.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
   }
 
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
@@ -347,51 +340,17 @@ export class AutomationRunsService {
       !hasRetryDetails(step, started, preflight) ||
       endExpiredRetry(step, started.firstTriedAt, wakeAt, preflight)
     ) {
-      const gate = await this.authorizeRetry(claim, step, facts);
+      const gate = await this.smsRetry.authorize(claim, step, facts);
       return 'stop' in gate ? gate.stop : undefined;
     }
     facts.preparedSender = await this.messaging.prepareSender(storeId);
     const prepared = await this.smsDelivery.prepare(facts);
-    const planned = await this.authorizeRetry(claim, step, facts, prepared?.to ?? null);
+    const planned = await this.smsRetry.authorize(claim, step, facts, prepared?.to ?? null);
     if ('stop' in planned) return planned.stop;
     if (prepared)
       return this.smsDelivery.deliver({ storeId, contactId: facts.contactId, step }, prepared, {
         ...planned,
         body: messageBody(step, started.optOutUrl ?? undefined),
       });
-  }
-
-  private async authorizeRetry(
-    claim: RunClaim,
-    step: SendStep,
-    facts: RunFacts,
-    preparedPhone: string | null = null,
-  ) {
-    const { storeId, contactId } = facts;
-    const gated = await claimRetryDispatch({
-      repository: this.repository,
-      transaction: this.transaction,
-      stores: this.stores,
-      claim,
-      step,
-      facts,
-      recheck: (locked, settings) =>
-        recheckAutomationRetry({
-          sendPolicy: this.sendPolicy,
-          readPhone: () => this.contacts.getPhoneForSend(storeId, contactId),
-          preparedPhone,
-          readExit: (at) => this.refreshExitReason(facts, at),
-          schedulerTime: () => this.repository.schedulerTime(storeId),
-          facts,
-          step,
-          settings,
-          locked,
-        }),
-    });
-    if (gated?.result) return { stop: { ...gated.result, claim: gated.claim } };
-    if (gated) return gated;
-    const run = await this.repository.findRun(storeId, claim.runId);
-    const held = holdOwnedClaim(run, claim, await this.repository.schedulerTime(storeId));
-    return { stop: held && endWithUnknownOutcome(held) };
   }
 }
