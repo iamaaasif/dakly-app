@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { META_AUTHORIZATION_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
@@ -677,6 +678,15 @@ async function metaGrant(shop: Shop, actor = shop.owner) {
   return { state: url.searchParams.get('state'), code: url.searchParams.get('code') };
 }
 
+async function secondShopSession(shop: Shop) {
+  const { token } = await app.get(SessionsService).create(shop.owner.id, { isRemembered: false });
+  const cookie = `${SESSION_COOKIE}=${token}`;
+  expect(
+    (await f.request(cookie, 'POST', '/me/active-store', { storeId: shop.id })).statusCode,
+  ).toBe(204);
+  return cookie;
+}
+
 async function metaCacheKey(shop: Shop, actor: Actor, kind: 'state' | 'selection', key: string) {
   const session = await app
     .get(SessionsService)
@@ -792,11 +802,7 @@ fixture('POST /channel-connections/meta/accounts', async () => {
   expect([wrongStore.statusCode, missing.statusCode]).toEqual([404, 404]);
   expect(wrongStore.json()).toEqual(missing.json());
   expect(await denyMetaStateOutsideItsShop(a, b, foreign)).toEqual(missing.json());
-  const other = await app.get(SessionsService).create(b.owner.id, { isRemembered: false });
-  const otherCookie = `${SESSION_COOKIE}=${other.token}`;
-  const selected = await f.request(otherCookie, 'POST', '/me/active-store', { storeId: b.id });
-  expect(selected.statusCode).toBe(204);
-  const wrongSession = await f.request(otherCookie, 'POST', metaAccounts, own);
+  const wrongSession = await f.request(await secondShopSession(b), 'POST', metaAccounts, own);
   expect(wrongSession.statusCode).toBe(404);
   expect(wrongSession.json()).toEqual(missing.json());
   await denyCustomMetaRole(b, own);
@@ -1663,6 +1669,246 @@ async function smsSender(shop: Shop, status: 'requested' | 'approved' = 'request
     await f.admin.pool.query("update sms_sender_ids set status='approved' where id=$1", [id]);
   return id;
 }
+const metaConnect = '/channel-connections/meta';
+const pageSelection = { kind: 'facebook_page', externalAccountId: '1001001' };
+const instagramSelection = { kind: 'instagram', externalAccountId: '1002001' };
+
+async function metaSelection(shop: Shop) {
+  const result = await success(shop, 'POST', metaAccounts, 201, await metaGrant(shop));
+  return result.json().selectionId as string;
+}
+
+async function expectSavedMetaCredential(shop: Shop, id: string, kind: string) {
+  const {
+    rows: [row],
+  } = await f.admin.pool.query(
+    'select store_id, kind, status, access_token_ciphertext, key_version from channel_connections where id=$1',
+    [id],
+  );
+  expect(row).toMatchObject({ store_id: shop.id, kind, status: 'active' });
+  const plaintext = app
+    .get(EnvelopeEncryption)
+    .decrypt(
+      { owner: 'store', storeId: shop.id, purpose: 'channel-access-token' },
+      { ciphertext: row.access_token_ciphertext, keyVersion: row.key_version },
+    );
+  expect(plaintext.toString()).toBe('fake-rina-page-credential');
+  plaintext.fill(0);
+}
+
+function metaSubscriptionDriver() {
+  return app.get<{ subscribePage(pageId: string, token: string): Promise<void> }>(
+    META_AUTHORIZATION_DRIVER,
+  );
+}
+
+async function expectRetryAfterSubscriptionFailure(shop: Shop) {
+  const selectionId = await metaSelection(shop);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let subscriptionPending = false;
+  const subscription = vi
+    .spyOn(metaSubscriptionDriver(), 'subscribePage')
+    .mockImplementation(async (id) => {
+      if (id === pageSelection.externalAccountId) throw new Error('Temporary test failure');
+      subscriptionPending = true;
+      await pending;
+      subscriptionPending = false;
+    });
+  try {
+    const response = await f.request(shop.owner, 'POST', metaConnect, {
+      selectionId,
+      accounts: [pageSelection, { kind: 'facebook_page', externalAccountId: '1001002' }],
+    });
+    expect(response.statusCode).toBe(500);
+    expect(subscriptionPending).toBe(false);
+  } finally {
+    release();
+    subscription.mockRestore();
+  }
+  await success(shop, 'POST', metaConnect, 201, { selectionId, accounts: [pageSelection] });
+}
+
+async function expectGrantConsumedAfterCacheFailure(shop: Shop) {
+  const selectionId = await metaSelection(shop);
+  const key = await metaCacheKey(shop, shop.owner, 'selection', selectionId);
+  const cache = app.get(ValkeyClient).connection;
+  const deletion = vi.spyOn(cache, 'del').mockRejectedValueOnce(new Error('Test cache failure'));
+  try {
+    const response = await f.request(shop.owner, 'POST', metaConnect, {
+      selectionId,
+      accounts: [{ kind: 'facebook_page', externalAccountId: '1001002' }],
+    });
+    expect(response.statusCode).toBe(500);
+  } finally {
+    deletion.mockRestore();
+  }
+  try {
+    const list = await success(shop, 'GET', '/channel-connections', 200);
+    expect(list.json().items).toContainEqual(
+      expect.objectContaining({ externalAccountId: '1001002' }),
+    );
+    const replay = await f.request(shop.owner, 'POST', metaConnect, {
+      selectionId,
+      accounts: [pageSelection],
+    });
+    expect(replay.json().error.code).toBe('META_SELECTION_IN_PROGRESS');
+  } finally {
+    await cache.del(key, `${key}:claimed`);
+  }
+}
+
+async function rejectMetaConflict(shop: Shop, accounts: (typeof pageSelection)[]) {
+  const selectionId = await metaSelection(shop);
+  const input = { selectionId, accounts };
+  const subscription = vi.spyOn(metaSubscriptionDriver(), 'subscribePage');
+  try {
+    const denied = await f.request(shop.owner, 'POST', metaConnect, input);
+    expect(denied.statusCode).toBe(409);
+    expect(denied.json().error.code).toBe('META_ACCOUNT_ALREADY_CONNECTED');
+    expect(subscription).not.toHaveBeenCalled();
+    expect((await f.request(shop.owner, 'POST', metaConnect, input)).statusCode).toBe(404);
+    return { selectionId, denied };
+  } finally {
+    subscription.mockRestore();
+  }
+}
+
+fixture('POST /channel-connections/meta', async () => {
+  const { a, b } = await pair();
+  const selectionId = await metaSelection(a);
+  const input = { selectionId, accounts: [pageSelection, instagramSelection] };
+  const foreign = await f.request(b.owner, 'POST', metaConnect, input);
+  const other = await f.request(await secondShopSession(a), 'POST', metaConnect, input);
+  expect([foreign.statusCode, other.statusCode]).toEqual([404, 404]);
+  expect(foreign.json()).toEqual(other.json());
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    a.membership,
+  ]);
+  expect((await f.request(a.member, 'POST', metaConnect, input)).statusCode).toBe(403);
+
+  const submissions = await Promise.all([
+    f.request(a.owner, 'POST', metaConnect, input),
+    f.request(a.owner, 'POST', metaConnect, input),
+  ]);
+  expect(submissions.filter((response) => response.statusCode === 201)).toHaveLength(1);
+  const connected = submissions.find((response) => response.statusCode === 201)!;
+  const replay = submissions.find((response) => response.statusCode !== 201)!;
+  expect(['META_SELECTION_NOT_FOUND', 'META_SELECTION_IN_PROGRESS']).toContain(
+    replay.json().error.code,
+  );
+  const { ids } = connected.json();
+  expect(ids).toHaveLength(2);
+  await expectSavedMetaCredential(a, ids[0], 'facebook_page');
+  await expectSavedMetaCredential(a, ids[1], 'instagram');
+  expect((await f.request(a.owner, 'POST', metaConnect, input)).statusCode).toBe(404);
+
+  await rejectMetaConflict(b, [pageSelection]);
+  const { selectionId: bSelection, denied: conflict } = await rejectMetaConflict(b, [
+    { kind: 'facebook_page', externalAccountId: '1001002' },
+    instagramSelection,
+  ]);
+  expect((await success(b, 'GET', '/channel-connections', 200)).json()).toEqual({
+    items: [],
+    nextCursor: null,
+  });
+  const events = await f.admin.pool.query(
+    'select payload from outbox_events where store_id=$1 and type=$2',
+    [a.id, 'channel.connected'],
+  );
+  expect(events.rows).toHaveLength(2);
+  expect(events.rows).toEqual(
+    expect.arrayContaining(ids.map((id: string) => ({ payload: { channelConnectionId: id } }))),
+  );
+  for (const value of [
+    selectionId,
+    bSelection,
+    'fake-meta-user-credential',
+    'fake-rina-page-credential',
+  ]) {
+    expect(connected.body).not.toContain(value);
+    expect(conflict.body).not.toContain(value);
+    expect(logs.contents()).not.toContain(value);
+  }
+  await expectRetryAfterSubscriptionFailure(a);
+  await expectGrantConsumedAfterCacheFailure(a);
+});
+
+async function seedChannel(shop: Shop) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into channel_connections(id,store_id,kind,external_account_id,display_name,access_token_ciphertext,key_version)
+     values($1::uuid,$2,'facebook_page',$1::uuid::text,'রিনার দোকান',$3,1)`,
+    [id, shop.id, Buffer.from('encrypted-page-credential')],
+  );
+  return id;
+}
+
+fixture('GET /channel-connections', async () => {
+  const { a, b } = await pair();
+  await seedChannel(a);
+  const own = await seedChannel(b);
+  const result = await success(b, 'GET', '/channel-connections', 200);
+  expect(result.json()).toEqual({
+    nextCursor: null,
+    items: [
+      {
+        id: own,
+        kind: 'facebook_page',
+        displayName: 'রিনার দোকান',
+        externalAccountId: own,
+        status: 'active',
+        tokenExpiresAt: null,
+        connectedAt: expect.any(String),
+        disconnectedAt: null,
+      },
+    ],
+  });
+  const second = await seedChannel(b);
+  const firstPage = await success(b, 'GET', '/channel-connections?limit=1', 200);
+  const { items, nextCursor } = firstPage.json();
+  expect(items.map(({ id }: { id: string }) => id)).toEqual([nextCursor]);
+  const nextPage = await success(
+    b,
+    'GET',
+    `/channel-connections?limit=1&cursor=${nextCursor}`,
+    200,
+  );
+  expect(nextPage.json().nextCursor).toBeNull();
+  expect([nextCursor, nextPage.json().items[0].id].sort()).toEqual([own, second].sort());
+  expect((await f.request(b.member, 'GET', '/channel-connections')).statusCode).toBe(403);
+});
+
+fixture('DELETE /channel-connections/:channelConnectionId', async () => {
+  const { a, b } = await pair();
+  const foreign = await seedChannel(a);
+  const own = await seedChannel(b);
+  const url = (id: string) => `/channel-connections/${id}`;
+  const conversation = randomUUID();
+  await f.admin.pool.query(
+    `insert into conversations(id,store_id,contact_id,channel_connection_id,channel)
+     values($2,$1,$4,$3,'messenger')`,
+    [b.id, conversation, own, await contact(b)],
+  );
+  await hidden(b, 'DELETE', url, foreign);
+  expect((await f.request(b.member, 'DELETE', url(own))).statusCode).toBe(403);
+  await success(b, 'DELETE', url(own), 204);
+  expect(await f.row('conversations', conversation)).toMatchObject({ channel_connection_id: own });
+  expect(await f.row('channel_connections', foreign)).toMatchObject({ status: 'active' });
+  expect(await f.row('channel_connections', own)).toMatchObject({
+    status: 'disconnected',
+    access_token_ciphertext: null,
+    key_version: null,
+  });
+  const events = await f.admin.pool.query(
+    'select payload from outbox_events where store_id=$1 and type=$2',
+    [b.id, 'channel.disconnected'],
+  );
+  expect(events.rows).toEqual([{ payload: { channelConnectionId: own } }]);
+});
+
 fixture('GET /sms-sender-ids', async () => {
   const { a, b } = await pair(),
     aId = await smsSender(a),
