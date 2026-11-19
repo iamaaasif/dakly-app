@@ -71,10 +71,16 @@ test('changes the report period and keeps cards scoped to the selected shop', as
     if (process.env.DASHBOARD_EVIDENCE) {
       await page.screenshot({ path: testInfo.outputPath('dashboard-360x800.png') });
     }
+    await database.pool.query(
+      `delete from store_daily_metrics where store_id=$1 and metric='orders'
+       and day >= (now() at time zone 'Asia/Dhaka')::date - 6`,
+      [ownerShop],
+    );
     const period = page.getByRole('navigation', { name: 'Reporting period' });
     await period.getByRole('link', { name: '7 days', exact: true }).click();
     await expect(page).toHaveURL(/\/dashboard\?period=7$/);
     await expect(figures.getByText('vs previous 7 days')).toHaveCount(4);
+    await expect(figures.getByText('No orders in this period.')).toBeVisible();
     await expect(period.getByRole('link', { name: '7 days', exact: true })).toHaveAttribute(
       'aria-current',
       'page',

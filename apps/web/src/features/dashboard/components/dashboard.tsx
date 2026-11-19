@@ -1,6 +1,5 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import type { DashboardQuery, DashboardResponse } from '@dakly/contracts/dashboard';
@@ -9,21 +8,16 @@ import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
+import { useDashboard } from '../api/dashboard';
 import { DashboardMetrics, LifecycleGroups } from './dashboard-metrics';
 import { formatCalendarDate, localHour } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
-import { useStoreRequest } from '@/lib/store-request';
 
 const periods = [7, 30, 90] as const;
 
 export function Dashboard({ period }: DashboardQuery) {
   const { data: session } = useSessionContext();
-  const { request, contextTag } = useStoreRequest();
-  const { data, error, isPending, refetch } = useQuery({
-    queryKey: ['dashboard', contextTag, period],
-    queryFn: ({ signal }) => request<DashboardResponse>(`/dashboard?period=${period}`, { signal }),
-    enabled: Boolean(contextTag && session?.currentStore),
-  });
+  const { data, error, isPending, refetch } = useDashboard(period, Boolean(session?.currentStore));
   if (!session?.currentStore) return null;
 
   const available = data ? hasReports(data) : true;
@@ -51,17 +45,9 @@ export function Dashboard({ period }: DashboardQuery) {
   );
 }
 
-function DashboardHeader({
-  data,
-  name,
-  period,
-  available,
-}: {
-  data?: DashboardResponse;
-  name?: string;
-  period: DashboardQuery['period'];
-  available: boolean;
-}) {
+type HeaderProps = DashboardQuery & { data?: DashboardResponse; name?: string; available: boolean };
+
+function DashboardHeader({ data, name, period, available }: HeaderProps) {
   return (
     <Card className="flex flex-col justify-between gap-4 bg-linear-to-b from-primary-soft to-surface md:flex-row md:items-end md:p-8">
       <div>
@@ -70,9 +56,12 @@ function DashboardHeader({
             {formatCalendarDate(data.asOf, data.timeZone)}
           </time>
         )}
-        <h1 aria-label="Dashboard" className="text-xl font-bold md:text-2xl">
-          {data ? `${greeting(data)}, ${name}` : 'Dashboard'}
-        </h1>
+        <h1 className={cn(data ? 'sr-only' : 'text-xl font-bold md:text-2xl')}>Dashboard</h1>
+        {data && (
+          <p className="text-xl font-bold md:text-2xl">
+            {greeting(data)}, {name}
+          </p>
+        )}
       </div>
       {available && (
         <nav

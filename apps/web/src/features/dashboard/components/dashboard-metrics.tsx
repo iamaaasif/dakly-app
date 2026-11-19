@@ -42,13 +42,9 @@ const metrics = [
   },
 ] as const;
 
-export function DashboardMetrics({
-  cards,
-  period,
-}: {
-  cards: DashboardResponse['cards'];
-  period: number;
-}) {
+type MetricsProps = { cards: DashboardResponse['cards']; period: number };
+
+export function DashboardMetrics({ cards, period }: MetricsProps) {
   if (!Object.values(cards).some(Boolean)) return null;
   return (
     <section aria-label="Key figures" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -75,7 +71,7 @@ export function DashboardMetrics({
             </div>
             <ReportChange total={total} previous={previous} period={period} />
             <p className="mt-auto border-t border-border pt-3 text-sm text-text-muted">
-              {description}
+              {id === 'orders' && total === 0n ? 'No orders in this period.' : description}
             </p>
           </Card>
         );
@@ -150,41 +146,39 @@ export function LifecycleGroups({
 }) {
   const total = groups.reduce((sum, { key }) => sum + counts[key], 0);
   return (
-    <section aria-labelledby="lifecycle-heading">
-      <Card className="space-y-4">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-          <h2 id="lifecycle-heading" className="text-lg font-semibold">
-            Your customers at a glance
-          </h2>
-          <p className="text-sm text-text-muted tabular-nums">
-            {formatCount(total)} {total === 1 ? 'customer' : 'customers'}
-          </p>
-        </div>
-        <div aria-hidden className="flex h-2 overflow-hidden rounded-full bg-surface-muted">
-          {total > 0 &&
-            groups.map(({ key, color }) => (
-              <span
-                key={key}
-                className={color}
-                style={{ width: `${(counts[key] / total) * 100}%` }}
-              />
-            ))}
-        </div>
-        <dl className="grid gap-x-8 md:grid-cols-2">
-          {groups.map(({ key, name, color }) => (
-            <div
+    <Card role="region" aria-labelledby="lifecycle-heading" className="space-y-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <h2 id="lifecycle-heading" className="text-lg font-semibold">
+          Your customers at a glance
+        </h2>
+        <p className="text-sm text-text-muted tabular-nums">
+          {formatCount(total)} {total === 1 ? 'customer' : 'customers'}
+        </p>
+      </div>
+      <div aria-hidden className="flex h-2 overflow-hidden rounded-full bg-surface-muted">
+        {total > 0 &&
+          groups.map(({ key, color }) => (
+            <span
               key={key}
-              className="flex items-center justify-between gap-4 border-b border-border py-3"
-            >
-              <dt className="flex items-center gap-2">
-                <span aria-hidden className={cn('size-2 shrink-0 rounded-full', color)} />
-                {name}
-              </dt>
-              <dd className="font-semibold tabular-nums">{formatCount(counts[key])}</dd>
-            </div>
+              className={color}
+              style={{ width: `${(counts[key] / total) * 100}%` }}
+            />
           ))}
-        </dl>
-      </Card>
-    </section>
+      </div>
+      <dl className="grid gap-x-8 md:grid-cols-2">
+        {groups.map(({ key, name, color }) => (
+          <div
+            key={key}
+            className="flex items-center justify-between gap-4 border-b border-border py-3"
+          >
+            <dt className="flex items-center gap-2">
+              <span aria-hidden className={cn('size-2 shrink-0 rounded-full', color)} />
+              {name}
+            </dt>
+            <dd className="font-semibold tabular-nums">{formatCount(counts[key])}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
   );
 }
