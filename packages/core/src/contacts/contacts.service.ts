@@ -20,6 +20,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
@@ -60,6 +61,7 @@ export type ImportContactBatch = {
 export class ContactsService {
   constructor(
     @Inject(ContactsRepository) private readonly contactsRepository: ContactsRepository,
+    @Inject(ContactIdentitiesRepository) private readonly identities: ContactIdentitiesRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
@@ -90,6 +92,28 @@ export class ContactsService {
       return created;
     });
     return toContactResponse(contact, access.seeFullPhone);
+  }
+
+  findOrCreateByIdentity(storeId: string, input: InboundIdentity): Promise<string> {
+    return this.transaction.run(storeId, async () => {
+      for (;;) {
+        const existing = await this.identities.findInboundIdentity(storeId, input);
+        if (existing) {
+          if (!existing.deletedAt) return existing.contactId;
+          await this.identities.retireInboundIdentity(storeId, existing.id);
+        }
+        const now = this.clock.now();
+        const identity = await this.identities.createInboundIdentity(storeId, input, now);
+        if (!identity) continue;
+        await this.outbox.publish({
+          type: 'contact.created',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { contactId: identity.contactId },
+        });
+        return identity.contactId;
+      }
+    });
   }
 
   async list(
