@@ -14,9 +14,13 @@ import {
 import {
   conversationListQuerySchema,
   conversationMessageListQuerySchema,
+  createConversationNoteSchema,
+  takeOverConversationSchema,
   updateConversationSchema,
   type ConversationListQuery,
   type ConversationMessageListQuery,
+  type CreateConversationNoteInput,
+  type TakeOverConversationInput,
   type UpdateConversationInput,
 } from '@dakly/contracts/chats';
 
@@ -67,6 +71,17 @@ export class InboxController {
     return this.inbox.update(storeId, id, userId, input);
   }
 
+  @Post(':conversationId/notes')
+  @RequirePermission('chats.edit')
+  addNote(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('conversationId', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(createConversationNoteSchema)) input: CreateConversationNoteInput,
+  ) {
+    return this.inbox.addNote(storeId, id, { kind: 'user', userId }, input);
+  }
+
   @Post(':conversationId/take-over')
   @RequirePermission('chats.edit')
   @HttpCode(200)
@@ -74,8 +89,14 @@ export class InboxController {
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
     @Param('conversationId', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(takeOverConversationSchema)) input: TakeOverConversationInput,
   ) {
-    return this.inbox.setResponder(storeId, id, userId, 'human');
+    return this.inbox.setResponder(
+      storeId,
+      id,
+      { kind: 'user', userId },
+      { ...input, responder: 'human' },
+    );
   }
 
   @Post(':conversationId/return-to-ai')
@@ -86,6 +107,6 @@ export class InboxController {
     @CurrentUser() userId: string,
     @Param('conversationId', ParseUUIDPipe) id: string,
   ) {
-    return this.inbox.setResponder(storeId, id, userId, 'ai');
+    return this.inbox.setResponder(storeId, id, { kind: 'user', userId }, { responder: 'ai' });
   }
 }

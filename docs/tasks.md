@@ -122,13 +122,13 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M4. Chats inbox (people only)
 
-| ID     | Task                                                     | Status    | Depends       | PR   | Notes                                                                                        |
-| ------ | -------------------------------------------------------- | --------- | ------------- | ---- | -------------------------------------------------------------------------------------------- |
-| CHAT-3 | Status, responder, assignment, take over, internal notes | In review | CHAT-1        | #183 | Other return timers follow AI-4 and CHAT-2.                                                  |
-| CHAT-4 | Saved replies                                            | In review | CHAT-1        | #186 |                                                                                              |
-| CHAT-5 | Web: inbox list, conversation, composer, customer panel  | Todo      | CHAT-3, WEB-2 |      |                                                                                              |
-| CHAT-6 | Comments: receive, reply publicly and privately, hide    | Todo      | CHAT-2        |      |                                                                                              |
-| CHAT-8 | Customer memory processing                               | Todo      | AI-4, CHAT-1  |      | Preserve memory ownership on merge and undo. Clear derived facts and checkpoints on erasure. |
+| ID     | Task                                                     | Status    | Depends       | PR         | Notes                                                                                        |
+| ------ | -------------------------------------------------------- | --------- | ------------- | ---------- | -------------------------------------------------------------------------------------------- |
+| CHAT-3 | Status, responder, assignment, take over, internal notes | In review | CHAT-1        | #183, #192 | Other return timers follow AI-4 and CHAT-2.                                                  |
+| CHAT-4 | Saved replies                                            | In review | CHAT-1        | #186       |                                                                                              |
+| CHAT-5 | Web: inbox list, conversation, composer, customer panel  | Todo      | CHAT-3, WEB-2 |            |                                                                                              |
+| CHAT-6 | Comments: receive, reply publicly and privately, hide    | Todo      | CHAT-2        |            |                                                                                              |
+| CHAT-8 | Customer memory processing                               | Todo      | AI-4, CHAT-1  |            | Preserve memory ownership on merge and undo. Clear derived facts and checkpoints on erasure. |
 
 ## M5. Products
 
@@ -158,7 +158,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | Done   |              | #137             | Q8                                                                                                                |
 | AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | Done   | AI-1, PAY-1  | #140             | Q15                                                                                                               |
 | AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Done   | AI-2         | #143, #146, #147 | PDF and plain text files. Items and uploads, indexing, then search. Images and website links are for later tasks. |
-| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Todo   | AI-2, CHAT-3 |                  |                                                                                                                   |
+| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Todo   | AI-2, CHAT-3 |                  | Exclude internal notes (`kind = 'note'`) from model context and all customer-facing messages.                     |
 | AI-5 | Sales agent tools and the fact check before sending                     | Todo   | AI-4, ORD-3  |                  |                                                                                                                   |
 | AI-6 | Practice mode, test questions, Go live                                  | Todo   | AI-5         |                  | Q10                                                                                                               |
 | AI-7 | Golden-set eval runner and nightly job                                  | Todo   | AI-5         |                  |                                                                                                                   |

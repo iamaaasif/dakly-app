@@ -27,6 +27,7 @@ import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
+import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
@@ -96,6 +97,7 @@ import { JobSchedulers } from './job-schedulers';
     NotificationsModule,
     MetaWebhookRoutingModule,
     ChannelTokenHealthModule,
+    ConversationReturnsModule,
     AutomationRunsModule,
     CampaignsModule,
     ClockModule,
