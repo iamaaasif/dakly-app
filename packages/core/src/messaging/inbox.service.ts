@@ -9,6 +9,7 @@ import type {
   CreateConversationNoteInput,
   TakeOverConversationInput,
   UpdateConversationInput,
+  handoverReasons,
 } from '@dakly/contracts/chats';
 
 import { AuditService } from '../audit/audit.service';
@@ -147,6 +148,27 @@ export class InboxService {
         { now, bumpVersion: false },
       );
       if (after) await this.recordChange(storeId, actor, before, after);
+    });
+  }
+
+  async aiReplyTurn(storeId: string, id: string, lock = false) {
+    const turn = await this.repository.aiReplyTurn(storeId, id, lock);
+    return turn?.windowExpiresAt && turn.windowExpiresAt > this.clock.now() ? turn : undefined;
+  }
+
+  async handOver(storeId: string, id: string, reason: (typeof handoverReasons)[number]) {
+    return this.transaction.run(storeId, async () => {
+      const before = await this.repository.find(storeId, id, 'no key update');
+      if (before?.responder !== 'ai') return undefined;
+      const now = this.clock.now();
+      const after = await this.repository.update(
+        storeId,
+        id,
+        { status: 'needs_you', responder: 'human', handoverReason: reason, handedOverAt: now },
+        { now },
+      );
+      if (after) await this.recordChange(storeId, { kind: 'system' }, before, after);
+      return after;
     });
   }
 
