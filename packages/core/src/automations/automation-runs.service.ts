@@ -205,7 +205,7 @@ export class AutomationRunsService {
         : undefined;
     const planned = await this.authorizeFirstSend(claim, step, facts, prepared?.to ?? null);
     if ('stop' in planned) return planned.stop;
-    if (prepared) return this.deliver(storeId, step, prepared, planned);
+    if (prepared) return this.deliver(facts, step, prepared, planned);
   }
 
   private async authorizeFirstSend(
@@ -350,14 +350,14 @@ export class AutomationRunsService {
   }
 
   private async deliver(
-    storeId: string,
+    { storeId, contactId }: Pick<RunFacts, 'storeId' | 'contactId'>,
     step: SendStep,
     prepared: PreparedSms,
     authorized: { claim: RunClaim; at: Date; body: string },
   ): Promise<StepResult | undefined> {
     const message = {
       channel: 'sms',
-      contactId: prepared.contactId,
+      contactId,
       body: authorized.body,
       operationKey: operationKey(authorized.claim),
     } as const;
