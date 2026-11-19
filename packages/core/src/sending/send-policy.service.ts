@@ -98,6 +98,15 @@ export class SendPolicyService {
     return { decision, at };
   }
 
+  async recheckQuietHoursForDispatch(storeId: string) {
+    this.requireTransaction();
+    const { quietHours, timeZone } = await this.stores.sendingSettings(storeId);
+    const at = this.clock.now();
+    const until = quietHoursEnd(at, quietHours, timeZone);
+    const decision: SendDecision = until ? { action: 'defer', until } : SEND;
+    return { decision, at };
+  }
+
   private async lockForDispatch(storeId: string, contactId: string) {
     this.requireTransaction();
     await this.repository.lockContact(storeId, contactId);
