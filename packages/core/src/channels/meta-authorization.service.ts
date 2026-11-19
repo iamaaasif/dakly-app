@@ -125,6 +125,7 @@ export class MetaAuthorizationService {
     if (!(await cache.set(claim, '1', 'EX', loginLifetimeSeconds, 'NX')))
       throw loginError('META_SELECTION_IN_PROGRESS');
 
+    let discard = false;
     try {
       const packed = await cache.get(key);
       if (!packed) throw loginError('META_SELECTION_NOT_FOUND');
@@ -133,13 +134,10 @@ export class MetaAuthorizationService {
       if (await this.connections.hasForeignOwner(storeId, selected))
         throw loginError('META_ACCOUNT_ALREADY_CONNECTED');
       const subscriptions = new Map(selected.map(({ page }) => [page.id, page.accessToken]));
-      await Promise.all(
-        [...subscriptions].map(([id, token]) =>
-          this.callMeta('meta_subscribe', 'Meta Page subscription measured', () =>
-            driver.subscribePage(id, token),
-          ),
-        ),
-      );
+      for (const [id, token] of subscriptions)
+        await this.callMeta('meta_subscribe', 'Meta Page subscription measured', () =>
+          driver.subscribePage(id, token),
+        );
       const now = this.clock.now();
       const ids = await this.transaction.runLocked(storeId, async () => {
         const ids: string[] = [];
@@ -167,14 +165,14 @@ export class MetaAuthorizationService {
         }
         return ids;
       });
-      await cache.del(key);
+      discard = true;
       return { ids };
     } catch (error) {
-      if (error instanceof AppError && (error.status === 400 || error.status === 409))
-        await cache.del(key);
+      discard = error instanceof AppError && (error.status === 400 || error.status === 409);
       throw error;
     } finally {
-      await cache.del(claim);
+      // Delete both together so a cache failure cannot unlock a consumed grant.
+      await cache.del(...(discard ? [key, claim] : [claim]));
     }
   }
 
