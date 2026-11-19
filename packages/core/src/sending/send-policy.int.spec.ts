@@ -14,6 +14,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { StoresService } from '../stores/stores.service';
 import { type SendRequest, SendPolicyService } from './send-policy.service';
 import { SendingModule } from './sending.module';
 
@@ -319,7 +320,17 @@ describe('SendPolicyService (Postgres)', () => {
     const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(noon);
     const message = { contactId, channel: 'sms', category: 'marketing' } as const;
     const retry = () =>
-      app.get(StoreTransaction).run(storeA, () => policy.recheckForSend(storeA, message, stepId));
+      app.get(StoreTransaction).run(storeA, async () => {
+        const settings = await app.get(StoresService).sendingSettings(storeA, 'share');
+        const recipient = await policy.recheckRetryRecipient(storeA, message);
+        if (recipient?.decision.action !== 'send') return recipient;
+        const check = await policy.prepareMarketingRetryCheck(storeA, {
+          contactId,
+          workflowStepId: stepId,
+          settings,
+        });
+        return check();
+      });
     try {
       expect(await retry()).toMatchObject({ decision: { action: 'send' } });
       await workflowSend(storeA, contactId, hoursBefore(2), { outcome: 'unconfirmed' });

@@ -25,7 +25,7 @@ The code that enqueues it passes the same constant: `queue.add(SEND_ORDER_CONFIR
 
 Rules:
 
-- The payload always has `storeId` and is parsed with zod. The exception is a platform-wide sweep or account job with no store (security notices, staff alerts, staff audit maintenance): its payload says so in a comment and holds only global ids.
+- The payload always has `storeId` and is parsed with zod. The exception is a platform-wide sweep or account job with no store (security notices, staff alerts, staff audit maintenance): its payload says so in a comment and holds only global ids. The [webhook intake job](../data/jobs.md#inbound) also carries a global id because store routing happens in the worker.
 - The handler only parses and calls a service. Logic lives in the service so HTTP and jobs share it.
 - Each queue has one worker, a dispatcher in `platform/queue/job-dispatcher.ts`, that routes each job to its handler by `job.name`. Mark the handler with `@HandlesJob({ queue, name })`, export the name as a constant from the handler file, and enqueue with that constant. Two handlers for the same queue and name stop the worker at startup. A job with no handler fails at once and is not retried.
 - The dispatcher runs the handler inside the job log context, reports a failure once through `ErrorReporter`, writes the security log line and rethrows a plain error, so BullMQ never stores the original message. Handlers do not catch errors themselves.

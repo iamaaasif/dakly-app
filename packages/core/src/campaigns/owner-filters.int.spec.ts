@@ -29,6 +29,13 @@ describe('campaign filters without RLS assistance', () => {
     expect((await f.row('campaigns', b.id)).store_id).toBe(f.b);
     expect(await repository.find(f.b, a.id)).toBeUndefined();
     expect((await repository.list(f.b, page)).map((campaign) => campaign.id)).toEqual([b.id]);
+    const filtered = await repository.list(f.b, {
+      ...page,
+      search: 'ঈদ',
+      status: 'draft',
+      channel: 'sms',
+    });
+    expect(filtered.map(({ id }) => id)).toEqual([b.id]);
 
     const now = new Date('2026-11-16T05:00:00Z');
     expect(
@@ -36,6 +43,23 @@ describe('campaign filters without RLS assistance', () => {
     ).toBeUndefined();
     expect(await repository.removeDraft(f.b, a.id)).toBe(false);
     expect(await repository.find(f.a, a.id)).toMatchObject({ name: 'ঈদের অফার' });
+  });
+
+  it('returns no campaigns when the cursor belongs to another store', async () => {
+    const suffix = randomUUID().slice(8);
+    const local = `10000000${suffix}`;
+    const foreign = `20000000${suffix}`;
+    await f.connection.pool.query(
+      `insert into campaigns(id, store_id, name, channel, content, created_at)
+       values ($1, $2, 'নববর্ষের অফার', 'sms', '{}', '2026-04-14T00:00:00Z'),
+              ($3, $4, 'নববর্ষের অফার', 'sms', '{}', '2026-04-15T00:00:00Z')`,
+      [local, f.a, foreign, f.b],
+    );
+
+    const query = { ...page, search: 'নববর্ষের অফার' };
+    expect((await repository.list(f.a, query)).map(({ id }) => id)).toEqual([local]);
+    expect((await repository.list(f.b, query)).map(({ id }) => id)).toEqual([foreign]);
+    expect(await repository.list(f.a, { ...query, cursor: foreign })).toEqual([]);
   });
 
   it('locks, freezes recipients for and approves only the selected store’s drafts', async () => {

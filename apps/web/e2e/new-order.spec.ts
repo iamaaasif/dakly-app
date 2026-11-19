@@ -20,22 +20,22 @@ async function capture(page: Page, name: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
-    if (name === 'new') {
-      if (width === 1440) {
-        await page
-          .locator('dialog[open] form > div.overflow-y-auto')
+    if (name === 'edit-detail') {
+      await expect(page.getByRole('button', { name: 'Edit order' })).toBeInViewport();
+    } else if (name !== 'pipeline') {
+      const dialog = page.getByRole('dialog', {
+        name: name === 'edit' ? 'Edit order' : 'New order',
+      });
+      if (width === 1440)
+        await dialog
+          .locator('form > div.overflow-y-auto')
           .evaluate((node) => node.scrollTo({ top: 0 }));
-      }
       if (width === 360) {
-        await page.getByText('Cash on delivery').scrollIntoViewIfNeeded();
-        await expect(page.getByRole('button', { name: 'Save order' })).toBeInViewport();
+        await dialog.getByText('Cash on delivery').scrollIntoViewIfNeeded();
+        await expect(dialog.getByRole('button', { name: 'Save order' })).toBeInViewport();
       }
       await expect
-        .poll(() =>
-          page
-            .locator('dialog[open]')
-            .evaluate((dialog) => dialog.scrollWidth - dialog.clientWidth),
-        )
+        .poll(() => dialog.evaluate((element) => element.scrollWidth - element.clientWidth))
         .toBe(0);
     }
     await page.screenshot({
@@ -60,6 +60,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
   let zoneId: string | undefined;
   let zoneIds: string[] = [];
   let insertedCounter = false;
+  let existingBuyerId: string | undefined;
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -128,17 +129,18 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await variant.selectOption({ label: 'Cotton Panjabi · M' });
     await expect(variant).toHaveAttribute('aria-invalid', 'false');
     await expect(create.getByText('5 in stock')).toBeVisible();
-    await expect(create.getByText('৳1,310')).toBeVisible();
+    const cod = create.getByText(/^Cash on delivery/);
+    await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
     await create.getByRole('button', { name: 'Add product' }).click();
     await expect(create.getByText('Cash on delivery')).toHaveCount(0);
     await create.getByRole('button', { name: 'Remove' }).last().click();
     const search = create.getByLabel('Search products');
     await search.fill('Missing product');
     await expect(create.getByText('5 in stock')).toBeVisible();
-    await expect(create.getByText('৳1,310')).toBeVisible();
+    await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
     await search.clear();
     await create.getByLabel('Delivery charge (৳)').fill('90.25');
-    await expect(create.getByText('৳1,340.25')).toBeVisible();
+    await expect(cod.getByText('৳1,340.25', { exact: true })).toBeVisible();
     await capture(page, 'new');
     let firstKey: string | undefined;
     let firstBody: string | null;
@@ -172,6 +174,121 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(detail.getByRole('status', { name: 'Order stage' })).toHaveText('To confirm');
     await expect(detail.getByText('৳1,340.25').first()).toBeVisible();
     await page.unroute('**/api/orders');
+
+    await detail.getByRole('button', { name: 'Close', exact: true }).click();
+    const storeContext = await context.request.get('/api/me/context');
+    const { contextTag: storeTag } = await storeContext.json();
+    const buyer = await context.request.post('/api/contacts', {
+      data: { name: 'Sonia Akter', phone: '01701000024' },
+      headers: { Origin: baseURL!, 'X-Session-Context': storeTag },
+    });
+    expect(buyer.status()).toBe(201);
+    const { id: buyerId } = await buyer.json();
+    existingBuyerId = buyerId;
+    await page.getByRole('button', { name: 'New order' }).click();
+    await create.getByLabel('Find a customer').fill('Sonia Akter');
+    await create.getByRole('button', { name: /Sonia Akter/ }).click();
+    await expect(recipientPhone).toHaveValue('01701000024');
+    await gift.check();
+    await expect(recipientPhone).toHaveValue('');
+    await create.getByLabel('Recipient name').fill('Nusrat Akter');
+    await recipientPhone.fill('01701000025');
+    await create.getByLabel('Address').fill('Road 4, Dhanmondi');
+    await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
+    await create.getByLabel('District').selectOption({ label: 'Dhaka' });
+    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60.00');
+    await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
+    await expect(create.getByText('4 in stock')).toBeVisible();
+    await create.getByLabel('Discount (৳)').fill('1260');
+    await expect(create.getByText('Discount cannot exceed the item total.')).toBeVisible();
+    await expect(cod).toHaveCount(0);
+    await create.getByLabel('Discount (৳)').fill('50');
+    await expect(create.getByText(/^Total/).getByText('৳1,260', { exact: true })).toBeVisible();
+    await create.getByLabel('Discount (৳)').clear();
+    await create.getByLabel('Advance paid (৳)').fill('200');
+    await expect(cod.getByText('৳1,110', { exact: true })).toBeVisible();
+    await capture(page, 'buyer-and-advance');
+    let confirmKey: string | undefined;
+    let confirmBody: string | null;
+    await page.route('**/api/orders', async (route) => {
+      const request = route.request();
+      if (request.method() !== 'POST') return route.continue();
+      expect(request.postDataJSON()).toMatchObject({ confirm: true });
+      if (confirmKey) {
+        expect(request.headers()['idempotency-key']).toBe(confirmKey);
+        expect(request.postData()).toBe(confirmBody);
+        return route.continue();
+      }
+      confirmKey = request.headers()['idempotency-key'];
+      confirmBody = request.postData();
+      expect(confirmKey).toBeTruthy();
+      const confirmed = await route.fetch();
+      expect(confirmed.status()).toBe(201);
+      expect(await confirmed.json()).toMatchObject({ stage: 'to_pack' });
+      await route.abort();
+    });
+    await create.getByRole('button', { name: 'Save as confirmed' }).click();
+    await expect(create.getByText('Could not confirm the save')).toBeVisible();
+    await create.getByRole('button', { name: 'Retry save' }).click();
+    await expect(detail.getByText('Nusrat Akter', { exact: true })).toBeVisible();
+    await page.unroute('**/api/orders');
+    await expect(detail.getByRole('link', { name: 'Open profile' })).toHaveAttribute(
+      'href',
+      `/customers/${buyerId}`,
+    );
+    await expect(detail.getByText('To confirm → To pack')).toBeVisible();
+    await expect(detail.getByText('৳1,110')).toBeVisible();
+
+    const newPrice = await context.request.patch(`/api/products/${productId}`, {
+      data: { pricePoisha: 140000, isStockTracked: false },
+      headers: { Origin: baseURL!, 'X-Session-Context': storeTag },
+    });
+    expect(newPrice.status()).toBe(200);
+    await page.reload();
+    const editButton = detail.getByRole('button', { name: 'Edit order' });
+    await expect(editButton).toBeVisible();
+    await capture(page, 'edit-detail');
+    await editButton.click();
+    const edit = page.getByRole('dialog', { name: 'Edit order' });
+    await expect(edit.getByText('Sonia Akter')).toBeVisible();
+    await expect(edit.getByText('৳1,250 · 3 in stock', { exact: true })).toBeVisible();
+    await expect(edit.getByLabel('Advance paid (৳)')).toHaveValue('200.00');
+    await expect(edit.getByRole('button', { name: 'Save order' })).toBeDisabled();
+    await edit.getByLabel('Quantity 1').fill('2');
+    await expect(
+      edit.getByText(/^Cash on delivery/).getByText('৳2,360', { exact: true }),
+    ).toBeVisible();
+    await capture(page, 'edit');
+    await edit.getByLabel('Discount (৳)').fill('50');
+    await expect(
+      edit.getByText(/^Cash on delivery/).getByText('৳2,310', { exact: true }),
+    ).toBeVisible();
+    await edit.getByRole('button', { name: 'Save order' }).click();
+    await expect(edit).toBeHidden();
+    await expect(editButton).toBeFocused();
+    await expect(detail.getByText('৳2,310')).toBeVisible();
+
+    await editButton.click();
+    const savedDiscount = edit.getByLabel('Discount (৳)');
+    await expect(savedDiscount).toHaveValue('50.00');
+    await savedDiscount.clear();
+    await expect(
+      edit.getByText(/^Cash on delivery/).getByText('৳2,360', { exact: true }),
+    ).toBeVisible();
+    await edit.getByRole('button', { name: 'Save order' }).click();
+    await expect(edit).toBeHidden();
+    await expect(detail.getByText('৳2,360')).toBeVisible();
+
+    await editButton.click();
+    await edit.getByLabel('Address').fill('Updated delivery address');
+    const patch = page.waitForRequest(
+      (req) => req.method() === 'PATCH' && /\/api\/orders\/[^/]+$/.test(req.url()),
+    );
+    await edit.getByRole('button', { name: 'Save order' }).click();
+    expect((await patch).postDataJSON()).not.toHaveProperty('items');
+    await expect(edit).toBeHidden();
+    await expect(detail.getByText('Updated delivery address')).toBeVisible();
+    await expect(detail.getByText('৳2,360')).toBeVisible();
   } finally {
     const orders = await database.pool.query<{ id: string; buyer_contact_id: string | null }>(
       'select id,buyer_contact_id from orders where store_id=$1 and delivery_zone_id=$2',
@@ -179,6 +296,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     );
     const ids = orders.rows.map((order) => order.id);
     const buyerIds = orders.rows.flatMap(({ buyer_contact_id }) => buyer_contact_id ?? []);
+    if (existingBuyerId) buyerIds.push(existingBuyerId);
     await database.pool.query(
       `delete from outbox_events where store_id=$1 and
        (payload->>'orderId' = any($2::text[]) or payload->>'variantId'=$3 or payload->>'contactId' = any($4::text[]))`,

@@ -125,8 +125,11 @@ The prototype's WhatsApp connect is a one-click stub. The real flow is Meta Embe
 
 Messenger and Instagram
 
-1. Facebook Login for Business returns a user token. Dakly lists the user's Pages and linked Instagram accounts.
-2. The owner picks which to connect. Dakly stores the long-lived Page token (encrypted) and subscribes the Page to `messages`, `messaging_postbacks` and `feed`.
+1. `POST /channel-connections/meta/start` returns the Facebook Login for Business URL. An Owner or Admin can start this flow. The login state can be used once in the same store and session, within 10 minutes.
+2. The Integrations screen passes the returned code and state to `POST /channel-connections/meta/accounts`. The API exchanges them and lists Pages the member can manage and their linked Instagram accounts. The response includes an opaque selection id. The credential stays encrypted in Valkey for up to 10 minutes, bound to the same store, member and session.
+3. Graph login uses a User access token configuration with `pages_show_list`, `pages_manage_metadata`, `instagram_basic` and `pages_read_engagement`. Add `business_management` for Pages linked to a Meta business account. The member must have a role on that business. Meta lists `ads_read` or `ads_management` for Instagram user fields when the Page role was granted through Business Manager. Credentials for Graph login alone leave webhook intake disabled. [Page discovery requirements](https://developers.facebook.com/docs/graph-api/changelog/non-versioned-changes/nvc-2023#september-15-2023) · [Instagram user requirements](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/v21.0/)
+4. `POST /channel-connections/meta` accepts the selection id and chosen account ids. Dakly rechecks access and store ownership, subscribes each Page to `messages`, `messaging_postbacks` and `feed`, and saves the selected connections with encrypted long-lived Page tokens. Add `pages_messaging` to the Meta configuration for the Page message subscription. Dakly clears the OAuth grant after saving or a final rejection. [Page webhook requirements](https://developers.facebook.com/docs/graph-api/webhooks/getting-started/webhooks-for-pages)
+5. `GET /channel-connections` lists the store’s connections with status and dates. Use `cursor` and `limit` to page through the list. An Owner or Admin can disconnect at `DELETE /channel-connections/:channelConnectionId`. Disconnect clears the saved token and keeps the conversation history.
 
 WhatsApp
 
@@ -137,11 +140,16 @@ Every connection is a `channel_connections` row: kind, external account id, encr
 
 Webhook intake
 
-1. `POST /webhooks/meta` checks `X-Hub-Signature-256` against `request.rawBody` with `timingSafeEqual`. A bad signature returns 401 and logs a security event.
-2. The handler saves the raw payload to `webhook_events` (unique on provider and external event id), enqueues `process-webhook-event`, and returns 200. Nothing else runs in the request.
-3. The job parses with the driver, finds the store with the `store_id_for_channel_account(kind, externalId)` database function, and calls `ChatsService.receiveInboundMessage(storeId, ...)` or `SocialService.receiveComment(storeId, ...)`. A duplicate hits the unique key and is skipped.
+1. `GET /webhooks/meta` returns the challenge as plain text when the subscription token matches `META_WEBHOOK_VERIFY_TOKEN`.
+2. `POST /webhooks/meta` checks `X-Hub-Signature-256` against the exact request bytes using `META_APP_SECRET`. A bad signature on a valid JSON request returns 401 and logs a security event. Fastify refuses malformed JSON and bodies over 1 MiB.
+3. The handler saves one payload per signed delivery in `webhook_events`. Its external id is the SHA-256 hex digest of the verified bytes. The handler queues one `process-webhook-event` job by row id and returns 200. An identical retry restores a missing job for an unprocessed row.
+4. The worker parses Messenger and Instagram messages with the driver and looks up each connected store through `store_id_for_channel_account(kind, externalId)`. It passes text messages for known accounts to `MessagingService.receiveInboundMessage`. Messaging checks when Dakly received the delivery and when Meta sent the message against the current connection’s start time. It ignores messages in the first minute of a connection to cover clock skew and keep a previous shop’s messages private after a transfer. The worker records a result and clears the payload. CHAT-2 adds receipt handling. CHAT-7 adds stored media and attachment-only messages before live intake.
 
-Token health: a daily job checks tokens and warns 7 days before expiry. A send that fails with an auth error marks the connection `needs_reconnect` and shows a banner.
+A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. CHN-8 finds and unsubscribes Pages in this state before live intake.
+
+CHN-9 adds recovery for acknowledged deliveries whose Valkey jobs are lost and the seven-day webhook payload purge. Complete CHN-9 before enabling live intake.
+
+The daily token sweep queues one job per store with an active Meta connection that has no fixed expiry or expires within seven days. The worker checks Meta outside the database transaction. A valid credential with a known expiry gets one warning for that expiry date. An invalid credential moves to `needs_reconnect` and notifies members with permission to edit store settings once per connection and UTC day.
 
 SMS sender name (CHN-6)
 

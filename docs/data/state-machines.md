@@ -77,14 +77,14 @@ Refunds (`refunds.status`): `requested` → `pending` → `succeeded` or `failed
 
 `conversations.status` is where the chat sits for staff; `conversations.responder` is who answers. They change apart.
 
-| Field       | Values                               | Moves                                                                                                                           |
-| ----------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `status`    | `open`, `needs_you`, `later`, `done` | Any to any by staff. A new customer message moves `done` and `later` back to `open`. A hand-over moves it to `needs_you`.       |
-| `responder` | `ai`, `human`, `paused`              | `ai` → `human` on hand-over or a staff reply; `human` → `ai` by staff or when `return_to_ai_at` passes; `paused` only by staff. |
+| Field       | Values                               | Moves                                                                                                                         |
+| ----------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `status`    | `open`, `needs_you`, `later`, `done` | Any to any by staff. A new customer message moves `done` and `later` back to `open`. A hand-over moves it to `needs_you`.     |
+| `responder` | `ai`, `human`, `paused`              | `ai` → `human` on hand-over or a staff reply; `human` → `ai` by staff or when `ai_resumes_at` passes; `paused` only by staff. |
 
 The AI writes a reply only if, in the short transaction after the model call, `responder` is still `ai` and `version` has not changed (must-fix 2).
 
-Messages (`messages.status`): `queued` → `sent` → `delivered` → `read`, or `failed` from `queued` or `sent`. Inbound messages are `received`. Comments (`social_comments.status`): `new` → `replied`, `needs_you`, `hidden` or `ignored`; `needs_you` → `replied`.
+Messages (`messages.status`): `queued` → `sent` → `delivered` → `read`, or `failed` from `queued` or `sent`. Inbound messages and internal notes are stored as `received`. Comments (`social_comments.status`): `new` → `replied`, `needs_you`, `hidden` or `ignored`; `needs_you` → `replied`.
 
 ## Campaign and recipients
 

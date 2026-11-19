@@ -9,6 +9,20 @@ export const contactCreatedEventSchema = z.strictObject({
   payload: z.strictObject({ contactId: z.uuid() }),
 });
 
+export const contactTagAddedEventSchema = z.strictObject({
+  type: z.literal('contact.tag_added'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ contactId: z.uuid(), tag: z.string().trim().min(1).max(50) }),
+});
+
+export const contactBirthdayEventSchema = z.strictObject({
+  type: z.literal('contact.birthday'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ contactId: z.uuid(), day: z.iso.date() }),
+});
+
 export const consentChangedEventSchema = z.strictObject({
   type: z.literal('consent.changed'),
   storeId: z.uuid(),

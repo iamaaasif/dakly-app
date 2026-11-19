@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
+import type { ContactIdentitiesRepository } from './contact-identities.repository';
 import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 import type { ImportContactsRepository } from './import-contacts.repository';
@@ -38,6 +39,7 @@ describe('ContactsService', () => {
     repository.findIdentities.mockResolvedValue([]);
     service = new ContactsService(
       repository as unknown as ContactsRepository,
+      {} as ContactIdentitiesRepository,
       transaction as unknown as StoreTransaction,
       { publish: vi.fn() } as unknown as OutboxService,
       { now: () => new Date('2026-11-16T04:30:00Z') } as Clock,

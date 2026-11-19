@@ -27,16 +27,19 @@ import { applyOrderFulfilment } from './order-fulfilment';
 import { moveOrderReservations } from './order-reservations';
 import { returnRisk } from './order-risk';
 import {
-  canEditOrder,
   isSyncedOrder,
   orderStageCounts,
   orderStageHistory,
   productArchiveStages,
+  recordOrderCreation,
+  recordOrderEdit,
   recordOrderStage,
+  requireEditableOrder,
+  staffConfirmation,
   stageWrite,
   stagesForOrderTab,
 } from './order-stage';
-import { orderTotalPoisha, orderTotals } from './order-totals';
+import { editedOrderTotals, orderTotalPoisha, orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
@@ -123,10 +126,10 @@ export class OrdersService {
         idempotencyKey,
         ...delivery,
         ...totals,
+        ...stageWrite(input.confirm ? staffConfirmation : { to: 'to_confirm' }, now, input.confirm),
         paymentStatus: input.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         possibleDuplicateOfOrderId: duplicate,
         createdAt: now,
-        updatedAt: now,
       } satisfies OrderWrite;
       await this.saveNewOrder(storeId, order, items, actor);
       return this.getById(storeId, id, access);
@@ -142,20 +145,12 @@ export class OrdersService {
     return this.transaction.runLocked(storeId, async () => {
       const order = await this.repository.lock(storeId, orderId);
       if (!order) throw orderError('ORDER_NOT_FOUND');
-      if (!canEditOrder(order)) throw orderError('ORDER_NOT_EDITABLE');
-
-      const advancePaidPoisha = input.advancePaidPoisha ?? order.advancePaidPoisha;
-      if (order.advancePaidPoisha > 0 && order.advancePaidPoisha !== advancePaidPoisha)
-        throw orderError('ORDER_ADVANCE_ALREADY_PAID');
-
+      const { expectedUpdatedAt, ...changes } = input;
+      requireEditableOrder(order, expectedUpdatedAt);
       const delivery = await this.editedDelivery(storeId, input, order);
       const previous = await this.repository.items(storeId, orderId);
-      const items = await this.orderItems(storeId, input.items, previous);
-      const totals = orderTotals(items, {
-        orderDiscountPoisha: input.orderDiscountPoisha ?? order.orderDiscountPoisha,
-        deliveryChargePoisha: delivery.deliveryChargePoisha ?? order.deliveryChargePoisha,
-        advancePaidPoisha,
-      });
+      const items = input.items ? await this.orderItems(storeId, input.items, previous) : previous;
+      const totals = editedOrderTotals(items, order, input, delivery.deliveryChargePoisha);
       const now = this.clock.now();
       const possibleDuplicateOfOrderId = await this.repository.findDuplicate(storeId, {
         orderId,
@@ -163,31 +158,32 @@ export class OrdersService {
         variantIds: items.map(({ variantId }) => variantId),
         since: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       });
-      await moveOrderReservations(
-        storeId,
-        this.products,
-        { orderId, actor },
-        { before: previous, after: items },
-      );
-      await this.repository.saveItems(
-        storeId,
-        orderId,
-        items.map((item) => ({ ...item, createdAt: now })),
-      );
+      if (input.items) {
+        await moveOrderReservations(
+          storeId,
+          this.products,
+          { orderId, actor },
+          { before: previous, after: items },
+        );
+        await this.repository.saveItems(
+          storeId,
+          orderId,
+          items.map((item) => ({ ...item, createdAt: now })),
+        );
+      }
       await this.repository.updateOrder(storeId, orderId, {
         ...delivery,
         ...totals,
         possibleDuplicateOfOrderId,
-        paymentStatus: advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
+        paymentStatus: totals.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         updatedAt: now,
       });
-      await this.audit.record(storeId, {
-        action: 'order.edited',
-        entityType: 'order',
-        entityId: orderId,
-        actor,
-        after: { changedFields: Object.keys(input) },
-      });
+      await recordOrderEdit(
+        storeId,
+        orderId,
+        { actor, occurredAt: now.toISOString(), changedFields: Object.keys(changes) },
+        { audit: this.audit, outbox: this.outbox },
+      );
       return this.getById(storeId, orderId, access);
     });
   }
@@ -241,6 +237,7 @@ export class OrdersService {
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
       hasRecipientPhoneMatch: await this.contacts.hasOrderPhoneMatch(storeId, order, access),
       createdAt: order.createdAt.toISOString(),
+      updatedAt: order.updatedAt.toISOString(),
       shippedAt: isoTime(order.shippedAt),
       deliveredAt: isoTime(order.deliveredAt),
       returnedAt: isoTime(order.returnedAt),
@@ -356,12 +353,7 @@ export class OrdersService {
       items.map((item) => ({ ...item, createdAt })),
     );
     await this.contacts.markOrderLinked(storeId, buyerContactId, actor);
-    await this.outbox.publish({
-      type: 'order.created',
-      storeId,
-      occurredAt: createdAt.toISOString(),
-      payload: { orderId: id },
-    });
+    await recordOrderCreation(storeId, order, actor, { audit: this.audit, outbox: this.outbox });
   }
 
   private async editedDelivery(

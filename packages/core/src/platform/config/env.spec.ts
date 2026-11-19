@@ -62,6 +62,34 @@ describe('SMS driver configuration', () => {
   });
 });
 
+describe('Meta channel configuration', () => {
+  const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
+
+  it('refuses the fake channel driver in production', () => {
+    expect(() => loadEnv({ ...base, NODE_ENV: 'production', META_CHANNEL_DRIVER: 'fake' })).toThrow(
+      'Fake Meta channel driver is not allowed in production',
+    );
+  });
+
+  it('requires a complete app configuration when the graph driver is enabled', () => {
+    expect(() => loadEnv({ ...base, META_CHANNEL_DRIVER: 'graph' })).toThrow(
+      'Meta app id, secret, login configuration and redirect URI are required',
+    );
+    const graph = {
+      ...base,
+      META_CHANNEL_DRIVER: 'graph',
+      META_APP_ID: '123',
+      META_APP_SECRET: 'local-test-value',
+      META_LOGIN_CONFIG_ID: '456',
+      META_OAUTH_REDIRECT_URI: 'https://shop.example.test/integrations/meta',
+    };
+    expect(loadEnv(graph).metaChannel).toMatchObject({ driver: 'graph', appId: '123' });
+    expect(() =>
+      loadEnv({ ...graph, META_OAUTH_REDIRECT_URI: 'http://shop.example.test/integrations/meta' }),
+    ).toThrow('Meta Graph requires an HTTPS redirect URI');
+  });
+});
+
 describe('Google identity configuration', () => {
   const base = { DATABASE_URL: 'postgres://localhost/dakly', REDIS_URL: 'redis://localhost' };
   it('refuses fake Google identity in production', () => {

@@ -17,6 +17,8 @@ const WORKFLOW_JOBS_AT_ONCE = 5;
 // One job at a time per worker. Campaign jobs still tolerate overlap between workers.
 const CAMPAIGN_JOBS_AT_ONCE = 1;
 const concurrency = {
+  inbound: TRANSACTIONAL_JOBS_AT_ONCE,
+  sync: 1,
   transactional: TRANSACTIONAL_JOBS_AT_ONCE,
   bulk: BULK_JOBS_AT_ONCE,
   workflow: WORKFLOW_JOBS_AT_ONCE,
@@ -52,6 +54,8 @@ abstract class JobDispatcher extends WorkerHost implements OnModuleInit, OnAppli
   }
 
   async process(job: Job) {
+    const { id: jobId } = job;
+    if (!jobId) throw new UnrecoverableError('Cannot dispatch a job without an ID');
     const handler = this.handlers.get(job.name);
     if (!handler)
       throw new UnrecoverableError(`No handler for job ${job.name} on queue ${this.queue}`);
@@ -62,13 +66,13 @@ abstract class JobDispatcher extends WorkerHost implements OnModuleInit, OnAppli
         await handler.handle(job.data, job.attemptsMade + 1 >= (job.opts.attempts ?? 1));
         await job.updateProgress(100);
       } catch (error) {
-        this.reporter.reportJob(serializeError(error), job.id!);
-        this.logger.error({ event: 'security', jobId: job.id }, failure);
+        this.reporter.reportJob(serializeError(error), jobId);
+        this.logger.error({ event: 'security', jobId }, failure);
         failed = true;
       }
       // BullMQ persists failures; only the sanitized reporter receives the original error.
       if (failed) throw new Error(failure);
-    }, job.id);
+    }, jobId);
   }
 }
 
@@ -109,5 +113,25 @@ export class CampaignJobDispatcher extends JobDispatcher {
     @Inject(ErrorReporter) reporter: ErrorReporter,
   ) {
     super(QUEUES.campaign, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.inbound, { concurrency: concurrency.inbound, autorun: false })
+export class InboundJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.inbound, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.sync, { concurrency: concurrency.sync, autorun: false })
+export class SyncJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.sync, discovery, reporter);
   }
 }

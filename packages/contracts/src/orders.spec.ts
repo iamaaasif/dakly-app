@@ -116,6 +116,16 @@ it('rejects a hold follow-up date in year zero', () => {
   ).toBe(false);
 });
 
+it('accepts a delivery-only patch and refuses an empty order edit', () => {
+  const expectedUpdatedAt = '2026-11-18T02:00:00.000Z';
+  expect(editOrderSchema.parse({ expectedUpdatedAt, recipient: { address: 'Mirpur' } })).toEqual({
+    expectedUpdatedAt,
+    recipient: { address: 'Mirpur' },
+  });
+  for (const empty of [{}, { expectedUpdatedAt }, { recipient: {} }])
+    expect(editOrderSchema.safeParse(empty).success).toBe(false);
+});
+
 describe('manual delivery inputs', () => {
   it('accepts no courier and requires the name only for Other', () => {
     expect(dispatchOrderSchema.parse({})).toEqual({});

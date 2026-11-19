@@ -1,36 +1,29 @@
 import type { AutomationExitReason } from '@dakly/contracts/automations';
 
 import { TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
-import type { MessagingService } from '../messaging/messaging.service';
 import type { StoreTransaction } from '../platform/database/store-transaction';
-import { AppError } from '../platform/errors/app-error';
-import type { ErrorReporter } from '../platform/logging/error-reporter';
-import { serializeError } from '../platform/logging/safe-error';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import type { SendDecision, SendPolicyService } from '../sending/send-policy.service';
-import type { WalletService } from '../wallets/wallet.service';
+import type { StoreSendingSettings, StoresService } from '../stores/stores.service';
 import type { AutomationRunsRepository, RunClaim, SendingStep } from './automation-runs.repository';
 import {
-  type CreditSettlement,
-  type Delivery,
   endWithUnknownOutcome,
   exited,
   failed,
   goOn,
   ifNotReachable,
   isLateSend,
-  operationKey,
   type RunFacts,
   type SendStep,
   type StepResult,
   UNKNOWN_OUTCOME,
   workflowDestinationHash,
+  WORKFLOW_LEASE_MS,
 } from './automation-step-rules';
 
 const RETRY_LIMIT_MS = 36 * HOUR_MS;
 const MAX_DELAY_MS = 6 * HOUR_MS;
 const optOutPath = new RegExp(`/s/[a-zA-Z0-9]{${TRACKED_LINK_CODE_LENGTH}}$`, 'u');
-const system = { kind: 'system' } as const;
 
 type RetryableSend = SendingStep & {
   firstTriedAt: Date;
@@ -38,8 +31,9 @@ type RetryableSend = SendingStep & {
   destinationHash: string;
 };
 
-type RetryCheck =
+type RetryGateDecision =
   { result: StepResult; at: Date } | { result: undefined; at: Date; destination: string };
+type RetryCheck = (now: Date) => RetryGateDecision;
 
 export function hasRetryDetails(step: SendStep, row: SendingStep, now: Date): row is RetryableSend {
   return (
@@ -85,89 +79,124 @@ export function endExpiredRetry(
   wakeAt: Date | null,
   now: Date,
 ) {
+  if (now < firstTriedAt) return endIncompleteRetry(now);
   return (
     exhausted(firstTriedAt, now) ??
     (isLateSend(wakeAt, now) ? endWithUnknownOutcome(goOn(step.next, now)) : undefined)
   );
 }
 
-// Recheck the destination under the contact lock and renew after waiting for the workflow lock.
-export async function claimRetryDispatch({
-  repository,
-  transaction,
-  claim,
-  step,
-  facts: { storeId, wakeAt },
-  recheck,
-}: {
+type RetryDispatchInput = {
   repository: AutomationRunsRepository;
   transaction: StoreTransaction;
+  stores: Pick<StoresService, 'sendingSettings'>;
   claim: RunClaim;
   step: SendStep;
   facts: Pick<RunFacts, 'storeId' | 'wakeAt'>;
   recheck: (
     locked: RetryableSend,
-    lockWorkflow: () => Promise<boolean>,
-  ) => Promise<RetryCheck | undefined>;
-}) {
+    settings: StoreSendingSettings | undefined,
+  ) => Promise<RetryCheck>;
+};
+
+// Recheck the destination under the contact lock and renew after waiting for the workflow lock.
+export async function claimRetryDispatch({
+  repository,
+  transaction,
+  stores,
+  claim,
+  step,
+  facts: { storeId, wakeAt },
+  recheck,
+}: RetryDispatchInput) {
   return transaction.run(storeId, async () => {
+    // Keep the marketing settings stable through the retry dispatch commit.
+    const settings =
+      step.category === 'marketing' ? await stores.sendingSettings(storeId, 'share') : undefined;
     const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
     if (!(await repository.moveRunIfLive(storeId, claim, unchanged))) return undefined;
+    if (!(await repository.moveRunIfLive(storeId, claim, unchanged, 'retry'))) return undefined;
     const locked = await repository.findSendingStep(storeId, claim.runId, claim.stepKey, true);
     if (!locked) return undefined;
     const checkedAt = await repository.schedulerTime(storeId);
-    const lockWorkflow = () => repository.moveRunIfLive(storeId, claim, unchanged, 'retry');
-    const finishIfLive = async (resultAt: (at: Date) => StepResult) => {
-      if (!(await lockWorkflow())) return undefined;
+    const finishWithoutSubmission = async (resultAt: (at: Date) => StepResult) => {
       const claimedAt = await repository.schedulerTime(storeId);
       await repository.moveRun(storeId, claim, { status: 'running', claimedAt });
       return { result: resultAt(claimedAt), claim: { ...claim, claimedAt }, at: claimedAt };
     };
-    if (!hasRetryDetails(step, locked, checkedAt)) return finishIfLive(endIncompleteRetry);
-    const { firstTriedAt, latestDispatchAt, optOutUrl } = locked;
+    if (!hasRetryDetails(step, locked, checkedAt))
+      return finishWithoutSubmission(endIncompleteRetry);
+    const { firstTriedAt, latestDispatchAt } = locked;
     const early = endExpiredRetry(step, firstTriedAt, wakeAt, checkedAt);
-    if (early) return finishIfLive(() => early);
-    const checked = await recheck(locked, lockWorkflow);
-    if (!checked) return undefined;
+    if (early) return finishWithoutSubmission(() => early);
+    const finalize = await recheck(locked, settings);
     const claimedAt = await repository.schedulerTime(storeId);
-    const result = checked.result ?? endExpiredRetry(step, firstTriedAt, wakeAt, claimedAt);
+    const checked = finalize(claimedAt);
+    const ended = endExpiredRetry(step, firstTriedAt, wakeAt, claimedAt);
+    const result = retryOutcome(checked.result, ended);
+    const leaseRecovery = retryAfterLostLease(claim, claimedAt, result, wakeAt);
+    if (leaseRecovery) return { result: leaseRecovery, claim, at: checked.at };
     // A slower worker must not age out a previously submitted message early.
-    const sentAt = checked.at > latestDispatchAt ? checked.at : latestDispatchAt;
+    const sentAt = new Date(Math.max(checked.at.getTime(), latestDispatchAt.getTime()));
     const dispatch = { outcome: 'sending', sentAt, firstTriedAt } as const;
     if (!result) await repository.changeStep(storeId, claim.runId, claim.stepKey, dispatch);
     await repository.moveRun(storeId, claim, { status: 'running', claimedAt });
     const renewed = { ...claim, claimedAt };
     if (result) return { result, claim: renewed, at: checked.at };
-    return { ...checked, claim: renewed, at: sentAt, optOutUrl, firstTriedAt };
+    return {
+      ...checked,
+      claim: renewed,
+      at: sentAt,
+      previousDispatchAt: latestDispatchAt,
+      firstTriedAt,
+    };
   });
 }
 
-export async function recheckAutomationRetry({
-  sendPolicy,
-  readPhone,
-  readExit,
-  schedulerTime,
-  facts: { storeId, contactId, wakeAt },
-  step,
-  locked: { id, firstTriedAt, destinationHash },
-  lockWorkflow,
-}: {
+function retryAfterLostLease(
+  claim: RunClaim,
+  now: Date,
+  result: StepResult | undefined,
+  wakeAt: Date | null,
+): StepResult | undefined {
+  if (result && result.run.status !== 'waiting') return undefined;
+  if (now.getTime() - claim.claimedAt.getTime() < WORKFLOW_LEASE_MS) return undefined;
+  return { run: { status: 'waiting', wakeAt: wakeAt ?? now } };
+}
+
+function retryOutcome(result: StepResult | undefined, ended: StepResult | undefined) {
+  // A defer must not overwrite a wake time that already exceeded a hard cutoff.
+  return result?.run.status === 'waiting' ? (ended ?? result) : (result ?? ended);
+}
+
+type RetryCheckInput = {
   sendPolicy: SendPolicyService;
   readPhone: () => Promise<string | null>;
+  preparedPhone: string | null;
   readExit: (at: Date) => Promise<AutomationExitReason | undefined>;
   schedulerTime: () => Promise<Date>;
   facts: Pick<RunFacts, 'storeId' | 'contactId' | 'wakeAt'>;
   step: SendStep;
+  settings: StoreSendingSettings | undefined;
   locked: RetryableSend;
-  lockWorkflow: () => Promise<boolean>;
-}): Promise<RetryCheck | undefined> {
-  const gate = await sendPolicy.recheckForSend(
-    storeId,
-    { contactId, channel: 'sms', category: step.category },
-    id,
-    lockWorkflow,
-  );
-  if (!gate) return undefined;
+};
+
+export async function recheckAutomationRetry({
+  sendPolicy,
+  readPhone,
+  preparedPhone,
+  readExit,
+  schedulerTime,
+  facts: { storeId, contactId, wakeAt },
+  step,
+  settings,
+  locked: { id, firstTriedAt, destinationHash },
+}: RetryCheckInput): Promise<RetryCheck> {
+  const gate = await sendPolicy.recheckRetryRecipient(storeId, {
+    contactId,
+    channel: 'sms',
+    category: step.category,
+  });
   const { decision, at } = gate;
   const exit = await readExit(at);
   const now = await schedulerTime();
@@ -175,19 +204,30 @@ export async function recheckAutomationRetry({
     ? endWithUnknownOutcome(exited(exit, now))
     : (endExpiredRetry(step, firstTriedAt, wakeAt, now) ??
       retryDecision(step, firstTriedAt, decision, now));
-  if (result) return { result, at };
+  if (result) return () => ({ result, at });
   const destination = await readPhone();
-  if (!destination || workflowDestinationHash(storeId, destination) !== destinationHash)
-    return {
+  if (
+    !destination ||
+    destination !== preparedPhone ||
+    workflowDestinationHash(storeId, destination) !== destinationHash
+  )
+    return () => ({
       result: endWithUnknownOutcome(
         failed("The contact's phone changed after this message was decided", now),
       ),
       at,
-    };
-  if (step.category !== 'marketing') return { result: undefined, at, destination };
-  const final = await sendPolicy.recheckQuietHoursForDispatch(storeId);
-  const held = retryDecision(step, firstTriedAt, final.decision, now);
-  return held ? { result: held, at: final.at } : { result: undefined, at: final.at, destination };
+    });
+  if (!settings) return () => ({ result: undefined, at, destination });
+  const check = await sendPolicy.prepareMarketingRetryCheck(storeId, {
+    contactId,
+    workflowStepId: id,
+    settings,
+  });
+  return (checkedAt) => {
+    const final = check();
+    const held = retryDecision(step, firstTriedAt, final.decision, checkedAt);
+    return held ? { result: held, at: final.at } : { result: undefined, at: final.at, destination };
+  };
 }
 
 function retryDecision(
@@ -209,14 +249,7 @@ function retryDecision(
   return undefined;
 }
 
-function refusedSend(claim: RunClaim, message: string, isFirstTry: boolean, now: Date): StepResult {
-  const result = failed(message, now);
-  // A refusal proves this attempt did not send. An earlier attempt could still have succeeded.
-  if (!isFirstTry) return endWithUnknownOutcome({ ...result, claim });
-  return { ...result, claim, stepChange: { outcome: 'failed' }, credits: { settle: 'release' } };
-}
-
-function retryAfterError(claim: RunClaim, firstTriedAt: Date, now: Date): StepResult {
+export function retryAfterError(claim: RunClaim, firstTriedAt: Date, now: Date): StepResult {
   const end = exhausted(firstTriedAt, now);
   if (end) return { ...end, claim };
   // The wait doubles with time already spent, from one minute up to six hours.
@@ -235,72 +268,4 @@ function retryAfterError(claim: RunClaim, firstTriedAt: Date, now: Date): StepRe
 function retryWakeAt(firstTriedAt: Date, candidate: Date) {
   const deadline = firstTriedAt.getTime() + RETRY_LIMIT_MS;
   return new Date(Math.min(candidate.getTime(), deadline));
-}
-
-// The provider call runs outside the transaction. The operation key deduplicates retry attempts.
-export async function deliverAutomationSms(
-  {
-    messaging,
-    reporter,
-    repository,
-  }: {
-    messaging: MessagingService;
-    reporter: ErrorReporter;
-    repository: Pick<AutomationRunsRepository, 'schedulerTime'>;
-  },
-  { storeId, claim, contactId, step, body, destination, isFirstTry, preparedSender }: Delivery,
-  firstTriedAt: Date,
-  attemptedAt: Date,
-): Promise<StepResult> {
-  const message = {
-    channel: 'sms',
-    contactId,
-    body,
-    operationKey: operationKey(claim),
-    destination,
-  } as const;
-  const attempt = await messaging.send(storeId, message, preparedSender).then(
-    (receipt) => ({ receipt }),
-    (error: unknown) => ({ error }),
-  );
-  const now = await repository.schedulerTime(storeId);
-  if ('receipt' in attempt) {
-    const { providerMessageId, credits } = attempt.receipt;
-    return {
-      ...goOn(step.next, now),
-      claim,
-      stepChange: { outcome: 'sent', providerMessageId, sentAt: attemptedAt },
-      credits: { settle: 'charge', quantity: credits },
-    };
-  }
-  const { error } = attempt;
-  if (error instanceof AppError) return refusedSend(claim, error.message, isFirstTry, now);
-  const result = retryAfterError(claim, firstTriedAt, now);
-  if (result.run.status === 'waiting')
-    reporter.reportJob(serializeError(error), operationKey(claim));
-  return result;
-}
-
-export async function settleAutomationCredits(
-  wallets: WalletService,
-  storeId: string,
-  claim: RunClaim,
-  credits: CreditSettlement,
-) {
-  const key = operationKey(claim);
-  // Every send row was written with its reservation, in the same transaction.
-  const reservationId = (await wallets.findByIdempotencyKey(storeId, key))!.entryId;
-  if (credits.settle === 'charge')
-    await wallets.charge(storeId, {
-      reservationId,
-      quantity: credits.quantity,
-      idempotencyKey: `${key}:charge`,
-      actor: system,
-    });
-  else
-    await wallets.release(storeId, {
-      reservationId,
-      idempotencyKey: `${key}:release`,
-      actor: system,
-    });
 }

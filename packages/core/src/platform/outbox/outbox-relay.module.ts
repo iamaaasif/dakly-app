@@ -10,6 +10,8 @@ import { OutboxRepository } from './outbox.repository';
 @Module({
   imports: [
     DiscoveryModule,
+    BullModule.registerQueue({ name: QUEUES.inbound }),
+    BullModule.registerQueue({ name: QUEUES.sync }),
     BullModule.registerQueue({ name: QUEUES.transactional }),
     BullModule.registerQueue({ name: QUEUES.bulk }),
     BullModule.registerQueue({ name: QUEUES.workflow }),

@@ -21,9 +21,12 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
+import { MaintenanceStoresRepository } from './maintenance-stores.repository';
 import { onboardingExtensions, recommendedPlans } from './onboarding';
 import { storeError } from './stores.errors';
 import { type StoreSettingsRow, StoresRepository } from './stores.repository';
+
+export type StoreSendingSettings = SendingSettings & { timeZone: string };
 
 @Injectable()
 export class StoresService {
@@ -31,6 +34,7 @@ export class StoresService {
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresRepository) private readonly repository: StoresRepository,
+    @Inject(MaintenanceStoresRepository) private readonly maintenance: MaintenanceStoresRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(BillingService) private readonly billing: BillingService,
@@ -50,14 +54,28 @@ export class StoresService {
     return toSettingsResponse(store);
   }
 
+  maintenanceStoreIds(after: string | null, limit: number) {
+    return this.maintenance.maintenanceStoreIds(after, limit);
+  }
+
+  maintenanceStores(after: string | null, limit: number) {
+    return this.maintenance.maintenanceStores(after, limit);
+  }
+
+  async customerInactivityDays(storeId: string) {
+    const days = await this.repository.customerInactivityDays(storeId);
+    if (days === undefined) throw storeError('STORE_NOT_FOUND');
+    return days;
+  }
+
   async timeZone(storeId: string): Promise<string> {
     const timeZone = await this.repository.timeZone(storeId);
     if (timeZone === undefined) throw storeError('STORE_NOT_FOUND');
     return timeZone;
   }
 
-  async sendingSettings(storeId: string): Promise<SendingSettings & { timeZone: string }> {
-    const store = await this.repository.sendingSettings(storeId);
+  async sendingSettings(storeId: string, lock?: 'share'): Promise<StoreSendingSettings> {
+    const store = await this.repository.sendingSettings(storeId, lock);
     if (!store) throw storeError('STORE_NOT_FOUND');
     return { ...parseSending(store.sending), timeZone: store.timeZone };
   }

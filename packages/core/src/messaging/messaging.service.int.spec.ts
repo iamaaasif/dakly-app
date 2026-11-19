@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { randomUUID } from 'node:crypto';
+
 import { type INestApplicationContext, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { sql } from 'drizzle-orm';
@@ -247,6 +249,36 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(await capturedIdsTo('01712345606')).toEqual([first.providerMessageId]);
   });
 
+  it('submits a prepared SMS without reading the phone again and binds it to the shop and contact', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Nasima Akter', phone: '01812345619' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const phone = vi.spyOn(contacts, 'getPhoneForSend');
+    const prepared = await messaging.prepareSms(storeA, contact.id);
+    const message = {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order has shipped',
+      operationKey: `prepared-${contact.id}`,
+    } as const;
+
+    expect(await errorCode(messaging.send(storeB, message, prepared))).toBe(
+      'MESSAGING_PREPARATION_FAILED',
+    );
+    expect(
+      await errorCode(messaging.send(storeA, { ...message, contactId: randomUUID() }, prepared)),
+    ).toBe('MESSAGING_PREPARATION_FAILED');
+    expect(calls).toEqual([]);
+
+    await messaging.send(storeA, message, prepared);
+    expect(phone).toHaveBeenCalledExactlyOnceWith(storeA, contact.id);
+    expect(calls.map((call) => call.to)).toEqual(['01812345619']);
+  });
+
   it('sends from the shared sender until the store’s sender name is approved', async () => {
     const contact = await contacts.create(
       storeB,
@@ -353,6 +385,18 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(await errorCode(send(storeA, contact!.id, 'Hello'))).toBe(
       'MESSAGING_CONTACT_HAS_NO_PHONE',
     );
+    // An approved number is checked first: the phone it was approved for is gone.
+    expect(
+      await errorCode(
+        messaging.send(storeA, {
+          channel: 'sms',
+          contactId: contact!.id,
+          body: 'Hello',
+          operationKey: `test-no-phone-${contact!.id}`,
+          destination: '01712345610',
+        }),
+      ),
+    ).toBe('MESSAGING_DESTINATION_CHANGED');
     expect(calls).toEqual([]);
   });
 

@@ -5,7 +5,7 @@ import type { JobsOptions, Queue } from 'bullmq';
 
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { HandlesJob } from '../queue/job-handler';
-import { QUEUES, type QueueName } from '../queue/queues';
+import { QUEUES, type QueueName, WORKER_QUEUES } from '../queue/queues';
 import { JOB_POLL_INTERVAL_MS } from '../time';
 import { SubscribedEvent } from './handles-event';
 import { OutboxRepository } from './outbox.repository';
@@ -36,12 +36,14 @@ export class OutboxRelayService implements OnModuleInit {
     @Inject(OutboxRepository) private readonly repository: OutboxRepository,
     @Inject(DiscoveryService) private readonly discovery: DiscoveryService,
     @Inject(Reflector) private readonly reflector: Reflector,
+    @InjectQueue(QUEUES.inbound) inbound: Queue,
+    @InjectQueue(QUEUES.sync) sync: Queue,
     @InjectQueue(QUEUES.transactional) transactional: Queue,
     @InjectQueue(QUEUES.bulk) bulk: Queue,
     @InjectQueue(QUEUES.workflow) workflow: Queue,
     @InjectQueue(QUEUES.campaign) campaign: Queue,
   ) {
-    this.queues = { transactional, bulk, workflow, campaign };
+    this.queues = { inbound, sync, transactional, bulk, workflow, campaign };
   }
 
   onModuleInit() {
@@ -62,6 +64,8 @@ export class OutboxRelayService implements OnModuleInit {
     const events = await this.repository.claim(RELAY_BATCH_SIZE);
     if (events.length === 0) return;
     const jobs: Record<QueueName, SubscriberJob[]> = {
+      inbound: [],
+      sync: [],
       transactional: [],
       bulk: [],
       workflow: [],
@@ -80,9 +84,9 @@ export class OutboxRelayService implements OnModuleInit {
         });
     try {
       await Promise.all(
-        Object.values(QUEUES)
-          .filter((queue) => jobs[queue].length > 0)
-          .map((queue) => this.queues[queue].addBulk(jobs[queue])),
+        WORKER_QUEUES.filter((queue) => jobs[queue].length > 0).map((queue) =>
+          this.queues[queue].addBulk(jobs[queue]),
+        ),
       );
       await this.repository.markPublished(events.map((event) => event.id));
     } catch (error) {

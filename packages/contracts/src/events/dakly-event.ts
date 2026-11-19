@@ -3,8 +3,15 @@ import { z } from 'zod';
 import { automationPausedEventSchema } from './automations';
 import { campaignApprovedEventSchema } from './campaigns';
 import {
+  channelConnectedEventSchema,
+  channelDisconnectedEventSchema,
+  channelNeedsReconnectEventSchema,
+} from './channels';
+import {
   consentChangedEventSchema,
+  contactBirthdayEventSchema,
   contactCreatedEventSchema,
+  contactTagAddedEventSchema,
   importStartedEventSchema,
   importUndoRequestedEventSchema,
   segmentSavedEventSchema,
@@ -24,6 +31,7 @@ import {
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
+  orderEditedEventSchema,
   orderStageChangedEventSchema,
 } from './orders';
 import {
@@ -34,7 +42,9 @@ import {
 import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
+  contactBirthdayEventSchema,
   contactCreatedEventSchema,
+  contactTagAddedEventSchema,
   productUpdatedEventSchema,
   stockChangedEventSchema,
   variantRestockedEventSchema,
@@ -44,6 +54,9 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   importUndoRequestedEventSchema,
   knowledgeIndexRequestedEventSchema,
   campaignApprovedEventSchema,
+  channelConnectedEventSchema,
+  channelDisconnectedEventSchema,
+  channelNeedsReconnectEventSchema,
   conversationStartedEventSchema,
   messageReceivedEventSchema,
   messageDeliveredEventSchema,
@@ -58,6 +71,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
+  orderEditedEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;
