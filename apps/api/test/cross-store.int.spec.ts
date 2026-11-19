@@ -2135,12 +2135,12 @@ async function seedChannel(shop: Shop, kind: 'facebook_page' | 'instagram' = 'fa
   return id;
 }
 
-async function seedPostPhoto(shop: Shop) {
+async function seedPostPhoto(shop: Shop, contentType = 'image/jpeg') {
   const id = randomUUID();
   await f.admin.pool.query(
     `insert into files(id,store_id,purpose,object_key,content_type,size_bytes,status)
-     values($1::uuid,$2,'post_media',$1::text,'image/jpeg',1024,'ready')`,
-    [id, shop.id],
+     values($1::uuid,$2,'post_media',$1::text,$3,1024,'ready')`,
+    [id, shop.id, contentType],
   );
   return id;
 }
@@ -3441,6 +3441,38 @@ describe('every production shop route isolates its data', () => {
       }
     }
     expect((await success(b, 'GET', url, 200)).json().mediaFileIds).toEqual([ownPhoto]);
+  });
+
+  it('requires JPEG photos before saving or approving an Instagram target', async () => {
+    const shop = await f.shop();
+    const page = await seedChannel(shop);
+    const instagram = await seedChannel(shop, 'instagram');
+    const mediaFileIds = [await seedPostPhoto(shop, 'image/png')];
+    const create = (channelConnectionId: string) =>
+      f.request(
+        shop.owner,
+        'POST',
+        '/posts',
+        {
+          mediaFileIds,
+          isAiWritten: true,
+          targets: [{ channelConnectionId, captionOverride: null }],
+        },
+        { 'idempotency-key': randomUUID() },
+      );
+    const rejected = await create(instagram);
+    expect(rejected.statusCode, rejected.body).toBe(400);
+    expect(rejected.json().error.code).toBe('POST_INSTAGRAM_PHOTO_FORMAT');
+
+    const draft = await create(page);
+    expect(draft.statusCode, draft.body).toBe(201);
+    await f.admin.pool.query(
+      'update post_targets set channel_connection_id=$1 where store_id=$2 and post_id=$3',
+      [instagram, shop.id, draft.json().id],
+    );
+    const approve = await f.request(shop.owner, 'POST', `/posts/${draft.json().id}/approve`);
+    expect(approve.statusCode, approve.body).toBe(400);
+    expect(approve.json().error.code).toBe('POST_INSTAGRAM_PHOTO_FORMAT');
   });
 
   it('validates each Instagram caption and keeps AI provenance when edited', async () => {

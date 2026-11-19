@@ -20,6 +20,7 @@ import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
+import { validateInstagramPhotos, validateInstagramPost } from './post-content';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
@@ -75,8 +76,8 @@ export class SocialService {
         return response(post, targets);
       }
       const now = this.clock.now();
-      await this.validatePostMedia(storeId, input.mediaFileIds, now);
-      await this.validateTargets(storeId, input, []);
+      const photos = await this.validatePostMedia(storeId, input.mediaFileIds, now);
+      await this.validateTargets(storeId, input, [], photos);
       const { targets, ...content } = input;
       const post = await this.repository.insertPost(storeId, {
         ...content,
@@ -150,11 +151,12 @@ export class SocialService {
           captionOverride,
         }));
       const now = this.clock.now();
-      if (change.mediaFileIds) await this.validatePostMedia(storeId, mediaFileIds, now);
+      const photos = await this.validatePostMedia(storeId, mediaFileIds, now);
       await this.validateTargets(
         storeId,
         { kind, caption, mediaFileIds, targets: targetInput },
         targets,
+        photos,
       );
       const edited = await this.repository.updatePost(storeId, postId, {
         ...change,
@@ -294,8 +296,8 @@ export class SocialService {
     this.requireDraft(targets);
     if (!targets.length) throw socialError('POST_TARGET_REQUIRED');
     const now = this.clock.now();
-    await this.validatePostMedia(storeId, post.mediaFileIds, now);
-    const connections = await this.validateTargets(storeId, { ...post, targets }, []);
+    const photos = await this.validatePostMedia(storeId, post.mediaFileIds, now);
+    const connections = await this.validateTargets(storeId, { ...post, targets }, [], photos);
     if (
       !post.mediaFileIds.length &&
       !post.linkUrl &&
@@ -352,15 +354,17 @@ export class SocialService {
   }
 
   private async validatePostMedia(storeId: string, ids: string[], now: Date) {
-    if (!ids.length) return;
+    if (!ids.length) return [];
     const media = await this.repository.listPostMedia(storeId, ids, now);
     if (media.length !== new Set(ids).size) throw socialError('POST_MEDIA_NOT_FOUND');
+    return media;
   }
 
   private async validateTargets(
     storeId: string,
     input: Pick<CreatePostInput, 'kind' | 'caption' | 'mediaFileIds' | 'targets'>,
     previous: Target[],
+    photos: { contentType: string }[],
   ) {
     if (input.kind === 'story' && input.mediaFileIds.length !== 1)
       throw socialError('POST_PHOTOS_REQUIRED');
@@ -372,19 +376,11 @@ export class SocialService {
       const connection = connections.get(target.channelConnectionId);
       if (!connection || (connection.status !== 'active' && !retained.has(connection.id)))
         throw socialError('POST_CONNECTION_NOT_FOUND');
-      if (connection.kind === 'instagram')
-        this.validateInstagram(
-          target.captionOverride ?? input.caption ?? '',
-          input.mediaFileIds.length,
-        );
+      if (connection.kind === 'instagram') {
+        validateInstagramPhotos(photos);
+        validateInstagramPost(target.captionOverride ?? input.caption ?? '', photos.length);
+      }
     }
     return connections;
-  }
-
-  private validateInstagram(caption: string, photoCount: number) {
-    if (!photoCount) throw socialError('POST_PHOTOS_REQUIRED');
-    if (Array.from(caption).length > 2_200) throw socialError('POST_CAPTION_TOO_LONG');
-    if ((caption.match(/#[\p{L}\p{M}\p{N}_]+/gu)?.length ?? 0) > 30)
-      throw socialError('POST_TOO_MANY_HASHTAGS');
   }
 }

@@ -184,6 +184,8 @@ uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
 one account can use a slot once. Scheduling records `post.scheduled` for each
 target.
 
+Instagram targets require JPEG photos when saved and approved.
+
 The Meta publishing driver uses the connected Page token for Facebook and
 Instagram. It can upload unpublished Page photos, publish a Page post or story,
 and create, check and publish an Instagram media container. The worker that uses
