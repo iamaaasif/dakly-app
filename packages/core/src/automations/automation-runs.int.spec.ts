@@ -11,6 +11,7 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 import { createDatabase } from '@dakly/db/client';
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
+import { SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
@@ -942,12 +943,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const first = await dueRuns(send('marketing'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(
-        new AppError('SMS_SEND_REFUSED', {
-          status: 422,
-          message: 'The provider refused the message',
-        }),
-      );
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new SmsSendRefused());
       await runDueStep(runner, first.runIds[0]!);
       expect(sentFor(first.runIds[0]!)).toEqual([]);
       expect(await sendStep(first.runIds[0]!)).toEqual([
