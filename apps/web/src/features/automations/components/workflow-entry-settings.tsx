@@ -6,12 +6,23 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
-import {
-  exitLabels,
-  reEntryLabels,
-  removesOwnTag,
-  type SettingsInput,
-} from '../workflow-settings-form';
+import { removesOwnTag, type SettingsInput } from '../workflow-settings-form';
+
+const exitLabels = {
+  placed_order: 'Customer places an order',
+  order_confirmed: 'Order is confirmed',
+  order_paid: 'Order is paid',
+  order_cancelled: 'Order is cancelled',
+  got_tag: 'Customer receives a tag',
+  tapped_link: 'Link tapped (needs workflow link tracking)',
+  replied: 'Customer replies',
+} satisfies Record<AutomationGraph['exitConditions'][number]['kind'], string>;
+
+const reEntryLabels = {
+  once: 'Once ever',
+  every_days: 'Once every few days',
+  every_time: 'Every time',
+} satisfies Record<AutomationGraph['reEntry']['rule'], string>;
 
 type ExitKind = AutomationGraph['exitConditions'][number]['kind'];
 type ReEntryRule = AutomationGraph['reEntry']['rule'];

@@ -41,59 +41,38 @@ function DelayFields({ stepKey, wait }: { stepKey: string; wait: Wait }) {
   );
 }
 
-function MessageFields({
-  stepKey,
-  step,
-}: {
-  stepKey: string;
-  step: Extract<AutomationStep, { kind: 'send' }>;
-}) {
+type SendStep = Extract<AutomationStep, { kind: 'send' }>;
+
+function MessageFields({ stepKey, step }: { stepKey: string; step: SendStep }) {
   const { register, setValue } = useFormContext<SettingsInput>();
   const text = `graph.steps.${stepKey}.message.text` as const;
-  const channels = `graph.steps.${stepKey}.channels` as const;
-  const update = (value: typeof step.channels) =>
-    setValue(channels, value, { shouldDirty: true, shouldValidate: true });
+  function moveUp(channel: SendStep['channels'][number], index: number) {
+    const channels = [...step.channels];
+    channels.splice(index, 1);
+    channels.splice(index - 1, 0, channel!);
+    setValue(`graph.steps.${stepKey}.channels`, channels, { shouldDirty: true });
+  }
   return (
     <div className="space-y-3">
       <FormField name={text} label="Message text">
-        {(control) => <Textarea {...control} {...register(text)} rows={3} maxLength={1024} />}
+        {(control) => <Textarea {...control} {...register(text)} rows={3} />}
       </FormField>
-      <ChannelOrder channels={step.channels} update={update} />
+      <fieldset>
+        <legend className="text-sm font-medium">Channel order</legend>
+        <ol className="space-y-1">
+          {step.channels.map((channel, index) => (
+            <li key={channel} className="flex items-center justify-between gap-2">
+              <span>{channelLabels[channel]}</span>
+              {index > 0 && (
+                <Button variant="secondary" onClick={() => moveUp(channel, index)}>
+                  Move {channelLabels[channel]} up
+                </Button>
+              )}
+            </li>
+          ))}
+        </ol>
+      </fieldset>
     </div>
-  );
-}
-
-function ChannelOrder({
-  channels,
-  update,
-}: {
-  channels: Extract<AutomationStep, { kind: 'send' }>['channels'];
-  update: (value: Extract<AutomationStep, { kind: 'send' }>['channels']) => void;
-}) {
-  return (
-    <fieldset className="space-y-2">
-      <legend className="text-sm font-medium">Channel order</legend>
-      <ol className="space-y-1">
-        {channels.map((channel, index) => (
-          <li key={channel} className="flex flex-wrap items-center gap-2">
-            <span className="mr-auto text-sm">{channelLabels[channel]}</span>
-            <Button
-              variant="secondary"
-              disabled={index === 0}
-              aria-label={`Move ${channelLabels[channel]} up`}
-              onClick={() => {
-                const order = [...channels];
-                order.splice(index, 1);
-                order.splice(index - 1, 0, channel);
-                update(order);
-              }}
-            >
-              Move up
-            </Button>
-          </li>
-        ))}
-      </ol>
-    </fieldset>
   );
 }
 

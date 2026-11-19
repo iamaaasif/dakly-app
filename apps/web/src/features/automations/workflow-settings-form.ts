@@ -17,19 +17,3 @@ export function removesOwnTag(graph: SettingsInput['graph']) {
       step.action.tag === filter?.tag,
   );
 }
-
-export const exitLabels = {
-  placed_order: 'Customer places an order',
-  order_confirmed: 'Order is confirmed',
-  order_paid: 'Order is paid',
-  order_cancelled: 'Order is cancelled',
-  got_tag: 'Customer receives a tag',
-  tapped_link: 'Customer taps a link',
-  replied: 'Customer replies',
-} satisfies Record<AutomationGraph['exitConditions'][number]['kind'], string>;
-
-export const reEntryLabels = {
-  once: 'Once ever',
-  every_days: 'Once every few days',
-  every_time: 'Every time',
-} satisfies Record<AutomationGraph['reEntry']['rule'], string>;
