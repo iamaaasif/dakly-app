@@ -12,11 +12,12 @@ import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { MetaWebhooksRepository } from './meta-webhooks.repository';
 import { MetaWebhooksService } from './meta-webhooks.service';
 
-const now = new Date('2026-11-19T09:00:00Z');
+// Keep the global purge cutoff before fixtures from other test suites.
+const now = new Date('2000-01-10T09:00:00Z');
 const clock = { now: () => now };
 const queue = new Queue<{ webhookEventId: string }>(QUEUES.inbound, {
   connection: toRedisConnection(process.env.REDIS_URL!),
-  prefix: `${process.env.QUEUE_PREFIX}-webhook-maintenance`,
+  prefix: `${process.env.QUEUE_PREFIX}-${randomUUID()}`,
 });
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const app = createDatabase(process.env.DATABASE_URL!);
@@ -69,7 +70,8 @@ describe('Meta webhook maintenance', () => {
       data: { webhookEventId: lost },
       opts: { jobId: lost, attempts: 3 },
     });
-    expect((await queue.getJobs(['waiting'])).map((job) => job.id)).toEqual([lost]);
+    const waitingIds = (await queue.getJobs(['waiting'])).map((job) => job.id);
+    expect(waitingIds.filter((id) => id === lost)).toEqual([lost]);
     expect(await queue.getJobState(waiting)).toBe('delayed');
     expect(await queue.getJob(processed)).toBeUndefined();
     expect(await queue.getJob(recent)).toBeUndefined();

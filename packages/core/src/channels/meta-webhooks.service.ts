@@ -99,7 +99,7 @@ export class MetaWebhooksService {
 
   private async enqueueDelivery(webhookEventId: string): Promise<void> {
     try {
-      // BullMQ also uses this id to deduplicate concurrent recovery and intake.
+      // Meta retries and recovery share the row id so BullMQ can deduplicate their adds.
       await this.queue.add(
         PROCESS_WEBHOOK_EVENT,
         { webhookEventId },
