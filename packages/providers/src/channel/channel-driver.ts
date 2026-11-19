@@ -50,6 +50,10 @@ export type MetaAuthorizationDriver = {
   subscribePage(pageId: string, accessToken: string): Promise<void>;
 };
 
+export type MetaTokenHealthDriver = {
+  isTokenValid(accessToken: string): Promise<boolean>;
+};
+
 export class MetaRequestError extends Error {
   constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response') {
     super('Meta request failed');

@@ -18,6 +18,7 @@ const WORKFLOW_JOBS_AT_ONCE = 5;
 const CAMPAIGN_JOBS_AT_ONCE = 1;
 const concurrency = {
   inbound: TRANSACTIONAL_JOBS_AT_ONCE,
+  sync: 1,
   transactional: TRANSACTIONAL_JOBS_AT_ONCE,
   bulk: BULK_JOBS_AT_ONCE,
   workflow: WORKFLOW_JOBS_AT_ONCE,
@@ -120,5 +121,15 @@ export class InboundJobDispatcher extends JobDispatcher {
     @Inject(ErrorReporter) reporter: ErrorReporter,
   ) {
     super(QUEUES.inbound, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.sync, { concurrency: concurrency.sync, autorun: false })
+export class SyncJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.sync, discovery, reporter);
   }
 }

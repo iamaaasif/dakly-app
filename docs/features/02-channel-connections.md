@@ -149,7 +149,7 @@ A crash or later failure during selection can leave a Page subscribed at Meta wi
 
 Enable live intake after the worker can clear processed payloads and recover acknowledged deliveries if their Valkey jobs are lost. Run the seven-day webhook purge before enabling live intake.
 
-Token health: a daily job checks tokens and warns 7 days before expiry. A send that fails with an auth error marks the connection `needs_reconnect` and shows a banner.
+The daily token sweep queues one check per active connection due to expire within seven days. The worker checks Meta outside the database transaction. A valid credential gets one expiry warning per expiry date. An invalid credential moves to `needs_reconnect` and notifies members with permission to edit store settings.
 
 SMS sender name (CHN-6)
 
