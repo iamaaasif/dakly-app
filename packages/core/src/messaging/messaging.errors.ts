@@ -6,6 +6,10 @@ const MESSAGING_ERRORS = {
   CONVERSATION_ASSIGNEE_INVALID: { status: 400, message: 'Choose an active team member' },
   MESSAGING_PREPARATION_FAILED: { status: 503, message: 'The message could not be prepared' },
   MESSAGING_CONTACT_HAS_NO_PHONE: { status: 422, message: 'This contact has no phone number' },
+  MESSAGE_OPERATION_CONFLICT: {
+    status: 409,
+    message: 'This operation already used another message',
+  },
   MESSAGING_DESTINATION_CHANGED: {
     status: 409,
     message: "The contact's phone changed after this message was decided",

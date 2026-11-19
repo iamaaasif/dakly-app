@@ -5,10 +5,12 @@ import { ConsentsModule } from '../consents/consents.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
+import { SendingModule } from '../sending/sending.module';
 import { SmsModule } from '../sms/sms.module';
 import { SmsSendersModule } from '../sms-senders/sms-senders.module';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
 import { MessagingService } from './messaging.service';
+import { OutboundMessagingRepository } from './outbound-messaging.repository';
 
 @Module({
   imports: [
@@ -16,11 +18,12 @@ import { MessagingService } from './messaging.service';
     ConsentsModule,
     ClockModule,
     OutboxModule,
+    SendingModule,
     MetaAuthorizationModule,
     SmsModule,
     SmsSendersModule,
   ],
-  providers: [MessagingService, InboundMessagingRepository],
+  providers: [MessagingService, InboundMessagingRepository, OutboundMessagingRepository],
   exports: [MessagingService],
 })
 export class MessagingModule {}

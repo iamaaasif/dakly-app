@@ -12,6 +12,11 @@ export type InboundIdentity = {
   channel: typeof contactIdentities.$inferInsert.channel;
 };
 
+export type OutboundIdentity = Pick<InboundIdentity, 'connectionId' | 'channel'> & {
+  contactId: string;
+  identityId: string;
+};
+
 @Injectable()
 export class ContactIdentitiesRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -40,6 +45,27 @@ export class ContactIdentitiesRepository {
           ),
         )
         .for('no key update', { of: contacts }),
+    );
+    return identity;
+  }
+
+  async findOutboundIdentity(
+    storeId: string,
+    { connectionId, channel, contactId, identityId }: OutboundIdentity,
+  ) {
+    const [identity] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ externalId: contactIdentities.externalId })
+        .from(contactIdentities)
+        .where(
+          and(
+            eq(contactIdentities.storeId, storeId),
+            eq(contactIdentities.id, identityId),
+            eq(contactIdentities.contactId, contactId),
+            eq(contactIdentities.channelConnectionId, connectionId),
+            eq(contactIdentities.channel, channel),
+          ),
+        ),
     );
     return identity;
   }

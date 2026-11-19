@@ -22,6 +22,8 @@ import {
   messageOptedOutEventSchema,
   messageReadEventSchema,
   messageReceivedEventSchema,
+  messageSendRequestedEventSchema,
+  messageSentEventSchema,
   messageTappedEventSchema,
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
@@ -55,6 +57,8 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   channelNeedsReconnectEventSchema,
   conversationStartedEventSchema,
   messageReceivedEventSchema,
+  messageSendRequestedEventSchema,
+  messageSentEventSchema,
   messageDeliveredEventSchema,
   messageReadEventSchema,
   messageFailedEventSchema,
