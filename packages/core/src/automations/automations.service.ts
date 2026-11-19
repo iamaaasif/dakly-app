@@ -119,10 +119,11 @@ export class AutomationsService {
     input: ChangeAutomationInput,
     _actor: Actor,
   ): Promise<AutomationResponse> {
-    const automation = await this.repository.change(storeId, automationId, VISIBLE_STATUSES, {
-      ...input,
-      updatedAt: this.clock.now(),
-    });
+    const automation = await this.repository.change(
+      storeId,
+      { id: automationId, from: VISIBLE_STATUSES },
+      { ...input, updatedAt: this.clock.now() },
+    );
     if (!automation) throw automationError('AUTOMATION_NOT_FOUND');
     return toAutomationResponse(automation);
   }
@@ -145,11 +146,11 @@ export class AutomationsService {
         publishedByUserId: actor.kind === 'user' ? actor.userId : null,
         publishedAt: now,
       });
-      const published = await this.repository.change(storeId, automationId, ['active'], {
-        publishedVersionId: version.id,
-        triggerType: locked.graph.trigger.key,
-        updatedAt: now,
-      });
+      const published = await this.repository.change(
+        storeId,
+        { id: automationId, from: ['active'] },
+        { publishedVersionId: version.id, triggerType: locked.graph.trigger.key, updatedAt: now },
+      );
       return toAutomationResponse(published!);
     });
   }
@@ -224,8 +225,7 @@ export class AutomationsService {
     // Only a top-up ends a pause for a short balance (resumeAfterTopUp).
     const automation = await this.repository.change(
       storeId,
-      automationId,
-      from,
+      { id: automationId, from },
       { status: to, ...PAUSE_REASONS[move], updatedAt: this.clock.now() },
       to === 'active' ? 'balance' : undefined,
     );

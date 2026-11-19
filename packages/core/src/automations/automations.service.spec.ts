@@ -47,8 +47,7 @@ class FakeAutomationsRepository {
 
   async change(
     _storeId: string,
-    _id: string,
-    from: readonly AutomationStatus[],
+    { from }: { from: readonly AutomationStatus[] },
     change: Partial<Automation>,
   ) {
     if (!this.automation || !from.includes(this.automation.status)) return undefined;

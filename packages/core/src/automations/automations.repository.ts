@@ -127,8 +127,7 @@ export class AutomationsRepository {
 
   async change(
     storeId: string,
-    id: string,
-    from: readonly AutomationStatus[],
+    { id, from }: { id: string; from: readonly AutomationStatus[] },
     { graph, ...change }: AutomationChange,
     unlessPausedFor?: AutomationPauseReason,
   ): Promise<Automation | undefined> {

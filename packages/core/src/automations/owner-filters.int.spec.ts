@@ -49,7 +49,11 @@ describe('automation filters without RLS assistance', () => {
     expect(await repository.listVersions(f.b, a.automation.id)).toEqual([]);
 
     expect(
-      await repository.change(f.b, a.automation.id, visible, { name: 'চুরি', updatedAt: now }),
+      await repository.change(
+        f.b,
+        { id: a.automation.id, from: visible },
+        { name: 'চুরি', updatedAt: now },
+      ),
     ).toBeUndefined();
     expect(await repository.stopVersion(f.b, a.automation.id, a.version.id)).toBe(false);
     const fromStoreB = { graph, publishedByUserId: f.userB, publishedAt: now };
@@ -91,13 +95,10 @@ describe('automation filters without RLS assistance', () => {
         [automation.id],
       );
     const toActive = { status: 'active', pauseReason: null, updatedAt: now } as const;
+    const pausedWorkflow = { id: a.automation.id, from: ['paused'] } as const;
 
-    expect(
-      await repository.change(f.b, a.automation.id, ['paused'], { ...toActive }),
-    ).toBeUndefined();
-    expect(
-      await repository.change(f.a, a.automation.id, ['paused'], toActive, 'balance'),
-    ).toBeUndefined();
+    expect(await repository.change(f.b, pausedWorkflow, toActive)).toBeUndefined();
+    expect(await repository.change(f.a, pausedWorkflow, toActive, 'balance')).toBeUndefined();
     await f.tenant.forStore(f.b, async () => {
       const ids = await repository.lockBalancePaused(f.b, 2);
       expect(ids).toEqual([b.automation.id]);
