@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 
 import type { ChannelConnectionListQuery } from '@dakly/contracts/channels';
+import type { PostingSlot } from '@dakly/contracts/social';
 import type { Database } from '@dakly/db/client';
 import { channelConnections } from '@dakly/db/schema/channels';
 
@@ -35,6 +36,7 @@ const postingConnectionFields = {
   id: channelConnections.id,
   kind: channelConnections.kind,
   status: channelConnections.status,
+  postingSlots: sql<unknown>`${channelConnections.settings}->'postingSlots'`,
 };
 
 @Injectable()
@@ -72,6 +74,33 @@ export class ChannelConnectionsRepository {
             inArray(channelConnections.kind, postingKinds),
           ),
         ),
+    );
+  }
+
+  savePostingSlots(
+    storeId: string,
+    {
+      channelConnectionId,
+      slots,
+      now,
+    }: { channelConnectionId: string; slots: PostingSlot[]; now: Date },
+  ) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .update(channelConnections)
+        .set({
+          settings: sql`jsonb_set(${channelConnections.settings}, '{postingSlots}', ${JSON.stringify(slots)}::jsonb)`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(channelConnections.storeId, storeId),
+            eq(channelConnections.id, channelConnectionId),
+            inArray(channelConnections.kind, postingKinds),
+            ne(channelConnections.status, 'disconnected'),
+          ),
+        )
+        .returning(postingConnectionFields),
     );
   }
 

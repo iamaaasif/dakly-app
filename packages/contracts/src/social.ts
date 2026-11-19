@@ -34,6 +34,20 @@ export const savedContentSchema = z
     'A model run requires AI provenance',
   );
 
+export const postingSlotsSchema = z
+  .array(
+    z.strictObject({
+      weekday: z.number().int().min(0).max(6),
+      time: z.iso.time({ precision: -1 }),
+    }),
+  )
+  .refine(
+    (slots) =>
+      new Set(slots.map(({ weekday, time }) => `${weekday}-${time}`)).size === slots.length,
+    'Use each time once on a day',
+  );
+export type PostingSlot = z.infer<typeof postingSlotsSchema>[number];
+
 const postIdSchema = z.uuid().transform((id) => id.toLowerCase());
 const postText = z.string().refine((value) => !value.includes('\0'), 'Remove null characters');
 
@@ -106,3 +120,22 @@ export type PostResponse = Omit<CreatePostInput, 'targets'> & {
   })[];
 };
 export type PostListResponse = { items: PostResponse[]; nextCursor: string | null };
+
+export const schedulePostSchema = z.union([
+  z.strictObject({
+    scheduledFor: z.iso
+      .datetime({ offset: true })
+      .transform((time) => new Date(time).toJSON())
+      .pipe(z.iso.datetime()),
+  }),
+  z.strictObject({ nextSlot: z.literal(true) }),
+]);
+
+export type SchedulePostInput = z.infer<typeof schedulePostSchema>;
+
+export const postingSlotsQuerySchema = z.strictObject({ channelConnectionId: postIdSchema });
+export const savePostingSlotsSchema = postingSlotsQuerySchema.extend({ slots: postingSlotsSchema });
+
+export type PostingSlotsQuery = z.infer<typeof postingSlotsQuerySchema>;
+export type SavePostingSlotsInput = z.infer<typeof savePostingSlotsSchema>;
+export type PostingSlotsResponse = SavePostingSlotsInput & { timeZone: string };
