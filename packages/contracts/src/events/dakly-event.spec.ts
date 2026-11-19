@@ -54,6 +54,16 @@ const examples: DaklyEvent[] = [
   { type: 'order.created', storeId, occurredAt, payload: { orderId } },
   { type: 'order.cod_collected', storeId, occurredAt, payload: { orderId } },
   {
+    type: 'post.scheduled',
+    storeId,
+    occurredAt,
+    payload: {
+      postId: '019c01ea-cf15-7d31-a7f5-d73d66007ae4',
+      postTargetId: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+      scheduledFor: '2026-11-20T14:30:00.000Z',
+    },
+  },
+  {
     type: 'stock.changed',
     storeId,
     occurredAt,

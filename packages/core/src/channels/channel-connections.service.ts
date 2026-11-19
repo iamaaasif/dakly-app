@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import type { ChannelConnection, ChannelConnectionListQuery } from '@dakly/contracts/channels';
+import { postingSlotsSchema, type PostingSlot } from '@dakly/contracts/social';
 import type { StoreAccess } from '@dakly/contracts/team';
 import {
   MetaRequestError,
@@ -68,7 +69,23 @@ export class ChannelConnectionsService {
 
   async postingConnections(storeId: string, ids: string[]) {
     if (!ids.length) return [];
-    return this.repository.findPostingConnections(storeId, ids);
+    const rows = await this.repository.findPostingConnections(storeId, ids);
+    return rows.map(({ postingSlots, ...connection }) => ({
+      ...connection,
+      postingSlots: postingSlotsSchema.safeParse(postingSlots).data ?? null,
+    }));
+  }
+
+  async savePostingSlots(
+    storeId: string,
+    input: { channelConnectionId: string; slots: PostingSlot[] },
+  ) {
+    const [saved] = await this.repository.savePostingSlots(storeId, {
+      ...input,
+      now: this.clock.now(),
+    });
+    if (!saved) return undefined;
+    return { ...saved, postingSlots: input.slots };
   }
 
   async findInbound(
