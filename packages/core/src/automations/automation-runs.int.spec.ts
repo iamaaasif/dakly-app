@@ -902,6 +902,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       async (change) => {
         const runner = await worker();
         const contact = await customer(true, runner);
+        databaseNow = new Date();
         clockNow = new Date(opensAt.getTime() + 11 * HOUR);
         const {
           automationId,
