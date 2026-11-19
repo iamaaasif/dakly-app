@@ -781,14 +781,18 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await drainFixture(fixtures.getStore()!);
       clockNow = daytime;
       databaseNow = undefined;
-      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementation((message) => sms.send(message));
+      vi.mocked(MailpitSmsDriver.prototype.send)
+        .mockReset()
+        .mockImplementation((message) => sms.send(message));
     });
 
     afterAll(() => {
       vi.restoreAllMocks();
     });
 
-    it('does not deadlock a first send with an entry for the same workflow and contact', async () => {
+    it('does not deadlock a first send with an entry for the same workflow and contact', async ({
+      signal,
+    }) => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
@@ -798,6 +802,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const entryHasContact = Promise.withResolvers<void>();
       const allowEntry = Promise.withResolvers<void>();
       const sendNeedsContact = Promise.withResolvers<void>();
+      signal.throwIfAborted();
+      const releaseEntry = () => allowEntry.resolve();
+      signal.addEventListener('abort', releaseEntry, { once: true });
       const lockVersion = AutomationEntryRepository.prototype.lockPublishedVersion;
       const entryLock = vi
         .spyOn(AutomationEntryRepository.prototype, 'lockPublishedVersion')
@@ -841,15 +848,16 @@ describe('Workflow runner (Postgres and Valkey)', () => {
               throw new Error('Send did not acquire the contact lock');
             }),
           ]);
-          allowEntry.resolve();
+          releaseEntry();
           await Promise.all([entry, dispatched]);
         } finally {
-          allowEntry.resolve();
+          releaseEntry();
           await Promise.allSettled([entry, dispatched]);
           sendLock.mockRestore();
         }
       } finally {
-        allowEntry.resolve();
+        signal.removeEventListener('abort', releaseEntry);
+        releaseEntry();
         await Promise.allSettled([entry]);
         entryLock.mockRestore();
       }
@@ -2464,7 +2472,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       }
     });
 
-    it('enforces the cap when an earlier-started run reaches the lock second', async () => {
+    it('enforces the cap when an earlier-started run reaches the lock second', async ({
+      signal,
+    }) => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const first = await dueRuns(send('marketing'), 1, 'active', contact);
@@ -2481,6 +2491,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const continueFirst = new Promise<void>((resolve) => {
         release = resolve;
       });
+      signal.throwIfAborted();
+      signal.addEventListener('abort', release, { once: true });
       const originalTags = ContactsService.prototype.findTags;
       const hook = vi
         .spyOn(ContactsService.prototype, 'findTags')
@@ -2491,7 +2503,12 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         });
       const pending = runner.runStep(firstJob.data as StepJobData);
       try {
-        await blocked;
+        await Promise.race([
+          blocked,
+          pending.then(() => {
+            throw new Error('The first run did not reach the send gate');
+          }),
+        ]);
         clockNow = new Date(daytime.getTime() + 1000);
         await runner.runStep(secondJob.data as StepJobData);
         release();
@@ -2502,8 +2519,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           expect.objectContaining({ outcome: 'skipped', skip_reason: 'frequency_cap' }),
         ]);
       } finally {
+        signal.removeEventListener('abort', release);
         release();
-        await pending;
+        await pending.catch(() => undefined);
         hook.mockRestore();
         await firstJob.remove();
         await secondJob.remove();
