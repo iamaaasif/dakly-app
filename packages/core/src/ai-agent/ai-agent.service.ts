@@ -51,7 +51,7 @@ export class AiAgentService {
   ) {}
 
   async schedule(storeId: string, conversationId: string, messageId: string) {
-    const settings = await this.settings.enabled(storeId);
+    const settings = await this.enabledSettings(storeId);
     if (!settings) return;
     const turn = await this.inbox.aiReplyTurn(storeId, conversationId);
     const arrival = turn?.inbound.find(({ id }) => id === messageId);
@@ -93,18 +93,24 @@ export class AiAgentService {
   }
 
   private async eligibleTurn(storeId: string, id: string, lock = false) {
-    const settings = await this.settings.enabled(storeId);
-    if (!settings || !(await this.stores.settings(storeId)).extensions.includes('chats')) return;
+    const settings = await this.enabledSettings(storeId);
+    if (!settings) return;
     const turn = await this.inbox.aiReplyTurn(storeId, id, lock);
     if (!turn || turn.channel === 'whatsapp') return;
     const { contactId, channel, connectionId, latest } = turn;
     const contact = await this.contacts.findRecipient(storeId, contactId);
     if (!contact || contact.kind === 'not_customer' || contact.isBlocked) return;
-    const [consent] = await this.consent.current(storeId, [contactId], channel);
-    if (consent?.status === 'withdrawn') return;
+    const consent = await this.consent.current(storeId, [contactId], channel);
+    if (consent.some(({ status }) => status === 'withdrawn')) return;
     const target = { contactId, channel, connectionId, identityId: latest.senderIdentityId };
     if (!(await this.identities.findOutboundIdentity(storeId, target))) return;
     return { turn, target, debounceSeconds: settings.debounceSeconds };
+  }
+
+  private async enabledSettings(storeId: string) {
+    const settings = await this.settings.enabled(storeId);
+    if (settings && (await this.stores.settings(storeId)).extensions.includes('chats'))
+      return settings;
   }
 
   private async classify(storeId: string, texts: string[]): Promise<Reason | 'busy' | null> {
@@ -185,13 +191,22 @@ function burstText(turn: Turn, delay: number) {
 export function handoverReason(texts: string[], result: ChatClassification): Reason | null {
   if (result.asksForPerson) return 'asked_for_person';
   const text = texts.join('\n').normalize('NFKC').toLowerCase();
-  if (result.intent === 'exchange' || /\b(refund|exchange|ferot)\b|ফেরত|বদল/u.test(text))
-    return 'refund';
-  if (result.intent === 'complaint' || /\b(damaged|fake|chera|broken)\b|নকল|ছেঁড়া/u.test(text))
-    return 'complaint';
-  if (/\b(discount|chhar)\b|ছাড়/u.test(text)) return 'discount';
+  const rule = handoverRules.find(
+    ({ intent, pattern }) => intent === result.intent || pattern.test(text),
+  );
+  if (rule) return rule.reason;
   if (result.handover) return result.handover;
   if (result.sentiment === 'angry') return 'angry';
-  if (result.confidence === 'low' || result.intent === 'special_request') return 'out_of_scope';
-  return null;
+  return result.confidence === 'low' || result.intent === 'special_request' ? 'out_of_scope' : null;
 }
+
+const handoverRules: { intent?: ChatClassification['intent']; pattern: RegExp; reason: Reason }[] =
+  [
+    { intent: 'exchange', pattern: /\b(refund|exchange|ferot)\b|ফেরত|বদল/u, reason: 'refund' },
+    {
+      intent: 'complaint',
+      pattern: /\b(damaged|fake|chera|broken)\b|নকল|ছেঁড়া/u,
+      reason: 'complaint',
+    },
+    { pattern: /\b(discount|chhar)\b|ছাড়/u, reason: 'discount' },
+  ];

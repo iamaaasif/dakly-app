@@ -34,4 +34,13 @@ describe('handoverReason', () => {
     expect(handoverReason(['Hello'], { ...greeting, confidence: 'low' })).toBe('out_of_scope');
     expect(handoverReason(['Hello'], greeting)).toBeNull();
   });
+
+  it('uses a more specific hand-over reason before a special request fallback', () => {
+    const request = { ...greeting, intent: 'special_request' as const };
+    expect(handoverReason(['Custom size'], { ...request, handover: 'ready_to_buy' })).toBe(
+      'ready_to_buy',
+    );
+    expect(handoverReason(['Custom size'], { ...request, sentiment: 'angry' })).toBe('angry');
+    expect(handoverReason(['Custom size'], request)).toBe('out_of_scope');
+  });
 });
