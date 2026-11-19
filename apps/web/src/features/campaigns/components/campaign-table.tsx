@@ -22,7 +22,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
       </ul>
       <div className="hidden md:block">
         <Table aria-label="Campaigns">
-          <TableHeader className="uppercase">
+          <TableHeader className="bg-surface uppercase [&_th]:text-text-muted">
             <TableRow>
               <TableHead className="w-1/2">Campaign</TableHead>
               <TableHead>Status</TableHead>
@@ -39,7 +39,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
                 <TableCell className="whitespace-normal">
                   <Link
                     href={`/campaigns/${campaign.id}`}
-                    className="inline-flex min-h-10 min-w-10 items-center font-semibold wrap-anywhere text-text after:absolute after:inset-0 hover:underline focus-visible:outline-hidden focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus"
+                    className="inline-flex min-h-10 min-w-10 items-center text-base font-semibold wrap-anywhere text-text after:absolute after:inset-0 hover:underline focus-visible:outline-hidden focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus"
                   >
                     {campaign.name}
                   </Link>
@@ -75,7 +75,7 @@ function CampaignCard({ campaign }: { campaign: CampaignResponse }) {
           <div className="min-w-0">
             <span
               id={nameId}
-              className="inline-flex min-h-10 min-w-10 items-center font-semibold wrap-anywhere text-text group-hover:underline"
+              className="inline-flex min-h-10 min-w-10 items-center text-base font-semibold wrap-anywhere text-text group-hover:underline"
             >
               {campaign.name}
             </span>
