@@ -28,9 +28,8 @@ import { SocialRepository } from './social.repository';
 export const META_PUBLISHING_DRIVER = Symbol('META_PUBLISHING_DRIVER');
 
 type JobTarget = Omit<ScheduledPostTarget, 'storeId'>;
-type SavedTarget = NonNullable<Awaited<ReturnType<SocialRepository['findPublishTarget']>>>;
-type PublishingTarget = SavedTarget['target'];
-type PendingPost = { post: SavedTarget['post']; target: PublishingTarget };
+type PendingPost = NonNullable<Awaited<ReturnType<SocialRepository['findPublishTarget']>>>;
+type PublishingTarget = PendingPost['target'];
 type Changes = Parameters<SocialRepository['updatePublishTarget']>[2];
 type AccountKind = 'facebook_page' | 'instagram';
 type PublishReceipt = {
@@ -151,7 +150,7 @@ export class SocialPublishingService {
     { post, target }: PendingPost,
     driver: MetaPublishingDriver,
   ) {
-    if (post.isAiWritten && (!post.approvedAt || !post.approvedByUserId))
+    if (post.isAiWritten && [post.approvedAt, post.approvedByUserId].includes(null))
       throw socialError('POST_APPROVAL_REQUIRED');
     const { channelConnectionId } = target;
     const credential = await this.credential(storeId, channelConnectionId, this.clock.now());
@@ -180,6 +179,14 @@ export class SocialPublishingService {
           ? { account, text: post.firstComment, verifyToken }
           : undefined;
       return { externalId, firstComment };
+    } catch (failure) {
+      if (failure instanceof MetaPublishingError && failure.code === 'auth_error')
+        await this.channels.recordRejectedToken(
+          storeId,
+          channelConnectionId,
+          credential.ciphertext,
+        );
+      throw failure;
     } finally {
       token.fill(0);
     }
@@ -270,9 +277,8 @@ export class SocialPublishingService {
       )
         return;
     }
-    const savedId = containerId;
     const state = await this.meta('instagram_container_status', () =>
-      driver.instagramContainerState(account, savedId),
+      driver.instagramContainerState(account, containerId),
     );
     if (state === 'published') return null;
     if (state === 'failed') {
@@ -284,7 +290,7 @@ export class SocialPublishingService {
     }
     if (state !== 'ready') throw socialError('POST_CONTAINER_PROCESSING');
     return this.sendClaimed(context, () =>
-      this.meta('instagram_publish_post', () => driver.publishInstagram(account, savedId)),
+      this.meta('instagram_publish_post', () => driver.publishInstagram(account, containerId)),
     );
   }
 
@@ -292,15 +298,8 @@ export class SocialPublishingService {
     { storeId, target, verifyToken }: PublishContext,
     send: () => Promise<string>,
   ) {
-    const claimed = await this.recordTarget(
-      storeId,
-      target,
-      {
-        action: 'post.publishing',
-        status: 'publishing',
-      },
-      verifyToken,
-    );
+    const change = { action: 'post.publishing', status: 'publishing' } as const;
+    const claimed = await this.recordTarget(storeId, target, change, verifyToken);
     if (!claimed) return;
     try {
       return await send();

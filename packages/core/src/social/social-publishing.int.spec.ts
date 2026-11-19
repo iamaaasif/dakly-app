@@ -54,6 +54,9 @@ describe('SocialPublishingService', () => {
       const kind = accounts.get(channelConnectionId);
       return kind && { ...secret, expiresAt, kind, externalAccountId: channelConnectionId };
     });
+    const recordRejectedToken = vi.fn(async (_storeId: string, channelConnectionId: string) => {
+      accounts.delete(channelConnectionId);
+    });
     const repository = new SocialRepository(fixture.tenant);
     const storage = {
       getObjectMetadata: vi.fn<FileStorageDriver['getObjectMetadata']>(async () => ({
@@ -71,7 +74,7 @@ describe('SocialPublishingService', () => {
     const publish = vi.fn();
     const service = new SocialPublishingService(
       repository,
-      { postingCredential } as unknown as ChannelConnectionsService,
+      { postingCredential, recordRejectedToken } as unknown as ChannelConnectionsService,
       storage,
       driver,
       encryption,
@@ -91,6 +94,7 @@ describe('SocialPublishingService', () => {
       notify,
       storage,
       postingCredential,
+      recordRejectedToken,
       clock,
       isActive,
     };
@@ -435,6 +439,38 @@ describe('SocialPublishingService', () => {
       status: 'failed',
       error_code: 'POST_CAPTION_TOO_LONG',
     });
+  });
+
+  it('marks a rejected token for reconnect and keeps the target retryable', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi
+      .spyOn(driver, 'publishFacebook')
+      .mockRejectedValueOnce(new MetaPublishingError('auth_error'));
+    const { service, accounts, recordRejectedToken, notify, clock } = publishing(driver);
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    const [channelConnectionId] = [...accounts.keys()];
+    await expect(service.publishTarget(fixture.a, target, false)).rejects.toMatchObject({
+      code: 'auth_error',
+    });
+    expect(recordRejectedToken).toHaveBeenCalledExactlyOnceWith(
+      fixture.a,
+      channelConnectionId,
+      expect.any(Buffer),
+    );
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'scheduled',
+    });
+    clock.now.mockReturnValue(new Date(now.getTime() + 5 * MINUTE_MS));
+    await service.publishTarget(fixture.a, target, true);
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'failed',
+      error_code: 'POST_TOKEN_EXPIRED',
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      fixture.a,
+      expect.objectContaining({ category: 'fix_now' }),
+    );
   });
 
   it('flags an expired Page token for its store without calling Meta', async () => {

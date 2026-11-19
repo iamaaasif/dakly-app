@@ -37,6 +37,8 @@ export function socialError(code: keyof typeof errors) {
 export function publishError(error: unknown, status: PostResponse['targets'][number]['status']) {
   if (status === 'publishing') return socialError('POST_PUBLISH_UNCONFIRMED');
   if (error instanceof AppError) return error;
+  if (error instanceof MetaPublishingError && error.code === 'auth_error')
+    return socialError('POST_TOKEN_EXPIRED');
   return socialError(
     error instanceof MetaPublishingError && error.code === 'rejected'
       ? 'POST_PROVIDER_REJECTED'

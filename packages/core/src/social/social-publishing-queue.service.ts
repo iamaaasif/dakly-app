@@ -55,7 +55,6 @@ export class SocialPublishingQueueService implements OnApplicationBootstrap {
           jobId: `check-${jobId}`,
           delay: Math.max(0, remaining - DAY_MS),
           attempts: 3,
-          backoff: { type: 'exponential', delay: MINUTE_MS },
           removeOnComplete: { age: DAY_MS / 1_000 },
           removeOnFail: 100,
         },
