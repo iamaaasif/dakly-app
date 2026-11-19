@@ -56,7 +56,7 @@ export type WorkflowTemplateCard = (typeof workflowTemplates)[number];
 export function templateRequirement(template: WorkflowTemplateCard) {
   const needs: readonly string[] = template.needs;
   if (needs.includes('channels')) return 'Needs a connected channel and the chat-start trigger';
-  if (needs.includes('products')) return 'Needs the back-in-stock trigger';
+  if (needs.includes('products')) return 'Needs product alerts and the back-in-stock trigger';
   if (needs.includes('orders')) return 'Needs order triggers';
   return 'Waiting for this trigger';
 }
