@@ -170,11 +170,6 @@ export class SendPolicyService {
     };
   }
 
-  async prepareCampaignSendLimits(storeId: string, contactId: string, campaignRecipientId: string) {
-    const settings = await this.stores.sendingSettings(storeId, 'share');
-    return this.prepareMarketingRetryCheck(storeId, { contactId, campaignRecipientId, settings });
-  }
-
   // Approval freezes these skips with the same rules, a page at a time and with no lock. The
   // check inside the send transaction can still skip a queued recipient, never send a skipped one.
   async checkAudience(storeId: string, request: AudienceRequest): Promise<AudienceDecision[]> {

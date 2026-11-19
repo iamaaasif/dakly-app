@@ -21,6 +21,8 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SegmentsService } from '../segments/segments.service';
+import { SendPolicyService } from '../sending/send-policy.service';
+import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
@@ -663,6 +665,57 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
+  it('releases a late definite refusal while the other recipient is still outstanding', async () => {
+    const { id } = await sendingCampaign(2);
+    const contacted = Promise.withResolvers<void>();
+    const reply = Promise.withResolvers<{ providerMessageId: string }>();
+    vi.mocked(MailpitSmsDriver.prototype.send)
+      .mockImplementationOnce(async (message) => {
+        calls.push({ ...message });
+        contacted.resolve();
+        return reply.promise;
+      })
+      .mockRejectedValueOnce(new Error('second recipient timed out'));
+    const first = sender.sendBatch(storeId, id);
+    void first.catch(() => undefined);
+    try {
+      await Promise.race([
+        contacted.promise,
+        first.then(() => {
+          throw new Error('The batch ended before contacting the provider');
+        }),
+      ]);
+      const phone = calls[0]!.to;
+      await admin.pool.query('update contacts set is_blocked=true where store_id=$1 and phone=$2', [
+        storeId,
+        phone,
+      ]);
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      await expect(sender.sendBatch(storeId, id)).rejects.toThrow('second recipient timed out');
+      expect(await settlementRows(id)).toEqual([]);
+      expect((await recipients(id)).find((row) => row.phone === phone)).toMatchObject({
+        status: 'failed',
+        sms_credits: 1,
+      });
+
+      reply.reject(new SmsSendRefused());
+      await first;
+      expect((await recipients(id)).find((row) => row.phone === phone)).toMatchObject({
+        status: 'failed',
+        sms_credits: null,
+      });
+      clockNow = new Date(noon.getTime() + 12 * MINUTE);
+      await sender.sendBatch(storeId, id);
+      expect(await settlementRows(id)).toEqual([
+        { kind: 'release', quantity_delta: 2 },
+        { kind: 'charge', quantity_delta: -1 },
+      ]);
+    } finally {
+      reply.resolve({ providerMessageId: 'unused-late-refusal-receipt' });
+      await first.catch(() => undefined);
+    }
+  });
+
   it.each([false, true])(
     'uses only a live claim when cancellation has committed (expired: %s)',
     async (expired) => {
@@ -729,6 +782,25 @@ describe('Campaign sender (Postgres)', () => {
       expect(waits).toHaveBeenCalledTimes(1);
     } finally {
       waits.mockRestore();
+    }
+  });
+
+  it('locks the store settings before it locks the recipient for dispatch', async () => {
+    const { id } = await sendingCampaign(1);
+    const policy = app.get(SendPolicyService);
+    const lockForDispatch = policy.lockForDispatch.bind(policy);
+    const settings = vi.spyOn(app.get(StoresService), 'sendingSettings');
+    const contact = vi.spyOn(policy, 'lockForDispatch').mockImplementationOnce(async (...args) => {
+      expect(settings).toHaveBeenCalledWith(storeId, 'share');
+      return lockForDispatch(...args);
+    });
+    try {
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(contact).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(1);
+    } finally {
+      contact.mockRestore();
+      settings.mockRestore();
     }
   });
 
