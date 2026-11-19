@@ -22,6 +22,7 @@ import {
   changeAutomationSchema,
   type CreateAutomationInput,
   createAutomationSchema,
+  publishAutomationSchema,
 } from '@dakly/contracts/automations';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -96,7 +97,7 @@ export class AutomationsController {
     @CurrentUser() userId: string,
     @CurrentAccess() access: StoreAccess,
     @Param('automationId', ParseUUIDPipe) automationId: string,
-    @Body(new ZodValidationPipe(changeAutomationSchema.optional()))
+    @Body(new ZodValidationPipe(publishAutomationSchema))
     draft: ChangeAutomationInput | undefined,
   ): Promise<AutomationResponse> {
     return this.automations.publish(

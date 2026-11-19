@@ -40,9 +40,12 @@ const automationFieldsSchema = z.strictObject({
 export const createAutomationSchema = automationFieldsSchema.extend({
   templateKey: z.enum(Object.keys(automationTemplates) as TemplateKey[]).optional(),
 });
-export const changeAutomationSchema = automationFieldsSchema
-  .partial()
-  .refine((input) => input.name !== undefined || input.graph !== undefined, 'Nothing to change');
+const draftChangeSchema = automationFieldsSchema.partial();
+export const changeAutomationSchema = draftChangeSchema.refine(
+  (input) => input.name !== undefined || input.graph !== undefined,
+  'Nothing to change',
+);
+export const publishAutomationSchema = draftChangeSchema.optional();
 export type AutomationTriggerPreview = {
   items: { id: string; contactId: string; occurredAt: string }[];
 };
