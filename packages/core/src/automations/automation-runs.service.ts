@@ -226,9 +226,7 @@ export class AutomationRunsService {
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
       const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return 'not_live';
-      const checkedAt = await this.repository.schedulerTime(storeId);
-      const late = await this.readLateGateResult(facts, checkedAt);
-      const result = late ?? (await this.gateSend(claim, step, facts, preparedPhone));
+      const result = await this.gateSend(claim, step, facts, preparedPhone);
       if (result === 'balance_paused') return result;
       const claimedAt = await this.repository.schedulerTime(storeId);
       // Renew on the sweep's Postgres clock so it cannot retake a fresh lease early.
@@ -260,21 +258,14 @@ export class AutomationRunsService {
     preparedPhone: string | null | undefined,
   ): Promise<GateResult> {
     const { storeId, contactId } = facts;
+    const hasSms = step.channels.includes('sms');
+    const lockedContactExists = await this.lockFirstSend(claim, facts, hasSms);
+    if (lockedContactExists === undefined) return 'not_live';
+    const checkedAt = await this.repository.schedulerTime(storeId);
+    const initialLate = await this.readLateGateResult(facts, checkedAt);
+    if (initialLate) return initialLate;
     // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
-    if (!step.channels.includes('sms'))
-      return { decision: { action: 'skip', reason: 'window_closed' } };
-    await this.wallets.lockForReservation(storeId, 'sms_credits');
-    // Entry locks the contact before the workflow, so use the same order for dispatch.
-    const lockedContactExists = await this.sendPolicy.lockForDispatch(storeId, contactId);
-    if (
-      !(await this.repository.moveRunIfLive(
-        storeId,
-        claim,
-        { status: 'running', claimedAt: claim.claimedAt },
-        'first_send',
-      ))
-    )
-      return 'not_live';
+    if (!hasSms) return { decision: { action: 'skip', reason: 'window_closed' } };
     const { decision, destination, at } = await this.sendPolicy.checkForSend(
       storeId,
       { contactId, channel: 'sms', category: step.category },
@@ -294,6 +285,26 @@ export class AutomationRunsService {
       { sentAt: at, firstTriedAt },
       preparedPhone,
     );
+  }
+
+  private async lockFirstSend(
+    claim: RunClaim,
+    { storeId, contactId }: RunFacts,
+    hasSms: boolean,
+  ): Promise<boolean | undefined> {
+    let contactExists = false;
+    if (hasSms) {
+      await this.wallets.lockForReservation(storeId, 'sms_credits');
+      // Entry locks the contact before the workflow, so use the same order for dispatch.
+      contactExists = await this.sendPolicy.lockForDispatch(storeId, contactId);
+    }
+    const held = await this.repository.moveRunIfLive(
+      storeId,
+      claim,
+      { status: 'running', claimedAt: claim.claimedAt },
+      'first_send',
+    );
+    return held ? contactExists : undefined;
   }
 
   private async reserveFirstSend(

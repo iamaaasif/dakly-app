@@ -821,6 +821,51 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       expect(sentFor(runId!)).toHaveLength(1);
     });
 
+    it('reads committed resume time under the workflow lock before ending an old send', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const wakeAt = new Date(daytime.getTime() - 25 * HOUR);
+      const resumedAt = new Date(wakeAt.getTime() + 23 * HOUR);
+      await admin.pool.query('update automation_runs set wake_at=$1 where id=$2', [wakeAt, runId]);
+      await runner.sweep();
+      const jobs = await runner.queue.getJobs(['waiting']);
+      const first = jobs.find((job) => job.data.automationRunId === runId)!;
+      const blocker = await admin.pool.connect();
+      let dispatched: Promise<unknown> | undefined;
+      try {
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        // A pre-cutoff resume is visible only after the writer commits the workflow change.
+        await blocker.query(
+          'update automations set balance_resumed_at=$1, has_balance_resume_send_allowance=true where id=$2',
+          [resumedAt, automationId],
+        );
+        dispatched = runner.runStep(first.data as StepJobData).catch((error: unknown) => error);
+        await waitForBlocker(pid);
+        await blocker.query('commit');
+        expect(await dispatched).toBeUndefined();
+      } finally {
+        await blocker.query('rollback');
+        blocker.release(true);
+        await dispatched;
+      }
+      await first.remove();
+
+      expect(await run(runId!)).toMatchObject({ status: 'waiting', wake_at: wakeAt });
+      expect(await ledgerFor(runId!)).toEqual([]);
+      expect(sentFor(runId!)).toEqual([]);
+
+      await runDueStep(runner, runId!);
+      expect(sentFor(runId!)).toHaveLength(1);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+    });
+
     it('sends through the gate with the opt-out link and the step key, and a retry sends once', async () => {
       const firstLinkBase = loadEnv().SHORT_LINK_BASE_URL;
       const runner = await worker();
