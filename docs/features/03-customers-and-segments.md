@@ -63,6 +63,13 @@ Search rules:
 - Partial phone search needs "See full phone numbers": for those members, digits that
   are not a full number match the start of stored numbers. For anyone else a partial
   number finds nothing, and only an exact full number finds the contact.
+- Members without "See full phone numbers" can make 30 exact phone searches and 10
+  contact writes that supply a phone per store per hour. Search hits and misses both
+  count. Partial searches made up of digits `0` to `9` count too. Creating and
+  editing share the phone write limit.
+  Each window starts with the first attempt. Over the limit, the API returns
+  `429 CONTACT_PHONE_RATE_LIMITED`, records the refusal in the audit log without the
+  phone number, and leaves contacts unchanged. Members with the permission are exempt.
 
 The `consents/` feature owns the `consents` table. `ConsentService.record(storeId, change, actor)`
 appends one row per answer, with its channel, status, source, evidence and the member who
@@ -549,6 +556,7 @@ Segments
 9. Indexes, measured with 50,000 contacts in one store of a 500,000-row table: every count starts from an index on `store_id` (`contacts_store_id_kind_idx` for kind, otherwise a bitmap scan on a `store_id` index) and filters tag, district and source on those rows; consent reads `consents_contact_channel_idx`. Each condition and an AND/OR mix counted in under 40 ms.
 
 Import: CSV of customers (and POS sales, D6) with a preview, column mapping and a result report. Rows with bad phones are reported, not dropped silently.
+The import report's duplicate counts are not limited for members without "See full phone numbers" and are tracked as a follow-up.
 
 ### Rules
 
