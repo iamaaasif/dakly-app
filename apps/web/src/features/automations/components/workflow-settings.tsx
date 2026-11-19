@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 
 import type { AutomationDetailResponse } from '@dakly/contracts/automations';
@@ -25,7 +25,7 @@ export function WorkflowSettings({ id }: { id: string }) {
     return (
       <QueryError message="Could not load this workflow." onRetry={() => void workflow.refetch()} />
     );
-  if (!workflow.data || (workflow.isFetching && !workflow.isFetchedAfterMount))
+  if (!workflow.data)
     return (
       <p role="status" className="p-4">
         Loading workflow…
@@ -49,16 +49,12 @@ function useEditor({ workflow, refresh }: SettingsProps) {
     defaultValues: workflow.graph,
   });
   const { errors, isDirty, isSubmitting } = form.formState;
-  const { reset } = form;
-  useEffect(() => {
-    if (!isDirty) reset(workflow.graph);
-  }, [isDirty, reset, workflow.graph]);
   const pending = isSubmitting || save.isPending || publish.isPending;
 
   async function saveGraph(graph: AutomationGraph) {
     try {
       await save.mutateAsync(graph);
-      reset(graph);
+      form.reset(graph);
       return true;
     } catch {
       return false;
