@@ -63,6 +63,7 @@ function serviceFor(graph: AutomationGraph) {
     name: 'স্বাগতম',
     status: 'draft',
     pauseReason: null,
+    templateKey: null,
     graph,
     publishedVersionId: null,
     createdAt: now,
