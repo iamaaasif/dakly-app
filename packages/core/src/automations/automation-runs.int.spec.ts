@@ -1310,61 +1310,77 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       },
     );
 
-    it('counts only the earlier attempt when the final retry phone lookup fails', async () => {
-      const runner = await worker();
-      const contact = await customer(true, runner);
-      const firstDatabaseAt = new Date();
-      databaseNow = firstDatabaseAt;
-      const firstAt = new Date(opensAt.getTime() + HOUR);
-      clockNow = firstAt;
-      const {
-        runIds: [runId],
-      } = await dueRuns(send('marketing'), 1, 'active', contact);
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new Error('socket hang up'));
-      await runDueStep(runner, runId!);
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+    it.each(['preparation', 'final'] as const)(
+      'counts only the earlier attempt when the %s retry phone lookup fails',
+      async (lookup) => {
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        const firstDatabaseAt = new Date();
+        databaseNow = firstDatabaseAt;
+        const firstAt = new Date(opensAt.getTime() + HOUR);
+        clockNow = firstAt;
+        const {
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(
+          new Error('socket hang up'),
+        );
+        await runDueStep(runner, runId!);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
 
-      databaseNow = new Date(databaseNow.getTime() + HOUR);
-      clockNow = new Date(firstAt.getTime() + 25 * HOUR);
-      await wakeNow(runId!);
-      const phone = vi
-        .spyOn(ContactsService.prototype, 'getPhoneForSend')
-        .mockRejectedValueOnce(new Error('database unavailable'));
-      try {
-        await expect(runDueStep(runner, runId!)).rejects.toMatchObject({
-          code: 'MESSAGING_PREPARATION_FAILED',
-        });
-        expect(phone).toHaveBeenCalledTimes(1);
-      } finally {
-        phone.mockRestore();
-      }
-      expect(sentFor(runId!)).toEqual([]);
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
-      expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+        databaseNow = new Date(databaseNow.getTime() + HOUR);
+        clockNow = new Date(firstAt.getTime() + 25 * HOUR);
+        await wakeNow(runId!);
+        const readPhone = ContactsService.prototype.getPhoneForSend;
+        const phone = vi.spyOn(ContactsService.prototype, 'getPhoneForSend');
+        const unavailable = new Error('database unavailable');
+        if (lookup === 'final') {
+          phone.mockImplementationOnce(function (shop, person) {
+            return readPhone.call(this, shop, person);
+          });
+        }
+        phone.mockRejectedValueOnce(unavailable);
+        try {
+          const result = expect(runDueStep(runner, runId!)).rejects;
+          if (lookup === 'preparation') {
+            await result.toMatchObject({ code: 'MESSAGING_PREPARATION_FAILED' });
+          } else {
+            await result.toThrow(unavailable.message);
+          }
+          expect(phone).toHaveBeenCalledTimes(lookup === 'preparation' ? 1 : 2);
+        } finally {
+          phone.mockRestore();
+        }
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+        expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
 
-      const next = await dueRuns(send('marketing'), 1, 'active', contact);
-      await runDueStep(runner, next.runIds[0]!);
-      expect(sentFor(next.runIds[0]!)).toHaveLength(1);
-      const previous = await admin.pool.query<{ sent_at: Date }>(
-        "select sent_at from automation_run_steps where run_id=$1 and kind='send'",
-        [runId],
-      );
-      expect(previous.rows).toEqual([{ sent_at: firstAt }]);
+        const next = await dueRuns(send('marketing'), 1, 'active', contact);
+        await runDueStep(runner, next.runIds[0]!);
+        expect(sentFor(next.runIds[0]!)).toHaveLength(1);
+        const previous = await admin.pool.query<{ sent_at: Date }>(
+          "select sent_at from automation_run_steps where run_id=$1 and kind='send'",
+          [runId],
+        );
+        expect(previous.rows).toEqual([{ sent_at: firstAt }]);
 
-      databaseNow = new Date(firstDatabaseAt.getTime() + 36 * HOUR);
-      await admin.pool.query(
-        "update automation_runs set claimed_at=now() - interval '6 minutes' where id=$1",
-        [runId],
-      );
-      const oldJob = (await runner.queue.getJobs(['waiting'])).find(
-        (job) => job.data.automationRunId === runId,
-      );
-      await oldJob?.remove();
-      await runDueStep(runner, runId!);
-      expect(sentFor(runId!)).toEqual([]);
-      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'unconfirmed' })]);
-      expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
-    });
+        databaseNow = new Date(firstDatabaseAt.getTime() + 36 * HOUR);
+        await admin.pool.query(
+          "update automation_runs set claimed_at=now() - interval '6 minutes' where id=$1",
+          [runId],
+        );
+        const oldJob = (await runner.queue.getJobs(['waiting'])).find(
+          (job) => job.data.automationRunId === runId,
+        );
+        await oldJob?.remove();
+        await runDueStep(runner, runId!);
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([
+          expect.objectContaining({ outcome: 'unconfirmed' }),
+        ]);
+        expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+      },
+    );
 
     it.each([
       'a reclaimed run',
