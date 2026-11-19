@@ -16,7 +16,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string; storeIds: string[] };
   const storeId = fixture.storeIds[0]!;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const evidence = resolve(process.cwd(), '../../docs/design/evidence/ord-5-pipeline');
+  const evidence = resolve(process.cwd(), '../../docs/design/evidence/web-7-orders-list');
   const orderIds: string[] = [];
   const productId = randomUUID();
   const variantId = randomUUID();
@@ -65,7 +65,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
         await expect(action).toBeInViewport({ ratio: 1 });
       }
       if (name === 'filters' && width === 360) {
-        await page.getByText('Filters', { exact: true }).evaluate((summary) => {
+        await page.getByRole('button', { name: 'Filters', exact: true }).evaluate((summary) => {
           summary.scrollIntoView({ block: 'start' });
         });
         await expect(page.getByRole('button', { name: 'Apply filters' })).toBeInViewport();
@@ -74,10 +74,11 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
         .toBeLessThanOrEqual(width);
-      await page.screenshot({
-        path: resolve(evidence, `${name}-${width}.png`),
-        animations: 'disabled',
-      });
+      if (name === 'pipeline')
+        await page.screenshot({
+          path: resolve(evidence, `orders-list-${width}x${height}.png`),
+          animations: 'disabled',
+        });
     }
   }
 
@@ -105,7 +106,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       hours: 3,
       cod: 501000,
     });
-    await order({
+    const nusrat = await order({
       number: 1059,
       stage: 'to_confirm',
       name: 'Nusrat Jahan',
@@ -113,6 +114,10 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       hours: 14,
       cod: 226000,
     });
+    await database.pool.query("update orders set source='instagram' where store_id=$1 and id=$2", [
+      storeId,
+      nusrat,
+    ]);
     await order({
       number: 1058,
       stage: 'returned',
@@ -183,9 +188,17 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByText('1 high-risk order')).toBeVisible();
     await expect(page.getByText('৳5,780 COD still with couriers')).toBeVisible();
     await expect(page.getByText('Cotton Panjabi (L) × 2')).toBeVisible();
+    await expect(page.getByText('Search orders', { exact: true })).toBeVisible();
+    await expect(page.getByRole('searchbox', { name: 'Search orders' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    await expect(page.getByLabel('From date')).toBeHidden();
+    await expect(page.getByText('Return risk is based on your past orders.')).toBeVisible();
     await capture('pipeline');
 
-    await page.getByRole('link', { name: '1 high-risk order' }).click();
+    await page.getByRole('link', { name: 'Review high-risk orders' }).click();
     await expect(page).toHaveURL(/alert=risk/);
     await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(0);
     await page.getByRole('searchbox').fill('#1060');
@@ -225,13 +238,14 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page).toHaveURL(/stage=to_pack/);
     await expect(page.getByRole('link', { name: 'Kamal Hossain' })).toBeVisible();
     await page.getByRole('link', { name: 'Clear search' }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
     await page.getByRole('link', { name: /^Delivered/ }).click();
     await expect(page).toHaveURL(/stage=delivered/);
     await expect(page.getByText('Nusrat Jahan', { exact: true })).toHaveCount(2);
     await expect(page.getByRole('link', { name: 'Delivered 2' })).toBeVisible();
     await expect(page.getByText('Partly delivered', { exact: true })).toBeVisible();
     await expect(page.getByText('৳2,560', { exact: true })).toBeVisible();
-    await page.getByText('Filters', { exact: true }).click();
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
     await page.getByRole('combobox', { name: 'Source' }).selectOption({ label: 'WhatsApp' });
     await page.getByRole('combobox', { name: 'Courier' }).selectOption({ label: 'Pathao' });
     await page.getByLabel('From date').fill('2026-11-17');
@@ -253,9 +267,17 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
     await page.getByRole('button', { name: 'Clear filters' }).click();
     await expect(page).toHaveURL(/stage=to_confirm/);
-    const summary = page.getByText('Filters', { exact: true });
-    await expect(summary).toBeFocused();
-    await summary.press('Enter');
+    const filters = page.getByRole('button', { name: 'Filters', exact: true });
+    await expect(filters).toBeFocused();
+    await expect(filters).toHaveAttribute('aria-expanded', 'false');
+    await page.goBack();
+    await expect(page).toHaveURL(/stage=cancelled/);
+    await expect(filters).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByLabel('Cancelled orders')).toBeChecked();
+    await page.goForward();
+    await expect(page).toHaveURL(/stage=to_confirm/);
+    await expect(filters).toHaveAttribute('aria-expanded', 'false');
+    await filters.press('Enter');
     await page.getByLabel('Cancelled orders').check();
     await applyFilters.click();
     await expect(page).toHaveURL(/stage=cancelled/);
@@ -263,7 +285,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await applyFilters.focus();
     await applyFilters.press('Enter');
     await expect(page).toHaveURL(/stage=to_confirm/);
-    await expect(summary).toBeFocused();
+    await expect(filters).toBeFocused();
   } finally {
     await database.pool.query(
       "delete from outbox_events where store_id=$1 and payload->>'orderId' = any($2::text[])",
