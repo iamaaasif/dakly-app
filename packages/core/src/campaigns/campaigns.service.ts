@@ -260,7 +260,7 @@ export class CampaignsService {
     if (cancelledAt && !(await this.repository.markSettled(storeId, id, cancelledAt))) return false;
     const key = approvalKey(id, approvedAt);
     const reservation = await this.wallets.reservationFor(storeId, 'sms_credits', key);
-    const quantity = cancelledAt ? Math.min(chargedCredits, reservation.quantity) : chargedCredits;
+    const quantity = Math.min(chargedCredits, reservation.quantity);
     const write = { reservationId: reservation.entryId, actor };
     if (quantity)
       await this.wallets.charge(storeId, { ...write, quantity, idempotencyKey: `${key}:charge` });

@@ -360,7 +360,7 @@ The batch claims up to 200 recipients and stops taking new claims once it has ru
 
 A claim older than five minutes can recover. The sender saves a provider receipt before finishing its send. An expired claim with a saved receipt gets a provider lookup without resending. An unresolved claim without a receipt may retry in a sending campaign, up to three attempts. A cancellation, ineligible recipient or exhausted retry keeps the cost of an unresolved outcome without another submission. A definite refusal releases its credit while settlement is open. Late refusals after settlement go through ACC-14 reconciliation. A late acceptance can update the same unresolved outcome. Mailpit uses the same operation key for staging recovery. When a retry submits again without a saved receipt, the cap uses that attempt’s start time because the provider does not identify which attempt first accepted the message. Durable provider deduplication and store-wide daily pacing belong to ACC-14.
 
-When no queued or claimed recipient remains, the sender settles the reservation and marks the campaign sent. The results part emits `campaign.sent`. Cancelling uses the same settlement with a charge capped at the approval reservation. The top-up recovery part prepares older approvals before dispatch starts.
+When no queued or claimed recipient remains, the sender settles the reservation and marks the campaign sent. Activation adds the `campaign.sent` event. Both completed and cancelled campaigns charge up to the approved reservation. The top-up recovery part prepares older approvals before dispatch starts.
 
 ### Frozen destinations and final send checks
 
