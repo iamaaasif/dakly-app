@@ -20,5 +20,6 @@ import { RefreshContactStatsOnOrderStageChanged } from './jobs/refresh-contact-s
     RefreshContactStatsOnOrderStageChanged,
     RefreshContactStatsOnOrderCodCollected,
   ],
+  exports: [ContactStatsService],
 })
 export class ContactStatsModule {}
