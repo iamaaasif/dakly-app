@@ -17,7 +17,7 @@ export class AnalyticsService {
     @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
-  async periods(storeId: string, days: 7 | 30 | 90) {
+  async periods(storeId: string, days: 7 | 30 | 90 | 365) {
     const timeZone = await this.stores.timeZone(storeId);
     const now = this.clock.now();
     const through = reportDay(now, timeZone);
