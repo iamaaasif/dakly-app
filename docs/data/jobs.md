@@ -12,7 +12,7 @@ A store job that loses its Valkey entry is found again by a sweep. Store sweeps 
 | `record-delivery-status` | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                             |
 | `process-comment`        | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)` |
 
-`process-webhook-event` has no `storeId`. The worker resolves the store for each event, and one delivery can cover several stores. Jobs started after that lookup carry `storeId`. Meta delivery receipts use `process-webhook-event` to apply status within each resolved store. The job retries a receipt while the recipient has an unconfirmed send.
+`process-webhook-event` has no `storeId`. The worker resolves the store for each event, and one delivery can cover several stores. Jobs started after that lookup carry `storeId`. Meta delivery receipts use `process-webhook-event` to apply status within each resolved store. The job retries a receipt while the recipient has an unconfirmed send. If the final attempt throws, the worker marks the webhook row `failed` for the seven-day purge and reports the job failure.
 
 ## ai-reply
 
@@ -43,6 +43,12 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 | `StartAutomationOnConsent`, `StartAutomationOnTagAdded` | Consent grant or tag added                 | the event, including `storeId`                    | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                          |
 | `StartAutomationOnBirthday`                             | Birthday                                   | the event, including `storeId`                    | Unique `automation_runs (automation_id, contact_id, trigger_key)`                                          |
 
+`recover-webhook-events` runs every minute with an empty payload. It checks global Meta deliveries
+still marked `received` more than one minute after arrival, in pages of 100. If the inbound job is
+missing, it queues `process-webhook-event` under the same row id. BullMQ deduplicates overlapping
+adds. The recovery query uses `webhook_events_recovery_idx`. If Valkey loses its scheduler data,
+restart the worker to register the schedules again.
+
 Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
 Order creation, stage changes and COD collection give the order ID, which the service uses to find
 the buyer. The subscriber recomputes the contact's row from current orders.
@@ -66,10 +72,11 @@ Per-store cap: one running campaign batch per store.
 
 ## workflow
 
-| Job                       | Started by                       | Payload                                              | Makes a rerun harmless                                                                             |
-| ------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `continue-automation-run` | The sweep, or the step before it | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
-| sweep `wake-due-runs`     | Every minute                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| Job                               | Started by                       | Payload                                              | Makes a rerun harmless                                                                             |
+| --------------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `continue-automation-run`         | The sweep, or the step before it | `storeId`, `automationRunId`, `stepKey`, `claimedAt` | Step and claim guard; deduplicated on `<runId>-<stepKey>-<claimedAt ms>`; see lease contract below |
+| sweep `wake-due-runs`             | Every minute                     | none                                                 | `due_automation_runs` claims due waits or five-minute stale running leases with SKIP LOCKED        |
+| `ResumeWorkflowsOnWalletCredited` | `wallet.credited` outbox event   | the event (`storeId`, `wallet`, `entryId`)           | Moves only workflows still paused for balance to active; an `sms_credits` credit only              |
 
 ## sync
 
@@ -90,6 +97,11 @@ The ANA-1 reconciliation follow-up repairs missed day refreshes nightly.
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
 ## bulk
+
+`purge-webhook-events` runs at 00:00 UTC daily with an empty payload. It deletes global webhook
+rows received more than seven days ago in batches of 5,000, skipping locked rows and keeping rows
+still marked `received`. It calls `purge_webhook_events` through the existing `dakly_app` grant
+and uses `webhook_events_received_at_idx`.
 
 `sweep-contact-stats` runs at 00:00 UTC daily and pages through `maintenance_store_ids`. It queues
 `reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contacts
@@ -158,40 +170,42 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 2. For each finished Asia/Dhaka day after a rollup's `maintenance_watermarks` row, page through `maintenance_store_ids(after, limit)` from a null cursor to an empty page. It includes active, suspended and closing stores; a store remains eligible until permanently purged. Process each store inside `forStore`: link visits into `tracked_link_visit_days`, AI run cost, tokens and counts by purpose into `store_daily_metrics`. Do not use `active_store_ids()` for retention. Upserts make retries safe. Advance the global watermark only after every page and store has finished the day, including stores with no source rows. A failed or unfinished store keeps the watermark unchanged; restart the day's scan from a null cursor on retry. Serialize runs for the same rollup so a stale run cannot overwrite newer progress.
 3. `drop_expired_partitions()`: drop AI run and link visit months older than 13 months. It skips any month past the watermark, so a failed step 2 delays deletion instead of losing data.
 4. Archive: export each `audit_log` month older than 24 months to R2 as gzipped JSON lines, check the row count, then drop it as the owner role. Export messages older than 12 months the same way, grouped by conversation and month, whether or not the chat is still active, then delete them in batches. Archives stay in R2 for the life of the store; the store purge deletes them, and a customer's deletion request removes or anonymises that customer's archived messages (D39, [growth.md](growth.md#r2-archives)).
-5. Purge in batches of 5,000: published outbox events and webhook events after 7 days, notifications and `assistant_messages` after 90 days, usage events after 13 months, `store_daily_metrics` rows after 24 months, campaign recipients and workflow steps 372 days after their campaign or run finishes, expired sessions and files.
+5. Purge in batches of 5,000: published outbox events after 7 days, notifications and `assistant_messages` after 90 days, usage events after 13 months, `store_daily_metrics` rows after 24 months, campaign recipients and workflow steps 372 days after their campaign or run finishes, expired sessions and files.
 6. Account history: as the owner, call `SELECT public.purge_account_security_events(1000)` in separate short transactions until it returns zero. The SQL exists in migration 0016; the daily runner remains DB-7. It deletes rows strictly older than two years and rejects limits outside 1–1,000. Retrying cannot remove newer events; it needs no store scan. No R2 archive is required for account events.
 
 ## Events in M2 and M3
 
 The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids, enum values and the repair day when a job needs it. They contain no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
 
-| Event                     | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
-| ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
-| `contact.deleted`         | `ContactsService.remove` and `removeAll`                         | `contactId`                                                             | ANA-1 buyer activity cleanup                                 |
-| `contact_stats.repaired`  | Nightly contact stats repair, after the store’s last page        | `day`                                                                   | ANA-1 nightly lifecycle snapshot                             |
-| `order.created`           | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
-| `order.edited`            | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
-| `order.stage_changed`     | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |
-| `order.cod_collected`     | ORD-9, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
-| `consent.changed`         | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
-| `contact.tag_added`       | CAMP-11, `ContactsService.changeTag`                             | `contactId`, `tag`                                                      | Tag-added workflow trigger                                   |
-| `contact.birthday`        | CAMP-11 birthday sweep                                           | `contactId`, local `day`                                                | Birthday workflow trigger                                    |
-| `segment.saved`           | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
-| `campaign.approved`       | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
-| `conversation.started`    | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
-| `message.received`        | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
-| `message.send_requested`  | CHAT-2, `MessagingService` queues a channel message              | `messageId`                                                             | CHAT-2 `SendMessageJob` on `outbound`                        |
-| `message.sent`            | CHAT-2, the channel provider accepts a message                   | `messageId`, `conversationId`, `contactId`, `channel`                   | None yet                                                     |
-| `message.delivered`       | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.read`            | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.failed`          | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.tapped`          | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
-| `message.opted_out`       | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
-| `channel.connected`       | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
-| `channel.disconnected`    | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
-| `channel.needs_reconnect` | CHN-4, `ChannelTokenHealthService`                               | `channelConnectionId`                                                   | None yet                                                     |
-| `notification.created`    | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
+| Event                      | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
+| -------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `contact.created`          | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
+| `contact.deleted`          | `ContactsService.remove` and `removeAll`                         | `contactId`                                                             | ANA-1 buyer activity cleanup                                 |
+| `contact_stats.repaired`   | Nightly contact stats repair, after the store’s last page        | `day`                                                                   | ANA-1 nightly lifecycle snapshot                             |
+| `order.created`            | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.edited`             | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
+| `order.stage_changed`      | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.cod_collected`      | ORD-9, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `consent.changed`          | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
+| `contact.tag_added`        | CAMP-11, `ContactsService.changeTag`                             | `contactId`, `tag`                                                      | Tag-added workflow trigger                                   |
+| `contact.birthday`         | CAMP-11 birthday sweep                                           | `contactId`, local `day`                                                | Birthday workflow trigger                                    |
+| `segment.saved`            | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
+| `campaign.approved`        | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
+| `conversation.started`     | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
+| `message.received`         | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 contact stats; AI-4 reply debounce                     |
+| `conversation.handed_over` | AI-4, `AiAgentService` hands over a conversation                 | `conversationId`, `reason`                                              | None yet                                                     |
+| `message.send_requested`   | CHAT-2, `MessagingService` queues a channel message              | `messageId`                                                             | CHAT-2 `SendMessageJob` on `outbound`                        |
+| `message.sent`             | CHAT-2, the channel provider accepts a message                   | `messageId`, `conversationId`, `contactId`, `channel`                   | None yet                                                     |
+| `message.delivered`        | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.read`             | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.failed`           | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.tapped`           | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
+| `message.opted_out`        | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
+| `channel.connected`        | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.disconnected`     | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.needs_reconnect`  | CHN-4, `ChannelTokenHealthService`                               | `channelConnectionId`                                                   | None yet                                                     |
+| `notification.created`     | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
+| `wallet.credited`          | PAY-11, `WalletService.credit`                                   | `wallet`, `entryId`                                                     | CAMP-5 `ResumeWorkflowsOnWalletCredited` (workflow)          |
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 

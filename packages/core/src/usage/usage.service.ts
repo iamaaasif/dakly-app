@@ -26,14 +26,9 @@ export class UsageService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
-  async remaining(storeId: string, unit: UsageUnit): Promise<number> {
-    const { allowance, periodStart } = await this.billing.currentAllowance(storeId, unit);
-    const used = await this.repository.periodTotal(
-      storeId,
-      unit,
-      periodStart.toISOString().slice(0, 10),
-    );
-    return Math.max(0, allowance - used);
+  async hasAllowance(storeId: string, unit: UsageUnit, quantity: number): Promise<boolean> {
+    const { allowance, used } = await this.currentUsage(storeId, unit);
+    return used + quantity <= allowance;
   }
 
   consume(storeId: string, { unit, quantity, reference }: ConsumeUsageInput): Promise<UsageEvent> {
@@ -41,10 +36,7 @@ export class UsageService {
       await this.repository.lockUnit(storeId, unit);
       const earlier = await this.repository.findByReference(storeId, unit, reference);
       if (earlier) return earlier;
-      const { allowance, periodStart } = await this.billing.currentAllowance(storeId, unit);
-      // Billing counts periods in UTC calendar days, so the UTC date names the period.
-      const period = periodStart.toISOString().slice(0, 10);
-      const used = await this.repository.periodTotal(storeId, unit, period);
+      const { allowance, period, used } = await this.currentUsage(storeId, unit);
       if (used + quantity > allowance) throw usageError('USAGE_ALLOWANCE_EXCEEDED');
       const event = await this.repository.insert(storeId, {
         unit,
@@ -60,6 +52,14 @@ export class UsageService {
       }
       return event;
     });
+  }
+
+  private async currentUsage(storeId: string, unit: UsageUnit) {
+    const { allowance, periodStart } = await this.billing.currentAllowance(storeId, unit);
+    // Billing counts periods in UTC calendar days, so the UTC date names the period.
+    const period = periodStart.toISOString().slice(0, 10);
+    const used = await this.repository.periodTotal(storeId, unit, period);
+    return { allowance, period, used };
   }
 
   private notifyThreshold(storeId: string, unit: UsageUnit, period: string, percent: number) {

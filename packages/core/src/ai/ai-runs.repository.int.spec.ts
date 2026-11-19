@@ -42,5 +42,12 @@ describe('AiRunsRepository', () => {
       tenant.forStore(storeId, (transaction) => transaction.select({ id: aiRuns.id }).from(aiRuns));
     expect(await findRuns(fixture.a)).toEqual([{ id }]);
     expect(await findRuns(fixture.b)).toEqual([]);
+
+    const ownerRepository = new AiRunsRepository(new TenantDatabase(fixture.connection.db));
+    expect(await ownerRepository.find(fixture.a, id)).toEqual({
+      purpose: run.purpose,
+      outcome: run.outcome,
+    });
+    expect(await ownerRepository.find(fixture.b, id)).toBeUndefined();
   });
 });

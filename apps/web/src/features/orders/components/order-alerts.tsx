@@ -2,6 +2,7 @@ import { Clock, PackageCheck, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
 import type { OrderAlerts as Alerts } from '@dakly/contracts/orders';
+import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
 
 import { formatMoney } from '@/lib/format-money';
@@ -17,7 +18,8 @@ export function OrderAlerts({ alerts }: OrderAlertsProps) {
       title: `${orderCount(alerts.waiting)} waiting over 12 hours`,
       href: '/orders?alert=waiting',
       detail: 'Unconfirmed orders are the ones most likely to be fake or forgotten.',
-      actionLabel: 'Confirm now ›',
+      actionLabel: 'Confirm now',
+      accessibleAction: 'Confirm now, orders waiting over 12 hours',
     },
     {
       show: alerts.highRisk > 0,
@@ -26,7 +28,8 @@ export function OrderAlerts({ alerts }: OrderAlertsProps) {
       title: `${alerts.highRisk} high-risk ${alerts.highRisk === 1 ? 'order' : 'orders'}`,
       href: '/orders?alert=risk',
       detail: 'These customers returned most past parcels. Ask for a small advance first.',
-      actionLabel: 'Review ›',
+      actionLabel: 'Review',
+      accessibleAction: 'Review high-risk orders',
     },
     {
       show: alerts.codAwaitingOrders > 0,
@@ -35,34 +38,32 @@ export function OrderAlerts({ alerts }: OrderAlertsProps) {
       title: `${formatMoney(BigInt(alerts.codAwaitingPoisha))} COD still with couriers`,
       href: '/orders?alert=cod',
       detail: `${alerts.codAwaitingOrders} delivered ${alerts.codAwaitingOrders === 1 ? 'order hasn’t' : 'orders haven’t'} been paid to you yet.`,
-      actionLabel: 'Check ›',
+      actionLabel: 'Check',
+      accessibleAction: 'Check COD still with couriers',
     },
   ].filter((card) => card.show);
 
   if (!cards.length) return null;
   return (
     <section aria-label="Order alerts" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {cards.map(({ icon: Icon, className, title, detail, actionLabel, href }) => (
-        <Link
-          key={href}
-          href={href}
-          className={cn(
-            'rounded-xl hover:shadow-xs flex min-h-11 flex-col justify-between border p-4 transition-colors',
-            className,
-          )}
-        >
-          <div>
-            <div className="flex items-center gap-2">
-              <Icon className="shrink-0" size={16} strokeWidth={2} aria-hidden="true" />
-              <span className="text-sm font-semibold underline decoration-transparent hover:decoration-current">
-                {title}
-              </span>
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-text">{detail}</p>
-          </div>
-          <span className="mt-3 text-xs font-semibold">{actionLabel}</span>
-        </Link>
-      ))}
+      {cards.map(
+        ({ icon: Icon, className, title, detail, actionLabel, accessibleAction, href }) => (
+          <Card key={href} className={cn('flex flex-col items-start gap-1 p-4', className)}>
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <Icon className="shrink-0" size={16} strokeWidth={1.75} aria-hidden="true" />
+              {title}
+            </h2>
+            <p className="flex-1 text-sm text-text">{detail}</p>
+            <Link
+              href={href}
+              aria-label={accessibleAction}
+              className="inline-flex min-h-10 min-w-10 items-center gap-1 rounded-sm text-sm font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            >
+              {actionLabel} <span aria-hidden="true">›</span>
+            </Link>
+          </Card>
+        ),
+      )}
     </section>
   );
 }

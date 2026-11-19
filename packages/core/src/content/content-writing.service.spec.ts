@@ -1,14 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import type { BrandProfile } from '@dakly/contracts/content';
 import type { ContentWriteInput } from '@dakly/contracts/content-writing';
 import type { ProductResponse } from '@dakly/contracts/products';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { AiRunsService } from '../ai/ai-runs.service';
 import type { AiRequest, AiService } from '../ai/ai.service';
 import type { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
-import { resetEnvForTests } from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { ProductsService } from '../products/products.service';
 import type { TeamService } from '../team/team.service';
@@ -69,11 +69,12 @@ function writing(run: (request: AiRequest<Output>) => Promise<unknown>, prices =
         } as ProductResponse;
       },
     } as unknown as ProductsService,
-    { remaining: async () => 10 } as unknown as UsageService,
+    { hasAllowance: async () => true } as unknown as UsageService,
     {
       canAccess: (access: StoreAccess, area: 'products' | 'social') =>
         ['view', 'edit'].includes(access.areas[area] ?? ''),
     } as unknown as TeamService,
+    {} as AiRunsService,
   );
 }
 
@@ -87,16 +88,6 @@ function modelResponse(request: AiRequest<Output>, options: string[]) {
 }
 
 describe('ContentService writing', () => {
-  beforeEach(() => {
-    vi.stubEnv('DATABASE_URL', 'postgres://localhost/dakly');
-    vi.stubEnv('REDIS_URL', 'redis://localhost:6379');
-    vi.stubEnv('CODE_HASH_KEY', Buffer.alloc(32, 9).toString('base64'));
-    resetEnvForTests();
-  });
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    resetEnvForTests();
-  });
   it.each(['CHEAP', 'সস্তা', 'Ｃｈｅａｐ'])('rejects a draft containing %s', async (avoided) => {
     const service = writing((request) =>
       modelResponse(request, [`${avoided} scarves`, 'New scarves', 'Pick a scarf']),
@@ -116,7 +107,7 @@ describe('ContentService writing', () => {
         language: 'en',
         tone: 'friendly',
       }),
-    ).resolves.toMatchObject({ options: ['New scarves'], aiDraft: { aiRunId } });
+    ).resolves.toEqual({ options: ['New scarves'], aiRunId });
   });
 
   it('uses only the named product’s saved public details', async () => {
@@ -203,39 +194,14 @@ describe('ContentService writing', () => {
     });
   });
 
-  it('returns a valid draft when its charge finishes after the writing deadline', async () => {
-    vi.useFakeTimers();
-    try {
-      let charged!: () => void;
-      const debit = new Promise<void>((resolve) => {
-        charged = resolve;
-      });
-      const options = ['Cotton scarves', 'Wear a scarf', 'Pick a scarf'];
-      const service = writing(async (request) => {
-        const response = await modelResponse(request, options);
-        await debit;
-        return response;
-      });
-      const outcome = service.write(storeId, access, topic).catch((error: unknown) => error);
-      await vi.advanceTimersByTimeAsync(20_000);
-      charged();
-      await expect(outcome).resolves.toMatchObject({ options });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('fails after twenty seconds when the model does not settle', async () => {
-    vi.useFakeTimers();
-    try {
-      const service = writing(() => new Promise(() => undefined));
-      const outcome = expect(service.write(storeId, access, topic)).rejects.toMatchObject({
+  it.each(['LLM_TIMEOUT', 'LLM_ABORTED'])(
+    'returns a retryable writing error on %s',
+    async (code) => {
+      const service = writing(async () => ({ kind: 'failure', code }));
+      await expect(service.write(storeId, access, topic)).rejects.toMatchObject({
         code: 'CONTENT_TIMEOUT',
+        status: 504,
       });
-      await vi.advanceTimersByTimeAsync(20_000);
-      await outcome;
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+    },
+  );
 });

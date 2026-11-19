@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { AiRunsService } from '../ai/ai-runs.service';
 import type { AiService } from '../ai/ai.service';
 import type { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
@@ -25,6 +26,7 @@ function serviceWith(repository: Partial<ContentRepository>) {
     {} as ProductsService,
     {} as UsageService,
     {} as TeamService,
+    {} as AiRunsService,
   );
 }
 

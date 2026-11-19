@@ -25,14 +25,23 @@ import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
+import { WalletService } from '../wallets/wallet.service';
+import { AutomationEntryRepository } from './automation-entry.repository';
+import { AutomationEntryService } from './automation-entry.service';
 import { AutomationRunsModule } from './automation-runs.module';
 import { AutomationRunsRepository } from './automation-runs.repository';
+import { AutomationsModule } from './automations.module';
+import { AutomationsRepository } from './automations.repository';
 import { ContinueAutomationRunJob } from './jobs/continue-automation-run.job';
+import { ResumeWorkflowsOnWalletCredited } from './jobs/resume-workflows-on-wallet-credited.job';
 import { WakeDueRunsJob } from './jobs/wake-due-runs.job';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();
 const contactId = randomUUID();
+const ownerId = randomUUID();
+const staffUserId = randomUUID();
+const ownerEmail = `owner-${ownerId}@example.test`;
 const MINUTE = 60 * 1000;
 const end: AutomationStep = { kind: 'exit' };
 const applications: INestApplicationContext[] = [];
@@ -51,13 +60,14 @@ async function worker() {
     imports: [
       DatabaseModule,
       AutomationRunsModule,
+      AutomationsModule,
       BullModule.forRoot({
         connection: toRedisConnection(loadEnv().REDIS_URL),
         prefix: `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
       }),
       BullModule.registerQueue({ name: QUEUES.workflow }),
     ],
-    providers: [WakeDueRunsJob, ContinueAutomationRunJob],
+    providers: [WakeDueRunsJob, ContinueAutomationRunJob, ResumeWorkflowsOnWalletCredited],
   })(TestModule);
   const application = await NestFactory.createApplicationContext(TestModule, { logger: false });
   applications.push(application);
@@ -65,7 +75,11 @@ async function worker() {
     sweep: () => application.get(WakeDueRunsJob).handle({}),
     runStep: (data: StepJobData) =>
       runWithJobContext(() => application.get(ContinueAutomationRunJob).handle(data)),
+    entries: application.get(AutomationEntryService),
     consents: application.get(ConsentService),
+    resumeOnCredit: (data: unknown) =>
+      application.get(ResumeWorkflowsOnWalletCredited).handle(data),
+    wallets: application.get(WalletService),
     queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
   };
 }
@@ -95,8 +109,8 @@ function graphWith(first: AutomationStep): AutomationGraph {
 async function workflow(status = 'active') {
   const automationId = randomUUID();
   await admin.pool.query(
-    "insert into automations(id,store_id,name,trigger_type,draft_graph,status) values($1,$2,'স্বাগতম','consent_given','{}',$3)",
-    [automationId, storeId, status],
+    "insert into automations(id,store_id,name,trigger_type,draft_graph,status,pause_reason) values($1,$2,'স্বাগতম','consent_given','{}',$3,$4)",
+    [automationId, storeId, status, status === 'paused' ? 'manual' : null],
   );
   return automationId;
 }
@@ -184,6 +198,18 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       [contactId, storeId],
     );
     await admin.pool.query(
+      "insert into staff_users(id,email,name,role) values($1,$2,'Wallet staff','super_admin')",
+      [staffUserId, `${staffUserId}@example.test`],
+    );
+    await admin.pool.query("insert into users(id,name,email) values($1,'রিনা',$2)", [
+      ownerId,
+      ownerEmail,
+    ]);
+    await admin.pool.query(
+      "insert into memberships(id,store_id,user_id,built_in_role,status) values(gen_random_uuid(),$1,$2,'owner','active')",
+      [storeId, ownerId],
+    );
+    await admin.pool.query(
       "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values(gen_random_uuid(),$1,'sms_credits',1,'top_up',1000,1000,$2,'system')",
       [storeId, `seed-${storeId}`],
     );
@@ -193,6 +219,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     try {
       await Promise.all(applications.map((application) => application.close()));
       await admin.pool.query('delete from automation_runs where store_id=$1', [storeId]);
+      await admin.pool.query('delete from notifications where store_id=$1', [storeId]);
+      await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
+      await admin.pool.query('delete from memberships where store_id=$1', [storeId]);
+      await admin.pool.query('delete from users where id=$1', [ownerId]);
       await admin.pool.query('update automations set published_version_id=null where store_id=$1', [
         storeId,
       ]);
@@ -202,6 +232,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await admin.pool.query('delete from tracked_links where store_id=$1', [storeId]);
       await admin.pool.query('delete from contacts where store_id=$1', [storeId]);
       await admin.pool.query('delete from stores where id=$1', [storeId]);
+      await admin.pool.query('delete from staff_users where id=$1', [staffUserId]);
     } finally {
       vi.unstubAllEnvs();
       resetEnvForTests();
@@ -341,7 +372,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       runId,
     );
 
-    await admin.pool.query("update automations set status='active' where id=$1", [automationId]);
+    await admin.pool.query(
+      "update automations set status='active', pause_reason=null where id=$1",
+      [automationId],
+    );
     await runner.sweep();
     expect(await queuedStep(runner.queue, runId!)).toMatchObject({ stepKey: 'first' });
   });
@@ -616,6 +650,54 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       return result.rows[0].balance as number;
     }
 
+    // Sets the store's SMS credits with one adjustment, outside the services.
+    async function setCredits(
+      target: number,
+      createdAt?: Date,
+    ): Promise<{ id: string; created_at: Date; revision: number } | undefined> {
+      const latest = await admin.pool.query(
+        "select revision,balance_quantity_after::int as balance from wallet_ledger where store_id=$1 and wallet='sms_credits' order by revision desc limit 1",
+        [storeId],
+      );
+      const { revision, balance } = latest.rows[0];
+      if (target === balance) return undefined;
+      const entry = await admin.pool.query(
+        "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type,created_at) values(gen_random_uuid(),$1,'sms_credits',$2,'adjustment',$3,$4,$5,'system',coalesce($6::timestamptz,now())) returning id,created_at,revision",
+        [storeId, revision + 1, target - balance, target, `adjust-${randomUUID()}`, createdAt],
+      );
+      return entry.rows[0];
+    }
+
+    // Credits the store as staff do, then hands the outbox row to the resume subscriber.
+    async function creditThrough(
+      runner: Awaited<ReturnType<typeof worker>>,
+      wallet: 'sms_credits' | 'whatsapp_poisha',
+      key: string,
+      deliveries = 1,
+    ) {
+      const credit = await runner.wallets.credit(storeId, {
+        wallet,
+        quantity: 100,
+        idempotencyKey: `top-up-${wallet}-${key}`,
+        staffUserId,
+        staffAuditId: randomUUID(),
+      });
+      const events = await admin.pool.query(
+        "select id,payload,occurred_at from outbox_events where store_id=$1 and type='wallet.credited' and payload->>'entryId'=$2",
+        [storeId, credit.entryId],
+      );
+      expect(events.rows).toHaveLength(1);
+      const [event] = events.rows;
+      for (let delivery = 0; delivery < deliveries; delivery++)
+        await runner.resumeOnCredit({
+          id: event.id,
+          type: 'wallet.credited',
+          storeId,
+          occurredAt: event.occurred_at.toISOString(),
+          payload: event.payload,
+        });
+    }
+
     function sentFor(runId: string) {
       return sms.messages.filter((message) => message.idempotencyKey?.startsWith(`run:${runId}:`));
     }
@@ -628,6 +710,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       vi.spyOn(AutomationRunsRepository.prototype, 'schedulerTime').mockImplementation(
         fixtureSchedulerTime,
       );
+      vi.spyOn(AutomationsRepository.prototype, 'schedulerTime').mockImplementation(
+        fixtureSchedulerTime,
+      );
     });
 
     afterEach(() => {
@@ -638,6 +723,124 @@ describe('Workflow runner (Postgres and Valkey)', () => {
 
     afterAll(() => {
       vi.restoreAllMocks();
+    });
+
+    it('does not deadlock a first send with an entry for the same workflow and contact', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      const entryHasContact = Promise.withResolvers<void>();
+      const allowEntry = Promise.withResolvers<void>();
+      const sendNeedsContact = Promise.withResolvers<void>();
+      const lockVersion = AutomationEntryRepository.prototype.lockPublishedVersion;
+      const entryLock = vi
+        .spyOn(AutomationEntryRepository.prototype, 'lockPublishedVersion')
+        .mockImplementationOnce(async function (shop, workflowId) {
+          entryHasContact.resolve();
+          await allowEntry.promise;
+          return lockVersion.call(this, shop, workflowId);
+        });
+      const eventId = randomUUID();
+      const entry = runner.entries.start(storeId, automationId, {
+        id: eventId,
+        type: 'consent.changed',
+        occurredAt: new Date().toISOString(),
+        payload: {
+          consentId: eventId,
+          contactId: contact,
+          channel: 'sms',
+          status: 'granted',
+          source: 'manual',
+        },
+      });
+      try {
+        await Promise.race([
+          entryHasContact.promise,
+          entry.then(() => {
+            throw new Error('Entry did not acquire the contact lock');
+          }),
+        ]);
+        const lockContact = ContactsService.prototype.lockForConsent;
+        const sendLock = vi
+          .spyOn(ContactsService.prototype, 'lockForConsent')
+          .mockImplementationOnce(function (shop, contacts) {
+            sendNeedsContact.resolve();
+            return lockContact.call(this, shop, contacts);
+          });
+        const dispatched = runDueStep(runner, runId!);
+        try {
+          await Promise.race([
+            sendNeedsContact.promise,
+            dispatched.then(() => {
+              throw new Error('Send did not acquire the contact lock');
+            }),
+          ]);
+          allowEntry.resolve();
+          await Promise.all([entry, dispatched]);
+        } finally {
+          allowEntry.resolve();
+          await Promise.allSettled([entry, dispatched]);
+          sendLock.mockRestore();
+        }
+      } finally {
+        allowEntry.resolve();
+        await Promise.allSettled([entry]);
+        entryLock.mockRestore();
+      }
+
+      const runs = await admin.pool.query('select id from automation_runs where automation_id=$1', [
+        automationId,
+      ]);
+      expect(runs.rows).toEqual([{ id: runId }]);
+      expect(sentFor(runId!)).toHaveLength(1);
+    });
+
+    it('reads committed resume time under the workflow lock before ending an old send', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const wakeAt = new Date(daytime.getTime() - 25 * HOUR);
+      const resumedAt = new Date(wakeAt.getTime() + 23 * HOUR);
+      await admin.pool.query('update automation_runs set wake_at=$1 where id=$2', [wakeAt, runId]);
+      await runner.sweep();
+      const jobs = await runner.queue.getJobs(['waiting']);
+      const first = jobs.find((job) => job.data.automationRunId === runId)!;
+      const blocker = await admin.pool.connect();
+      let dispatched: Promise<unknown> | undefined;
+      try {
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        // A pre-cutoff resume is visible only after the writer commits the workflow change.
+        await blocker.query(
+          'update automations set balance_resumed_at=$1, has_balance_resume_send_allowance=true where id=$2',
+          [resumedAt, automationId],
+        );
+        dispatched = runner.runStep(first.data as StepJobData).catch((error: unknown) => error);
+        await waitForBlocker(pid);
+        await blocker.query('commit');
+        expect(await dispatched).toBeUndefined();
+      } finally {
+        await blocker.query('rollback');
+        blocker.release(true);
+        await dispatched;
+      }
+      await first.remove();
+
+      expect(await run(runId!)).toMatchObject({ status: 'waiting', wake_at: wakeAt });
+      expect(await ledgerFor(runId!)).toEqual([]);
+      expect(sentFor(runId!)).toEqual([]);
+
+      await runDueStep(runner, runId!);
+      expect(sentFor(runId!)).toHaveLength(1);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
     });
 
     it('sends through the gate with the opt-out link and the step key, and a retry sends once', async () => {
@@ -807,7 +1010,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       );
 
       clockNow = new Date(daytime.getTime() + 25 * HOUR);
-      await admin.pool.query("update automations set status='active' where id=$1", [automationId]);
+      await admin.pool.query(
+        "update automations set status='active', pause_reason=null where id=$1",
+        [automationId],
+      );
       await runDueStep(runner, runId!);
 
       expect(sentFor(runId!)).toEqual([]);
@@ -1112,9 +1318,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           .mockImplementationOnce(async function (shop, person) {
             const value = await read.call(this, shop, person);
             if (change === 'the workflow pauses')
-              await admin.pool.query("update automations set status='paused' where id=$1", [
-                automationId,
-              ]);
+              await admin.pool.query(
+                "update automations set status='paused', pause_reason='manual' where id=$1",
+                [automationId],
+              );
             else clockNow = new Date(opensAt.getTime() + 12 * HOUR);
             return value;
           });
@@ -1211,9 +1418,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           .spyOn(ContactsService.prototype, 'getPhoneForSend')
           .mockImplementationOnce(async () => {
             if (pause)
-              await admin.pool.query("update automations set status='paused' where id=$1", [
-                automationId,
-              ]);
+              await admin.pool.query(
+                "update automations set status='paused', pause_reason='manual' where id=$1",
+                [automationId],
+              );
             throw new Error('database unavailable');
           });
         try {
@@ -1228,9 +1436,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         expect(await ledgerFor(runId!)).toEqual([]);
         expect(await run(runId!)).toMatchObject({ status: 'running', current_step_key: 'first' });
         if (pause)
-          await admin.pool.query("update automations set status='active' where id=$1", [
-            automationId,
-          ]);
+          await admin.pool.query(
+            "update automations set status='active', pause_reason=null where id=$1",
+            [automationId],
+          );
         await admin.pool.query(
           "update automation_runs set claimed_at=now() - interval '6 minutes' where id=$1",
           [runId],
@@ -1278,9 +1487,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           .spyOn(ContactsService.prototype, 'findTags')
           .mockImplementationOnce(async function (shop, person) {
             const value = await read.call(this, shop, person);
-            await admin.pool.query("update automations set status='paused' where id=$1", [
-              automationId,
-            ]);
+            await admin.pool.query(
+              "update automations set status='paused', pause_reason='manual' where id=$1",
+              [automationId],
+            );
             return condition === 'goal reached' ? [...value, 'paid'] : value;
           });
         try {
@@ -1293,9 +1503,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         expect(sentFor(runId!)).toEqual([]);
         expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
 
-        await admin.pool.query("update automations set status='active' where id=$1", [
-          automationId,
-        ]);
+        await admin.pool.query(
+          "update automations set status='active', pause_reason=null where id=$1",
+          [automationId],
+        );
         await runDueStep(runner, runId!);
         if (condition === 'goal reached') {
           expect(sentFor(runId!)).toHaveLength(1);
@@ -1784,10 +1995,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
                 [automationId],
               );
             else
-              await admin.pool.query('update automations set status=$1 where id=$2', [
-                change,
-                automationId,
-              ]);
+              await admin.pool.query(
+                "update automations set status=$1, pause_reason=case when $1='paused' then 'manual' end where id=$2",
+                [change, automationId],
+              );
             return tags;
           });
         try {
@@ -1962,10 +2173,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
               [ids],
             );
           else
-            await admin.pool.query('update automations set status=$1 where id=any($2::uuid[])', [
-              change,
-              ids,
-            ]);
+            await admin.pool.query(
+              "update automations set status=$1, pause_reason=case when $1='paused' then 'manual' end where id=any($2::uuid[])",
+              [change, ids],
+            );
           await blocker.query('commit');
           isHoldingLock = false;
           await pending;
@@ -2369,6 +2580,57 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       ]);
     });
 
+    it.each(['balance pause', 'quiet hours'] as const)(
+      'holds a retry when %s starts during a workflow lock wait',
+      async (reason) => {
+        const before = await balance();
+        await setCredits(Math.max(before, 1));
+        const runner = await worker();
+        const contact = await customer(true, runner);
+        clockNow = new Date(opensAt.getTime() + 11 * HOUR);
+        const {
+          automationId,
+          runIds: [runId],
+        } = await dueRuns(send('marketing'), 1, 'active', contact);
+        vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(
+          new Error('socket hang up'),
+        );
+        await runDueStep(runner, runId!);
+        await wakeNow(runId!);
+
+        const blocker = await admin.pool.connect();
+        let retry: Promise<void> | undefined;
+        try {
+          const {
+            rows: [{ pid }],
+          } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+          await blocker.query('begin');
+          await blocker.query(
+            reason === 'balance pause'
+              ? "update automations set status='paused', pause_reason='balance', balance_pause_revision=0 where id=$1"
+              : "update automations set name='Updated workflow' where id=$1",
+            [automationId],
+          );
+          retry = runDueStep(runner, runId!);
+          void retry.catch(() => undefined);
+          await waitForBlocker(pid);
+          if (reason === 'quiet hours') clockNow = new Date(clockNow.getTime() + HOUR);
+          await blocker.query('commit');
+          await retry;
+
+          expect(sentFor(runId!)).toEqual([]);
+          expect(await run(runId!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
+          expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sending' })]);
+          expect(await ledgerFor(runId!)).toEqual([{ kind: 'reserve', delta: -1 }]);
+        } finally {
+          await blocker.query('rollback');
+          blocker.release();
+          await retry?.catch(() => undefined);
+          await setCredits(before);
+        }
+      },
+    );
+
     it('does not submit a retry after waiting on its step row across the deadline', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
@@ -2449,7 +2711,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     });
 
     // Last: it drains the store's credits.
-    it('charges the credits a sent SMS reserved, and skips a send the balance cannot cover', async () => {
+    it('charges the credits a sent SMS reserved, and holds a send the balance cannot cover', async () => {
       const runner = await worker();
       const contact = await customer(true, runner);
       const {
@@ -2466,25 +2728,303 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         { kind: 'charge', delta: -1 },
       ]);
 
-      const latest = await admin.pool.query(
-        "select revision,balance_quantity_after::int as balance from wallet_ledger where store_id=$1 and wallet='sms_credits' order by revision desc limit 1",
-        [storeId],
-      );
-      const { revision, balance } = latest.rows[0];
-      await admin.pool.query(
-        "insert into wallet_ledger(id,store_id,wallet,revision,kind,quantity_delta,balance_quantity_after,idempotency_key,actor_type) values(gen_random_uuid(),$1,'sms_credits',$2,'adjustment',$3,0,$4,'system')",
-        [storeId, revision + 1, -balance, `drain-${storeId}`],
-      );
+      await setCredits(0);
       const {
         runIds: [unpaid],
       } = await dueRuns(send('transactional'), 1, 'active', contact);
       await runDueStep(runner, unpaid!);
 
       expect(sentFor(unpaid!)).toEqual([]);
-      expect(await sendStep(unpaid!)).toEqual([
+      expect(await sendStep(unpaid!)).toEqual([]);
+      expect(await run(unpaid!)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
+    });
+
+    it('pauses the workflow once on a short balance, tells the owner and resumes after a top-up', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [recent, old],
+      } = await dueRuns(send('transactional'), 2, 'active', contact);
+      // Both runs reach the gate at the same moment.
+      await runner.sweep();
+      await Promise.all([
+        runner.runStep(await queuedStep(runner.queue, recent!)),
+        runner.runStep(await queuedStep(runner.queue, old!)),
+      ]);
+      for (const job of await runner.queue.getJobs(['waiting'])) await job.remove();
+
+      for (const runId of [recent!, old!])
+        expect(await run(runId)).toMatchObject({
+          status: 'waiting',
+          current_step_key: 'first',
+          attempts: 0,
+        });
+      const paused = await admin.pool.query(
+        'select status,pause_reason from automations where id=$1',
+        [automationId],
+      );
+      expect(paused.rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
+      const cards = await admin.pool.query(
+        "select user_id,action_url from notifications where store_id=$1 and type='automation.paused_for_balance' and dedupe_key like $2",
+        [storeId, `automation-balance:${automationId}:%`],
+      );
+      expect(cards.rows).toEqual([{ user_id: ownerId, action_url: '/settings' }]);
+      // A paused workflow's runs are not swept.
+      await runner.sweep();
+      expect((await run(old!)).status).toBe('waiting');
+
+      // A WhatsApp top-up resumes nothing; an SMS top-up resumes it, and a repeated event changes
+      // nothing more.
+      await creditThrough(runner, 'whatsapp_poisha', automationId);
+      const stillPaused = await admin.pool.query('select status from automations where id=$1', [
+        automationId,
+      ]);
+      expect(stillPaused.rows).toEqual([{ status: 'paused' }]);
+      await creditThrough(runner, 'sms_credits', automationId, 2);
+      const resumed = await admin.pool.query(
+        'select status,pause_reason from automations where id=$1',
+        [automationId],
+      );
+      expect(resumed.rows).toEqual([{ status: 'active', pause_reason: null }]);
+
+      // One message waited past a day, the other did not.
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+        old,
+        new Date(daytime.getTime() - 25 * HOUR),
+      ]);
+      await wakeNow(recent!);
+      await runDueStep(runner, recent!);
+      await runDueStep(runner, old!);
+
+      expect(sentFor(recent!)).toHaveLength(1);
+      expect(sentFor(old!)).toEqual([]);
+      expect(await sendStep(old!)).toEqual([
         expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_credits' }),
       ]);
-      expect((await run(unpaid!)).current_step_key).toBe('end');
+      expect((await run(old!)).current_step_key).toBe('end');
+    });
+
+    it('resumes after a top-up when the host that credits runs an hour behind the worker', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      clockNow = new Date(daytime.getTime() + HOUR);
+      await runDueStep(runner, runId!);
+      const status = () =>
+        admin.pool.query(
+          'select status,pause_reason,balance_resumed_at from automations where id=$1',
+          [automationId],
+        );
+      expect((await status()).rows).toEqual([
+        { status: 'paused', pause_reason: 'balance', balance_resumed_at: null },
+      ]);
+
+      clockNow = new Date(daytime.getTime() - HOUR);
+      databaseNow = new Date(daytime.getTime() + 2 * HOUR);
+      await creditThrough(runner, 'sms_credits', `behind-${automationId}`);
+
+      expect((await status()).rows).toEqual([
+        { status: 'active', pause_reason: null, balance_resumed_at: databaseNow },
+      ]);
+    });
+
+    it('measures a balance resume after waiting for the workflow lock', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      await runDueStep(runner, runId!);
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+        runId,
+        new Date(daytime.getTime() - 24 * HOUR + MINUTE),
+      ]);
+
+      const blocker = await admin.pool.connect();
+      const {
+        rows: [{ pid }],
+      } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await blocker.query('begin');
+      await blocker.query('select id from automations where id=$1 for update', [automationId]);
+      const pending = creditThrough(runner, 'sms_credits', automationId);
+      try {
+        await waitForBlocker(pid);
+        databaseNow = new Date(daytime.getTime() + 2 * MINUTE);
+        await blocker.query('commit');
+        await pending;
+        await runDueStep(runner, runId!);
+        expect(sentFor(runId!)).toEqual([]);
+        expect(await sendStep(runId!)).toEqual([
+          expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_credits' }),
+        ]);
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await pending;
+      }
+    });
+
+    it('sends a step that was still eligible when the balance resumed before the sweep', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      await runDueStep(runner, runId!);
+      await admin.pool.query('update automation_runs set wake_at=$2 where id=$1', [
+        runId,
+        new Date(daytime.getTime() - 24 * HOUR + MINUTE),
+      ]);
+      await creditThrough(runner, 'sms_credits', automationId);
+
+      databaseNow = new Date(daytime.getTime() + 2 * MINUTE);
+      await runDueStep(runner, runId!);
+
+      expect(sentFor(runId!)).toHaveLength(1);
+      expect(await sendStep(runId!)).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+    });
+
+    it('checks quiet hours after the workflow version lock on the first send', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      clockNow = new Date(opensAt.getTime() + 11 * HOUR);
+      const {
+        runIds: [runId],
+      } = await dueRuns(send('marketing'), 1, 'active', contact);
+      const id = runId!;
+      const blocker = await admin.pool.connect();
+      let pending: Promise<void> | undefined;
+      try {
+        const {
+          rows: [{ pid }],
+        } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+        await blocker.query('begin');
+        await blocker.query(
+          'select id from automation_versions where id=(select version_id from automation_runs where id=$1) for update',
+          [id],
+        );
+        pending = runDueStep(runner, id);
+        void pending.catch(() => undefined);
+        await waitForBlocker(pid);
+        clockNow = new Date(clockNow.getTime() + HOUR);
+        await blocker.query('rollback');
+        await pending;
+
+        expect(sentFor(id)).toEqual([]);
+        expect(await sendStep(id)).toEqual([]);
+        expect(await ledgerFor(id)).toEqual([]);
+        expect(await run(id)).toMatchObject({ status: 'waiting', current_step_key: 'first' });
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await pending;
+      }
+    });
+
+    it('keeps the workflow active when the old version stops at a short balance gate', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(send('transactional'), 1, 'active', contact);
+      const id = runId!;
+      const {
+        rows: [newVersion],
+      } = await admin.pool.query(
+        `insert into automation_versions(id,store_id,automation_id,version,graph,published_at)
+         select gen_random_uuid(), v.store_id, v.automation_id, v.version+1, v.graph, now()
+         from automation_versions v join automation_runs r on r.version_id=v.id where r.id=$1
+         returning id`,
+        [id],
+      );
+      await admin.pool.query('update automations set published_version_id=$2 where id=$1', [
+        automationId,
+        newVersion.id,
+      ]);
+
+      const blocker = await admin.pool.connect();
+      const {
+        rows: [{ pid }],
+      } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await blocker.query('begin');
+      await blocker.query(
+        'update automation_versions set is_stopped=true where id=(select version_id from automation_runs where id=$1)',
+        [id],
+      );
+      const pending = runDueStep(runner, id);
+      try {
+        await waitForBlocker(pid);
+        await blocker.query('commit');
+        await pending;
+        expect(sentFor(id)).toEqual([]);
+        expect(await sendStep(id)).toEqual([]);
+        expect(await run(id)).toMatchObject({ status: 'exited', exit_reason: 'version_stopped' });
+        const state = await admin.pool.query(
+          'select status,pause_reason from automations where id=$1',
+          [automationId],
+        );
+        expect(state.rows).toEqual([{ status: 'active', pause_reason: null }]);
+      } finally {
+        await blocker.query('rollback');
+        blocker.release();
+        await pending;
+      }
+    });
+
+    it('keeps a pause whose gate already saw a credit that committed while it waited for the lock', async () => {
+      await setCredits(0);
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const twoParts = {
+        ...send('transactional'),
+        message: { text: 'ক'.repeat(100), buttons: [] },
+      };
+      const {
+        automationId,
+        runIds: [runId],
+      } = await dueRuns(twoParts, 1, 'active', contact);
+      // One credit, too few for two parts, commits after the gate's transaction began.
+      let credit: Awaited<ReturnType<typeof setCredits>>;
+      const lockWallet = WalletService.prototype.lockForReservation;
+      vi.spyOn(WalletService.prototype, 'lockForReservation').mockImplementationOnce(
+        async function (this: WalletService, ...args) {
+          credit = await setCredits(1, clockNow);
+          return lockWallet.apply(this, args);
+        },
+      );
+      await runDueStep(runner, runId!);
+      const status = () =>
+        admin.pool.query('select status,pause_reason from automations where id=$1', [automationId]);
+      expect((await status()).rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
+      const pause = await admin.pool.query(
+        'select balance_pause_revision,updated_at from automations where id=$1',
+        [automationId],
+      );
+      expect(pause.rows).toEqual([
+        { balance_pause_revision: credit!.revision, updated_at: credit!.created_at },
+      ]);
+
+      await runner.resumeOnCredit({
+        id: randomUUID(),
+        type: 'wallet.credited',
+        storeId,
+        occurredAt: credit!.created_at.toISOString(),
+        payload: { wallet: 'sms_credits', entryId: credit!.id },
+      });
+
+      expect((await status()).rows).toEqual([{ status: 'paused', pause_reason: 'balance' }]);
     });
   });
 });

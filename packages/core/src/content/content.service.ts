@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
@@ -19,11 +19,10 @@ import {
 import type { ProductResponse } from '@dakly/contracts/products';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
 import { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
-import { hashCode } from '../platform/crypto/code-hash';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
 import { ProductsService } from '../products/products.service';
@@ -46,6 +45,7 @@ export class ContentService {
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(UsageService) private readonly usage: UsageService,
     @Inject(TeamService) private readonly team: TeamService,
+    @Inject(AiRunsService) private readonly aiRuns: AiRunsService,
   ) {}
 
   async brandProfile(storeId: string): Promise<BrandProfile> {
@@ -98,22 +98,19 @@ export class ContentService {
   createPiece(
     storeId: string,
     actor: Actor,
-    { sourcePieceId, aiDraft, ...input }: CreateContentPieceInput,
+    { sourcePieceId, aiRunId, ...input }: CreateContentPieceInput,
   ) {
-    if (aiDraft) {
-      const expected = draftProof(storeId, aiDraft.aiRunId);
-      if (!timingSafeEqual(Buffer.from(aiDraft.proof), Buffer.from(expected)))
-        throw contentWriteError('CONTENT_DRAFT_INVALID');
-    }
     return this.transaction.run(storeId, async () => {
+      if (aiRunId && !(await this.aiRuns.hasCompletedContentRun(storeId, aiRunId)))
+        throw contentWriteError('CONTENT_DRAFT_INVALID');
       const source = sourcePieceId ? await this.getPiece(storeId, sourcePieceId) : undefined;
-      const aiRunId = aiDraft?.aiRunId ?? source?.aiRunId ?? null;
+      const provenance = aiRunId ?? source?.aiRunId ?? null;
       const piece = await this.repository.createPiece(
         storeId,
         {
           ...input,
-          isAiWritten: Boolean(aiRunId) || (source?.isAiWritten ?? false),
-          aiRunId,
+          isAiWritten: Boolean(provenance) || (source?.isAiWritten ?? false),
+          aiRunId: provenance,
         },
         actor.userId,
         this.clock.now(),
@@ -146,42 +143,6 @@ export class ContentService {
   ): Promise<ContentWriteResult> {
     if (input.productId && !this.team.canAccess(access, 'products', 'view'))
       throw new AppError('PERMISSION_DENIED', PLATFORM_ERRORS.PERMISSION_DENIED);
-    if (!loadEnv().CODE_HASH_KEY) throw contentWriteError('CONTENT_UNAVAILABLE');
-    const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        abort.abort();
-        reject(contentWriteError('CONTENT_TIMEOUT'));
-      }, 20_000);
-    });
-    try {
-      return await Promise.race([
-        this.writeOptions(storeId, input, {
-          access,
-          signal: abort.signal,
-          acceptOutput: () => clearTimeout(timer),
-        }),
-        deadline,
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  private async writeOptions(
-    storeId: string,
-    input: ContentWriteInput,
-    {
-      access,
-      signal,
-      acceptOutput,
-    }: {
-      access: StoreAccess;
-      signal: AbortSignal;
-      acceptOutput: () => void;
-    },
-  ) {
     const { productId, ...request } = input;
     const [brand, savedProduct] = await Promise.all([
       this.brandProfile(storeId),
@@ -192,22 +153,19 @@ export class ContentService {
       : {};
     const visibleBrand = this.team.canAccess(access, 'social', 'view') ? brand : undefined;
     const quantity = input.operation === 'generate' ? 3 : 1;
-    if ((await this.usage.remaining(storeId, 'ai_content')) < quantity)
+    if (!(await this.usage.hasAllowance(storeId, 'ai_content', quantity)))
       throw contentWriteError('CONTENT_CREDITS_UNAVAILABLE');
     const avoided = brand.wordsToAvoid.map(normalize).filter(Boolean);
     const limit = formatLimits[input.kind];
-    const output = contentWriteOutputSchema.refine(({ options }) => {
-      const valid = validOptions(options, {
+    const output = contentWriteOutputSchema.refine(({ options }) =>
+      validOptions(options, {
         quantity,
         avoided,
         supportedNumbers,
         pricePoisha: product?.pricePoisha,
         limit,
-      });
-      // A valid draft can now be charged. Wait for that charge so the caller gets the draft.
-      if (valid) acceptOutput();
-      return valid;
-    });
+      }),
+    );
     const result = await this.ai.run(storeId, {
       purpose: 'content',
       usageReference: randomUUID(),
@@ -216,12 +174,8 @@ export class ContentService {
       prompt: contentWritingV1,
       input: JSON.stringify({ request, brand: visibleBrand, product, characterLimit: limit }),
       output,
-      signal,
     });
-    if (result.kind === 'output') {
-      const { aiRunId } = result;
-      return { ...result.output, aiDraft: { aiRunId, proof: draftProof(storeId, aiRunId) } };
-    }
+    if (result.kind === 'output') return { ...result.output, aiRunId: result.aiRunId };
     throw writingFailure(result.kind === 'tool_calls' ? 'AI_OUTPUT_MISMATCH' : result.code);
   }
 
@@ -327,11 +281,6 @@ function validOptions(
     const supportedNumbers = rules.supportedNumbers;
     return !supportedNumbers || validProductNumbers(text, supportedNumbers, rules.pricePoisha);
   });
-}
-
-// Bind a draft to its shop without storing model output before a person chooses to save it.
-function draftProof(storeId: string, aiRunId: string): string {
-  return hashCode(loadEnv().CODE_HASH_KEY, JSON.stringify(['content-draft', storeId, aiRunId]));
 }
 
 function writingFailure(code: string) {

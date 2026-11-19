@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { contentAiDraftSchema } from './content-writing';
 import { searchText } from './search-text';
 import { contentKinds, contentLanguages } from './social';
 
@@ -21,20 +20,17 @@ const pieceSchema = z.strictObject({
   language: z.enum(contentLanguages),
   body: z
     .string()
-    .min(1)
     .max(20_000)
-    .refine(
-      (body) => body.trim().length > 0 && !body.includes('\u0000'),
-      'Enter text without a null character',
-    ),
+    .refine((body) => body.trim().length > 0, 'Enter some text')
+    .refine((body) => !body.includes('\u0000'), 'Remove the null character'),
 });
 
 export const createContentPieceSchema = pieceSchema
   .extend({
     sourcePieceId: z.uuid().optional(),
-    aiDraft: contentAiDraftSchema.optional(),
+    aiRunId: z.uuid().optional(),
   })
-  .refine((input) => !input.sourcePieceId || !input.aiDraft, 'Choose one source');
+  .refine((input) => !input.sourcePieceId || !input.aiRunId, 'Choose one source');
 export const updateContentPieceSchema = pieceSchema
   .partial()
   .refine((input) => Object.keys(input).length > 0, 'Change at least one field');

@@ -16,7 +16,6 @@ import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
 import { NewOrderDialog } from './order-editor-dialog';
 import { OrderFilters } from './order-filters';
-import { OrderSearch } from './order-search';
 import { OrdersList } from './orders-list';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
@@ -39,7 +38,6 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
         />
         {orders.data ? <OrderAlerts alerts={orders.data.alerts} /> : null}
         <OrderStageNav query={query} counts={orders.data?.counts} />
-        <OrderSearch query={query} />
         <OrderFilters query={query} />
         {orders.isPending ? <p role="status">Loading orders…</p> : null}
         {orders.error ? (

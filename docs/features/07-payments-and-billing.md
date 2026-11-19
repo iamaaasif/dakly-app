@@ -392,13 +392,13 @@ Wallet writers take a transaction-scoped advisory lock for `(store_id, wallet)`,
 
 `WalletService` in `wallets/` serves the two messaging wallets, `sms_credits` (a count) and `whatsapp_poisha` (poisha). AI top-ups (`ai_conversations`) stay with the usage allowance (P2), and wallets never call `UsageService`. Every write takes an idempotency key, unique per store: the same key again returns the first entry and writes nothing.
 
-| Method                                         | Rows written                                                                                        |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `balance(storeId, wallet)`                     | None; the `balance_quantity_after` of the highest revision, 0 for an empty wallet                   |
-| `reserve(storeId, { wallet, quantity, ... })`  | `reserve` of minus the quantity. Its row id is the reservation id                                   |
-| `release(storeId, { reservationId, ... })`     | `release` of plus the reserved quantity                                                             |
-| `charge(storeId, { reservationId, quantity })` | `release` of the whole reservation, then `charge` of minus the charged quantity, in one transaction |
-| `credit(storeId, { wallet, quantity, ... })`   | `adjustment` of plus the quantity, by staff, referencing the staff audit row                        |
+| Method                                         | Rows written                                                                                                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `balance(storeId, wallet)`                     | None; the `balance_quantity_after` of the highest revision, 0 for an empty wallet                                                                   |
+| `reserve(storeId, { wallet, quantity, ... })`  | `reserve` of minus the quantity. Its row id is the reservation id                                                                                   |
+| `release(storeId, { reservationId, ... })`     | `release` of plus the reserved quantity                                                                                                             |
+| `charge(storeId, { reservationId, quantity })` | `release` of the whole reservation, then `charge` of minus the charged quantity, in one transaction                                                 |
+| `credit(storeId, { wallet, quantity, ... })`   | `adjustment` of plus the quantity, by staff, referencing the staff audit row; a new entry publishes `wallet.credited`, at the entry's database time |
 
 Release and charge rows reference the reservation (`reference_type` `wallet_reservation`, `reference_id` the reserve row id). Every settled reservation has exactly one `release` row; under the wallet lock a second release or charge of the same reservation fails with `WALLET_RESERVATION_SETTLED`. A charge may be smaller than the reservation, never larger (`WALLET_CHARGE_OVER_RESERVATION`). Reserve, charge and credit quantities are whole numbers above 0 (`WALLET_QUANTITY_INVALID`); a charge of nothing is a release. Writing the charge as its own row keeps every delta non-zero, keeps the balance equal to the sum of deltas, and records the full charge of a reservation. A write that would take the balance below zero fails with `WALLET_BALANCE_TOO_LOW`; the service checks this before writing, and the `wallet_ledger_balance` check constraint maps to the same error.
 

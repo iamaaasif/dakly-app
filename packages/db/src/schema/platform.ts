@@ -113,6 +113,12 @@ export const webhookEvents = pgTable(
   (table) => [
     uniqueIndex('webhook_events_provider_external_id_key').on(table.provider, table.externalId),
     index('webhook_events_received_at_idx').on(table.receivedAt),
+    index('webhook_events_recovery_idx').on(
+      table.provider,
+      table.status,
+      table.receivedAt,
+      table.id,
+    ),
     check('webhook_events_provider', isOneOf(table.provider, webhookProviders)),
     check('webhook_events_status', isOneOf(table.status, webhookEventStatuses)),
   ],
