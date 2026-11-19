@@ -28,7 +28,7 @@ import type {
   RunStepChange,
 } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
-import { AutomationSmsDeliveryService } from './automation-sms-delivery';
+import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 
 const STORE_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a01';
 const RUN_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a02';

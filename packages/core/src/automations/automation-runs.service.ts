@@ -21,7 +21,7 @@ import {
   type DueRun,
   type RunClaim,
 } from './automation-runs.repository';
-import { AutomationSmsDeliveryService, SMS_NO_ANSWER } from './automation-sms-delivery';
+import { AutomationSmsDeliveryService, SMS_NO_ANSWER } from './automation-sms-delivery.service';
 import {
   type Delivery,
   endWithUnknownOutcome,
