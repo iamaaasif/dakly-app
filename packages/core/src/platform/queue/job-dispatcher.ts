@@ -54,6 +54,8 @@ abstract class JobDispatcher extends WorkerHost implements OnModuleInit, OnAppli
   }
 
   async process(job: Job) {
+    const { id: jobId } = job;
+    if (!jobId) throw new UnrecoverableError('Cannot dispatch a job without an ID');
     const handler = this.handlers.get(job.name);
     if (!handler)
       throw new UnrecoverableError(`No handler for job ${job.name} on queue ${this.queue}`);
@@ -64,13 +66,13 @@ abstract class JobDispatcher extends WorkerHost implements OnModuleInit, OnAppli
         await handler.handle(job.data, job.attemptsMade + 1 >= (job.opts.attempts ?? 1));
         await job.updateProgress(100);
       } catch (error) {
-        this.reporter.reportJob(serializeError(error), job.id!);
-        this.logger.error({ event: 'security', jobId: job.id }, failure);
+        this.reporter.reportJob(serializeError(error), jobId);
+        this.logger.error({ event: 'security', jobId }, failure);
         failed = true;
       }
       // BullMQ persists failures; only the sanitized reporter receives the original error.
       if (failed) throw new Error(failure);
-    }, job.id);
+    }, jobId);
   }
 }
 
