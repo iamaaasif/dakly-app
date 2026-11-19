@@ -45,6 +45,23 @@ describe('campaign filters without RLS assistance', () => {
     expect(await repository.find(f.a, a.id)).toMatchObject({ name: 'ঈদের অফার' });
   });
 
+  it('returns no campaigns when the cursor belongs to another store', async () => {
+    const suffix = randomUUID().slice(8);
+    const local = `10000000${suffix}`;
+    const foreign = `20000000${suffix}`;
+    await f.connection.pool.query(
+      `insert into campaigns(id, store_id, name, channel, content, created_at)
+       values ($1, $2, 'নববর্ষের অফার', 'sms', '{}', '2026-04-14T00:00:00Z'),
+              ($3, $4, 'নববর্ষের অফার', 'sms', '{}', '2026-04-15T00:00:00Z')`,
+      [local, f.a, foreign, f.b],
+    );
+
+    const query = { ...page, search: 'নববর্ষের অফার' };
+    expect((await repository.list(f.a, query)).map(({ id }) => id)).toEqual([local]);
+    expect((await repository.list(f.b, query)).map(({ id }) => id)).toEqual([foreign]);
+    expect(await repository.list(f.a, { ...query, cursor: foreign })).toEqual([]);
+  });
+
   it('locks, freezes recipients for and approves only the selected store’s drafts', async () => {
     const a = await repository.insert(f.a, { ...draft, createdByUserId: f.userA });
     const b = await repository.insert(f.b, { ...draft, createdByUserId: f.userB });

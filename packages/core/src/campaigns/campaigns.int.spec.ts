@@ -66,6 +66,31 @@ describe('CampaignsService drafts (Postgres)', () => {
     expect(next.items.map((item) => item.id)).toEqual([first.id]);
   });
 
+  it('pages by creation time down to the microsecond and breaks ties by descending id', async () => {
+    const suffix = randomUUID().slice(8);
+    const newest = `10000000${suffix}`;
+    const lowerTie = `20000000${suffix}`;
+    const higherTie = `30000000${suffix}`;
+    await admin.pool.query(
+      `insert into campaigns(id, store_id, name, channel, content, created_at)
+       values ($1, $4, 'নববর্ষের অফার', 'sms', '{}', '2026-04-14T00:00:00.000002Z'),
+              ($2, $4, 'নববর্ষের অফার', 'sms', '{}', '2026-04-14T00:00:00.000001Z'),
+              ($3, $4, 'নববর্ষের অফার', 'sms', '{}', '2026-04-14T00:00:00.000001Z')`,
+      [newest, lowerTie, higherTie, storeId],
+    );
+
+    const query = { limit: 1, search: 'নববর্ষের অফার' };
+    const first = await service.list(storeId, query);
+    expect(first.items.map(({ id }) => id)).toEqual([newest]);
+    expect(first.nextCursor).toBe(newest);
+    const second = await service.list(storeId, { ...query, cursor: newest });
+    expect(second.items.map(({ id }) => id)).toEqual([higherTie]);
+    expect(second.nextCursor).toBe(higherTie);
+    const third = await service.list(storeId, { ...query, cursor: higherTie });
+    expect(third.items.map(({ id }) => id)).toEqual([lowerTie]);
+    expect(third.nextCursor).toBeNull();
+  });
+
   it('filters names literally, includes the start date and excludes the end date', async () => {
     const matching = await draft('VIP 20%');
     const earlier = await draft('VIP 20% earlier');

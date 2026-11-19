@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, ilike, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, lt, sql } from 'drizzle-orm';
 
 import type {
   CampaignChannel,
@@ -91,7 +91,10 @@ export class CampaignsRepository {
         .where(
           and(
             eq(campaigns.storeId, storeId),
-            query.cursor ? lt(campaigns.id, query.cursor) : undefined,
+            query.cursor
+              ? sql`(${campaigns.createdAt}, ${campaigns.id}) <
+              (select created_at, id from campaigns where store_id = ${storeId} and id = ${query.cursor})`
+              : undefined,
             query.search ? ilike(campaigns.name, `%${escapeLike(query.search)}%`) : undefined,
             query.status ? eq(campaigns.status, query.status) : undefined,
             query.channel ? eq(campaigns.channel, query.channel) : undefined,
@@ -101,7 +104,7 @@ export class CampaignsRepository {
               : undefined,
           ),
         )
-        .orderBy(desc(campaigns.id))
+        .orderBy(desc(campaigns.createdAt), desc(campaigns.id))
         .limit(query.limit + 1),
     );
     return rows;
