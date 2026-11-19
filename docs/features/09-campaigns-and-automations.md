@@ -355,7 +355,7 @@ Each change is a guarded update from one state, listed in a table in `CampaignsS
 
 ### Sender (CAMP-3)
 
-The batch worker can reuse a contact's opt-out code at the base saved at approval. Recipient rows have fields for the dispatch claim, provider attempts and charged SMS credits. The recovery query can find one sending campaign per store, and the send gate can check current consent and frequency after the contact lock.
+The batch worker can reuse a contact's opt-out code at the base saved at approval. Recipient rows have fields for the dispatch claim, provider attempts and charged SMS credits. The recovery sweep finds stores with a sending campaign, then reads each store's earliest campaign under store RLS. The send gate checks current consent and frequency after the contact lock.
 
 When the short-link host changes, redirect old links to their equivalents at the current short-link base. Preserve the code and whether the link is an opt-out. The confirmation page opens on the current host and posts from the configured short-link origin.
 
@@ -380,7 +380,7 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 5. Marketing only, quiet hours: inside the store's quiet hours, in the store's time zone, the send defers to the end hour. Default 21:00 to 09:00; 20:59 sends and 21:00 defers to 09:00 the next day.
 6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time whose own `category` is `marketing`, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
 
-   A campaign recipient counts once it is `sent`, `delivered` or `read`, and a recipient still in `sending` counts as a send happening now. A workflow step counts from its `sent_at` while its outcome is `sending`, `sent` or `unconfirmed`. An unconfirmed step counts because the provider may have accepted it. A confirmed refusal does not count. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
+   A campaign recipient counts once it is `sent`, `delivered` or `read`. A failed recipient with `outcome_unknown` counts from its dispatch claim time. A recipient still `sending` occupies a slot at the live gate, while audience estimates count it in the window of its claim. A workflow step counts from its `sent_at` while its outcome is `sending`, `sent` or `unconfirmed`. Unconfirmed sends count because the provider may have accepted them. A confirmed refusal does not count. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
 
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 
