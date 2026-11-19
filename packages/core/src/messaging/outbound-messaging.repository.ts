@@ -6,19 +6,19 @@ import { conversations, messages } from '@dakly/db/schema/chats';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { OutgoingChannelMessage } from './messaging.service';
 
-const queuedFields = {
-  id: messages.id,
-  conversationId: messages.conversationId,
-  body: messages.body,
-  identityId: messages.recipientIdentityId,
-  category: messages.sendCategory,
-};
-
 type SendOutcome =
   | { status: 'sent'; externalId: string; sentAt: Date; errorCode: null }
   | { status: 'failed'; errorCode: string };
 
-const unconfirmed = 'send_unconfirmed';
+const SEND_UNCONFIRMED = 'send_unconfirmed';
+
+function queuedMessage(storeId: string, messageId: string) {
+  return and(
+    eq(messages.storeId, storeId),
+    eq(messages.id, messageId),
+    eq(messages.status, 'queued'),
+  );
+}
 
 @Injectable()
 export class OutboundMessagingRepository {
@@ -105,7 +105,11 @@ export class OutboundMessagingRepository {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
-          ...queuedFields,
+          id: messages.id,
+          conversationId: messages.conversationId,
+          body: messages.body,
+          identityId: messages.recipientIdentityId,
+          category: messages.sendCategory,
           authorType: messages.authorType,
           contactId: conversations.contactId,
           connectionId: conversations.channelConnectionId,
@@ -123,11 +127,9 @@ export class OutboundMessagingRepository {
         )
         .where(
           and(
-            eq(messages.storeId, storeId),
-            eq(messages.id, messageId),
+            queuedMessage(storeId, messageId),
             eq(messages.direction, 'out'),
             eq(messages.kind, 'text'),
-            eq(messages.status, 'queued'),
             isNull(messages.errorCode),
           ),
         ),
@@ -139,15 +141,8 @@ export class OutboundMessagingRepository {
     const [updated] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(messages)
-        .set({ errorCode: unconfirmed })
-        .where(
-          and(
-            eq(messages.storeId, storeId),
-            eq(messages.id, messageId),
-            eq(messages.status, 'queued'),
-            isNull(messages.errorCode),
-          ),
-        )
+        .set({ errorCode: SEND_UNCONFIRMED })
+        .where(and(queuedMessage(storeId, messageId), isNull(messages.errorCode)))
         .returning({ id: messages.id }),
     );
     return updated !== undefined;
@@ -165,11 +160,9 @@ export class OutboundMessagingRepository {
         .set(outcome)
         .where(
           and(
-            eq(messages.storeId, storeId),
-            eq(messages.id, messageId),
-            eq(messages.status, 'queued'),
+            queuedMessage(storeId, messageId),
             stage === 'attempted'
-              ? eq(messages.errorCode, unconfirmed)
+              ? eq(messages.errorCode, SEND_UNCONFIRMED)
               : isNull(messages.errorCode),
           ),
         )

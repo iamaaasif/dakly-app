@@ -22,6 +22,7 @@ import { OutboxRelayService } from '../platform/outbox/outbox-relay.service';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { ChannelDispatchService } from './channel-dispatch.service';
 import { SendMessageJob } from './jobs/send-message.job';
 import { MessagingModule } from './messaging.module';
 import { MessagingService, type OutgoingChannelMessage } from './messaging.service';
@@ -31,6 +32,7 @@ const f = new OwnerIsolationFixture();
 const now = new Date('2026-11-19T03:00:00Z');
 let app: INestApplicationContext;
 let messaging: MessagingService;
+let dispatch: ChannelDispatchService;
 let queue: Queue;
 
 beforeAll(async () => {
@@ -57,6 +59,7 @@ beforeAll(async () => {
   })(TestModule);
   app = await NestFactory.createApplicationContext(TestModule, { logger: false });
   messaging = app.get(MessagingService);
+  dispatch = app.get(ChannelDispatchService);
   queue = app.get(getQueueToken(QUEUES.outbound));
 });
 
@@ -152,9 +155,10 @@ it('submits a queued reply once outside the database transaction', async () => {
   const transaction = app.get(StoreTransaction);
   vi.spyOn(FakeMetaChannelDriver.prototype, 'send').mockImplementation(async (_, message) => {
     calls.push({ inside: transaction.isOpen(), operationKey: message.operationKey });
+    vi.mocked(app.get(Clock).now).mockReturnValue(new Date(now.getTime() + MINUTE_MS));
     return { externalMessageId: `fake-${messageId}` };
   });
-  await messaging.sendQueuedMessage(f.b, messageId);
+  await dispatch.sendQueuedMessage(f.b, messageId);
   expect(await f.row('messages', messageId)).toMatchObject({ status: 'queued' });
   await app.get(OutboxRelayService).relay();
   const waiting = await queue.getWaiting();
@@ -163,10 +167,9 @@ it('submits a queued reply once outside the database transaction', async () => {
   const handler = app.get(SendMessageJob);
   await Promise.all([handler.handle(job!.data), handler.handle(job!.data)]);
   expect(calls).toEqual([{ inside: false, operationKey: messageId }]);
-  expect(await f.row('messages', messageId)).toMatchObject({
-    status: 'sent',
-    external_id: `fake-${messageId}`,
-  });
+  const sent = await f.row('messages', messageId);
+  expect(sent).toMatchObject({ status: 'sent', external_id: `fake-${messageId}` });
+  expect(new Date(String(sent.sent_at))).toEqual(now);
 });
 
 it('never submits twice if the worker lost its result after provider acceptance', async () => {
@@ -177,10 +180,10 @@ it('never submits twice if the worker lost its result after provider acceptance'
   vi.spyOn(app.get(OutboundMessagingRepository), 'finish').mockRejectedValueOnce(
     new Error('Database connection lost'),
   );
-  await expect(messaging.sendQueuedMessage(f.a, messageId)).rejects.toThrow(
+  await expect(dispatch.sendQueuedMessage(f.a, messageId)).rejects.toThrow(
     'Database connection lost',
   );
-  await messaging.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
   expect(provider).toHaveBeenCalledTimes(1);
   expect(await f.row('messages', messageId)).toMatchObject({
     status: 'queued',
@@ -196,16 +199,31 @@ it('can retry a credential lookup failure before making a provider attempt', asy
   const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send').mockResolvedValue({
     externalMessageId: `fake-${messageId}`,
   });
-  await expect(messaging.sendQueuedMessage(f.a, messageId)).rejects.toThrow(
+  await expect(dispatch.sendQueuedMessage(f.a, messageId)).rejects.toThrow(
     'Credential lookup unavailable',
   );
   expect(await f.row('messages', messageId)).toMatchObject({
     status: 'queued',
     error_code: null,
   });
-  await messaging.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
   expect(provider).toHaveBeenCalledTimes(1);
   expect(await f.row('messages', messageId)).toMatchObject({ status: 'sent' });
+});
+
+it('records an inactive connection without making a provider attempt', async () => {
+  const { connectionId, messageId } = await queuedReply();
+  await f.connection.pool.query(
+    "update channel_connections set status = 'needs_reconnect' where id = $1",
+    [connectionId],
+  );
+  const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
+  await dispatch.sendQueuedMessage(f.a, messageId);
+  expect(await f.row('messages', messageId)).toMatchObject({
+    status: 'failed',
+    error_code: 'channel_not_connected',
+  });
+  expect(provider).not.toHaveBeenCalled();
 });
 
 it('keeps an uncertain send pending across a worker retry', async () => {
@@ -213,8 +231,8 @@ it('keeps an uncertain send pending across a worker retry', async () => {
   const provider = vi
     .spyOn(FakeMetaChannelDriver.prototype, 'send')
     .mockRejectedValue(new MetaRequestError('unavailable'));
-  await messaging.sendQueuedMessage(f.a, messageId);
-  await messaging.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
   expect(provider).toHaveBeenCalledTimes(1);
   expect(await f.row('messages', messageId)).toMatchObject({
     status: 'queued',
@@ -228,7 +246,7 @@ it('fails the message and tells the owner when the provider rejects the credenti
   vi.spyOn(FakeMetaChannelDriver.prototype, 'send').mockRejectedValue(
     new MetaRequestError('auth_error'),
   );
-  await messaging.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
   expect(await f.row('channel_connections', connectionId)).toMatchObject({
     status: 'needs_reconnect',
   });
@@ -244,12 +262,61 @@ it('checks the reply window again at dispatch', async () => {
   const { messageId } = await queuedReply();
   vi.mocked(app.get(Clock).now).mockReturnValue(new Date(now.getTime() + DAY_MS));
   const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
-  await messaging.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
   expect(provider).not.toHaveBeenCalled();
   expect(await f.row('messages', messageId)).toMatchObject({
     status: 'failed',
     error_code: 'window_closed',
   });
+});
+
+it('uses the refreshed reply window after waiting for an inbound write', async () => {
+  const { connectionId, messageId } = await queuedReply();
+  const inboundAt = new Date(now.getTime() + DAY_MS);
+  vi.mocked(app.get(Clock).now).mockReturnValue(inboundAt);
+  vi.spyOn(FakeMetaChannelDriver.prototype, 'send').mockResolvedValue({
+    externalMessageId: `fake-${messageId}`,
+  });
+  const { pool } = f.connection;
+  const blocker = await pool.connect();
+  try {
+    await blocker.query('begin');
+    const {
+      rows: [connection],
+    } = await blocker.query<{ contact_id: string; pid: number }>(
+      `select contact_id, pg_backend_pid() as pid from conversations
+       where store_id = $1 and channel_connection_id = $2`,
+      [f.a, connectionId],
+    );
+    await blocker.query('select id from contacts where store_id = $1 and id = $2 for update', [
+      f.a,
+      connection!.contact_id,
+    ]);
+    await Promise.all([
+      dispatch.sendQueuedMessage(f.a, messageId),
+      (async () => {
+        await vi.waitFor(async () => {
+          const {
+            rows: [lock],
+          } = await pool.query<{ blocked: boolean }>(
+            'select exists(select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))) as blocked',
+            [connection!.pid],
+          );
+          expect(lock?.blocked).toBe(true);
+        });
+        await blocker.query(
+          `update conversations set last_inbound_at = $1, window_expires_at = $2
+           where store_id = $3 and channel_connection_id = $4`,
+          [inboundAt, new Date(inboundAt.getTime() + DAY_MS), f.a, connectionId],
+        );
+        await blocker.query('commit');
+      })(),
+    ]);
+  } finally {
+    await blocker.query('rollback');
+    blocker.release();
+  }
+  expect(await f.row('messages', messageId)).toMatchObject({ status: 'sent' });
 });
 
 it('uses the human-agent tag for a staff reply after the standard window', async () => {
@@ -258,7 +325,7 @@ it('uses the human-agent tag for a staff reply after the standard window', async
   const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send').mockResolvedValue({
     externalMessageId: `fake-${messageId}`,
   });
-  await messaging.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
   expect(provider.mock.calls[0]?.[1].humanAgent).toBe(true);
   expect(await f.row('messages', messageId)).toMatchObject({ status: 'sent' });
 });
@@ -269,8 +336,8 @@ it('fails an older outbound row without its chosen recipient', async () => {
     messageId,
   ]);
   const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
-  await messaging.sendQueuedMessage(f.a, messageId);
-  await messaging.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
+  await dispatch.sendQueuedMessage(f.a, messageId);
   expect(provider).not.toHaveBeenCalled();
   expect(await f.row('messages', messageId)).toMatchObject({
     status: 'failed',
@@ -286,8 +353,8 @@ it('refuses queued inbox replies when Chats is disabled and sends core transacti
   });
   await chatsEnabled(false);
   try {
-    await messaging.sendQueuedMessage(f.a, reply.messageId);
-    await messaging.sendQueuedMessage(f.a, transactional.messageId);
+    await dispatch.sendQueuedMessage(f.a, reply.messageId);
+    await dispatch.sendQueuedMessage(f.a, transactional.messageId);
     expect(provider).toHaveBeenCalledTimes(1);
     expect(await f.row('messages', reply.messageId)).toMatchObject({
       status: 'failed',
@@ -297,4 +364,18 @@ it('refuses queued inbox replies when Chats is disabled and sends core transacti
   } finally {
     await chatsEnabled(true);
   }
+});
+
+it('refuses an older marketing intent without making a provider attempt', async () => {
+  const { messageId } = await queuedReply();
+  await f.connection.pool.query("update messages set send_category = 'marketing' where id = $1", [
+    messageId,
+  ]);
+  const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
+  await dispatch.sendQueuedMessage(f.a, messageId);
+  expect(await f.row('messages', messageId)).toMatchObject({
+    status: 'failed',
+    error_code: 'send_category_unsupported',
+  });
+  expect(provider).not.toHaveBeenCalled();
 });

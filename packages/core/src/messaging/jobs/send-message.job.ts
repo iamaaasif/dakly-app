@@ -6,16 +6,16 @@ import { messageSendRequestedEventSchema } from '@dakly/contracts/events/messagi
 import { HandlesEvent } from '../../platform/outbox/handles-event';
 import type { JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
-import { MessagingService } from '../messaging.service';
+import { ChannelDispatchService } from '../channel-dispatch.service';
 
 const jobData = messageSendRequestedEventSchema.extend({ id: z.uuid() });
 
 @HandlesEvent('message.send_requested', { queue: QUEUES.outbound })
 export class SendMessageJob implements JobHandler {
-  constructor(@Inject(MessagingService) private readonly messaging: MessagingService) {}
+  constructor(@Inject(ChannelDispatchService) private readonly dispatch: ChannelDispatchService) {}
 
   async handle(data: unknown) {
     const { storeId, payload } = jobData.parse(data);
-    await this.messaging.sendQueuedMessage(storeId, payload.messageId);
+    await this.dispatch.sendQueuedMessage(storeId, payload.messageId);
   }
 }
