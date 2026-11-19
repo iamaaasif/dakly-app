@@ -123,8 +123,6 @@ export const campaigns = pgTable(
     shortLinkBase: text('short_link_base'),
     startedAt: timestamptz('started_at'),
     finishedAt: timestamptz('finished_at'),
-    settlementPendingAt: timestamptz('settlement_pending_at'),
-    settledAt: timestamptz('settled_at'),
     estimatedCostPoisha: poisha('estimated_cost_poisha'),
     reservedPoisha: poisha('reserved_poisha').notNull().default(0),
     actualCostPoisha: poisha('actual_cost_poisha').notNull().default(0),
@@ -167,9 +165,6 @@ export const campaigns = pgTable(
     index('campaigns_start_due_by_store_idx')
       .on(table.storeId, table.scheduledFor, table.id)
       .where(sql`${table.status} = 'scheduled'`),
-    index('campaigns_unsettled_idx')
-      .on(table.storeId, table.settlementPendingAt, table.id)
-      .where(sql`${table.status} = 'cancelled' and ${table.settlementPendingAt} is not null`),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),
@@ -212,13 +207,8 @@ export const campaignRecipients = pgTable(
     // Phone or page-scoped id at freeze time.
     destinationAddress: text('destination_address'),
     status: text('status', { enum: recipientStatuses }).notNull(),
-    // An expired claim can be reconciled after the worker stops waiting for the provider.
-    claimedAt: timestamptz('claimed_at'),
-    // Receipt lookup renews the lease without moving the SMS dispatch time used by the cap.
-    dispatchStartedAt: timestamptz('dispatch_started_at'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
-    smsCredits: integer('sms_credits'),
     costPoisha: poisha('cost_poisha'),
     errorCode: text('error_code'),
     sentAt: timestamptz('sent_at'),

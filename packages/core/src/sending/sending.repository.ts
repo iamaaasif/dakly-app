@@ -59,19 +59,11 @@ export class SendingRepository {
 
 function campaignSends(tx: Transaction, window: SendWindow) {
   const { storeId, contactIds, after, until, includeCommittedFuture } = window;
-  const uncertain = and(
-    eq(campaignRecipients.status, 'failed'),
-    eq(campaignRecipients.errorCode, 'outcome_unknown'),
-  );
-  const dispatchStartedAt = sql<Date>`coalesce(${campaignRecipients.dispatchStartedAt}, ${campaignRecipients.claimedAt})`;
   return tx
     .select({
       contactId: campaignRecipients.contactId,
       channel: campaigns.channel,
-      sentAt:
-        sql<Date | null>`case when ${uncertain} then ${dispatchStartedAt} else ${campaignRecipients.sentAt} end`.mapWith(
-          campaignRecipients.sentAt,
-        ),
+      sentAt: campaignRecipients.sentAt,
     })
     .from(campaignRecipients)
     .innerJoin(
@@ -87,11 +79,6 @@ function campaignSends(tx: Transaction, window: SendWindow) {
         inArray(campaignRecipients.contactId, contactIds),
         or(
           eq(campaignRecipients.status, 'sending'),
-          and(
-            uncertain,
-            gt(dispatchStartedAt, after),
-            includeCommittedFuture ? undefined : lte(dispatchStartedAt, until),
-          ),
           and(
             inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
             gt(campaignRecipients.sentAt, after),

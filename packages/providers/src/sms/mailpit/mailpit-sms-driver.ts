@@ -1,14 +1,7 @@
 import { createTransport } from 'nodemailer';
 import { z } from 'zod';
 
-import {
-  type SmsDriver,
-  type SmsMessage,
-  type SmsReceipt,
-  type SmsReceiptStatus,
-  type SmsSendResult,
-  SmsSendRefused,
-} from '../sms-driver';
+import { type SmsDriver, type SmsMessage, type SmsSendResult, SmsSendRefused } from '../sms-driver';
 
 const SHARED_FROM = 'dakly@sms.dakly.test';
 const captureId = z.string().refine((value) => value.trim().length > 0);
@@ -46,16 +39,6 @@ export class MailpitSmsDriver implements SmsDriver {
     return this.submit(message, messageId, signal);
   }
 
-  async receiptStatus({
-    providerMessageId,
-    idempotencyKey,
-  }: SmsReceipt): Promise<SmsReceiptStatus> {
-    const messageId = `${idempotencyKey}@sms.dakly.test`;
-    const captured = await this.findCaptured(messageId, undefined, providerMessageId);
-    // A capture may have been removed after retention, so absence is not proof of refusal.
-    return captured ? 'sent' : 'unknown';
-  }
-
   private async submit(
     message: SmsMessage,
     messageId?: string,
@@ -85,11 +68,7 @@ export class MailpitSmsDriver implements SmsDriver {
   }
 
   // A retained capture lets a later send recover its id by Message-ID.
-  private async findCaptured(
-    messageId: string,
-    signal?: AbortSignal,
-    providerMessageId?: string,
-  ): Promise<string | undefined> {
+  private async findCaptured(messageId: string, signal?: AbortSignal): Promise<string | undefined> {
     const query = new URLSearchParams({ query: `message-id:"${messageId}"`, limit: '100' });
     const deadline = AbortSignal.timeout(5000);
     const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, {
@@ -98,10 +77,7 @@ export class MailpitSmsDriver implements SmsDriver {
     if (!response.ok) throw new Error('Mailpit search failed');
     const { messages } = captureSearch.parse(await response.json());
     // Mailpit searches substrings, so only an exact Message-ID proves a prior submission.
-    return messages.find(
-      ({ ID, MessageID }) =>
-        MessageID === messageId && (!providerMessageId || ID === providerMessageId),
-    )?.ID;
+    return messages.find(({ MessageID }) => MessageID === messageId)?.ID;
   }
 }
 

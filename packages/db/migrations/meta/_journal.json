@@ -407,27 +407,6 @@
       "when": 1795117429648,
       "tag": "0057_campaign_link_base",
       "breakpoints": true
-    },
-    {
-      "idx": 58,
-      "version": "7",
-      "when": 1795118126187,
-      "tag": "0058_campaign_cancel_settlement",
-      "breakpoints": true
-    },
-    {
-      "idx": 59,
-      "version": "7",
-      "when": 1795119391917,
-      "tag": "0059_campaign_cancel_claims",
-      "breakpoints": true
-    },
-    {
-      "idx": 60,
-      "version": "7",
-      "when": 1795121709178,
-      "tag": "0060_campaign_dispatch_time",
-      "breakpoints": true
     }
   ]
 }

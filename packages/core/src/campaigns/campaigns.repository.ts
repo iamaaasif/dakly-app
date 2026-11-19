@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, sql } from 'drizzle-orm';
 
 import type {
   CampaignChannel,
@@ -59,7 +59,6 @@ export type CampaignStatusGuard = { status: CampaignStatus; pauseReason?: Campai
 export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   pauseReason?: CampaignPauseReason | null;
   finishedAt?: Date;
-  settlementPendingAt?: Date | null;
   approvedByUserId?: null;
   approvedAt?: null;
   shortLinkBase?: null;
@@ -223,18 +222,12 @@ export class CampaignsRepository {
     return row;
   }
 
-  async lockCancellable(storeId: string, id: string) {
+  async lockForCancellation(storeId: string, id: string) {
     const [row] = await this.database.inTransaction(storeId, (tx) =>
       tx
         .select({ ...campaignColumns, approvedAt: campaigns.approvedAt })
         .from(campaigns)
-        .where(
-          and(
-            eq(campaigns.storeId, storeId),
-            eq(campaigns.id, id),
-            notInArray(campaigns.status, ['sent', 'cancelled', 'failed']),
-          ),
-        )
+        .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id)))
         .for('update'),
     );
     return row;
@@ -277,35 +270,6 @@ export class CampaignsRepository {
     );
   }
 
-  async settlementTotals(storeId: string, campaignId: string) {
-    const [row] = await this.database.inTransaction(storeId, (tx) =>
-      tx
-        .select({
-          unsettled:
-            sql<number>`count(*) filter (where ${campaignRecipients.status} in ('queued', 'sending'))`.mapWith(
-              Number,
-            ),
-          chargedCredits: sql<number>`coalesce(sum(${campaignRecipients.smsCredits}), 0)`.mapWith(
-            Number,
-          ),
-        })
-        .from(campaignRecipients)
-        .where(recipientsWhere(storeId, campaignId)),
-    );
-    return row!;
-  }
-
-  async markSettled(storeId: string, campaignId: string, settledAt: Date): Promise<boolean> {
-    const [row] = await this.database.inTransaction(storeId, (tx) =>
-      tx
-        .update(campaigns)
-        .set({ settledAt, settlementPendingAt: null, updatedAt: sql`${campaigns.updatedAt}` })
-        .where(and(statusWhere(storeId, campaignId, 'cancelled'), isNull(campaigns.settledAt)))
-        .returning({ id: campaigns.id }),
-    );
-    return row !== undefined;
-  }
-
   async removeDraft(storeId: string, id: string): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
@@ -321,7 +285,7 @@ function statusWhere(storeId: string, id: string, status: CampaignStatus) {
   return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
 }
 
-export function recipientsWhere(storeId: string, campaignId: string) {
+function recipientsWhere(storeId: string, campaignId: string) {
   return and(
     eq(campaignRecipients.storeId, storeId),
     eq(campaignRecipients.campaignId, campaignId),

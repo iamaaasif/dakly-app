@@ -1,1 +1,0 @@
-ALTER TABLE "campaign_recipients" ADD COLUMN "dispatch_started_at" timestamp with time zone;

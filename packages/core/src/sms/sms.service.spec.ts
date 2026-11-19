@@ -9,37 +9,6 @@ import { SmsService } from './sms.service';
 
 describe('shared SMS delivery', () => {
   it.each(['success', 'failure'] as const)(
-    'measures receipt lookup %s without receipt details',
-    async (outcome) => {
-      const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
-      const receiptStatus = vi
-        .fn<NonNullable<SmsDriver['receiptStatus']>>()
-        .mockResolvedValue('sent');
-      if (outcome === 'failure')
-        receiptStatus.mockRejectedValue(new Error('private vendor detail'));
-      const service = new SmsService({ send: vi.fn<SmsDriver['send']>(), receiptStatus });
-      const receipt = { providerMessageId: 'private receipt', idempotencyKey: 'private operation' };
-      try {
-        expect(await service.receiptStatus(receipt)).toBe(
-          outcome === 'success' ? 'sent' : 'unknown',
-        );
-        expect(log).toHaveBeenCalledExactlyOnceWith(
-          {
-            event: 'metric',
-            metric: 'sms_receipt',
-            count: 1,
-            durationMilliseconds: expect.any(Number),
-            outcome,
-          },
-          'SMS receipt lookup measured',
-        );
-      } finally {
-        log.mockRestore();
-      }
-    },
-  );
-
-  it.each(['success', 'failure'] as const)(
     'measures %s without recipient or vendor details',
     async (outcome) => {
       const records: object[] = [];

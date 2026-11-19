@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0060_snapshot.json`: **95 tables, 1277 columns, 389 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0057_snapshot.json`: **95 tables, 1272 columns, 388 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1392,8 +1392,6 @@ erDiagram
         text short_link_base "NULL; text"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone settlement_pending_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone settled_at "NULL; timestamp with time zone"
         bigint estimated_cost_poisha "NULL; bigint"
         bigint reserved_poisha "NOT NULL; bigint"
         bigint actual_cost_poisha "NOT NULL; bigint"
@@ -1417,11 +1415,8 @@ erDiagram
         uuid contact_identity_id FK "NULL; uuid"
         text destination_address "NULL; text"
         text status "NOT NULL; text"
-        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone dispatch_started_at "NULL; timestamp with time zone"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
-        integer sms_credits "NULL; integer"
         bigint cost_poisha "NULL; bigint"
         text error_code "NULL; text"
         timestamp_with_time_zone sent_at "NULL; timestamp with time zone"

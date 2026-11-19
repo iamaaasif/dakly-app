@@ -108,9 +108,8 @@ class FakeCampaignsRepository {
     return row?.status === 'scheduled' ? (row as Campaign & { approvedAt: Date }) : undefined;
   }
 
-  async lockCancellable(_storeId: string, id: string) {
-    const row = this.rows.get(id);
-    if (row && !['cancelled', 'sent', 'failed'].includes(row.status)) return row;
+  async lockForCancellation(_storeId: string, id: string) {
+    return this.rows.get(id);
   }
 
   async changeStatus(
@@ -135,19 +134,6 @@ class FakeCampaignsRepository {
     for (const recipient of this.recipients)
       if (recipient.campaignId === campaignId && recipient.status === 'queued')
         Object.assign(recipient, { status: 'cancelled' });
-  }
-
-  async settlementTotals(_storeId: string, campaignId: string) {
-    return {
-      unsettled: this.recipients.filter(
-        (row) => row.campaignId === campaignId && row.status === 'queued',
-      ).length,
-      chargedCredits: 0,
-    };
-  }
-
-  async markSettled() {
-    return true;
   }
 
   async markApproved(_storeId: string, id: string, approval: CampaignApproval) {
@@ -231,11 +217,6 @@ describe('CampaignsService', () => {
       findByIdempotencyKey: async (_storeId: string, key: string) => {
         const reservation = reservations.get(key);
         return reservation && { entryId: reservation.entryId, balanceQuantity: balance };
-      },
-      reservationFor: async (_storeId: string, _wallet: string, key: string) => {
-        const reservation = reservations.get(key);
-        if (!reservation) throw new Error('Test reservation not found');
-        return { entryId: reservation.entryId, quantity: reservation.quantity };
       },
       release: async (_storeId: string, input: { reservationId: string }) => {
         const reservation = [...reservations.values()].find(

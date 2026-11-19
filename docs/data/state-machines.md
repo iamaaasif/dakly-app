@@ -96,10 +96,8 @@ stateDiagram-v2
     draft --> waiting_approval: WhatsApp template not approved yet
     draft --> scheduled
     draft --> sending: send now
-    draft --> cancelled
     waiting_approval --> scheduled
     waiting_approval --> failed: template rejected
-    waiting_approval --> cancelled
     scheduled --> sending
     scheduled --> cancelled
     scheduled --> draft: edit

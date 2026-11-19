@@ -88,33 +88,6 @@ afterEach(async () => {
 });
 
 describe('MailpitSmsDriver', () => {
-  it('checks the exact capture for a known receipt without connecting to SMTP', async () => {
-    const smtp = await smtpPeer();
-    const { apiUrl, queries } = await searchPeer(() => ({
-      body: {
-        messages: [
-          { ID: 'capture-other', MessageID: messageId },
-          { ID: 'capture-one', MessageID: messageId },
-          { ID: 'capture-wrong-operation', MessageID: `other-${messageId}` },
-        ],
-      },
-    }));
-    const driver = new MailpitSmsDriver({ host, port: smtp.port, apiUrl });
-    const receipt = { idempotencyKey: message.idempotencyKey };
-
-    await expect(
-      driver.receiptStatus({ ...receipt, providerMessageId: 'capture-one' }),
-    ).resolves.toBe('sent');
-    await expect(
-      driver.receiptStatus({ ...receipt, providerMessageId: 'capture-wrong-operation' }),
-    ).resolves.toBe('unknown');
-    expect(queries.map((query) => query.get('query'))).toEqual([
-      `message-id:"${messageId}"`,
-      `message-id:"${messageId}"`,
-    ]);
-    expect(smtp.connections()).toBe(0);
-  });
-
   it.each([
     { label: 'lookup is down', status: 503, body: {} },
     {

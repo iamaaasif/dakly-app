@@ -62,15 +62,13 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 
 ## campaign
 
-| Job                            | Started by                      | Payload                                     | Makes a rerun harmless                                                                                           |
-| ------------------------------ | ------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `build-campaign-audience`      | Campaign scheduled or sent now  | `storeId`, `campaignId`                     | Unique `campaign_recipients (campaign_id, contact_id)`                                                           |
-| `send-campaign-batch`          | Audience built, then each batch | `storeId`, `campaignId`, `afterRecipientId` | Only `queued` recipients are picked; status moves forward                                                        |
-| sweep `start-due-campaigns`    | Every minute from CAMP-3 sender | none                                        | `campaign_due_stores` finds due stores. Each tenant update starts up to 100 due campaigns and skips locked rows. |
-| `sweep-campaign-cancellations` | Every minute                    | none                                        | Selects a page of store IDs with pending cancellations and queues one settlement job per store.                  |
-| `settle-cancelled-campaign`    | Cancellation sweep              | `storeId`, `campaignId`                     | Claims expired receipts before reading the provider. A guarded update settles the reservation once.              |
+| Job                         | Started by                      | Payload                                     | Makes a rerun harmless                                                                                           |
+| --------------------------- | ------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `build-campaign-audience`   | Campaign scheduled or sent now  | `storeId`, `campaignId`                     | Unique `campaign_recipients (campaign_id, contact_id)`                                                           |
+| `send-campaign-batch`       | Audience built, then each batch | `storeId`, `campaignId`, `afterRecipientId` | Only `queued` recipients are picked; status moves forward                                                        |
+| sweep `start-due-campaigns` | Every minute from CAMP-3 sender | none                                        | `campaign_due_stores` finds due stores. Each tenant update starts up to 100 due campaigns and skips locked rows. |
 
-Per-store cap: one sending batch and one cancellation settlement at a time. The cancellation sweep pauses queueing at an advisory threshold of 1,000 waiting jobs.
+Per-store cap: one running campaign batch per store.
 
 ## workflow
 
