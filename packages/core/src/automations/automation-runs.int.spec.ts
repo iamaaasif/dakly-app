@@ -667,7 +667,6 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       const [started] = await sendStep(runId!);
       expect(started).toMatchObject({ outcome: 'sending', opt_out_url: expect.any(String) });
 
-      expect(started.opt_out_url).toContain(`${firstLinkBase}/s/`);
       expect(inFlight).toEqual([
         {
           destination_hash: expect.stringMatching(/^[a-f0-9]{64}$/u),
@@ -683,7 +682,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         await wakeNow(runId!);
         await runDueStep(runner, runId!);
         const retry = vi.mocked(MailpitSmsDriver.prototype.send).mock.lastCall?.[0];
-        expect(retry?.text).toBe(`নতুন কালেকশন এসেছে\n${started.opt_out_url}`);
+        expect(retry).toMatchObject({
+          idempotencyKey: `run:${runId}:first`,
+          text: `নতুন কালেকশন এসেছে\n${started.opt_out_url}`,
+        });
       } finally {
         vi.stubEnv('SHORT_LINK_BASE_URL', firstLinkBase);
         resetEnvForTests();
@@ -700,6 +702,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         [storeId, contact],
       );
       expect(link.rows).toEqual([{ kind: 'sms_opt_out', code }]);
+      expect(started.opt_out_url).toBe(`${firstLinkBase}/s/${link.rows[0].code}`);
       expect(await retryFields()).toEqual([
         { destination_hash: null, opt_out_url: null, first_tried_at: daytime },
       ]);
