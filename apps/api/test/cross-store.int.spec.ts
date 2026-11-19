@@ -3129,7 +3129,9 @@ describe('every production shop route isolates its data', () => {
     expect(first.statusCode, first.body).toBe(201);
     expect(second.statusCode, second.body).toBe(201);
     expect(second.json().id).toBe(first.json().id);
-    expect((await send('ঈদের পাঞ্জাবি')).statusCode).toBe(409);
+    const repeated = await send('ঈদের পাঞ্জাবি');
+    expect(repeated.statusCode, repeated.body).toBe(201);
+    expect(repeated.json()).toMatchObject({ id: first.json().id, caption: 'নতুন পাঞ্জাবি' });
     const audits = await f.admin.pool.query(
       'select action from audit_log where store_id=$1 and entity_id=$2 order by created_at',
       [shop.id, first.json().id],

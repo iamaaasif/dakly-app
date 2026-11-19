@@ -1,5 +1,5 @@
 {
-  "id": "6f83fcbf-4744-41e5-b317-138a057a1c1f",
+  "id": "51f33e7a-77ee-4815-a5d4-51255eb640f1",
   "prevId": "ec0e09f8-16ed-435d-89cc-2aa741c8c50f",
   "version": "7",
   "dialect": "postgresql",
@@ -20254,14 +20254,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "create_key": {
-          "name": "create_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "create_fingerprint": {
-          "name": "create_fingerprint",
+        "idempotency_key": {
+          "name": "idempotency_key",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -20321,8 +20315,8 @@
           "method": "btree",
           "with": {}
         },
-        "posts_store_creator_create_key": {
-          "name": "posts_store_creator_create_key",
+        "posts_store_creator_idempotency_key": {
+          "name": "posts_store_creator_idempotency_key",
           "columns": [
             {
               "expression": "store_id",
@@ -20337,14 +20331,14 @@
               "nulls": "last"
             },
             {
-              "expression": "create_key",
+              "expression": "idempotency_key",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "where": "\"posts\".\"create_key\" is not null",
+          "where": "\"posts\".\"idempotency_key\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -24,8 +24,7 @@ describe('SocialRepository', () => {
       isAiWritten: false,
       createdAt: now,
       updatedAt: now,
-      createKey: randomUUID(),
-      createFingerprint: 'fingerprint',
+      idempotencyKey: randomUUID(),
     } as const;
     const own = await repository.insertPost(a, {
       ...fields,
@@ -44,7 +43,7 @@ describe('SocialRepository', () => {
     expect(await repository.listPosts(b, { limit: 50, drafts: 'team' }, userB)).toMatchObject([
       { post: { id: other!.id } },
     ]);
-    expect(await repository.findCreateKey(b, userA, fields.createKey)).toBeUndefined();
+    expect(await repository.findByIdempotencyKey(b, userA, fields.idempotencyKey)).toBeUndefined();
     expect(
       await repository.updatePost(b, ownId, { caption: 'ঈদ', updatedAt: now }),
     ).toBeUndefined();

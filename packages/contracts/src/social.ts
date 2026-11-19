@@ -78,7 +78,7 @@ export const createPostSchema = postDraftSchema
 
 export const editPostSchema = postDraftSchema.partial().refine(hasUniqueTargets, uniqueTargets);
 
-export const postCreateKeySchema = z.string().trim().min(1).max(200);
+export const postIdempotencyKeySchema = z.string().trim().min(1).max(128);
 export const postListQuerySchema = z.strictObject({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),

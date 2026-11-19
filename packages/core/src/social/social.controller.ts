@@ -15,7 +15,7 @@ import {
 import {
   createPostSchema,
   editPostSchema,
-  postCreateKeySchema,
+  postIdempotencyKeySchema,
   postListQuerySchema,
   type CreatePostInput,
   type EditPostInput,
@@ -32,7 +32,7 @@ import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { SocialService } from './social.service';
 
-const createKeyPipe = new ZodValidationPipe(postCreateKeySchema);
+const idempotencyKeyPipe = new ZodValidationPipe(postIdempotencyKeySchema);
 
 @Controller('posts')
 export class SocialController {
@@ -46,7 +46,7 @@ export class SocialController {
     @Headers('idempotency-key') key: string | undefined,
     @Body(new ZodValidationPipe(createPostSchema)) input: CreatePostInput,
   ): Promise<PostResponse> {
-    return this.social.createDraft(storeId, input, createKeyPipe.transform(key), {
+    return this.social.createDraft(storeId, input, idempotencyKeyPipe.transform(key), {
       kind: 'user',
       userId,
     });

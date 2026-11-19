@@ -174,7 +174,7 @@ The post composer and scheduling are well thought out. But the design can't deci
 The posts API saves, reads, edits and deletes drafts. Each target names a connected
 Facebook Page or Instagram account in the store. Drafts belong to their creator.
 Owners and Admins can read team drafts. Editing an AI-written draft keeps its
-approval requirement.
+approval requirement. Reusing a create key returns the creator's saved draft.
 
 This change covers drafts and targets. Posting slots, scheduling and approval are
 the rest of SOC-1. Publishing (SOC-2), insights (SOC-3), AI captions (SOC-4) and the

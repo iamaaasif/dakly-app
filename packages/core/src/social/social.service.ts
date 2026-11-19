@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { Injectable } from '@nestjs/common';
 
 import type {
@@ -52,15 +50,16 @@ export class SocialService {
   createDraft(
     storeId: string,
     input: CreatePostInput,
-    key: string,
+    idempotencyKey: string,
     actor: UserActor,
   ): Promise<PostResponse> {
     return this.transaction.runLocked(storeId, async () => {
-      const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex');
-      const existing = await this.repository.findCreateKey(storeId, actor.userId, key);
+      const existing = await this.repository.findByIdempotencyKey(
+        storeId,
+        actor.userId,
+        idempotencyKey,
+      );
       if (existing) {
-        if (existing.fingerprint !== fingerprint) throw socialError('POST_CREATE_KEY_USED');
-        if (existing.deletedAt) throw socialError('POST_NOT_FOUND');
         const { post, targets } = await this.findPost(storeId, existing.id);
         return response(post, targets);
       }
@@ -71,8 +70,7 @@ export class SocialService {
       const post = await this.repository.insertPost(storeId, {
         ...content,
         createdByUserId: actor.userId,
-        createKey: key,
-        createFingerprint: fingerprint,
+        idempotencyKey,
         createdAt: now,
         updatedAt: now,
       });
