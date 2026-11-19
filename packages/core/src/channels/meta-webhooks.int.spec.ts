@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer, type AddressInfo, type Socket } from 'node:net';
 
 import { getQueueToken } from '@nestjs/bullmq';
 import { Logger, Module } from '@nestjs/common';
@@ -36,13 +38,13 @@ const delivery = (object = 'page') =>
 const signature = (payload: string) =>
   `sha256=${createHmac('sha256', appSecret).update(payload).digest('hex')}`;
 
-function post(payload: string, signed = signature(payload)) {
+function post(payload: string, signed = signature(payload), contentType = 'application/json') {
   deliveryKeys.add(createHash('sha256').update(payload).digest('hex'));
   return app.inject({
     url: webhookPath,
     method: 'POST',
     headers: {
-      'content-type': 'application/json',
+      'content-type': contentType,
       'x-hub-signature-256': signed,
       cookie: 'dakly_session=untrusted-cookie',
     },
@@ -89,7 +91,9 @@ describe('Meta webhook intake', () => {
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
     queue = app.get(getQueueToken('inbound'));
-    await queue.waitUntilReady();
+    const client = await queue.waitUntilReady();
+    if (client.status !== 'ready')
+      await new Promise<void>((resolve) => client.once('ready', resolve));
   });
 
   afterAll(async () => {
@@ -156,9 +160,16 @@ describe('Meta webhook intake', () => {
     expect(await stored(payload)).toEqual([]);
   });
 
-  it('checks the signature before decoding malformed JSON', async () => {
+  it('refuses a signed JSON payload labeled as form data', async () => {
+    const payload = delivery();
+    const response = await post(payload, signature(payload), 'application/x-www-form-urlencoded');
+    expect(response.statusCode).toBe(415);
+    expect(await stored(payload)).toEqual([]);
+  });
+
+  it('refuses malformed JSON at the transport boundary', async () => {
     const malformed = '{"object":';
-    expect((await post(malformed, 'sha256=invalid')).statusCode).toBe(401);
+    expect((await post(malformed, 'sha256=invalid')).statusCode).toBe(400);
     expect((await post(malformed)).statusCode).toBe(400);
     expect(await stored(malformed)).toEqual([]);
   });
@@ -178,35 +189,42 @@ describe('Meta webhook intake', () => {
     }
   });
 
-  it('leaves the row ready to retry while the queue is reconnecting', async () => {
+  it('leaves the row ready to retry while the queue is disconnected', async () => {
     const payload = delivery();
     const client = await queue.waitUntilReady();
-    const status = client.status;
-    const enqueue = vi.spyOn(queue, 'add').mockRejectedValueOnce(new Error('Queue unavailable'));
-    try {
-      client.status = 'reconnecting';
-      expect((await post(payload)).statusCode).toBe(503);
-      expect(await stored(payload)).toHaveLength(1);
-      expect(enqueue).not.toHaveBeenCalled();
-    } finally {
-      client.status = status;
-      enqueue.mockRestore();
-    }
+    await new Promise<void>((resolve) => {
+      client.once('end', resolve);
+      client.disconnect();
+    });
+
+    expect((await post(payload)).statusCode).toBe(503);
+    const rows = await stored(payload);
+    expect(rows).toHaveLength(1);
+
+    await client.connect();
     expect((await post(payload)).statusCode).toBe(200);
+    expect(await stored(payload)).toEqual(rows);
+    expect((await queue.getJob(rows[0]!.id))?.data).toEqual({ webhookEventId: rows[0]!.id });
   });
 
-  it('returns a retryable response if the queue does not respond', async () => {
+  it('returns a retryable response if the queue connection stops responding', async () => {
     const payload = delivery();
-    const enqueue = vi.spyOn(queue, 'add').mockImplementationOnce(() => new Promise(() => {}));
-    try {
-      expect((await post(payload)).statusCode).toBe(503);
-      expect(await stored(payload)).toHaveLength(1);
-      expect((await post(payload)).statusCode).toBe(200);
-      const [event] = await stored(payload);
-      expect((await queue.getJob(event!.id))?.data).toEqual({ webhookEventId: event!.id });
-    } finally {
-      enqueue.mockRestore();
-    }
+    const client = await queue.waitUntilReady();
+    const reconnected = new Promise<void>((resolve) => client.once('ready', resolve));
+    // BLPOP blocks only this connection, so other test traffic can keep using Valkey.
+    const blocked = client
+      .runCommand('blpop', [queue.toKey('blocked-test'), 3])
+      .catch(() => undefined);
+
+    expect((await post(payload)).statusCode).toBe(503);
+    const rows = await stored(payload);
+    expect(rows).toHaveLength(1);
+
+    await blocked;
+    await reconnected;
+    expect((await post(payload)).statusCode).toBe(200);
+    expect(await stored(payload)).toEqual(rows);
+    expect((await queue.getJob(rows[0]!.id))?.data).toEqual({ webhookEventId: rows[0]!.id });
   });
 
   it('refuses a 2 MiB delivery before saving it', async () => {
@@ -215,11 +233,40 @@ describe('Meta webhook intake', () => {
     expect(await stored(payload)).toEqual([]);
   });
 
+  it('closes cleanly when the inbound producer has not reached Valkey readiness', async () => {
+    const connections = new Set<Socket>();
+    const server = createServer((socket) => connections.add(socket));
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const { port } = server.address() as AddressInfo;
+    const redisUrl = process.env.REDIS_URL;
+    vi.stubEnv('REDIS_URL', `redis://127.0.0.1:${port}`);
+    resetEnvForTests();
+
+    class ColdStartModule {}
+    Module({ imports: [DatabaseModule, MetaWebhooksModule] })(ColdStartModule);
+    let producer: Queue | undefined;
+    try {
+      const coldApp = await NestFactory.createApplicationContext(ColdStartModule, {
+        logger: false,
+      });
+      producer = coldApp.get<Queue>(getQueueToken('inbound'));
+      expect((await producer.waitUntilReady()).status).not.toBe('ready');
+      await expect(coldApp.close()).resolves.toBeUndefined();
+    } finally {
+      await producer?.disconnect();
+      for (const socket of connections) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      vi.stubEnv('REDIS_URL', redisUrl);
+      resetEnvForTests();
+    }
+  });
+
   it('queues the saved row on a retry after enqueue fails', async () => {
     const payload = delivery();
     const enqueue = vi.spyOn(queue, 'add').mockRejectedValueOnce(new Error('Queue unavailable'));
     try {
-      expect((await post(payload)).statusCode).toBe(500);
+      expect((await post(payload)).statusCode).toBe(503);
       const rows = await stored(payload);
       expect(rows).toHaveLength(1);
       expect(await queue.getJob(rows[0]!.id)).toBeUndefined();

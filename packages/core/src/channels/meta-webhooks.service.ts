@@ -1,8 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { setTimeout } from 'node:timers/promises';
 
 import { InjectQueue } from '@nestjs/bullmq';
-import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
 import type { MetaWebhookVerification } from '@dakly/contracts/meta-webhooks';
@@ -15,33 +14,20 @@ import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { hashToken } from '../platform/crypto/token-hash';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
-import { INBOUND_QUEUE } from '../platform/queue/queues';
+import { QUEUES } from '../platform/queue/queues';
 import { META_WEBHOOK_ERRORS } from './meta-webhooks.errors';
 import { MetaWebhooksRepository } from './meta-webhooks.repository';
 
-const QUEUE_WRITE_TIMEOUT_MS = 1000;
-
 @Injectable()
-export class MetaWebhooksService implements OnModuleInit {
+export class MetaWebhooksService {
   private readonly logger = new Logger(MetaWebhooksService.name);
   private readonly env = loadEnv();
-  private queueClient?: Awaited<Queue['client']>;
 
   constructor(
     @Inject(MetaWebhooksRepository) private readonly repository: MetaWebhooksRepository,
     @Inject(Clock) private readonly clock: Clock,
-    @InjectQueue(INBOUND_QUEUE) private readonly queue: Queue<{ webhookEventId: string }>,
+    @InjectQueue(QUEUES.inbound) private readonly queue: Queue<{ webhookEventId: string }>,
   ) {}
-
-  onModuleInit(): void {
-    // Observe startup once so early requests do not leave pending adds on the connection promise.
-    void this.queue.waitUntilReady().then(
-      (client) => {
-        this.queueClient = client;
-      },
-      () => undefined,
-    );
-  }
 
   verifySubscription(input: MetaWebhookVerification): string {
     const token = this.env.META_WEBHOOK_VERIFY_TOKEN;
@@ -80,24 +66,9 @@ export class MetaWebhooksService implements OnModuleInit {
   }
 
   private async enqueueDelivery(webhookEventId: string): Promise<void> {
-    if (this.queueClient?.status !== 'ready')
-      throw new AppError(
-        'META_WEBHOOK_QUEUE_UNAVAILABLE',
-        META_WEBHOOK_ERRORS.META_WEBHOOK_QUEUE_UNAVAILABLE,
-      );
-
-    const timer = new AbortController();
-    const deadline = setTimeout(QUEUE_WRITE_TIMEOUT_MS, undefined, { signal: timer.signal }).then(
-      () => {
-        throw new AppError(
-          'META_WEBHOOK_QUEUE_UNAVAILABLE',
-          META_WEBHOOK_ERRORS.META_WEBHOOK_QUEUE_UNAVAILABLE,
-        );
-      },
-    );
     try {
-      // A provider retry uses the same job id even if Valkey accepts the first write late.
-      const queued = this.queue.add(
+      // Meta retries with the same row id if the connection drops after receiving the write.
+      await this.queue.add(
         'process-webhook-event',
         { webhookEventId },
         {
@@ -108,9 +79,11 @@ export class MetaWebhooksService implements OnModuleInit {
           removeOnFail: 100,
         },
       );
-      await Promise.race([queued, deadline]);
-    } finally {
-      timer.abort();
+    } catch {
+      throw new AppError(
+        'META_WEBHOOK_QUEUE_UNAVAILABLE',
+        META_WEBHOOK_ERRORS.META_WEBHOOK_QUEUE_UNAVAILABLE,
+      );
     }
   }
 }

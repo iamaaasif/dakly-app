@@ -139,7 +139,7 @@ Every connection is a `channel_connections` row: kind, external account id, encr
 Webhook intake
 
 1. `GET /webhooks/meta` returns the challenge as plain text when the subscription token matches `META_WEBHOOK_VERIFY_TOKEN`.
-2. `POST /webhooks/meta` checks `X-Hub-Signature-256` against the exact request bytes using `META_APP_SECRET`. A bad signature returns 401 and logs a security event. Fastify refuses bodies over 1 MiB.
+2. `POST /webhooks/meta` checks `X-Hub-Signature-256` against the exact request bytes using `META_APP_SECRET`. A bad signature on a valid JSON request returns 401 and logs a security event. Fastify refuses malformed JSON and bodies over 1 MiB.
 3. The handler saves one payload per signed delivery in `webhook_events`. Its external id is the SHA-256 hex digest of the verified bytes. The handler queues one `process-webhook-event` job by row id and returns 200. An identical retry restores a missing job for an unprocessed row.
 4. CHN-4 adds the worker. It parses with the driver and finds each store through `store_id_for_channel_account(kind, externalId)`. CHAT-1 and CHAT-2 handle individual message and receipt deduplication.
 

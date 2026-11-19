@@ -7,9 +7,9 @@ import {
   Query,
   Req,
   Res,
+  UnsupportedMediaTypeException,
   type RawBodyRequest,
 } from '@nestjs/common';
-import { RouteConfig } from '@nestjs/platform-fastify';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import {
@@ -39,9 +39,10 @@ export class MetaWebhooksController {
 
   @Post()
   @ProviderCallback()
-  @RouteConfig({ rawJson: true })
   @HttpCode(200)
   receive(@Req() request: RawBodyRequest<FastifyRequest>) {
+    const mediaType = request.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase();
+    if (mediaType !== 'application/json') throw new UnsupportedMediaTypeException();
     const signature = request.headers['x-hub-signature-256'];
     return this.webhooks.receiveDelivery(
       request.rawBody,
