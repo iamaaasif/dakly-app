@@ -1,0 +1,42 @@
+import { describe, expect, it } from 'vitest';
+
+import { createContentPieceSchema, updateContentPieceSchema } from './content';
+
+describe('content library input', () => {
+  const piece = { kind: 'sms', language: 'bn', body: 'অর্ডার করুন\n' };
+
+  it('keeps the text as entered', () => {
+    expect(createContentPieceSchema.parse(piece)).toEqual(piece);
+  });
+
+  it('rejects body text that is blank or contains a null character', () => {
+    expect(createContentPieceSchema.safeParse({ ...piece, body: ' \n ' }).success).toBe(false);
+    expect(createContentPieceSchema.safeParse({ ...piece, body: 'অর্ডার\u0000 করুন' }).success).toBe(
+      false,
+    );
+  });
+
+  it('explains how to fix blank text and null characters', () => {
+    for (const body of ['', ' \n ']) {
+      expect(createContentPieceSchema.safeParse({ ...piece, body })).toMatchObject({
+        success: false,
+        error: { issues: [{ path: ['body'], message: 'Enter some text' }] },
+      });
+    }
+    expect(createContentPieceSchema.safeParse({ ...piece, body: 'অর্ডার\u0000 করুন' })).toMatchObject(
+      {
+        success: false,
+        error: { issues: [{ path: ['body'], message: 'Remove the null character' }] },
+      },
+    );
+  });
+
+  it('rejects attempts to set the creator or provenance', () => {
+    expect(createContentPieceSchema.safeParse({ ...piece, createdByUserId: null }).success).toBe(
+      false,
+    );
+    expect(
+      updateContentPieceSchema.safeParse({ body: piece.body, isAiWritten: false }).success,
+    ).toBe(false);
+  });
+});
