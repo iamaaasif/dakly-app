@@ -274,6 +274,29 @@ fixture('GET /orders/catalogue', async () => {
   });
 });
 
+fixture('GET /orders/catalogue/stock', async () => {
+  const { a, b } = await pair();
+  const product = (
+    await success(b, 'POST', '/products', 201, {
+      name: 'Tracked Panjabi',
+      pricePoisha: 125000,
+      isStockTracked: true,
+    })
+  ).json();
+  const own = product.variants[0].id as string;
+  const foreign = await orderVariant(a);
+  await f.admin.pool.query(
+    "update product_variants set on_hand=7,reserved=3,status='archived' where store_id=$1 and id=$2",
+    [b.id, own],
+  );
+  const url = `/orders/catalogue/stock?variantIds=${own},${foreign},${randomUUID()}`;
+  expect((await success(b, 'GET', url, 200)).json()).toEqual([{ variantId: own, available: 4 }]);
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    b.membership,
+  ]);
+  expect((await f.request(b.member, 'GET', url)).statusCode).toBe(403);
+});
+
 fixture('GET /orders/catalogue/:productId', async () => {
   const { a, b } = await pair();
   const product = (
