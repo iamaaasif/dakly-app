@@ -75,18 +75,15 @@ export class AnalyticsSummariesService {
   }
 
   private async scheduleOrderDay(storeId: string, day: string) {
-    await this.queue.add(
-      BUILD_ORDER_SUMMARY,
-      { storeId, day },
-      {
-        deduplication: { id: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}`, keepLastIfActive: true },
-        delay: MINUTE_MS - (this.clock.now().getTime() % MINUTE_MS),
-        attempts: 3,
-        backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
-        removeOnComplete: { age: DAY_MS / 1000 },
-        removeOnFail: 100,
-      },
-    );
+    const payload = { storeId, day };
+    await this.queue.add(BUILD_ORDER_SUMMARY, payload, {
+      deduplication: { id: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}`, keepLastIfActive: true },
+      delay: MINUTE_MS - (this.clock.now().getTime() % MINUTE_MS),
+      attempts: 3,
+      backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
+      removeOnComplete: { age: DAY_MS / 1000 },
+      removeOnFail: 100,
+    });
   }
 
   private async refreshBuyer(storeId: string, contactId: string, timeZone: string) {

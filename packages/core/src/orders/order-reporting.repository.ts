@@ -19,16 +19,15 @@ export class OrderReportingRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   async reportingAnchor(storeId: string, orderId: string, timeZone: string) {
-    const [order] = await this.database.forStore(storeId, (tx) => {
-      const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
-      return tx
+    const [order] = await this.database.forStore(storeId, (tx) =>
+      tx
         .select({
-          day: sql<string>`${day}::text`,
+          day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text`,
           buyerContactId: orders.buyerContactId,
         })
         .from(orders)
-        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)));
-    });
+        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
+    );
     return order;
   }
 
@@ -46,7 +45,8 @@ export class OrderReportingRepository {
         from orders o cross join first_order
         where o.store_id = ${storeId} and o.buyer_contact_id = ${contactId}
           and o.stage <> 'cancelled'
-          and o.created_at >= ${since}::date::timestamp at time zone ${timeZone}
+          and o.created_at >= (${since}::date - 1)::timestamp at time zone 'UTC'
+          and (o.created_at at time zone ${timeZone})::date >= ${since}::date
       `),
     );
     return rows;
@@ -54,10 +54,11 @@ export class OrderReportingRepository {
 
   dailyOrderMetrics(storeId: string, range: { from: string; through: string; timeZone: string }) {
     const { from, through, timeZone } = range;
+    const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
-          day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text`,
+          day: sql<string>`${day}::text`,
           source: orders.source,
           orders: sql<string>`count(*)::text`,
           sales: sql<string>`sum(${orders.itemsSubtotalPoisha} - ${orders.orderDiscountPoisha})::text`,
@@ -69,8 +70,9 @@ export class OrderReportingRepository {
           and(
             eq(orders.storeId, storeId),
             ne(orders.stage, 'cancelled'),
-            sql`${orders.createdAt} >= ${from}::date::timestamp at time zone ${timeZone}`,
-            sql`${orders.createdAt} < (${through}::date + 1)::timestamp at time zone ${timeZone}`,
+            // The UTC bounds keep the index usable when local midnight repeats.
+            sql`${orders.createdAt} >= (${from}::date - 1)::timestamp at time zone 'UTC' and ${orders.createdAt} < (${through}::date + 2)::timestamp at time zone 'UTC'`,
+            sql`${day} between ${from}::date and ${through}::date`,
           ),
         )
         .groupBy(sql`1`, orders.source),

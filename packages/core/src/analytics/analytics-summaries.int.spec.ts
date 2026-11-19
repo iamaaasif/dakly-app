@@ -118,6 +118,27 @@ describe('Daily order summaries', () => {
     expect(await ordersFor(fixture.b)).toMatchObject([{ day: '2026-11-08', value: '1' }]);
   });
 
+  it('counts the first midnight when the store’s local clock repeats midnight', async () => {
+    const storeId = fixture.b;
+    const day = '2026-10-25';
+    await fixture.connection.pool.query(
+      "update stores set time_zone='Atlantic/Azores' where id=$1",
+      [storeId],
+    );
+    try {
+      const orderId = await order(storeId, `${day}T00:30:00Z`);
+      await app
+        .get(SummarizeOrderCreated)
+        .handle({ ...event(storeId, orderId), type: 'order.created' });
+      await finishOrderDay(storeId, day);
+      expect(await ordersFor(storeId)).toContainEqual(expect.objectContaining({ day, value: '1' }));
+    } finally {
+      await fixture.connection.pool.query("update stores set time_zone='UTC' where id=$1", [
+        storeId,
+      ]);
+    }
+  });
+
   it('queues one refresh for two order events on the same store day', async () => {
     const first = await order(fixture.a, '2026-10-26T05:00:00Z');
     const second = await order(fixture.a, '2026-10-26T06:00:00Z');
