@@ -26,19 +26,9 @@ export class UsageService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
-  async remaining(storeId: string, unit: UsageUnit): Promise<number> {
-    const { allowance, periodStart } = await this.billing.currentAllowance(storeId, unit);
-    const used = await this.repository.periodTotal(
-      storeId,
-      unit,
-      periodStart.toISOString().slice(0, 10),
-    );
-    return Math.max(0, allowance - used);
-  }
-
-  async hasAllowance(storeId: string, unit: UsageUnit): Promise<boolean> {
+  async hasAllowance(storeId: string, unit: UsageUnit, quantity: number): Promise<boolean> {
     const { allowance, used } = await this.currentUsage(storeId, unit);
-    return used < allowance;
+    return used + quantity <= allowance;
   }
 
   consume(storeId: string, { unit, quantity, reference }: ConsumeUsageInput): Promise<UsageEvent> {

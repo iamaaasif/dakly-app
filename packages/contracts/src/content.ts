@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { contentAiDraftSchema } from './content-writing';
 import { searchText } from './search-text';
 import { contentKinds, contentLanguages } from './social';
 
@@ -29,9 +28,9 @@ const pieceSchema = z.strictObject({
 export const createContentPieceSchema = pieceSchema
   .extend({
     sourcePieceId: z.uuid().optional(),
-    aiDraft: contentAiDraftSchema.optional(),
+    aiRunId: z.uuid().optional(),
   })
-  .refine((input) => !input.sourcePieceId || !input.aiDraft, 'Choose one source');
+  .refine((input) => !input.sourcePieceId || !input.aiRunId, 'Choose one source');
 export const updateContentPieceSchema = pieceSchema
   .partial()
   .refine((input) => Object.keys(input).length > 0, 'Change at least one field');

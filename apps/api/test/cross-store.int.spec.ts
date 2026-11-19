@@ -2797,10 +2797,10 @@ function scriptWriter(write: (input: string) => string[]) {
   }));
 }
 
-async function allowContentCredits() {
+async function allowContentCredits(quantity = 20) {
   await f.admin.pool.query('update plans set limits=limits || $2::jsonb where id=$1', [
     f.plan,
-    JSON.stringify({ ai_content: 20 }),
+    JSON.stringify({ ai_content: quantity }),
   ]);
 }
 
@@ -2831,24 +2831,52 @@ fixture('POST /content-pieces/generate', async () => {
     const empty = await f.request(a.owner, 'POST', url, request);
     expect(empty.statusCode, empty.body).toBe(409);
     expect(model).not.toHaveBeenCalled();
-    await allowContentCredits();
+    await allowContentCredits(4);
     const rejected = await f.request(a.owner, 'POST', url, request);
     expect(rejected.statusCode, rejected.body).toBe(502);
     expect(await contentCharges(a)).toEqual([]);
     modelOptions = safe;
     const generated = await success(a, 'POST', url, 200, request);
     expect(generated.json().options).toEqual(safe);
-    const aiDraft = generated.json().aiDraft;
-    const savedInput = { kind: request.kind, language: request.language, body: safe[0], aiDraft };
+    const aiRunId = generated.json().aiRunId;
+    const savedInput = { kind: request.kind, language: request.language, body: safe[0], aiRunId };
     const saved = await success(a, 'POST', '/content-pieces', 201, savedInput);
     expect(saved.json()).toMatchObject({
       body: safe[0],
       isAiWritten: true,
-      aiRunId: aiDraft.aiRunId,
+      aiRunId,
     });
     expect((await f.request(b.owner, 'POST', '/content-pieces', savedInput)).statusCode).toBe(400);
+    const {
+      rows: [failedRun],
+    } = await f.admin.pool.query<{ id: string }>(
+      "select id from ai_runs where store_id=$1 and purpose='content' and outcome='failed_check' limit 1",
+      [a.id],
+    );
+    expect(failedRun).toBeDefined();
+    const failedSave = await f.request(a.owner, 'POST', '/content-pieces', {
+      ...savedInput,
+      aiRunId: failedRun!.id,
+    });
+    expect(failedSave.json().error.code).toBe('CONTENT_DRAFT_INVALID');
+    const replyRunId = randomUUID();
+    await f.admin.pool.query(
+      `insert into ai_runs (id,store_id,purpose,tier,model,prompt_version,outcome)
+       values ($1,$2,'chat_reply','reply','test','chat-reply.v1','completed')`,
+      [replyRunId, a.id],
+    );
+    const replySave = await f.request(a.owner, 'POST', '/content-pieces', {
+      ...savedInput,
+      aiRunId: replyRunId,
+    });
+    expect(replySave.json().error.code).toBe('CONTENT_DRAFT_INVALID');
     expect(await contentCharges(a)).toEqual([3]);
     expect(await contentCharges(b)).toEqual([]);
+
+    model.mockClear();
+    const shortAllowance = await f.request(a.owner, 'POST', url, request);
+    expect(shortAllowance.json().error.code).toBe('CONTENT_CREDITS_UNAVAILABLE');
+    expect(model).not.toHaveBeenCalled();
 
     modelOptions = ['Cotton scarves are here'];
     const edited = await success(a, 'POST', url, 200, {

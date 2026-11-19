@@ -43,15 +43,10 @@ export const contentWriteRequestSchema = z
       });
   });
 
-export const contentAiDraftSchema = z.strictObject({
-  aiRunId: z.uuid(),
-  proof: z.string().regex(/^[a-f0-9]{64}$/),
-});
-
 export const contentWriteOutputSchema = z.strictObject({ options: z.array(z.string()) });
 
 export type ContentWriteInput = z.infer<typeof contentWriteRequestSchema>;
 export type ProductDescriptionInput = z.infer<typeof productDescriptionRequestSchema>;
 export type ContentWriteResult = z.infer<typeof contentWriteOutputSchema> & {
-  aiDraft: z.infer<typeof contentAiDraftSchema>;
+  aiRunId: string;
 };
