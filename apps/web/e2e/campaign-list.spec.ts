@@ -144,6 +144,44 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect.poll(() => new URL(page.url()).searchParams.get('limit')).toBe('50');
     for (const [name, value] of Object.entries(bounds))
       expect(new URL(page.url()).searchParams.get(name)).toBe(value);
+    await createdThrough.fill('2019-12-31');
+    const dateError = page.getByText('End date must be on or after the start date');
+    await expect(dateError).toBeVisible();
+    await page.goBack();
+    await expect(createdThrough).toHaveValue(bounds.createdThrough);
+    await expect(dateError).toHaveCount(0);
+    await clear.click();
+    await expect(page).toHaveURL(/\/campaigns$/);
+
+    let releaseSearch!: () => void;
+    const waitForRelease = new Promise<void>((resolve) => (releaseSearch = resolve));
+    const isPendingSearch = (url: URL) =>
+      url.pathname === '/campaigns' &&
+      url.searchParams.get('search') === 'Kurti' &&
+      !url.searchParams.has('status');
+    await page.route(isPendingSearch, async (route) => {
+      await waitForRelease;
+      await route.continue().catch((error: unknown) => {
+        // The second navigation can cancel this held request before we release it.
+        if (!(error instanceof Error) || !error.message.includes('Route is already handled'))
+          throw error;
+      });
+    });
+    try {
+      await search.fill('Kurti');
+      const requestedSearch = page.waitForRequest((request) =>
+        isPendingSearch(new URL(request.url())),
+      );
+      await submitSearch.click();
+      await requestedSearch;
+      await status.selectOption('draft');
+      await expect(page).toHaveURL(/search=Kurti.*status=draft/);
+      await expect(page.getByRole('link', { name: 'Winter Kurti collection' })).toBeVisible();
+    } finally {
+      releaseSearch();
+      await page.unroute(isPendingSearch);
+    }
+
     await clear.click();
     await expect(page).toHaveURL(/\/campaigns$/);
     await status.selectOption('sent');

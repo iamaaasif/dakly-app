@@ -1,8 +1,8 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -41,37 +41,38 @@ const campaignFilterSchema = filterFields
 
 export function CampaignFilters({ query }: { query: CampaignListQuery }) {
   const router = useRouter();
+  const params = useSearchParams().toString();
   const { search = '', status = '', channel = '', createdFrom = '', createdThrough = '' } = query;
   const form = useForm<FiltersInput, unknown, CampaignListQuery>({
     resolver: zodResolver(campaignFilterSchema),
     defaultValues: { search, status, channel, createdFrom, createdThrough },
   });
   const { getValues, reset, resetField } = form;
+  const submittedSearch = useRef(search);
   useEffect(() => {
     resetField('search', { defaultValue: search });
   }, [search, resetField]);
   useEffect(() => {
+    submittedSearch.current = search;
     reset({ search: getValues('search'), status, channel, createdFrom, createdThrough });
-  }, [status, channel, createdFrom, createdThrough, getValues, reset]);
+  }, [status, channel, createdFrom, createdThrough, getValues, reset, search, params]);
   const visit = (filters: CampaignListQuery) =>
     router.push(campaignListHref({ ...filters, limit: query.limit }));
-  const apply = form.handleSubmit(visit);
+  const apply = form.handleSubmit((filters) => {
+    submittedSearch.current = filters.search ?? '';
+    visit(filters);
+  });
   function applyFilter() {
     const parsed = campaignFilterSchema.safeParse({
       ...getValues(),
-      search,
+      search: submittedSearch.current,
     });
     if (parsed.success) visit(parsed.data);
     else void form.trigger();
   }
   function clear() {
-    reset({
-      search: '',
-      status: '',
-      channel: '',
-      createdFrom: '',
-      createdThrough: '',
-    });
+    submittedSearch.current = '';
+    reset({ search: '', status: '', channel: '', createdFrom: '', createdThrough: '' });
     router.push('/campaigns');
   }
 
