@@ -52,6 +52,15 @@ export class SegmentsService {
     return this.contacts.listIdsMatching(storeId, segment.rules, page);
   }
 
+  async matchingContactIds(storeId: string, segmentId: string, contactIds: string[]) {
+    const segment = await this.repository.find(storeId, segmentId);
+    if (!segment) return [];
+    return this.contacts.listIdsMatching(storeId, segment.rules, {
+      contactIds,
+      limit: contactIds.length,
+    });
+  }
+
   // A deleted segment holds no one.
   async hasContact(storeId: string, segmentId: string, contactId: string): Promise<boolean> {
     const segment = await this.repository.find(storeId, segmentId);

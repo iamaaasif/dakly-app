@@ -259,6 +259,15 @@ export class ContactsService {
     });
   }
 
+  birthdayContactIds(
+    storeId: string,
+    birthday: { month: number; days: number[] },
+    after: string | null,
+    limit: number,
+  ) {
+    return this.contactsRepository.birthdayContactIds(storeId, birthday, after, limit);
+  }
+
   // D42: an import never changes the phone, kind, source, verification or consent of a contact the
   // store already has. A filled cell replaces that field and tags are added; `skip` leaves it as it
   // is. A contact this import already added is not written again, so a rerun changes nothing.
@@ -362,7 +371,7 @@ export class ContactsService {
   listIdsMatching(
     storeId: string,
     rules: SegmentRules,
-    page: { cursor?: string; limit: number },
+    page: { cursor?: string; limit: number; contactIds?: string[] },
   ): Promise<string[]> {
     return this.contactsRepository.listIdsMatching(storeId, rules, page);
   }
