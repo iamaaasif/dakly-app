@@ -139,14 +139,6 @@ function NewOrderActions({
     <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-3">
       <Button
         variant="secondary"
-        disabled={busy}
-        className="min-h-11 sm:min-h-10"
-        onClick={onSaveConfirmed}
-      >
-        Save as confirmed
-      </Button>
-      <Button
-        variant="secondary"
         onClick={onClose}
         disabled={busy}
         className="min-h-11 sm:min-h-10"
@@ -155,6 +147,14 @@ function NewOrderActions({
       </Button>
       <Button type="submit" loading={isPending} className="min-h-11 sm:min-h-10">
         {mustRetry ? 'Retry save' : 'Save order'}
+      </Button>
+      <Button
+        variant="secondary"
+        disabled={busy}
+        className="min-h-11 sm:min-h-10"
+        onClick={onSaveConfirmed}
+      >
+        Save as confirmed
       </Button>
     </div>
   );
@@ -312,22 +312,23 @@ function OrderPreview({ variants, order }: OrderPreviewProps) {
   if (charge === undefined || paid === undefined) return null;
   const total = subtotal - orderDiscount + charge;
   if (!Number.isSafeInteger(total)) return null;
+  return <OrderPreviewTotals total={total} cod={Math.max(0, total - paid)} isNew={!order} />;
+}
+
+function OrderPreviewTotals({ total, cod, isNew }: { total: number; cod: number; isNew: boolean }) {
   return (
     <p
       className={cn(
         'flex flex-wrap items-center rounded-lg bg-surface-muted p-3 text-sm tabular-nums',
-        order ? 'justify-between' : 'gap-x-3',
+        isNew ? 'gap-x-3' : 'justify-between',
       )}
     >
       <span>
         Total <strong className="font-semibold text-text">{formatMoney(total)}</strong>
       </span>
-      {!order && <span aria-hidden="true">·</span>}
+      {isNew && <span aria-hidden="true">·</span>}
       <span>
-        Cash on delivery{' '}
-        <strong className="font-semibold text-text">
-          {formatMoney(Math.max(0, total - paid))}
-        </strong>
+        Cash on delivery <strong className="font-semibold text-text">{formatMoney(cod)}</strong>
       </span>
     </p>
   );

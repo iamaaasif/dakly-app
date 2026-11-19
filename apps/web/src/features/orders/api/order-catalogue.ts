@@ -1,4 +1,11 @@
-import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type QueryFunctionContext,
+} from '@tanstack/react-query';
+import { useEffect } from 'react';
 
 import type {
   OrderCataloguePage,
@@ -20,8 +27,9 @@ export function useOrderCatalogue(search?: string) {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (pageParam) params.set('cursor', pageParam);
+      const requestedAt = performance.now();
       const page = await request<OrderCataloguePage>(`/orders/catalogue?${params}`, { signal });
-      return { ...page, receivedAt: Date.now() };
+      return { ...page, requestedAt };
     },
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(contextTag && data?.currentStore?.canEditOrders),
@@ -35,14 +43,24 @@ const catalogueProductKey = (contextTag: string | undefined, id: string) => [
   id,
 ];
 
-export function useRememberCatalogueProduct() {
+type ProductSnapshot = OrderCatalogueProduct & { requestedAt: number };
+
+export function useSelectedCatalogueProduct(
+  id: string,
+  product: OrderCatalogueProduct | undefined,
+  requestedAt = 0,
+) {
   const { contextTag } = useStoreRequest();
   const cache = useQueryClient();
-  return (product: OrderCatalogueProduct, receivedAt: number) => {
+  const [selected] = useOrderCatalogueProducts(id ? [id] : []);
+  useEffect(() => {
+    if (!product) return;
     const key = catalogueProductKey(contextTag, product.id);
-    if (receivedAt > (cache.getQueryState(key)?.dataUpdatedAt ?? 0))
-      cache.setQueryData(key, product, { updatedAt: receivedAt });
-  };
+    if (requestedAt > (cache.getQueryData<ProductSnapshot>(key)?.requestedAt ?? -1))
+      cache.setQueryData(key, { ...product, requestedAt });
+  }, [cache, contextTag, product, requestedAt]);
+  const latest = selected?.data;
+  return (latest?.requestedAt ?? -1) > requestedAt ? latest : (product ?? latest);
 }
 
 export function useOrderCatalogueProducts(ids: readonly string[]) {
@@ -51,8 +69,12 @@ export function useOrderCatalogueProducts(ids: readonly string[]) {
   return useQueries({
     queries: ids.map((id) => ({
       queryKey: catalogueProductKey(contextTag, id),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        request<OrderCatalogueProduct>(`/orders/catalogue/${id}`, { signal }),
+      queryFn: async ({ client, queryKey, signal }: QueryFunctionContext) => {
+        const requestedAt = performance.now();
+        const product = await request<OrderCatalogueProduct>(`/orders/catalogue/${id}`, { signal });
+        const latest = client.getQueryData<ProductSnapshot>(queryKey);
+        return latest && latest.requestedAt > requestedAt ? latest : { ...product, requestedAt };
+      },
       enabled: Boolean(contextTag && data?.currentStore?.canEditOrders),
     })),
   });
