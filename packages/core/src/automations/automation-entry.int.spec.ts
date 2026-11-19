@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { getQueueToken } from '@nestjs/bullmq';
 import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { createDatabase } from '@dakly/db/client';
@@ -173,8 +173,13 @@ describe('AutomationEntryService (Postgres)', () => {
       { key: 'tag_added', filters: [{ field: 'tag', tag: 'নিয়মিত' }] },
     );
     const contacts = app.get(ContactsService);
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      await contacts.changeTag(storeId, contactId, { tag, change: 'add' }, { kind: 'system' });
+    const contactClock = vi.spyOn(Clock.prototype, 'now').mockReturnValue(now);
+    try {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await contacts.changeTag(storeId, contactId, { tag, change: 'add' }, { kind: 'system' });
+      }
+    } finally {
+      contactClock.mockRestore();
     }
     const { rows } = await admin.pool.query(
       `select id, type, store_id as "storeId", payload, occurred_at as "occurredAt"
