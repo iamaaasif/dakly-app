@@ -28,18 +28,22 @@ export class MailpitSmsDriver implements SmsDriver {
     });
   }
 
-  async send(message: SmsMessage): Promise<SmsSendResult> {
+  async send(message: SmsMessage, signal?: AbortSignal): Promise<SmsSendResult> {
     const messageId = message.idempotencyKey && `${message.idempotencyKey}@sms.dakly.test`;
     if (messageId) {
-      const earlier = await this.findCaptured(messageId).catch(() => {
+      const earlier = await this.findCaptured(messageId, signal).catch(() => {
         throw new SmsSendRefused();
       });
       if (earlier) return { providerMessageId: earlier };
     }
-    return this.submit(message, messageId);
+    return this.submit(message, messageId, signal);
   }
 
-  private async submit(message: SmsMessage, messageId?: string): Promise<SmsSendResult> {
+  private async submit(
+    message: SmsMessage,
+    messageId?: string,
+    signal?: AbortSignal,
+  ): Promise<SmsSendResult> {
     let response = '';
     try {
       ({ response } = await this.transport.sendMail({
@@ -56,7 +60,7 @@ export class MailpitSmsDriver implements SmsDriver {
     // Mailpit can store a message without returning a queue id, including on a lost reply.
     const providerMessageId =
       /queued as ([\w-]+)$/u.exec(response)?.[1] ??
-      (messageId ? await this.findCaptured(messageId).catch(() => undefined) : undefined);
+      (messageId ? await this.findCaptured(messageId, signal).catch(() => undefined) : undefined);
     if (!providerMessageId) {
       throw Object.assign(new Error('SMS delivery failed'), { code: 'SMS_SEND_FAILED' });
     }
@@ -64,10 +68,11 @@ export class MailpitSmsDriver implements SmsDriver {
   }
 
   // A retained capture lets a later send recover its id by Message-ID.
-  private async findCaptured(messageId: string): Promise<string | undefined> {
+  private async findCaptured(messageId: string, signal?: AbortSignal): Promise<string | undefined> {
     const query = new URLSearchParams({ query: `message-id:"${messageId}"`, limit: '100' });
+    const deadline = AbortSignal.timeout(5000);
     const response = await fetch(`${this.apiUrl}/api/v1/search?${query}`, {
-      signal: AbortSignal.timeout(5000),
+      signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
     });
     if (!response.ok) throw new Error('Mailpit search failed');
     const { messages } = captureSearch.parse(await response.json());

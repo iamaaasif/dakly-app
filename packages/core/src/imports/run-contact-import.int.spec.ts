@@ -100,6 +100,29 @@ async function report(url: string | null) {
   return (await fetch(url!)).text();
 }
 
+async function deleteFixtureContacts() {
+  const { rows } = await admin.pool.query<{ id: string }>(
+    'select id from contacts where store_id=$1 order by id',
+    [storeId],
+  );
+  // Split the fixture's foreign-key work across a few disjoint contact batches.
+  const batchSize = Math.max(1, Math.ceil(rows.length / 4));
+  const deletes = [];
+  for (let start = 0; start < rows.length; start += batchSize) {
+    const ids = rows.slice(start, start + batchSize).map(({ id }) => id);
+    deletes.push(
+      admin.pool.query('delete from contacts where store_id=$1 and id=any($2::uuid[])', [
+        storeId,
+        ids,
+      ]),
+    );
+  }
+  const failure = (await Promise.allSettled(deletes)).find(
+    (result) => result.status === 'rejected',
+  );
+  if (failure) throw failure.reason;
+}
+
 describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
   beforeAll(async () => {
     await admin.pool.query("insert into stores(id,name) values($1,'শাহনাজের দোকান')", [storeId]);
@@ -123,7 +146,9 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
   afterAll(async () => {
     try {
       await app?.close();
-      for (const table of ['outbox_events', 'contacts', 'imports', 'files'])
+      await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
+      await deleteFixtureContacts();
+      for (const table of ['imports', 'files'])
         await admin.pool.query(`delete from ${table} where store_id=$1`, [storeId]);
       await admin.pool.query('delete from stores where id=$1', [storeId]);
       await admin.pool.query('delete from users where id=$1', [userId]);

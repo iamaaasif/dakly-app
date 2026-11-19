@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { MetaRequestError, type MetaAuthorizationDriver, type MetaPage } from '../channel-driver';
+import {
+  MetaRequestError,
+  type MetaAuthorizationDriver,
+  type MetaPage,
+  type MetaTokenHealthDriver,
+} from '../channel-driver';
 
 const graph = 'https://graph.facebook.com/v27.0/';
 const login = 'https://www.facebook.com/v27.0/dialog/oauth';
@@ -57,7 +62,7 @@ type MetaApp = {
   redirectUri: string;
 };
 
-export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
+export class MetaGraphChannelDriver implements MetaAuthorizationDriver, MetaTokenHealthDriver {
   constructor(private readonly app: MetaApp) {}
 
   authorizationUrl(state: string): string {
@@ -122,6 +127,19 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
       z.object({ success: z.literal(true) }),
       { method: 'POST', signal: AbortSignal.timeout(requestTimeoutMs), accessToken },
     );
+  }
+
+  async isTokenValid(accessToken: string): Promise<boolean> {
+    const result = await this.request(
+      'debug_token',
+      { input_token: accessToken },
+      z.object({ data: z.object({ is_valid: z.boolean() }) }),
+      {
+        accessToken: `${this.app.appId}|${this.app.appSecret}`,
+        signal: AbortSignal.timeout(requestTimeoutMs),
+      },
+    );
+    return result.data.is_valid;
   }
 
   private async request<T>(

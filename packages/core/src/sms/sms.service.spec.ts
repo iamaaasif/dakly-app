@@ -3,7 +3,7 @@ import { Logger } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
-import { SmsSendRefused } from '@dakly/providers/sms/sms-driver';
+import { type SmsDriver, SmsSendRefused, SmsSendTimeout } from '@dakly/providers/sms/sms-driver';
 
 import { SmsService } from './sms.service';
 
@@ -55,4 +55,49 @@ describe('shared SMS delivery', () => {
     await expect(service.send(message)).rejects.toBe(timeout);
     vi.restoreAllMocks();
   });
+
+  it.each([
+    { label: 'never answers', refusesOnAbort: false },
+    { label: 'rejects as refused when aborted', refusesOnAbort: true },
+  ])(
+    'reports an unknown outcome after 30 seconds when the provider $label',
+    async ({ refusesOnAbort }) => {
+      vi.useFakeTimers();
+      const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+      try {
+        const cancelled = vi.fn();
+        const driver: SmsDriver = {
+          send: (_message, signal) =>
+            new Promise((_resolve, reject) => {
+              signal?.addEventListener(
+                'abort',
+                () => {
+                  cancelled();
+                  if (refusesOnAbort) reject(new SmsSendRefused());
+                },
+                { once: true },
+              );
+            }),
+        };
+        const sending = new SmsService(driver).send({ to: '01712345678', text: 'অর্ডার নিশ্চিত' });
+        let settled = false;
+        const outcome = sending.catch((error: unknown) => error).finally(() => (settled = true));
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(settled).toBe(false);
+        expect(cancelled).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(1);
+        const error = await outcome;
+        expect(error).toBeInstanceOf(SmsSendTimeout);
+        expect(error).toMatchObject({
+          code: 'SMS_SEND_TIMEOUT',
+          message: 'The SMS provider did not answer in time',
+        });
+        expect(cancelled).toHaveBeenCalledTimes(1);
+      } finally {
+        log.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
 });
