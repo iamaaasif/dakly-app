@@ -103,7 +103,7 @@ function SettingsFields({ error, pending }: { error?: string; pending: boolean }
   return (
     <fieldset disabled={pending} className="mx-auto max-w-5xl space-y-4 p-4 md:p-8">
       <FormField name="name" label="Workflow name">
-        {(field) => <Input {...field} {...register('name')} maxLength={80} />}
+        {(field) => <Input {...field} {...register('name')} />}
       </FormField>
       {(error || formState.errors.root?.message) && (
         <p role="alert" className="text-danger">

@@ -1,4 +1,4 @@
-import { useFieldArray, useFormContext, useWatch, type FieldPath } from 'react-hook-form';
+import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 
 import { type AutomationGraph, MAX_EXIT_CONDITIONS } from '@dakly/contracts/automations/graph';
 import { Button } from '@dakly/ui/button';
@@ -24,62 +24,31 @@ const reEntryLabels = {
   every_time: 'Every time',
 } satisfies Record<AutomationGraph['reEntry']['rule'], string>;
 
-type ReEntryRule = AutomationGraph['reEntry']['rule'];
-
-function RuleSelect<Value extends string>({
-  name,
-  label,
-  value,
-  labels,
-  onChange,
-}: {
-  name: FieldPath<SettingsInput>;
-  label: string;
-  value: Value;
-  labels: Record<Value, string>;
-  onChange: (value: Value) => void;
-}) {
-  return (
-    <FormField name={name} label={label}>
-      {(field) => (
-        <Select value={value} onValueChange={onChange}>
-          <SelectTrigger {...field}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries<string>(labels).map(([key, label]) => (
-              <SelectItem key={key} value={key}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-    </FormField>
-  );
-}
-
-export function WorkflowEntrySettings() {
-  const { control, register, setValue } = useFormContext<SettingsInput>();
-  const graph = useWatch({ control, name: 'graph' });
-  const rule = graph.reEntry?.rule ?? 'every_days';
-  function changeRule(rule: ReEntryRule) {
+function ReEntryField({ rule }: { rule: AutomationGraph['reEntry']['rule'] }) {
+  const { register, setValue } = useFormContext<SettingsInput>();
+  function changeRule(rule: AutomationGraph['reEntry']['rule']) {
     setValue('graph.reEntry', rule === 'every_days' ? { rule, days: 30 } : { rule }, {
       shouldDirty: true,
     });
   }
   return (
-    <section
-      className="space-y-4 rounded-lg border border-border bg-surface p-4"
-      aria-label="Entry and exit rules"
-    >
-      <RuleSelect
-        name="graph.reEntry.rule"
-        label="Re-entry"
-        value={rule}
-        labels={reEntryLabels}
-        onChange={changeRule}
-      />
+    <>
+      <FormField name="graph.reEntry.rule" label="Re-entry">
+        {(field) => (
+          <Select value={rule} onValueChange={changeRule}>
+            <SelectTrigger {...field}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(reEntryLabels).map(([key, label]) => (
+                <SelectItem key={key} value={key}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </FormField>
       {rule === 'every_days' && (
         <FormField name="graph.reEntry.days" label="Days between entries">
           {(field) => (
@@ -87,12 +56,23 @@ export function WorkflowEntrySettings() {
               {...field}
               {...register('graph.reEntry.days', { valueAsNumber: true })}
               type="number"
-              min={1}
-              max={365}
             />
           )}
         </FormField>
       )}
+    </>
+  );
+}
+
+export function WorkflowEntrySettings() {
+  const { control } = useFormContext<SettingsInput>();
+  const graph = useWatch({ control, name: 'graph' });
+  return (
+    <section
+      className="space-y-4 rounded-lg border border-border bg-surface p-4"
+      aria-label="Entry and exit rules"
+    >
+      <ReEntryField rule={graph.reEntry?.rule ?? 'every_days'} />
       {removesOwnTag(graph) && (
         <p role="status" className="text-sm text-warning">
           This workflow removes its trigger tag. Adding that tag again can restart the workflow.
