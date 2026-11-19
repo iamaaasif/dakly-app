@@ -58,8 +58,13 @@ export class SendPolicyService {
   ) {}
 
   // Check eligibility and freeze the destination after the contact locks.
-  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'> & SendWindow) {
-    const exists = await this.lockForDispatch(storeId, request.contactId);
+  async checkForSend(
+    storeId: string,
+    request: Omit<SendRequest, 'at'> & SendWindow,
+    lockedContactExists?: boolean,
+  ) {
+    this.requireTransaction();
+    const exists = lockedContactExists ?? (await this.lockForDispatch(storeId, request.contactId));
     const at = this.clock.now();
     if (!exists) return { decision: skip('no_address'), destination: null, at };
     const [checked] = await this.evaluateAudience(
@@ -70,7 +75,8 @@ export class SendPolicyService {
     return { decision: checked!.decision, destination: checked!.phone, at };
   }
 
-  private async lockForDispatch(storeId: string, contactId: string) {
+  // Workflow gates take this lock before locking the workflow, then pass the result to the check.
+  async lockForDispatch(storeId: string, contactId: string) {
     this.requireTransaction();
     await this.repository.lockContact(storeId, contactId);
     try {
@@ -110,8 +116,13 @@ export class SendPolicyService {
   }
 
   // The recipient and workflow stay locked while the runner prepares the final time and cap check.
-  async recheckRetryRecipient(storeId: string, request: Omit<SendRequest, 'at'>) {
-    const exists = await this.lockForDispatch(storeId, request.contactId);
+  async recheckRetryRecipient(
+    storeId: string,
+    request: Omit<SendRequest, 'at'>,
+    lockedContactExists?: boolean,
+  ) {
+    this.requireTransaction();
+    const exists = lockedContactExists ?? (await this.lockForDispatch(storeId, request.contactId));
     const at = this.clock.now();
     const reason = exists ? await this.recipientReason(storeId, { ...request, at }) : 'no_address';
     return { decision: reason ? skip(reason) : SEND, at };
