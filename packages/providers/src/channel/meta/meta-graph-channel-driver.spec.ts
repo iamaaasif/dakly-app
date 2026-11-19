@@ -59,16 +59,56 @@ describe('MetaGraphChannelDriver', () => {
     });
   });
 
-  it('reports a rejected recipient as a definite failure', async () => {
-    vi.stubGlobal('fetch', async () =>
-      Response.json(
-        { error: { code: 551, message: 'Private recipient details' } },
-        { status: 400 },
+  it.each([100, 551, 10903, 10904])(
+    'reports Graph rejection %s as a definite failure',
+    async (code) => {
+      vi.stubGlobal('fetch', async () =>
+        Response.json({ error: { code, message: 'Private recipient details' } }, { status: 400 }),
+      );
+      await expect(driver.send(pageCredentials, messengerReply)).rejects.toMatchObject({
+        code: 'rejected',
+        message: 'Meta request failed',
+      });
+    },
+  );
+
+  it('uses the linked Page token for a reply to an Instagram-scoped recipient', async () => {
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      expect(url.pathname).toMatch(/\/me\/messages$/);
+      const request = new Request(url, init);
+      expect(request.headers.get('authorization')).toBe('Bearer test-page-credential');
+      expect(await request.json()).toMatchObject({
+        recipient: { id: messengerReply.externalConversationId },
+        message: { text: messengerReply.text },
+      });
+      return Response.json({ message_id: 'mid.instagram' });
+    });
+    await expect(
+      driver.send(
+        { ...pageCredentials, accountExternalId: 'instagram-business-account' },
+        { ...messengerReply, channel: 'instagram' },
       ),
+    ).resolves.toEqual({ externalMessageId: 'mid.instagram' });
+  });
+
+  it('treats a message-window error as a send rejection without revoking the connection', async () => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json({ error: { code: 10, error_subcode: 2018278 } }, { status: 400 }),
     );
     await expect(driver.send(pageCredentials, messengerReply)).rejects.toMatchObject({
       code: 'rejected',
-      message: 'Meta request failed',
+    });
+  });
+
+  it.each([
+    [10, 2534077],
+    [200, 2534041],
+  ])('requires reconnect for Graph link or access error %s/%s', async (code, error_subcode) => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json({ error: { code, error_subcode } }, { status: 400 }),
+    );
+    await expect(driver.send(pageCredentials, messengerReply)).rejects.toMatchObject({
+      code: 'auth_error',
     });
   });
 
