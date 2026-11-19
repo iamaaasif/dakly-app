@@ -10,6 +10,8 @@ import {
   consentChangedEventSchema,
   contactBirthdayEventSchema,
   contactCreatedEventSchema,
+  contactDeletedEventSchema,
+  contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   importStartedEventSchema,
   importUndoRequestedEventSchema,
@@ -23,6 +25,8 @@ import {
   messageOptedOutEventSchema,
   messageReadEventSchema,
   messageReceivedEventSchema,
+  messageSendRequestedEventSchema,
+  messageSentEventSchema,
   messageTappedEventSchema,
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
@@ -42,6 +46,8 @@ import {
 export const daklyEventSchema = z.discriminatedUnion('type', [
   contactBirthdayEventSchema,
   contactCreatedEventSchema,
+  contactDeletedEventSchema,
+  contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   productUpdatedEventSchema,
   stockChangedEventSchema,
@@ -57,6 +63,8 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   channelNeedsReconnectEventSchema,
   conversationStartedEventSchema,
   messageReceivedEventSchema,
+  messageSendRequestedEventSchema,
+  messageSentEventSchema,
   messageDeliveredEventSchema,
   messageReadEventSchema,
   messageFailedEventSchema,

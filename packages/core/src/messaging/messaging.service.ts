@@ -5,6 +5,7 @@ import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ConsentService } from '../consents/consent.service';
+import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { hashToken } from '../platform/crypto/token-hash';
@@ -16,6 +17,8 @@ import { SmsService } from '../sms/sms.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
 import { messagingError } from './messaging.errors';
+import { OutboundMessagingRepository } from './outbound-messaging.repository';
+import type { OutgoingChannelMessage } from './outgoing-channel-message';
 
 export type InboundMessageInput = {
   kind: (typeof channelConnectionKinds)[number];
@@ -52,6 +55,7 @@ export type SentMessage = { providerMessageId: string; parts: number; credits: n
 export class MessagingService {
   constructor(
     @Inject(ContactsService) private readonly contactsService: ContactsService,
+    @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
     @Inject(SmsService) private readonly smsService: SmsService,
     @Inject(SmsSendersService) private readonly smsSenders: SmsSendersService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -60,6 +64,7 @@ export class MessagingService {
     @Inject(ConsentService) private readonly consent: ConsentService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(OutboundMessagingRepository) private readonly outbound: OutboundMessagingRepository,
   ) {}
 
   receiveInboundMessage(storeId: string, input: InboundMessageInput): Promise<ReceiveOutcome> {
@@ -168,6 +173,30 @@ export class MessagingService {
     });
     // One SMS credit pays for one part (glossary: message cost).
     return { providerMessageId, parts, credits: parts };
+  }
+
+  queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
+    return this.transaction.run(storeId, async () => {
+      const conversation = await this.outbound.findConversation(storeId, input);
+      if (!conversation || !(await this.identities.findOutboundIdentity(storeId, input)))
+        throw messagingError('CONVERSATION_NOT_FOUND');
+      const idempotencyKey = `outbound:${hashToken(input.operationKey).toString('hex')}`;
+      const now = this.clock.now();
+      const { message, created } = await this.outbound.queue(
+        storeId,
+        { ...input, conversationId: conversation.id, idempotencyKey },
+        now,
+      );
+      if (!message) throw messagingError('MESSAGE_OPERATION_CONFLICT');
+      if (created)
+        await this.outbox.publish({
+          type: 'message.send_requested',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { messageId: message.id },
+        });
+      return { messageId: message.id };
+    });
   }
 
   async prepareSender(storeId: string): Promise<PreparedSmsSender> {

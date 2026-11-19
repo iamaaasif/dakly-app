@@ -230,6 +230,7 @@ export class IsolationFixture {
       'sms_sender_ids',
       'saved_replies',
       'notifications',
+      'store_daily_metrics',
       'outbox_events',
       'audit_log',
       'memberships',

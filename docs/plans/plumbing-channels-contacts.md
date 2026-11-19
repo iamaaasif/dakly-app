@@ -90,9 +90,9 @@ Branch: `feat/chat-1-core-messaging-inbound`
 
 ### CHAT-2 · Core messaging: send and receipts
 
-Branch: `feat/chat-2-core-messaging-send`
+Branches: `feat/chat-2-core-messaging`, `feat/chat-2-channel-dispatch`, `feat/chat-2-message-receipts`
 
-- Scope: `MessagingService.send(storeId, { contactId, channel, connectionId, identityId, category, content, operationKey })` writes the outbound message as `queued` and enqueues `send-message` with the operation key as job id; the job calls the channel driver (Messenger and Instagram now; SMS through `SmsService` with an `sms_messages` row; WhatsApp after CHN-3) outside any transaction, then records the provider message id. An uncertain provider result is reconciled before any resend. Delivery, read and failure webhooks update the message and emit `message.delivered`, `message.read`, `message.failed`. An auth error marks the connection `needs_reconnect`. Campaigns, workflows and the Chats inbox all send through this one method.
+- Scope: `MessagingService.queueChannelMessage(storeId, { contactId, channel, connectionId, identityId, category, content, operationKey, actor })` writes the outbound message as `queued` and publishes `message.send_requested` in the same transaction. The outbox relay queues `send-message` once per event and subscriber. The job calls the Messenger or Instagram driver outside the transaction, uses the message id as the provider operation key and records the provider message id. WhatsApp follows CHN-3. An uncertain provider result is reconciled before any resend. Delivery, read and failure webhooks update the message and emit `message.delivered`, `message.read`, `message.failed`. An auth error marks the connection `needs_reconnect`. Channel dispatch handles replies and transactional sends. SMS callers use `MessagingService.send`. Marketing sends need the campaign sender’s timing and frequency accounting.
 - Tests (integration, fake drivers): the same operation key twice sends once; a crash after the provider call sends once on retry; a read receipt before the delivery receipt still ends `read`; an auth error marks the connection and notifies the Owner; no transaction is open during the driver call.
 
 ### CUS-3 · Contact stats
