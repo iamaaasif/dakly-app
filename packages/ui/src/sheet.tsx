@@ -99,6 +99,7 @@ type SheetDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   pending: boolean;
+  className?: string;
   children: ReactNode;
 };
 
@@ -108,6 +109,7 @@ export function SheetDialog({
   open,
   onOpenChange,
   pending,
+  className,
   children,
 }: SheetDialogProps) {
   return (
@@ -117,7 +119,10 @@ export function SheetDialog({
         <DialogPrimitive.Overlay className="fixed inset-0 z-60 bg-inverse/50" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
-          className="fixed inset-0 z-70 m-auto h-fit max-h-dvh w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text shadow-overlay"
+          className={cn(
+            'fixed inset-0 z-70 m-auto h-fit max-h-dvh w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text shadow-overlay',
+            className,
+          )}
         >
           <div className="mb-4 flex items-start justify-between gap-4">
             <DialogPrimitive.Title className="min-w-0 text-lg font-semibold wrap-anywhere">
