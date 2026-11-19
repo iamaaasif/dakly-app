@@ -23,9 +23,11 @@ export class SmsService {
   constructor(@Inject(SMS_DRIVER) private readonly driver: SmsDriver) {}
 
   async receiptStatus(receipt: SmsReceipt): Promise<SmsReceiptStatus> {
-    return (
-      (await this.driver.receiptStatus?.(receipt).catch(() => 'unknown' as const)) ?? 'unknown'
-    );
+    const readReceipt = this.driver.receiptStatus?.bind(this.driver);
+    if (!readReceipt) return 'unknown';
+    return measureVendorCall(this.logger, 'sms_receipt', 'SMS receipt lookup measured', () =>
+      readReceipt(receipt),
+    ).catch(() => 'unknown');
   }
 
   async send(message: SmsMessage): Promise<SmsSendResult> {
