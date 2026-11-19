@@ -79,8 +79,22 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     );
     await expect(page.getByRole('link', { name: 'Winter Kurti collection' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Puja winback' })).toBeVisible();
-    await expect(page.getByRole('row', { name: /Puja winback/ })).toContainText(
-      'Win back customers',
+    await expect(page.getByRole('columnheader')).toHaveText([
+      'Campaign',
+      'Status',
+      'Sent',
+      'Clicked',
+      'Orders',
+      'Revenue',
+    ]);
+    await expect(page.getByRole('row', { name: /Puja winback/ })).toContainText('SMS');
+    await expect(
+      page.getByRole('row', { name: /Puja winback/ }).getByText('—', { exact: true }),
+    ).toHaveCount(4);
+    await expect(page.getByRole('combobox', { name: 'Channel' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'false',
     );
     await captureCampaignList(page);
 
@@ -104,11 +118,15 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await page.setViewportSize({ width: 1440, height: 900 });
     const search = page.getByLabel('Search', { exact: true });
     const status = page.getByRole('combobox', { name: 'Status', exact: true });
+    const moreFilters = page.getByRole('button', { name: 'Filters', exact: true });
     const channel = page.getByRole('combobox', { name: 'Channel', exact: true });
     const createdFrom = page.getByLabel('Created from', { exact: true });
     const createdThrough = page.getByLabel('Created through', { exact: true });
     const clear = page.getByRole('button', { name: 'Clear filters', exact: true });
     const submitSearch = page.getByRole('button', { name: 'Search', exact: true });
+    await search.fill('Unsubmitted text');
+    await clear.click();
+    await expect(search).toHaveValue('');
     await search.fill('Puja');
     await expect.poll(() => new URL(page.url()).searchParams.has('search')).toBe(false);
     await status.selectOption('sent');
@@ -119,6 +137,8 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect(search).toHaveValue('');
     await status.selectOption('sent');
     await expect(page).toHaveURL(/status=sent/);
+    await moreFilters.click();
+    await expect(moreFilters).toHaveAttribute('aria-expanded', 'true');
     await channel.selectOption('sms');
     await expect(page).toHaveURL(/channel=sms/);
     await createdFrom.fill('2026-11-01');
@@ -135,6 +155,8 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
       createdThrough: '2099-12-31',
     };
     await page.goto(`/campaigns?${new URLSearchParams(bounds)}`);
+    await expect(createdFrom).toBeHidden();
+    await moreFilters.click();
     await expect(createdFrom).toHaveValue('2020-01-01');
     await expect(createdThrough).toHaveValue('2099-12-31');
     await search.fill('Puja');
@@ -145,6 +167,11 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
       expect(new URL(page.url()).searchParams.get(name)).toBe(value);
     await createdThrough.fill('2019-12-31');
     const dateError = page.getByText('End date must be on or after the start date');
+    await expect(dateError).toBeVisible();
+    await moreFilters.click();
+    await expect(dateError).toBeHidden();
+    await submitSearch.click();
+    await expect(moreFilters).toHaveAttribute('aria-expanded', 'true');
     await expect(dateError).toBeVisible();
     await page.goBack();
     await expect(createdThrough).toHaveValue(bounds.createdThrough);
@@ -175,6 +202,7 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     );
     await expect(page).toHaveURL(new RegExp(`/campaigns/${sent}$`));
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
+    await expect(page.getByText('Win back customers')).toBeVisible();
     await expect(page.getByText('Come back this week for our Puja collection.')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Save draft' })).toHaveCount(0);
 
