@@ -196,3 +196,15 @@ describe.each(WORKER_QUEUES)('Scheduled job on %s', (queueName) => {
     expect(JSON.stringify(report.mock.calls)).not.toContain('private-scheduled-failure');
   });
 });
+
+describe('Calendar schedules', () => {
+  it('starts the daily job at UTC midnight', async () => {
+    const prefix = `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`;
+    const { queue } = await start(QUEUES.bulk, prefix);
+    await scheduleJob(queue, SCHEDULED, { pattern: '0 0 * * *', tz: 'UTC' });
+    const [scheduled] = await queue.getJobSchedulers();
+    expect(scheduled).toMatchObject({ name: SCHEDULED, pattern: '0 0 * * *', tz: 'UTC' });
+    expect(new Date(scheduled?.next ?? 1).toISOString()).toMatch(/T00:00:00\.000Z$/);
+    expect(scheduled?.next).toBeGreaterThan(Date.now());
+  });
+});
