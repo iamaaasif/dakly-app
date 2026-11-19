@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { ContactsService } from '../contacts/contacts.service';
-import { TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import { type SendDecision, SendPolicyService } from '../sending/send-policy.service';
@@ -30,7 +29,6 @@ import {
 
 const RETRY_LIMIT_MS = 36 * HOUR_MS;
 const MAX_DELAY_MS = 6 * HOUR_MS;
-const optOutPath = new RegExp(`/s/[a-zA-Z0-9]{${TRACKED_LINK_CODE_LENGTH}}$`, 'u');
 
 type RetryableSend = SendingStep & {
   firstTriedAt: Date;
@@ -45,33 +43,15 @@ type RetryCheck = (now: Date) => RetryGateDecision;
 export function hasRetryDetails(step: SendStep, row: SendingStep, now: Date): row is RetryableSend {
   return (
     row.providerMessageId === null &&
-    validTime(row.firstTriedAt) &&
+    row.firstTriedAt !== null &&
     row.firstTriedAt <= now &&
-    validTime(row.latestDispatchAt) &&
-    /^[a-f0-9]{64}$/u.test(row.destinationHash ?? '') &&
-    (step.category === 'marketing' ? validOptOutUrl(row.optOutUrl) : row.optOutUrl === null)
+    row.latestDispatchAt !== null &&
+    row.destinationHash !== null &&
+    (step.category !== 'marketing' || row.optOutUrl !== null)
   );
 }
 
-function validTime(time: Date | null): time is Date {
-  return time instanceof Date && Number.isFinite(time.getTime());
-}
-
-function validOptOutUrl(value: string | null): boolean {
-  if (!value || /\s/u.test(value)) return false;
-  const url = URL.parse(value);
-  return (
-    url !== null &&
-    /^https?:$/u.test(url.protocol) &&
-    !url.username &&
-    !url.password &&
-    !url.search &&
-    !url.hash &&
-    optOutPath.test(url.pathname)
-  );
-}
-
-export function endIncompleteRetry(now: Date): StepResult {
+function endIncompleteRetry(now: Date): StepResult {
   return endWithUnknownOutcome(failed('The SMS is missing its original delivery details', now));
 }
 
@@ -86,7 +66,6 @@ export function endExpiredRetry(
   wakeAt: Date | null,
   now: Date,
 ) {
-  if (now < firstTriedAt) return endIncompleteRetry(now);
   return (
     exhausted(firstTriedAt, now) ??
     (isLateSend(wakeAt, now) ? endWithUnknownOutcome(goOn(step.next, now)) : undefined)
