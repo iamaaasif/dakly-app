@@ -173,16 +173,16 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M9. Payments and billing
 
-| ID    | Task                                                                      | Status | Depends      | PR  | Notes                  |
-| ----- | ------------------------------------------------------------------------- | ------ | ------------ | --- | ---------------------- |
-| PAY-2 | Payment intents, events, verify job, reconciliation jobs                  | Todo   | DB-2         |     |                        |
-| PAY-3 | bKash driver (tokenized checkout)                                         | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
-| PAY-4 | Nagad driver                                                              | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
-| PAY-5 | City Bank card driver (hosted page)                                       | Todo   | PAY-2, DB-4  |     | Needs merchant sandbox |
-| PAY-6 | Shop advances: payment links from chats and orders, refunds               | Todo   | PAY-3, ORD-3 |     |                        |
-| PAY-7 | Subscriptions, renewal job, dunning, read-only guard                      | Todo   | PAY-3        |     | Q1 prices              |
-| PAY-8 | Invoices (PDF, numbering per financial year), SMS packs, WhatsApp balance | Todo   | PAY-7        |     |                        |
-| PAY-9 | Web: plan and usage, payments and invoices, payment methods settings      | Todo   | PAY-7        |     |                        |
+| ID    | Task                                                                      | Status    | Depends      | PR   | Notes                  |
+| ----- | ------------------------------------------------------------------------- | --------- | ------------ | ---- | ---------------------- |
+| PAY-2 | Payment intents, events, verify job, reconciliation jobs                  | In review | DB-2         | #228 |                        |
+| PAY-3 | bKash driver (tokenized checkout)                                         | Todo      | PAY-2, DB-4  |      | Needs merchant sandbox |
+| PAY-4 | Nagad driver                                                              | Todo      | PAY-2, DB-4  |      | Needs merchant sandbox |
+| PAY-5 | City Bank card driver (hosted page)                                       | Todo      | PAY-2, DB-4  |      | Needs merchant sandbox |
+| PAY-6 | Shop advances: payment links from chats and orders, refunds               | Todo      | PAY-3, ORD-3 |      |                        |
+| PAY-7 | Subscriptions, renewal job, dunning, read-only guard                      | Todo      | PAY-3        |      | Q1 prices              |
+| PAY-8 | Invoices (PDF, numbering per financial year), SMS packs, WhatsApp balance | Todo      | PAY-7        |      |                        |
+| PAY-9 | Web: plan and usage, payments and invoices, payment methods settings      | Todo      | PAY-7        |      |                        |
 
 ## M10. Content and social
 
@@ -191,7 +191,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | SOC-1 | Posts, targets, posting slots, approval          | In review | CHN-2   | #227, #234 |                                                 |
 | SOC-2 | Publish jobs for Facebook and Instagram, retries | Todo      | SOC-1   |            |                                                 |
 | SOC-3 | Post insights job                                | Todo      | SOC-2   |            |                                                 |
-| SOC-4 | Content Studio writing                           | In review | AI-2    | #225       | Create post caption generation waits for SOC-1. |
+| SOC-4 | Content Studio writing                           | In review | AI-2    | #225, #230 | Create post caption generation waits for SOC-1. |
 | SOC-5 | Web: Social hub, My posts, Content Studio        | Todo      | SOC-4   |            |                                                 |
 
 ## M11. Analytics and insights
