@@ -1,0 +1,76 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { MetaGraphPublishingDriver } from './meta-graph-publishing-driver';
+
+const account = { accountId: '123', accessToken: 'test-page-token' };
+const photoUrls = ['https://storage.test/one.jpg', 'https://storage.test/two.jpg'];
+const content = { kind: 'post' as const, caption: 'ঈদ', linkUrl: null, photoUrls };
+
+describe('MetaGraphPublishingDriver', () => {
+  const driver = new MetaGraphPublishingDriver();
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('uploads unpublished Facebook photos and then publishes them in one Page post', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ id: 'photo-1' }))
+      .mockResolvedValueOnce(Response.json({ id: 'photo-2' }))
+      .mockResolvedValueOnce(Response.json({ id: 'page-post' }));
+    vi.stubGlobal('fetch', fetch);
+
+    const photos = await driver.uploadFacebookPhotos(account, photoUrls);
+    expect(await driver.publishFacebook(account, content, photos)).toBe('page-post');
+    const [photo, , feed] = fetch.mock.calls;
+    expect(new URL(photo![0]).pathname).toMatch(/\/123\/photos$/);
+    expect(JSON.parse(photo![1].body)).toEqual({ url: photoUrls[0], published: false });
+    expect(new URL(feed![0]).pathname).toMatch(/\/123\/feed$/);
+    expect(feed![1].headers).toMatchObject({ Authorization: 'Bearer test-page-token' });
+    expect(JSON.parse(feed![1].body)).toEqual({
+      message: 'ঈদ',
+      attached_media: [{ media_fbid: 'photo-1' }, { media_fbid: 'photo-2' }],
+    });
+  });
+
+  it('creates Instagram carousel children and waits for the parent container to be ready', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ id: 'first' }))
+      .mockResolvedValueOnce(Response.json({ id: 'second' }))
+      .mockResolvedValueOnce(Response.json({ id: 'carousel' }))
+      .mockResolvedValueOnce(Response.json({ status_code: 'IN_PROGRESS' }))
+      .mockResolvedValueOnce(Response.json({ status_code: 'FINISHED' }))
+      .mockResolvedValueOnce(Response.json({ id: 'ig-post' }));
+    vi.stubGlobal('fetch', fetch);
+
+    const container = await driver.createInstagramContainer(account, content);
+    expect(container).toBe('carousel');
+    expect(await driver.instagramContainerState(account, container)).toBe('processing');
+    expect(await driver.instagramContainerState(account, container)).toBe('ready');
+    expect(await driver.publishInstagram(account, container)).toBe('ig-post');
+    const [first, , parent, status, , publish] = fetch.mock.calls;
+    expect(JSON.parse(first![1].body)).toEqual({ image_url: photoUrls[0], is_carousel_item: true });
+    expect(JSON.parse(parent![1].body)).toEqual({
+      caption: 'ঈদ',
+      media_type: 'CAROUSEL',
+      children: 'first,second',
+    });
+    expect(new URL(status![0]).searchParams.get('fields')).toBe('status_code');
+    expect(new URL(publish![0]).pathname).toMatch(/\/123\/media_publish$/);
+    expect(JSON.parse(publish![1].body)).toEqual({ creation_id: 'carousel' });
+  });
+
+  it('distinguishes a confirmed rejection from an unknown publishing result', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ error: { code: 190 } }, { status: 400 }))
+      .mockRejectedValueOnce(new Error('disconnected'));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
+      code: 'rejected',
+    });
+    await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+  });
+});
