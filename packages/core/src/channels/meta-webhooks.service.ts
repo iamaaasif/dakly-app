@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { setTimeout } from 'node:timers/promises';
 
 import { InjectQueue } from '@nestjs/bullmq';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
 import type { MetaWebhookVerification } from '@dakly/contracts/meta-webhooks';
@@ -22,15 +22,26 @@ import { MetaWebhooksRepository } from './meta-webhooks.repository';
 const QUEUE_WRITE_TIMEOUT_MS = 1000;
 
 @Injectable()
-export class MetaWebhooksService {
+export class MetaWebhooksService implements OnModuleInit {
   private readonly logger = new Logger(MetaWebhooksService.name);
   private readonly env = loadEnv();
+  private queueClient?: Awaited<Queue['client']>;
 
   constructor(
     @Inject(MetaWebhooksRepository) private readonly repository: MetaWebhooksRepository,
     @Inject(Clock) private readonly clock: Clock,
     @InjectQueue(INBOUND_QUEUE) private readonly queue: Queue<{ webhookEventId: string }>,
   ) {}
+
+  onModuleInit(): void {
+    // Observe startup once so early requests do not leave pending adds on the connection promise.
+    void this.queue.waitUntilReady().then(
+      (client) => {
+        this.queueClient = client;
+      },
+      () => undefined,
+    );
+  }
 
   verifySubscription(input: MetaWebhookVerification): string {
     const token = this.env.META_WEBHOOK_VERIFY_TOKEN;
@@ -69,6 +80,12 @@ export class MetaWebhooksService {
   }
 
   private async enqueueDelivery(webhookEventId: string): Promise<void> {
+    if (this.queueClient?.status !== 'ready')
+      throw new AppError(
+        'META_WEBHOOK_QUEUE_UNAVAILABLE',
+        META_WEBHOOK_ERRORS.META_WEBHOOK_QUEUE_UNAVAILABLE,
+      );
+
     const timer = new AbortController();
     const deadline = setTimeout(QUEUE_WRITE_TIMEOUT_MS, undefined, { signal: timer.signal }).then(
       () => {

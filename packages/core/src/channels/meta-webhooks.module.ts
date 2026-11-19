@@ -20,7 +20,9 @@ import { MetaWebhooksService } from './meta-webhooks.service';
           connection: {
             ...toRedisConnection(env.REDIS_URL),
             enableOfflineQueue: false,
+            autoResendUnfulfilledCommands: false,
             commandTimeout: 1000,
+            socketTimeout: 1000,
           },
           prefix: env.QUEUE_PREFIX,
         };

@@ -89,6 +89,7 @@ describe('Meta webhook intake', () => {
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
     queue = app.get(getQueueToken('inbound'));
+    await queue.waitUntilReady();
   });
 
   afterAll(async () => {
@@ -175,6 +176,23 @@ describe('Meta webhook intake', () => {
     } finally {
       lookup.mockRestore();
     }
+  });
+
+  it('leaves the row ready to retry while the queue is reconnecting', async () => {
+    const payload = delivery();
+    const client = await queue.waitUntilReady();
+    const status = client.status;
+    const enqueue = vi.spyOn(queue, 'add').mockRejectedValueOnce(new Error('Queue unavailable'));
+    try {
+      client.status = 'reconnecting';
+      expect((await post(payload)).statusCode).toBe(503);
+      expect(await stored(payload)).toHaveLength(1);
+      expect(enqueue).not.toHaveBeenCalled();
+    } finally {
+      client.status = status;
+      enqueue.mockRestore();
+    }
+    expect((await post(payload)).statusCode).toBe(200);
   });
 
   it('returns a retryable response if the queue does not respond', async () => {
