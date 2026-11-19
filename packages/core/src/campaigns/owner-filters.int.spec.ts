@@ -137,6 +137,15 @@ describe('campaign filters without RLS assistance', () => {
 
     expect(await repository.lockScheduled(f.b, a.id)).toBeUndefined();
     expect(
+      await f.tenant.forStore(f.b, () => repository.lockForCancellation(f.b, a.id)),
+    ).toBeUndefined();
+    expect(
+      await f.tenant.forStore(f.a, () => repository.lockForCancellation(f.a, a.id)),
+    ).toMatchObject({
+      id: a.id,
+      status: 'scheduled',
+    });
+    expect(
       await repository.changeStatus(
         f.b,
         a.id,

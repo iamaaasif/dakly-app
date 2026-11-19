@@ -184,8 +184,31 @@ uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
 one account can use a slot once. Scheduling records `post.scheduled` for each
 target.
 
-Publishing (SOC-2), insights (SOC-3), and the web screens (SOC-5) are separate
-tasks. SOC-4 adds AI caption generation and checks generated text before scheduling.
+With Meta publishing configured, the worker queues a publish job for each target. Instagram waits for its media
+container to finish. A successful target stays published when another target
+fails. Each target gets three retries over 30 minutes and a Fix now notification
+if it fails. A check 24 hours before publishing flags an account that needs
+reconnecting or a photo that is missing. Instagram targets require JPEG photos
+when saved, approved and published. A suspended store cannot publish. Its
+target fails if the store is still suspended on the last attempt. A first
+comment goes to Instagram only. A recovery job runs each minute and restores
+missing or failed jobs for targets due within 24 hours. The window for a missed
+or failed publication ends 30 minutes after the scheduled time, including time
+with Meta publishing disabled. After that, recovery records a saved receipt or
+marks the target failed.
+
+If Meta receives a publish request without returning a result, Dakly checks the
+Instagram container for confirmation. A confirmed container can be marked
+published even if Meta did not return the post ID. For a Facebook result it cannot confirm,
+Dakly asks the shop to check the Page before posting again.
+
+Facebook and Instagram use the connected Page token. Live publishing requires
+Meta app review for `pages_manage_posts` and `instagram_content_publish`. Stores
+may need to reconnect to grant them. An Instagram first comment needs comment
+permission. Dakly shows a warning if it cannot confirm the comment.
+
+Insights (SOC-3) and the web screens (SOC-5) are separate tasks. SOC-4 adds AI
+caption generation and checks generated text before scheduling.
 
 ### Screens in release 1
 

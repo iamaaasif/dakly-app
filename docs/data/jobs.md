@@ -55,10 +55,12 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 
 ## outbound
 
-| Job                   | Started by                         | Payload                   | Makes a rerun harmless                                              |
-| --------------------- | ---------------------------------- | ------------------------- | ------------------------------------------------------------------- |
-| `SendMessageJob`      | `message.send_requested`           | `storeId`, `messageId`    | One job per outbox event. The provider reference is the message ID. |
-| `publish-post-target` | Due post (from `due_post_targets`) | `storeId`, `postTargetId` | Status `publishing` set first; `external_post_id` unique            |
+| Job                       | Started by                   | Payload                                                           | Makes a rerun harmless                                                            |
+| ------------------------- | ---------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `SendMessageJob`          | `message.send_requested`     | `storeId`, `messageId`                                            | One job per outbox event. The provider reference is the message ID.               |
+| `QueuePostOnScheduledJob` | `post.scheduled`             | The event, including `storeId`, `postTargetId` and `scheduledFor` | Check and publish job IDs include the target and its scheduled time.              |
+| `check-post-target`       | 24 hours before publish time | `storeId`, `postTargetId`, `scheduledFor`                         | Checks only the matching schedule and writes only when the warning changes.       |
+| `publish-post-target`     | At publish time              | `storeId`, `postTargetId`, `scheduledFor`                         | Claims the target before calling Meta. A saved receipt prevents a second publish. |
 
 ## campaign
 
@@ -82,6 +84,7 @@ Per-store cap: one running campaign batch per store.
 
 | Job                          | Started by                                              | Payload                          | Makes a rerun harmless                                                                              |
 | ---------------------------- | ------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `recover-post-targets`       | Every minute                                            | none (sweep)                     | Finds stores with targets due within 24 hours and restores jobs under their original IDs.           |
 | `refresh-post-metrics`       | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                                                  |
 | `queue-channel-token-checks` | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due`                            |
 | `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                                               |

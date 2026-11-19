@@ -98,6 +98,14 @@ export class ChannelConnectionsService {
     return { id: connection.id, channel, connectedAt: connection.connectedAt } as const;
   }
 
+  async postingCredential(storeId: string, channelConnectionId: string) {
+    const token = await this.repository.activeMetaToken(storeId, channelConnectionId);
+    if (!token?.ciphertext || token.keyVersion === null) return undefined;
+    const { kind, ciphertext, keyVersion, expiresAt, externalAccountId } = token;
+    if (kind !== 'facebook_page' && kind !== 'instagram') return undefined;
+    return { kind, ciphertext, keyVersion, expiresAt, externalAccountId };
+  }
+
   async prepareMetaSend(
     storeId: string,
     connectionId: string,
