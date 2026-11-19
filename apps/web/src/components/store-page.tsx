@@ -9,6 +9,8 @@ type StorePageProps = {
     | 'canViewOrders'
     | 'canViewCampaigns'
     | 'canEditCampaigns'
+    | 'canViewAutomations'
+    | 'canEditAutomations'
     | 'canViewCustomers'
     | 'canCreateCustomer'
     | 'canApproveSupport'

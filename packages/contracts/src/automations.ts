@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import type { CampaignChannel } from './campaigns';
+
 import { type AutomationGraph, automationGraphSchema } from './automations/graph';
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
@@ -70,4 +72,10 @@ export type AutomationVersionResponse = {
 export type AutomationDetailResponse = AutomationResponse & {
   versions: AutomationVersionResponse[];
 };
-export type AutomationListResponse = { items: AutomationResponse[]; nextCursor: string | null };
+export type AutomationListItem = AutomationResponse & {
+  trigger: AutomationGraph['trigger']['key'];
+  stepCount: number;
+  channels: CampaignChannel[];
+  enteredLast30Days: number;
+};
+export type AutomationListResponse = { items: AutomationListItem[]; nextCursor: string | null };
