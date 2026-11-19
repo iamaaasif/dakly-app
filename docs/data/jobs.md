@@ -41,6 +41,10 @@ AI jobs take a per-store Valkey semaphore (3 at a time, Q15 working assumption).
 | `relay-outbox`                | Job scheduler, every second                | none (sweep)                                      | Claims stop after 10; job id `<eventId>-<subscriber>`; marked published                                    |
 | `wake-snoozed-notifications`  | Job scheduler, every 30 seconds            | none (sweep)                                      | `stores_with_snoozes_due`; per store, moves only `snoozed` cards whose `snoozed_until` has passed to `new` |
 
+Contact stats subscribers run on the transactional queue. Contact creation gives the contact ID.
+Order creation, stage changes and COD collection give the order ID, which the service uses to find
+the buyer. The subscriber recomputes the contact's row from current orders.
+
 ## outbound
 
 | Job                   | Started by                          | Payload                   | Makes a rerun harmless                                   |
@@ -75,7 +79,6 @@ Per-store cap: one running campaign batch per store.
 | `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                    |
 | `return-conversation-to-ai`  | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                                |
 | `sync-whatsapp-templates`    | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                      |
-| `refresh-contact-stats`      | Order or message outbox event                           | `storeId`, `contactId`           | Recomputes the row                                                       |
 | `build-daily-metrics`        | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                           |
 | `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)     |
 
