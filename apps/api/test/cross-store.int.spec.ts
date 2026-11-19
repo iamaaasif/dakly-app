@@ -5,7 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { META_AUTHORIZATION_DRIVER } from '@dakly/core/channels/meta-authorization.service';
+import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
@@ -1828,7 +1828,7 @@ async function expectSavedMetaCredential(shop: Shop, id: string, kind: string) {
 
 function metaSubscriptionDriver() {
   return app.get<{ subscribePage(pageId: string, token: string): Promise<void> }>(
-    META_AUTHORIZATION_DRIVER,
+    META_CHANNEL_DRIVER,
   );
 }
 

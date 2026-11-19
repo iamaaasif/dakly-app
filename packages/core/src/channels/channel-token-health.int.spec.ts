@@ -313,6 +313,22 @@ it('queues stores beyond the first bounded lookup page', async () => {
   }
 });
 
+it('reports a missing or mismatched Meta connection', async () => {
+  const connectionId = await connection('wrong-kind-fixture', null);
+  const connections = app.get(ChannelConnectionsService);
+  const message = {
+    channel: 'instagram',
+    externalConversationId: 'recipient-test',
+    text: 'Fixture reply',
+    operationKey: randomUUID(),
+  } as const;
+  for (const id of [randomUUID(), connectionId]) {
+    await expect(connections.sendMetaMessage(storeId, id, message)).rejects.toMatchObject({
+      code: 'CHANNEL_NOT_CONNECTED',
+    });
+  }
+});
+
 it('marks a rejected send credential and tells the owner', async () => {
   const connectionId = await connection('revoked-send-token', null);
   const connections = app.get(ChannelConnectionsService);
