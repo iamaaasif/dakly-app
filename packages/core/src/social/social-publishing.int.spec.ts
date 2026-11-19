@@ -53,6 +53,7 @@ describe('SocialPublishingService', () => {
     const isActive = vi.fn(async () => true);
     const stores = { isActive } as unknown as StoresService;
     const publish = vi.fn();
+    const record = vi.fn();
     const service = new SocialPublishingService(
       repository,
       { postingCredential, recordRejectedToken } as unknown as ChannelConnectionsService,
@@ -60,7 +61,7 @@ describe('SocialPublishingService', () => {
       driver,
       encryption,
       new StoreTransaction(fixture.tenant),
-      { record: vi.fn() } as unknown as AuditService,
+      { record } as unknown as AuditService,
       { publish } as unknown as OutboxService,
       clock,
       stores,
@@ -69,6 +70,7 @@ describe('SocialPublishingService', () => {
       service,
       accounts,
       publish,
+      record,
       storage,
       postingCredential,
       recordRejectedToken,
@@ -299,6 +301,49 @@ describe('SocialPublishingService', () => {
       error_code: null,
     });
     expect(comment).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the first comment result when a duplicate job arrives while it is sending', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const entered = Promise.withResolvers<void>();
+    const reply = Promise.withResolvers<void>();
+    const comment = vi.spyOn(driver, 'comment').mockImplementationOnce(() => {
+      entered.resolve();
+      return reply.promise;
+    });
+    const { service, accounts } = publishing(driver);
+    const target = await setupTarget(accounts, 'instagram', await post('ইনস্টাগ্রাম'));
+    const first = service.publishTarget(fixture.a, target, false);
+    await Promise.race([entered.promise, first]);
+    try {
+      await expect(service.publishTarget(fixture.a, target, false)).rejects.toMatchObject({
+        code: 'POST_PUBLISH_UNCONFIRMED',
+      });
+    } finally {
+      reply.resolve();
+      await first;
+    }
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'published',
+      error_code: null,
+    });
+    expect(comment).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a target recoverable when recording the attempt fails before calling Meta', async () => {
+    const driver = new FakeMetaPublishingDriver();
+    const send = vi.spyOn(driver, 'publishFacebook');
+    const { service, accounts, record } = publishing(driver);
+    const target = await setupTarget(accounts, 'facebook_page', await post());
+    record.mockRejectedValueOnce(new Error('Audit unavailable'));
+    await expect(service.publishTarget(fixture.a, target, true)).rejects.toThrow(
+      'Audit unavailable',
+    );
+    expect(await fixture.row('post_targets', target.postTargetId)).toMatchObject({
+      status: 'scheduled',
+      attempts: 0,
+    });
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('stops before any Meta request when the store is suspended', async () => {

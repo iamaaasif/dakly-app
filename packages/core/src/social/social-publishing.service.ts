@@ -68,17 +68,23 @@ export class SocialPublishingService {
     if (!driver || !match) return;
     const { target } = match;
     if (target.publishedAt) {
+      if (target.errorCode === 'POST_COMMENT_UNCONFIRMED') this.checkDue(target);
       await this.finish(storeId, target);
       return;
     }
     this.checkDue(target);
+    const attempted = await this.recordTarget(storeId, target, {
+      action: 'post.publish_attempted',
+      attempts: target.attempts + 1,
+    }).catch(async (failure: unknown) => {
+      if (!finalAttempt || !(failure instanceof AppError) || failure.code !== 'POST_STORE_INACTIVE')
+        throw failure;
+      await this.finish(storeId, target, failure);
+      return false;
+    });
+    if (!attempted) return;
     let receipt: PublishReceipt | undefined;
     try {
-      const attempted = await this.recordTarget(storeId, target, {
-        action: 'post.publish_attempted',
-        attempts: target.attempts + 1,
-      });
-      if (!attempted) return;
       receipt = await this.publishApproved(storeId, match, driver);
     } catch (failure) {
       if (!finalAttempt) throw failure;
