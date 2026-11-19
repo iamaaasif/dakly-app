@@ -57,5 +57,15 @@ describe('order summaries without RLS assistance', () => {
     expect(
       await repository.buyerActivityDays(fixture.a, buyerId, 'Atlantic/Azores', localDay),
     ).toMatchObject([{ day: localDay }]);
+    expect(await repository.oldestRetainedOrderDay(fixture.a, 'Atlantic/Azores', localDay)).toBe(
+      localDay,
+    );
+    expect(
+      await repository.reportBuyerIds(fixture.a, null, {
+        timeZone: 'Atlantic/Azores',
+        since: localDay,
+        limit: 100,
+      }),
+    ).toEqual([buyerId]);
   });
 });

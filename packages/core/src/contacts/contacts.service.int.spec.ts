@@ -215,7 +215,7 @@ describe('ContactsService (Postgres)', () => {
     ).rejects.toThrow('Later step failed');
 
     const events = await admin.pool.query(
-      'select type, payload from outbox_events where store_id=$1',
+      "select type, payload from outbox_events where store_id=$1 and type='contact.created'",
       [storeId],
     );
     expect(events.rows).toContainEqual({ type: 'contact.created', payload: { contactId: id } });

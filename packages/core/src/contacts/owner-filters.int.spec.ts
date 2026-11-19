@@ -86,7 +86,7 @@ describe('contact filters without RLS assistance', () => {
     expect(listed.map((row) => row.id)).toEqual([b!.id]);
     expect(await repository.findIdentities(f.b, a!.id)).toEqual([]);
     expect(await repository.update(f.b, a!.id, { name: 'করিম' })).toBeUndefined();
-    expect(await repository.softDelete(f.b, a!.id, new Date())).toBe(false);
+    expect(await repository.softDeleteAll(f.b, [a!.id], new Date())).toEqual([]);
     expect(await f.row('contacts', a!.id)).toMatchObject({ name: 'সুমি', deleted_at: null });
     expect(await repository.findIdentities(f.a, a!.id)).toHaveLength(1);
   });

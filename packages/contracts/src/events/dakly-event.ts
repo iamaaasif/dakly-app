@@ -11,6 +11,8 @@ import {
   consentChangedEventSchema,
   contactBirthdayEventSchema,
   contactCreatedEventSchema,
+  contactDeletedEventSchema,
+  contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   importStartedEventSchema,
   importUndoRequestedEventSchema,
@@ -44,6 +46,8 @@ import { walletCreditedEventSchema } from './wallets';
 export const daklyEventSchema = z.discriminatedUnion('type', [
   contactBirthdayEventSchema,
   contactCreatedEventSchema,
+  contactDeletedEventSchema,
+  contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   productUpdatedEventSchema,
   stockChangedEventSchema,

@@ -20,6 +20,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ContactDeletionService } from './contact-deletion.service';
 import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
 import { contactError } from './contacts.errors';
 import {
@@ -67,6 +68,7 @@ export class ContactsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ImportContactsRepository) private readonly importContacts: ImportContactsRepository,
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
+    @Inject(ContactDeletionService) private readonly deletion: ContactDeletionService,
   ) {}
 
   async create(
@@ -332,7 +334,7 @@ export class ContactsService {
   }
 
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
-    if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
+    if (!(await this.deletion.remove(storeId, [id])).length)
       throw contactError('CONTACT_NOT_FOUND');
   }
 
@@ -346,8 +348,8 @@ export class ContactsService {
     return this.contactsRepository.lockUneditedByImport(storeId, importId, page);
   }
 
-  removeAll(storeId: string, ids: string[], _actor: Actor): Promise<void> {
-    return this.contactsRepository.softDeleteAll(storeId, ids, this.clock.now());
+  async removeAll(storeId: string, ids: string[], _actor: Actor): Promise<void> {
+    await this.deletion.remove(storeId, ids);
   }
 
   // A deleted contact reads as undefined.
