@@ -184,17 +184,26 @@ uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
 one account can use a slot once. Scheduling records `post.scheduled` for each
 target.
 
-Instagram targets require JPEG photos when saved and approved.
+Instagram targets require JPEG photos when saved, approved and published. The
+publishing service handles one target at a time and records `post.published` or
+`post.failed`. Instagram waits for its media container to finish. A successful
+target stays published when another target fails. A suspended store cannot
+publish. Its target fails if the store is still suspended on the last attempt.
+A first comment goes to Instagram only. The next SOC-2 change connects this service to scheduled jobs,
+day-ahead checks and Fix now notifications.
 
-The Meta publishing driver uses the connected Page token for Facebook and
-Instagram. It can upload unpublished Page photos, publish a Page post or story,
-and create, check and publish an Instagram media container. The worker that uses
-this driver is the next SOC-2 change. Live publishing requires Meta app review
-for `pages_manage_posts` and `instagram_content_publish`. Stores may need to
-reconnect to grant them. First comments also need the network’s comment permission.
+If Meta receives a publish request without returning a result, Dakly checks the
+Instagram container for confirmation. A confirmed container can be marked
+published even if Meta did not return the post ID. For a Facebook result it cannot confirm,
+Dakly asks the shop to check the Page before posting again.
 
-Publishing (SOC-2), insights (SOC-3), and the web screens (SOC-5) are separate
-tasks. SOC-4 adds AI caption generation and checks generated text before scheduling.
+Facebook and Instagram use the connected Page token. Live publishing requires
+Meta app review for `pages_manage_posts` and `instagram_content_publish`. Stores
+may need to reconnect to grant them. An Instagram first comment needs comment
+permission. Dakly shows a warning if it cannot confirm the comment.
+
+Insights (SOC-3) and the web screens (SOC-5) are separate tasks. SOC-4 adds AI
+caption generation and checks generated text before scheduling.
 
 ### Screens in release 1
 
