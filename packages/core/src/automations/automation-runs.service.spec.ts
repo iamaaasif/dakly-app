@@ -96,10 +96,7 @@ class FakeRunsRepository {
   }
 
   async findSendingStep(_storeId: string, _runId: string, stepKey: string) {
-    const row = this.steps.find(
-      (row) => row.stepKey === stepKey && ['preparing', 'sending'].includes(row.outcome),
-    );
-    return row && { ...row, ...(row.outcome === 'preparing' && { preparing: true }) };
+    return this.steps.find((row) => row.stepKey === stepKey && row.outcome === 'sending');
   }
 
   async changeStep(_storeId: string, _runId: string, stepKey: string, change: RunStepChange) {
