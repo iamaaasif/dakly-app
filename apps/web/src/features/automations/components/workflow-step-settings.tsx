@@ -98,33 +98,12 @@ function ChannelOrder({
 }
 
 export function WorkflowStepSettings() {
-  const { control, setValue } = useFormContext<SettingsInput>();
+  const { control } = useFormContext<SettingsInput>();
   const graph = useWatch({ control, name: 'graph' });
   const steps = Object.entries(graph.steps).filter(
     ([, step]) => step.kind === 'wait' || step.kind === 'send',
   );
-  function addMessage() {
-    setValue(
-      'graph',
-      {
-        ...graph,
-        firstStepKey: 'message',
-        steps: {
-          ...graph.steps,
-          message: {
-            kind: 'send',
-            category: 'marketing',
-            channels: ['sms'],
-            message: { text: '', buttons: [] },
-            next: graph.firstStepKey,
-            ifNotReachable: 'skip',
-            reviewBeforeSending: false,
-          },
-        },
-      },
-      { shouldDirty: true },
-    );
-  }
+  if (!steps.length) return null;
   return (
     <section className="space-y-4" aria-label="Workflow steps">
       {steps.map(([key, step], index) => (
@@ -136,11 +115,6 @@ export function WorkflowStepSettings() {
           {step.kind === 'send' && <MessageFields stepKey={key} step={step} />}
         </div>
       ))}
-      {steps.length === 0 && graph.steps[graph.firstStepKey]?.kind === 'exit' && (
-        <Button variant="secondary" onClick={addMessage}>
-          Add a message
-        </Button>
-      )}
     </section>
   );
 }

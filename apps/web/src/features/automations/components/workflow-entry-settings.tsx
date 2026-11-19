@@ -1,7 +1,6 @@
-import { useFormContext, useWatch } from 'react-hook-form';
+import { useFieldArray, useFormContext, useWatch, type FieldPath } from 'react-hook-form';
 
-import type { AutomationGraph } from '@dakly/contracts/automations/graph';
-import { MAX_EXIT_CONDITIONS } from '@dakly/contracts/automations/graph';
+import { type AutomationGraph, MAX_EXIT_CONDITIONS } from '@dakly/contracts/automations/graph';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
@@ -14,43 +13,64 @@ import {
   type SettingsInput,
 } from '../workflow-settings-form';
 
-type ExitCondition = AutomationGraph['exitConditions'][number];
+type ExitKind = AutomationGraph['exitConditions'][number]['kind'];
+type ReEntryRule = AutomationGraph['reEntry']['rule'];
+
+function RuleSelect<Value extends string>({
+  name,
+  label,
+  value,
+  labels,
+  onChange,
+}: {
+  name: FieldPath<SettingsInput>;
+  label: string;
+  value: Value;
+  labels: Record<Value, string>;
+  onChange: (value: Value) => void;
+}) {
+  return (
+    <FormField name={name} label={label}>
+      {(field) => (
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger {...field}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries<string>(labels).map(([key, label]) => (
+              <SelectItem key={key} value={key}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </FormField>
+  );
+}
 
 export function WorkflowEntrySettings() {
   const { control, register, setValue } = useFormContext<SettingsInput>();
   const graph = useWatch({ control, name: 'graph' });
-  const reEntry = graph.reEntry ?? { rule: 'every_days', days: 30 };
+  const rule = graph.reEntry?.rule ?? 'every_days';
+  function changeRule(rule: ReEntryRule) {
+    setValue('graph.reEntry', rule === 'every_days' ? { rule, days: 30 } : { rule }, {
+      shouldDirty: true,
+    });
+  }
   return (
     <section
       className="space-y-4 rounded-lg border border-border bg-surface p-4"
       aria-label="Entry and exit rules"
     >
-      <FormField name="graph.reEntry.rule" label="Re-entry">
-        {(field) => (
-          <Select
-            value={reEntry.rule}
-            onValueChange={(value: AutomationGraph['reEntry']['rule']) =>
-              setValue(
-                'graph.reEntry',
-                value === 'every_days' ? { rule: value, days: 30 } : { rule: value },
-                { shouldDirty: true },
-              )
-            }
-          >
-            <SelectTrigger {...field}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(reEntryLabels).map(([key, label]) => (
-                <SelectItem key={key} value={key}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </FormField>
-      {reEntry.rule === 'every_days' && (
+      <RuleSelect
+        name="graph.reEntry.rule"
+        label="Re-entry"
+        value={rule}
+        labels={reEntryLabels}
+        onChange={changeRule}
+      />
+      {rule === 'every_days' && (
         <FormField name="graph.reEntry.days" label="Days between entries">
           {(field) => (
             <Input
@@ -74,58 +94,39 @@ export function WorkflowEntrySettings() {
 }
 
 function ExitRules() {
-  const { control, register, setValue } = useFormContext<SettingsInput>();
-  const exits = useWatch({ control, name: 'graph.exitConditions' });
-  const update = (value: ExitCondition[]) =>
-    setValue('graph.exitConditions', value, { shouldDirty: true });
+  const { control, register } = useFormContext<SettingsInput>();
+  const { fields, append, remove, update } = useFieldArray({
+    control,
+    name: 'graph.exitConditions',
+  });
   return (
     <fieldset className="space-y-3">
       <legend className="mb-3 font-semibold">Exit rules</legend>
-      {exits.map((exit, index) => (
-        <div key={index} className="space-y-2">
-          <FormField name={`graph.exitConditions.${index}.kind`} label={`Exit rule ${index + 1}`}>
-            {(field) => (
-              <Select
-                value={exit.kind}
-                onValueChange={(kind: ExitCondition['kind']) =>
-                  update(
-                    exits.map((item, position) => {
-                      if (position !== index) return item;
-                      return kind === 'got_tag' ? { kind, tag: '' } : { kind };
-                    }),
-                  )
-                }
-              >
-                <SelectTrigger {...field}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(exitLabels).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </FormField>
+      {fields.map((exit, index) => (
+        <div key={exit.id} className="space-y-2">
+          <RuleSelect
+            name={`graph.exitConditions.${index}.kind`}
+            label={`Exit rule ${index + 1}`}
+            value={exit.kind}
+            labels={exitLabels}
+            onChange={(kind: ExitKind) =>
+              update(index, kind === 'got_tag' ? { kind, tag: '' } : { kind })
+            }
+          />
           {exit.kind === 'got_tag' && (
             <FormField name={`graph.exitConditions.${index}.tag`} label="Exit tag">
               {(field) => <Input {...field} {...register(`graph.exitConditions.${index}.tag`)} />}
             </FormField>
           )}
-          <Button
-            variant="secondary"
-            onClick={() => update(exits.filter((_, position) => position !== index))}
-          >
+          <Button variant="secondary" onClick={() => remove(index)}>
             Remove exit rule {index + 1}
           </Button>
         </div>
       ))}
       <Button
         variant="secondary"
-        disabled={exits.length >= MAX_EXIT_CONDITIONS}
-        onClick={() => update([...exits, { kind: 'placed_order' }])}
+        disabled={fields.length >= MAX_EXIT_CONDITIONS}
+        onClick={() => append({ kind: 'placed_order' })}
       >
         Add exit rule
       </Button>

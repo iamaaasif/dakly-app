@@ -1,6 +1,7 @@
 'use client';
 
 import { Ellipsis, Zap } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import type { AutomationListItem } from '@dakly/contracts/automations';
@@ -15,7 +16,7 @@ import {
 } from '@dakly/ui/dropdown-menu';
 
 import { useAutomationAction } from '../api/automation-actions';
-import { channelLabels, triggerLabels } from '../automation-labels';
+import { channelLabels, statusLabels, triggerLabels } from '../automation-labels';
 
 export function AutomationRow({
   workflow,
@@ -26,12 +27,6 @@ export function AutomationRow({
 }) {
   const active = workflow.status === 'active';
   const draft = workflow.status === 'draft';
-  const statusLabels = {
-    active: 'Active',
-    draft: 'Draft',
-    paused: 'Disabled',
-    archived: 'Archived',
-  };
   const channels = workflow.channels.map((channel) => channelLabels[channel]).join(', ');
   const description = [
     `When ${triggerLabels[workflow.trigger]}`,
@@ -86,9 +81,12 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
             {active ? 'Disable' : 'Enable'}
           </Button>
         )}
-        <Button variant="secondary" disabled>
+        <Link
+          href={`/automations/${workflow.id}`}
+          className="inline-flex min-h-10 items-center rounded-md border border-input-border px-3 font-medium hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
           Edit
-        </Button>
+        </Link>
 
         <WorkflowMenu
           workflow={workflow}
