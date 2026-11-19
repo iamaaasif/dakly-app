@@ -82,13 +82,14 @@ resend is explicit. See [account and team](../features/01-account-and-team.md).
 
 ## Channels (02)
 
-| Route                                                                                                          | Permission      |
-| -------------------------------------------------------------------------------------------------------------- | --------------- |
-| `GET /channel-connections`                                                                                     | `storeSettings` |
-| `POST /channel-connections/meta`, `POST /channel-connections/whatsapp`                                         | `storeSettings` |
-| `POST /channel-connections/:channelConnectionId/reconnect`, `DELETE /channel-connections/:channelConnectionId` | `storeSettings` |
-| `PATCH /channel-connections/:channelConnectionId/ai`                                                           | `chats`         |
-| `GET /sms-sender-ids`, `POST /sms-sender-ids`, `POST /sms-sender-ids/:smsSenderIdId/test`                      | `storeSettings` |
+| Route                                                                                                          | Permission                           |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `GET /channel-connections`                                                                                     | `storeSettings`                      |
+| `POST /channel-connections/meta/start`, `POST /channel-connections/meta/accounts`                              | `storeSettings.edit`, Owner or Admin |
+| `POST /channel-connections/meta`, `POST /channel-connections/whatsapp`                                         | `storeSettings`                      |
+| `POST /channel-connections/:channelConnectionId/reconnect`, `DELETE /channel-connections/:channelConnectionId` | `storeSettings`                      |
+| `PATCH /channel-connections/:channelConnectionId/ai`                                                           | `chats`                              |
+| `GET /sms-sender-ids`, `POST /sms-sender-ids`, `POST /sms-sender-ids/:smsSenderIdId/test`                      | `storeSettings`                      |
 
 Store settings: `GET /store` requires `storeSettings.view`, and `PATCH /store`
 requires `storeSettings.edit`. Both return `StoreSettingsResponse`. Settings
