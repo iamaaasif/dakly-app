@@ -125,7 +125,7 @@ function WorkflowMenu({
 }) {
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
+      <DropdownMenuTrigger asChild disabled={action.isPending}>
         <Button
           variant="secondary"
           aria-label={`Actions for ${workflow.name}`}
