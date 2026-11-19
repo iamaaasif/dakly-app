@@ -43,6 +43,7 @@ export type FrozenRecipient = {
 export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
   approvedByUserId: string | null;
   approvedAt: Date;
+  shortLinkBase: string;
   startedAt: Date | null;
   estimatedCostPoisha: number;
   recipientsCount: number;
@@ -60,6 +61,7 @@ export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   finishedAt?: Date;
   approvedByUserId?: null;
   approvedAt?: null;
+  shortLinkBase?: null;
   estimatedCostPoisha?: null;
   recipientsCount?: 0;
   skippedCount?: 0;
