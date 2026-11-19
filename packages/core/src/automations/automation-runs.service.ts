@@ -130,8 +130,8 @@ export class AutomationRunsService {
     const held = holdOrEnd(run, now);
     if (held) return started ? endWithUnknownOutcome(held) : held;
     const facts: RunFacts = {
-      graph: run.graph,
       storeId,
+      graph: run.graph,
       runId: claim.runId,
       contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
@@ -179,6 +179,7 @@ export class AutomationRunsService {
         };
       }
       case 'send':
+        // Versions published before the guard still fail instead of sending without review.
         if (step.reviewBeforeSending)
           return failed('Review before sending is not available yet', now);
         return this.startSend(claim, step, facts);
