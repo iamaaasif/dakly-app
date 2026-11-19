@@ -1,0 +1,2 @@
+ALTER TABLE "contact_stats" ADD COLUMN "returned_count" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "contact_stats" ADD CONSTRAINT "contact_stats_returned_count" CHECK ("contact_stats"."returned_count" >= 0);

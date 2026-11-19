@@ -40,6 +40,14 @@ export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending' | 'stock'> 
 @Injectable()
 export class StoresRepository {
   constructor(@Inject(TenantDatabase) private readonly tenant: TenantDatabase) {}
+
+  async customerInactivityDays(storeId: string) {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select({ days: stores.customerInactivityDays }).from(stores).where(eq(stores.id, storeId)),
+    );
+    return row?.days;
+  }
+
   async insert(storeId: string, input: CreateStoreInput, extensions: string[]): Promise<void> {
     await this.tenant.forStore(storeId, async (tx) => {
       await tx.insert(stores).values({

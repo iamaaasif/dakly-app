@@ -50,6 +50,12 @@ export class StoresService {
     return toSettingsResponse(store);
   }
 
+  async customerInactivityDays(storeId: string) {
+    const days = await this.repository.customerInactivityDays(storeId);
+    if (days === undefined) throw storeError('STORE_NOT_FOUND');
+    return days;
+  }
+
   async timeZone(storeId: string): Promise<string> {
     const timeZone = await this.repository.timeZone(storeId);
     if (timeZone === undefined) throw storeError('STORE_NOT_FOUND');

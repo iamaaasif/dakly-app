@@ -28,7 +28,7 @@ export function StockAdjustmentForm({ productName, variant, onClose }: StockAdju
   const adjustment = useAdjustStock();
   return (
     <Dialog title={`Adjust stock: ${productName} · ${variant.title}`} open onClose={onClose}>
-      <p className="mb-4 text-sm text-text-muted">
+      <p className="mb-4 rounded-md border border-border bg-surface-muted p-3 text-sm text-text-muted">
         On hand: {variant.onHand} · Reserved: {variant.reserved} · Available: {variant.available}
       </p>
       <FormProvider {...form}>
@@ -60,7 +60,7 @@ export function StockAdjustmentForm({ productName, variant, onClose }: StockAdju
               {adjustment.error.message}
             </p>
           ) : null}
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-2">
             <Button variant="secondary" onClick={onClose}>
               Cancel
             </Button>

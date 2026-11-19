@@ -63,7 +63,7 @@ Every customer is in exactly one stage, so the 6 Dashboard groups always add up 
 | 3     | Slipping away           | 2 or more orders, and days since last order are more than 1.5 × the customer's usual gap between orders.                                                                     |
 | 4     | New                     | First order within the last 30 days.                                                                                                                                         |
 | 5     | Regulars                | 2 or more orders.                                                                                                                                                            |
-| 6     | Bought once             | Exactly 1 order (or 0 orders but imported as a customer), first order 31 to 60 days ago.                                                                                     |
+| 6     | Bought once             | Exactly 1 order outside the last 30 calendar days, or 0 orders but added as a customer. Earlier stages still take precedence.                                                |
 
 ## Ready-made segments (can overlap)
 
