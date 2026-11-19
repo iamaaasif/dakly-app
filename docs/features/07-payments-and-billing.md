@@ -386,8 +386,8 @@ merchant. It decrypts shop credentials only for those calls. A new callback
 queues verification through the outbox. The due sweep recovers verification
 after a missing callback or a lost queue entry. The sweep also requeues signed
 delivery attempts that are still waiting and clears any left after seven days.
-The outbox records verified live
-successes and failures. An amount mismatch also creates an in-app notice.
+The outbox records verified live successes and failures. An amount mismatch
+also creates an in-app notice.
 Nightly reconciliation matches loaded settlement lines for Dakly billing by
 gateway, transaction id and verified gross amount. A match updates the line and
 the intent together. Unmatched lines remain available for staff review. Shop and

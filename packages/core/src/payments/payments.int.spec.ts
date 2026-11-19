@@ -26,6 +26,7 @@ import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
+import { createHttpServer } from '../platform/http/http-server';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
@@ -111,10 +112,11 @@ let storeA: string;
 let storeB: string;
 
 beforeAll(async () => {
-  http = await NestFactory.create<NestFastifyApplication>(PaymentTestModule, new FastifyAdapter(), {
-    rawBody: true,
-    logger: false,
-  });
+  http = await NestFactory.create<NestFastifyApplication>(
+    PaymentTestModule,
+    new FastifyAdapter(createHttpServer([])),
+    { rawBody: true, logger: false },
+  );
   http.useGlobalFilters(new AppErrorFilter());
   await http.init();
   const created = await admin.db

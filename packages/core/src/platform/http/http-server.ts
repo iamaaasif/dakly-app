@@ -4,6 +4,7 @@ import { isIP } from 'node:net';
 import fastify from 'fastify';
 
 import type { ErrorResponse } from '@dakly/contracts/errors';
+import { MAX_PAYMENT_CALLBACK_BYTES } from '@dakly/contracts/payments';
 
 import { compileProxyTrust } from '../config/trusted-proxies';
 import { PLATFORM_ERRORS } from '../errors/app-error';
@@ -38,6 +39,10 @@ function validForwarding(headers: IncomingHttpHeaders): boolean {
 export function createHttpServer(trustedProxies: string[]) {
   const trust = compileProxyTrust(trustedProxies);
   const server = fastify({ trustProxy: trust });
+  server.addHook('onRoute', (route) => {
+    if (route.method === 'POST' && route.url === '/webhooks/payments/:gateway')
+      route.bodyLimit = MAX_PAYMENT_CALLBACK_BYTES;
+  });
   server.addHook('onRequest', async (request, reply) => {
     const headers = request.raw.headers;
     if (!trust(request.raw.socket.remoteAddress ?? '')) {
