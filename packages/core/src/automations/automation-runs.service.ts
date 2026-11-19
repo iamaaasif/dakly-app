@@ -217,8 +217,6 @@ export class AutomationRunsService {
     const { storeId } = facts;
     let renewed = claim;
     const started = await this.transaction.run(storeId, async (): Promise<GateResult> => {
-      // Settings edits can take the store row before touching a contact.
-      if (step.category === 'marketing') await this.stores.sendingSettings(storeId, 'share');
       const unchanged = { status: 'running', claimedAt: claim.claimedAt } as const;
       if (!(await this.repository.moveRunIfLive(storeId, claim, unchanged))) return 'not_live';
       const checkedAt = await this.repository.schedulerTime(storeId);
