@@ -131,7 +131,10 @@ describe('ImportsService.runCustomerImport (Postgres and SeaweedFS)', () => {
       "insert into users(id,name,email) values($1::uuid,'শাহনাজ',$1::text || '@example.test')",
       [userId],
     );
-    app = await NestFactory.createApplicationContext(TestModule, { logger: false });
+    app = await NestFactory.createApplicationContext(TestModule, {
+      logger: false,
+      abortOnError: false,
+    });
     service = app.get(ImportsService);
   });
 
