@@ -19,9 +19,7 @@ import { PaymentCallbacksService } from './payment-callbacks.service';
 @Controller('webhooks/payments')
 @Public()
 export class PaymentCallbacksController {
-  constructor(
-    @Inject(PaymentCallbacksService) private readonly callbacks: PaymentCallbacksService,
-  ) {}
+  constructor(@Inject(PaymentCallbacksService) private readonly intake: PaymentCallbacksService) {}
 
   @Post(':gateway')
   @ProviderCallback()
@@ -30,6 +28,6 @@ export class PaymentCallbacksController {
     @Param('gateway', new ZodValidationPipe(paymentGatewaySchema)) gateway: PaymentGateway,
     @Req() request: RawBodyRequest<FastifyRequest>,
   ) {
-    return this.callbacks.receive(gateway, request.rawBody, request.headers);
+    return this.intake.receive(gateway, request.rawBody, request.headers, request.ip);
   }
 }

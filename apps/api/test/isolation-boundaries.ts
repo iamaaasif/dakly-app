@@ -8,7 +8,7 @@ const groups = [
   },
   {
     evidence: 'payments/payments.int.spec.ts',
-    boundary: 'public signed callback with the store resolved from the verified merchant reference',
+    boundary: 'public callback intake with merchant signature verification in the worker',
     routes: ['POST /webhooks/payments/:gateway'],
   },
   {

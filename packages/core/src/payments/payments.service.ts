@@ -67,19 +67,16 @@ export class PaymentsService {
       if (intent.status !== 'created') return;
       const now = this.clock.now();
       if (intent.expiresAt <= now || intent.voidedAt) return;
-      await this.repository.update(storeId, intent.id, intent.status, {
-        status: 'pending',
-        gatewayPaymentId,
-        nextCheckAt: new Date(now.getTime() + MINUTE_MS),
-        updatedAt: now,
-      });
-      await this.repository.appendEvent(storeId, {
-        paymentIntentId: intent.id,
-        kind: 'redirected',
-        fromStatus: intent.status,
-        toStatus: 'pending',
-        createdAt: now,
-      });
+      await this.transition(
+        storeId,
+        intent,
+        {
+          status: 'pending',
+          gatewayPaymentId,
+          nextCheckAt: new Date(now.getTime() + MINUTE_MS),
+        },
+        { now, kind: 'redirected' },
+      );
     });
   }
 
@@ -168,26 +165,28 @@ export class PaymentsService {
     storeId: string,
     intent: Intent,
     change: Parameters<PaymentsRepository['update']>[3] & { status: Intent['status'] },
-    { now, verified }: { now: Date; verified?: PaidStatus },
-  ) {
+    {
+      now,
+      verified,
+      kind = 'status_changed',
+    }: { now: Date; verified?: PaidStatus; kind?: 'redirected' | 'status_changed' },
+  ): Promise<void> {
     const result = await this.repository.update(storeId, intent.id, intent.status, {
-      ...change,
       nextCheckAt: null,
+      ...change,
       updatedAt: now,
     });
     if (result === 'unchanged') return;
-    if (result === 'duplicate') {
-      await this.transition(
+    if (result === 'duplicate')
+      return this.transition(
         storeId,
         intent,
         { status: 'needs_review', reviewReason: 'duplicate' },
         { now, verified },
       );
-      return;
-    }
     await this.repository.appendEvent(storeId, {
       paymentIntentId: intent.id,
-      kind: 'status_changed',
+      kind,
       fromStatus: intent.status,
       toStatus: change.status,
       gatewayReference: verified?.transactionId,

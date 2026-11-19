@@ -1,4 +1,4 @@
-import type { gateways } from '@dakly/contracts/payments';
+import type { gateways, paymentCallbackSchema } from '@dakly/contracts/payments';
 
 export type PaymentGateway = (typeof gateways)[number];
 
@@ -23,11 +23,8 @@ export type PaymentStatus =
       transactionId: string;
     };
 
-export type PaymentCallback = {
-  // Prefix an account-local id with the merchant namespace before returning it.
-  eventId: string;
-  merchantReference: string;
-};
+// Prefix an account-local event id with the merchant namespace before returning it.
+export type PaymentCallback = ReturnType<typeof paymentCallbackSchema.parse>;
 
 // Each shop connects its own merchant account. Dakly never holds shop money.
 export type PaymentMerchant =
@@ -37,8 +34,11 @@ export type PaymentDriver = {
   readonly gateway: PaymentGateway;
   createPayment(input: CreatePaymentInput, merchant: PaymentMerchant): Promise<CreatePaymentResult>;
   getStatus(gatewayPaymentId: string, merchant: PaymentMerchant): Promise<PaymentStatus>;
+  readonly callbackHeaders: readonly string[];
+  callbackReference(rawBody: Buffer): string | undefined;
   verifyCallback(
     rawBody: Buffer,
     headers: Readonly<Record<string, string | string[] | undefined>>,
+    merchant: PaymentMerchant,
   ): PaymentCallback | undefined;
 };
