@@ -42,6 +42,7 @@ export const recipientSkipReasons = [
   'meta_user_limit',
   'do_not_call',
   'daily_reach_limit',
+  'no_credits',
 ] as const;
 export const templateStatuses = [
   'draft',

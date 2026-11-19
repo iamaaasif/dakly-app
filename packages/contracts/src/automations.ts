@@ -10,6 +10,7 @@ export const automationExitReasons = [
   'goal',
   'exit_condition',
   'workflow_filter',
+  'not_reachable',
 ] as const;
 export const automationStepKinds = [
   'trigger',

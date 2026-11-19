@@ -1,4 +1,8 @@
-import type { OrderSummary } from '@dakly/contracts/orders';
+import {
+  editableOrderStages,
+  editablePaymentStatuses,
+  type OrderSummary,
+} from '@dakly/contracts/orders';
 
 export function canChangeOrderStage(
   order: Pick<OrderSummary, 'source'>,
@@ -15,5 +19,14 @@ export function canConfirmOrder(
     order !== undefined &&
     canChangeOrderStage(order, canEditOrders) &&
     (order.stage === 'to_confirm' || order.stage === 'on_hold')
+  );
+}
+
+export function canEditOrder(order: OrderSummary | undefined, canEditOrders?: boolean): boolean {
+  return (
+    order !== undefined &&
+    canChangeOrderStage(order, canEditOrders) &&
+    editableOrderStages.includes(order.stage) &&
+    editablePaymentStatuses.includes(order.paymentStatus)
   );
 }
