@@ -81,7 +81,7 @@ Task briefs, order and assumed decisions: [plans/core.md](plans/core.md).
 | ------ | -------------------------------------------------------------------------------------------------------------------- | --------- | ------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CUS-1  | Rename customers to contacts; add channel identities and contact kinds                                               | Done      | ACC-3               | #91, #96         | Q10                                                                                                                                                                                               |
 | CUS-2  | Consent: append-only rows, current-consent view                                                                      | Done      | CUS-1               | #93              | STOP keywords moved to CHAT-1                                                                                                                                                                     |
-| CUS-3  | Contact stats table and refresh jobs                                                                                 | Todo      | ORD-1               |                  |                                                                                                                                                                                                   |
+| CUS-3  | Contact stats table and refresh jobs                                                                                 | In review | ORD-1               | #188             | Nightly repair and Best customers ranking follow.                                                                                                                                                 |
 | CUS-4  | Own-phone capture, possible matches and identity merge                                                               | Todo      | CUS-1               |                  | Q10 must-fix; D27 own-phone save is not verification                                                                                                                                              |
 | CHN-1  | Meta webhook intake: signature, `webhook_events`, enqueue                                                            | In review | DB-1                | #172             |                                                                                                                                                                                                   |
 | CHN-2  | Messenger and Instagram connect (Facebook Login for Business)                                                        | In review | DB-4, ACC-4         | #173, #175       | Enable re-runs the publish checks once channels can disconnect                                                                                                                                    |
@@ -122,12 +122,12 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M4. Chats inbox (people only)
 
-| ID     | Task                                                     | Status | Depends       | PR  | Notes |
-| ------ | -------------------------------------------------------- | ------ | ------------- | --- | ----- |
-| CHAT-3 | Status, responder, assignment, take over, internal notes | Todo   | CHAT-1        |     |       |
-| CHAT-4 | Saved replies                                            | Todo   | CHAT-1        |     |       |
-| CHAT-5 | Web: inbox list, conversation, composer, customer panel  | Todo   | CHAT-3, WEB-2 |     |       |
-| CHAT-6 | Comments: receive, reply publicly and privately, hide    | Todo   | CHAT-2        |     |       |
+| ID     | Task                                                     | Status    | Depends       | PR   | Notes                                       |
+| ------ | -------------------------------------------------------- | --------- | ------------- | ---- | ------------------------------------------- |
+| CHAT-3 | Status, responder, assignment, take over, internal notes | In review | CHAT-1        | #183 | Other return timers follow AI-4 and CHAT-2. |
+| CHAT-4 | Saved replies                                            | Todo      | CHAT-1        |      |                                             |
+| CHAT-5 | Web: inbox list, conversation, composer, customer panel  | Todo      | CHAT-3, WEB-2 |      |                                             |
+| CHAT-6 | Comments: receive, reply publicly and privately, hide    | Todo      | CHAT-2        |      |                                             |
 
 ## M5. Products
 

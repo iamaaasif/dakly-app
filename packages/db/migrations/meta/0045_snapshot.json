@@ -1,5 +1,5 @@
 {
-  "id": "7a0a966f-0c7b-42fe-a1a2-7b2d2b191930",
+  "id": "d6ed5fa9-a09f-4e57-a688-8805c9257423",
   "prevId": "b98b9265-6f58-41cf-834e-bc4cce4f60bb",
   "version": "7",
   "dialect": "postgresql",
@@ -4340,24 +4340,6 @@
         "category": {
           "name": "category",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "opt_out_url": {
-          "name": "opt_out_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "destination_hash": {
-          "name": "destination_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_tried_at": {
-          "name": "first_tried_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -12241,6 +12223,13 @@
           "notNull": true,
           "default": 0
         },
+        "returned_count": {
+          "name": "returned_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "net_spend_poisha": {
           "name": "net_spend_poisha",
           "type": "bigint",
@@ -12406,6 +12395,10 @@
         "contact_stats_counts": {
           "name": "contact_stats_counts",
           "value": "\"contact_stats\".\"orders_count\" >= 0 and \"contact_stats\".\"delivered_count\" >= 0"
+        },
+        "contact_stats_returned_count": {
+          "name": "contact_stats_returned_count",
+          "value": "\"contact_stats\".\"returned_count\" >= 0"
         }
       },
       "isRLSEnabled": false

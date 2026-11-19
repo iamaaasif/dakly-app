@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0045_snapshot.json`: **95 tables, 1260 columns, 378 explicit indexes and 298 foreign keys**.
+Built from `packages/db/migrations/meta/0045_snapshot.json`: **95 tables, 1258 columns, 378 explicit indexes and 298 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -586,6 +586,7 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         integer orders_count "NOT NULL; integer"
         integer delivered_count "NOT NULL; integer"
+        integer returned_count "NOT NULL; integer"
         bigint net_spend_poisha "NOT NULL; bigint"
         timestamp_with_time_zone first_order_at "NULL; timestamp with time zone"
         timestamp_with_time_zone last_order_at "NULL; timestamp with time zone"
@@ -1500,9 +1501,6 @@ erDiagram
         text outcome "NOT NULL; text"
         text channel "NULL; text"
         text category "NULL; text"
-        text opt_out_url "NULL; text"
-        text destination_hash "NULL; text"
-        timestamp_with_time_zone first_tried_at "NULL; timestamp with time zone"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
         bigint cost_poisha "NULL; bigint"

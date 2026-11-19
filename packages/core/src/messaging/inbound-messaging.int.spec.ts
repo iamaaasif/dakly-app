@@ -118,6 +118,38 @@ it('stores a duplicate only once and makes one contact and conversation for conc
   ]);
 });
 
+it.each(['done', 'later'])('reopens a %s conversation only for a new message', async (status) => {
+  const storeId = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  const first = {
+    ...inbound(connectionId, 'before-close'),
+    sentAt: new Date(sentAt.getTime() + 10_000),
+  };
+  await expect(service.receiveInboundMessage(storeId, first)).resolves.toBe('stored');
+  await admin.pool.query(
+    'update conversations set status = $1, responder = $2, version = 3 where store_id = $3',
+    [status, 'human', storeId],
+  );
+  await expect(service.receiveInboundMessage(storeId, first)).resolves.toBe('duplicate');
+  const state = () =>
+    admin.pool.query('select status, responder, version from conversations where store_id = $1', [
+      storeId,
+    ]);
+  expect((await state()).rows).toEqual([{ status, responder: 'human', version: 3 }]);
+  await expect(
+    service.receiveInboundMessage(storeId, inbound(connectionId, 'delayed-before-close')),
+  ).resolves.toBe('stored');
+  expect((await state()).rows).toEqual([{ status, responder: 'human', version: 3 }]);
+  await expect(
+    service.receiveInboundMessage(storeId, {
+      ...inbound(connectionId, 'after-close'),
+      sentAt: new Date(sentAt.getTime() + 20_000),
+    }),
+  ).resolves.toBe('stored');
+  expect((await state()).rows).toEqual([{ status: 'open', responder: 'human', version: 4 }]);
+});
+
 it('preserves two Page identities for one contact and keeps the newest inbound window', async () => {
   const storeId = await store();
   const [firstPage, secondPage] = await Promise.all([connection(storeId), connection(storeId)]);
