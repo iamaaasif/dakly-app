@@ -10,7 +10,7 @@ export const SWEEP_ANALYTICS = 'sweep-analytics';
 // The sweep pages through stores to start each store's own repair.
 const payload = z.strictObject({});
 
-@HandlesJob({ queue: QUEUES.sync, name: SWEEP_ANALYTICS })
+@HandlesJob({ queue: QUEUES.bulk, name: SWEEP_ANALYTICS })
 export class SweepAnalyticsJob implements JobHandler {
   constructor(
     @Inject(AnalyticsReconciliationService) private readonly repair: AnalyticsReconciliationService,

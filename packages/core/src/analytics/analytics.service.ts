@@ -37,8 +37,20 @@ export class AnalyticsService {
     return this.readOrderMetric(storeId, period, 'orders');
   }
 
-  sales(storeId: string, period: ReportPeriod) {
-    return this.readOrderMetric(storeId, period, 'sales');
+  async sales(storeId: string, period: ReportPeriod) {
+    const rows = await this.repository.readDailyMetrics(storeId, period, ['sales']);
+    const byDay = new Map<string, bigint>();
+    const bySource = new Map<string, bigint>();
+    for (const { day, dimension, value } of rows) {
+      byDay.set(day, (byDay.get(day) ?? 0n) + value);
+      bySource.set(dimension, (bySource.get(dimension) ?? 0n) + value);
+    }
+    const days = [...byDay].map(([day, value]) => ({ day, value }));
+    return {
+      total: sumPoints(days),
+      points: fillDays(period, days),
+      bySource: Object.fromEntries(bySource),
+    };
   }
 
   deliveredSales(storeId: string, period: ReportPeriod) {

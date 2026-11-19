@@ -238,7 +238,7 @@ export class ContactsRepository {
     const tags = adding
       ? sql`array_append(${contacts.tags}, ${tag})`
       : sql`array_remove(${contacts.tags}, ${tag})`;
-    await this.database.forStore(storeId, (tx) =>
+    const [changed] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(contacts)
         .set({ tags })
@@ -249,8 +249,10 @@ export class ContactsRepository {
             isNull(contacts.deletedAt),
             changesTags,
           ),
-        ),
+        )
+        .returning({ id: contacts.id }),
     );
+    return Boolean(changed);
   }
 
   async lockForConsent(storeId: string, ids: string[]): Promise<string[]> {
@@ -265,17 +267,6 @@ export class ContactsRepository {
         .for('no key update'),
     );
     return rows.map((row) => row.id);
-  }
-
-  async softDelete(storeId: string, id: string, deletedAt: Date): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .update(contacts)
-        .set({ deletedAt })
-        .where(and(eq(contacts.storeId, storeId), eq(contacts.id, id), isNull(contacts.deletedAt)))
-        .returning({ id: contacts.id }),
-    );
-    return rows.length > 0;
   }
 
   // Both timestamps start from the database clock; a later edit makes them differ.
@@ -305,14 +296,17 @@ export class ContactsRepository {
     return result.map((row) => row.id);
   }
 
-  // For ids that lockUneditedByImport returned in the same transaction, so all are still live.
-  async softDeleteAll(storeId: string, ids: string[], deletedAt: Date): Promise<void> {
-    await this.database.forStore(storeId, (tx) =>
+  async softDeleteAll(storeId: string, ids: string[], deletedAt: Date): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(contacts)
         .set({ deletedAt })
-        .where(and(eq(contacts.storeId, storeId), inArray(contacts.id, ids))),
+        .where(
+          and(eq(contacts.storeId, storeId), inArray(contacts.id, ids), isNull(contacts.deletedAt)),
+        )
+        .returning({ id: contacts.id }),
     );
+    return rows.map(({ id }) => id);
   }
 
   async countMatching(storeId: string, rules: SegmentRules): Promise<number> {

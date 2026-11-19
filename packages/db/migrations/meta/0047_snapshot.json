@@ -1,5 +1,5 @@
 {
-  "id": "cfc7ea23-e04e-448c-9a15-22a25faee1e6",
+  "id": "d481f05d-6177-4bf9-b132-ff652ae07f57",
   "prevId": "367230af-928b-4ea1-ab0c-6c4822554515",
   "version": "7",
   "dialect": "postgresql",
@@ -3666,36 +3666,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "store_daily_metrics_buyer_activity_idx": {
-          "name": "store_daily_metrics_buyer_activity_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "dimension",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "day",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"store_daily_metrics\".\"metric\" = 'buyer_activity'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "store_daily_metrics_store_id_stores_id_fk": {
           "name": "store_daily_metrics_store_id_stores_id_fk",
@@ -4369,6 +4340,24 @@
         "category": {
           "name": "category",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opt_out_url": {
+          "name": "opt_out_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "destination_hash": {
+          "name": "destination_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "first_tried_at": {
+          "name": "first_tried_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

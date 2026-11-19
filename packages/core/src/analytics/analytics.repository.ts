@@ -20,7 +20,8 @@ export class AnalyticsRepository {
         .select({
           day: storeDailyMetrics.day,
           metric: storeDailyMetrics.metric,
-          value: sql`sum(${storeDailyMetrics.value})::text`.mapWith(BigInt),
+          dimension: storeDailyMetrics.dimension,
+          value: sql`${storeDailyMetrics.value}::text`.mapWith(BigInt),
         })
         .from(storeDailyMetrics)
         .where(
@@ -31,8 +32,7 @@ export class AnalyticsRepository {
             inArray(storeDailyMetrics.metric, metrics),
             sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`,
           ),
-        )
-        .groupBy(storeDailyMetrics.day, storeDailyMetrics.metric),
+        ),
     );
   }
 

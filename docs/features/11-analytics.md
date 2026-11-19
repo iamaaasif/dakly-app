@@ -226,9 +226,9 @@ The nightly lifecycle snapshot stores the count for each of the six stages. Repo
 
 Order subscribers run on the sync queue. Pending order changes for the same store and original day share a refresh. A change received during a refresh schedules another run. Replaying an event recomputes from current orders and leaves unchanged summary rows as they were. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
 
-The current and previous periods use store-local calendar days. Sales sums the source amounts. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
+The current and previous periods use store-local calendar days. Sales returns the total and the amounts by order source. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
 
-Nightly reconciliation repairs up to 31 order days or 100 buyers per job. It rebuilds from the original creation dates and removes stale buyer activity for excluded buyers. It writes one lifecycle snapshot per store and prunes expired report rows in pages of 5,000.
+Nightly reconciliation repairs up to 31 order days or 100 buyers per job. It rebuilds from the original creation dates and removes stale buyer activity for excluded buyers. The contact deletion event also removes that buyer’s activity. The job prunes expired report rows in pages of 5,000. Finishing the nightly contact stats repair schedules a lifecycle snapshot for that store’s local day. The snapshot uses the stage from the completed repair.
 
 ### Acceptance
 

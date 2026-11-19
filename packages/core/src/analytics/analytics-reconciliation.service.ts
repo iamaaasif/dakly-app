@@ -21,6 +21,7 @@ export const analyticsReconciliationPayload = z.strictObject({
     }),
     z.strictObject({ kind: z.literal('buyers'), after: z.uuid().nullable() }),
     z.strictObject({ kind: z.literal('retention'), batch: z.int().nonnegative() }),
+    z.strictObject({ kind: z.literal('lifecycle') }),
   ]),
 });
 type Repair = z.infer<typeof analyticsReconciliationPayload>;
@@ -31,7 +32,7 @@ export class AnalyticsReconciliationService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(AnalyticsSummariesService) private readonly summaries: AnalyticsSummariesService,
     @Inject(Clock) private readonly clock: Clock,
-    @InjectQueue(QUEUES.sync) private readonly queue: Queue,
+    @InjectQueue(QUEUES.bulk) private readonly queue: Queue,
   ) {}
 
   async schedule() {
@@ -49,9 +50,13 @@ export class AnalyticsReconciliationService {
     }
   }
 
+  async scheduleLifecycle(storeId: string, day: string) {
+    await this.queue.addBulk([reconciliationJob({ storeId, day, page: { kind: 'lifecycle' } })]);
+  }
+
   async reconcile(repair: Repair) {
-    const { day, storeId, page } = repair;
-    if (day !== this.clock.now().toISOString().slice(0, 10)) return;
+    const { storeId, day, page } = repair;
+    if (page.kind === 'lifecycle') return this.summaries.refreshLifecycle(storeId, day);
     if (page.kind === 'retention') {
       if (await this.summaries.pruneExpiredRows(storeId))
         await this.queue.addBulk([
@@ -66,7 +71,6 @@ export class AnalyticsReconciliationService {
           reconciliationJob({ ...repair, page: { kind: 'buyers', after } }),
         ]);
       else {
-        await this.summaries.refreshLifecycle(storeId);
         await this.queue.addBulk([
           reconciliationJob({ ...repair, page: { kind: 'retention', batch: 0 } }),
         ]);
@@ -99,7 +103,7 @@ function reconciliationJob(data: Repair) {
   let cursor: string | number | undefined | null;
   if (page.kind === 'orders') cursor = page.period?.from;
   else if (page.kind === 'buyers') cursor = page.after;
-  else cursor = page.batch;
+  else if (page.kind === 'retention') cursor = page.batch;
   return {
     name: RECONCILE_ANALYTICS,
     data,

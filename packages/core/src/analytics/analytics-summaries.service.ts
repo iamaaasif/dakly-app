@@ -48,6 +48,13 @@ export class AnalyticsSummariesService {
     await this.scheduleOrderDay(storeId, day);
   }
 
+  async removeBuyer(storeId: string, contactId: string) {
+    await this.transaction.run(storeId, async () => {
+      await this.summaries.lockSummaries(storeId, contactId);
+      await this.summaries.replaceBuyerActivity(storeId, contactId, [], this.clock.now());
+    });
+  }
+
   async refreshOrderDays(storeId: string, period: ReportPeriod) {
     await this.transaction.run(storeId, async () => {
       await this.summaries.lockSummaries(storeId, 'orders');
@@ -117,12 +124,12 @@ export class AnalyticsSummariesService {
     return ids.length === BUYER_PAGE_SIZE ? (ids.at(-1) ?? null) : null;
   }
 
-  async refreshLifecycle(storeId: string) {
+  async refreshLifecycle(storeId: string, day: string) {
     await this.transaction.run(storeId, async () => {
       await this.summaries.lockSummaries(storeId, 'lifecycle');
       const now = this.clock.now();
       const timeZone = await this.stores.timeZone(storeId);
-      const day = reportDay(now, timeZone);
+      if (reportDay(now, timeZone) !== day) return;
       const rows = await this.contactStats.lifecycleCounts(storeId);
       const counts = new Map(rows.map(({ stage, count }) => [stage, count]));
       const metrics = lifecycleStages

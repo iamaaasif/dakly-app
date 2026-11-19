@@ -15,6 +15,8 @@ import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notic
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
+import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
+import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
@@ -70,6 +72,8 @@ import { JobSchedulers } from './job-schedulers';
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,
+    StartAutomationOnConsent,
+    StartAutomationOnTagAdded,
     StartDueCampaignsJob,
     ContinueAutomationRunJob,
     JobSchedulers,

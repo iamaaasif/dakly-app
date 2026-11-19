@@ -59,7 +59,7 @@ describe('analytics writes without RLS assistance', () => {
       now,
     );
     expect(await repository.readDailyMetrics(a, period, ['sales'])).toEqual([
-      { day, metric: 'sales', value: 12000n },
+      { day, metric: 'sales', dimension: 'manual', value: 12000n },
     ]);
     expect(await repository.readBuyers(a, period, 'returning')).toHaveLength(2);
     expect(await repository.readBuyers(a, period, 'returning')).toContainEqual({
