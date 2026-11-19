@@ -86,10 +86,11 @@ The daily token sweep makes one Meta call per active connection with no fixed ex
 
 ## bulk
 
-`sweep-contact-stats` runs daily and pages through `maintenance_store_ids`. It queues
-`reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contact rows
-and queues the next cursor. A separate job finds the Best customers cutoff after the last totals page. Rank pages visit
-contacts whose stage differs from that cutoff and check the current ranking before a write. Page IDs deduplicate retries.
+`sweep-contact-stats` runs at 00:00 UTC daily and pages through `maintenance_store_ids`. It queues
+`reconcile-contact-stats` with the store and sweep day. Each job repairs up to 100 contacts
+and queues the next cursor. The last totals page measures the Best customers cutoff.
+Ranking pages check contacts whose stage differs from the cutoff before writing a new stage.
+Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contact lock keeps an in-flight rank update ahead of any newer update for the same contact.
 
 | Job                        | Started by                               | Payload                                                       | Makes a rerun harmless                                                                                                                                                                                                                                        |
 | -------------------------- | ---------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

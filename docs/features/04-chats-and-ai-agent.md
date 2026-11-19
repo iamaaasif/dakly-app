@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                                          |
 | Extension | Chats                                                                                                                |
 | Code      | `packages/core/src/{chats,ai-agent,ai,usage}/`, `packages/providers/src/llm/openai/`, `apps/web/src/features/chats/` |
-| Tasks     | CHAT-1 to CHAT-6, AI-1 to AI-8                                                                                       |
+| Tasks     | CHAT-1 to CHAT-7, AI-1 to AI-8                                                                                       |
 
 ## Purpose
 
@@ -292,7 +292,7 @@ Conversation state is three separate fields:
 
 Inbound
 
-1. `ChatsService.receiveInboundMessage` finds or creates the identity, contact and conversation, saves the message (unique on conversation and external message id), sets the window to 24 hours from now, and emits `message.received`.
+1. `MessagingService.receiveInboundMessage` uses the Page-scoped identity to find or create a contact and conversation. It saves each message once per connection and external message id. A newer inbound message moves the window to 24 hours from its sent time. A delayed message cannot shorten the window. The service emits `message.received`, plus `conversation.started` for a new conversation. This runs with the Chats extension off.
 2. Voice notes are transcribed and images described; both are saved on the message so staff and the AI read the same text.
 3. The AI listener schedules an `ai-reply` job keyed by conversation id with the store's debounce (default 8 s). Each new message resets it, so one reply answers a burst.
 

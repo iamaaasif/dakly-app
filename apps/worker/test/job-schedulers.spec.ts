@@ -14,9 +14,9 @@ function recordingQueue() {
   return { queue, schedulers };
 }
 
-const scheduler = (name: string, every = 30000) => [
+const scheduler = (name: string, schedule: number | { pattern: string; tz: string } = 30000) => [
   name,
-  { every },
+  typeof schedule === 'number' ? { every: schedule } : schedule,
   {
     name,
     data: {},
@@ -53,7 +53,7 @@ describe('Worker job schedulers', () => {
     const bulkSweeps = [
       scheduler('staff-audit-maintenance'),
       scheduler('fail-stuck-imports'),
-      scheduler('sweep-contact-stats', 86400000),
+      scheduler('sweep-contact-stats', { pattern: '0 0 * * *', tz: 'UTC' }),
     ];
     expect(bulk.schedulers).toEqual([...bulkSweeps, ...bulkSweeps]);
     expect(sync.schedulers).toEqual([

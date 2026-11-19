@@ -17,10 +17,9 @@ export const reconcileContactStatsPayload = z.strictObject({
   day: z.iso.date(),
   after: z.uuid().nullable(),
   ranking: z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('keep') }),
-    z.strictObject({ kind: z.literal('measure') }),
+    z.strictObject({ kind: z.literal('totals') }),
     z.strictObject({
-      kind: z.literal('cutoff'),
+      kind: z.literal('rank'),
       cutoff: z
         .strictObject({
           contactId: z.uuid(),
@@ -48,7 +47,7 @@ export class ContactStatsSweepService {
       const stores = await this.stores.maintenanceStoreIds(after, STORE_PAGE_SIZE);
       await this.bulk.addBulk(
         stores.map((storeId) =>
-          repairJob({ storeId, day, after: null, ranking: { kind: 'keep' } }),
+          repairJob({ storeId, day, after: null, ranking: { kind: 'totals' } }),
         ),
       );
       if (stores.length < STORE_PAGE_SIZE) return;
@@ -57,20 +56,20 @@ export class ContactStatsSweepService {
   }
 
   async reconcile(repair: Repair) {
-    const { storeId, after, ranking } = repair;
-    if (ranking.kind === 'measure') {
-      const cutoff = await this.stats.bestSpendCutoff(storeId);
-      await this.bulk.addBulk([repairJob({ ...repair, ranking: { kind: 'cutoff', cutoff } })]);
-      return;
-    }
-    const next = await this.stats.reconcilePage(storeId, after, ranking);
+    const { storeId, after, ranking, day } = repair;
+    if (day !== this.clock.now().toISOString().slice(0, 10)) return;
+    const next = await this.stats.reconcilePage(storeId, after, ranking, day);
     if (next) {
       await this.bulk.addBulk([repairJob({ ...repair, after: next })]);
-    } else if (ranking.kind === 'keep') {
-      // Wait until all spend totals are repaired before taking a store-wide ranking.
-      await this.bulk.addBulk([
-        repairJob({ ...repair, after: null, ranking: { kind: 'measure' } }),
-      ]);
+    } else if (ranking.kind === 'totals') {
+      const firstRankPage = {
+        ...repair,
+        after: null,
+        ranking: { kind: 'rank', cutoff: null },
+      } as const;
+      if (await this.bulk.getJob(repairJobId(firstRankPage))) return;
+      const cutoff = await this.stats.bestSpendCutoff(storeId);
+      await this.bulk.addBulk([repairJob({ ...firstRankPage, ranking: { kind: 'rank', cutoff } })]);
     }
   }
 }
@@ -80,11 +79,15 @@ function repairJob(data: Repair) {
     name: RECONCILE_CONTACT_STATS,
     data,
     opts: {
-      jobId: `${RECONCILE_CONTACT_STATS}-${data.storeId}-${data.day}-${data.ranking.kind}-${data.after ?? 'start'}`,
+      jobId: repairJobId(data),
       attempts: 3,
       backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
       removeOnComplete: { age: DAY_MS / 1000 },
       removeOnFail: 100,
     },
   };
+}
+
+function repairJobId(data: Repair): string {
+  return `${RECONCILE_CONTACT_STATS}-${data.storeId}-${data.day}-${data.ranking.kind}-${data.after ?? 'start'}`;
 }

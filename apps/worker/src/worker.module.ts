@@ -20,7 +20,7 @@ import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
-import { ContactStatsModule } from '@dakly/core/contacts/contact-stats.module';
+import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
@@ -95,7 +95,7 @@ import { JobSchedulers } from './job-schedulers';
     CampaignsModule,
     ClockModule,
     ImportsModule,
-    ContactStatsModule,
+    ContactStatsRepairModule,
     AnalyticsModule,
     KnowledgeIndexModule,
     BullModule.forRootAsync({

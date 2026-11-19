@@ -43,6 +43,9 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   changed phone clears its WhatsApp verification, because a typed phone proves nothing.
 - `DELETE /contacts/:contactId` (`customers.edit`) soft deletes the contact: it is
   gone from the list and the profile, and its phone can be saved on another contact.
+  If the sender writes again, Dakly retires the old channel identity and makes a
+  new contact and conversation. The old identity remains linked to campaign
+  history until the purge.
 - A phone the store already has on another contact fails with `409 CONTACT_PHONE_TAKEN`,
   on create and on edit. The error never names or links the other contact, because the
   member may not be allowed to see who has the number.
@@ -77,8 +80,7 @@ with `400 CONSENT_CONTACTS_TOO_MANY`.
   Messenger or Instagram opt-in has to come from the customer, so `granted` there fails with
   `400 CONSENT_OPT_IN_NEEDS_CUSTOMER`. A withdrawal is accepted on every channel except email. Email is not accepted (D20). A contact that is
   missing or in another store returns `404 CONTACT_NOT_FOUND`.
-- STOP keywords on WhatsApp and Messenger are not handled yet: core messaging (CHAT-1) will call
-  `ConsentService.record` when it receives them.
+- An inbound `STOP` or `বন্ধ` on WhatsApp or Messenger writes a withdrawal through `ConsentService.record` in the same transaction as the message. A repeated delivery leaves the consent history unchanged.
 
 The web app has two customer screens.
 
@@ -530,7 +532,9 @@ Consent
 
 Stats: one `contact_stats` row per contact holds the non-cancelled order count, delivered count, returned count, net spend, first and last order, usual gap and lifecycle stage. Net spend uses the kept items after discount on paid deliveries. A late return removes that order's spend. Return risk is read from orders by delivery phone (D26), and lead temperature lives on the conversation.
 
-Contact creation, order creation, stage changes and COD collection refresh one contact from current orders in a store transaction. Replaying an event leaves the stats unchanged. The daily worker repairs up to 100 contacts per job and queues the next page. It repairs the order totals before ranking the Best customers. The top tenth is rounded down and ties use contact ID.
+Contact and order creation events, stage changes and COD collection refresh one contact from current orders in a store transaction. Replaying an event does not double-count orders. A refresh keeps an existing Best customers stage while the contact still qualifies above ৳20,000 and has not stopped buying.
+
+The nightly repair also covers imported contacts that have no creation event. It refreshes up to 100 contacts per job. The last totals page measures the store-wide cutoff for Best customers and starts the ranking pages. Each candidate's current order totals and eligibility are checked before changing their stage. The top tenth is rounded down and ties use contact ID.
 
 Segments
 

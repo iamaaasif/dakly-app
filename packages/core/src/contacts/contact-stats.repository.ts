@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, gt, sql } from 'drizzle-orm';
 
-import type { ContactSource } from '@dakly/contracts/contacts';
 import { contacts, contactStats } from '@dakly/db/schema/contacts';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -28,35 +27,33 @@ export class ContactStatsRepository {
     );
   }
 
-  contactsWithChangedRank(
+  async contactsWithChangedRank(
     storeId: string,
     after: string | null,
     { cutoff, minimum, limit }: { cutoff: BestSpendCutoff | null; minimum: bigint; limit: number },
   ) {
+    const cursor = after ? sql`and contact_id > ${after}::uuid` : sql``;
     const qualifies = cutoff
-      ? sql`${contactStats.lifecycleStage} not in ('none', 'stopped_buying')
-            and ${contactStats.netSpendPoisha} > ${minimum.toString()}::bigint
-            and (${contactStats.netSpendPoisha}, ${contactStats.contactId}) >=
+      ? sql`net_spend_poisha > ${minimum.toString()}::bigint
+            and net_spend_poisha >= ${cutoff.netSpendPoisha}::bigint
+            and (net_spend_poisha, contact_id) >=
                 (${cutoff.netSpendPoisha}::bigint, ${cutoff.contactId}::uuid)`
       : sql`false`;
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: contacts.id })
-        .from(contacts)
-        .innerJoin(
-          contactStats,
-          and(eq(contactStats.storeId, storeId), eq(contactStats.contactId, contacts.id)),
-        )
-        .where(
-          and(
-            eq(contacts.storeId, storeId),
-            after ? gt(contacts.id, after) : undefined,
-            sql`(${contactStats.lifecycleStage} = 'best') <> (${qualifies})`,
-          ),
-        )
-        .orderBy(asc(contacts.id))
-        .limit(limit),
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ id: string }>(sql`
+        select id from (
+          (select contact_id as id from contact_stats
+           where store_id = ${storeId} and lifecycle_stage = 'best' ${cursor}
+             and not (${qualifies})
+           order by contact_id limit ${limit})
+          union all
+          (select contact_id as id from contact_stats
+           where store_id = ${storeId} and lifecycle_stage not in ('none', 'stopped_buying', 'best')
+             ${cursor} and (${qualifies})
+           order by contact_id limit ${limit})
+        ) candidates order by id limit ${limit}`),
     );
+    return rows;
   }
 
   async bestSpendCutoff(storeId: string) {
@@ -102,37 +99,6 @@ export class ContactStatsRepository {
         .where(and(eq(contactStats.storeId, storeId), eq(contactStats.contactId, contactId))),
     );
     return stats?.stage;
-  }
-
-  async bestBySpend(
-    storeId: string,
-    contactId: string,
-    netSpendPoisha: bigint,
-    intentionalSources: readonly ContactSource[],
-  ) {
-    const { rows } = await this.database.forStore(storeId, (tx) =>
-      tx.execute<{ best: boolean }>(sql`
-      with higher_spenders as (
-        select count(*) as people
-        from contact_stats s join contacts c on c.store_id = s.store_id and c.id = s.contact_id
-        where s.store_id = ${storeId} and s.contact_id <> ${contactId}
-          and s.net_spend_poisha >= ${netSpendPoisha.toString()}::bigint
-          and (s.net_spend_poisha, c.id) > (${netSpendPoisha.toString()}::bigint, ${contactId}::uuid)
-          and c.deleted_at is null and not c.is_blocked and c.kind <> 'not_customer'
-      )
-      select exists (
-        select 1
-        from contacts c left join contact_stats s on s.store_id = c.store_id and s.contact_id = c.id
-        where c.store_id = ${storeId} and c.deleted_at is null and not c.is_blocked
-          and c.kind <> 'not_customer'
-          and (c.id = ${contactId} or s.orders_count > 0 or (
-            c.kind = 'customer' and c.source = any(${sql.param(intentionalSources)}::text[])
-          ))
-        offset (select people * 10 + 9 from higher_spenders)
-      ) as best
-    `),
-    );
-    return rows[0]!.best;
   }
 
   async save(storeId: string, contactId: string, stats: ContactStatsWrite) {

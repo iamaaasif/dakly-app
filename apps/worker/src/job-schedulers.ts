@@ -36,7 +36,7 @@ export class JobSchedulers implements OnApplicationBootstrap {
       scheduleJob(this.bulk, STAFF_AUDIT_MAINTENANCE),
       scheduleJob(this.workflow, WAKE_DUE_RUNS, MINUTE_MS),
       scheduleJob(this.bulk, FAIL_STUCK_IMPORTS),
-      scheduleJob(this.bulk, SWEEP_CONTACT_STATS, DAY_MS),
+      scheduleJob(this.bulk, SWEEP_CONTACT_STATS, { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduleJob(this.sync, QUEUE_CHANNEL_TOKEN_CHECKS, DAY_MS),
     ]);
   }

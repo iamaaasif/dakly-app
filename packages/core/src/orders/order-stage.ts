@@ -46,20 +46,6 @@ export function orderStageCounts(rows: { stage: OrderStage; count: number }[]) {
   };
 }
 
-export function orderStageTimes(order: {
-  shippedAt: Date | null;
-  deliveredAt: Date | null;
-  returnedAt: Date | null;
-  codCollectedAt: Date | null;
-}) {
-  return {
-    shippedAt: order.shippedAt?.toISOString() ?? null,
-    deliveredAt: order.deliveredAt?.toISOString() ?? null,
-    returnedAt: order.returnedAt?.toISOString() ?? null,
-    codCollectedAt: order.codCollectedAt?.toISOString() ?? null,
-  };
-}
-
 export function stageWrite(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {
   return {
     stage: change.to,
