@@ -262,7 +262,7 @@ export class AutomationRunsService {
         ? ({ outcome: 'late' } as const)
         : await this.gateSend(renewed, step, facts);
       const claimedAt = await this.repository.schedulerTime(storeId);
-      // The live move holds this run row; renew after the gate's other locks and writes.
+      // Renew on the sweep's Postgres clock so it cannot retake a fresh lease early.
       await this.repository.moveRun(storeId, renewed, { status: 'running', claimedAt });
       renewed = { ...claim, claimedAt };
       return result;
