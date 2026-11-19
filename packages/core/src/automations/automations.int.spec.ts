@@ -386,13 +386,12 @@ describe('AutomationsService (Postgres)', () => {
              ($2::uuid,$3,'sms_credits',2,'adjustment',1,2,$2::text,'system')`,
       [earlierCredit, laterCredit, storeA],
     );
-    const system = { kind: 'system' } as const;
     // A credit the gate already saw cannot end this pause, even when its event arrives late.
-    await service.resumeAfterTopUp(storeA, earlierCredit, system);
+    await service.resumeAfterTopUp(storeA, earlierCredit);
     expect((await service.get(storeA, automation.id)).status).toBe('paused');
-    await service.resumeAfterTopUp(storeB, laterCredit, system);
+    await service.resumeAfterTopUp(storeB, laterCredit);
     expect((await service.get(storeA, automation.id)).status).toBe('paused');
-    await service.resumeAfterTopUp(storeA, laterCredit, system);
+    await service.resumeAfterTopUp(storeA, laterCredit);
     expect(await service.get(storeA, automation.id)).toMatchObject({
       status: 'active',
       pauseReason: null,

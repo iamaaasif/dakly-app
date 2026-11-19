@@ -188,7 +188,7 @@ export class AutomationsService {
 
   // Inside the send step's transaction. Only the first run short of SMS credits pauses the
   // workflow and posts a card for the owner.
-  async pauseForBalance(storeId: string, automationId: string, _actor: Actor): Promise<void> {
+  async pauseForBalance(storeId: string, automationId: string): Promise<void> {
     const revision = await this.wallets.currentRevision(storeId, 'sms_credits');
     const now = await this.repository.schedulerTime(storeId);
     const paused = await this.repository.pauseForBalance(storeId, automationId, revision, now);
@@ -204,7 +204,7 @@ export class AutomationsService {
   }
 
   // A delayed credit event cannot resume a pause whose gate already saw that ledger revision.
-  async resumeAfterTopUp(storeId: string, entryId: string, _actor: Actor): Promise<void> {
+  async resumeAfterTopUp(storeId: string, entryId: string): Promise<void> {
     await this.transaction.run(storeId, async () => {
       const revision = await this.wallets.topUpRevision(storeId, 'sms_credits', entryId);
       if (revision === undefined) return;

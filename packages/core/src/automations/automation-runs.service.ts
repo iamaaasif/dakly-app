@@ -321,7 +321,7 @@ export class AutomationRunsService {
     if (destination !== preparedPhone) return { outcome: 'destination_changed' };
     const body = await this.writeSend(delivery, times);
     if (body === undefined) {
-      await this.automations.pauseForBalance(storeId, automationId, system);
+      await this.automations.pauseForBalance(storeId, automationId);
       // The sweep ignores the waiting run while its workflow is paused.
       await this.repository.moveRun(storeId, claim, {
         status: 'waiting',
