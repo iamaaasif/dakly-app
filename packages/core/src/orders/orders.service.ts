@@ -45,8 +45,9 @@ import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
 type StageEditor = { actor: AuditEntry['actor']; access: Access };
-type CreateEditor = StageEditor & {
+type CreateEditor = {
   actor: Extract<AuditEntry['actor'], { kind: 'user' }>;
+  access: Access;
   idempotencyKey: string;
 };
 
@@ -65,13 +66,11 @@ export class OrdersService {
     @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
-  contactOrderTotals(storeId: string, contactId: string, timeZone: string) {
-    return this.reporting.contactOrderTotals(storeId, contactId, timeZone);
-  }
+  contactOrderTotals = (storeId: string, contactId: string, timeZone: string) =>
+    this.reporting.contactOrderTotals(storeId, contactId, timeZone);
 
-  buyerContactId(storeId: string, orderId: string) {
-    return this.reporting.buyerContactId(storeId, orderId);
-  }
+  buyerContactId = (storeId: string, orderId: string) =>
+    this.reporting.buyerContactId(storeId, orderId);
 
   archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
     return this.transaction.run(storeId, async () => {
@@ -206,11 +205,12 @@ export class OrdersService {
     const parsedPhone = bdMobileSchema.safeParse(query.search);
     const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
     const { stage, ...filters } = query;
+    const stages = stage === undefined ? undefined : stagesForOrderTab(stage);
     const timeZone =
       query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
     const rows = await this.repository.list(
       storeId,
-      { ...filters, stages: stage === undefined ? undefined : stagesForOrderTab(stage), timeZone },
+      { ...filters, stages, timeZone },
       overdueBefore,
       phone,
     );
