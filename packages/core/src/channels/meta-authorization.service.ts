@@ -27,7 +27,7 @@ import { TeamService } from '../team/team.service';
 import { ChannelConnectionsRepository } from './channel-connections.repository';
 import { META_AUTHORIZATION_ERRORS } from './meta-authorization.errors';
 
-export const META_AUTHORIZATION_DRIVER = Symbol('META_AUTHORIZATION_DRIVER');
+export const META_CHANNEL_DRIVER = Symbol('META_CHANNEL_DRIVER');
 
 const loginLifetimeSeconds = 10 * 60;
 
@@ -51,7 +51,7 @@ export class MetaAuthorizationService {
   private readonly logger = new Logger(MetaAuthorizationService.name);
 
   constructor(
-    @Inject(META_AUTHORIZATION_DRIVER) private readonly driver: MetaAuthorizationDriver | null,
+    @Inject(META_CHANNEL_DRIVER) private readonly driver: MetaAuthorizationDriver | null,
     @Inject(ValkeyClient) private readonly valkey: ValkeyClient,
     @Inject(EnvelopeEncryption) private readonly encryption: EnvelopeEncryption,
     @Inject(TeamService) private readonly team: TeamService,

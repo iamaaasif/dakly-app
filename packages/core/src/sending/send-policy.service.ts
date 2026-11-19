@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { recipientSkipReasons } from '@dakly/contracts/campaigns';
+import type { messageSendCategories } from '@dakly/contracts/chats';
 import type { ConsentChannel, ConsentStatus, ContactKind } from '@dakly/contracts/contacts';
 import type { SendingSettings } from '@dakly/contracts/stores';
 
@@ -13,7 +14,7 @@ import { HOUR_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { type MarketingSend, SendingRepository } from './sending.repository';
 
-export type SendCategory = 'staff_reply' | 'transactional' | 'marketing';
+export type SendCategory = (typeof messageSendCategories)[number];
 export type SendChannel = Exclude<ConsentChannel, 'email'>;
 export type SkipReason = (typeof recipientSkipReasons)[number];
 
@@ -31,6 +32,7 @@ export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: str
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
 type CapReadOptions = { includeCommittedFuture?: boolean };
+type SendWindow = { windowClosesAt?: Date | null };
 
 // The most contacts one checkAudience call takes: its consent read's limit.
 export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
@@ -55,13 +57,13 @@ export class SendPolicyService {
   ) {}
 
   // Check eligibility and freeze the destination after the contact locks.
-  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'>) {
+  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'> & SendWindow) {
     const exists = await this.lockForDispatch(storeId, request.contactId);
     const at = this.clock.now();
     if (!exists) return { decision: skip('no_address'), destination: null, at };
     const [checked] = await this.evaluateAudience(
       storeId,
-      { contactIds: [request.contactId], channel: request.channel, category: request.category, at },
+      { ...request, contactIds: [request.contactId], at },
       { includeCommittedFuture: true },
     );
     return { decision: checked!.decision, destination: checked!.phone, at };
@@ -107,7 +109,7 @@ export class SendPolicyService {
 
   private async evaluateAudience(
     storeId: string,
-    { contactIds, channel, category, at }: AudienceRequest,
+    { contactIds, channel, category, at, windowClosesAt }: AudienceRequest & SendWindow,
     capRead?: CapReadOptions,
   ): Promise<AudienceDecision[]> {
     const contacts = new Map(
@@ -124,9 +126,10 @@ export class SendPolicyService {
     const limits = isMarketing
       ? await this.audienceLimits(storeId, { contactIds, channel, at }, capRead)
       : undefined;
+    const request = { channel, category, at, windowClosesAt };
     return contactIds.map((contactId) => {
       const contact = contacts.get(contactId);
-      const reason = recipientSkip(contact, consentOf.get(contactId), { channel, category });
+      const reason = recipientSkip(contact, consentOf.get(contactId), request);
       const decision = reason ? skip(reason) : (limits?.(contactId) ?? SEND);
       return { contactId, phone: contact?.phone ?? null, decision };
     });
@@ -179,7 +182,12 @@ function recipientSkip(
     | { kind: ContactKind; isBlocked: boolean; isOverPlanLimit: boolean; hasPhone: boolean }
     | undefined,
   consent: ConsentStatus | undefined,
-  { channel, category }: Pick<SendRequest, 'channel' | 'category'>,
+  {
+    channel,
+    category,
+    at,
+    windowClosesAt,
+  }: Pick<SendRequest, 'channel' | 'category' | 'at'> & SendWindow,
 ): SkipReason | undefined {
   if (!contact) return 'no_address';
   if (contact.isBlocked) return 'blocked';
@@ -189,10 +197,12 @@ function recipientSkip(
     if (consent !== 'granted') return 'no_consent';
   }
   if (channel === 'sms' && !contact.hasPhone) return 'no_address';
-  // SMS has no window. Other channels have no inbound message times or templates until CHAT-2
-  // and CHN-3, so no window can be shown open.
-  if (channel !== 'sms') return 'window_closed';
+  if (!windowAllowsSend(channel, at, windowClosesAt)) return 'window_closed';
   return undefined;
+}
+
+function windowAllowsSend(channel: SendChannel, at: Date, closesAt?: Date | null): boolean {
+  return channel === 'sms' || (channel !== 'whatsapp' && !!closesAt && at < closesAt);
 }
 
 function capReached(

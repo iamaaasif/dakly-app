@@ -26,3 +26,10 @@ description = "Removed operationKeyHash test fixture"
 condition = "AND"
 commits = ["bb4d1eb77672194f3fdcdd6c19149914d6402018"]
 paths = ['''^packages/core/src/platform/logging/error-reporter\.spec\.ts$''']
+
+# This commit used a synthetic message operation key in the provider test.
+[[allowlists]]
+description = "Synthetic Meta message operation key"
+condition = "AND"
+commits = ["0d5a412f27e04a5872163c4c26ede75597428552"]
+paths = ['''^packages/providers/src/channel/meta/meta-graph-channel-driver\.spec\.ts$''']

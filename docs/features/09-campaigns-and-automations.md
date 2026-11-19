@@ -368,7 +368,7 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 1. Contact: a deleted contact is `no_address`; a blocked contact is `blocked` for every category.
 2. Marketing only: a Not a customer contact is `not_customer`; a contact past the plan's customer limit (ACC-R8) is `over_plan_limit`; a channel consent that is not `granted` in `contact_consent_current` is `no_consent`, so a withdrawal after approval skips.
 3. SMS needs a phone, else `no_address`, for every category.
-4. Window: SMS has none. Messenger, Instagram and WhatsApp skip as `window_closed` until CHAT-2 stores inbound message times and CHN-3 adds WhatsApp templates.
+4. Window. SMS has no window. Messenger and Instagram dispatch can pass the selected conversation's deadline to `checkForSend`. The gate compares it with the clock after locking the contact. Without a chat deadline the gate returns `window_closed`. WhatsApp templates follow CHN-3.
 5. Marketing only, quiet hours: inside the store's quiet hours, in the store's time zone, the send defers to the end hour. Default 21:00 to 09:00; 20:59 sends and 21:00 defers to 09:00 the next day.
 6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time whose own `category` is `marketing`, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
 
@@ -444,6 +444,10 @@ Statuses follow [state-machines.md](../data/state-machines.md#workflow). Publish
 A consent grant or a workflow's tag action can start an active workflow. Adding a tag a contact already has does nothing. Consent from an import does not start a run. The event subscriber is the start job. It checks the published trigger’s filters once, then checks when the contact last entered. By default a contact can enter again after 30 days. A contact with a waiting or running run cannot enter again, even when every entry is allowed. Repeated delivery of the same event starts at most one run.
 
 Link tapped waits for CAMP-10 to record taps on workflow messages.
+
+An hourly sweep queues one birthday job per store and local date. That job records one event per contact and date. A birthday workflow can limit entry to a saved segment. A 29 February birthday matches on 28 February in years without a leap day.
+
+`GET /automations/:automationId/trigger-preview` uses the draft trigger and returns up to 10 matching events still in the outbox, newest first. It checks current segment membership for up to 1,000 birthday events. It needs `automations.view`.
 
 Runs: `automation_runs` holds the current step, `status`, `wake_at` and the version, unique on (automation, contact, trigger key) so an event delivered twice runs once. Postgres is the source of truth for waiting runs: a sweeper job every minute claims due runs through a SECURITY DEFINER "due work" function in batches and queues one idempotent job per (run, step). Running claims are leases: the sweep also reclaims expired `claimed_at` values, including a crash between claiming and queueing. A worker guards writes with its claim generation/time, and provider sends use a stable `(run, step)` operation key; an uncertain provider result must be reconciled before resending. A stale worker cannot advance a newly claimed run. No row lock spans a provider call. Temporary provider errors retry with back-off for up to 36 hours, then the run fails with a readable reason. Each executed step writes an `automation_run_steps` row, kept until 372 days after the run finishes (365-day rebuild plus 7-day lookback), for per-step numbers, attribution and the per-person history. Active runs retain their evidence.
 

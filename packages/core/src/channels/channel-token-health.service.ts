@@ -13,10 +13,10 @@ import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
-import { OutboxService } from '../platform/outbox/outbox.service';
 import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS } from '../platform/time';
 import { ChannelConnectionsRepository } from './channel-connections.repository';
+import { ChannelConnectionsService } from './channel-connections.service';
 
 export const CHECK_CHANNEL_TOKEN = 'check-channel-token';
 export const META_TOKEN_HEALTH_DRIVER = Symbol('META_TOKEN_HEALTH_DRIVER');
@@ -32,7 +32,7 @@ export class ChannelTokenHealthService {
     @Inject(EnvelopeEncryption) private readonly encryption: EnvelopeEncryption,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
-    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(ChannelConnectionsService) private readonly connections: ChannelConnectionsService,
     @Inject(Clock) private readonly clock: Clock,
     @InjectQueue(QUEUES.sync) private readonly queue: Queue,
   ) {}
@@ -106,38 +106,20 @@ export class ChannelTokenHealthService {
     } finally {
       plaintext.fill(0);
     }
+    if (!valid) {
+      await this.connections.recordRejectedToken(storeId, channelConnectionId, ciphertext);
+      return;
+    }
     await this.transaction.runLocked(storeId, async () => {
       // A disconnect or credential rotation while Meta was responding invalidates this result.
       const current = await this.repository.activeMetaToken(storeId, channelConnectionId);
       if (!current?.ciphertext?.equals(ciphertext)) return;
-      await this.recordHealth(storeId, channelConnectionId, valid, current.expiresAt);
+      await this.warnExpiring(storeId, channelConnectionId, current.expiresAt);
     });
   }
 
-  private async recordHealth(
-    storeId: string,
-    channelConnectionId: string,
-    valid: boolean,
-    expiresAt: Date | null,
-  ) {
+  private async warnExpiring(storeId: string, channelConnectionId: string, expiresAt: Date | null) {
     const now = this.clock.now();
-    if (!valid) {
-      await this.repository.markNeedsReconnect(storeId, channelConnectionId, now);
-      await this.outbox.publish({
-        type: 'channel.needs_reconnect',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: { channelConnectionId },
-      });
-      await this.notifications.notify(storeId, {
-        type: 'channel.needs_reconnect',
-        category: 'fix_now',
-        recipientPermission: 'storeSettings.edit',
-        title: 'Reconnect a channel',
-        dedupeKey: `channel.needs_reconnect:${channelConnectionId}:${now.toISOString().slice(0, 10)}`,
-      });
-      return;
-    }
     if (!expiresAt || expiresAt.getTime() > now.getTime() + warningWindow) return;
     await this.notifications.notify(storeId, {
       type: 'channel.token_expiring',
