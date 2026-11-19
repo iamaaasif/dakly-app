@@ -17,6 +17,7 @@ import {
   type AutomationStep,
   nextStepKeys,
 } from '@dakly/contracts/automations/graph';
+import { automationTemplates } from '@dakly/contracts/automations/templates';
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -104,10 +105,12 @@ export class AutomationsService {
         MAX_AUTOMATIONS_PER_STORE
       )
         throw automationError('AUTOMATION_LIMIT_REACHED');
+      const graph = input.templateKey ? automationTemplates[input.templateKey].graph : input.graph;
       // The live trigger starts as the first draft's; only Publish changes it after that.
       const automation = await this.repository.insert(storeId, {
         ...input,
-        triggerType: input.graph.trigger.key,
+        graph,
+        triggerType: graph.trigger.key,
         createdByUserId: actor.kind === 'user' ? actor.userId : null,
       });
       return toAutomationResponse(automation);

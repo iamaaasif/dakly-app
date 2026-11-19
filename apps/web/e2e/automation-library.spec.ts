@@ -48,6 +48,16 @@ test('filters the template library and copies a ready workflow into a draft', as
       .getByRole('button', { name: 'Welcome 1' })
       .click();
     await expect(page).toHaveURL(/type=welcome/);
+    await page
+      .getByRole('region', { name: 'Goal' })
+      .getByRole('button', { name: 'Convert subscribers 1' })
+      .click();
+    await page
+      .getByRole('region', { name: 'Channel' })
+      .getByRole('button', { name: 'SMS 1' })
+      .click();
+    await expect(page).toHaveURL(/type=welcome&goal=convert_subscribers&channel=sms/);
+    await page.reload();
     await expect(page.getByRole('article')).toHaveCount(1);
     await page.getByRole('button', { name: 'Use workflow Welcome new subscribers' }).click();
     await expect
@@ -62,12 +72,26 @@ test('filters the template library and copies a ready workflow into a draft', as
         status: 'draft',
         graph: automationTemplates.welcome_new_subscriber.graph,
       });
+    await page.goto('/automations/new');
+    await page.getByRole('button', { name: 'Create from scratch' }).click();
+    await expect
+      .poll(async () => {
+        const current: AutomationListResponse = await (
+          await context.request.get('/api/automations', { headers })
+        ).json();
+        return current.items.find(
+          (item) => !existing.has(item.id) && item.name === 'Untitled workflow',
+        );
+      })
+      .toMatchObject({ templateKey: null, status: 'draft' });
   } finally {
     const current: AutomationListResponse = await (
       await context.request.get('/api/automations', { headers })
     ).json();
     const added = current.items.filter(
-      (item) => !existing.has(item.id) && item.templateKey === 'welcome_new_subscriber',
+      (item) =>
+        !existing.has(item.id) &&
+        (item.templateKey === 'welcome_new_subscriber' || item.name === 'Untitled workflow'),
     );
     await db.pool.query('delete from automations where id=any($1::uuid[])', [
       added.map(({ id }) => id),

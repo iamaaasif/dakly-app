@@ -9,6 +9,7 @@ import { templateCategories, templateGoals } from '@dakly/contracts/automations/
 import { campaignChannels } from '@dakly/contracts/campaigns';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
+import { QueryError } from '@dakly/ui/query-error';
 
 import { useAutomationAction } from '../api/automation-actions';
 import { useAutomations } from '../api/automations';
@@ -90,13 +91,21 @@ export function WorkflowLibrary() {
       />
       <div className="mx-auto grid max-w-7xl gap-6 p-4 md:grid-cols-[12rem_minmax(0,1fr)] md:p-8">
         <LibraryFilters selected={selected} choose={choose} />
-        <LibraryResults
-          results={filteredTemplates(selected)}
-          activeTemplates={activeTemplates}
-          pending={action.isPending}
-          error={action.error?.message}
-          create={create}
-        />
+        <div className="space-y-4">
+          {workflows.isError && (
+            <QueryError
+              message="Could not check which templates are in use."
+              onRetry={() => void workflows.refetch()}
+            />
+          )}
+          <LibraryResults
+            results={filteredTemplates(selected)}
+            activeTemplates={activeTemplates}
+            pending={action.isPending}
+            error={action.error?.message}
+            create={create}
+          />
+        </div>
       </div>
     </main>
   );
