@@ -44,7 +44,7 @@ const staffUserId = randomUUID();
 const ownerEmail = `owner-${ownerId}@example.test`;
 const MINUTE = 60 * 1000;
 const end: AutomationStep = { kind: 'exit' };
-const applications: INestApplicationContext[] = [];
+const applications: Promise<INestApplicationContext>[] = [];
 
 type StepJobData = {
   storeId: string;
@@ -69,8 +69,9 @@ async function worker() {
     ],
     providers: [WakeDueRunsJob, ContinueAutomationRunJob, ResumeWorkflowsOnWalletCredited],
   })(TestModule);
-  const application = await NestFactory.createApplicationContext(TestModule, { logger: false });
-  applications.push(application);
+  const started = NestFactory.createApplicationContext(TestModule, { logger: false });
+  applications.push(started);
+  const application = await started;
   return {
     sweep: () => application.get(WakeDueRunsJob).handle({}),
     runStep: (data: StepJobData) =>
@@ -82,6 +83,16 @@ async function worker() {
     wallets: application.get(WalletService),
     queue: application.get<Queue>(getQueueToken(QUEUES.workflow)),
   };
+}
+
+function throwFirstRejection(results: PromiseSettledResult<unknown>[]) {
+  const failure = results.find((result) => result.status === 'rejected');
+  if (failure) throw failure.reason;
+}
+
+async function closeWorkers() {
+  const closing = applications.splice(0).map(async (started) => (await started).close());
+  throwFirstRejection(await Promise.allSettled(closing));
 }
 
 async function queuedSteps(queue: Queue): Promise<StepJobData[]> {
@@ -215,12 +226,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     );
   });
 
-  afterEach(async () => {
-    await Promise.all(applications.splice(0).map((application) => application.close()));
-  });
+  afterEach(closeWorkers);
 
   afterAll(async () => {
     try {
+      await closeWorkers();
       await admin.pool.query('delete from automation_runs where store_id=$1', [storeId]);
       await admin.pool.query('delete from notifications where store_id=$1', [storeId]);
       await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
@@ -248,7 +258,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     const { runIds } = await dueRuns(wait, 150);
     const [first, second] = [await worker(), await worker()];
 
-    await Promise.all([first.sweep(), second.sweep()]);
+    throwFirstRejection(await Promise.allSettled([first.sweep(), second.sweep()]));
     // A sweep takes at most 100 of one store's runs, so the rest come in the next sweep.
     await first.sweep();
 
@@ -2166,7 +2176,9 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           `wallet:${storeId}:sms_credits`,
         ]);
         let isHoldingLock = true;
-        const pending = Promise.all(heldJobs.map((job) => runner.runStep(job.data as StepJobData)));
+        const pending = Promise.allSettled(
+          heldJobs.map((job) => runner.runStep(job.data as StepJobData)),
+        );
         try {
           await waitForBlocker(pid, 2);
           const ids = runs.map((run) => run.automationId);
@@ -2182,7 +2194,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
             );
           await blocker.query('commit');
           isHoldingLock = false;
-          await pending;
+          throwFirstRejection(await pending);
           for (const {
             runIds: [runId],
           } of runs) {
@@ -2202,7 +2214,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           if (isHoldingLock) await blocker.query('rollback');
           blocker.release();
           await pending;
-          await Promise.all(heldJobs.map((job) => job.remove()));
+          throwFirstRejection(await Promise.allSettled(heldJobs.map((job) => job.remove())));
         }
       },
     );
@@ -2752,10 +2764,11 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       } = await dueRuns(send('transactional'), 2, 'active', contact);
       // Both runs reach the gate at the same moment.
       await runner.sweep();
-      await Promise.all([
-        runner.runStep(await queuedStep(runner.queue, recent!)),
-        runner.runStep(await queuedStep(runner.queue, old!)),
-      ]);
+      const recentStep = await queuedStep(runner.queue, recent!);
+      const oldStep = await queuedStep(runner.queue, old!);
+      throwFirstRejection(
+        await Promise.allSettled([runner.runStep(recentStep), runner.runStep(oldStep)]),
+      );
       for (const job of await runner.queue.getJobs(['waiting'])) await job.remove();
 
       for (const runId of [recent!, old!])
