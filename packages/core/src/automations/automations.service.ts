@@ -5,6 +5,7 @@ import {
   type AutomationDetailResponse,
   type AutomationListQuery,
   type AutomationListResponse,
+  type AutomationPauseReason,
   type AutomationResponse,
   type AutomationStatus,
   type ChangeAutomationInput,
@@ -21,11 +22,13 @@ import { automationTemplates } from '@dakly/contracts/automations/templates';
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
+import { WalletService } from '../wallets/wallet.service';
 import { automationError } from './automations.errors';
 import { type Automation, AutomationsRepository } from './automations.repository';
 
@@ -41,6 +44,16 @@ const STATUS_MOVES = {
   archive: { from: ['draft', 'active', 'paused'], to: 'archived' },
 } as const satisfies Record<string, { from: readonly AutomationStatus[]; to: AutomationStatus }>;
 type StatusMove = keyof typeof STATUS_MOVES;
+// The Pause button records a manual pause; moving to active or archiving clears either reason.
+const PAUSE_REASONS = {
+  publish: { pauseReason: null },
+  enable: { pauseReason: null },
+  pause: { pauseReason: 'manual', hasBalanceResumeSendAllowance: false },
+  archive: { pauseReason: null },
+} as const satisfies Record<
+  StatusMove,
+  { pauseReason: AutomationPauseReason | null; hasBalanceResumeSendAllowance?: boolean }
+>;
 
 // An archived workflow is deleted for the shop; its versions stay for the runs on them.
 const VISIBLE_STATUSES = ['draft', 'active', 'paused'] as const;
@@ -57,6 +70,8 @@ export class AutomationsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(TeamService) private readonly team: TeamService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(WalletService) private readonly wallets: WalletService,
   ) {}
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
@@ -130,10 +145,11 @@ export class AutomationsService {
     input: ChangeAutomationInput,
     _actor: Actor,
   ): Promise<AutomationResponse> {
-    const automation = await this.repository.change(storeId, automationId, VISIBLE_STATUSES, {
-      ...input,
-      updatedAt: this.clock.now(),
-    });
+    const automation = await this.repository.change(
+      storeId,
+      { id: automationId, from: VISIBLE_STATUSES },
+      { ...input, updatedAt: this.clock.now() },
+    );
     if (!automation) throw automationError('AUTOMATION_NOT_FOUND');
     return toAutomationResponse(automation);
   }
@@ -156,11 +172,11 @@ export class AutomationsService {
         publishedByUserId: actor.kind === 'user' ? actor.userId : null,
         publishedAt: now,
       });
-      const published = await this.repository.change(storeId, automationId, ['active'], {
-        publishedVersionId: version.id,
-        triggerType: locked.graph.trigger.key,
-        updatedAt: now,
-      });
+      const published = await this.repository.change(
+        storeId,
+        { id: automationId, from: ['active'] },
+        { publishedVersionId: version.id, triggerType: locked.graph.trigger.key, updatedAt: now },
+      );
       return toAutomationResponse(published!);
     });
   }
@@ -197,18 +213,54 @@ export class AutomationsService {
       throw automationError('AUTOMATION_VERSION_NOT_FOUND');
   }
 
+  // Inside the send step's transaction. Only the first run short of SMS credits pauses the
+  // workflow and posts a card for the owner.
+  async pauseForBalance(storeId: string, automationId: string): Promise<void> {
+    const revision = await this.wallets.currentRevision(storeId, 'sms_credits');
+    const now = await this.repository.schedulerTime(storeId);
+    const paused = await this.repository.pauseForBalance(storeId, automationId, revision, now);
+    if (!paused) return;
+    await this.notifications.notify(storeId, {
+      type: 'automation.paused_for_balance',
+      category: 'fix_now',
+      dedupeKey: `automation-balance:${automationId}:${revision}`,
+      recipientPermission: 'billing.edit',
+      ...balancePauseNotice(paused.name),
+      actionUrl: TOP_UP_PATH,
+    });
+  }
+
+  // A delayed credit event cannot resume a pause whose gate already saw that ledger revision.
+  async resumeAfterTopUp(storeId: string, entryId: string): Promise<void> {
+    await this.transaction.run(storeId, async () => {
+      const revision = await this.wallets.topUpRevision(storeId, 'sms_credits', entryId);
+      if (revision === undefined) return;
+      const ids = await this.repository.lockBalancePaused(storeId, revision);
+      if (ids.length === 0) return;
+      const resumedAt = await this.repository.schedulerTime(storeId);
+      await this.repository.resumeBalancePaused(storeId, ids, resumedAt);
+    });
+  }
+
   private async move(
     storeId: string,
     automationId: string,
     move: StatusMove,
   ): Promise<AutomationResponse> {
     const { from, to } = STATUS_MOVES[move];
-    const automation = await this.repository.change(storeId, automationId, from, {
-      status: to,
-      updatedAt: this.clock.now(),
-    });
+    // Only a top-up ends a pause for a short balance (resumeAfterTopUp).
+    const automation = await this.repository.change(
+      storeId,
+      { id: automationId, from },
+      { status: to, ...PAUSE_REASONS[move], updatedAt: this.clock.now() },
+      to === 'active' ? 'balance' : undefined,
+    );
     if (automation) return toAutomationResponse(automation);
-    await this.findVisible(storeId, automationId);
+    const current = await this.findVisible(storeId, automationId);
+    if (current.status === 'paused' && current.pauseReason === 'balance')
+      throw automationError('AUTOMATION_PAUSED_BY_SYSTEM', [
+        { path: 'pauseReason', message: 'balance' },
+      ]);
     throw automationError('AUTOMATION_STATUS_NOT_ALLOWED');
   }
 
@@ -226,6 +278,15 @@ export class AutomationsService {
       throw automationError('AUTOMATION_NOT_FOUND');
     return automation;
   }
+}
+
+// The shop app has no top-up screen until PAY-8; Settings is where billing will live.
+const TOP_UP_PATH = '/settings';
+function balancePauseNotice(name: string) {
+  return {
+    title: `"${name}" paused: SMS balance too low`,
+    body: `"${name}" paused because its next SMS needed more credits than were available. A top-up resumes the workflow and lets eligible messages go out.`,
+  };
 }
 
 // The graph schema already refused a path with no end or a loop. These checks need to know what

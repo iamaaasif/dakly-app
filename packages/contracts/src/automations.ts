@@ -5,6 +5,8 @@ import { automationTemplates, type TemplateKey } from './automations/templates';
 import type { CampaignChannel } from './campaigns';
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
+// Manual is the Pause button; balance is a short SMS balance, which a top-up ends on its own.
+export const automationPauseReasons = ['manual', 'balance'] as const;
 export const automationRunStatuses = ['waiting', 'running', 'done', 'exited', 'failed'] as const;
 export const automationExitReasons = [
   'version_stopped',
@@ -25,6 +27,7 @@ export const automationStepKinds = [
   'exit',
 ] as const;
 export type AutomationStatus = (typeof automationStatuses)[number];
+export type AutomationPauseReason = (typeof automationPauseReasons)[number];
 export type AutomationRunStatus = (typeof automationRunStatuses)[number];
 export type AutomationExitReason = (typeof automationExitReasons)[number];
 export type AutomationStepKind = (typeof automationStepKinds)[number];
@@ -66,6 +69,7 @@ export type AutomationResponse = {
   id: string;
   name: string;
   status: AutomationStatus;
+  pauseReason: AutomationPauseReason | null;
   templateKey: string | null;
   graph: AutomationGraph;
   publishedVersionId: string | null;
