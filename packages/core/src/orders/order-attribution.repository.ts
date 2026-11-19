@@ -1,9 +1,30 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 
+import type { attributionSourceTypes } from '@dakly/contracts/orders';
 import { orders } from '@dakly/db/schema/orders';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+
+export type AttributionWrite = {
+  sourceType: (typeof attributionSourceTypes)[number];
+  sourceId: string;
+  channel: string;
+  touchId: string;
+  touchAt: Date;
+  windowDays: 1 | 3 | 7;
+  amountPoisha: number;
+};
+
+const clearedAttribution = {
+  sourceType: null,
+  sourceId: null,
+  channel: null,
+  touchId: null,
+  touchAt: null,
+  windowDays: null,
+  amountPoisha: null,
+};
 
 @Injectable()
 export class OrderAttributionRepository {
@@ -31,25 +52,23 @@ export class OrderAttributionRepository {
     return order;
   }
 
-  save(
-    storeId: string,
-    orderId: string,
-    record: Pick<
-      typeof orders.$inferInsert,
-      | 'attributedSourceType'
-      | 'attributedSourceId'
-      | 'attributedChannel'
-      | 'attributedTouchId'
-      | 'attributedTouchAt'
-      | 'attributedWindowDays'
-      | 'attributedAmountPoisha'
-    >,
-  ) {
+  save(storeId: string, orderId: string, record: AttributionWrite | null) {
+    const { sourceType, sourceId, channel, touchId, touchAt, windowDays, amountPoisha } =
+      record ?? clearedAttribution;
     return this.database.forStore(storeId, (tx) =>
       tx
         .update(orders)
-        // The staff editor uses updated_at to detect edits to the order itself.
-        .set({ ...record, updatedAt: sql`${orders.updatedAt}` })
+        .set({
+          attributedSourceType: sourceType,
+          attributedSourceId: sourceId,
+          attributedChannel: channel,
+          attributedTouchId: touchId,
+          attributedTouchAt: touchAt,
+          attributedWindowDays: windowDays,
+          attributedAmountPoisha: amountPoisha,
+          // The staff editor uses updated_at to detect edits to the order itself.
+          updatedAt: sql`${orders.updatedAt}`,
+        })
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
     );
   }

@@ -1,21 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type { attributionSourceTypes } from '@dakly/contracts/orders';
 
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { OrderAttributionRepository } from './order-attribution.repository';
+import { OrderAttributionRepository, type AttributionWrite } from './order-attribution.repository';
 
-export type OrderAttributionReference = {
-  sourceType: (typeof attributionSourceTypes)[number];
-  sourceId: string;
-  channel: string;
-  touchId: string;
-  touchAt: Date;
-  windowDays: 1 | 3 | 7;
-};
+export type OrderAttributionReference = Omit<AttributionWrite, 'amountPoisha'>;
 
 @Injectable()
 export class OrderAttributionService {
@@ -38,15 +30,8 @@ export class OrderAttributionService {
       const next = order.stage === 'cancelled' || !order.buyerContactId ? null : reference;
       if (next ? sameTouch(order, next) : !order.sourceType) return;
 
-      await this.repository.save(storeId, orderId, {
-        attributedSourceType: next?.sourceType ?? null,
-        attributedSourceId: next?.sourceId ?? null,
-        attributedChannel: next?.channel ?? null,
-        attributedTouchId: next?.touchId ?? null,
-        attributedTouchAt: next?.touchAt ?? null,
-        attributedWindowDays: next?.windowDays ?? null,
-        attributedAmountPoisha: next ? order.itemsSubtotalPoisha - order.orderDiscountPoisha : null,
-      });
+      const amountPoisha = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
+      await this.repository.save(storeId, orderId, next && { ...next, amountPoisha });
       const occurredAt = this.clock.now().toISOString();
       await this.outbox.publish(
         next
