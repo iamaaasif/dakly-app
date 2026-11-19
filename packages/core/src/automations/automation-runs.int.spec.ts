@@ -215,9 +215,12 @@ describe('Workflow runner (Postgres and Valkey)', () => {
     );
   });
 
+  afterEach(async () => {
+    await Promise.all(applications.splice(0).map((application) => application.close()));
+  });
+
   afterAll(async () => {
     try {
-      await Promise.all(applications.map((application) => application.close()));
       await admin.pool.query('delete from automation_runs where store_id=$1', [storeId]);
       await admin.pool.query('delete from notifications where store_id=$1', [storeId]);
       await admin.pool.query('delete from outbox_events where store_id=$1', [storeId]);
