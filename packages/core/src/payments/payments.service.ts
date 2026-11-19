@@ -110,8 +110,12 @@ export class PaymentsService {
         createdAt: now,
       });
       if (event && ['pending', 'expired', 'failed'].includes(intent.status)) {
+        const priorCheck = intent.nextCheckAt?.getTime();
+        // Each callback invalidates the result of a check that already started.
+        const due =
+          priorCheck === undefined ? now : new Date(Math.min(now.getTime(), priorCheck - 1));
         await this.repository.update(storeId, intent.id, intent.status, {
-          nextCheckAt: now,
+          nextCheckAt: due,
           updatedAt: now,
         });
         await this.outbox.publish({
@@ -172,15 +176,19 @@ export class PaymentsService {
   }
 
   private async advanceCheck(storeId: string, intent: Intent, now: Date) {
-    const delay = paymentCheckMinutes[intent.checkCount];
-    const next =
-      delay === undefined ? intent.expiresAt.getTime() : now.getTime() + delay * MINUTE_MS;
     await this.repository.update(storeId, intent.id, intent.status, {
       checkCount: intent.checkCount + 1,
-      nextCheckAt:
-        intent.status === 'pending' ? new Date(Math.min(next, intent.expiresAt.getTime())) : null,
+      nextCheckAt: this.nextCheck(intent, intent.status, now),
       updatedAt: now,
     });
+  }
+
+  private nextCheck(intent: Intent, status: Intent['status'], now: Date) {
+    const delay = paymentCheckMinutes[intent.checkCount];
+    const next = delay === undefined ? null : new Date(now.getTime() + delay * MINUTE_MS);
+    if (status === 'expired') return next;
+    if (status === 'pending') return !next || next > intent.expiresAt ? intent.expiresAt : next;
+    return null;
   }
 
   private matchPayment(intent: Intent, result: PaymentStatus) {
@@ -190,7 +198,13 @@ export class PaymentsService {
 
   private unpaidChange(intent: Intent, result: PaymentStatus, now: Date) {
     if (intent.status !== 'pending') return;
-    if (intent.expiresAt <= now) return { status: 'expired' } as const;
+    if (intent.expiresAt <= now) {
+      return {
+        status: 'expired',
+        checkCount: intent.checkCount + 1,
+        nextCheckAt: this.nextCheck(intent, 'expired', now),
+      } as const;
+    }
     if (result.status === 'failed' || result.status === 'cancelled')
       return { status: result.status } as const;
   }

@@ -275,19 +275,21 @@ describe('Payment intents (Postgres)', () => {
 
   it('keeps the new check due if an earlier query reports cancellation', async () => {
     const intent = await pendingIntent();
-    await payments.recordCallback(storeA, intent.id, 'bkash', {
-      eventId: 'new-callback-check',
-      merchantReference: intent.merchantReference,
-    });
-    await payments.applyStatus(
-      storeA,
-      intent.id,
-      { status: 'cancelled' },
-      new Date('2026-11-19T03:01:00.000Z'),
-    );
+    const firstDue = new Date('2026-11-19T03:01:00.000Z');
+    const originalClock = clock.now;
+    clock.now = () => firstDue;
+    try {
+      await payments.recordCallback(storeA, intent.id, 'bkash', {
+        eventId: 'new-callback-check',
+        merchantReference: intent.merchantReference,
+      });
+      await payments.applyStatus(storeA, intent.id, { status: 'cancelled' }, firstDue);
+    } finally {
+      clock.now = originalClock;
+    }
     expect(await repository.find(storeA, intent.id)).toMatchObject({
       status: 'pending',
-      nextCheckAt: now,
+      nextCheckAt: new Date('2026-11-19T03:00:59.999Z'),
     });
   });
 
@@ -307,8 +309,37 @@ describe('Payment intents (Postgres)', () => {
     }
     expect(await repository.find(storeA, intent.id)).toMatchObject({
       status: 'expired',
-      nextCheckAt: null,
+      nextCheckAt: new Date('2026-11-19T04:04:00.000Z'),
     });
+  });
+
+  it('keeps checking past expiry and records a later capture for review', async () => {
+    const intent = await pendingIntent();
+    const originalClock = clock.now;
+    clock.now = () => new Date('2026-11-19T04:00:00.000Z');
+    try {
+      await payments.applyStatus(
+        storeA,
+        intent.id,
+        { status: 'pending' },
+        new Date('2026-11-19T03:01:00.000Z'),
+      );
+      const expired = await repository.find(storeA, intent.id);
+      expect(expired).toMatchObject({
+        status: 'expired',
+        nextCheckAt: new Date('2026-11-19T04:04:00.000Z'),
+      });
+      clock.now = () => new Date('2026-11-19T04:04:00.000Z');
+      await verify.handle({ storeId: storeA, paymentIntentId: intent.id });
+      expect(await repository.find(storeA, intent.id)).toMatchObject({
+        status: 'needs_review',
+        reviewReason: 'late_success',
+        succeededAt: null,
+        nextCheckAt: null,
+      });
+    } finally {
+      clock.now = originalClock;
+    }
   });
 
   it('uses the shop credential and refuses to use it from another store', async () => {
