@@ -309,6 +309,13 @@
       "when": 1795059739050,
       "tag": "0043_campaign_list_order",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795062688963,
+      "tag": "0044_campaign_delivery",
+      "breakpoints": true
     }
   ]
 }

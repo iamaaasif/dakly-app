@@ -1,6 +1,6 @@
 {
-  "id": "72e366d5-f9a0-4712-84da-57a394d93c07",
-  "prevId": "85bc85f4-e684-4e3d-9f76-b2d162c911a3",
+  "id": "771cc3e2-ebd6-4413-a028-0d1527585f0a",
+  "prevId": "c7915f7d-7339-465e-88bd-1350b43abdd7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7569,6 +7569,33 @@
             },
             {
               "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaigns_store_id_created_at_id_idx": {
+          "name": "campaigns_store_id_created_at_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

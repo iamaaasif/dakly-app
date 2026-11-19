@@ -1,6 +1,7 @@
 ALTER TABLE "campaign_recipients" ADD COLUMN "claimed_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "campaign_recipients" ADD COLUMN "sms_credits" integer;--> statement-breakpoint
 ALTER TABLE "campaign_recipients" ADD COLUMN "send_attempts" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "campaigns" ADD COLUMN "short_link_base" text;--> statement-breakpoint
 CREATE INDEX "campaigns_sending_idx" ON "campaigns" USING btree ("store_id","started_at","id") WHERE "campaigns"."status" = 'sending';--> statement-breakpoint
 -- The batch scheduler sees one sending campaign per store. Work is done under store RLS.
 CREATE FUNCTION sending_campaigns(after_store uuid, store_limit integer)
