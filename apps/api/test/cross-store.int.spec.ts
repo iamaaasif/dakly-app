@@ -1704,14 +1704,17 @@ function metaSubscriptionDriver() {
 
 async function expectRetryAfterSubscriptionFailure(shop: Shop) {
   const selectionId = await metaSelection(shop);
-  const release = Promise.withResolvers<void>();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   let subscriptionPending = false;
   const subscription = vi
     .spyOn(metaSubscriptionDriver(), 'subscribePage')
     .mockImplementation(async (id) => {
       if (id === pageSelection.externalAccountId) throw new Error('Temporary test failure');
       subscriptionPending = true;
-      await release.promise;
+      await pending;
       subscriptionPending = false;
     });
   try {
@@ -1722,7 +1725,7 @@ async function expectRetryAfterSubscriptionFailure(shop: Shop) {
     expect(response.statusCode).toBe(500);
     expect(subscriptionPending).toBe(false);
   } finally {
-    release.resolve();
+    release();
     subscription.mockRestore();
   }
   await success(shop, 'POST', metaConnect, 201, { selectionId, accounts: [pageSelection] });
