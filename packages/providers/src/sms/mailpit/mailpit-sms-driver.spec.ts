@@ -1,5 +1,5 @@
 import { once } from 'node:events';
-import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpServer, type IncomingMessage } from 'node:http';
 import { createServer, type Server, type Socket } from 'node:net';
 
 import { afterEach, describe, expect, it } from 'vitest';
@@ -185,35 +185,26 @@ describe('MailpitSmsDriver', () => {
     );
   });
 
-  it('closes the SMTP connection when the delivery is aborted', async () => {
-    const server = createServer();
-    server.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('Missing test server port');
+  it('cancels the receipt lookup before connecting to SMTP', async () => {
+    const smtp = await smtpPeer();
+    const lookup = createHttpServer();
+    const port = await listen(lookup);
     const driver = new MailpitSmsDriver({
-      host: '127.0.0.1',
-      port: address.port,
-      apiUrl: 'http://127.0.0.1:1',
+      host,
+      port: smtp.port,
+      apiUrl: `http://${host}:${port}`,
     });
     const controller = new AbortController();
-    const connected = once(server, 'connection') as Promise<[Socket]>;
-    const sent = driver
-      .send({ to: '01712345678', text: 'Private order update' }, controller.signal)
-      .catch((error: unknown) => error);
-    const [socket] = await connected;
-    socket.resume();
-    try {
-      const closed = once(socket, 'close', { signal: AbortSignal.timeout(500) });
-      controller.abort();
-      await closed;
-      expect(await sent).toMatchObject({ code: 'SMS_SEND_TIMEOUT' });
-    } finally {
-      socket.destroy();
-      server.close();
-      await once(server, 'close');
-      await sent;
-    }
+    const requested = once(lookup, 'request') as Promise<[IncomingMessage]>;
+    const refused = expect(driver.send(message, controller.signal)).rejects.toBeInstanceOf(
+      SmsSendRefused,
+    );
+    const [request] = await requested;
+    const closed = once(request.socket, 'close', { signal: AbortSignal.timeout(1000) });
+    controller.abort();
+    await closed;
+    await refused;
+    expect(smtp.connections()).toBe(0);
   });
 
   it('returns a safe failure without exposing the SMTP error or message', async () => {
