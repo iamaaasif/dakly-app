@@ -414,7 +414,7 @@ Unicode spellings before matching.
 
 ### Saved replies
 
-Staff with `chats.view` can list saved replies and read their text for the composer. Staff with `chats.edit` can create, change and delete replies. These routes require the Chats extension. Shortcuts are optional and unique within a store. Each write records the staff member and the changed field names in the audit log.
+Staff with `chats.view` can list saved replies and read their text for the composer. Staff with `chats.edit` can create, change and delete replies. These routes require the Chats extension. Shortcuts are optional and unique within a store. Each write records the staff member in the audit log. Create and update also record the submitted field names.
 
 ### Customer memory processing
 
