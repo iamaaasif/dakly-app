@@ -68,6 +68,10 @@ export class StoresService {
     return days;
   }
 
+  async isActive(storeId: string): Promise<boolean> {
+    return (await this.repository.lockedStatus(storeId)) === 'active';
+  }
+
   async timeZone(storeId: string): Promise<string> {
     const timeZone = await this.repository.timeZone(storeId);
     if (timeZone === undefined) throw storeError('STORE_NOT_FOUND');

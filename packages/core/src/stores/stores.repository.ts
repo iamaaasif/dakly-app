@@ -90,6 +90,13 @@ export class StoresRepository {
     return row;
   }
 
+  async lockedStatus(storeId: string) {
+    const [store] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select({ status: stores.status }).from(stores).where(eq(stores.id, storeId)).for('share'),
+    );
+    return store?.status;
+  }
+
   async timeZone(storeId: string): Promise<string | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select({ timeZone: stores.timeZone }).from(stores).where(eq(stores.id, storeId)).limit(1),
