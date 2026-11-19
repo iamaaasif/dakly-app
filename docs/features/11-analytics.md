@@ -204,7 +204,7 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 1. Every number is defined in the [glossary](../product/glossary.md). One report function per number lives in `analytics/` and is used by the dashboard, Ask Dakly AI and this page.
 2. Attribution: an order is attributed to the last message or post the contact tapped or read within the window (default 7 days). Cancelled and returned orders are removed.
 3. Reports read summary tables. Incremental outbox processing updates affected store/day/metric rows within five minutes of the source commit, deduplicates event ids and restates original reporting days for late returns and corrections. A nightly reconciliation repairs missed or divergent summaries. Loading a shop with 50,000 customers in under 2 seconds remains a performance acceptance target, not a measured result of this schema PR.
-4. All periods are in Asia/Dhaka days.
+4. All periods use the store’s local calendar days. The default time zone is Asia/Dhaka.
 5. A 365-day attribution rebuild needs 372 days of eligible touch evidence (including the maximum 7-day lookback). Keep workflow step evidence through 372 days after run completion. Link taps are kept one row per tap, with exact times, for 13 months (D31); first/last tap counters on the link alone cannot rebuild attribution.
 
 ### Rules
@@ -218,12 +218,13 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 
 ### Data
 
-`store_daily_metrics` (one row per store, day, metric and dimension), owned by `analytics/`. The order subscribers write `orders`, `delivered_orders` and `net_spend` by the original creation day. Net spend and the delivered count supply Average order value. COD collection and late returns restate that day. It also writes `buyer_activity`
-with one row per buyer and day, using the buyer's first non-cancelled order day as the value. That lets a period count each repeat buyer once even when they order on several days. A cancellation can move the first order day, so the subscriber replaces that buyer's retained days.
+`store_daily_metrics` (one row per store, day, metric and dimension), owned by `analytics/`. The order subscribers write `orders`, `delivered_orders` and `net_spend` by the original creation day. Net spend and the delivered count supply Average order value. COD collection and late returns restate that day.
 
-Each store’s lifecycle snapshot holds a count for each of the six stages. Contact stats publish an event when a stage changes.
+Each `buyer_activity` row records one buyer and day, with the first non-cancelled order day as its value. That lets a period count each repeat buyer once even when they order on several days. A cancellation can move the first order day, so the subscriber replaces that buyer's retained days.
 
-The order event ID is recorded in the same transaction as its summary rows. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2.
+Each store lifecycle snapshot holds a count for each of the six stages. Contact stats publish `contact.lifecycle_changed` when a stage changes.
+
+Order changes for the same store and original day share a refresh at the end of the current minute. The subscriber queues that refresh before recording the event ID with its buyer activity writes, so a queue failure can be retried. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2.
 
 Reports use the current and previous ranges of store-local calendar days. A returning buyer is counted once across the full period. The daily points count that same group on each day it ordered. Lifecycle counts read the latest snapshot inside the period.
 

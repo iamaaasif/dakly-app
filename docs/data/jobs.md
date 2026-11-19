@@ -72,15 +72,16 @@ Per-store cap: one running campaign batch per store.
 
 ## sync
 
-| Job                          | Started by                                              | Payload                          | Makes a rerun harmless                                                   |
-| ---------------------------- | ------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------ |
-| `refresh-post-metrics`       | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                       |
-| `queue-channel-token-checks` | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due` |
-| `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                    |
-| `return-conversation-to-ai`  | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                                |
-| `sync-whatsapp-templates`    | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                      |
-| `build-daily-metrics`        | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                           |
-| `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)     |
+| Job                          | Started by                                              | Payload                          | Makes a rerun harmless                                                          |
+| ---------------------------- | ------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------- |
+| `refresh-post-metrics`       | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                              |
+| `queue-channel-token-checks` | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due`        |
+| `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                           |
+| `return-conversation-to-ai`  | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                                       |
+| `sync-whatsapp-templates`    | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                             |
+| `build-daily-metrics`        | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                                  |
+| `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One job per store, original order day and minute; recomputes totals from orders |
+| `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)            |
 
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
@@ -161,23 +162,28 @@ One daily job, run in this order. Each step works in bounded batches and can be 
 
 The schemas are in `packages/contracts/src/events/`, one file per area, and `dakly-event.ts` holds the union of all of them. A producer publishes an event through `OutboxService.publish` inside the transaction that made the change (DB-2). The relay queues one job per subscriber with job id `<eventId>-<subscriber>` (P5 in the [plumbing plan](../plans/plumbing-channels-contacts.md)). Payloads hold ids and enum values only: no phone, email, name or message text. Listeners in M3b are built by the tasks named in the [campaigns plan](../plans/campaigns-and-automations.md).
 
-| Event                     | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
-| ------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `contact.created`         | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
-| `consent.changed`         | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
-| `segment.saved`           | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
-| `campaign.approved`       | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
-| `conversation.started`    | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
-| `message.received`        | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
-| `message.delivered`       | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.read`            | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.failed`          | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
-| `message.tapped`          | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
-| `message.opted_out`       | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
-| `channel.connected`       | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
-| `channel.disconnected`    | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
-| `channel.needs_reconnect` | CHN-4, `ChannelTokenHealthService`                               | `channelConnectionId`                                                   | None yet                                                     |
-| `notification.created`    | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
+| Event                       | Emitted by                                                       | Payload                                                                 | Listeners                                                    |
+| --------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `contact.created`           | CUS-1, `ContactsService.findOrCreateByIdentity`                  | `contactId`                                                             | CUS-3 `refresh-contact-stats`                                |
+| `contact.lifecycle_changed` | ANA-1, `ContactStatsService`                                     | `contactId`                                                             | ANA-1 lifecycle snapshot                                     |
+| `order.created`             | ORD-3, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.edited`              | ANA-1, `OrdersService.editOrder`                                 | `orderId`                                                               | ANA-1 order summaries                                        |
+| `order.stage_changed`       | ORD-1, `OrdersService`                                           | `orderId`, `from`, `to`                                                 | CUS-3 contact stats; ANA-1 order summaries                   |
+| `order.cod_collected`       | ORD-9, `OrdersService`                                           | `orderId`                                                               | CUS-3 contact stats; ANA-1 order summaries                   |
+| `consent.changed`           | CUS-2, `ConsentService.record`                                   | `consentId`, `contactId`, `channel`, `status`, `source`                 | CAMP-11 consent given trigger (M3b)                          |
+| `segment.saved`             | CUS-6, `SegmentsService.create` and `change`                     | `segmentId`                                                             | None yet                                                     |
+| `campaign.approved`         | CAMP-2, `CampaignsService.approve`                               | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet; CAMP-3 sender (M3b)                                |
+| `conversation.started`      | CHAT-1, `MessagingService.receiveInboundMessage`                 | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                           |
+| `message.received`          | CHAT-1, `MessagingService.receiveInboundMessage`                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`                                |
+| `message.delivered`         | CHAT-2, `MessagingService` on a delivery receipt                 | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.read`              | CHAT-2, `MessagingService` on a read receipt                     | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.failed`            | CHAT-2, `MessagingService` on a failure receipt or send failure  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; CAMP-3 recipient status (M3b) |
+| `message.tapped`            | CAMP-10, `LinksService.redirect` on a link's first tap           | `trackedLinkId`, `contactId` (null when none), `sourceType`, `sourceId` | CAMP-11 `link_tapped` trigger (M3b)                          |
+| `message.opted_out`         | CAMP-10, `LinksService.optOut` when it writes the SMS withdrawal | `trackedLinkId`, `contactId`, `sourceType`, `sourceId`                  | None yet                                                     |
+| `channel.connected`         | CHN-2, `MetaAuthorizationService.connect`                        | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.disconnected`      | CHN-2, `ChannelConnectionsService.disconnect`                    | `channelConnectionId`                                                   | None yet                                                     |
+| `channel.needs_reconnect`   | CHN-4, `ChannelTokenHealthService`                               | `channelConnectionId`                                                   | None yet                                                     |
+| `notification.created`      | HOME-1, `NotificationsService.notify`, one per notification row  | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user      |
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 

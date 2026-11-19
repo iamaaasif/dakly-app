@@ -8,11 +8,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
-import { AnalyticsModule } from './analytics.module';
+import { AnalyticsReportsModule } from './analytics-reports.module';
 import { AnalyticsService } from './analytics.service';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, AnalyticsModule] })(TestModule);
+Module({ imports: [DatabaseModule, AnalyticsReportsModule] })(TestModule);
 
 describe('Analytics reports', () => {
   const fixture = new OwnerIsolationFixture();

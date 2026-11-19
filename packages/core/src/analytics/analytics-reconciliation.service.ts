@@ -91,7 +91,7 @@ export class AnalyticsReconciliationService {
 
     const { from, through } = page.period ?? (await this.summaries.reconciliationRange(storeId));
     const lastDay = shiftReportDay(from, 30);
-    await this.summaries.reconcileOrderRange(storeId, {
+    await this.summaries.refreshOrderDays(storeId, {
       from,
       through: lastDay < through ? lastDay : through,
     });

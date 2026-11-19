@@ -130,11 +130,30 @@ export class AnalyticsRepository {
     return rows;
   }
 
-  async lockSummaries(storeId: string) {
-    // Subscriptions and repairs must read after the last summary write commits.
+  async lockSummaries(storeId: string, scope: string) {
+    // A repair and an event for the same rows must read in write order.
     await this.database.inTransaction(storeId, (tx) =>
-      tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`analytics-${storeId}`}, 0))`),
+      tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`analytics-${storeId}-${scope}`}, 0))`,
+      ),
     );
+  }
+
+  async hasOrderEvent(storeId: string, event: { id: string; occurredAt: string }) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ dimension: storeDailyMetrics.dimension })
+        .from(storeDailyMetrics)
+        .where(
+          and(
+            eq(storeDailyMetrics.storeId, storeId),
+            eq(storeDailyMetrics.day, event.occurredAt.slice(0, 10)),
+            eq(storeDailyMetrics.metric, 'order_event'),
+            eq(storeDailyMetrics.dimension, event.id),
+          ),
+        ),
+    );
+    return row !== undefined;
   }
 
   async recordEvent(storeId: string, event: { id: string; occurredAt: string }, now: Date) {

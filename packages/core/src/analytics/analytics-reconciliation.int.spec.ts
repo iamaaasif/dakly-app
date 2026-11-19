@@ -78,7 +78,7 @@ describe('Analytics reconciliation', () => {
     );
     await handler.handle({ ...event, id: randomUUID() });
     const queue = app.get<Queue>(getQueueToken(QUEUES.sync));
-    const jobs = await queue.getDelayed();
+    const jobs = (await queue.getDelayed()).filter(({ data }) => data.storeId === fixture.a);
     expect(jobs.map(({ data, opts }) => ({ storeId: data.storeId, delay: opts.delay }))).toEqual([
       { storeId: fixture.a, delay: 35000 },
     ]);

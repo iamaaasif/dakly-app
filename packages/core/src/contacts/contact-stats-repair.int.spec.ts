@@ -14,11 +14,9 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { ContactStatsRepairModule } from './contact-stats-repair.module';
+import { RECONCILE_CONTACT_STATS } from './contact-stats-sweep.service';
 import { ContactStatsService } from './contact-stats.service';
-import {
-  RECONCILE_CONTACT_STATS,
-  ReconcileContactStatsJob,
-} from './jobs/reconcile-contact-stats.job';
+import { ReconcileContactStatsJob } from './jobs/reconcile-contact-stats.job';
 
 class TestModule {}
 Module({
