@@ -370,7 +370,7 @@ Immediately before provider submission, repeat consent, window, block, plan and 
 5. Marketing only, quiet hours: inside the store's quiet hours, in the store's time zone, the send defers to the end hour. Default 21:00 to 09:00; 20:59 sends and 21:00 defers to 09:00 the next day.
 6. Marketing only, frequency cap (CAMP-R3, D41): at most 1 marketing message on the channel in the last 24 hours and 3 across channels in the last 7 days. It counts `campaign_recipients` in `sent`, `delivered` or `read` from marketing campaigns and `automation_run_steps` with a send time whose own `category` is `marketing`, from Postgres (A2), on the existing `(store_id, contact_id, sent_at)` indexes. Over either limit is `frequency_cap`.
 
-   A campaign recipient counts once it is `sent`, `delivered` or `read`, and a recipient still in `sending` counts as a send happening now. A workflow step counts from its `sent_at` while its outcome is `sending` or `sent`. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
+   A campaign recipient counts once it is `sent`, `delivered` or `read`, and a recipient still in `sending` counts as a send happening now. A workflow step counts from its `sent_at` while its outcome is `sending`, `sent` or `unconfirmed`. An unconfirmed step counts because the provider may have accepted it. For marketing, `check` requires an open store transaction (`STORE_TRANSACTION_REQUIRED` otherwise) and takes a transaction advisory lock on the store and contact before it counts, so a second check for the same person waits until the first transaction has marked its message sending and committed, then counts it.
 
 Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore consent, quiet hours and the cap (CAMP-R2).
 
@@ -379,6 +379,8 @@ Staff replies check 1, 3 and 4. Transactional sends check 1, 3 and 4 and ignore 
 Quiet hours, the cap and the approval setting are the `sending` section of `stores.settings`, parsed by `sendingSettingsSchema` in `packages/contracts/src/stores.ts`: `quietHours` with `startHour` 20 to 22 and `endHour` 8 to 10, `frequencyCap` with `perChannelPerDay` 1 to 3 and `perSevenDays` 1 to 10, and `onlyOwnersAndAdminsApprove`, on by default. `PATCH /store` with `storeSettings.edit` takes the whole section, as `GET /store` returns it, so a save never resets a part to its default. A store that never saved the section gets the defaults.
 
 The gate does not reserve cost: the campaign reserves at approval (CAMP-2) and the sending job reserves or releases around the gate in the same transaction (CAMP-3, CAMP-5).
+
+The workflow dispatch gate can take the contact and frequency locks and then read the shared application clock. It counts earlier committed submissions even if another worker's clock stamped them later than this worker's check. The gate returns the checked destination and time. The wallet service exposes the reservation lock so callers can take it before the gate. The schema accepts `no_credits` as a skipped-send reason and `not_reachable` as a workflow exit reason.
 
 ### Channel rules
 
@@ -399,6 +401,7 @@ Window first: a send step tries a free-form message on the channel where the cus
 Campaigns and workflows send through `MessagingService.send(storeId, { channel, contactId, body, operationKey })` in `messaging/` (D37). SMS is the only channel so far (D40); Messenger and Instagram join the same method later.
 
 - It reads the contact's phone through `ContactsService`. A contact with no phone is refused with `MESSAGING_CONTACT_HAS_NO_PHONE`. The phone goes only to the SMS driver; it is never logged or returned.
+- Messaging can check a frozen destination before calling the provider. A changed phone returns `MESSAGING_DESTINATION_CHANGED`. A prepared sender name is bound to its store, and messaging looks up the current store's approved sender when the prepared value belongs to another store.
 - It counts parts with `countSmsParts` in `packages/contracts/src/sms.ts`, where the web app can use the same counter. One part holds 160 GSM-7 or 70 Unicode characters; a longer text splits into parts of 153 or 67, because each part carries a header. One Bangla character makes the whole text Unicode, and `^ { } \ [ ] ~ | €` take two GSM-7 characters each. One part costs one SMS credit.
 - It calls the driver with no store transaction open and refuses to run inside one (`MESSAGING_INSIDE_TRANSACTION`). It returns the provider message id, parts and credits. The caller, a campaign recipient or a workflow step, records status and cost and decides retries; `messaging/` writes no rows.
 - Every SMS goes from Dakly's shared sender until the store's own sender name is approved ([feature 02](02-channel-connections.md)); then it goes from that name. Delivery receipts come with the provider driver (ACC-14); Mailpit, used in development and tests, sends none, so an accepted message counts as delivered.

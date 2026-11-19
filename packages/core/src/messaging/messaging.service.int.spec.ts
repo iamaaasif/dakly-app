@@ -156,6 +156,81 @@ describe('MessagingService (Postgres and Mailpit)', () => {
     expect(sent).toMatchObject({ parts: 2, credits: 2 });
   });
 
+  it('reads the final phone after an unprepared sender lookup finishes', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Sumi Akter', phone: '01712345618' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const original = SmsSendersService.prototype.approvedSenderName;
+    vi.spyOn(SmsSendersService.prototype, 'approvedSenderName').mockImplementationOnce(
+      async function (store) {
+        const sender = await original.call(this, store);
+        await contacts.editDetails(
+          storeA,
+          contact.id,
+          { phone: '01712345619' },
+          { access: fullPhone, actor: { kind: 'system' } },
+        );
+        return sender;
+      },
+    );
+    expect(
+      await errorCode(
+        messaging.send(storeA, {
+          channel: 'sms',
+          contactId: contact.id,
+          body: 'Your order has shipped',
+          operationKey: `test-${contact.id}`,
+          destination: contact.phone,
+        }),
+      ),
+    ).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses before the provider a destination the contact no longer has', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Sumi Akter', phone: '01712345609' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const changed = messaging.send(storeA, {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order has shipped',
+      operationKey: `test-${contact.id}`,
+      destination: '01712345610',
+    });
+
+    expect(await errorCode(changed)).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses a phone the contact did not have when the send was decided', async () => {
+    const contact = await contacts.create(
+      storeA,
+      { name: 'Rina Begum', phone: '01712345611' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const calls = watchDriver();
+    const changed = messaging.send(storeA, {
+      channel: 'sms',
+      contactId: contact.id,
+      body: 'Your order has shipped',
+      operationKey: `test-${contact.id}`,
+      destination: null,
+    });
+
+    expect(await errorCode(changed)).toBe('MESSAGING_DESTINATION_CHANGED');
+    expect(calls).toEqual([]);
+  });
+
   it('sends one SMS for the same operation key twice', async () => {
     const contact = await contacts.create(
       storeA,
@@ -193,15 +268,47 @@ describe('MessagingService (Postgres and Mailpit)', () => {
       { status: 'approved', reason: 'Operator approved the masking name' },
       { kind: 'system' },
     );
-    const own = await messaging.send(storeB, {
-      channel: 'sms',
-      contactId: contact.id,
-      body: 'Your order is out for delivery',
-      operationKey: `approved-${contact.id}`,
-    });
+    const prepared = await messaging.prepareSender(storeB);
+    const own = await messaging.send(
+      storeB,
+      {
+        channel: 'sms',
+        contactId: contact.id,
+        body: 'Your order is out for delivery',
+        operationKey: `approved-${contact.id}`,
+      },
+      prepared,
+    );
+    const otherContact = await contacts.create(
+      storeA,
+      { name: 'Karim Hossain', phone: '01912345609' },
+      fullPhone,
+      { kind: 'system' },
+    );
+    const [otherRequest] = await admin.db
+      .insert(smsSenderIds)
+      .values({ storeId: storeA, senderName: 'Karim Mart' })
+      .returning({ id: smsSenderIds.id });
+    await senders.decideRequest(
+      storeA,
+      otherRequest!.id,
+      { status: 'approved', reason: 'Operator approved the masking name' },
+      { kind: 'system' },
+    );
+    const other = await messaging.send(
+      storeA,
+      {
+        channel: 'sms',
+        contactId: otherContact.id,
+        body: 'Your order is out for delivery',
+        operationKey: `other-store-${otherContact.id}`,
+      },
+      prepared,
+    );
 
     expect(await capturedSenderName(shared.providerMessageId)).toBe('');
     expect(await capturedSenderName(own.providerMessageId)).toBe('Nusrat Fab');
+    expect(await capturedSenderName(other.providerMessageId)).toBe('Karim Mart');
   });
 
   it('calls the driver with no store transaction open', async () => {
