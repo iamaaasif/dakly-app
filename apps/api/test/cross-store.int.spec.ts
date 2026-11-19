@@ -2124,14 +2124,104 @@ fixture('POST /channel-connections/meta', async () => {
   await expectGrantConsumedAfterCacheFailure(a);
 });
 
-async function seedChannel(shop: Shop) {
+async function seedChannel(shop: Shop, kind: 'facebook_page' | 'instagram' = 'facebook_page') {
   const id = randomUUID();
   await f.admin.pool.query(
     `insert into channel_connections(id,store_id,kind,external_account_id,display_name,access_token_ciphertext,key_version)
-     values($1::uuid,$2,'facebook_page',$1::uuid::text,'রিনার দোকান',$3,1)`,
-    [id, shop.id, Buffer.from('encrypted-page-credential')],
+     values($1::uuid,$2,$4,$1::uuid::text,'রিনার দোকান',$3,1)`,
+    [id, shop.id, Buffer.from('encrypted-page-credential'), kind],
   );
   return id;
+}
+
+async function seedPostPhoto(shop: Shop) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into files(id,store_id,purpose,object_key,content_type,size_bytes,status)
+     values($1::uuid,$2,'post_media',$1::text,'image/jpeg',1024,'ready')`,
+    [id, shop.id],
+  );
+  return id;
+}
+
+async function postDraft(shop: Shop, channelConnectionId: string) {
+  const result = await f.request(
+    shop.owner,
+    'POST',
+    '/posts',
+    { caption: 'নতুন পাঞ্জাবি', targets: [{ channelConnectionId, captionOverride: '' }] },
+    { 'idempotency-key': randomUUID() },
+  );
+  expect(result.statusCode, result.body).toBe(201);
+  expect(result.json().targets[0]).toMatchObject({ channelConnectionId, captionOverride: '' });
+  return result.json().id as string;
+}
+
+fixture('POST /posts', async () => {
+  const { a, b } = await pair();
+  const channel = await seedChannel(a);
+  const id = await postDraft(a, channel);
+  expect(await f.row('posts', id)).toMatchObject({ store_id: a.id });
+  for (const channelConnectionId of [channel, randomUUID()]) {
+    const result = await f.request(
+      b.owner,
+      'POST',
+      '/posts',
+      { caption: 'নতুন পাঞ্জাবি', targets: [{ channelConnectionId, captionOverride: null }] },
+      { 'idempotency-key': randomUUID() },
+    );
+    expect(result.statusCode, result.body).toBe(404);
+    expect(result.json().error.code).toBe('POST_CONNECTION_NOT_FOUND');
+  }
+});
+
+fixture('GET /posts', async () => {
+  const { a, b } = await pair();
+  for (const shop of [a, b]) {
+    const id = await postDraft(shop, await seedChannel(shop));
+    expect(
+      (await success(shop, 'GET', '/posts', 200)).json().items.map((row: { id: string }) => row.id),
+    ).toEqual([id]);
+  }
+  expect((await success(a, 'GET', '/posts', 200)).json().items).toHaveLength(1);
+  await f.admin.pool.query("update memberships set built_in_role = 'marketer' where id=$1", [
+    a.membership,
+  ]);
+  const privateList = await f.request(a.member, 'GET', '/posts');
+  expect(privateList.statusCode, privateList.body).toBe(200);
+  expect(privateList.json().items).toEqual([]);
+  expect((await f.request(a.member, 'GET', '/posts?drafts=team')).statusCode).toBe(403);
+  expect((await success(a, 'GET', '/posts?drafts=team', 200)).json().items).toHaveLength(1);
+});
+
+fixture('GET /posts/:postId', async () => {
+  const { a, b } = await pair();
+  const id = await postDraft(a, await seedChannel(a));
+  const own = await success(a, 'GET', `/posts/${id}`, 200);
+  expect(own.json()).toMatchObject({ id, targets: [{ captionOverride: '' }] });
+  await hidden(b, 'GET', (value) => `/posts/${value}`, id);
+});
+
+for (const method of ['PATCH', 'DELETE'] as const) {
+  fixture(`${method} /posts/:postId`, async () => {
+    const { a, b } = await pair();
+    const own = await postDraft(b, await seedChannel(b));
+    const foreign = await postDraft(a, await seedChannel(a));
+    const payload = method === 'PATCH' ? { caption: 'ঈদের পাঞ্জাবি' } : undefined;
+    await success(b, method, `/posts/${own}`, method === 'PATCH' ? 200 : 204, payload);
+    const changed = await f.row('posts', own);
+    if (method === 'PATCH') expect(changed.caption).toBe(payload?.caption);
+    else expect(changed.deleted_at).toBeTruthy();
+    const before = await f.row('posts', foreign);
+    await hidden(
+      b,
+      method,
+      (id) => `/posts/${id}`,
+      foreign,
+      () => payload!,
+    );
+    expect(await f.row('posts', foreign)).toEqual(before);
+  });
 }
 
 fixture('GET /channel-connections', async () => {
@@ -3050,5 +3140,145 @@ describe('every production shop route isolates its data', () => {
       expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
     }
   });
+  it('requires one photo for a story draft even without any targets', async () => {
+    const shop = await f.shop();
+    const story = await f.request(
+      shop.owner,
+      'POST',
+      '/posts',
+      { kind: 'story' },
+      { 'idempotency-key': randomUUID() },
+    );
+    expect(story.statusCode, story.body).toBe(400);
+    expect(story.json().error.code).toBe('POST_PHOTOS_REQUIRED');
+  });
+
+  it('keeps post media in its own store on create and edit', async () => {
+    const { a, b } = await pair();
+    const foreignPhoto = await seedPostPhoto(a);
+    const ownPhoto = await seedPostPhoto(b);
+    const channelConnectionId = await seedChannel(b, 'instagram');
+    const targets = [{ channelConnectionId, captionOverride: null }];
+    const send = (mediaFileId: string) =>
+      f.request(
+        b.owner,
+        'POST',
+        '/posts',
+        { mediaFileIds: [mediaFileId], targets },
+        { 'idempotency-key': randomUUID() },
+      );
+    const own = await send(ownPhoto);
+    expect(own.statusCode, own.body).toBe(201);
+    const url = `/posts/${own.json().id}`;
+    for (const mediaFileId of [foreignPhoto, randomUUID()]) {
+      const rejectedCreate = await send(mediaFileId);
+      const rejectedEdit = await f.request(b.owner, 'PATCH', url, { mediaFileIds: [mediaFileId] });
+      for (const rejected of [rejectedCreate, rejectedEdit]) {
+        expect(rejected.statusCode, rejected.body).toBe(404);
+        expect(rejected.json().error.code).toBe('POST_MEDIA_NOT_FOUND');
+      }
+    }
+    expect((await success(b, 'GET', url, 200)).json().mediaFileIds).toEqual([ownPhoto]);
+  });
+
+  it('validates each Instagram caption and keeps AI provenance when edited', async () => {
+    const shop = await f.shop();
+    const channelConnectionId = await seedChannel(shop, 'instagram');
+    const common = {
+      caption: 'ক'.repeat(2_201),
+      mediaFileIds: [await seedPostPhoto(shop)],
+      isAiWritten: true,
+    };
+    const send = (captionOverride: string | null) =>
+      f.request(
+        shop.owner,
+        'POST',
+        '/posts',
+        { ...common, targets: [{ channelConnectionId, captionOverride }] },
+        { 'idempotency-key': randomUUID() },
+      );
+    const fallback = await send(null);
+    expect(fallback.statusCode, fallback.body).toBe(400);
+    expect(fallback.json().error.code).toBe('POST_CAPTION_TOO_LONG');
+    const hashtags = await send('#নতুন '.repeat(31));
+    expect(hashtags.statusCode, hashtags.body).toBe(400);
+    expect(hashtags.json().error.code).toBe('POST_TOO_MANY_HASHTAGS');
+    const created = await send('');
+    expect(created.statusCode, created.body).toBe(201);
+    const edited = await success(shop, 'PATCH', `/posts/${created.json().id}`, 200, {
+      caption: 'ঈদের পাঞ্জাবি',
+      isAiWritten: false,
+    });
+    expect(edited.json()).toMatchObject({
+      caption: 'ঈদের পাঞ্জাবি',
+      isAiWritten: true,
+      targets: [{ channelConnectionId, captionOverride: '', status: 'waiting_approval' }],
+    });
+  });
+
+  it('keeps another team member’s draft private and keeps team drafts read only', async () => {
+    const shop = await f.shop();
+    const id = await postDraft(shop, await seedChannel(shop));
+    const url = `/posts/${id}`;
+    await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+      shop.membership,
+    ]);
+    expect((await f.request(shop.member, 'GET', url)).statusCode).toBe(404);
+    expect((await f.request(shop.member, 'PATCH', url, { caption: 'ঈদ' })).statusCode).toBe(404);
+    await f.admin.pool.query("update memberships set built_in_role='admin' where id=$1", [
+      shop.membership,
+    ]);
+    const teamDrafts = await f.request(shop.member, 'GET', '/posts?drafts=team');
+    expect(teamDrafts.statusCode, teamDrafts.body).toBe(200);
+    expect(teamDrafts.json().items).toMatchObject([{ id }]);
+    expect((await f.request(shop.member, 'GET', url)).statusCode).toBe(200);
+    expect((await f.request(shop.member, 'DELETE', url)).statusCode).toBe(404);
+  });
+
+  it('pages drafts in order and ignores a cursor from another store', async () => {
+    const { a, b } = await pair();
+    const channel = await seedChannel(b);
+    const older = await postDraft(b, channel);
+    const newer = await postDraft(b, channel);
+    const foreign = await postDraft(a, await seedChannel(a));
+    const first = (await success(b, 'GET', '/posts?limit=1', 200)).json();
+    expect(first).toMatchObject({ items: [{ id: newer }], nextCursor: newer });
+    const next = await success(b, 'GET', `/posts?limit=1&cursor=${first.nextCursor}`, 200);
+    expect(next.json()).toMatchObject({ items: [{ id: older }], nextCursor: null });
+    expect((await success(b, 'GET', `/posts?cursor=${foreign}`, 200)).json().items).toEqual([]);
+  });
+
+  it('records one draft and audit entry for concurrent creates with the same key', async () => {
+    const shop = await f.shop();
+    const key = { 'idempotency-key': randomUUID() };
+    const send = (caption: string) => f.request(shop.owner, 'POST', '/posts', { caption }, key);
+    const [first, second] = await Promise.all([send('নতুন পাঞ্জাবি'), send('নতুন পাঞ্জাবি')]);
+    expect(first.statusCode, first.body).toBe(201);
+    expect(second.statusCode, second.body).toBe(201);
+    expect(second.json().id).toBe(first.json().id);
+    const repeated = await send('ঈদের পাঞ্জাবি');
+    expect(repeated.statusCode, repeated.body).toBe(201);
+    expect(repeated.json()).toMatchObject({ id: first.json().id, caption: 'নতুন পাঞ্জাবি' });
+    const audits = await f.admin.pool.query(
+      'select action from audit_log where store_id=$1 and entity_id=$2 order by created_at',
+      [shop.id, first.json().id],
+    );
+    expect(audits.rows).toEqual([{ action: 'post.created' }]);
+  });
+
+  it('keeps a draft create key private to its creator', async () => {
+    const shop = await f.shop();
+    await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+      shop.membership,
+    ]);
+    const key = { 'idempotency-key': randomUUID() };
+    const owner = await f.request(shop.owner, 'POST', '/posts', { caption: 'ঈদ' }, key);
+    const member = await f.request(shop.member, 'POST', '/posts', { caption: 'শাড়ি' }, key);
+    expect(owner.statusCode, owner.body).toBe(201);
+    expect(member.statusCode, member.body).toBe(201);
+    expect(member.json().id).not.toBe(owner.json().id);
+    expect(member.json().caption).toBe('শাড়ি');
+  });
+
   for (const [route, run] of fixtures) it(route, run);
 });

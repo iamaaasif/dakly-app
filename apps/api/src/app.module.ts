@@ -25,6 +25,7 @@ import { SavedRepliesModule } from '@dakly/core/saved-replies/saved-replies.modu
 import { SegmentsModule } from '@dakly/core/segments/segments.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
 import { SmsSendersModule } from '@dakly/core/sms-senders/sms-senders.module';
+import { SocialModule } from '@dakly/core/social/social.module';
 import { StoresModule } from '@dakly/core/stores/stores.module';
 import { WalletsModule } from '@dakly/core/wallets/wallets.module';
 
@@ -56,6 +57,7 @@ import { HealthController } from './health.controller';
     AutomationsModule,
     CampaignsModule,
     StoresModule,
+    SocialModule,
     NotificationsModule,
     WalletsModule,
     SmsSendersModule,
