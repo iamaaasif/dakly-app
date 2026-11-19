@@ -119,6 +119,26 @@ describe('SendPolicyService', () => {
     });
   });
 
+  it.each(['messenger', 'instagram'] as const)(
+    'uses the current %s reply window at dispatch',
+    async (channel) => {
+      const windowClosesAt = new Date(NOON_DHAKA.getTime() + HOUR);
+      const reply = { ...request({ channel, category: 'staff_reply' }), windowClosesAt };
+      expect((await service.checkForSend(STORE_ID, reply)).decision).toEqual({ action: 'send' });
+      afterLock = () => {
+        clockAt = windowClosesAt;
+      };
+      expect((await service.checkForSend(STORE_ID, reply)).decision).toEqual({
+        action: 'skip',
+        reason: 'window_closed',
+      });
+    },
+  );
+
+  it('keeps SMS eligible without a chat window', async () => {
+    expect((await service.checkForSend(STORE_ID, request())).decision).toEqual({ action: 'send' });
+  });
+
   it('keeps a marketing send capped when the worker clock is past the anniversary', async () => {
     sends.push(sentBefore(24));
     clockAt = new Date(NOON_DHAKA.getTime() - 50);

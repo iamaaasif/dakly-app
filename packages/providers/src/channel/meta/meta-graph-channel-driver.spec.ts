@@ -59,6 +59,32 @@ describe('MetaGraphChannelDriver', () => {
     });
   });
 
+  it('reports a rejected recipient as a definite failure', async () => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json(
+        { error: { code: 551, message: 'Private recipient details' } },
+        { status: 400 },
+      ),
+    );
+    await expect(driver.send(pageCredentials, messengerReply)).rejects.toMatchObject({
+      code: 'rejected',
+      message: 'Meta request failed',
+    });
+  });
+
+  it('labels a staff reply requiring the human-agent window', async () => {
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      expect(await new Request(url, init).json()).toMatchObject({
+        messaging_type: 'MESSAGE_TAG',
+        tag: 'HUMAN_AGENT',
+      });
+      return Response.json({ message_id: 'm_staff_reply' });
+    });
+    await expect(
+      driver.send(pageCredentials, { ...messengerReply, humanAgent: true }),
+    ).resolves.toEqual({ externalMessageId: 'm_staff_reply' });
+  });
+
   it('opens Facebook Login for Business with a server-selected redirect and state', () => {
     const url = new URL(driver.authorizationUrl('login-state'));
     expect(url.hostname).toBe('www.facebook.com');

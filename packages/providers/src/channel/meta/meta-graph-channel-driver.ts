@@ -2,10 +2,12 @@ import { z } from 'zod';
 
 import {
   MetaRequestError,
+  type ChannelCredentials,
   type ChannelDriver,
   type MetaAuthorizationDriver,
   type MetaPage,
   type MetaTokenHealthDriver,
+  type OutboundMessage,
 } from '../channel-driver';
 
 const graph = 'https://graph.facebook.com/v27.0/';
@@ -49,11 +51,13 @@ function selectablePage(
   };
 }
 
-function responseError(status: number, payload: unknown): MetaRequestError {
+function responseError(status: number, payload: unknown, sending: boolean): MetaRequestError {
   const code = graphErrorSchema.safeParse(payload).data?.error.code;
   const permissionDenied = code === 10 || (code !== undefined && code >= 200 && code <= 299);
   const authError = status === 401 || code === 190 || code === 459 || permissionDenied;
-  return new MetaRequestError(authError ? 'auth_error' : 'unavailable');
+  if (authError) return new MetaRequestError('auth_error');
+  if (sending && code === 551) return new MetaRequestError('rejected');
+  return new MetaRequestError('unavailable');
 }
 
 type MetaApp = {
@@ -145,12 +149,15 @@ export class MetaGraphChannelDriver
     return result.data.is_valid;
   }
 
-  send: ChannelDriver['send'] = async ({ accountExternalId, accessToken }, message) => {
+  async send({ accountExternalId, accessToken }: ChannelCredentials, message: OutboundMessage) {
     const messenger = message.channel === 'messenger';
+    const delivery = message.humanAgent
+      ? { messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }
+      : messenger && { messaging_type: 'RESPONSE' };
     const body = JSON.stringify({
       recipient: { id: message.externalConversationId },
       message: { text: message.text, ...(messenger && { metadata: message.operationKey }) },
-      ...(messenger && { messaging_type: 'RESPONSE' }),
+      ...delivery,
     });
     const response = await this.request(
       `${encodeURIComponent(accountExternalId)}/messages`,
@@ -159,7 +166,7 @@ export class MetaGraphChannelDriver
       { method: 'POST', accessToken, signal: AbortSignal.timeout(requestTimeoutMs), body },
     );
     return { externalMessageId: response.message_id };
-  };
+  }
 
   private async request<T>(
     path: string,
@@ -186,7 +193,7 @@ export class MetaGraphChannelDriver
     } catch {
       throw new MetaRequestError('unavailable');
     }
-    if (!response.ok) throw responseError(response.status, payload);
+    if (!response.ok) throw responseError(response.status, payload, options.body !== undefined);
     const parsed = schema.safeParse(payload);
     if (!parsed.success) throw new MetaRequestError('invalid_response');
     return parsed.data;
