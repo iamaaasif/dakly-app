@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { CampaignChannel } from './campaigns';
 
 import { type AutomationGraph, automationGraphSchema } from './automations/graph';
+import { automationTemplates, type TemplateKey } from './automations/templates';
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
 export const automationRunStatuses = ['waiting', 'running', 'done', 'exited', 'failed'] as const;
@@ -33,11 +34,14 @@ export const MAX_AUTOMATIONS_PER_STORE = 100;
 
 const automationNameSchema = z.string().trim().min(1).max(80);
 
-export const createAutomationSchema = z.strictObject({
+const automationFieldsSchema = z.strictObject({
   name: automationNameSchema,
   graph: automationGraphSchema,
 });
-export const changeAutomationSchema = createAutomationSchema
+export const createAutomationSchema = automationFieldsSchema.extend({
+  templateKey: z.enum(Object.keys(automationTemplates) as TemplateKey[]).optional(),
+});
+export const changeAutomationSchema = automationFieldsSchema
   .partial()
   .refine((input) => input.name !== undefined || input.graph !== undefined, 'Nothing to change');
 export type AutomationTriggerPreview = {
@@ -58,6 +62,7 @@ export type AutomationResponse = {
   id: string;
   name: string;
   status: AutomationStatus;
+  templateKey: string | null;
   graph: AutomationGraph;
   publishedVersionId: string | null;
   createdAt: string;
