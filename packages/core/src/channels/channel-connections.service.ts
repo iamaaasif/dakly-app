@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { ChannelConnection } from '@dakly/contracts/channels';
+import type { ChannelConnection, ChannelConnectionListQuery } from '@dakly/contracts/channels';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { Clock } from '../platform/clock';
@@ -25,10 +25,15 @@ export class ChannelConnectionsService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  async list(storeId: string): Promise<{ items: ChannelConnection[] }> {
-    const rows = await this.repository.list(storeId);
+  async list(
+    storeId: string,
+    query: ChannelConnectionListQuery,
+  ): Promise<{ items: ChannelConnection[]; nextCursor: string | null }> {
+    const rows = await this.repository.list(storeId, query);
+    const page = rows.slice(0, query.limit);
     return {
-      items: rows.map((row) => ({
+      nextCursor: rows.length > query.limit ? (page.at(-1)?.id ?? null) : null,
+      items: page.map((row) => ({
         ...row,
         tokenExpiresAt: row.tokenExpiresAt?.toISOString() ?? null,
         connectedAt: row.connectedAt.toISOString(),
@@ -45,7 +50,7 @@ export class ChannelConnectionsService {
     if (!this.team.canManageChannelConnections(access))
       throw connectionError('CHANNEL_CONNECTION_ROLE_REQUIRED');
     const now = this.clock.now();
-    await this.transaction.run(storeId, async () => {
+    await this.transaction.runLocked(storeId, async () => {
       const disconnected = await this.repository.disconnect(storeId, channelConnectionId, now);
       if (!disconnected) throw connectionError('CHANNEL_CONNECTION_NOT_FOUND');
       await this.outbox.publish({

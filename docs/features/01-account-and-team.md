@@ -512,20 +512,24 @@ Emits `member.invited`, `member.joined`, `member.removed`, `store.created`, `ext
 ## SMS delivery in development
 
 ACC-1 provides `SmsDriver.send({ to, text })`, returning `{ providerMessageId }`.
-`MailpitSmsDriver` takes SMTP `{ host, port }` options and captures each SMS as an
-email to `<phone>@sms.test`. Its provider message id is Mailpit's queue id,
-so the API and UI can retrieve the captured message. The adapter sets five-second
-SMTP timeouts and returns `SMS_SEND_FAILED` without the raw vendor error. It logs
-neither phone numbers nor message text. `FakeSmsDriver` keeps message copies in
-memory and returns distinct ids for unit tests.
+`MailpitSmsDriver` uses an SMTP host and port to capture each SMS as an email
+to `<phone>@sms.test`. It also uses the Mailpit API URL at runtime to look up a
+capture by Message-ID. A definite refusal raises `SmsSendRefused`, which the
+core service maps to `SMS_SEND_REFUSED`. An uncertain attempt without a matching
+capture raises a generic `SMS_SEND_FAILED`. The adapter leaves the raw vendor
+error, phone and message text out of logs and errors. `FakeSmsDriver` keeps
+message copies in memory and returns distinct ids for unit tests.
+[Feature 09](09-campaigns-and-automations.md#core-send-step) describes
+the sandbox receipt rules.
 
 `docker compose` runs Mailpit on localhost: SMTP port 1025 and UI/API port 8025.
 CI uses the same ports and checks readiness before tests. `MAILPIT_SMTP_HOST` and
-`MAILPIT_SMTP_PORT` configure the SMTP connection; `MAILPIT_API_URL` configures
-integration test read-back. The integration test removes only its own message.
+`MAILPIT_SMTP_PORT` configure the SMTP connection. `MAILPIT_API_URL` configures
+runtime receipt lookup and integration test read-back. The integration test
+removes only its own message.
 
 `SMS_DRIVER=mailpit` is the only supported selection. SmsModule selects Mailpit in
-development and tests, using the SMTP settings above. Application startup fails in
+development and tests, using the settings above. Application startup fails in
 production even when `SMS_DRIVER` is omitted: no usable production driver exists
 until ACC-14 supplies the provider account, sender id and adapter. Pure environment
 parsing remains separate from the consumer factory so cookie settings do not

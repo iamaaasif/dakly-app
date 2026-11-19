@@ -19,6 +19,18 @@ const trackedLink = {
 
 const examples: DaklyEvent[] = [
   {
+    type: 'channel.connected',
+    storeId,
+    occurredAt,
+    payload: { channelConnectionId: connectionId },
+  },
+  {
+    type: 'channel.disconnected',
+    storeId,
+    occurredAt,
+    payload: { channelConnectionId: connectionId },
+  },
+  {
     type: 'knowledge.index_requested',
     storeId,
     occurredAt,

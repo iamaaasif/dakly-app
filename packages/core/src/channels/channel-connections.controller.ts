@@ -1,10 +1,24 @@
-import { Controller, Delete, Get, HttpCode, Inject, Param, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Query,
+} from '@nestjs/common';
 
+import {
+  channelConnectionListQuerySchema,
+  type ChannelConnectionListQuery,
+} from '@dakly/contracts/channels';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
+import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { ChannelConnectionsService } from './channel-connections.service';
 
 @Controller('channel-connections')
@@ -15,8 +29,12 @@ export class ChannelConnectionsController {
 
   @Get()
   @RequirePermission('storeSettings.view')
-  list(@CurrentStore() storeId: string) {
-    return this.channels.list(storeId);
+  list(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(channelConnectionListQuerySchema))
+    query: ChannelConnectionListQuery,
+  ) {
+    return this.channels.list(storeId, query);
   }
 
   @Delete(':channelConnectionId')

@@ -9,8 +9,11 @@ import type {
   MetaSelectionInput,
 } from '@dakly/contracts/channels';
 import type { StoreAccess } from '@dakly/contracts/team';
-import type { MetaAuthorizationDriver, MetaPage } from '@dakly/providers/channel/channel-driver';
-import { MetaRequestError } from '@dakly/providers/channel/meta/meta-graph-channel-driver';
+import {
+  MetaRequestError,
+  type MetaAuthorizationDriver,
+  type MetaPage,
+} from '@dakly/providers/channel/channel-driver';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
@@ -116,22 +119,27 @@ export class MetaAuthorizationService {
   async connect(storeId: string, actor: Actor, input: MetaSelectionInput) {
     const driver = this.authorizedDriver(actor.access);
     const key = stateKey(storeId, actor, 'selection', input.selectionId);
-    const packed = await this.valkey.connection.get(key);
-    if (!packed) throw loginError('META_SELECTION_NOT_FOUND');
+    const claim = `${key}:claimed`;
+    const cache = this.valkey.connection;
+    // The claim outlives the grant, which cannot be used after it expires.
+    if (!(await cache.set(claim, '1', 'EX', loginLifetimeSeconds, 'NX')))
+      throw loginError('META_SELECTION_IN_PROGRESS');
 
+    let discard = false;
     try {
+      const packed = await cache.get(key);
+      if (!packed) throw loginError('META_SELECTION_NOT_FOUND');
       const pages = await this.listSelectedGrantPages(storeId, driver, packed);
       const selected = this.selectAccounts(pages, input.accounts);
+      if (await this.connections.hasForeignOwner(storeId, selected))
+        throw loginError('META_ACCOUNT_ALREADY_CONNECTED');
       const subscriptions = new Map(selected.map(({ page }) => [page.id, page.accessToken]));
-      await Promise.all(
-        [...subscriptions].map(([id, token]) =>
-          this.callMeta('meta_subscribe', 'Meta Page subscription measured', () =>
-            driver.subscribePage(id, token),
-          ),
-        ),
-      );
+      for (const [id, token] of subscriptions)
+        await this.callMeta('meta_subscribe', 'Meta Page subscription measured', () =>
+          driver.subscribePage(id, token),
+        );
       const now = this.clock.now();
-      const ids = await this.transaction.run(storeId, async () => {
+      const ids = await this.transaction.runLocked(storeId, async () => {
         const ids: string[] = [];
         for (const { page, ...account } of selected) {
           const secret = this.encryptPageToken(storeId, page.accessToken);
@@ -157,12 +165,14 @@ export class MetaAuthorizationService {
         }
         return ids;
       });
-      await this.valkey.connection.del(key);
+      discard = true;
       return { ids };
     } catch (error) {
-      if (error instanceof AppError && (error.status === 400 || error.status === 409))
-        await this.valkey.connection.del(key);
+      discard = error instanceof AppError && (error.status === 400 || error.status === 409);
       throw error;
+    } finally {
+      // Delete both together so a cache failure cannot unlock a consumed grant.
+      await cache.del(...(discard ? [key, claim] : [claim]));
     }
   }
 
