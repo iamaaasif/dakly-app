@@ -55,7 +55,9 @@ export function AutomationsScreen() {
                   className="m-0 rounded-md border-0 px-2 text-sm data-[state=active]:bg-surface"
                 >
                   {label}
-                  {workflows.data && <span className="ml-1 tabular-nums">{count}</span>}
+                  {workflows.data && (
+                    <span className="ml-1 text-text-muted tabular-nums">{count}</span>
+                  )}
                 </TabsTrigger>
               );
             })}
@@ -63,9 +65,7 @@ export function AutomationsScreen() {
         </header>
         {tabs.map(({ key }) => (
           <TabsContent key={key} value={key} className="pt-0">
-            {key === selected && (
-              <WorkflowList workflows={workflows} items={selectedItems} canEdit={canEdit} />
-            )}
+            <WorkflowList workflows={workflows} items={selectedItems} canEdit={canEdit} />
           </TabsContent>
         ))}
       </Tabs>
