@@ -74,10 +74,10 @@ export function WorkflowLibrary() {
       .map(({ templateKey }) => templateKey),
   );
   function choose(facet: Facet, value: string) {
-    const query = new URLSearchParams(search);
+    const query = new URLSearchParams(window.location.search);
     if (value === 'all') query.delete(facet);
     else query.set(facet, value);
-    router.push(query.size ? `/automations/new?${query}` : '/automations/new', { scroll: false });
+    window.history.pushState(null, '', query.size ? `?${query}` : '/automations/new');
   }
   function create(draft: CreateAutomationInput) {
     action.mutate({ draft }, { onSuccess: () => router.push('/automations?tab=draft') });
@@ -123,34 +123,36 @@ function LibraryFilters({
   choose: (facet: Facet, value: string) => void;
 }) {
   return (
-    <aside aria-label="Template filters" className="flex flex-wrap gap-4 md:flex-col">
+    <aside aria-label="Template filters" className="min-w-0 space-y-3">
       {groups.map(({ key, name, options }) => {
         const candidates = filteredTemplates(selected, key);
         return (
-          <section key={key} className="min-w-36 space-y-1" aria-label={name}>
+          <section key={key} className="space-y-1" aria-label={name}>
             <h2 className="px-2 text-xs font-semibold tracking-wide text-text-muted uppercase">
               {name}
             </h2>
-            {[{ value: 'all', label: 'All' }, ...options].map(({ value, label }) => {
-              const count = candidates.filter((item) => matches(item, key, value)).length;
-              const pressed = selected(key) === value;
-              return (
-                <Button
-                  key={value}
-                  variant="secondary"
-                  aria-pressed={pressed}
-                  aria-label={`${label} ${count}`}
-                  className={cn(
-                    'w-full justify-between border-0 px-2',
-                    pressed ? 'bg-primary-soft text-action' : 'bg-transparent',
-                  )}
-                  onClick={() => choose(key, value)}
-                >
-                  {label}
-                  <span className="text-xs tabular-nums">{count}</span>
-                </Button>
-              );
-            })}
+            <div className="flex gap-1 overflow-x-auto md:grid">
+              {[{ value: 'all', label: 'All' }, ...options].map(({ value, label }) => {
+                const count = candidates.filter((item) => matches(item, key, value)).length;
+                const pressed = selected(key) === value;
+                return (
+                  <Button
+                    key={value}
+                    variant="secondary"
+                    aria-pressed={pressed}
+                    aria-label={`${label} ${count}`}
+                    className={cn(
+                      'shrink-0 justify-between border-0 px-2 md:w-full',
+                      pressed ? 'bg-primary-soft text-action' : 'bg-transparent',
+                    )}
+                    onClick={() => choose(key, value)}
+                  >
+                    {label}
+                    <span className="text-xs tabular-nums">{count}</span>
+                  </Button>
+                );
+              })}
+            </div>
           </section>
         );
       })}
