@@ -1623,6 +1623,15 @@ async function savedReply(shop: Shop, shortcut: string) {
   return result.json().id as string;
 }
 
+async function savedReplyAudit(shop: Shop, id: string) {
+  const { rows } = await f.admin.pool.query(
+    `select action, actor_user_id, "after" from audit_log
+     where store_id = $1 and entity_type = 'saved_reply' and entity_id = $2 order by action`,
+    [shop.id, id],
+  );
+  return rows;
+}
+
 fixture('GET /saved-replies', async () => {
   const { a, b } = await pair();
   expect((await f.request(b.owner, 'GET', '/saved-replies')).statusCode).toBe(403);
@@ -1672,6 +1681,16 @@ fixture('POST /saved-replies', async () => {
   await success(b, 'POST', '/saved-replies', 400, { ...reply, storeId: a.id });
   for (const field of ['title', 'body', 'shortcut'])
     await success(b, 'POST', '/saved-replies', 400, { ...reply, [field]: 'invalid\u0000text' });
+  expect(await savedReplyAudit(b, result.json().id)).toEqual([
+    {
+      action: 'saved_reply.created',
+      actor_user_id: b.owner.id,
+      after: { changedFields: ['title', 'body', 'shortcut'] },
+    },
+  ]);
+  expect(await f.row('saved_replies', result.json().id)).toMatchObject({
+    created_by_user_id: b.owner.id,
+  });
 });
 
 fixture('PATCH /saved-replies/:savedReplyId', async () => {
@@ -1691,6 +1710,16 @@ fixture('PATCH /saved-replies/:savedReplyId', async () => {
   });
   expect(result.json()).toMatchObject({ id: own, body: 'চার্জ ৭০ টাকা।', shortcut: null });
   expect(await f.row('saved_replies', foreign)).toMatchObject({ shortcut: 'delivery' });
+  const audited = (await savedReplyAudit(b, own)).filter(
+    ({ action }) => action === 'saved_reply.updated',
+  );
+  expect(audited).toEqual([
+    {
+      action: 'saved_reply.updated',
+      actor_user_id: b.owner.id,
+      after: { changedFields: ['body', 'shortcut'] },
+    },
+  ]);
 });
 
 fixture('DELETE /saved-replies/:savedReplyId', async () => {
@@ -1704,6 +1733,11 @@ fixture('DELETE /saved-replies/:savedReplyId', async () => {
   await success(b, 'DELETE', url(own), 204);
   expect(await f.row('saved_replies', own)).toBeUndefined();
   expect(await f.row('saved_replies', foreign)).toMatchObject({ shortcut: 'delivery' });
+  expect((await savedReplyAudit(b, own)).at(-1)).toEqual({
+    action: 'saved_reply.deleted',
+    actor_user_id: b.owner.id,
+    after: null,
+  });
 });
 
 fixture('GET /notifications', async () => {

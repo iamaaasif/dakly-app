@@ -47,23 +47,28 @@ export class SavedRepliesController {
     @CurrentUser() userId: string,
     @Body(new ZodValidationPipe(createSavedReplySchema)) input: CreateSavedReplyInput,
   ) {
-    return this.replies.create(storeId, userId, input);
+    return this.replies.create(storeId, { kind: 'user', userId }, input);
   }
 
   @Patch(':savedReplyId')
   @RequirePermission('chats.edit')
   update(
     @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
     @Param('savedReplyId', ParseUUIDPipe) id: string,
     @Body(new ZodValidationPipe(updateSavedReplySchema)) input: UpdateSavedReplyInput,
   ) {
-    return this.replies.update(storeId, id, input);
+    return this.replies.update(storeId, id, { kind: 'user', userId }, input);
   }
 
   @Delete(':savedReplyId')
   @RequirePermission('chats.edit')
   @HttpCode(204)
-  remove(@CurrentStore() storeId: string, @Param('savedReplyId', ParseUUIDPipe) id: string) {
-    return this.replies.remove(storeId, id);
+  remove(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('savedReplyId', ParseUUIDPipe) id: string,
+  ) {
+    return this.replies.remove(storeId, id, { kind: 'user', userId });
   }
 }
