@@ -20,8 +20,7 @@ import { AutomationEntryRepository } from './automation-entry.repository';
 export const START_AUTOMATION_RUN = 'start-automation-run';
 export const automationConsentEvent = consentChangedEventSchema.extend({ id: z.uuid() });
 export const automationTagEvent = contactTagAddedEventSchema.extend({ id: z.uuid() });
-const triggerEvent = z.discriminatedUnion('type', [automationConsentEvent, automationTagEvent]);
-type TriggerEvent = z.infer<typeof triggerEvent>;
+type TriggerEvent = z.infer<typeof automationConsentEvent | typeof automationTagEvent>;
 
 export const startAutomationRunPayload = z.discriminatedUnion('type', [
   automationConsentEvent.extend({ automationId: z.uuid() }),
