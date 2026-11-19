@@ -224,7 +224,7 @@ Each `buyer_activity` row records one buyer and day, with the first non-cancelle
 
 Contact stats publish `contact.lifecycle_changed` when a stage changes. The ANA-1 reports follow-up will use that event to write snapshots with a count for each of the six stages.
 
-Order changes for the same store and original day share a refresh at the end of the current minute. The subscriber queues that refresh before recording the event ID with its buyer activity writes, so a queue failure can be retried. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
+Pending order changes for the same store and original day share a refresh at the end of the current minute. A change received while a refresh runs schedules another refresh. The subscriber queues that refresh before recording the event ID with its buyer activity writes, so a queue failure can be retried. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
 
 ### Acceptance
 

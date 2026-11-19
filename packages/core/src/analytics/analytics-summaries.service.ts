@@ -13,7 +13,7 @@ import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS, JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { AnalyticsRepository } from './analytics.repository';
-import { reportDay, shiftReportDay, type ReportPeriod } from './report-period';
+import { reportDay, retainedSince, shiftReportDay, type ReportPeriod } from './report-period';
 
 export const BUILD_ORDER_SUMMARY = 'build-order-summary';
 
@@ -43,7 +43,7 @@ export class AnalyticsSummariesService {
       const { buyerContactId } = order;
       if (buyerContactId) {
         await this.summaries.lockSummaries(storeId, buyerContactId);
-        await this.refreshBuyer(storeId, buyerContactId, timeZone, now);
+        await this.refreshBuyer(storeId, buyerContactId, timeZone, this.clock.now());
       }
     });
   }
@@ -52,10 +52,14 @@ export class AnalyticsSummariesService {
     await this.transaction.run(storeId, async () => {
       await this.summaries.lockSummaries(storeId, 'orders');
       const timeZone = await this.stores.timeZone(storeId);
-      const rows = await this.orders.dailyOrderMetrics(storeId, { ...period, timeZone });
+      const now = this.clock.now();
+      const cutoff = retainedSince(reportDay(now, timeZone));
+      const from = period.from < cutoff ? cutoff : period.from;
+      if (from > period.through) return;
+      const rows = await this.orders.dailyOrderMetrics(storeId, { ...period, from, timeZone });
       const byDay = new Map(rows.map((row) => [row.day, row]));
       const metrics = [];
-      for (let day = period.from; day <= period.through; day = shiftReportDay(day, 1)) {
+      for (let day = from; day <= period.through; day = shiftReportDay(day, 1)) {
         const totals = byDay.get(day) ?? { orders: '0', deliveredOrders: '0', netSpend: '0' };
         metrics.push(
           { day, metric: 'orders', value: BigInt(totals.orders) },
@@ -63,7 +67,7 @@ export class AnalyticsSummariesService {
           { day, metric: 'net_spend', value: BigInt(totals.netSpend) },
         );
       }
-      await this.summaries.save(storeId, metrics, this.clock.now());
+      await this.summaries.save(storeId, metrics, now);
     });
   }
 
@@ -74,12 +78,12 @@ export class AnalyticsSummariesService {
       BUILD_ORDER_SUMMARY,
       { storeId, day },
       {
-        jobId: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}-${dueAt}`,
+        deduplication: { id: `${BUILD_ORDER_SUMMARY}-${storeId}-${day}`, keepLastIfActive: true },
         delay: dueAt - now,
         attempts: 3,
         backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
         removeOnComplete: { age: DAY_MS / 1000 },
-        removeOnFail: 100,
+        removeOnFail: { age: (7 * DAY_MS) / 1000 },
       },
     );
   }

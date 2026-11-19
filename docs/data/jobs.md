@@ -72,16 +72,18 @@ Per-store cap: one running campaign batch per store.
 
 ## sync
 
-| Job                          | Started by                                              | Payload                          | Makes a rerun harmless                                                          |
-| ---------------------------- | ------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------- |
-| `refresh-post-metrics`       | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                              |
-| `queue-channel-token-checks` | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due`        |
-| `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                           |
-| `return-conversation-to-ai`  | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                                       |
-| `sync-whatsapp-templates`    | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                             |
-| `build-daily-metrics`        | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                                  |
-| `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One job per store, original order day and minute; recomputes totals from orders |
-| `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)            |
+| Job                          | Started by                                              | Payload                          | Makes a rerun harmless                                                                   |
+| ---------------------------- | ------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------- |
+| `refresh-post-metrics`       | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                                       |
+| `queue-channel-token-checks` | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due`                 |
+| `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                                    |
+| `return-conversation-to-ai`  | Sweep `due_conversation_returns`, every minute          | `storeId`, `conversationId`      | Clears `ai_resumes_at` in the same update                                                |
+| `sync-whatsapp-templates`    | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                                      |
+| `build-daily-metrics`        | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                                           |
+| `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run |
+| `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                     |
+
+Failed `build-order-summary` jobs stay in the sync queue for seven days. Use the job ID from the worker error report to retry the failed job. The retry reads current orders for the original day and skips days outside retention.
 
 The daily token sweep makes one Meta call per active connection with no fixed expiry or an expiry within seven days, plus retries when needed.
 
