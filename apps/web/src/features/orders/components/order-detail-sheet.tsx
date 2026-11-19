@@ -157,17 +157,30 @@ function FooterActionsLayout(props: FooterActionsLayoutProps) {
     onChangeStage,
   } = props;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      {canConfirm && (
-        <Button
-          className="order-3 min-h-11 sm:min-h-10"
-          disabled={isPending}
-          aria-label="Mark confirmed"
-          onClick={(event) => onChangeStage({ to: 'to_pack' }, event.currentTarget)}
-        >
-          Confirm
-        </Button>
-      )}
+    <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+      <div className="order-2 flex items-center gap-1.5 sm:gap-2">
+        {canConfirm && (
+          <Button
+            className="order-3 min-h-11 px-3 text-xs font-semibold sm:min-h-10 sm:px-3 sm:text-sm"
+            disabled={isPending}
+            aria-label="Mark confirmed"
+            onClick={(event) => onChangeStage({ to: 'to_pack' }, event.currentTarget)}
+          >
+            Confirm
+          </Button>
+        )}
+        <div className="order-1 flex items-center gap-1.5 sm:gap-2">
+          <StageActionButtons
+            actions={otherActions}
+            canConfirm={canConfirm}
+            isPending={isPending}
+            stage={stage}
+            order={order}
+            onChangeStage={onChangeStage}
+          />
+          {editable && <EditOrderDialog order={order} disabled={isPending} />}
+        </div>
+      </div>
       <div className="order-1">
         {cancelAction && (
           <OrderStageDialog
@@ -178,17 +191,6 @@ function FooterActionsLayout(props: FooterActionsLayoutProps) {
             disabled={isPending}
           />
         )}
-      </div>
-      <div className="order-2 flex flex-wrap items-center gap-2 sm:ml-auto">
-        <StageActionButtons
-          actions={otherActions}
-          canConfirm={canConfirm}
-          isPending={isPending}
-          stage={stage}
-          order={order}
-          onChangeStage={onChangeStage}
-        />
-        {editable && <EditOrderDialog order={order} disabled={isPending} />}
       </div>
     </div>
   );
@@ -219,7 +221,7 @@ function StageActionButtons({
             key={action}
             variant={!canConfirm && index === 0 ? 'primary' : 'secondary'}
             disabled={isPending}
-            className="min-h-11 sm:min-h-10"
+            className="min-h-11 px-2.5 text-xs sm:min-h-10 sm:px-3 sm:text-sm"
             onClick={(event) => onChangeStage({ to: action }, event.currentTarget)}
           >
             {stageActionLabels[action]}

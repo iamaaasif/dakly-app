@@ -87,8 +87,8 @@ export function OrderStageDialog({
           disabled={disabled}
           className={
             action === 'cancelled'
-              ? 'min-h-11 border-transparent bg-transparent text-danger shadow-none hover:border-transparent hover:bg-danger-soft hover:text-danger sm:min-h-10'
-              : 'min-h-11 sm:min-h-10'
+              ? 'min-h-11 border-transparent bg-transparent px-1.5 text-xs text-danger shadow-none hover:border-transparent hover:bg-danger-soft hover:text-danger sm:min-h-10 sm:px-2 sm:text-sm'
+              : 'min-h-11 px-2 text-xs sm:min-h-10 sm:px-3 sm:text-sm'
           }
         >
           {label}
@@ -222,7 +222,7 @@ function ReturnFields() {
   return (
     <>
       <StageInput name="reason" label="Return reason" maxLength={200} />
-      <div className="flex min-h-10 items-center gap-3 pl-2">
+      <div className="flex min-h-11 items-center gap-3 pl-2 sm:min-h-10">
         <Checkbox
           id="damaged-items"
           checked={damaged ?? false}

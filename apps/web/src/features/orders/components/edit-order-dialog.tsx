@@ -46,9 +46,9 @@ export function EditOrderDialog({ order, disabled }: EditOrderDialogProps) {
           variant="secondary"
           disabled={disabled}
           aria-label="Edit order"
-          className="min-h-11 sm:min-h-10"
+          className="min-h-11 px-2.5 text-xs sm:min-h-10 sm:px-3 sm:text-sm"
         >
-          <Pencil size={14} aria-hidden="true" />
+          <Pencil size={13} aria-hidden="true" />
           Edit
         </Button>
       }
@@ -98,7 +98,12 @@ function EditOrderForm({ order, edit, form, onSuccess }: EditOrderFormProps) {
           </p>
         )}
         <div className="flex shrink-0 justify-end">
-          <Button type="submit" loading={edit.isPending} disabled={!isDirty}>
+          <Button
+            type="submit"
+            loading={edit.isPending}
+            disabled={!isDirty}
+            className="min-h-11 sm:min-h-10"
+          >
             Save order
           </Button>
         </div>

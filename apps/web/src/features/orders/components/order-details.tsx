@@ -29,11 +29,6 @@ export function OrderDetails({ order, stageRef }: OrderDetailsProps) {
   );
 }
 
-type OrderStageTrackerProps = {
-  currentStage: OrderDetail['stage'];
-  stageRef: RefObject<HTMLSpanElement | null>;
-};
-
 const trackerMilestones = ['Inquiry', 'Confirmed', 'Packed', 'With courier', 'Delivered'] as const;
 
 function milestoneStep(stage: OrderDetail['stage']): number {
@@ -58,6 +53,11 @@ function milestoneLabelClass(isCurrent: boolean, isReached: boolean): string {
   if (isReached) return 'font-medium text-text';
   return 'text-text-muted';
 }
+
+type OrderStageTrackerProps = {
+  currentStage: OrderDetail['stage'];
+  stageRef: RefObject<HTMLSpanElement | null>;
+};
 
 function OrderStageTracker({ currentStage, stageRef }: OrderStageTrackerProps) {
   const currentStep = milestoneStep(currentStage);
@@ -87,7 +87,7 @@ function OrderStageTracker({ currentStage, stageRef }: OrderStageTrackerProps) {
               />
               <span
                 className={cn(
-                  'block text-[10px] leading-tight sm:text-xs',
+                  'block text-xs leading-tight',
                   milestoneLabelClass(isCurrent, isReached),
                 )}
               >
@@ -122,7 +122,7 @@ function DeliveryDetails({ order }: DeliveryDetailsProps) {
           <a
             href={`tel:${order.recipientPhone}`}
             tabIndex={-1}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-text hover:bg-surface-muted sm:min-h-8"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:min-h-8"
           >
             <Phone size={13} aria-hidden="true" />
             Call
@@ -132,7 +132,7 @@ function DeliveryDetails({ order }: DeliveryDetailsProps) {
             target="_blank"
             rel="noopener noreferrer"
             tabIndex={-1}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-text hover:bg-surface-muted sm:min-h-8"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:min-h-8"
           >
             <MessageSquare size={13} aria-hidden="true" />
             WhatsApp
