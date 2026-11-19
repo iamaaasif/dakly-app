@@ -110,6 +110,39 @@ describe('MetaGraphChannelDriver', () => {
     });
   });
 
+  it('subscribes the selected Page to the required fields with its Page token', async () => {
+    const requests: Request[] = [];
+    vi.stubGlobal('fetch', async (endpoint: URL, init: RequestInit) => {
+      requests.push(new Request(endpoint, init));
+      return Response.json({ success: true });
+    });
+
+    await driver.subscribePage('123', 'test-page-credential');
+    expect(requests).toHaveLength(1);
+    const [request] = requests;
+    const url = new URL(request!.url);
+    expect(url.hostname).toBe('graph.facebook.com');
+    expect(url.pathname).toMatch(/\/123\/subscribed_apps$/);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      subscribed_fields: 'messages,messaging_postbacks,feed',
+    });
+    expect(request!.method).toBe('POST');
+    expect(request!.headers.get('authorization')).toBe('Bearer test-page-credential');
+  });
+
+  it('treats a Meta Page permission denial as an authorization error', async () => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json(
+        { error: { code: 200, message: 'private permission details' } },
+        { status: 403 },
+      ),
+    );
+    await expect(driver.subscribePage('123', 'test-page-credential')).rejects.toMatchObject({
+      code: 'auth_error',
+      message: 'Meta request failed',
+    });
+  });
+
   it('returns a typed failure without the vendor error text', async () => {
     vi.stubGlobal('fetch', async () =>
       Response.json({ error: { code: 190, message: 'private token details' } }, { status: 400 }),

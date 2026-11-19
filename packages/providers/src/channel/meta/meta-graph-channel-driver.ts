@@ -43,6 +43,13 @@ function selectablePage(
   };
 }
 
+function responseError(status: number, payload: unknown): MetaRequestError {
+  const code = graphErrorSchema.safeParse(payload).data?.error.code;
+  const permissionDenied = code === 10 || (code !== undefined && code >= 200 && code <= 299);
+  const authError = status === 401 || code === 190 || code === 459 || permissionDenied;
+  return new MetaRequestError(authError ? 'auth_error' : 'unavailable');
+}
+
 type MetaApp = {
   appId: string;
   appSecret: string;
@@ -68,13 +75,13 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
   async exchangeAuthorizationCode(code: string): Promise<string> {
     const app = { client_id: this.app.appId, client_secret: this.app.appSecret };
     const options = { signal: AbortSignal.timeout(requestTimeoutMs) };
-    const short = await this.get(
+    const short = await this.request(
       'oauth/access_token',
       { ...app, code, redirect_uri: this.app.redirectUri },
       accessTokenSchema,
       options,
     );
-    const long = await this.get(
+    const long = await this.request(
       'oauth/access_token',
       { ...app, grant_type: 'fb_exchange_token', fb_exchange_token: short.access_token },
       accessTokenSchema,
@@ -86,11 +93,11 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
   async listAccounts(userToken: string): Promise<MetaPage[]> {
     const pages: MetaPage[] = [];
     const cursors = new Set<string>();
-    const options = { userToken, signal: AbortSignal.timeout(requestTimeoutMs) };
+    const options = { accessToken: userToken, signal: AbortSignal.timeout(requestTimeoutMs) };
     const params = { fields: 'id,name,tasks,access_token,instagram_business_account{id,username}' };
     let after: string | undefined;
     for (;;) {
-      const response = await this.get(
+      const response = await this.request(
         'me/accounts',
         { ...params, ...(after && { after }) },
         accountsSchema,
@@ -108,11 +115,20 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
     }
   }
 
-  private async get<T>(
+  async subscribePage(pageId: string, accessToken: string): Promise<void> {
+    await this.request(
+      `${encodeURIComponent(pageId)}/subscribed_apps`,
+      { subscribed_fields: 'messages,messaging_postbacks,feed' },
+      z.object({ success: z.literal(true) }),
+      { method: 'POST', signal: AbortSignal.timeout(requestTimeoutMs), accessToken },
+    );
+  }
+
+  private async request<T>(
     path: string,
     query: Record<string, string>,
     schema: z.ZodType<T>,
-    options: { signal: AbortSignal; userToken?: string },
+    options: { signal: AbortSignal; accessToken?: string; method?: 'POST' },
   ): Promise<T> {
     const url = new URL(path, graph);
     url.search = new URLSearchParams(query).toString();
@@ -121,19 +137,15 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
     try {
       response = await fetch(url, {
         signal: options.signal,
+        method: options.method,
         redirect: 'error',
-        ...(options.userToken && { headers: { authorization: `Bearer ${options.userToken}` } }),
+        ...(options.accessToken && { headers: { authorization: `Bearer ${options.accessToken}` } }),
       });
       payload = await response.json();
     } catch {
       throw new MetaRequestError('unavailable');
     }
-    if (!response.ok) {
-      const code = graphErrorSchema.safeParse(payload).data?.error.code;
-      throw new MetaRequestError(
-        response.status === 401 || code === 190 || code === 459 ? 'auth_error' : 'unavailable',
-      );
-    }
+    if (!response.ok) throw responseError(response.status, payload);
     const parsed = schema.safeParse(payload);
     if (!parsed.success) throw new MetaRequestError('invalid_response');
     return parsed.data;
