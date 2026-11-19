@@ -1643,7 +1643,10 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         const {
           rows: [{ pid }],
         } = await blocker.query<{ pid: number }>('select pg_backend_pid() as pid');
-        await blocker.query('select id from stores where id=$1 for no key update', [storeId]);
+        await blocker.query('select id from contacts where store_id=$1 and id=$2 for update', [
+          storeId,
+          contact,
+        ]);
         const running = runDueStep(runner, runId!);
         try {
           await waitForBlocker(pid);
