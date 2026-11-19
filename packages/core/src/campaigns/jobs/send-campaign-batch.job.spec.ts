@@ -10,7 +10,7 @@ const payload = {
 };
 
 function buildJob(sender: { sendBatch: CampaignSenderService['sendBatch'] }) {
-  const client = { set: vi.fn().mockResolvedValue('OK'), eval: vi.fn().mockResolvedValue(1) };
+  const client = { runCommand: vi.fn().mockResolvedValueOnce('OK').mockResolvedValueOnce(1) };
   const queue = { client: Promise.resolve(client), toKey: (key: string) => `test:${key}` };
   return new SendCampaignBatchJob(
     sender as unknown as CampaignSenderService,

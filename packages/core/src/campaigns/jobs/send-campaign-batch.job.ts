@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { InjectQueue } from '@nestjs/bullmq';
-import { Inject, Logger } from '@nestjs/common';
+import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { z } from 'zod';
 
@@ -13,6 +13,7 @@ import { CampaignSenderService } from '../campaign-sender.service';
 export const SEND_CAMPAIGN_BATCH = 'send-campaign-batch';
 
 const LEASE_MS = 5 * MINUTE_MS;
+const acquire = `return redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2], 'NX')`;
 const release = `
   if redis.call('GET', KEYS[1]) == ARGV[1] then
     return redis.call('DEL', KEYS[1])
@@ -23,7 +24,7 @@ const release = `
 const payload = z.strictObject({ storeId: z.uuid(), campaignId: z.uuid() });
 
 @HandlesJob({ queue: QUEUES.campaign, name: SEND_CAMPAIGN_BATCH })
-export class SendCampaignBatchJob implements JobHandler {
+export class SendCampaignBatchJob implements JobHandler, OnModuleInit {
   private readonly logger = new Logger(SendCampaignBatchJob.name);
 
   constructor(
@@ -31,18 +32,24 @@ export class SendCampaignBatchJob implements JobHandler {
     @InjectQueue(QUEUES.campaign) private readonly queue: Queue,
   ) {}
 
+  async onModuleInit() {
+    const client = await this.queue.client;
+    client.defineCommand('claimCampaignBatch', { numberOfKeys: 1, lua: acquire });
+    client.defineCommand('releaseCampaignBatch', { numberOfKeys: 1, lua: release });
+  }
+
   async handle(data: unknown) {
     const { storeId, campaignId } = payload.parse(data);
     const client = await this.queue.client;
     const key = this.queue.toKey(`batch-lease:${storeId}`);
     const token = randomUUID();
-    if (!(await client.set(key, token, 'PX', LEASE_MS, 'NX')))
+    if (!(await client.runCommand('claimCampaignBatch', [key, token, LEASE_MS])))
       return { delayUntil: Date.now() + JOB_POLL_INTERVAL_MS };
     try {
       const next = await this.sender.sendBatch(storeId, campaignId);
       if (next) return { delayUntil: next.getTime() };
     } finally {
-      await client.eval(release, 1, key, token).catch(() => {
+      await client.runCommand('releaseCampaignBatch', [key, token]).catch(() => {
         this.logger.warn('Could not release a campaign batch lease');
       });
     }
