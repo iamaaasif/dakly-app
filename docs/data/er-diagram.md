@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0044_snapshot.json`: **95 tables, 1261 columns, 379 explicit indexes and 298 foreign keys**.
+Built from `packages/db/migrations/meta/0052_snapshot.json`: **95 tables, 1267 columns, 384 explicit indexes and 299 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -443,6 +443,7 @@ erDiagram
     users |o..o{ messages : "author_user_id"
     users |o..o{ messages : "rated_by_user_id"
     conversations ||..o{ messages : "store_id, conversation_id"
+    contact_identities |o..o{ messages : "store_id, recipient_identity_id"
     stores ||..o{ social_comments : "store_id"
     channel_connections ||..o{ social_comments : "channel_connection_id"
     post_targets |o..o{ social_comments : "post_target_id"
@@ -586,6 +587,7 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         integer orders_count "NOT NULL; integer"
         integer delivered_count "NOT NULL; integer"
+        integer returned_count "NOT NULL; integer"
         bigint net_spend_poisha "NOT NULL; bigint"
         timestamp_with_time_zone first_order_at "NULL; timestamp with time zone"
         timestamp_with_time_zone last_order_at "NULL; timestamp with time zone"
@@ -704,6 +706,8 @@ erDiagram
         text media_text "NULL; text"
         text external_id "NULL; text"
         text idempotency_key "NULL; text"
+        uuid recipient_identity_id FK "NULL; uuid"
+        text send_category "NULL; text"
         text status "NOT NULL; text"
         text error_code "NULL; text"
         text source_type "NOT NULL; text"
@@ -1380,7 +1384,6 @@ erDiagram
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
-        text short_link_base "NULL; text"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         bigint estimated_cost_poisha "NULL; bigint"
@@ -1415,9 +1418,6 @@ erDiagram
         timestamp_with_time_zone read_at "NULL; timestamp with time zone"
         timestamp_with_time_zone tapped_at "NULL; timestamp with time zone"
         timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
-        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
-        integer sms_credits "NULL; integer"
-        integer send_attempts "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     tracked_links {
@@ -1458,6 +1458,10 @@ erDiagram
         text template_key "NULL; text"
         text trigger_type "NOT NULL; text"
         text status "NOT NULL; text"
+        text pause_reason "NULL; text"
+        integer balance_pause_revision "NULL; integer"
+        timestamp_with_time_zone balance_resumed_at "NULL; timestamp with time zone"
+        boolean has_balance_resume_send_allowance "NOT NULL; boolean"
         boolean is_transactional "NOT NULL; boolean"
         smallint priority "NOT NULL; smallint"
         jsonb draft_graph "NOT NULL; jsonb"
@@ -1504,6 +1508,9 @@ erDiagram
         text outcome "NOT NULL; text"
         text channel "NULL; text"
         text category "NULL; text"
+        text opt_out_url "NULL; text"
+        text destination_hash "NULL; text"
+        timestamp_with_time_zone first_tried_at "NULL; timestamp with time zone"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
         bigint cost_poisha "NULL; bigint"
@@ -1950,6 +1957,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `messages_author_user_id_users_id_fk`                                | `messages(author_user_id)`                                | `users(id)`                                 | no action |
 | `messages_rated_by_user_id_users_id_fk`                              | `messages(rated_by_user_id)`                              | `users(id)`                                 | no action |
 | `messages_conversation_id_store_fk`                                  | `messages(store_id, conversation_id)`                     | `conversations(store_id, id)`               | no action |
+| `messages_recipient_identity_store_fk`                               | `messages(store_id, recipient_identity_id)`               | `contact_identities(store_id, id)`          | no action |
 | `saved_replies_store_id_stores_id_fk`                                | `saved_replies(store_id)`                                 | `stores(id)`                                | no action |
 | `saved_replies_created_by_user_id_users_id_fk`                       | `saved_replies(created_by_user_id)`                       | `users(id)`                                 | no action |
 | `sms_messages_store_id_stores_id_fk`                                 | `sms_messages(store_id)`                                  | `stores(id)`                                | no action |

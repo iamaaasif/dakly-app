@@ -32,7 +32,7 @@ export class MetaWebhooksRepository {
 
   async findReceived(id: string) {
     const [row] = await this.database
-      .select({ payload: webhookEvents.payload })
+      .select({ payload: webhookEvents.payload, receivedAt: webhookEvents.receivedAt })
       .from(webhookEvents)
       .where(
         and(
@@ -44,22 +44,29 @@ export class MetaWebhooksRepository {
     return row;
   }
 
-  async findStoresForAccounts(accounts: Map<string, string>) {
+  async findStoresForAccounts(accounts: { kind: string; externalAccountId: string }[]) {
     const result = await this.database.execute<{
+      kind: string;
       externalAccountId: string;
       storeId: string | null;
     }>(sql`
-      select account_id as "externalAccountId", store_id_for_channel_account(kind, account_id) as "storeId"
-      from unnest(${sql.param([...accounts.keys()])}::text[], ${sql.param([...accounts.values()])}::text[])
+      select kind, account_id as "externalAccountId", store_id_for_channel_account(kind, account_id) as "storeId"
+      from unnest(${sql.param(accounts.map((account) => account.externalAccountId))}::text[],
+        ${sql.param(accounts.map((account) => account.kind))}::text[])
         as accounts(account_id, kind)
     `);
     return result.rows;
   }
 
-  async markIgnored(id: string, reason: string, processedAt: Date) {
+  async finish(
+    id: string,
+    status: 'processed' | 'ignored',
+    error: string | null,
+    processedAt: Date,
+  ) {
     await this.database
       .update(webhookEvents)
-      .set({ status: 'ignored', error: reason, payload: null, processedAt })
+      .set({ status, error, payload: null, processedAt })
       .where(
         and(
           eq(webhookEvents.id, id),

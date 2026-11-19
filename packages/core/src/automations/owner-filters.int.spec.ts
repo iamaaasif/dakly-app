@@ -42,14 +42,18 @@ describe('automation filters without RLS assistance', () => {
     expect((await f.row('automation_versions', b.version.id)).store_id).toBe(f.b);
     expect(b.version.version).toBe(1);
     expect(await repository.find(f.b, a.automation.id)).toBeUndefined();
-    expect((await repository.list(f.b, visible, { limit: 100 })).map((row) => row.id)).toEqual([
-      b.automation.id,
-    ]);
+    expect(
+      (await repository.list(f.b, visible, { limit: 100 }, new Date(0))).map((row) => row.id),
+    ).toEqual([b.automation.id]);
     expect(await repository.countWithStatus(f.b, visible)).toBe(1);
     expect(await repository.listVersions(f.b, a.automation.id)).toEqual([]);
 
     expect(
-      await repository.change(f.b, a.automation.id, visible, { name: 'চুরি', updatedAt: now }),
+      await repository.change(
+        f.b,
+        { id: a.automation.id, from: visible },
+        { name: 'চুরি', updatedAt: now },
+      ),
     ).toBeUndefined();
     expect(await repository.stopVersion(f.b, a.automation.id, a.version.id)).toBe(false);
     const fromStoreB = { graph, publishedByUserId: f.userB, publishedAt: now };
@@ -72,6 +76,44 @@ describe('automation filters without RLS assistance', () => {
       expect.objectContaining({ id: a.version.id, isStopped: false }),
     ]);
     expect(await repository.find(f.a, a.automation.id)).toMatchObject({ name: a.automation.name });
+  });
+
+  it('pauses and resumes for balance only in the selected store', async () => {
+    const a = await published(f.a, f.userA);
+    const b = await published(f.b, f.userB);
+    await f.connection.pool.query("update automations set status='active' where id=$1", [
+      a.automation.id,
+    ]);
+    expect(await repository.pauseForBalance(f.b, a.automation.id, 1, now)).toBeUndefined();
+    expect(await f.row('automations', a.automation.id)).toMatchObject({
+      status: 'active',
+      balance_pause_revision: null,
+    });
+    for (const { automation } of [a, b])
+      await f.connection.pool.query(
+        "update automations set status='paused', pause_reason='balance', balance_pause_revision=1 where id=$1",
+        [automation.id],
+      );
+    const toActive = { status: 'active', pauseReason: null, updatedAt: now } as const;
+    const pausedWorkflow = { id: a.automation.id, from: ['paused'] } as const;
+
+    expect(await repository.change(f.b, pausedWorkflow, toActive)).toBeUndefined();
+    expect(await repository.change(f.a, pausedWorkflow, toActive, 'balance')).toBeUndefined();
+    await f.tenant.forStore(f.b, async () => {
+      const ids = await repository.lockBalancePaused(f.b, 2);
+      expect(ids).toEqual([b.automation.id]);
+      await repository.resumeBalancePaused(f.b, [...ids, a.automation.id], now);
+    });
+
+    expect(await f.row('automations', a.automation.id)).toMatchObject({
+      status: 'paused',
+      pause_reason: 'balance',
+      balance_resumed_at: null,
+    });
+    expect(await f.row('automations', b.automation.id)).toMatchObject({
+      status: 'active',
+      pause_reason: null,
+    });
   });
 
   it('reads, moves and records runs only in the selected store', async () => {
@@ -114,18 +156,48 @@ describe('automation filters without RLS assistance', () => {
       attempts: 1,
       graph,
     });
+    const stepId = randomUUID();
     const sending = {
+      id: stepId,
       stepKey: 'offer',
       kind: 'send',
       outcome: 'sending',
       sentAt: claimedAt,
     } as const;
     await runs.insertStep(f.a, runId, contactId, sending);
-    expect(await runs.hasSendingStep(f.b, runId, 'offer')).toBe(false);
+    expect(await runs.findSendingStep(f.b, runId, 'offer')).toBeUndefined();
+    await expect(runs.findSendingStep(f.a, runId, 'offer', true)).rejects.toThrow(
+      'requires an active store transaction',
+    );
+    expect(
+      await f.tenant.forStore(f.a, () => runs.findSendingStep(f.a, runId, 'offer', true)),
+    ).toMatchObject({ id: stepId });
     await runs.changeStep(f.b, runId, 'offer', { outcome: 'sent' });
-    expect(await runs.hasSendingStep(f.a, runId, 'offer')).toBe(true);
+    expect(await runs.findSendingStep(f.a, runId, 'offer')).toEqual({
+      id: stepId,
+      firstTriedAt: null,
+      latestDispatchAt: claimedAt,
+      optOutUrl: null,
+      destinationHash: null,
+      providerMessageId: null,
+    });
+    const incompleteId = randomUUID();
+    await runs.insertStep(f.a, runId, contactId, {
+      id: incompleteId,
+      stepKey: 'older-send',
+      kind: 'send',
+      outcome: 'sending',
+    });
+    expect(await runs.findSendingStep(f.a, runId, 'older-send')).toEqual({
+      id: incompleteId,
+      firstTriedAt: null,
+      latestDispatchAt: null,
+      optOutUrl: null,
+      destinationHash: null,
+      providerMessageId: null,
+    });
     await runs.changeStep(f.a, runId, 'offer', { outcome: 'sent' });
-    expect(await runs.hasSendingStep(f.a, runId, 'offer')).toBe(false);
+    expect(await runs.findSendingStep(f.a, runId, 'offer')).toBeUndefined();
     expect(await runs.moveRun(f.a, claim, { status: 'done' })).toBe(true);
   });
 });

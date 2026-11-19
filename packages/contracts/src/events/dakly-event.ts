@@ -1,10 +1,18 @@
 import { z } from 'zod';
 
 import { campaignApprovedEventSchema } from './campaigns';
-import { channelConnectedEventSchema, channelDisconnectedEventSchema } from './channels';
+import {
+  channelConnectedEventSchema,
+  channelDisconnectedEventSchema,
+  channelNeedsReconnectEventSchema,
+} from './channels';
 import {
   consentChangedEventSchema,
+  contactBirthdayEventSchema,
   contactCreatedEventSchema,
+  contactDeletedEventSchema,
+  contactStatsRepairedEventSchema,
+  contactTagAddedEventSchema,
   importStartedEventSchema,
   importUndoRequestedEventSchema,
   segmentSavedEventSchema,
@@ -17,6 +25,8 @@ import {
   messageOptedOutEventSchema,
   messageReadEventSchema,
   messageReceivedEventSchema,
+  messageSendRequestedEventSchema,
+  messageSentEventSchema,
   messageTappedEventSchema,
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
@@ -24,6 +34,7 @@ import {
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
+  orderEditedEventSchema,
   orderStageChangedEventSchema,
 } from './orders';
 import {
@@ -31,9 +42,14 @@ import {
   stockChangedEventSchema,
   variantRestockedEventSchema,
 } from './products';
+import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
+  contactBirthdayEventSchema,
   contactCreatedEventSchema,
+  contactDeletedEventSchema,
+  contactStatsRepairedEventSchema,
+  contactTagAddedEventSchema,
   productUpdatedEventSchema,
   stockChangedEventSchema,
   variantRestockedEventSchema,
@@ -45,18 +61,23 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   campaignApprovedEventSchema,
   channelConnectedEventSchema,
   channelDisconnectedEventSchema,
+  channelNeedsReconnectEventSchema,
   conversationStartedEventSchema,
   messageReceivedEventSchema,
+  messageSendRequestedEventSchema,
+  messageSentEventSchema,
   messageDeliveredEventSchema,
   messageReadEventSchema,
   messageFailedEventSchema,
   messageTappedEventSchema,
   messageOptedOutEventSchema,
   notificationCreatedEventSchema,
+  walletCreditedEventSchema,
   orderStageChangedEventSchema,
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
+  orderEditedEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

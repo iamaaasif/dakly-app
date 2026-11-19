@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import {
+  automationPauseReasons,
   automationExitReasons,
   automationRunStatuses,
   automationStatuses,
@@ -41,6 +42,15 @@ export const automations = pgTable(
     templateKey: text('template_key'),
     triggerType: text('trigger_type').notNull(),
     status: text('status', { enum: automationStatuses }).notNull().default('draft'),
+    pauseReason: text('pause_reason', { enum: automationPauseReasons }),
+    // The SMS wallet revision the gate saw under its lock. Only a newer top-up resumes this pause.
+    balancePauseRevision: integer('balance_pause_revision'),
+    // A send held through a balance pause is judged at the actual resume time.
+    balanceResumedAt: timestamptz('balance_resumed_at'),
+    // A manual pause removes the extra time after a balance resume.
+    hasBalanceResumeSendAllowance: boolean('has_balance_resume_send_allowance')
+      .notNull()
+      .default(false),
     // AUTO-R2: transactional first, then priority, when two automations hit one person on a day.
     isTransactional: boolean('is_transactional').notNull().default(false),
     priority: smallint('priority').notNull().default(0),
@@ -67,6 +77,16 @@ export const automations = pgTable(
     index('automations_published_version_id_idx').on(table.publishedVersionId),
     index('automations_created_by_user_id_idx').on(table.createdByUserId),
     check('automations_status', isOneOf(table.status, automationStatuses)),
+    check('automations_pause_reason', isOneOf(table.pauseReason, automationPauseReasons)),
+    check(
+      'automations_paused_has_reason',
+      sql`(${table.status} = 'paused') = (${table.pauseReason} is not null)`,
+    ),
+    check(
+      'automations_balance_pause_revision',
+      sql`${table.pauseReason} is distinct from 'balance'
+        or (${table.balancePauseRevision} is not null and ${table.balancePauseRevision} >= 0)`,
+    ),
   ],
 );
 
@@ -170,6 +190,11 @@ export const automationRuns = pgTable(
       table.automationId,
       table.status,
     ),
+    index('automation_runs_recent_entries_idx').on(
+      table.storeId,
+      table.automationId,
+      table.enteredAt,
+    ),
     index('automation_runs_store_contact_idx').on(table.storeId, table.contactId),
     index('automation_runs_version_id_idx').on(table.versionId),
     index('automation_runs_contact_id_idx').on(table.contactId),
@@ -203,6 +228,12 @@ export const automationRunSteps = pgTable(
     channel: text('channel'),
     // A send step's own category, so the frequency cap counts only marketing sends.
     category: text('category', { enum: sendCategories }),
+    // The opt-out link a marketing SMS ends with, so a retry sends the same text.
+    optOutUrl: text('opt_out_url'),
+    // Used to match the original SMS destination without retaining a copy of the phone.
+    destinationHash: text('destination_hash'),
+    // The retry deadline uses the first submission; the cap uses the latest dispatch.
+    firstTriedAt: timestamptz('first_tried_at'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),

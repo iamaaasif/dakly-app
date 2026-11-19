@@ -17,14 +17,17 @@ import {
 } from '@dakly/db/schema/automations';
 
 import { DATABASE } from '../platform/database/database.tokens';
+import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { SkipReason } from '../sending/send-policy.service';
+import { workflowSchedulerTime } from './workflow-scheduler-time.repository';
 
 // A worker may change a run only while it holds this claim on this step.
 export type RunClaim = { runId: string; stepKey: string; claimedAt: Date };
 export type DueRun = RunClaim & { storeId: string };
 
 export type ClaimedRun = {
+  automationId: string;
   contactId: string;
   status: AutomationRunStatus;
   currentStepKey: string;
@@ -34,6 +37,8 @@ export type ClaimedRun = {
   graph: AutomationGraph;
   isVersionStopped: boolean;
   automationStatus: AutomationStatus;
+  balanceResumedAt: Date | null;
+  hasBalanceResumeSendAllowance: boolean;
 };
 
 export type RunChange = {
@@ -54,10 +59,28 @@ export type NewRunStep = {
   outcome: string;
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
+  optOutUrl?: string | null;
+  destinationHash?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
+  firstTriedAt?: Date;
 };
-export type RunStepChange = { outcome: string; providerMessageId?: string; sentAt?: Date };
+export type RunStepChange = {
+  outcome: string;
+  providerMessageId?: string;
+  skipReason?: SkipReason;
+  sentAt?: Date;
+  firstTriedAt?: Date;
+};
+// A send handed to the provider whose outcome is not known yet.
+export type SendingStep = {
+  id: string;
+  firstTriedAt: Date | null;
+  latestDispatchAt: Date | null;
+  optOutUrl: string | null;
+  destinationHash: string | null;
+  providerMessageId: string | null;
+};
 
 @Injectable()
 export class AutomationRunsRepository {
@@ -78,20 +101,14 @@ export class AutomationRunsRepository {
 
   // Lease and wake timestamps use the same clock as due_automation_runs.
   async schedulerTime(storeId: string): Promise<Date> {
-    return this.database.forStore(storeId, async (tx) => {
-      const { rows } = await tx.execute<{ milliseconds: string }>(
-        sql`select floor(extract(epoch from clock_timestamp()) * 1000)::bigint as milliseconds`,
-      );
-      const [time] = rows;
-      if (!time) throw new Error('Postgres did not return the workflow scheduler time');
-      return new Date(Number(time.milliseconds));
-    });
+    return this.database.forStore(storeId, workflowSchedulerTime);
   }
 
   async findRun(storeId: string, runId: string): Promise<ClaimedRun | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
+          automationId: automationRuns.automationId,
           contactId: automationRuns.contactId,
           status: automationRuns.status,
           currentStepKey: automationRuns.currentStepKey,
@@ -101,6 +118,8 @@ export class AutomationRunsRepository {
           graph: automationVersions.graph,
           isVersionStopped: automationVersions.isStopped,
           automationStatus: automations.status,
+          balanceResumedAt: automations.balanceResumedAt,
+          hasBalanceResumeSendAllowance: automations.hasBalanceResumeSendAllowance,
         })
         .from(automationRuns)
         .innerJoin(
@@ -139,11 +158,22 @@ export class AutomationRunsRepository {
     return rows.map((row) => row.stepKey);
   }
 
-  // A send handed to the provider whose outcome is not known yet.
-  async hasSendingStep(storeId: string, runId: string, stepKey: string): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: automationRunSteps.id })
+  async findSendingStep(
+    storeId: string,
+    runId: string,
+    stepKey: string,
+    lock = false,
+  ): Promise<SendingStep | undefined> {
+    const read = (tx: Transaction) => {
+      const query = tx
+        .select({
+          id: automationRunSteps.id,
+          firstTriedAt: automationRunSteps.firstTriedAt,
+          latestDispatchAt: automationRunSteps.sentAt,
+          optOutUrl: automationRunSteps.optOutUrl,
+          destinationHash: automationRunSteps.destinationHash,
+          providerMessageId: automationRunSteps.providerMessageId,
+        })
         .from(automationRunSteps)
         .where(
           and(
@@ -153,16 +183,23 @@ export class AutomationRunsRepository {
             eq(automationRunSteps.outcome, 'sending'),
           ),
         )
-        .limit(1),
-    );
-    return rows.length > 0;
+        .limit(1);
+      return lock ? query.for('update') : query;
+    };
+    const [row] = lock
+      ? await this.database.inTransaction(storeId, read)
+      : await this.database.forStore(storeId, read);
+    return row;
   }
 
   async changeStep(storeId: string, runId: string, stepKey: string, change: RunStepChange) {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRunSteps)
-        .set(change)
+        .set({
+          ...change,
+          ...(change.outcome !== 'sending' && { destinationHash: null, optOutUrl: null }),
+        })
         .where(
           and(
             eq(automationRunSteps.storeId, storeId),
@@ -192,13 +229,25 @@ export class AutomationRunsRepository {
 
   // As moveRun, and only while the workflow is active and the run's version is not stopped, read
   // in the same statement so a pause or stop that committed first is seen.
-  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange): Promise<boolean> {
+  async moveRunIfLive(
+    storeId: string,
+    claim: RunClaim,
+    change: RunChange,
+    gate?: 'first_send' | 'retry',
+  ): Promise<boolean> {
+    // A first send may write the pause itself. Both gates hold the workflow until their
+    // dispatch commits so a pause and a new dispatch cannot pass each other.
+    const lock = {
+      first_send: sql`for no key update of ${automations} for share of ${automationVersions}`,
+      retry: sql`for share of ${automations}, ${automationVersions}`,
+    };
     const isLive = sql`exists (select 1 from ${automations} join ${automationVersions}
       on ${automationVersions.storeId} = ${automations.storeId}
       where ${automations.storeId} = ${automationRuns.storeId}
         and ${automations.id} = ${automationRuns.automationId}
         and ${automationVersions.id} = ${automationRuns.versionId}
-        and ${automations.status} = 'active' and not ${automationVersions.isStopped})`;
+        and ${automations.status} = 'active' and not ${automationVersions.isStopped}
+      ${gate ? lock[gate] : sql.empty()})`;
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(automationRuns)

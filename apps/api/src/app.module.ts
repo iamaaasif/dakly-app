@@ -9,14 +9,17 @@ import { MetaAuthorizationModule } from '@dakly/core/channels/meta-authorization
 import { MetaWebhooksModule } from '@dakly/core/channels/meta-webhooks.module';
 import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
+import { DashboardModule } from '@dakly/core/dashboard/dashboard.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { LinksModule } from '@dakly/core/links/links.module';
+import { InboxModule } from '@dakly/core/messaging/inbox.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { OrdersModule } from '@dakly/core/orders/orders.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import { ProductsModule } from '@dakly/core/products/products.module';
+import { SavedRepliesModule } from '@dakly/core/saved-replies/saved-replies.module';
 import { SegmentsModule } from '@dakly/core/segments/segments.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
 import { SmsSendersModule } from '@dakly/core/sms-senders/sms-senders.module';
@@ -33,15 +36,18 @@ import { HealthController } from './health.controller';
     AuthModule,
     SessionsModule,
     ContactsModule,
+    DashboardModule,
     MetaWebhooksModule,
     MetaAuthorizationModule,
     DeliveryModule,
     ProductsModule,
+    SavedRepliesModule,
     OrdersModule,
     ConsentsModule,
     ImportsModule,
     KnowledgeModule,
     LinksModule,
+    InboxModule,
     SegmentsModule,
     AutomationsModule,
     CampaignsModule,

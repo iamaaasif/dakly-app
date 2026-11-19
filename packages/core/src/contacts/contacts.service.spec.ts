@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
+import { ContactDeletionService } from './contact-deletion.service';
+import type { ContactIdentitiesRepository } from './contact-identities.repository';
 import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 import type { ImportContactsRepository } from './import-contacts.repository';
@@ -27,7 +29,7 @@ describe('ContactsService', () => {
     list: vi.fn(),
     findIdentities: vi.fn(),
     update: vi.fn(),
-    softDelete: vi.fn(),
+    softDeleteAll: vi.fn(),
     lockForConsent: vi.fn(),
   };
   const transaction = { run: (_storeId: string, work: () => Promise<unknown>) => work() };
@@ -36,17 +38,23 @@ describe('ContactsService', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     repository.findIdentities.mockResolvedValue([]);
+    const contacts = repository as unknown as ContactsRepository;
+    const storeTransaction = transaction as unknown as StoreTransaction;
+    const outbox = { publish: vi.fn(), publishAll: vi.fn() } as unknown as OutboxService;
+    const clock = { now: () => new Date('2026-11-16T04:30:00Z') } as Clock;
     service = new ContactsService(
-      repository as unknown as ContactsRepository,
-      transaction as unknown as StoreTransaction,
-      { publish: vi.fn() } as unknown as OutboxService,
-      { now: () => new Date('2026-11-16T04:30:00Z') } as Clock,
+      contacts,
+      {} as ContactIdentitiesRepository,
+      storeTransaction,
+      outbox,
+      clock,
       {
         findByPhones: vi.fn(),
         insertImported: vi.fn(),
         updateImported: vi.fn(),
       } as unknown as ImportContactsRepository,
       {} as OrderContactsRepository,
+      new ContactDeletionService(contacts, storeTransaction, outbox, clock),
     );
   });
 
@@ -173,7 +181,7 @@ describe('ContactsService', () => {
 
   it('returns 404 when editing or deleting a contact that is not in this store', async () => {
     repository.update.mockResolvedValue(undefined);
-    repository.softDelete.mockResolvedValue(false);
+    repository.softDeleteAll.mockResolvedValue([]);
 
     await expect(
       service.editDetails(

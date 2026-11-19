@@ -9,19 +9,32 @@ import { StaffAuditMaintenanceJob } from '@dakly/core/admin/jobs/staff-audit-mai
 import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { KnowledgeIndexModule } from '@dakly/core/ai/knowledge/knowledge-index.module';
+import { AnalyticsModule } from '@dakly/core/analytics/analytics.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
 import { SecurityNoticesModule } from '@dakly/core/auth/security-notices.module';
 import { AutomationRunsModule } from '@dakly/core/automations/automation-runs.module';
+import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { ContinueAutomationRunJob } from '@dakly/core/automations/jobs/continue-automation-run.job';
+import { RecordAutomationBirthdaysJob } from '@dakly/core/automations/jobs/record-automation-birthdays.job';
+import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
+import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
+import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
+import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
+import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
+import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
+import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
+import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
+import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
+import { MessagingModule } from '@dakly/core/messaging/messaging.module';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
@@ -36,6 +49,8 @@ import {
   BulkJobDispatcher,
   CampaignJobDispatcher,
   InboundJobDispatcher,
+  OutboundJobDispatcher,
+  SyncJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
 } from '@dakly/core/platform/queue/job-dispatcher';
@@ -49,6 +64,8 @@ import { JobSchedulers } from './job-schedulers';
     BulkJobDispatcher,
     CampaignJobDispatcher,
     InboundJobDispatcher,
+    OutboundJobDispatcher,
+    SyncJobDispatcher,
     TransactionalJobDispatcher,
     WorkflowJobDispatcher,
     StaffAuditExportJob,
@@ -58,14 +75,21 @@ import { JobSchedulers } from './job-schedulers';
     SendDueSecurityNoticesJob,
     SendSecurityNoticeJob,
     RelayOutboxJob,
+    SendMessageJob,
     FailStuckImportsJob,
     RunContactImport,
     UndoContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,
+    RecordAutomationBirthdaysJob,
+    StartAutomationOnBirthday,
+    StartAutomationOnConsent,
+    SweepAutomationBirthdaysJob,
+    StartAutomationOnTagAdded,
     StartDueCampaignsJob,
     ContinueAutomationRunJob,
+    ResumeWorkflowsOnWalletCredited,
     JobSchedulers,
   ],
   imports: [
@@ -75,6 +99,8 @@ import { JobSchedulers } from './job-schedulers';
     StaffHistoryModule,
     StaffAlertsModule,
     BullModule.registerQueue({ name: QUEUES.inbound }),
+    BullModule.registerQueue({ name: QUEUES.outbound }),
+    BullModule.registerQueue({ name: QUEUES.sync }),
     BullModule.registerQueue({ name: QUEUES.transactional }),
     BullModule.registerQueue({ name: QUEUES.bulk }),
     BullModule.registerQueue({ name: QUEUES.workflow }),
@@ -84,10 +110,16 @@ import { JobSchedulers } from './job-schedulers';
     OutboxRelayModule,
     NotificationsModule,
     MetaWebhookRoutingModule,
+    MessagingModule,
+    ChannelTokenHealthModule,
+    ConversationReturnsModule,
     AutomationRunsModule,
+    AutomationsModule,
     CampaignsModule,
     ClockModule,
     ImportsModule,
+    ContactStatsRepairModule,
+    AnalyticsModule,
     KnowledgeIndexModule,
     BullModule.forRootAsync({
       useFactory: () => {

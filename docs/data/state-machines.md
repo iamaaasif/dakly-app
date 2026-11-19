@@ -77,14 +77,14 @@ Refunds (`refunds.status`): `requested` → `pending` → `succeeded` or `failed
 
 `conversations.status` is where the chat sits for staff; `conversations.responder` is who answers. They change apart.
 
-| Field       | Values                               | Moves                                                                                                                           |
-| ----------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `status`    | `open`, `needs_you`, `later`, `done` | Any to any by staff. A new customer message moves `done` and `later` back to `open`. A hand-over moves it to `needs_you`.       |
-| `responder` | `ai`, `human`, `paused`              | `ai` → `human` on hand-over or a staff reply; `human` → `ai` by staff or when `return_to_ai_at` passes; `paused` only by staff. |
+| Field       | Values                               | Moves                                                                                                                         |
+| ----------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `status`    | `open`, `needs_you`, `later`, `done` | Any to any by staff. A new customer message moves `done` and `later` back to `open`. A hand-over moves it to `needs_you`.     |
+| `responder` | `ai`, `human`, `paused`              | `ai` → `human` on hand-over or a staff reply; `human` → `ai` by staff or when `ai_resumes_at` passes; `paused` only by staff. |
 
 The AI writes a reply only if, in the short transaction after the model call, `responder` is still `ai` and `version` has not changed (must-fix 2).
 
-Messages (`messages.status`): `queued` → `sent` → `delivered` → `read`, or `failed` from `queued` or `sent`. Inbound messages are `received`. Comments (`social_comments.status`): `new` → `replied`, `needs_you`, `hidden` or `ignored`; `needs_you` → `replied`.
+Messages (`messages.status`): `queued` → `sent` → `delivered` → `read`, or `failed` from `queued` or `sent`. Inbound messages and internal notes are stored as `received`. Comments (`social_comments.status`): `new` → `replied`, `needs_you`, `hidden` or `ignored`; `needs_you` → `replied`.
 
 ## Campaign and recipients
 
@@ -121,10 +121,11 @@ Recipients (`campaign_recipients.status`): `queued` → `sending` → `sent` →
 
 ## Workflow
 
-| Column                   | Values                                           | Moves                                                                                        |
-| ------------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| `automations.status`     | `draft`, `active`, `paused`, `archived`          | `draft` → `active` on publish; `active` ↔ `paused`; any → `archived`                         |
-| `automation_runs.status` | `waiting`, `running`, `done`, `exited`, `failed` | `running` ↔ `waiting` (wait steps); `running` → `done`, `exited` (exit rule met) or `failed` |
+| Column                     | Values                                           | Moves                                                                                                                                                               |
+| -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `automations.status`       | `draft`, `active`, `paused`, `archived`          | `draft` → `active` on publish; `active` ↔ `paused`; any → `archived`                                                                                                |
+| `automations.pause_reason` | `manual`, `balance`                              | `manual` from Pause; `balance` from a short SMS balance, which only a top-up clears; Enable, Publish and Archive clear it; set exactly while the status is `paused` |
+| `automation_runs.status`   | `waiting`, `running`, `done`, `exited`, `failed` | `running` ↔ `waiting` (wait steps); `running` → `done`, `exited` (exit rule met) or `failed`                                                                        |
 
 A run keeps the `automation_version_id` it started on; publishing a new version does not move running runs. The app may update only `automation_versions.is_stopped`; a worker checks it before the next step. Running leases older than five minutes may be reclaimed with a new `claimed_at` token. `attempts` counts step jobs that started on a claim without committing a step: the job adds one when it starts, each committed step sets it back to 0, and a run past 10 fails. Only the worker holding the current claim may commit the step transition.
 

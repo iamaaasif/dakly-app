@@ -15,3 +15,8 @@ export const channelDisconnectedEventSchema = z.strictObject({
   type: z.literal('channel.disconnected'),
   ...connectionEvent,
 });
+
+export const channelNeedsReconnectEventSchema = z.strictObject({
+  type: z.literal('channel.needs_reconnect'),
+  ...connectionEvent,
+});

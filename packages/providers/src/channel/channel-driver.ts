@@ -15,9 +15,27 @@ export type InboundMessage = {
   sentAt: Date;
 };
 
+export type ChannelReceipt = {
+  channel: Exclude<ChannelKind, 'whatsapp'>;
+  accountExternalId: string;
+  recipientExternalId: string;
+  occurredAt: Date;
+} & (
+  | ({ kind: 'delivered' | 'read' } & ({ externalMessageIds: string[] } | { through: Date }))
+  | {
+      kind: 'echo';
+      externalMessageId: string;
+      operationKey: string;
+      appExternalId: string;
+    }
+);
+
 export type OutboundMessage = {
+  channel: Exclude<ChannelKind, 'whatsapp'>;
   externalConversationId: string;
   text: string;
+  operationKey: string;
+  humanAgent?: boolean;
 };
 
 export type SendResult = {
@@ -28,6 +46,7 @@ export type ChannelDriver = {
   readonly kind: ChannelKind;
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string): boolean;
   parseWebhook(payload: unknown): InboundMessage[];
+  parseReceipts(payload: unknown): ChannelReceipt[];
   send(credentials: ChannelCredentials, message: OutboundMessage): Promise<SendResult>;
 };
 
@@ -50,8 +69,12 @@ export type MetaAuthorizationDriver = {
   subscribePage(pageId: string, accessToken: string): Promise<void>;
 };
 
+export type MetaTokenHealthDriver = {
+  isTokenValid(accessToken: string): Promise<boolean>;
+};
+
 export class MetaRequestError extends Error {
-  constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response') {
+  constructor(readonly code: 'auth_error' | 'unavailable' | 'invalid_response' | 'rejected') {
     super('Meta request failed');
     this.name = 'MetaRequestError';
   }

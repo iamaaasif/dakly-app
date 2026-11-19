@@ -34,6 +34,20 @@ export function formatDate(value: string, reference: string, timeZone = 'Asia/Dh
   }).format(instant);
 }
 
+export function formatCalendarDate(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone, dateStyle: 'full' }).format(
+    parseInstant(value),
+  );
+}
+
+export function localHour(value: string, timeZone: string): number {
+  return Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone, hour: 'numeric', hourCycle: 'h23' }).format(
+      parseInstant(value),
+    ),
+  );
+}
+
 export function formatTime(value: string, timeZone = 'Asia/Dhaka'): string {
   return new Intl.DateTimeFormat('en-US', {
     timeZone,

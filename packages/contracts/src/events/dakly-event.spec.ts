@@ -18,6 +18,13 @@ const trackedLink = {
 } as const;
 
 const examples: DaklyEvent[] = [
+  { type: 'contact.tag_added', storeId, occurredAt, payload: { contactId, tag: 'ভিআইপি' } },
+  {
+    type: 'channel.needs_reconnect',
+    storeId,
+    occurredAt,
+    payload: { channelConnectionId: connectionId },
+  },
   {
     type: 'channel.connected',
     storeId,
@@ -43,6 +50,7 @@ const examples: DaklyEvent[] = [
     payload: { orderId, from: 'to_confirm', to: 'to_pack' },
   },
   { type: 'order.confirmed', storeId, occurredAt, payload: { orderId } },
+  { type: 'order.edited', storeId, occurredAt, payload: { orderId } },
   { type: 'order.created', storeId, occurredAt, payload: { orderId } },
   { type: 'order.cod_collected', storeId, occurredAt, payload: { orderId } },
   {
@@ -64,6 +72,9 @@ const examples: DaklyEvent[] = [
     payload: { productId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2' },
   },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
+  { type: 'contact.deleted', storeId, occurredAt, payload: { contactId } },
+  { type: 'contact_stats.repaired', storeId, occurredAt, payload: { day: '2026-11-19' } },
+  { type: 'contact.birthday', storeId, occurredAt, payload: { contactId, day: '2026-11-16' } },
   {
     type: 'consent.changed',
     storeId,
@@ -107,6 +118,8 @@ const examples: DaklyEvent[] = [
     payload: { conversationId, contactId, connectionId, channel: 'instagram' },
   },
   { type: 'message.received', storeId, occurredAt, payload: message },
+  { type: 'message.send_requested', storeId, occurredAt, payload: { messageId } },
+  { type: 'message.sent', storeId, occurredAt, payload: message },
   { type: 'message.delivered', storeId, occurredAt, payload: message },
   { type: 'message.read', storeId, occurredAt, payload: message },
   { type: 'message.failed', storeId, occurredAt, payload: message },
@@ -121,6 +134,12 @@ const examples: DaklyEvent[] = [
       userId: '019c01ea-cf15-7d31-a7f5-d73d66007ade',
       category: 'fix_now',
     },
+  },
+  {
+    type: 'wallet.credited',
+    storeId,
+    occurredAt,
+    payload: { wallet: 'sms_credits', entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae0' },
   },
 ];
 

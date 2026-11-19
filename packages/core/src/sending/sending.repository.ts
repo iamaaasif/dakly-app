@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
 
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import { automationRunSteps } from '@dakly/db/schema/automations';
@@ -20,6 +20,7 @@ type SendWindow = {
   after: Date;
   until: Date;
   dispatch?: boolean;
+  excludeWorkflowStepId?: string;
   includeCommittedFuture?: boolean;
 };
 
@@ -109,7 +110,8 @@ function campaignSends(
 
 // Uncertain submissions count too: the provider may have accepted them; definite refusals do not.
 function workflowSends(tx: Transaction, window: SendWindow) {
-  const { storeId, contactIds, after, until, includeCommittedFuture } = window;
+  const { storeId, contactIds, after, until, excludeWorkflowStepId, includeCommittedFuture } =
+    window;
   return tx
     .select({
       contactId: automationRunSteps.contactId,
@@ -124,6 +126,7 @@ function workflowSends(tx: Transaction, window: SendWindow) {
         gt(automationRunSteps.sentAt, after),
         includeCommittedFuture ? undefined : lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),
+        excludeWorkflowStepId ? ne(automationRunSteps.id, excludeWorkflowStepId) : undefined,
         eq(automationRunSteps.category, 'marketing'),
         inArray(automationRunSteps.outcome, ['sending', 'sent', 'unconfirmed']),
       ),

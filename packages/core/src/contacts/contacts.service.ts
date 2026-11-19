@@ -20,6 +20,8 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ContactDeletionService } from './contact-deletion.service';
+import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
@@ -60,11 +62,13 @@ export type ImportContactBatch = {
 export class ContactsService {
   constructor(
     @Inject(ContactsRepository) private readonly contactsRepository: ContactsRepository,
+    @Inject(ContactIdentitiesRepository) private readonly identities: ContactIdentitiesRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ImportContactsRepository) private readonly importContacts: ImportContactsRepository,
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
+    @Inject(ContactDeletionService) private readonly deletion: ContactDeletionService,
   ) {}
 
   async create(
@@ -90,6 +94,28 @@ export class ContactsService {
       return created;
     });
     return toContactResponse(contact, access.seeFullPhone);
+  }
+
+  findOrCreateByIdentity(storeId: string, input: InboundIdentity): Promise<string> {
+    return this.transaction.run(storeId, async () => {
+      for (;;) {
+        const existing = await this.identities.findInboundIdentity(storeId, input);
+        if (existing) {
+          if (!existing.deletedAt) return existing.contactId;
+          await this.identities.retireInboundIdentity(storeId, existing.id);
+        }
+        const now = this.clock.now();
+        const identity = await this.identities.createInboundIdentity(storeId, input, now);
+        if (!identity) continue;
+        await this.outbox.publish({
+          type: 'contact.created',
+          storeId,
+          occurredAt: now.toISOString(),
+          payload: { contactId: identity.contactId },
+        });
+        return identity.contactId;
+      }
+    });
   }
 
   async list(
@@ -218,7 +244,30 @@ export class ContactsService {
 
   // A workflow's tag action. A deleted contact is left as it is.
   changeTag(storeId: string, contactId: string, change: TagChange, _actor: Actor): Promise<void> {
-    return this.contactsRepository.changeTag(storeId, contactId, change, MAX_CONTACT_TAGS);
+    return this.transaction.run(storeId, async () => {
+      const changed = await this.contactsRepository.changeTag(
+        storeId,
+        contactId,
+        change,
+        MAX_CONTACT_TAGS,
+      );
+      if (!changed || change.change !== 'add') return;
+      await this.outbox.publish({
+        type: 'contact.tag_added',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { contactId, tag: change.tag },
+      });
+    });
+  }
+
+  birthdayContactIds(
+    storeId: string,
+    birthday: { month: number; days: number[] },
+    after: string | null,
+    limit: number,
+  ) {
+    return this.contactsRepository.birthdayContactIds(storeId, birthday, after, limit);
   }
 
   // D42: an import never changes the phone, kind, source, verification or consent of a contact the
@@ -285,7 +334,7 @@ export class ContactsService {
   }
 
   async remove(storeId: string, id: string, _actor: Actor): Promise<void> {
-    if (!(await this.contactsRepository.softDelete(storeId, id, this.clock.now())))
+    if (!(await this.deletion.remove(storeId, [id])).length)
       throw contactError('CONTACT_NOT_FOUND');
   }
 
@@ -299,8 +348,8 @@ export class ContactsService {
     return this.contactsRepository.lockUneditedByImport(storeId, importId, page);
   }
 
-  removeAll(storeId: string, ids: string[], _actor: Actor): Promise<void> {
-    return this.contactsRepository.softDeleteAll(storeId, ids, this.clock.now());
+  async removeAll(storeId: string, ids: string[], _actor: Actor): Promise<void> {
+    await this.deletion.remove(storeId, ids);
   }
 
   // A deleted contact reads as undefined.
@@ -324,7 +373,7 @@ export class ContactsService {
   listIdsMatching(
     storeId: string,
     rules: SegmentRules,
-    page: { cursor?: string; limit: number },
+    page: { cursor?: string; limit: number; contactIds?: string[] },
   ): Promise<string[]> {
     return this.contactsRepository.listIdsMatching(storeId, rules, page);
   }

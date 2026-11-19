@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
 import { type AutomationGraph, automationGraphSchema } from './automations/graph';
+import { automationTemplates, type TemplateKey } from './automations/templates';
+import type { CampaignChannel } from './campaigns';
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
+// Manual is the Pause button; balance is a short SMS balance, which a top-up ends on its own.
+export const automationPauseReasons = ['manual', 'balance'] as const;
 export const automationRunStatuses = ['waiting', 'running', 'done', 'exited', 'failed'] as const;
 export const automationExitReasons = [
   'version_stopped',
@@ -23,21 +27,34 @@ export const automationStepKinds = [
   'exit',
 ] as const;
 export type AutomationStatus = (typeof automationStatuses)[number];
+export type AutomationPauseReason = (typeof automationPauseReasons)[number];
 export type AutomationRunStatus = (typeof automationRunStatuses)[number];
 export type AutomationExitReason = (typeof automationExitReasons)[number];
 export type AutomationStepKind = (typeof automationStepKinds)[number];
 
 export const MAX_AUTOMATIONS_PER_STORE = 100;
+export const AUTOMATION_NAME_MAX = 80;
 
-const automationNameSchema = z.string().trim().min(1).max(80);
+const automationNameSchema = z.string().trim().min(1).max(AUTOMATION_NAME_MAX);
 
-export const createAutomationSchema = z.strictObject({
+const automationDraftSchema = z.strictObject({
   name: automationNameSchema,
   graph: automationGraphSchema,
 });
-export const changeAutomationSchema = createAutomationSchema
+export const createAutomationSchema = z.union([
+  automationDraftSchema,
+  z.strictObject({
+    name: automationNameSchema,
+    templateKey: z.enum(Object.keys(automationTemplates) as TemplateKey[]),
+  }),
+]);
+export const changeAutomationSchema = automationDraftSchema
   .partial()
   .refine((input) => input.name !== undefined || input.graph !== undefined, 'Nothing to change');
+export type AutomationTriggerPreview = {
+  items: { id: string; contactId: string; occurredAt: string }[];
+};
+
 export const automationListQuerySchema = z.strictObject({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -52,6 +69,8 @@ export type AutomationResponse = {
   id: string;
   name: string;
   status: AutomationStatus;
+  pauseReason: AutomationPauseReason | null;
+  templateKey: string | null;
   graph: AutomationGraph;
   publishedVersionId: string | null;
   createdAt: string;
@@ -65,5 +84,12 @@ export type AutomationVersionResponse = {
 };
 export type AutomationDetailResponse = AutomationResponse & {
   versions: AutomationVersionResponse[];
+  activeRuns: number;
 };
-export type AutomationListResponse = { items: AutomationResponse[]; nextCursor: string | null };
+export type AutomationListItem = AutomationResponse & {
+  trigger: AutomationGraph['trigger']['key'];
+  stepCount: number;
+  channels: CampaignChannel[];
+  enteredLast30Days: number;
+};
+export type AutomationListResponse = { items: AutomationListItem[]; nextCursor: string | null };

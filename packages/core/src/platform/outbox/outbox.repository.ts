@@ -29,7 +29,11 @@ export class OutboxRepository {
 
   async insert(storeId: string, events: NewOutboxEvent[]) {
     await this.tenant.inTransaction(storeId, (tx) =>
-      tx.insert(outboxEvents).values(events.map((event) => ({ storeId, ...event }))),
+      // A birthday sweep can revisit a page after it has published that local day.
+      tx
+        .insert(outboxEvents)
+        .values(events.map((event) => ({ storeId, ...event })))
+        .onConflictDoNothing(),
     );
   }
 

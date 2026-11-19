@@ -8,7 +8,7 @@ export type SmsSendResult = { providerMessageId: string };
 // leaves the outcome unknown. Callers reconcile earlier attempts and apply their send rules
 // before retrying under the same key.
 export type SmsDriver = {
-  send(message: SmsMessage): Promise<SmsSendResult>;
+  send(message: SmsMessage, signal?: AbortSignal): Promise<SmsSendResult>;
 };
 
 export class SmsSendRefused extends Error {
@@ -17,5 +17,15 @@ export class SmsSendRefused extends Error {
   constructor() {
     super('SMS refused by the provider');
     this.name = 'SmsSendRefused';
+  }
+}
+
+// The provider might already have accepted the message when the caller cancels the request.
+export class SmsSendTimeout extends Error {
+  readonly code = 'SMS_SEND_TIMEOUT';
+
+  constructor() {
+    super('The SMS provider did not answer in time');
+    this.name = 'SmsSendTimeout';
   }
 }

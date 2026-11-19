@@ -85,6 +85,8 @@ function show(child: ReactNode) {
       canEditOrders: false,
       canViewCampaigns: false,
       canEditCampaigns: false,
+      canViewAutomations: false,
+      canEditAutomations: false,
       canViewCustomers: true,
       canCreateCustomer: true,
       canViewSegments: true,

@@ -4,7 +4,7 @@ import type { ConsentService } from '../consents/consent.service';
 import type { ContactsService } from '../contacts/contacts.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
-import type { StoresService } from '../stores/stores.service';
+import type { StoresService, StoreSendingSettings } from '../stores/stores.service';
 import { type SendRequest, SendPolicyService } from './send-policy.service';
 import type { SendingRepository } from './sending.repository';
 
@@ -13,6 +13,12 @@ const CONTACT_ID = '0193a3c4-5d1e-7b8f-9a0b-2c3d4e5f6a7b';
 // Asia/Dhaka is UTC+6 all year, so 12:00 in Dhaka is 06:00 UTC.
 const NOON_DHAKA = new Date('2026-11-16T06:00:00Z');
 const HOUR = 60 * 60 * 1000;
+const settings: StoreSendingSettings = {
+  timeZone: 'Asia/Dhaka',
+  quietHours: { startHour: 21, endHour: 9 },
+  frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
+  onlyOwnersAndAdminsApprove: true,
+};
 
 type MarketingSend = { channel: string; sentAt: Date };
 type Contact = {
@@ -25,7 +31,7 @@ type Contact = {
 describe('SendPolicyService', () => {
   let contact: Contact | undefined;
   let consent: 'granted' | 'withdrawn' | 'not_answered' | undefined;
-  let sends: MarketingSend[];
+  let sends: (MarketingSend & { workflowStepId?: string })[];
   let isTransactionOpen: boolean;
   let service: SendPolicyService;
   let clockAt: Date;
@@ -53,25 +59,32 @@ describe('SendPolicyService', () => {
         consent ? ids.map((contactId) => ({ contactId, status: consent })) : [],
     };
     const stores = {
-      sendingSettings: async () => ({
-        timeZone: 'Asia/Dhaka',
-        quietHours: { startHour: 21, endHour: 9 },
-        frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
-      }),
+      sendingSettings: async () => settings,
     };
     const repository = {
       lockContact: async () => afterLock(),
       listMarketingSends: async (
         _storeId: string,
         ids: string[],
-        range: { after: Date; until: Date; includeCommittedFuture?: boolean },
+        {
+          after,
+          until,
+          excludeWorkflowStepId,
+          includeCommittedFuture,
+        }: {
+          after: Date;
+          until: Date;
+          excludeWorkflowStepId?: string;
+          includeCommittedFuture?: boolean;
+        },
       ) =>
         ids.flatMap((contactId) =>
           sends
             .filter(
               (send) =>
-                send.sentAt > range.after &&
-                (range.includeCommittedFuture || send.sentAt <= range.until),
+                send.sentAt > after &&
+                (includeCommittedFuture || send.sentAt <= until) &&
+                (!excludeWorkflowStepId || send.workflowStepId !== excludeWorkflowStepId),
             )
             .map((send) => ({ ...send, contactId })),
         ),
@@ -117,6 +130,26 @@ describe('SendPolicyService', () => {
       destination: '01712345678',
       at: later,
     });
+  });
+
+  it.each(['messenger', 'instagram'] as const)(
+    'uses the current %s reply window at dispatch',
+    async (channel) => {
+      const windowClosesAt = new Date(NOON_DHAKA.getTime() + HOUR);
+      const reply = { ...request({ channel, category: 'staff_reply' }), windowClosesAt };
+      expect((await service.checkForSend(STORE_ID, reply)).decision).toEqual({ action: 'send' });
+      afterLock = () => {
+        clockAt = windowClosesAt;
+      };
+      expect((await service.checkForSend(STORE_ID, reply)).decision).toEqual({
+        action: 'skip',
+        reason: 'window_closed',
+      });
+    },
+  );
+
+  it('keeps SMS eligible without a chat window', async () => {
+    expect((await service.checkForSend(STORE_ID, request())).decision).toEqual({ action: 'send' });
   });
 
   it('keeps a marketing send capped when the worker clock is past the anniversary', async () => {
@@ -261,6 +294,42 @@ describe('SendPolicyService', () => {
     ['09:00 sends', '2026-11-17T03:00:00Z', { action: 'send' }],
   ])('in Dhaka time, %s', async (_case, at, decision) => {
     expect(await service.check(STORE_ID, request({ at: new Date(at) }))).toEqual(decision);
+  });
+
+  it('rechecks consent and quiet hours after the lock without counting the resend twice', async () => {
+    const stepId = 'earlier-step';
+    sends.push({ ...sentBefore(1), workflowStepId: stepId });
+    const retry = { contactId: CONTACT_ID, channel: 'sms', category: 'marketing' } as const;
+    async function recheck() {
+      const recipient = await service.recheckRetryRecipient(STORE_ID, retry);
+      if (recipient?.decision.action !== 'send') return recipient;
+      const check = await service.prepareMarketingRetryCheck(STORE_ID, {
+        contactId: CONTACT_ID,
+        workflowStepId: stepId,
+        settings,
+      });
+      return check();
+    }
+    expect(await recheck()).toEqual({
+      decision: { action: 'send' },
+      at: NOON_DHAKA,
+    });
+    const late = new Date('2026-11-16T20:00:00Z');
+    afterLock = () => {
+      clockAt = late;
+    };
+    expect(await recheck()).toEqual({
+      decision: { action: 'defer', until: new Date('2026-11-17T03:00:00Z') },
+      at: late,
+    });
+    afterLock = () => {
+      consent = 'withdrawn';
+      clockAt = NOON_DHAKA;
+    };
+    expect(await recheck()).toEqual({
+      decision: { action: 'skip', reason: 'no_consent' },
+      at: NOON_DHAKA,
+    });
   });
 
   it('checks quiet hours before the cap', async () => {

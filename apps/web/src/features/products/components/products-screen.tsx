@@ -32,11 +32,16 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
       <main className="space-y-6 p-6 md:p-8">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-xl font-bold">Products</h1>
-            <p className="mt-2 text-text-muted">What you sell, with prices, options and stock.</p>
+            <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
+            <p className="mt-1 text-sm text-text-muted">
+              What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take
+              orders and fill your order link.
+            </p>
           </div>
           {canEdit ? (
-            <Button onClick={() => router.push(`${listHref}&create=1`)}>Add product</Button>
+            <Button onClick={() => router.push(`${listHref}&create=1`)}>
+              <span aria-hidden="true">+ </span>Add product
+            </Button>
           ) : null}
         </header>
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">

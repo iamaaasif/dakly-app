@@ -5,7 +5,9 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 
 import type { TagChange } from '../contacts/contacts.service';
 import type { PreparedSmsSender } from '../messaging/messaging.service';
-import { DAY_MS } from '../platform/time';
+import { loadEnv } from '../platform/config/env';
+import { hashCode } from '../platform/crypto/code-hash';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import type { SendDecision } from '../sending/send-policy.service';
 import type {
   ClaimedRun,
@@ -19,11 +21,18 @@ import { wakeTime } from './automation-waits';
 // Step jobs that started on a claim and committed nothing: a job that keeps failing.
 const MAX_CLAIMS_WITHOUT_PROGRESS = 10;
 
+// Matches the lease compared by due_automation_runs in Postgres.
+export const WORKFLOW_LEASE_MS = 5 * MINUTE_MS;
+
+export type Condition = AutomationGraph['workflowFilters'][number];
+export type PathChoice = { outcome: string; next: string };
+
 export type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 // What the person has done in this run so far, read once per step.
 export type RunFacts = {
   preparedSender?: PreparedSmsSender;
   graph: AutomationGraph;
+  automationId: string;
   storeId: string;
   runId: string;
   contactId: string;
@@ -44,10 +53,22 @@ export type Delivery = {
 // workflow or a lost claim, a skip or defer, or a send with its text.
 export type GateResult =
   | 'not_live'
-  | { outcome: 'late' }
+  | 'balance_paused'
+  | { outcome: 'late'; balanceResumedAt: Date | null }
+  | { outcome: 'destination_changed' }
   | { exitReason: AutomationExitReason; at: Date }
   | { decision: Exclude<SendDecision, { action: 'send' }> }
-  | { decision: { action: 'send' }; body: string; destination: string | null; at: Date };
+  | {
+      decision: { action: 'send' };
+      body: string;
+      destination: string | null;
+      at: Date;
+      firstTriedAt: Date;
+    };
+export function holdOwnedClaim(run: ClaimedRun | undefined, claim: RunClaim, now: Date) {
+  return run && holdsClaim(run, claim) ? holdOrEnd(run, now) : undefined;
+}
+
 export type CreditSettlement = { settle: 'charge'; quantity: number } | { settle: 'release' };
 // The run's next state, the step row to add or change, a tag change and the send's credits,
 // written together under the claim (a send renews it first), and the next step's claim when the
@@ -64,12 +85,27 @@ export type StepResult = {
 
 type ExitCondition = AutomationGraph['exitConditions'][number];
 
-// This intermediate part skips a short balance; the balance-pause part replaces it.
-// Costs, retries and balance pause must merge together before any deploy.
-export const noCredits = { action: 'skip', reason: 'no_credits' } as const;
-
 export function operationKey({ runId, stepKey }: RunClaim) {
   return `run:${runId}:${stepKey}`;
+}
+
+// A send due more than a day before it runs is skipped (feature 09): as no_credits when it was
+// already a day old at the top-up that ended a pause for balance, else as late, as after a manual
+// pause that held it longer.
+function lateSend(
+  step: SendStep,
+  stepKey: string,
+  { wakeAt, balanceResumedAt }: { wakeAt: Date | null; balanceResumedAt: Date | null },
+  now: Date,
+): StepResult {
+  const row = { stepKey, kind: 'send', category: step.category } as const;
+  // Held through a balance pause and already a day old when the top-up ended it.
+  if (balanceResumedAt && wakeAt && balanceResumedAt.getTime() - wakeAt.getTime() > DAY_MS)
+    return {
+      ...ifNotReachable(step, now),
+      step: { ...row, outcome: 'skipped', skipReason: 'no_credits' },
+    };
+  return { ...goOn(step.next, now), step: { ...row, outcome: 'late' } };
 }
 
 export function scheduleWait(
@@ -85,6 +121,34 @@ export function scheduleWait(
       wakeAt: wakeTime(step.wait, now, timeZone),
     },
     step: { stepKey, kind: 'wait', outcome: 'scheduled' },
+  };
+}
+
+export function firstSendStop(
+  claim: RunClaim,
+  step: SendStep,
+  started: Exclude<GateResult, 'not_live' | 'balance_paused' | { body: string }>,
+  wakeAt: Date | null,
+): StepResult {
+  const at = claim.claimedAt;
+  const row = { stepKey: claim.stepKey, kind: 'send', category: step.category } as const;
+  if ('exitReason' in started) return { ...exited(started.exitReason, at), claim };
+  if ('outcome' in started) {
+    if (started.outcome === 'late')
+      return { ...lateSend(step, claim.stepKey, { ...started, wakeAt }, at), claim };
+    return {
+      ...failed("The contact's phone changed during SMS preparation", at),
+      claim,
+      step: { ...row, outcome: 'failed' },
+    };
+  }
+  const { decision } = started;
+  if (decision.action === 'defer')
+    return { claim, run: { status: 'waiting', wakeAt: decision.until } };
+  return {
+    ...ifNotReachable(step, at),
+    claim,
+    step: { ...row, outcome: 'skipped', skipReason: decision.reason },
   };
 }
 
@@ -118,6 +182,12 @@ export function messageBody(step: SendStep, optOutUrl: string | undefined): stri
   return optOutUrl ? `${step.message.text}\n${optOutUrl}` : step.message.text;
 }
 
+export function workflowDestinationHash(storeId: string, phone: string | null): string | null {
+  return phone
+    ? hashCode(loadEnv().CODE_HASH_KEY, JSON.stringify(['workflow-sms', storeId, phone]))
+    : null;
+}
+
 export function ifNotReachable(step: SendStep, now: Date) {
   return step.ifNotReachable === 'skip' ? goOn(step.next, now) : exited('not_reachable', now);
 }
@@ -125,7 +195,7 @@ export function ifNotReachable(step: SendStep, now: Date) {
 // The step was handed to the provider and no answer came; it may have been sent. Its credits stay
 // reserved until a reconciliation settles it (ACC-14 brings provider status reports), and it is
 // not sent again.
-const UNKNOWN_OUTCOME =
+export const UNKNOWN_OUTCOME =
   'The SMS provider did not confirm this message, so its credits stay reserved until it is checked';
 
 export function endWithUnknownOutcome(held: StepResult): StepResult {
@@ -192,6 +262,25 @@ export function randomPath(
 
 export function isLateSend(wakeAt: Date | null, now: Date): boolean {
   return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
+}
+
+export function sendLateness(
+  wakeAt: Date | null,
+  now: Date,
+  run: Pick<ClaimedRun, 'balanceResumedAt' | 'hasBalanceResumeSendAllowance'> | undefined,
+) {
+  if (!isLateSend(wakeAt, now)) return undefined;
+  const balanceResumedAt = run?.balanceResumedAt ?? null;
+  // If a top-up made an already-due send eligible, the wait for the sweep cannot expire it.
+  if (
+    run?.hasBalanceResumeSendAllowance &&
+    balanceResumedAt &&
+    wakeAt &&
+    wakeAt <= balanceResumedAt &&
+    !isLateSend(wakeAt, balanceResumedAt)
+  )
+    return undefined;
+  return { outcome: 'late', balanceResumedAt } as const;
 }
 
 export function shouldPrepareSender(step: AutomationStep): boolean {

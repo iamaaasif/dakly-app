@@ -1,4 +1,14 @@
-import { MetaRequestError, type MetaAuthorizationDriver, type MetaPage } from '../channel-driver';
+import { createHash } from 'node:crypto';
+
+import {
+  MetaRequestError,
+  type ChannelCredentials,
+  type ChannelDriver,
+  type MetaAuthorizationDriver,
+  type MetaPage,
+  type MetaTokenHealthDriver,
+  type OutboundMessage,
+} from '../channel-driver';
 
 const authorizationCode = 'dakly-local-meta-code';
 const userToken = 'fake-meta-user-credential';
@@ -17,7 +27,9 @@ const pages: MetaPage[] = [
   },
 ];
 
-export class FakeMetaChannelDriver implements MetaAuthorizationDriver {
+export class FakeMetaChannelDriver
+  implements MetaAuthorizationDriver, MetaTokenHealthDriver, Pick<ChannelDriver, 'send'>
+{
   constructor(private readonly redirectUri: string) {}
 
   authorizationUrl(state: string): string {
@@ -40,5 +52,20 @@ export class FakeMetaChannelDriver implements MetaAuthorizationDriver {
   async subscribePage(pageId: string, accessToken: string): Promise<void> {
     if (!pages.some((page) => page.id === pageId && page.accessToken === accessToken))
       throw new MetaRequestError('auth_error');
+  }
+
+  async isTokenValid(accessToken: string): Promise<boolean> {
+    return pages.some((page) => page.accessToken === accessToken);
+  }
+
+  async send({ accountExternalId, accessToken }: ChannelCredentials, message: OutboundMessage) {
+    const connected = pages.some((page) => {
+      const account = message.channel === 'messenger' ? page.id : page.instagram?.id;
+      return account === accountExternalId && page.accessToken === accessToken;
+    });
+    if (!connected) throw new MetaRequestError('auth_error');
+    const reference = JSON.stringify([message.channel, accountExternalId, message.operationKey]);
+    const externalMessageId = `fake-${createHash('sha256').update(reference).digest('hex')}`;
+    return { externalMessageId };
   }
 }

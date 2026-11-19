@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
-import { MetaRequestError, type MetaAuthorizationDriver, type MetaPage } from '../channel-driver';
+import {
+  MetaRequestError,
+  type ChannelCredentials,
+  type ChannelDriver,
+  type MetaAuthorizationDriver,
+  type MetaPage,
+  type MetaTokenHealthDriver,
+  type OutboundMessage,
+} from '../channel-driver';
 
 const graph = 'https://graph.facebook.com/v27.0/';
 const login = 'https://www.facebook.com/v27.0/dialog/oauth';
@@ -8,7 +16,9 @@ const requestTimeoutMs = 5000;
 const pageManagementTasks = ['MANAGE', 'PROFILE_PLUS_MANAGE', 'PROFILE_PLUS_FULL_CONTROL'];
 
 const accessTokenSchema = z.object({ access_token: z.string().min(1) });
-const graphErrorSchema = z.object({ error: z.object({ code: z.number() }) });
+const graphErrorSchema = z.object({
+  error: z.object({ code: z.number(), error_subcode: z.number().optional() }),
+});
 const accountsSchema = z.object({
   data: z.array(
     z.object({
@@ -43,11 +53,28 @@ function selectablePage(
   };
 }
 
-function responseError(status: number, payload: unknown): MetaRequestError {
-  const code = graphErrorSchema.safeParse(payload).data?.error.code;
-  const permissionDenied = code === 10 || (code !== undefined && code >= 200 && code <= 299);
-  const authError = status === 401 || code === 190 || code === 459 || permissionDenied;
-  return new MetaRequestError(authError ? 'auth_error' : 'unavailable');
+function responseError(status: number, payload: unknown, sending: boolean): MetaRequestError {
+  const error = graphErrorSchema.safeParse(payload).data?.error;
+  const code = error?.code ?? 0;
+  if (status === 401 || [190, 459].includes(code)) return new MetaRequestError('auth_error');
+  if (sending) return sendResponseError(code, error?.error_subcode);
+  return new MetaRequestError(permissionDenied(code) ? 'auth_error' : 'unavailable');
+}
+
+function sendResponseError(code: number, subcode?: number): MetaRequestError {
+  if (
+    (code === 10 && subcode === 2534077) ||
+    (code === 200 && subcode === 2534041) ||
+    (code === 100 && subcode === 2534013)
+  )
+    return new MetaRequestError('auth_error');
+  if (permissionDenied(code) || [100, 551, 10903, 10904].includes(code))
+    return new MetaRequestError('rejected');
+  return new MetaRequestError('unavailable');
+}
+
+function permissionDenied(code: number): boolean {
+  return code === 10 || (code >= 200 && code <= 299);
 }
 
 type MetaApp = {
@@ -57,7 +84,9 @@ type MetaApp = {
   redirectUri: string;
 };
 
-export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
+export class MetaGraphChannelDriver
+  implements MetaAuthorizationDriver, MetaTokenHealthDriver, Pick<ChannelDriver, 'send'>
+{
   constructor(private readonly app: MetaApp) {}
 
   authorizationUrl(state: string): string {
@@ -118,17 +147,53 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
   async subscribePage(pageId: string, accessToken: string): Promise<void> {
     await this.request(
       `${encodeURIComponent(pageId)}/subscribed_apps`,
-      { subscribed_fields: 'messages,messaging_postbacks,feed' },
+      {
+        subscribed_fields:
+          'messages,messaging_postbacks,feed,message_deliveries,message_reads,message_echoes',
+      },
       z.object({ success: z.literal(true) }),
       { method: 'POST', signal: AbortSignal.timeout(requestTimeoutMs), accessToken },
     );
+  }
+
+  async isTokenValid(accessToken: string): Promise<boolean> {
+    const result = await this.request(
+      'debug_token',
+      { input_token: accessToken },
+      z.object({ data: z.object({ is_valid: z.boolean() }) }),
+      {
+        accessToken: `${this.app.appId}|${this.app.appSecret}`,
+        signal: AbortSignal.timeout(requestTimeoutMs),
+      },
+    );
+    return result.data.is_valid;
+  }
+
+  async send({ accountExternalId, accessToken }: ChannelCredentials, message: OutboundMessage) {
+    const messenger = message.channel === 'messenger';
+    const delivery = message.humanAgent
+      ? { messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }
+      : messenger && { messaging_type: 'RESPONSE' };
+    const body = JSON.stringify({
+      recipient: { id: message.externalConversationId },
+      message: { text: message.text, ...(messenger && { metadata: message.operationKey }) },
+      ...delivery,
+    });
+    const endpoint = messenger ? encodeURIComponent(accountExternalId) : 'me';
+    const response = await this.request(
+      `${endpoint}/messages`,
+      {},
+      z.object({ message_id: z.string().min(1) }),
+      { method: 'POST', accessToken, signal: AbortSignal.timeout(requestTimeoutMs), body },
+    );
+    return { externalMessageId: response.message_id };
   }
 
   private async request<T>(
     path: string,
     query: Record<string, string>,
     schema: z.ZodType<T>,
-    options: { signal: AbortSignal; accessToken?: string; method?: 'POST' },
+    options: { signal: AbortSignal; accessToken?: string; method?: 'POST'; body?: string },
   ): Promise<T> {
     const url = new URL(path, graph);
     url.search = new URLSearchParams(query).toString();
@@ -139,13 +204,17 @@ export class MetaGraphChannelDriver implements MetaAuthorizationDriver {
         signal: options.signal,
         method: options.method,
         redirect: 'error',
-        ...(options.accessToken && { headers: { authorization: `Bearer ${options.accessToken}` } }),
+        body: options.body,
+        headers: {
+          ...(options.accessToken && { authorization: `Bearer ${options.accessToken}` }),
+          ...(options.body && { 'content-type': 'application/json' }),
+        },
       });
       payload = await response.json();
     } catch {
       throw new MetaRequestError('unavailable');
     }
-    if (!response.ok) throw responseError(response.status, payload);
+    if (!response.ok) throw responseError(response.status, payload, options.body !== undefined);
     const parsed = schema.safeParse(payload);
     if (!parsed.success) throw new MetaRequestError('invalid_response');
     return parsed.data;

@@ -5,7 +5,8 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { META_AUTHORIZATION_DRIVER } from '@dakly/core/channels/meta-authorization.service';
+import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
+import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
@@ -1128,22 +1129,92 @@ fixture('GET /automations', async () => {
     .json()
     .items.map((item: { id: string }) => item.id);
   expect(ids).toEqual([bId]);
-  expect((await success(a, 'GET', '/automations', 200)).json().items[0].id).toBe(aId);
+  expect((await success(a, 'GET', '/automations', 200)).json().items[0]).toMatchObject({
+    id: aId,
+    enteredLast30Days: 0,
+    trigger: 'consent_given',
+    channels: ['sms'],
+  });
 });
 fixture('POST /automations', async () => {
   const { a, b } = await pair(),
     id = await automation(a),
     before = await f.row('automations', id);
-  const own = await automation(b);
-  expect((await f.row('automations', own)).store_id).toBe(b.id);
+  const response = await success(b, 'POST', '/automations', 201, {
+    name: 'Birthday template',
+    templateKey: 'birthday',
+  });
+  expect(response.json()).toMatchObject({
+    templateKey: 'birthday',
+    graph: { trigger: { key: 'birthday' }, firstStepKey: 'morning' },
+  });
+  expect((await f.row('automations', response.json().id)).store_id).toBe(b.id);
   expect(await f.row('automations', id)).toEqual(before);
 });
 fixture('GET /automations/:automationId', async () => {
   const { a, b } = await pair(),
     { id, versionId } = await publishedAutomation(a);
+  const contactId = randomUUID();
+  await f.admin.pool.query(
+    "insert into contacts(id,store_id,name,source,kind) values($1,$2,'রিনা','manual','customer')",
+    [contactId, a.id],
+  );
+  await f.admin.pool.query(
+    `insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,wake_at)
+     values($5,$1,$2,$3,$4,'waiting','welcome','waiting',now()+interval '1 day'),
+           ($6,$1,$2,$3,$4,'finished','end','done',null)`,
+    [a.id, id, versionId, contactId, randomUUID(), randomUUID()],
+  );
   const own = (await success(a, 'GET', `/automations/${id}`, 200)).json();
   expect(own.versions.map((version: { id: string }) => version.id)).toEqual([versionId]);
+  expect(own.activeRuns).toBe(1);
   await hidden(b, 'GET', (value) => `/automations/${value}`, id);
+});
+fixture('GET /automations/:automationId/trigger-preview', async () => {
+  const { a, b } = await pair();
+  const addGrants = async (shop: Shop) => {
+    const contactId = randomUUID();
+    const eventIds = Array.from({ length: 12 }, () => randomUUID());
+    const now = Date.now();
+    for (const [index, id] of eventIds.entries()) {
+      await f.admin.pool.query(
+        `insert into outbox_events(id,store_id,type,payload,occurred_at)
+         values($1,$2,'consent.changed',$3,$4)`,
+        [
+          id,
+          shop.id,
+          { contactId, channel: 'sms', status: 'granted', source: 'manual' },
+          new Date(now - index * 1000),
+        ],
+      );
+    }
+    await f.admin.pool.query(
+      `insert into outbox_events(id,store_id,type,payload,occurred_at)
+       values($1,$2,'consent.changed',$3,$4)`,
+      [
+        randomUUID(),
+        shop.id,
+        { contactId, channel: 'sms', status: 'granted', source: 'import' },
+        new Date(now),
+      ],
+    );
+    return eventIds.slice(0, 10);
+  };
+  const [aId, bId, aEvents, bEvents] = await Promise.all([
+    automation(a),
+    automation(b),
+    addGrants(a),
+    addGrants(b),
+  ]);
+  const path = (id: string) => `/automations/${id}/trigger-preview`;
+  for (const [shop, id, ids] of [
+    [a, aId, aEvents],
+    [b, bId, bEvents],
+  ] as const) {
+    const response = await success(shop, 'GET', path(id), 200);
+    expect(response.json().items.map((item: { id: string }) => item.id)).toEqual(ids);
+  }
+  await hidden(b, 'GET', path, aId);
 });
 // Each action runs on a workflow in the status it starts from.
 for (const [method, action, status, start, expected] of [
@@ -1610,6 +1681,223 @@ async function notification(shop: Shop) {
   );
   return result.rows[0].id as string;
 }
+async function enableSavedReplies(shop: Shop) {
+  await success(shop, 'PATCH', '/store/extensions', 200, { extensions: ['chats'] });
+}
+
+async function savedReply(shop: Shop, shortcut: string) {
+  const result = await success(shop, 'POST', '/saved-replies', 201, {
+    title: 'ঢাকার ভেতরে',
+    body: 'ঢাকায় ডেলিভারি চার্জ ৬০ টাকা।',
+    shortcut,
+  });
+  return result.json().id as string;
+}
+
+async function savedReplyAudit(shop: Shop, id: string) {
+  const { rows } = await f.admin.pool.query(
+    `select action, actor_user_id, "after" from audit_log
+     where store_id = $1 and entity_type = 'saved_reply' and entity_id = $2 order by action`,
+    [shop.id, id],
+  );
+  return rows;
+}
+
+fixture('GET /saved-replies', async () => {
+  const { a, b } = await pair();
+  expect((await f.request(b.owner, 'GET', '/saved-replies')).statusCode).toBe(403);
+  await enableSavedReplies(a);
+  await enableSavedReplies(b);
+  await savedReply(a, 'delivery');
+  const own = await savedReply(b, 'delivery');
+  const result = await success(b, 'GET', '/saved-replies', 200);
+  expect(result.json()).toMatchObject({
+    items: [{ id: own, shortcut: 'delivery', body: 'ঢাকায় ডেলিভারি চার্জ ৬০ টাকা।' }],
+    nextCursor: null,
+  });
+  const { id: roleId } = (
+    await success(b, 'POST', '/roles', 201, {
+      name: 'Read saved replies',
+      permissions: { ...permissions, areas: { chats: 'view' } },
+    })
+  ).json();
+  await f.admin.pool.query(
+    'update memberships set built_in_role = null, role_id = $1 where id = $2',
+    [roleId, b.membership],
+  );
+  expect((await f.request(b.member, 'GET', '/saved-replies')).statusCode).toBe(200);
+  const writeRequests = [
+    ['POST', '/saved-replies', { title: 'Delivery', body: '60 taka' }],
+    ['PATCH', `/saved-replies/${own}`, { title: 'Changed' }],
+    ['DELETE', `/saved-replies/${own}`, undefined],
+  ] as const;
+  for (const [method, url, payload] of writeRequests)
+    expect((await f.request(b.member, method, url, payload)).statusCode).toBe(403);
+  await f.admin.pool.query(
+    "update memberships set built_in_role = 'marketer', role_id = null where id = $1",
+    [b.membership],
+  );
+  expect((await f.request(b.member, 'GET', '/saved-replies')).statusCode).toBe(403);
+});
+
+fixture('POST /saved-replies', async () => {
+  const { a, b } = await pair();
+  await enableSavedReplies(a);
+  await enableSavedReplies(b);
+  const reply = { title: 'Delivery', body: 'Delivery inside Dhaka is 60 taka.', shortcut: 'dhaka' };
+  await success(a, 'POST', '/saved-replies', 201, reply);
+  const result = await success(b, 'POST', '/saved-replies', 201, reply);
+  expect(result.json()).toMatchObject(reply);
+  await success(b, 'POST', '/saved-replies', 409, reply);
+  await success(b, 'POST', '/saved-replies', 400, { ...reply, storeId: a.id });
+  for (const field of ['title', 'body', 'shortcut'])
+    await success(b, 'POST', '/saved-replies', 400, { ...reply, [field]: 'invalid\u0000text' });
+  expect(await savedReplyAudit(b, result.json().id)).toEqual([
+    {
+      action: 'saved_reply.created',
+      actor_user_id: b.owner.id,
+      after: { changedFields: ['title', 'body', 'shortcut'] },
+    },
+  ]);
+  expect(await f.row('saved_replies', result.json().id)).toMatchObject({
+    created_by_user_id: b.owner.id,
+  });
+});
+
+fixture('PATCH /saved-replies/:savedReplyId', async () => {
+  const { a, b } = await pair();
+  await enableSavedReplies(a);
+  await enableSavedReplies(b);
+  const foreign = await savedReply(a, 'delivery');
+  const own = await savedReply(b, 'delivery');
+  await savedReply(b, 'returns');
+  const url = (id: string) => `/saved-replies/${id}`;
+  await hidden(b, 'PATCH', url, foreign, () => ({ shortcut: null }));
+  await success(b, 'PATCH', url(own), 409, { shortcut: 'returns' });
+  await success(b, 'PATCH', url(own), 400, { body: 'invalid\u0000text' });
+  const result = await success(b, 'PATCH', url(own), 200, {
+    body: 'চার্জ ৭০ টাকা।',
+    shortcut: null,
+  });
+  expect(result.json()).toMatchObject({ id: own, body: 'চার্জ ৭০ টাকা।', shortcut: null });
+  expect(await f.row('saved_replies', foreign)).toMatchObject({ shortcut: 'delivery' });
+  const audited = (await savedReplyAudit(b, own)).filter(
+    ({ action }) => action === 'saved_reply.updated',
+  );
+  expect(audited).toEqual([
+    {
+      action: 'saved_reply.updated',
+      actor_user_id: b.owner.id,
+      after: { changedFields: ['body', 'shortcut'] },
+    },
+  ]);
+});
+
+fixture('DELETE /saved-replies/:savedReplyId', async () => {
+  const { a, b } = await pair();
+  await enableSavedReplies(a);
+  await enableSavedReplies(b);
+  const url = (id: string) => `/saved-replies/${id}`;
+  const foreign = await savedReply(a, 'delivery');
+  const own = await savedReply(b, 'delivery');
+  await hidden(b, 'DELETE', url, foreign);
+  await success(b, 'DELETE', url(own), 204);
+  expect(await f.row('saved_replies', own)).toBeUndefined();
+  expect(await f.row('saved_replies', foreign)).toMatchObject({ shortcut: 'delivery' });
+  expect((await savedReplyAudit(b, own)).at(-1)).toEqual({
+    action: 'saved_reply.deleted',
+    actor_user_id: b.owner.id,
+    after: null,
+  });
+});
+
+fixture('GET /dashboard', async () => {
+  const { a, b } = await pair();
+  const reports = app.get(AnalyticsService);
+  const shops = await Promise.all(
+    (
+      [
+        [a, 2],
+        [b, 7],
+      ] as const
+    ).map(async ([shop, count]) => ({ shop, count, ...(await reports.periods(shop.id, 7)) })),
+  );
+  for (const { shop, count, current, previous } of shops) {
+    await f.admin.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
+       ($1,$2,'orders','',$4),($1,$3,'orders','',$4::bigint + 1),
+       ($1,$2,'lifecycle','new',$4),
+       ($1,$2,'sales','manual',$4::bigint * 10000),
+       ($1,$2,'sales','order_link',$4::bigint * 5000),
+       ($1,$3,'sales','manual',$4::bigint * 10000)`,
+      [shop.id, current.through, previous.through, count],
+    );
+    await f.admin.pool.query(
+      `with repeat_buyers as (
+         select gen_random_uuid()::text as id from generate_series(1, 8 - $4::integer)
+       )
+       insert into store_daily_metrics (store_id,day,metric,dimension,value)
+       select $1::uuid,$2::date,'buyer_activity',gen_random_uuid()::text,$2::date-date '1970-01-01'
+       from generate_series(1,$4::integer)
+       union all
+       select $1,$2,'buyer_activity',id,$3::date-date '1970-01-01' from repeat_buyers
+       union all
+       select $1,$3,'buyer_activity',id,$3::date-date '1970-01-01' from repeat_buyers`,
+      [shop.id, current.through, previous.through, count],
+    );
+  }
+  for (const { shop, count, current, previous } of shops) {
+    const result = await success(shop, 'GET', '/dashboard?period=7', 200);
+    const { cards, lifecycle } = result.json();
+    for (const key of ['orders', 'newCustomers', 'customersWhoCameBack'] as const) {
+      const now = await reports[key](shop.id, current);
+      const before = await reports[key](shop.id, previous);
+      expect(cards[key]).toEqual({
+        total: now.total.toString(),
+        previous: before.total.toString(),
+        points: now.points.map(({ value }) => value.toString()),
+      });
+    }
+    const sales = await reports.sales(shop.id, current);
+    const previousSales = await reports.sales(shop.id, previous);
+    expect(cards.sales).toEqual({
+      totalPoisha: sales.total.toString(),
+      previousPoisha: previousSales.total.toString(),
+      pointsPoisha: sales.points.map(({ value }) => value.toString()),
+    });
+    expect(cards.sales).toMatchObject({
+      totalPoisha: String(count * 15000),
+      previousPoisha: String(count * 10000),
+    });
+    expect(cards.orders).toMatchObject({ total: String(count), previous: String(count + 1) });
+    expect(cards.newCustomers).toMatchObject({ total: String(count), previous: String(8 - count) });
+    expect(cards.customersWhoCameBack).toMatchObject({ total: String(8 - count), previous: '0' });
+    expect(lifecycle).toEqual(await reports.lifecycleCounts(shop.id, current));
+    expect(lifecycle.new).toBe(count);
+  }
+  await f.admin.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+    a.membership,
+  ]);
+  const restricted = await f.request(a.member, 'GET', '/dashboard?period=7');
+  expect(restricted.statusCode, restricted.body).toBe(200);
+  expect(Object.keys(restricted.json().cards)).toEqual(['newCustomers', 'customersWhoCameBack']);
+  expect(restricted.json().lifecycle.new).toBe(2);
+  const ordersOnly = await success(b, 'POST', '/roles', 201, {
+    name: 'Order reader',
+    permissions: { ...permissions, areas: { orders: 'view' } },
+  });
+  await success(b, 'PATCH', `/members/${b.membership}`, 200, { roleId: ordersOnly.json().id });
+  const ordersDashboard = await f.request(b.member, 'GET', '/dashboard');
+  expect(ordersDashboard.statusCode, ordersDashboard.body).toBe(200);
+  expect(ordersDashboard.json()).not.toHaveProperty('lifecycle');
+  expect(ordersDashboard.json().cards).not.toHaveProperty('newCustomers');
+  expect(ordersDashboard.json().cards).not.toHaveProperty('customersWhoCameBack');
+  expect(ordersDashboard.json().cards.orders.points).toHaveLength(30);
+  expect(ordersDashboard.json().cards.sales.pointsPoisha).toHaveLength(30);
+  expect((await f.request(a.owner, 'GET', `/dashboard?storeId=${b.id}`)).statusCode).toBe(400);
+  expect((await f.request(a.owner, 'GET', '/dashboard?period=8')).statusCode).toBe(400);
+});
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),
@@ -1698,7 +1986,7 @@ async function expectSavedMetaCredential(shop: Shop, id: string, kind: string) {
 
 function metaSubscriptionDriver() {
   return app.get<{ subscribePage(pageId: string, token: string): Promise<void> }>(
-    META_AUTHORIZATION_DRIVER,
+    META_CHANNEL_DRIVER,
   );
 }
 
@@ -1907,6 +2195,249 @@ fixture('DELETE /channel-connections/:channelConnectionId', async () => {
     [b.id, 'channel.disconnected'],
   );
   expect(events.rows).toEqual([{ payload: { channelConnectionId: own } }]);
+});
+
+async function seedConversation(shop: Shop) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    "insert into conversations(id,store_id,contact_id,channel_connection_id,channel) values($1,$2,$3,$4,'messenger')",
+    [id, shop.id, await contact(shop), await seedChannel(shop)],
+  );
+  return id;
+}
+
+async function enableChats(shop: Shop) {
+  await success(shop, 'PATCH', '/store/extensions', 200, { extensions: ['chats'] });
+}
+
+fixture('GET /conversations', async () => {
+  const { a, b } = await pair();
+  await seedConversation(a);
+  const own = await seedConversation(b);
+  expect((await f.request(b.owner, 'GET', '/conversations')).statusCode).toBe(403);
+  await enableChats(b);
+  await success(b, 'GET', `/conversations?cursor=0000-01-01T00:00:00Z_${own}`, 400);
+  const result = await success(b, 'GET', '/conversations', 200);
+  expect(result.json()).toMatchObject({ items: [{ id: own }], nextCursor: null });
+  const second = await seedConversation(b);
+  await success(b, 'PATCH', `/conversations/${own}`, 200, { status: 'later' });
+  expect((await success(b, 'GET', '/conversations?status=later', 200)).json()).toMatchObject({
+    items: [{ id: own, status: 'later' }],
+    nextCursor: null,
+  });
+  const [latest, older] = [own, second].sort();
+  await f.admin.pool.query('update conversations set last_message_at = $1 where id = $2', [
+    '2026-11-18T10:00:00.123456Z',
+    latest,
+  ]);
+  const page = (await success(b, 'GET', '/conversations?limit=1', 200)).json();
+  expect(page.items).toMatchObject([{ id: latest }]);
+  expect(page.nextCursor).toEqual(expect.any(String));
+  const next = await success(b, 'GET', `/conversations?limit=1&cursor=${page.nextCursor}`, 200);
+  expect(next.json()).toMatchObject({ items: [{ id: older }], nextCursor: null });
+
+  const removed = await seedConversation(b);
+  const { contact_id: removedContactId } = await f.row('conversations', removed);
+  await f.admin.pool.query('update conversations set last_message_at = now() where id = $1', [
+    removed,
+  ]);
+  await success(b, 'DELETE', `/contacts/${removedContactId}`, 204);
+  expect((await success(b, 'GET', '/conversations?limit=1', 200)).json().items).toMatchObject([
+    { id: latest },
+  ]);
+  const url = (id: string) => `/conversations/${id}`;
+  await hidden(b, 'GET', url, removed);
+  await hidden(b, 'GET', (id) => `${url(id)}/messages`, removed);
+  await hidden(b, 'PATCH', url, removed, () => ({ status: 'later' }));
+  await hidden(b, 'POST', (id) => `${url(id)}/take-over`, removed);
+  await hidden(b, 'POST', (id) => `${url(id)}/return-to-ai`, removed);
+});
+
+fixture('GET /conversations/:conversationId', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}`;
+  await hidden(b, 'GET', url, await seedConversation(a));
+  const own = await seedConversation(b);
+  expect((await success(b, 'GET', url(own), 200)).json()).toMatchObject({ id: own });
+});
+
+fixture('GET /conversations/:conversationId/messages', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/messages`;
+  await hidden(b, 'GET', url, await seedConversation(a));
+  const own = await seedConversation(b);
+  const [newest, older] = [randomUUID(), randomUUID()].sort();
+  await success(b, 'GET', `${url(own)}?cursor=0000-01-01T00:00:00Z_${newest}`, 400);
+  await f.admin.pool.query(
+    `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at)
+     values($1,$2,$3,'in','customer','text','দাম কত?','received','2026-11-18T10:00:00.123456Z'),
+     ($4,$2,$3,'in','customer','text','সাইজ কত?','received','2026-11-18T10:00:00.123123Z')`,
+    [newest, b.id, own, older],
+  );
+  const page = (await success(b, 'GET', `${url(own)}?limit=1`, 200)).json();
+  expect(page.items).toMatchObject([
+    { id: newest, body: 'দাম কত?', status: 'received', authorType: 'customer' },
+  ]);
+  expect(page.nextCursor).toEqual(expect.any(String));
+  const next = await success(b, 'GET', `${url(own)}?limit=1&cursor=${page.nextCursor}`, 200);
+  expect(next.json()).toMatchObject({
+    items: [{ id: older, body: 'সাইজ কত?' }],
+    nextCursor: null,
+  });
+});
+
+fixture('PATCH /conversations/:conversationId', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  await hidden(b, 'PATCH', url, foreign, () => ({ status: 'done' }));
+  await success(b, 'PATCH', url(own), 400, { assigneeUserId: a.member.id });
+  const changed = await success(b, 'PATCH', url(own), 200, {
+    status: 'done',
+    assigneeUserId: b.member.id,
+  });
+  expect(changed.json()).toMatchObject({
+    status: 'done',
+    assigneeUserId: b.member.id,
+    responder: 'ai',
+  });
+  expect(await f.row('conversations', foreign)).toMatchObject({ status: 'open' });
+  expect(await f.row('conversations', own)).toMatchObject({ version: 1 });
+  await success(b, 'PATCH', url(own), 200, {
+    status: 'done',
+    assigneeUserId: b.member.id.toUpperCase(),
+  });
+  expect(await f.row('conversations', own)).toMatchObject({ version: 1 });
+  const records = await f.admin.pool.query(
+    'select actor_user_id, "after" from audit_log where store_id = $1 and entity_id = $2',
+    [b.id, own],
+  );
+  expect(records.rows).toEqual([
+    { actor_user_id: b.owner.id, after: { changedFields: ['status', 'assigneeUserId'] } },
+  ]);
+  const { id: roleId } = (
+    await success(b, 'POST', '/roles', 201, {
+      name: 'Chats view only',
+      permissions: { ...permissions, areas: { chats: 'view' } },
+    })
+  ).json();
+  await f.admin.pool.query(
+    'update memberships set built_in_role = null, role_id = $1 where id = $2',
+    [roleId, b.membership],
+  );
+  expect((await f.request(b.member, 'GET', url(own))).statusCode).toBe(200);
+  expect((await f.request(b.member, 'PATCH', url(own), { assigneeUserId: null })).statusCode).toBe(
+    403,
+  );
+  expect((await success(b, 'PATCH', url(own), 200, { assigneeUserId: null })).json()).toMatchObject(
+    { assigneeUserId: null },
+  );
+  const locker = await f.admin.pool.connect();
+  let assignment: ReturnType<typeof f.request> | undefined;
+  try {
+    await locker.query('begin');
+    await locker.query('select id from conversations where id = $1 for no key update', [own]);
+    const {
+      rows: [backend],
+    } = await locker.query<{ pid: number }>('select pg_backend_pid() as pid');
+    assignment = f.request(b.owner, 'PATCH', url(own), { assigneeUserId: b.member.id });
+    await vi.waitFor(async () => {
+      const { rows } = await f.admin.pool.query(
+        'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
+        [backend!.pid],
+      );
+      expect(rows).toHaveLength(1);
+    });
+    await locker.query(
+      "update conversations set status = 'open', version = version + 1 where id = $1",
+      [own],
+    );
+    await locker.query('commit');
+  } catch (error) {
+    await locker.query('rollback');
+    await assignment;
+    throw error;
+  } finally {
+    locker.release();
+  }
+  const assigned = await assignment;
+  expect(assigned.statusCode, assigned.body).toBe(200);
+  expect(assigned.json()).toMatchObject({ status: 'open', assigneeUserId: b.member.id });
+});
+
+for (const [path, responder] of [
+  ['take-over', 'human'],
+  ['return-to-ai', 'ai'],
+] as const) {
+  fixture(`POST /conversations/:conversationId/${path}`, async () => {
+    const { a, b } = await pair();
+    await enableChats(b);
+    const url = (id: string) => `/conversations/${id}/${path}`;
+    const foreign = await seedConversation(a);
+    const own = await seedConversation(b);
+    await hidden(b, 'POST', url, foreign);
+    if (path === 'return-to-ai')
+      await f.admin.pool.query("update conversations set responder = 'human' where id = $1", [own]);
+    expect((await success(b, 'POST', url(own), 200)).json()).toMatchObject({
+      status: 'open',
+      responder,
+      aiResumesAt: null,
+    });
+    if (path === 'take-over') {
+      await success(b, 'POST', url(own), 400, { returnAfterMinutes: 31 });
+      const earliest = Date.now() + 30 * 60_000;
+      const timed = await success(b, 'POST', url(own), 200, { returnAfterMinutes: 30 });
+      const deadline = Date.parse(timed.json().aiResumesAt);
+      expect(deadline).toBeGreaterThanOrEqual(earliest);
+      expect(deadline).toBeLessThanOrEqual(Date.now() + 30 * 60_000);
+      const handBack = await success(b, 'POST', `/conversations/${own}/return-to-ai`, 200);
+      expect(handBack.json()).toMatchObject({ responder: 'ai', aiResumesAt: null });
+    }
+    expect(await f.row('conversations', foreign)).toMatchObject({ responder: 'ai' });
+  });
+}
+
+fixture('POST /conversations/:conversationId/notes', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/notes`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  const body = 'গ্রাহককে কাল জানাতে হবে।';
+  await hidden(b, 'POST', url, foreign, () => ({ body }));
+  await success(b, 'POST', url(own), 400, { body: '   ' });
+  await f.admin.pool.query(
+    `update conversations set last_message_preview = 'Customer message',
+       last_message_at = now(), window_expires_at = now() + interval '1 day' where id = $1`,
+    [own],
+  );
+  const before = await f.row('conversations', own);
+  const added = await success(b, 'POST', url(own), 201, { body });
+  expect(added.json()).toMatchObject({
+    body,
+    kind: 'note',
+    authorType: 'user',
+    authorUserId: b.owner.id,
+    sentAt: null,
+  });
+  const thread = await success(b, 'GET', `/conversations/${own}/messages`, 200);
+  expect(thread.json().items).toMatchObject([{ id: added.json().id, kind: 'note', body }]);
+  expect(await f.row('conversations', own)).toMatchObject({
+    last_message_preview: before.last_message_preview,
+    last_message_at: before.last_message_at,
+    window_expires_at: before.window_expires_at,
+    unread_count: before.unread_count,
+    version: before.version,
+  });
+  const events = await f.admin.pool.query(
+    "select type from outbox_events where store_id = $1 and type like 'message.%'",
+    [b.id],
+  );
+  expect(events.rows).toEqual([]);
 });
 
 fixture('GET /sms-sender-ids', async () => {

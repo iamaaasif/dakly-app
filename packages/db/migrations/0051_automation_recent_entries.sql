@@ -1,0 +1,1 @@
+CREATE INDEX "automation_runs_recent_entries_idx" ON "automation_runs" USING btree ("store_id","automation_id","entered_at");

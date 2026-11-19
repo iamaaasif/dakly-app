@@ -1,13 +1,16 @@
 import type { OrderDetail } from '@dakly/contracts/orders';
+import { cn } from '@dakly/ui/cn';
 
 import { formatMoney } from '@/lib/format-money';
 
-export function OrderItems({ order }: { order: OrderDetail }) {
+export type OrderItemsProps = { order: OrderDetail };
+
+export function OrderItems({ order }: OrderItemsProps) {
   const subtotal = order.deliveredItemsSubtotalPoisha ?? order.itemsSubtotalPoisha;
   const discount = order.deliveredOrderDiscountPoisha ?? order.orderDiscountPoisha;
   return (
     <section aria-label="Items">
-      <h3 className="text-md font-semibold">Items</h3>
+      <h3 className="text-sm font-semibold text-text">Items</h3>
       <ul className="divide-y divide-border">
         {order.items.map((item) => {
           const lineDiscount = item.deliveredLineDiscountPoisha ?? item.lineDiscountPoisha;
@@ -30,7 +33,7 @@ export function OrderItems({ order }: { order: OrderDetail }) {
           );
         })}
       </ul>
-      <dl className="space-y-2 border-t border-border pt-3 text-sm tabular-nums">
+      <dl className="space-y-1.5 border-t border-border pt-3 text-sm tabular-nums">
         {order.deliveredItemsSubtotalPoisha !== null && (
           <PriceLine label="Ordered items" amount={order.itemsSubtotalPoisha} />
         )}
@@ -40,11 +43,11 @@ export function OrderItems({ order }: { order: OrderDetail }) {
         />
         <PriceLine label="Delivery" amount={order.deliveryChargePoisha} />
         {discount > 0 && <PriceLine label="Discount" amount={-discount} />}
-        <PriceLine label="Total" amount={order.totalPoisha} />
+        <PriceLine label="Total" amount={order.totalPoisha} isBold />
         <PriceLine label="Advance paid" amount={order.advancePaidPoisha} />
-        <PriceLine label="COD amount" amount={order.codAmountPoisha} />
+        <PriceLine label="COD amount" amount={order.codAmountPoisha} isBold />
         {order.codCollectedPoisha !== null && (
-          <PriceLine label="COD received" amount={order.codCollectedPoisha} />
+          <PriceLine label="COD received" amount={order.codCollectedPoisha} isBold />
         )}
       </dl>
       {order.paymentStatus === 'refund_due' && <p className="text-warning">Refund due</p>}
@@ -52,11 +55,15 @@ export function OrderItems({ order }: { order: OrderDetail }) {
   );
 }
 
-function PriceLine({ label, amount }: { label: string; amount: number }) {
+type PriceLineProps = { label: string; amount: number; isBold?: boolean };
+
+function PriceLine({ label, amount, isBold }: PriceLineProps) {
   return (
-    <div className="flex justify-between">
-      <dt>{label}</dt>
-      <dd>{formatMoney(amount)}</dd>
+    <div className="flex justify-between py-0.5">
+      <dt className={isBold ? 'font-semibold text-text' : 'text-text-muted'}>{label}</dt>
+      <dd className={cn('text-right tabular-nums', isBold && 'font-semibold text-text')}>
+        {formatMoney(amount)}
+      </dd>
     </div>
   );
 }
