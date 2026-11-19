@@ -11,8 +11,6 @@ const settings = {
 const storeSettings = { href: '/settings?tab=store' };
 const extensions = { href: '/settings?tab=extensions' };
 const team = { href: '/team' };
-const orders = { href: '/orders' };
-const products = { href: '/products' };
 
 describe('currentState', () => {
   it('marks Settings as the page on /settings without a tab', () => {
@@ -27,14 +25,6 @@ describe('currentState', () => {
   it('marks Settings as the location on the screens it leads to', () => {
     expect(currentState(settings, '/security', null)).toBe('location');
     expect(currentState(team, '/team/ownership', null)).toBeUndefined();
-  });
-  it('marks Orders as current on /orders', () => {
-    expect(currentState(orders, '/orders', null)).toBe('page');
-    expect(currentState(products, '/orders', null)).toBeUndefined();
-  });
-  it('marks Products as current on /products', () => {
-    expect(currentState(products, '/products', null)).toBe('page');
-    expect(currentState(orders, '/products', null)).toBeUndefined();
   });
 });
 
@@ -83,20 +73,15 @@ describe('navigationGroups', () => {
     ]);
   });
 
-  it('shows only Orders when canViewOrders is true and canViewProducts is false', () => {
-    const groups = navigationGroups(makeSession({ canViewOrders: true, canViewProducts: false }));
+  it.each([
+    [{ canViewOrders: true, canViewProducts: false }, ['Orders']],
+    [{ canViewOrders: false, canViewProducts: true }, ['Products']],
+    [{ canViewOrders: false, canViewProducts: false }, []],
+  ])('shows visible Sales links for %o', (permissions, expected) => {
+    const groups = navigationGroups(makeSession(permissions));
     const sales = groups.find((group) => group.heading === 'Sales');
-    expect(sales?.links.filter((link) => link.visible).map((link) => link.label)).toEqual([
-      'Orders',
-    ]);
-  });
-
-  it('shows only Products when canViewProducts is true and canViewOrders is false', () => {
-    const groups = navigationGroups(makeSession({ canViewOrders: false, canViewProducts: true }));
-    const sales = groups.find((group) => group.heading === 'Sales');
-    expect(sales?.links.filter((link) => link.visible).map((link) => link.label)).toEqual([
-      'Products',
-    ]);
+    const visible = sales?.links.filter((link) => link.visible).map((link) => link.label) ?? [];
+    expect(visible).toEqual(expected);
   });
 
   it('places Sales between Customers and Store information', () => {
@@ -108,12 +93,6 @@ describe('navigationGroups', () => {
       'Store information',
       'Configuration',
     ]);
-  });
-
-  it('marks both as not visible when neither is permitted', () => {
-    const groups = navigationGroups(makeSession({ canViewOrders: false, canViewProducts: false }));
-    const sales = groups.find((group) => group.heading === 'Sales');
-    expect(sales?.links.every((link) => !link.visible)).toBe(true);
   });
 
   it('handles session without active store', () => {

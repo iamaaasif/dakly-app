@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useId } from 'react';
 
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { cn } from '@dakly/ui/cn';
@@ -192,17 +193,18 @@ function NavigationGroups({
   collapsed,
   onNavigate,
 }: { groups: NavigationGroup[] } & Pick<ShellNavigationProps, 'collapsed' | 'onNavigate'>) {
+  const groupId = useId();
   return (
     <div className="flex-1 space-y-4 overflow-y-auto p-3">
-      {groups.map((group) => (
+      {groups.map((group, index) => (
         <div
           key={group.heading}
           role="group"
-          aria-label={`${group.heading} navigation`}
+          aria-labelledby={`${groupId}-${index}`}
           className="space-y-1"
         >
           <p
-            aria-hidden="true"
+            id={`${groupId}-${index}`}
             className={cn(
               'px-2 pt-2 text-xs font-semibold tracking-wide text-text-muted uppercase',
               collapsed && 'sr-only',
