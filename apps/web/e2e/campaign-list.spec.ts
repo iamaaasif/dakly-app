@@ -174,11 +174,11 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
       );
       await submitSearch.click();
       await requestedSearch;
-      await search.fill('Puja');
+      await search.fill('Puja ');
       await status.selectOption('draft');
       await expect(page).toHaveURL(/search=Kurti.*status=draft/);
       await expect(page.getByRole('link', { name: 'Winter Kurti collection' })).toBeVisible();
-      await expect(search).toHaveValue('Puja');
+      await expect(search).toHaveValue('Puja ');
     } finally {
       releaseSearch();
       await page.unroute(isPendingSearch);

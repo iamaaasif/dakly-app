@@ -14,10 +14,10 @@ import { Input } from '@dakly/ui/input';
 import { campaignListHref } from '../api/campaigns';
 import { campaignChannelLabels, campaignStatusLabels } from '../campaign-labels';
 
-const { search, status, channel } = campaignListQuerySchema.shape;
+const { status, channel } = campaignListQuerySchema.shape;
 const empty = z.literal('');
 const filterFields = z.strictObject({
-  search: search.or(empty),
+  search: z.string().optional(),
   status: status.or(empty),
   channel: channel.or(empty),
   createdFrom: z.string().optional(),
@@ -31,7 +31,7 @@ const selectClass =
 
 const campaignFilterSchema = filterFields
   .transform((filters): z.input<typeof campaignListQuerySchema> => ({
-    search: filters.search || undefined,
+    search: filters.search?.trim() || undefined,
     status: filters.status || undefined,
     channel: filters.channel || undefined,
     createdFrom: filters.createdFrom || undefined,
@@ -107,7 +107,7 @@ function FilterFields({ applyFilter }: { applyFilter: () => void }) {
             <div className="flex gap-2">
               <Input
                 {...control}
-                {...register('search', optional)}
+                {...register('search')}
                 type="search"
                 placeholder="Campaign name"
               />
