@@ -214,6 +214,8 @@ export const campaignRecipients = pgTable(
     status: text('status', { enum: recipientStatuses }).notNull(),
     // An expired claim can be reconciled after the worker stops waiting for the provider.
     claimedAt: timestamptz('claimed_at'),
+    // Receipt lookup renews the lease without moving the SMS dispatch time used by the cap.
+    dispatchStartedAt: timestamptz('dispatch_started_at'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     smsCredits: integer('sms_credits'),

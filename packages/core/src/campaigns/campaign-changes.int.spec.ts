@@ -353,7 +353,7 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
         rows: [{ id: recipientId }],
       } = await admin.pool.query(
         "update campaign_recipients set status='sending', provider_message_id='campaign-capture', claimed_at=$3 where campaign_id=$1 and contact_id=$2 returning id",
-        [id, recipient.contact_id, clockNow],
+        [id, recipient.contact_id, dispatchedAt],
       );
       await service.cancel(storeId, id, actor);
       clockNow = new Date(clockNow.getTime() + 6 * MINUTE);
@@ -393,6 +393,7 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     );
 
     await expect(service.resume(storeId, id, actor)).rejects.toMatchObject({
+      const dispatchedAt = clockNow;
       code: 'CAMPAIGN_PAUSED_BY_SYSTEM',
       status: 409,
       fields: [{ path: 'pauseReason', message: 'balance' }],
@@ -403,3 +404,10 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     expect(paused).toEqual({ status: 'paused', pause_reason: 'balance' });
   });
 });
+        const { rows } = await admin.pool.query(
+          'select dispatch_started_at, sent_at from campaign_recipients where id=$1',
+          [recipientId],
+        );
+        expect(rows).toEqual([
+          { dispatch_started_at: dispatchedAt, sent_at: outcome === 'sent' ? dispatchedAt : null },
+        ]);

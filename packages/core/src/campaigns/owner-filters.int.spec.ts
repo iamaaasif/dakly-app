@@ -238,7 +238,12 @@ describe('campaign filters without RLS assistance', () => {
       await cancellations.recordReceipt(
         f.b,
         campaign.id,
-        { id: recipient, claimedAt, providerMessageId: 'capture-one' },
+        {
+          id: recipient,
+          claimedAt,
+          dispatchStartedAt: claimedAt,
+          providerMessageId: 'capture-one',
+        },
         { status: 'sent', sentAt: now, smsCredits: 1 },
       );
     });

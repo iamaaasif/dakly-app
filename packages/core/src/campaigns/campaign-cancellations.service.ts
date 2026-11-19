@@ -113,7 +113,12 @@ export class CampaignCancellationsService {
         campaignId,
         claim,
         outcome === 'sent'
-          ? { status: 'sent', sentAt: now, claimedAt: null, smsCredits: credits }
+          ? {
+              status: 'sent',
+              sentAt: claim.dispatchStartedAt,
+              claimedAt: null,
+              smsCredits: credits,
+            }
           : {
               status: 'failed',
               failedAt: now,

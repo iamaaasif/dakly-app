@@ -17,6 +17,7 @@ export type CancellationReceiptClaim = {
   id: string;
   providerMessageId: string;
   claimedAt: Date;
+  dispatchStartedAt: Date;
 };
 
 @Injectable()
@@ -97,12 +98,15 @@ export class CampaignCancellationsRepository {
         .orderBy(asc(campaignRecipients.id))
         .limit(1)
         .for('update', { skipLocked: true });
-      if (!row?.providerMessageId) return;
+      if (!row?.providerMessageId || !row.claimedAt) return;
+      const dispatchStartedAt = row.dispatchStartedAt ?? row.claimedAt;
       await tx
         .update(campaignRecipients)
-        .set({ claimedAt })
+        .set({ claimedAt, dispatchStartedAt })
+          dispatchStartedAt: campaignRecipients.dispatchStartedAt,
+          claimedAt: campaignRecipients.claimedAt,
         .where(and(recipientsWhere(storeId, campaignId), eq(campaignRecipients.id, row.id)));
-      return { id: row.id, providerMessageId: row.providerMessageId, claimedAt };
+      return { id: row.id, providerMessageId: row.providerMessageId, claimedAt, dispatchStartedAt };
     });
   }
 

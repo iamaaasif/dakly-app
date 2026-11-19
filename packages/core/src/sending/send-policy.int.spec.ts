@@ -75,6 +75,17 @@ async function campaignSend(
   );
 }
 
+async function unknownCampaignSend(storeId: string, contactId: string, claimedAt: Date) {
+  const campaignId = await campaign(storeId);
+  await admin.pool.query("update campaigns set status='cancelled' where id=$1", [campaignId]);
+  const id = randomUUID();
+  await admin.pool.query(
+    "insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,error_code,claimed_at) values($1,$2,$3,$4,'failed','outcome_unknown',$5)",
+    [id, storeId, campaignId, contactId, claimedAt],
+  );
+  return id;
+}
+
 async function workflowSend(
   storeId: string,
   contactId: string,
@@ -185,6 +196,23 @@ describe('SendPolicyService (Postgres)', () => {
     await send(storeA, contactId, hoursBefore(2));
 
     expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
+  });
+
+  it('counts a cancelled campaign’s uncertain SMS using its dispatch time', async () => {
+    const contactId = await consentedContact(storeA);
+    const id = await unknownCampaignSend(storeA, contactId, hoursBefore(1));
+
+    expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
+    await admin.pool.query('update campaign_recipients set dispatch_started_at=$2 where id=$1', [
+      id,
+      hoursBefore(25),
+    ]);
+    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
+    await admin.pool.query(
+      "update campaign_recipients set dispatch_started_at=$2, error_code='provider_confirmed_not_sent' where id=$1",
+      [id, hoursBefore(1)],
+    );
+    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
   });
 
   it('does not count unsent, transactional, old or later messages', async () => {
