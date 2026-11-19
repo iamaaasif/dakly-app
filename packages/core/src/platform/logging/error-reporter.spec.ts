@@ -27,7 +27,12 @@ describe('ErrorReporter', () => {
       );
       if (kind === 'request')
         reporter.report(serializeError(failure), '2b59ea1c-40f5-4f30-a84b-b60ae6ec31a3');
-      else reporter.reportJob(serializeError(failure), '2b59ea1c-40f5-4f30-a84b-b60ae6ec31a3');
+      else
+        reporter.reportJob(
+          serializeError(failure),
+          '2b59ea1c-40f5-4f30-a84b-b60ae6ec31a3',
+          '8ba4d7e42a83952266bdd348b718799a396969747d178257091da4ead519a655',
+        );
       await reporter.onApplicationShutdown();
       expect(envelopes).toHaveLength(1);
       const event = JSON.stringify(envelopes);
@@ -44,6 +49,11 @@ describe('ErrorReporter', () => {
       expect(event).toContain('DrizzleQueryError');
       expect(event).toContain('INTERNAL_ERROR');
       expect(event).toContain('2b59ea1c-40f5-4f30-a84b-b60ae6ec31a3');
+      if (kind === 'job')
+        expect(event).toContain(
+          '"operationKeyHash":"8ba4d7e42a83952266bdd348b718799a396969747d178257091da4ead519a655"',
+        );
+      else expect(event).not.toContain('operationKeyHash');
       expect(event).toContain('platform/logging/error-reporter.spec.ts:');
     },
   );

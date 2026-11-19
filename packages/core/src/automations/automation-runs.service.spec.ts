@@ -12,6 +12,8 @@ import type {
 import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import type { ErrorReporter } from '../platform/logging/error-reporter';
+import { runWithJobContext } from '../platform/logging/job-context';
 import type { SegmentsService } from '../segments/segments.service';
 import type { SendDecision, SendPolicyService } from '../sending/send-policy.service';
 import type { StoresService } from '../stores/stores.service';
@@ -120,6 +122,7 @@ const send: AutomationStep = {
 const optOutUrl = 'https://links.dakly.test/s/Ab3dE6gH';
 
 describe('AutomationRunsService', () => {
+  const reportJob = vi.fn();
   let repository: FakeRunsRepository;
   let tags: string[];
   let segmentMembers: string[];
@@ -159,6 +162,7 @@ describe('AutomationRunsService', () => {
   }
 
   beforeEach(() => {
+    reportJob.mockClear();
     vi.spyOn(env, 'loadEnv').mockReturnValue({
       CODE_HASH_KEY: Buffer.alloc(32, 5).toString('base64'),
     } as env.Env);
@@ -282,6 +286,7 @@ describe('AutomationRunsService', () => {
       messaging as unknown as MessagingService,
       links as unknown as LinksService,
       wallets as unknown as WalletService,
+      { reportJob } as unknown as ErrorReporter,
       new AutomationConditionsService(
         segments as unknown as SegmentsService,
         sendPolicy as unknown as SendPolicyService,
@@ -595,8 +600,13 @@ describe('AutomationRunsService', () => {
 
     it('fails the run when the provider gives no answer', async () => {
       providerError = new Error('connection reset');
-      await start(send);
+      await runWithJobContext(() => start(send), 'workflow-job-lease-1');
 
+      expect(reportJob).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ errorCode: 'INTERNAL_ERROR' }),
+        'workflow-job-lease-1',
+        expect.stringMatching(/^[a-f0-9]{64}$/u),
+      );
       expect(repository.run).toMatchObject({ status: 'failed', currentStepKey: 'first' });
       expect(repository.run.lastError).toContain('The SMS provider did not answer');
       expect(repository.run.lastError).toContain('credits stay reserved');

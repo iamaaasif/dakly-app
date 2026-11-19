@@ -6,10 +6,11 @@ import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ContactsService } from '../contacts/contacts.service';
 import { LinksService, TRACKED_LINK_CODE_LENGTH } from '../links/links.service';
-import { MessagingService, type PreparedSms } from '../messaging/messaging.service';
+import { MessagingService } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import { ErrorReporter } from '../platform/logging/error-reporter';
 import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
@@ -22,7 +23,12 @@ import {
   type RunClaim,
 } from './automation-runs.repository';
 import {
-  type CreditSettlement,
+  deliverAutomationSms,
+  prepareAutomationSms,
+  settleAutomationCredits,
+  SMS_NO_ANSWER,
+} from './automation-sms-delivery';
+import {
   type Delivery,
   endWithUnknownOutcome,
   exited,
@@ -54,8 +60,6 @@ const CLAIMS_PER_STORE = 100;
 const WORKFLOW_LEASE_MS = 5 * MINUTE_MS;
 const system = { kind: 'system' } as const;
 
-const NO_ANSWER = 'The SMS provider did not answer';
-
 @Injectable()
 export class AutomationRunsService {
   constructor(
@@ -67,6 +71,7 @@ export class AutomationRunsService {
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(WalletService) private readonly wallets: WalletService,
+    @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
   ) {}
 
@@ -105,7 +110,8 @@ export class AutomationRunsService {
         await this.repository.changeStep(storeId, claim.runId, claim.stepKey, result.stepChange);
       if (result.tagChange)
         await this.contacts.changeTag(storeId, run.contactId, result.tagChange, actor);
-      if (result.credits) await this.settleCredits(storeId, claim, result.credits);
+      if (result.credits)
+        await settleAutomationCredits(this.wallets, storeId, claim, result.credits);
       return true;
     });
     return isMoved && result.next ? { runId: claim.runId, ...result.next } : undefined;
@@ -123,7 +129,7 @@ export class AutomationRunsService {
       (await this.repository.hasSendingStep(storeId, claim.runId, claim.stepKey));
     const held = holdOrEnd(run, now);
     // A send handed to the provider by an earlier claim is not sent again; its run ends.
-    if (isSending) return endWithUnknownOutcome(held ?? failed(NO_ANSWER, now));
+    if (isSending) return endWithUnknownOutcome(held ?? failed(SMS_NO_ANSWER, now));
     if (held) return held;
     const facts: RunFacts = {
       storeId,
@@ -192,20 +198,20 @@ export class AutomationRunsService {
   // transaction that also renews the claim, so the frequency cap counts this send before another
   // check for the contact can run.
   private async startSend(claim: RunClaim, step: SendStep, facts: RunFacts) {
-    const { storeId, contactId, preparedSender } = facts;
-    const checkedAt = await this.repository.schedulerTime(storeId);
+    const checkedAt = await this.repository.schedulerTime(facts.storeId);
     const prepared =
       step.channels.includes('sms') && !isLateSend(facts.wakeAt, checkedAt)
-        ? await this.messaging
-            .prepareSms(storeId, contactId, preparedSender)
-            .catch((error: unknown) => {
-              if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return undefined;
-              throw error;
-            })
+        ? await prepareAutomationSms(this.messaging, facts)
         : undefined;
     const planned = await this.authorizeFirstSend(claim, step, facts, prepared?.to ?? null);
     if ('stop' in planned) return planned.stop;
-    if (prepared) return this.deliver(facts, step, prepared, planned);
+    if (prepared)
+      return deliverAutomationSms(
+        { messaging: this.messaging, reporter: this.reporter, repository: this.repository },
+        { storeId: facts.storeId, contactId: facts.contactId, step },
+        prepared,
+        planned,
+      );
   }
 
   private async authorizeFirstSend(
@@ -328,60 +334,5 @@ export class AutomationRunsService {
       optOutUrl: optOut?.url,
     });
     return messageBody(step, optOut?.url);
-  }
-
-  private async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
-    const key = operationKey(claim);
-    // Every send row was written with its reservation, in the same transaction.
-    const reservationId = (await this.wallets.findByIdempotencyKey(storeId, key))!.entryId;
-    if (credits.settle === 'charge')
-      await this.wallets.charge(storeId, {
-        reservationId,
-        quantity: credits.quantity,
-        idempotencyKey: `${key}:charge`,
-        actor: system,
-      });
-    else
-      await this.wallets.release(storeId, {
-        reservationId,
-        idempotencyKey: `${key}:release`,
-        actor: system,
-      });
-  }
-
-  private async deliver(
-    { storeId, contactId }: Pick<RunFacts, 'storeId' | 'contactId'>,
-    step: SendStep,
-    prepared: PreparedSms,
-    authorized: { claim: RunClaim; at: Date; body: string },
-  ): Promise<StepResult | undefined> {
-    const message = {
-      channel: 'sms',
-      contactId,
-      body: authorized.body,
-      operationKey: operationKey(authorized.claim),
-    } as const;
-    const attempt = await this.messaging.send(storeId, message, prepared).then(
-      (receipt) => ({ receipt }),
-      (error: unknown) => ({ error }),
-    );
-    const now = await this.repository.schedulerTime(storeId);
-    if ('receipt' in attempt) {
-      const { providerMessageId, credits } = attempt.receipt;
-      return {
-        ...goOn(step.next, now),
-        claim: authorized.claim,
-        stepChange: { outcome: 'sent', providerMessageId, sentAt: authorized.at },
-        credits: { settle: 'charge', quantity: credits },
-      };
-    }
-    if (attempt.error instanceof AppError && attempt.error.code === 'SMS_SEND_REFUSED')
-      return {
-        ...failed(attempt.error.message, now),
-        claim: authorized.claim,
-        stepChange: { outcome: 'failed' },
-        credits: { settle: 'release' },
-      };
-    return endWithUnknownOutcome({ ...failed(NO_ANSWER, now), claim: authorized.claim });
   }
 }
