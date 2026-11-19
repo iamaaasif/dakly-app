@@ -3,13 +3,14 @@ import { Inject } from '@nestjs/common';
 import { HandlesEvent } from '../../platform/outbox/handles-event';
 import type { JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
-import { AutomationEntryService, automationTagEvent } from '../automation-entry.service';
+import { automationTagEvent } from '../automation-entry.service';
+import { AutomationTriggerQueue } from '../automation-trigger-queue.service';
 
-@HandlesEvent('contact.tag_added', { queue: QUEUES.workflow })
+@HandlesEvent('contact.tag_added', { queue: QUEUES.transactional })
 export class StartAutomationOnTagAdded implements JobHandler {
-  constructor(@Inject(AutomationEntryService) private readonly entries: AutomationEntryService) {}
+  constructor(@Inject(AutomationTriggerQueue) private readonly triggers: AutomationTriggerQueue) {}
 
   async handle(data: unknown) {
-    await this.entries.enqueue(automationTagEvent.parse(data));
+    await this.triggers.enqueue(automationTagEvent.parse(data));
   }
 }
