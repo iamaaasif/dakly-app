@@ -43,6 +43,10 @@ describe('Analytics reports', () => {
       current: { from: '2026-11-02', through: '2026-11-08' },
       previous: { from: '2026-10-26', through: '2026-11-01' },
     });
+    expect(await reports.periods(fixture.a, 365)).toMatchObject({
+      current: { from: '2025-11-09', through: '2026-11-08' },
+      previous: { from: '2024-11-09', through: '2025-11-08' },
+    });
   });
 
   it('uses stored order totals and fills dates without a summary', async () => {

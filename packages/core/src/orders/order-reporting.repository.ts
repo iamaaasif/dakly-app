@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 
 import { orders } from '@dakly/db/schema/orders';
 
@@ -29,42 +29,6 @@ export class OrderReportingRepository {
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
     );
     return order;
-  }
-
-  async reportBuyerIds(
-    storeId: string,
-    after: string | null,
-    { timeZone, since, limit }: { timeZone: string; since: string; limit: number },
-  ) {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .selectDistinct({ id: sql<string>`${orders.buyerContactId}` })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.storeId, storeId),
-            isNotNull(orders.buyerContactId),
-            after ? gt(orders.buyerContactId, after) : undefined,
-            ne(orders.stage, 'cancelled'),
-            retainedOrders(since, timeZone),
-          ),
-        )
-        .orderBy(asc(orders.buyerContactId))
-        .limit(limit),
-    );
-    return rows.map(({ id }) => id);
-  }
-
-  async oldestRetainedOrderDay(storeId: string, timeZone: string, since: string) {
-    const [order] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text` })
-        .from(orders)
-        .where(and(eq(orders.storeId, storeId), retainedOrders(since, timeZone)))
-        .orderBy(asc(orders.createdAt))
-        .limit(1),
-    );
-    return order?.day;
   }
 
   async buyerActivityDays(storeId: string, contactId: string, timeZone: string, since: string) {
@@ -162,9 +126,4 @@ export class OrderReportingRepository {
       lastOrderAt: totals.lastOrderAt === null ? null : new Date(totals.lastOrderAt),
     };
   }
-}
-
-function retainedOrders(since: string, timeZone: string) {
-  return sql`${orders.createdAt} >= (${since}::date - 1)::timestamp at time zone 'UTC'
-    and (${orders.createdAt} at time zone ${timeZone})::date >= ${since}::date`;
 }

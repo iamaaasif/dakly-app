@@ -1,13 +1,9 @@
-import { createHash } from 'node:crypto';
-
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 import { z } from 'zod';
 
 import { Clock } from '../platform/clock';
-import { StoreTransaction } from '../platform/database/store-transaction';
-import { OutboxService } from '../platform/outbox/outbox.service';
 import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS, JOB_POLL_INTERVAL_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
@@ -41,8 +37,6 @@ export class ContactStatsSweepService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(ContactStatsService) private readonly stats: ContactStatsService,
     @Inject(Clock) private readonly clock: Clock,
-    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
-    @Inject(OutboxService) private readonly outbox: OutboxService,
     @InjectQueue(QUEUES.bulk) private readonly bulk: Queue,
   ) {}
 
@@ -76,19 +70,6 @@ export class ContactStatsSweepService {
       if (await this.bulk.getJob(repairJobId(firstRankPage))) return;
       const cutoff = await this.stats.bestSpendCutoff(storeId);
       await this.bulk.addBulk([repairJob({ ...firstRankPage, ranking: { kind: 'rank', cutoff } })]);
-    } else {
-      const now = this.clock.now();
-      if (now.toISOString().slice(0, 10) !== day) return;
-      await this.transaction.run(storeId, async () => {
-        const timeZone = await this.stores.timeZone(storeId);
-        await this.outbox.publish({
-          id: completionId(storeId, day),
-          type: 'contact_stats.repaired',
-          storeId,
-          occurredAt: now.toISOString(),
-          payload: { day: new Intl.DateTimeFormat('en-CA', { timeZone }).format(now) },
-        });
-      });
     }
   }
 }
@@ -109,13 +90,4 @@ function repairJob(data: Repair) {
 
 function repairJobId(data: Repair): string {
   return `${RECONCILE_CONTACT_STATS}-${data.storeId}-${data.day}-${data.ranking.kind}-${data.after ?? 'start'}`;
-}
-
-function completionId(storeId: string, day: string) {
-  // A terminal page retry can cross local midnight after committing the first event.
-  const timestamp = Date.parse(day).toString(16).padStart(12, '0');
-  const hash = createHash('sha256')
-    .update(`contact_stats.repaired:${storeId}:${day}`)
-    .digest('hex');
-  return `${timestamp.slice(0, 8)}-${timestamp.slice(8)}-7${hash.slice(0, 3)}-8${hash.slice(3, 6)}-${hash.slice(6, 18)}`;
 }
