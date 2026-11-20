@@ -13,7 +13,6 @@ import { buildEntries, type CalendarEntry } from '../post-calendar';
 import { useMyPostsParams } from '../use-my-posts-params';
 import { CalendarPanel } from './calendar-panel';
 import { HubDialogs, type HubDialog } from './hub-dialogs';
-import { PostDetailsDialog } from './post-details-dialog';
 import { ReconnectBanner } from './reconnect-banner';
 import { SocialHubLoading } from './social-hub-loading';
 import { useSessionContext } from '@/lib/session-context';
@@ -48,7 +47,6 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
   const { data: session } = useSessionContext();
   const url = useMyPostsParams(accounts);
   const [dialog, setDialog] = useState<HubDialog>(null);
-  const [open, setOpen] = useState<CalendarEntry | null>(null);
   const store = session?.currentStore;
   const canEdit = Boolean(store?.canEditSocial);
   const all = buildEntries(posts, accounts, null);
@@ -67,8 +65,7 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
           setDialog({ type: 'connect', kind: account.kind, reconnecting: account })
         }
       />
-      <MyPostsBody accounts={accounts} posts={posts} url={url} canEdit={canEdit} onOpen={setOpen} />
-      {open && <PostDetailsDialog entry={open} accounts={accounts} onClose={() => setOpen(null)} />}
+      <MyPostsBody accounts={accounts} posts={posts} url={url} canEdit={canEdit} />
       <HubDialogs
         dialog={dialog}
         accounts={accounts}
@@ -148,10 +145,9 @@ function ConnectFirst() {
 type BodyProps = MyPostsProps & {
   url: ReturnType<typeof useMyPostsParams>;
   canEdit: boolean;
-  onOpen: (entry: CalendarEntry) => void;
 };
 
-function MyPostsBody({ accounts, posts, url, canEdit, onOpen }: BodyProps) {
+function MyPostsBody({ accounts, posts, url, canEdit }: BodyProps) {
   if (accounts.length === 0) return <ConnectFirst />;
   const all = buildEntries(posts, accounts, null);
   const shown = buildEntries(posts, accounts, url.accountId);
@@ -162,7 +158,6 @@ function MyPostsBody({ accounts, posts, url, canEdit, onOpen }: BodyProps) {
       entries={shown}
       hasPosts={all.length > 0}
       canEdit={canEdit}
-      onOpen={onOpen}
     />
   );
 }

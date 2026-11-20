@@ -205,13 +205,6 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
     await page.getByRole('button', { name: 'List', exact: true }).click();
     await capture(page, 'list');
 
-    await page.getByRole('button', { name: 'Month', exact: true }).click();
-    await page.getByRole('button', { name: /Weekend sale starts tonight/ }).click();
-    const details = page.getByRole('dialog');
-    await expect(details.getByText('Urban Trend')).toBeVisible();
-    await capture(page, 'post-details');
-    await details.getByRole('button', { name: 'Close', exact: true }).click();
-
     // A phone starts on the list, because the month grid is too small to read.
     await page.setViewportSize({ width: 360, height: 800 });
     await page.goto('/social/posts');

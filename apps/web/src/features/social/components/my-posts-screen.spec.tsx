@@ -115,9 +115,9 @@ it('tells how many scheduled Instagram posts are blocked by the expired account'
   expect(within(banner).getByText(/1 scheduled Instagram post won’t publish/)).toBeTruthy();
 });
 
-it('lists the month by day with each post’s state, and filters by account in the URL', async () => {
+it('lists the month by day with each post’s state, and moves to the next month in the URL', async () => {
   show([post('a', 'Weekend sale', {})]);
-  const row = await screen.findByRole('button', { name: /Weekend sale/ });
+  const row = (await screen.findByText('Weekend sale')).closest('li')!;
   expect(row.textContent).toContain('Scheduled');
   expect(row.textContent).toContain('12:30 pm');
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));

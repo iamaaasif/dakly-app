@@ -12,10 +12,9 @@ type CalendarGridProps = {
   // Days outside this month are dimmed; null for a week view.
   month: string | null;
   tall?: boolean;
-  onOpen: (entry: CalendarEntry) => void;
 };
 
-export function CalendarGrid({ weeks, entries, today, month, tall, onOpen }: CalendarGridProps) {
+export function CalendarGrid({ weeks, entries, today, month, tall }: CalendarGridProps) {
   const days = entriesByDay(entries);
   return (
     <div role="grid" aria-label="Calendar" className="border-t border-border">
@@ -53,7 +52,7 @@ export function CalendarGrid({ weeks, entries, today, month, tall, onOpen }: Cal
                   <time dateTime={day}>{Number(day.slice(8))}</time>
                 </p>
                 {(days.get(day) ?? []).map((entry) => (
-                  <PostChip key={entry.post.id} entry={entry} onOpen={onOpen} />
+                  <PostChip key={entry.post.id} entry={entry} />
                 ))}
               </div>
             );
