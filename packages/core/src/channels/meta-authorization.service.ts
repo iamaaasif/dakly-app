@@ -26,8 +26,8 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { TeamService } from '../team/team.service';
 import { ChannelConnectionsRepository } from './channel-connections.repository';
 import { META_AUTHORIZATION_ERRORS } from './meta-authorization.errors';
-
-export const META_CHANNEL_DRIVER = Symbol('META_CHANNEL_DRIVER');
+import { META_CHANNEL_DRIVER } from './meta-channel-driver';
+import { MetaPageSubscriptionsService } from './meta-page-subscriptions.service';
 
 const loginLifetimeSeconds = 10 * 60;
 
@@ -59,6 +59,8 @@ export class MetaAuthorizationService {
     private readonly connections: ChannelConnectionsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(MetaPageSubscriptionsService)
+    private readonly subscriptionRecords: MetaPageSubscriptionsService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -134,10 +136,7 @@ export class MetaAuthorizationService {
       if (await this.connections.hasForeignOwner(storeId, selected))
         throw loginError('META_ACCOUNT_ALREADY_CONNECTED');
       const subscriptions = new Map(selected.map(({ page }) => [page.id, page.accessToken]));
-      for (const [id, token] of subscriptions)
-        await this.callMeta('meta_subscribe', 'Meta Page subscription measured', () =>
-          driver.subscribePage(id, token),
-        );
+      await this.subscribePages(storeId, driver, subscriptions);
       const ids = await this.transaction.runLocked(storeId, async () => {
         const now = this.clock.now();
         const ids: string[] = [];
@@ -166,6 +165,8 @@ export class MetaAuthorizationService {
               payload: { channelConnectionId: saved.id },
             });
         }
+        // The connections now back these subscriptions, so the daily reconciliation must keep them.
+        await this.subscriptionRecords.forgetPages(storeId, [...subscriptions.keys()]);
         return ids;
       });
       discard = true;
@@ -176,6 +177,19 @@ export class MetaAuthorizationService {
     } finally {
       // Delete both together so a cache failure cannot unlock a consumed grant.
       await cache.del(...(discard ? [key, claim] : [claim]));
+    }
+  }
+
+  private async subscribePages(
+    storeId: string,
+    driver: MetaAuthorizationDriver,
+    subscriptions: Map<string, string>,
+  ) {
+    for (const [id, token] of subscriptions) {
+      await this.subscriptionRecords.recordPending(storeId, id, token);
+      await this.callMeta('meta_subscribe', 'Meta Page subscription measured', () =>
+        driver.subscribePage(id, token),
+      );
     }
   }
 

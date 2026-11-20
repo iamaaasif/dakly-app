@@ -68,6 +68,26 @@ export const channelConnections = pgTable(
   ],
 );
 
+// A Page Dakly subscribed to at Meta that no active connection backs yet or any more. It holds the
+// Page token so the daily reconciliation can unsubscribe the Page after a crash or a disconnect.
+export const metaPageSubscriptions = pgTable(
+  'meta_page_subscriptions',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    pageExternalId: text('page_external_id').notNull(),
+    accessTokenCiphertext: bytea('access_token_ciphertext').notNull(),
+    keyVersion: smallint('key_version').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('meta_page_subscriptions_store_page_key').on(table.storeId, table.pageExternalId),
+    index('meta_page_subscriptions_created_at_idx').on(table.createdAt),
+  ],
+);
+
 // A shop's request for its own SMS sender name. NID and trade licence files are staff-only and
 // deleted once the request is decided.
 export const smsSenderIds = pgTable(

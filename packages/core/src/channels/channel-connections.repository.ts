@@ -255,9 +255,25 @@ export class ChannelConnectionsRepository {
     );
   }
 
-  async disconnect(storeId: string, id: string, now: Date): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
+  async disconnect(storeId: string, id: string, now: Date) {
+    return this.database.forStore(storeId, async (tx) => {
+      const where = and(
+        eq(channelConnections.storeId, storeId),
+        eq(channelConnections.id, id),
+        ne(channelConnections.status, 'disconnected'),
+      );
+      const [previous] = await tx
+        .select({
+          kind: channelConnections.kind,
+          externalAccountId: channelConnections.externalAccountId,
+          ciphertext: channelConnections.accessTokenCiphertext,
+          keyVersion: channelConnections.keyVersion,
+        })
+        .from(channelConnections)
+        .where(where)
+        .for('update');
+      if (!previous) return undefined;
+      await tx
         .update(channelConnections)
         .set({
           status: 'disconnected',
@@ -267,15 +283,8 @@ export class ChannelConnectionsRepository {
           disconnectedAt: now,
           updatedAt: now,
         })
-        .where(
-          and(
-            eq(channelConnections.storeId, storeId),
-            eq(channelConnections.id, id),
-            ne(channelConnections.status, 'disconnected'),
-          ),
-        )
-        .returning({ id: channelConnections.id }),
-    );
-    return rows.length > 0;
+        .where(where);
+      return previous;
+    });
   }
 }

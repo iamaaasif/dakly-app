@@ -498,6 +498,13 @@
       "when": 1795178344384,
       "tag": "0070_purge_account_events_by_app",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1795179500022,
+      "tag": "0071_meta_page_subscriptions",
+      "breakpoints": true
     }
   ]
 }
