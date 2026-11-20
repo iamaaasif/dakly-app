@@ -4,6 +4,7 @@ import {
   MetaRequestError,
   type ChannelCredentials,
   type ChannelDriver,
+  type MediaDownload,
   type MetaAuthorizationDriver,
   type MetaPage,
   type MetaTokenHealthDriver,
@@ -13,6 +14,9 @@ import {
 const graph = 'https://graph.facebook.com/v27.0/';
 const login = 'https://www.facebook.com/v27.0/dialog/oauth';
 const requestTimeoutMs = 5000;
+const mediaTimeoutMs = 20_000;
+// The webhook is signed, but the token only goes to Meta's own media hosts.
+const mediaHostSuffixes = ['.fbcdn.net', '.cdninstagram.com', '.fbsbx.com'];
 const pageManagementTasks = ['MANAGE', 'PROFILE_PLUS_MANAGE', 'PROFILE_PLUS_FULL_CONTROL'];
 
 const accessTokenSchema = z.object({ access_token: z.string().min(1) });
@@ -77,6 +81,52 @@ function permissionDenied(code: number): boolean {
   return code === 10 || (code >= 200 && code <= 299);
 }
 
+function isMetaMediaUrl(url: string): boolean {
+  const { protocol, hostname } = new URL(url);
+  return protocol === 'https:' && mediaHostSuffixes.some((suffix) => hostname.endsWith(suffix));
+}
+
+// Meta's signed media links carry their expiry as hex Unix seconds in the `oe` parameter.
+function linkExpired(url: string): boolean {
+  const expiry = Number.parseInt(new URL(url).searchParams.get('oe') ?? '', 16);
+  return Number.isFinite(expiry) && expiry * 1000 < Date.now();
+}
+
+// Returns a final answer for a failed fetch, throws for an uncertain one, or nothing on success.
+function failedMediaResult(response: Response, url: string): MediaDownload | undefined {
+  const { status } = response;
+  // The token must never follow a redirect, so a redirect is a final answer.
+  if (status >= 300 && status < 400) throw new MetaRequestError('rejected');
+  // A CDN answer says nothing certain about the Page token, so it never marks it rejected.
+  if (status === 401) throw new MetaRequestError('rejected');
+  if ([400, 404, 410].includes(status)) return { kind: 'expired' };
+  // A 403 is only an expired link when the link's own expiry has passed; otherwise it may pass
+  // on a retry, so it counts as a fetch failure.
+  if (status === 403 && linkExpired(url)) return { kind: 'expired' };
+  if (!response.ok) throw new MetaRequestError('unavailable');
+  return undefined;
+}
+
+function mediaType(response: Response): string {
+  return (response.headers.get('content-type') ?? '').split(';')[0]?.trim() ?? '';
+}
+
+// Content-Length can be missing or wrong, so the body is counted as it arrives.
+async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array | null> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of response.body ?? []) {
+      total += chunk.byteLength;
+      if (total > maxBytes) return null;
+      chunks.push(chunk);
+    }
+  } catch {
+    throw new MetaRequestError('unavailable');
+  }
+  return Buffer.concat(chunks);
+}
+
 type MetaApp = {
   appId: string;
   appSecret: string;
@@ -85,7 +135,10 @@ type MetaApp = {
 };
 
 export class MetaGraphChannelDriver
-  implements MetaAuthorizationDriver, MetaTokenHealthDriver, Pick<ChannelDriver, 'send'>
+  implements
+    MetaAuthorizationDriver,
+    MetaTokenHealthDriver,
+    Pick<ChannelDriver, 'send' | 'downloadMedia'>
 {
   constructor(private readonly app: MetaApp) {}
 
@@ -196,6 +249,27 @@ export class MetaGraphChannelDriver
       { method: 'POST', accessToken, signal: AbortSignal.timeout(requestTimeoutMs), body },
     );
     return { externalMessageId: response.message_id };
+  }
+
+  async downloadMedia(accessToken: string, url: string, maxBytes: number): Promise<MediaDownload> {
+    if (!isMetaMediaUrl(url)) throw new MetaRequestError('rejected');
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: AbortSignal.timeout(mediaTimeoutMs),
+        redirect: 'manual',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+    } catch {
+      throw new MetaRequestError('unavailable');
+    }
+    const failure = failedMediaResult(response, url);
+    if (failure) return failure;
+    const declared = Number(response.headers.get('content-length'));
+    if (declared > maxBytes) return { kind: 'too_large' };
+    const bytes = await readCapped(response, maxBytes);
+    if (!bytes) return { kind: 'too_large' };
+    return { kind: 'downloaded', bytes, contentType: mediaType(response) };
   }
 
   private async request<T>(

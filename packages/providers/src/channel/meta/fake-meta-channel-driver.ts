@@ -4,6 +4,7 @@ import {
   MetaRequestError,
   type ChannelCredentials,
   type ChannelDriver,
+  type MediaDownload,
   type MetaAuthorizationDriver,
   type MetaPage,
   type MetaTokenHealthDriver,
@@ -28,7 +29,10 @@ const pages: MetaPage[] = [
 ];
 
 export class FakeMetaChannelDriver
-  implements MetaAuthorizationDriver, MetaTokenHealthDriver, Pick<ChannelDriver, 'send'>
+  implements
+    MetaAuthorizationDriver,
+    MetaTokenHealthDriver,
+    Pick<ChannelDriver, 'send' | 'downloadMedia'>
 {
   constructor(private readonly redirectUri: string) {}
 
@@ -72,5 +76,16 @@ export class FakeMetaChannelDriver
     const reference = JSON.stringify([message.channel, accountExternalId, message.operationKey]);
     const externalMessageId = `fake-${createHash('sha256').update(reference).digest('hex')}`;
     return { externalMessageId };
+  }
+
+  // Development has no Meta CDN: a link containing "expired" behaves like an old one.
+  async downloadMedia(accessToken: string, url: string, maxBytes: number): Promise<MediaDownload> {
+    if (!pages.some((page) => page.accessToken === accessToken))
+      throw new MetaRequestError('auth_error');
+    if (url.includes('expired')) return { kind: 'expired' };
+    const bytes = new TextEncoder().encode('fake media');
+    return bytes.byteLength > maxBytes
+      ? { kind: 'too_large' }
+      : { kind: 'downloaded', bytes, contentType: 'image/jpeg' };
   }
 }
