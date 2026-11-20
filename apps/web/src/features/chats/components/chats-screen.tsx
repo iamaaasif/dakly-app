@@ -6,14 +6,14 @@ import { ChatList } from './chat-list';
 
 export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
   return (
-    <main className="mx-auto max-w-[120rem] space-y-4 p-4 md:p-8">
-      <header>
+    <main className="flex h-[calc(100dvh-9.25rem)] min-h-[32rem] flex-col gap-4 p-4 md:h-[calc(100dvh-4.25rem)] md:p-8">
+      <header className="shrink-0">
         <h1 className="text-xl font-bold">Chats</h1>
         <p className="text-base text-text-muted">
           Messenger, WhatsApp and Instagram in one place. Turn each chat into an order.
         </p>
       </header>
-      <div className="grid min-h-[36rem] overflow-hidden rounded-lg border border-border bg-surface lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-surface lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
         <ChatList query={query} />
         <section
           aria-label="Conversation"

@@ -15,7 +15,10 @@ type ChatTabsProps = { query: ChatScreenQuery; counts: ConversationCountsRespons
 
 export function ChatTabs({ query, counts }: ChatTabsProps) {
   return (
-    <nav aria-label="Chat tabs" className="flex gap-1 overflow-x-auto border-b border-border px-2">
+    <nav
+      aria-label="Chat tabs"
+      className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2"
+    >
       {chatTabs.map((tab) => (
         <Link
           key={tab}

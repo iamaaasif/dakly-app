@@ -12,12 +12,14 @@ import { ChatTabs } from './chat-tabs';
 export function ChatList({ query }: { query: ChatScreenQuery }) {
   const counts = useConversationCounts();
   return (
-    <section aria-label="Chat list" className="flex min-w-0 flex-col">
+    <section aria-label="Chat list" className="flex min-h-0 min-w-0 flex-col">
       <ChatTabs query={query} counts={counts.data} />
-      <div className="border-b border-border p-3">
+      <div className="shrink-0 border-b border-border p-3">
         <ChatChannelFilter query={query} />
       </div>
-      <ChatRows query={query} />
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <ChatRows query={query} />
+      </div>
     </section>
   );
 }
