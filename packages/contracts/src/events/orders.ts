@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { orderStages } from '../orders';
+import { attributionSourceTypes, orderStages } from '../orders';
 
 export const orderStageChangedEventSchema = z.strictObject({
   type: z.literal('order.stage_changed'),
@@ -36,6 +36,24 @@ export const orderEditedEventSchema = z.strictObject({
 
 export const orderCodCollectedEventSchema = z.strictObject({
   type: z.literal('order.cod_collected'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ orderId: z.uuid() }),
+});
+
+export const attributionCreatedEventSchema = z.strictObject({
+  type: z.literal('attribution.created'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({
+    orderId: z.uuid(),
+    sourceType: z.enum(attributionSourceTypes),
+    sourceId: z.uuid(),
+  }),
+});
+
+export const attributionRemovedEventSchema = z.strictObject({
+  type: z.literal('attribution.removed'),
   storeId: z.uuid(),
   occurredAt: z.iso.datetime(),
   payload: z.strictObject({ orderId: z.uuid() }),

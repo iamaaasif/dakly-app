@@ -116,3 +116,16 @@ export type StoreSettingsResponse = StoreResponse & {
   sending: SendingSettings;
   stock: StockSettings;
 };
+
+export const attributionWindowSchema = z.union([z.literal(1), z.literal(3), z.literal(7)]);
+export type AttributionWindow = z.infer<typeof attributionWindowSchema>;
+
+export const changeAttributionWindowSchema = z.strictObject({
+  windowDays: attributionWindowSchema,
+});
+export type ChangeAttributionWindowInput = z.infer<typeof changeAttributionWindowSchema>;
+export type AttributionSettingsResponse = {
+  windowDays: AttributionWindow;
+  rebuilding: boolean;
+  processedOrders: number | null;
+};

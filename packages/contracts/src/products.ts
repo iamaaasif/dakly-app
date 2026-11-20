@@ -135,7 +135,7 @@ export const productFormSchema = z
       .transform((values) => values.filter((value) => value.trim()))
       .pipe(createProductSchema.shape.aliases.unwrap())
       .default([]),
-    pricePoisha: takaInput.default(0),
+    pricePoisha: z.union([z.literal('').transform(() => 0), takaInput]).default(0),
     compareAtPricePoisha: optionalTakaInput.default(null),
     variants: z
       .array(
@@ -208,6 +208,8 @@ export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
   updatedAt: string;
 };
 export type ProductListResponse = { items: ProductResponse[]; nextCursor: string | null };
+
+export type ProductCategoriesResponse = { items: string[] };
 
 export type StockMovementKind = (typeof stockMovementKinds)[number];
 export const MAX_STOCK_QUANTITY = 2147483647;

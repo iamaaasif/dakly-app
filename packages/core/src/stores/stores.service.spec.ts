@@ -5,6 +5,7 @@ import type { UsersService } from '../auth/users.service';
 import type { BillingService } from '../billing/billing.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
+import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { SessionsService } from '../sessions/sessions.service';
 import type { TeamService } from '../team/team.service';
 import type { MaintenanceStoresRepository } from './maintenance-stores.repository';
@@ -26,6 +27,7 @@ function serviceWith(sending: unknown) {
     unused as BillingService,
     unused as SessionsService,
     unused as AuditService,
+    unused as OutboxService,
   );
 }
 

@@ -65,7 +65,7 @@ Answer two questions for the owner: "How much did my marketing earn?" and "What 
 7. If the owner changes the window, attribution is recalculated for the last 365 days in a background job (under 10 minutes for 100,000 orders) and a banner says "Recalculating with the new 3-day window".
 8. Test messages, messages to team members and messages that failed to send never create touches.
 
-Edge cases: an order placed by phone with a different number than the one messaged is not linked (no fuzzy matching in release 1). Two touches in the same minute: the tapped one wins over the read one; if still tied, the campaign wins over the automation. A chat started from a Click-to-Messenger ad is not a Dakly touch (ads are out of scope) unless the customer taps a Dakly link.
+Edge cases: an order placed by phone with a different number than the one messaged is not linked (no fuzzy matching in release 1). For message receipts in the same minute, a tap wins over a read. Two taps with the same exact time are ordered by visit ID. If two other touches are still tied, a campaign wins over a workflow. A chat started from a Click-to-Messenger ad is not a Dakly touch (ads are out of scope) unless the customer taps a Dakly link.
 
 #### Best cards
 
@@ -115,7 +115,7 @@ CSV per tab, UTF-8 with BOM so Excel shows Bangla correctly. File name `dakly-an
 
 ### Permissions
 
-Uses the Analytics area from Team and permissions (tab 1). Owner and Admin: everything, including the attribution window. Marketer (View by default): all tabs except the Sales tab, which needs Orders or Shop sales access; cannot change the window. Support agent and Shop counter staff: no access by default. "Download customer lists" is not needed to download Analytics CSVs, because they contain no phone numbers.
+Uses the Analytics area from Team and permissions (tab 1). Owner: all tabs and the attribution window setting. Admin: all tabs and the current window. Marketer (View by default): all tabs except the Sales tab, which needs Orders or Shop sales access; cannot change the window. Support agent and Shop counter staff: no access by default. "Download customer lists" is not needed to download Analytics CSVs, because they contain no phone numbers.
 
 ### Events
 
@@ -202,7 +202,7 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 ### How it works
 
 1. Every number is defined in the [glossary](../product/glossary.md). One report function per number lives in `analytics/` and is used by the dashboard, Ask Dakly AI and this page.
-2. Attribution: an order is attributed to the last message or post the contact tapped or read within the window (default 7 days). Cancelled and returned orders are removed.
+2. Attribution: an order is attributed to the last message or post the contact tapped or read within the window (default 7 days). Cancellation clears attribution. A returned order keeps its source and order count. A full return leaves zero revenue, and a partial return counts only kept items.
 3. Reports read summary tables. Incremental outbox processing updates affected store/day/metric rows within five minutes of the source commit, deduplicates event ids and restates original reporting days for late returns and corrections. A nightly reconciliation repairs missed or divergent summaries. Loading a shop with 50,000 customers in under 2 seconds remains a performance acceptance target, not a measured result of this schema PR.
 4. All periods use the store’s local calendar days. The default time zone is Asia/Dhaka.
 5. A 365-day attribution rebuild needs 372 days of eligible touch evidence (including the maximum 7-day lookback). Keep workflow step evidence through 372 days after run completion. Link taps are kept one row per tap, with exact times, for 13 months (D31); first/last tap counters on the link alone cannot rebuild attribution.
@@ -226,7 +226,19 @@ The nightly lifecycle snapshot stores the count for each of the six stages. Repo
 
 Nightly reconciliation repairs up to 31 order days or 100 buyers per job and prunes expired report rows in pages of 5,000. A contact deletion removes that buyer’s activity. The completed nightly contact stats repair schedules one bulk job per store and local day. The job counts the six lifecycle stages when it runs and replaces the snapshot for the event’s local date.
 
-Order subscribers run on the sync queue. Pending order changes for the same store and original day share a refresh. A change received during a refresh schedules another run. Replaying an event recomputes from current orders and leaves unchanged summary rows as they were. Order edits publish `order.edited` with the order ID. Marketing attribution waits for ANA-2. Full design: [docs/data](../data/README.md).
+Order subscribers run on the sync queue. Pending order changes for the same store and original day share a refresh. A change received during a refresh schedules another run. Replaying an event recomputes from current orders and leaves unchanged summary rows as they were. Order edits publish `order.edited` with the order ID. Marketing summaries wait for the ANA-2 report slice. Full design: [docs/data](../data/README.md).
+
+The attribution record is kept on the order. It stores the winning evidence ID and eligibility time, source, channel, item amount after discount in poisha, and the window used. Recording credit leaves the staff order editor revision unchanged. Cancelling an attributed order clears the record and publishes a removal event in the same transaction. The same order and evidence can be recorded again without adding another attribution event.
+
+- Enabled: exact campaign and workflow redirect taps tied to the buyer. The touch must follow a send accepted by the provider. For campaign SMS, the saved destination must also match the buyer's own number. Workflow SMS clears the destination hash after sending, so the tap identifies the buyer by contact ID. The latest tap wins, with the visit ID breaking exact ties. CAMP-3 and workflow senders currently create opt-out links. They need to start wrapping message URLs before their messages produce redirect taps.
+- Campaign and workflow delivery and read evidence waits on CAMP-3 results and ACC-14 delivery receipts.
+- Post taps and chat referrals wait on buyer linkage in SOC-3 and CHAT-1.
+
+The order-created subscriber uses the buyer's contact. For self-delivery the order phone must match the buyer profile. For gifts it uses the buyer's own phone and leaves the recipient's phone out of attribution. Erasure of identifying attribution fields waits on CUS-11. The initial worker reads committed evidence. The window rebuild can pick up an earlier tap that was still being recorded when the order was processed.
+
+The Owner changes the window through `PATCH /store/attribution` with 1, 3 or 7 days. A change records the old and new window in the audit log and starts a rebuild. `GET /store/attribution` shows the current window, whether the rebuild is running and how many orders it has processed. The banner and window control are part of ANA-3.
+
+The bulk worker covers the latest 365 shop-local dates up to the time of the change. It selects evidence before locking orders. It commits up to 25 orders and the cursor together. A job handles up to 2,000 orders before saving its next outbox event with the final cursor of that job. A newer window replaces the old job's progress. A retry resumes from the last committed cursor. If an order changes during selection, the worker rereads that page. A rebuild keeps the captured amount when it selects the same touch. Report refreshes are requested per page in the reports slice. It reads the exact tap records across the full lookback horizon. A local run rebuilt 100,000 synthetic orders in 4 minutes 10 seconds with a simulated one-second relay wait per job. Production timing also depends on live queue load.
 
 The current and previous periods use store-local calendar days. Sales returns the total and the amounts by order source. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
 

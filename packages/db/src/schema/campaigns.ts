@@ -116,6 +116,7 @@ export const campaigns = pgTable(
       .default(sql`'{}'::uuid[]`),
     status: text('status', { enum: campaignStatuses }).notNull().default('draft'),
     pauseReason: text('pause_reason', { enum: campaignPauseReasons }),
+    balancePauseRevision: integer('balance_pause_revision'),
     isAiWritten: boolean('is_ai_written').notNull().default(false),
     scheduledFor: timestamptz('scheduled_for'),
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
@@ -170,8 +171,11 @@ export const campaigns = pgTable(
     index('campaigns_send_work_idx')
       .on(table.storeId, table.startedAt, table.id)
       .where(
-        sql`(${table.status} = 'sending' and ${table.shortLinkBase} is not null) or (${table.status} = 'cancelled' and ${table.settlementPendingAt} is not null)`,
+        sql`${table.status} = 'sending' or (${table.status} = 'cancelled' and ${table.settlementPendingAt} is not null)`,
       ),
+    index('campaigns_balance_paused_idx')
+      .on(table.storeId, table.id)
+      .where(sql`${table.status} = 'paused' and ${table.pauseReason} = 'balance'`),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),

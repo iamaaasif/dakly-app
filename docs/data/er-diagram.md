@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0059_snapshot.json`: **95 tables, 1279 columns, 389 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0062_snapshot.json`: **95 tables, 1283 columns, 391 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -993,7 +993,10 @@ erDiagram
         text attributed_source_type "NULL; text"
         uuid attributed_source_id "NULL; uuid"
         text attributed_channel "NULL; text"
+        uuid attributed_touch_id "NULL; uuid"
         timestamp_with_time_zone attributed_touch_at "NULL; timestamp with time zone"
+        bigint attributed_amount_poisha "NULL; bigint"
+        smallint attributed_window_days "NULL; smallint"
         uuid possible_duplicate_of_order_id FK "NULL; uuid"
         text note "NULL; text"
         text external_ref "NULL; text"
@@ -1385,6 +1388,7 @@ erDiagram
         uuid__ exclude_segment_ids "NOT NULL; uuid[]"
         text status "NOT NULL; text"
         text pause_reason "NULL; text"
+        integer balance_pause_revision "NULL; integer"
         boolean is_ai_written "NOT NULL; boolean"
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         uuid approved_by_user_id FK "NULL; uuid"

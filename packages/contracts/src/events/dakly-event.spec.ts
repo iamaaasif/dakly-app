@@ -172,6 +172,20 @@ const examples: DaklyEvent[] = [
     },
   },
   {
+    type: 'attribution.created',
+    storeId,
+    occurredAt,
+    payload: { orderId, sourceType: 'campaign', sourceId: trackedLink.sourceId },
+  },
+  { type: 'attribution.removed', storeId, occurredAt, payload: { orderId } },
+  { type: 'attribution.window_changed', storeId, occurredAt, payload: { rebuildId: orderId } },
+  {
+    type: 'attribution.rebuild_continued',
+    storeId,
+    occurredAt,
+    payload: { rebuildId: orderId, afterOrderId: orderId },
+  },
+  {
     type: 'wallet.credited',
     storeId,
     occurredAt,

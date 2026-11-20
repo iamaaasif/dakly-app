@@ -8,6 +8,7 @@ import { SWEEP_ANALYTICS } from '@dakly/core/analytics/jobs/sweep-analytics.job'
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SWEEP_AUTOMATION_BIRTHDAYS } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WAKE_DUE_RUNS } from '@dakly/core/automations/jobs/wake-due-runs.job';
+import { START_DUE_CAMPAIGNS } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { PURGE_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/purge-webhook-events.job';
 import { QUEUE_CHANNEL_TOKEN_CHECKS } from '@dakly/core/channels/jobs/queue-channel-token-checks.job';
 import { RECOVER_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/recover-webhook-events.job';
@@ -32,6 +33,7 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
     @InjectQueue(QUEUES.bulk) private readonly bulk: Queue,
     @InjectQueue(QUEUES.sync) private readonly sync: Queue,
     @InjectQueue(QUEUES.workflow) private readonly workflow: Queue,
+    @InjectQueue(QUEUES.campaign) private readonly campaign: Queue,
   ) {}
 
   async onModuleInit() {
@@ -48,6 +50,7 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.transactional, RECOVER_WEBHOOK_EVENTS, MINUTE_MS),
       scheduleJob(this.bulk, STAFF_AUDIT_MAINTENANCE),
       scheduleJob(this.workflow, WAKE_DUE_RUNS, MINUTE_MS),
+      scheduleJob(this.campaign, START_DUE_CAMPAIGNS, MINUTE_MS),
       scheduleJob(this.bulk, FAIL_STUCK_IMPORTS),
       scheduleJob(this.bulk, SWEEP_CONTACT_STATS, { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduleJob(this.bulk, SWEEP_AUTOMATION_BIRTHDAYS, { pattern: '0 * * * *', tz: 'UTC' }),

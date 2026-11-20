@@ -38,6 +38,15 @@ export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending' | 'stock'> 
   stock: unknown;
 };
 
+export type AttributionRebuild = {
+  id: string;
+  timeZone: string;
+  startedAt: string;
+  after: { id: string; at: string } | null;
+  processedOrders: number;
+  checkpoint: string | null;
+};
+
 @Injectable()
 export class StoresRepository {
   constructor(@Inject(TenantDatabase) private readonly tenant: TenantDatabase) {}
@@ -95,6 +104,51 @@ export class StoresRepository {
       tx.select({ status: stores.status }).from(stores).where(eq(stores.id, storeId)).for('share'),
     );
     return store?.status;
+  }
+
+  async attributionState(storeId: string) {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({
+          windowDays: stores.attributionWindowDays,
+          timeZone: stores.timeZone,
+          rebuild: sql<unknown>`${stores.settings}->'attributionRebuild'`,
+        })
+        .from(stores)
+        .where(eq(stores.id, storeId)),
+    );
+    return row;
+  }
+
+  writeAttributionState(
+    storeId: string,
+    rebuild: AttributionRebuild | null,
+    change?: { windowDays: number; updatedAt: Date },
+  ) {
+    const settings = rebuild
+      ? sql`jsonb_set(${stores.settings}, '{attributionRebuild}', ${JSON.stringify(rebuild)}::jsonb)`
+      : sql`${stores.settings} - 'attributionRebuild'`;
+    return this.tenant.forStore(storeId, (tx) =>
+      tx
+        .update(stores)
+        .set({
+          settings,
+          updatedAt: sql`${stores.updatedAt}`,
+          ...(change && { attributionWindowDays: change.windowDays, updatedAt: change.updatedAt }),
+        })
+        .where(eq(stores.id, storeId)),
+    );
+  }
+
+  async attributionWindowDays(storeId: string, lock?: 'share') {
+    const [row] = await this.tenant.forStore(storeId, (tx) => {
+      const query = tx
+        .select({ days: stores.attributionWindowDays })
+        .from(stores)
+        .where(eq(stores.id, storeId));
+      return lock ? query.for(lock) : query;
+    });
+    return row?.days;
   }
 
   async timeZone(storeId: string): Promise<string | undefined> {

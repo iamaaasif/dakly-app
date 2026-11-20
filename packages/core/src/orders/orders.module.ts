@@ -7,6 +7,8 @@ import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
+import { OrderAttributionRepository } from './order-attribution.repository';
+import { OrderAttributionService } from './order-attribution.service';
 import { OrderCatalogueController } from './order-catalogue.controller';
 import { OrderProductArchiveController } from './order-product-archive.controller';
 import { OrderReportingRepository } from './order-reporting.repository';
@@ -26,7 +28,14 @@ import { OrdersService } from './orders.service';
     StoresModule,
   ],
   controllers: [OrdersController, OrderProductArchiveController, OrderCatalogueController],
-  providers: [OrdersRepository, OrdersService, OrderReportingRepository, OrderReportingService],
-  exports: [OrdersService, OrderReportingService],
+  providers: [
+    OrdersRepository,
+    OrdersService,
+    OrderReportingRepository,
+    OrderReportingService,
+    OrderAttributionRepository,
+    OrderAttributionService,
+  ],
+  exports: [OrdersService, OrderReportingService, OrderAttributionService],
 })
 export class OrdersModule {}

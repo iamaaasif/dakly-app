@@ -32,6 +32,8 @@ import {
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
 import {
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
@@ -48,6 +50,10 @@ import {
   postPublishedEventSchema,
   postScheduledEventSchema,
 } from './social';
+import {
+  attributionRebuildContinuedEventSchema,
+  attributionWindowChangedEventSchema,
+} from './stores';
 import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
@@ -85,6 +91,10 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
   orderEditedEventSchema,
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
+  attributionWindowChangedEventSchema,
+  attributionRebuildContinuedEventSchema,
   postScheduledEventSchema,
   postPublishedEventSchema,
   postFailedEventSchema,
