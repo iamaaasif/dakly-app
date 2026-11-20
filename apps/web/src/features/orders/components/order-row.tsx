@@ -14,6 +14,7 @@ import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { cn } from '@dakly/ui/cn';
 
+import { isFinishedOrder } from '../order-actions';
 import { orderStageLabels } from '../order-labels';
 import { OrderRiskBadge } from './order-risk-badge';
 import { OrderRowAction } from './order-row-action';
@@ -82,17 +83,12 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
   );
 }
 
-// The design shows risk only while the order can still change.
-function isFinished(stage: OrderListItem['stage']): boolean {
-  return ['delivered', 'partially_delivered', 'returned', 'cancelled'].includes(stage);
-}
-
 type OrderRowBadgesProps = { order: OrderListItem };
 
 function OrderRowBadges({ order }: OrderRowBadgesProps) {
   return (
     <>
-      {isFinished(order.stage) ? null : <OrderRiskBadge risk={order.returnRisk} />}
+      {isFinishedOrder(order.stage) ? null : <OrderRiskBadge risk={order.returnRisk} />}
       {(order.stage === 'on_hold' || order.stage === 'partially_delivered') && (
         <Badge variant="neutral" className="rounded-full px-2.5 py-0.5 text-xs font-medium">
           {orderStageLabels[order.stage]}

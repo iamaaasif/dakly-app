@@ -102,4 +102,19 @@ describe('order row', () => {
     renderRow({ ...order, stage: 'returned', returnRisk: 'high' }, true);
     expect(screen.queryByText('High return risk')).toBeNull();
   });
+
+  it('offers Book courier on a packed order and no action on finished ones', () => {
+    renderRow({ ...order, stage: 'to_pack', courier: null }, true);
+    expect(screen.getByRole('link', { name: 'Book courier for order #1056' })).toBeTruthy();
+    cleanup();
+    renderRow({ ...order, stage: 'to_pack', courier: null }, false);
+    expect(screen.getByRole('link', { name: 'Details for order #1056' })).toBeTruthy();
+    cleanup();
+    for (const stage of ['delivered', 'returned', 'cancelled'] as const) {
+      renderRow({ ...order, stage }, true);
+      expect(screen.queryByRole('button')).toBeNull();
+      expect(document.querySelector('[data-order-row-action]')).toBeNull();
+      cleanup();
+    }
+  });
 });

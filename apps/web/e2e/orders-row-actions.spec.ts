@@ -110,6 +110,13 @@ test('marks a parcel delivered from its row and shows courier, returns and risk 
       hours: 600,
     });
     await order({
+      number: 1045,
+      stage: 'to_pack',
+      name: 'Rahim Uddin',
+      phone: '01801000004',
+      hours: 30,
+    });
+    await order({
       number: 1047,
       stage: 'delivered',
       name: 'Tanvir Hasan',
@@ -129,6 +136,16 @@ test('marks a parcel delivered from its row and shows courier, returns and risk 
         returned_at='2026-11-06T06:00:00Z' where store_id=$1 and id=$2`,
       [storeId, hasan],
     );
+
+    await page.goto('/orders?stage=to_pack');
+    await page.getByRole('link', { name: 'Book courier for order #1045' }).waitFor();
+    await capture('to-pack');
+    await page.getByRole('link', { name: 'Book courier for order #1045' }).click();
+    await expect(
+      page.getByRole('dialog', { name: 'Order #1045' }).getByRole('button', {
+        name: 'Sent with courier',
+      }),
+    ).toBeVisible();
 
     await page.goto('/orders?stage=with_courier');
     await expect(page.locator('ul').getByText('Steadfast', { exact: true })).toBeVisible();
@@ -151,6 +168,7 @@ test('marks a parcel delivered from its row and shows courier, returns and risk 
     await page.goto('/orders?stage=returned');
     await expect(page.getByText('RedX · Returned Nov 6')).toBeVisible();
     await expect(page.getByText('Refused at the door')).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Details for/ })).toHaveCount(0);
     await capture('returned');
 
     await page.goto(`/orders?stage=returned&selected=${hasan}`);
