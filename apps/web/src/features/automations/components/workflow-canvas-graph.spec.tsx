@@ -80,6 +80,19 @@ describe('WorkflowCanvasGraph', () => {
     expect(screen.getByText('3 people')).toBeTruthy();
   });
 
+  it('shows what happened at each step, with zero for steps nobody reached', () => {
+    const stats = {
+      message: { reached: 1200, sent: 1100, delivered: 1000, read: 0, tapped: 90 },
+      pause: { reached: 1300, sent: 0, delivered: 0, read: 0, tapped: 0 },
+    };
+    render(<WorkflowCanvasGraph graph={graph} layout={layoutWorkflow(graph)} stats={stats} />);
+    const steps = within(screen.getByRole('list', { name: 'Workflow steps' }));
+
+    expect(steps.getByText(/^1,100 sent · 90 tapped/)).toBeTruthy();
+    expect(steps.getByText(/^1,300 reached/)).toBeTruthy();
+    expect(steps.getAllByText(/^0 reached/).length).toBeGreaterThan(0);
+  });
+
   it('scales the drawing without changing its content', () => {
     const layout = layoutWorkflow(graph);
     const { container } = render(<WorkflowCanvasGraph graph={graph} layout={layout} scale={0.5} />);

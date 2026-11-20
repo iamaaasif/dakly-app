@@ -411,6 +411,38 @@ describe('AutomationsService (Postgres)', () => {
     expect(row.rows).toEqual([{ trigger_type: 'consent_given', draft_graph: graph }]);
   });
 
+  it('counts people per step over every version of a workflow', async () => {
+    const automation = await draft();
+    const { publishedVersionId } = await service.publish(storeA, automation.id, owner);
+    const other = await draft();
+    const otherVersion = (await service.publish(storeA, other.id, owner)).publishedVersionId!;
+    const runs = [
+      await seedRun(storeA, automation.id, publishedVersionId!),
+      await seedRun(storeA, automation.id, publishedVersionId!),
+      await seedRun(storeA, other.id, otherVersion),
+    ];
+    const step = (runId: string, key: string, kind: string, extra = '') =>
+      admin.pool.query(
+        `insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome${extra ? ',sent_at,delivered_at,tapped_at' : ''})
+         select gen_random_uuid(),$1,id,contact_id,$3,$4,'done'${extra ? ',now(),now(),$5::timestamptz' : ''}
+         from automation_runs where id=$2`,
+        extra
+          ? [storeA, runId, key, kind, extra === 'tapped' ? new Date() : null]
+          : [storeA, runId, key, kind],
+      );
+    await step(runs[0]!, 'welcome', 'send', 'tapped');
+    await step(runs[1]!, 'welcome', 'send', 'untapped');
+    await step(runs[0]!, 'wait', 'wait');
+    await step(runs[2]!, 'welcome', 'send', 'tapped');
+
+    expect(await service.stepStats(storeA, automation.id)).toEqual({
+      steps: {
+        welcome: { reached: 2, sent: 2, delivered: 2, read: 0, tapped: 1 },
+        wait: { reached: 1, sent: 0, delivered: 0, read: 0, tapped: 0 },
+      },
+    });
+  });
+
   it('never reads or changes another store’s workflows', async () => {
     const automation = await draft();
     const { publishedVersionId } = await service.publish(storeA, automation.id, owner);
@@ -418,6 +450,7 @@ describe('AutomationsService (Postgres)', () => {
 
     for (const attempt of [
       () => service.get(storeB, automation.id),
+      () => service.stepStats(storeB, automation.id),
       () => service.change(storeB, automation.id, { name: 'চুরি' }, staff),
       () => service.publish(storeB, automation.id, owner),
       () => service.pause(storeB, automation.id, staff),

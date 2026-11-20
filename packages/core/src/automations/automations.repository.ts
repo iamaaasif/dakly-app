@@ -1,5 +1,18 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, count, eq, gt, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  count,
+  countDistinct,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from 'drizzle-orm';
 
 import type {
   AutomationListQuery,
@@ -8,7 +21,12 @@ import type {
 } from '@dakly/contracts/automations';
 import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
-import { automationRuns, automations, automationVersions } from '@dakly/db/schema/automations';
+import {
+  automationRuns,
+  automationRunSteps,
+  automations,
+  automationVersions,
+} from '@dakly/db/schema/automations';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { workflowSchedulerTime } from './workflow-scheduler-time.repository';
@@ -113,6 +131,35 @@ export class AutomationsRepository {
         .limit(1),
     );
     return row;
+  }
+
+  stepStats(storeId: string, automationId: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          stepKey: automationRunSteps.stepKey,
+          reached: countDistinct(automationRunSteps.runId),
+          sent: count(automationRunSteps.sentAt),
+          delivered: count(automationRunSteps.deliveredAt),
+          read: count(automationRunSteps.readAt),
+          tapped: count(automationRunSteps.tappedAt),
+        })
+        .from(automationRunSteps)
+        .innerJoin(
+          automationRuns,
+          and(
+            eq(automationRuns.storeId, automationRunSteps.storeId),
+            eq(automationRuns.id, automationRunSteps.runId),
+          ),
+        )
+        .where(
+          and(
+            eq(automationRunSteps.storeId, storeId),
+            eq(automationRuns.automationId, automationId),
+          ),
+        )
+        .groupBy(automationRunSteps.stepKey),
+    );
   }
 
   async countActiveRuns(storeId: string, automationId: string): Promise<number> {

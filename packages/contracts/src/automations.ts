@@ -58,6 +58,14 @@ export type AutomationTriggerPreview = {
   lastSevenDays: { people: number; atLeast: boolean };
 };
 
+// Counts of people per step, over every version. Steps nobody reached are left out.
+export type AutomationStepStats = {
+  steps: Record<
+    string,
+    { reached: number; sent: number; delivered: number; read: number; tapped: number }
+  >;
+};
+
 export const automationListQuerySchema = z.strictObject({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),

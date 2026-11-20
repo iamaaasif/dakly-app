@@ -7,6 +7,7 @@ import {
   type AutomationListResponse,
   type AutomationPauseReason,
   type AutomationResponse,
+  type AutomationStepStats,
   type AutomationStatus,
   type ChangeAutomationInput,
   type CreateAutomationInput,
@@ -107,6 +108,12 @@ export class AutomationsService {
       };
     });
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+  }
+
+  async stepStats(storeId: string, automationId: string): Promise<AutomationStepStats> {
+    await this.findVisible(storeId, automationId);
+    const rows = await this.repository.stepStats(storeId, automationId);
+    return { steps: Object.fromEntries(rows.map(({ stepKey, ...counts }) => [stepKey, counts])) };
   }
 
   async get(storeId: string, automationId: string): Promise<AutomationDetailResponse> {
