@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0067_snapshot.json`: **95 tables, 1290 columns, 393 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0068_snapshot.json`: **95 tables, 1292 columns, 393 explicit indexes and 301 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1281,6 +1281,7 @@ erDiagram
     automations ||..o{ automation_runs : "automation_id"
     automation_versions ||..o{ automation_runs : "version_id"
     contacts ||..o{ automation_runs : "contact_id"
+    orders |o..o{ automation_runs : "trigger_order_id"
     automations ||..o{ automation_runs : "store_id, automation_id"
     automation_versions ||..o{ automation_runs : "store_id, version_id"
     contacts ||..o{ automation_runs : "store_id, contact_id"
@@ -1511,6 +1512,7 @@ erDiagram
         uuid version_id FK "NOT NULL; uuid"
         uuid contact_id FK "NOT NULL; uuid"
         text trigger_key "NOT NULL; text"
+        uuid trigger_order_id FK "NULL; uuid"
         text current_step_key "NOT NULL; text"
         text status "NOT NULL; text"
         text exit_reason "NULL; text"
@@ -1533,6 +1535,7 @@ erDiagram
         text channel "NULL; text"
         text category "NULL; text"
         text opt_out_url "NULL; text"
+        text rendered_text "NULL; text"
         text destination_hash "NULL; text"
         timestamp_with_time_zone first_tried_at "NULL; timestamp with time zone"
         text skip_reason "NULL; text"
@@ -1908,6 +1911,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `automation_runs_automation_id_automations_id_fk`                    | `automation_runs(automation_id)`                          | `automations(id)`                           | no action |
 | `automation_runs_version_id_automation_versions_id_fk`               | `automation_runs(version_id)`                             | `automation_versions(id)`                   | no action |
 | `automation_runs_contact_id_contacts_id_fk`                          | `automation_runs(contact_id)`                             | `contacts(id)`                              | cascade   |
+| `automation_runs_trigger_order_id_orders_id_fk`                      | `automation_runs(trigger_order_id)`                       | `orders(id)`                                | set null  |
 | `automation_runs_automation_id_store_fk`                             | `automation_runs(store_id, automation_id)`                | `automations(store_id, id)`                 | no action |
 | `automation_runs_version_id_store_fk`                                | `automation_runs(store_id, version_id)`                   | `automation_versions(store_id, id)`         | no action |
 | `automation_runs_contact_id_store_fk`                                | `automation_runs(store_id, contact_id)`                   | `contacts(store_id, id)`                    | cascade   |

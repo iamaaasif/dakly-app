@@ -63,7 +63,7 @@ export const templateStatuses = [
   'paused',
   'disabled',
 ] as const;
-export const trackedLinkKinds = ['redirect', 'sms_opt_out'] as const;
+export const trackedLinkKinds = ['redirect', 'sms_opt_out', 'order_confirm'] as const;
 export type TrackedLinkKind = (typeof trackedLinkKinds)[number];
 export const trackedLinkSourceTypes = ['campaign', 'automation', 'post', 'chat', 'order'] as const;
 export type TrackedLinkSourceType = (typeof trackedLinkSourceTypes)[number];
