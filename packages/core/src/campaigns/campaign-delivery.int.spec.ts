@@ -358,6 +358,33 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
+  it('sends an approved campaign even when an earlier campaign has no approval time', async () => {
+    const incomplete = await sendingCampaign(1);
+    const ready = await sendingCampaign(1);
+    await admin.pool.query('update campaigns set approved_at=null, started_at=$2 where id=$1', [
+      incomplete.id,
+      new Date(noon.getTime() - MINUTE),
+    ]);
+    try {
+      const job = app.get(SendCampaignBatchJob);
+      expect(await job.handle({ storeId })).toEqual({ delayUntil: clockNow.getTime() });
+      expect(calls.map(({ to }) => to)).toEqual(ready.phones);
+      expect(await campaignRow(ready.id)).toMatchObject({ status: 'sent' });
+      await expect(job.handle({ storeId })).rejects.toMatchObject({
+        code: 'CAMPAIGN_APPROVAL_TIME_MISSING',
+      });
+      expect(await settlementRows(incomplete.id)).toEqual([]);
+    } finally {
+      await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [
+        incomplete.id,
+        noon,
+      ]);
+      await campaigns.cancel(storeId, incomplete.id, actor);
+      if ((await campaignRow(ready.id)).status === 'sending')
+        await campaigns.cancel(storeId, ready.id, actor);
+    }
+  });
+
   it('selects an older approved campaign without a recorded start before newer work', async () => {
     const legacy = await sendingCampaign(1);
     const newer = await sendingCampaign(1);
@@ -371,9 +398,9 @@ describe('Campaign sender (Postgres)', () => {
         new Date(noon.getTime() + MINUTE),
       ]);
 
-      expect(await app.get(CampaignSendingRepository).firstWork(storeId, noon)).toEqual([
-        { campaignId: legacy.id, status: 'sending' },
-      ]);
+      expect(await app.get(CampaignSendingRepository).nextCampaignId(storeId, noon)).toBe(
+        legacy.id,
+      );
     } finally {
       await campaigns.cancel(storeId, legacy.id, actor);
       await campaigns.cancel(storeId, newer.id, actor);
@@ -525,9 +552,7 @@ describe('Campaign sender (Postgres)', () => {
       await app.get(StartDueCampaignsJob).handle({});
       const [continuation] = await queue.getWaiting();
       expect(continuation?.data).toEqual({ storeId });
-      expect(await app.get(CampaignSendingRepository).firstWork(storeId, noon)).toEqual([
-        { campaignId: newerId, status: 'sending' },
-      ]);
+      expect(await app.get(CampaignSendingRepository).nextCampaignId(storeId, noon)).toBe(newerId);
       await deliverCredit(previous.entryId);
       expect(await readPause()).toMatchObject({ status: 'paused', pause_reason: 'balance' });
 

@@ -79,13 +79,8 @@ export class CampaignSendingRepository {
     });
   }
 
+  // Prefer approved work, then settle ready cancellations before sending.
   async nextCampaignId(storeId: string, expiredBefore: Date): Promise<string | undefined> {
-    const work = await this.firstWork(storeId, expiredBefore);
-    return (work.find(({ status }) => status === 'cancelled') ?? work[0])?.campaignId;
-  }
-
-  // Find the earliest actionable campaign of each status, skipping live claims.
-  async firstWork(storeId: string, expiredBefore: Date) {
     const active = sql`${campaigns.status} = 'sending'`;
     const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null`;
     const recipients = sql`select 1 from campaign_recipients r
@@ -95,20 +90,20 @@ export class CampaignSendingRepository {
         (r.status = 'sending' and r.claimed_at < ${expiredBefore.toISOString()}::timestamptz)))
       or not exists (${recipients} and r.status in ('queued', 'sending'))
     )`;
-    return this.database.forStore(storeId, (tx) =>
+    const [next] = await this.database.forStore(storeId, (tx) =>
       tx
-        .selectDistinctOn([campaigns.status], {
-          campaignId: campaigns.id,
-          status: sql<'sending' | 'cancelled'>`${campaigns.status}`,
-        })
+        .select({ id: campaigns.id })
         .from(campaigns)
         .where(and(eq(campaigns.storeId, storeId), or(active, cancelled), ready))
         .orderBy(
-          asc(campaigns.status),
+          asc(sql`${campaigns.approvedAt} is null`),
+          asc(sql`${campaigns.status} <> 'cancelled'`),
           asc(sql`coalesce(${campaigns.startedAt}, ${campaigns.approvedAt})`),
           asc(campaigns.id),
-        ),
+        )
+        .limit(1),
     );
+    return next?.id;
   }
 
   async lockNextRecipient(
