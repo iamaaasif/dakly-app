@@ -9,9 +9,11 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { Textarea } from '@dakly/ui/textarea';
 
+import { CampaignAudienceFields } from './campaign-audience-fields';
 import { CampaignDraftShell } from './campaign-draft-shell';
+import { CampaignEstimate } from './campaign-estimate';
 import { CampaignGoalCards } from './campaign-goal-cards';
-import { useCampaignStep } from './campaign-steps';
+import { useCampaignStep, type CampaignStepId } from './campaign-steps';
 import { useSmsDraftForm, type SmsDraftInput } from './use-sms-draft-form';
 
 export function SmsDraft({ campaign }: { campaign: CampaignResponse }) {
@@ -34,11 +36,27 @@ export function SmsDraft({ campaign }: { campaign: CampaignResponse }) {
         busy={save.isPending}
         error={save.error?.message}
         message={save.isSuccess && !isDirty ? 'Draft saved.' : undefined}
-        fields={(step) => (step === 'goal' ? <SmsGoalFields /> : <SmsContentFields />)}
-        side={(step) => step === 'content' && <SmsPreview />}
+        fields={(step) => <SmsFields step={step} />}
+        side={(step) => (
+          <>
+            {step === 'content' && <SmsPreview />}
+            {step === 'audience' && (
+              <CampaignEstimate
+                channel="sms"
+                campaignId={campaign.id}
+                savedAt={campaign.updatedAt}
+              />
+            )}
+          </>
+        )}
       />
     </FormProvider>
   );
+}
+
+function SmsFields({ step }: { step: CampaignStepId }) {
+  if (step === 'goal') return <SmsGoalFields />;
+  return step === 'content' ? <SmsContentFields /> : <CampaignAudienceFields />;
 }
 
 function SmsGoalFields() {

@@ -8,6 +8,7 @@ import { cn } from '@dakly/ui/cn';
 const campaignSteps = [
   { id: 'goal', label: 'Goal' },
   { id: 'content', label: 'Content' },
+  { id: 'audience', label: 'Audience' },
 ] as const;
 export type CampaignStepId = (typeof campaignSteps)[number]['id'];
 
@@ -39,7 +40,7 @@ export function CampaignStepper({
   const currentIndex = campaignSteps.findIndex(({ id }) => id === current);
   return (
     <nav aria-label="Campaign steps">
-      <ol className="grid grid-cols-2 gap-3">
+      <ol className="grid grid-cols-3 gap-3">
         {campaignSteps.map(({ id, label }, index) => (
           <li key={id}>
             <Link

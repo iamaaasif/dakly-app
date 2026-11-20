@@ -44,8 +44,18 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
   }
   const storeId = fixture.storeIds[0];
   const ids: string[] = [];
+  const segmentIds: string[] = [];
   try {
     expect((await post('/me/active-store', { storeId })).status()).toBe(204);
+    const segment = await post('/segments', {
+      name: 'Dhaka customers',
+      rules: {
+        match: 'all',
+        conditions: [{ field: 'district', operator: 'is_any_of', values: ['Dhaka'] }],
+      },
+    });
+    expect(segment.status()).toBe(201);
+    segmentIds.push((await segment.json()).id);
     const created = await post('/campaigns', {
       name: 'Puja winback',
       goal: 'win_back',
@@ -185,6 +195,22 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       .fill('Winter Kurti collection is in. Order today and get free delivery in Dhaka.');
     await expect(page.getByText('Live preview · SMS', { exact: true })).toBeVisible();
     await capture(page, 'sms-content-step');
+    await page.getByRole('link', { name: '3. Audience' }).click();
+    await page.getByRole('group', { name: 'Send to' }).getByLabel('Dhaka customers').click();
+    const saveAudience = page.waitForRequest(
+      (request) =>
+        request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
+    );
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    expect((await saveAudience).postDataJSON()).toEqual({
+      content: {
+        text: 'Winter Kurti collection is in. Order today and get free delivery in Dhaka.',
+      },
+      includeSegmentIds: segmentIds,
+    });
+    await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Estimate' })).toContainText('SMS credits');
+    await capture(page, 'sms-audience-step');
 
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
@@ -195,6 +221,10 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await database.pool.query('delete from campaigns where store_id=$1 and id=any($2::uuid[])', [
       storeId,
       ids,
+    ]);
+    await database.pool.query('delete from segments where store_id=$1 and id=any($2::uuid[])', [
+      storeId,
+      segmentIds,
     ]);
     await database.pool.end();
   }

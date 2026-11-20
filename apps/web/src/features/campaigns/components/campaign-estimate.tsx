@@ -1,4 +1,4 @@
-import { recipientSkipReasons } from '@dakly/contracts/campaigns';
+import { recipientSkipReasons, type CampaignChannel } from '@dakly/contracts/campaigns';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { useCampaignEstimate } from '../api/campaign-estimate';
@@ -17,21 +17,20 @@ const skipLabels: Record<(typeof recipientSkipReasons)[number], string> = {
   no_credits: 'are over your credits',
 };
 
-// Messenger only lets a Page message someone who wrote or tapped a button in the last 24 hours,
-// so the count is often far below the audience.
-export function MessengerEstimate({
+// A Messenger count is often far below the audience, because a Page may message only people who
+// wrote or tapped a button in the last 24 hours.
+export function CampaignEstimate({
   campaignId,
   savedAt,
+  channel,
 }: {
   campaignId: string;
   savedAt: string;
+  channel: Extract<CampaignChannel, 'sms' | 'messenger'>;
 }) {
   const { data, isPending, isError } = useCampaignEstimate(campaignId, savedAt);
   if (isPending) return <Skeleton className="h-28 w-full" />;
   if (isError) return <p role="alert">The estimate could not load. Try again soon.</p>;
-  const skipped = recipientSkipReasons
-    .map((reason) => ({ reason, count: data.skippedByReason[reason] ?? 0 }))
-    .filter(({ count }) => count > 0);
   return (
     <section
       aria-label="Estimate"
@@ -54,24 +53,45 @@ export function MessengerEstimate({
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-text-muted">Estimated cost</dt>
-          <dd>Free</dd>
+          <dd>{channel === 'sms' ? `${data.smsCredits} SMS credits` : 'Free'}</dd>
         </div>
       </dl>
-      <div className="space-y-1 border-t border-border pt-3 text-sm text-text-muted">
-        <p>
-          Messenger only allows a message to people who wrote to your Page or tapped a button in the
-          last 24 hours. Dakly checks this again when each message goes out.
-        </p>
-        {skipped.length > 0 && (
-          <ul className="list-disc pl-5">
-            {skipped.map(({ reason, count }) => (
-              <li key={reason}>
-                {count} {skipLabels[reason]}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {(channel === 'messenger' || Object.values(data.skippedByReason).some(Boolean)) && (
+        <div className="space-y-1 border-t border-border pt-3 text-sm text-text-muted">
+          {channel === 'messenger' && (
+            <p>
+              Messenger only allows a message to people who wrote to your Page or tapped a button in
+              the last 24 hours. Dakly checks this again when each message goes out.
+            </p>
+          )}
+          <SkippedList counts={data.skippedByReason} channel={channel} />
+        </div>
+      )}
     </section>
+  );
+}
+
+function SkippedList({
+  counts,
+  channel,
+}: {
+  counts: Partial<Record<(typeof recipientSkipReasons)[number], number>>;
+  channel: CampaignChannel;
+}) {
+  const skipped = recipientSkipReasons
+    .map((reason) => ({ reason, count: counts[reason] ?? 0 }))
+    .filter(({ count }) => count > 0);
+  if (!skipped.length) return null;
+  return (
+    <ul className="list-disc pl-5">
+      {skipped.map(({ reason, count }) => (
+        <li key={reason}>
+          {count}{' '}
+          {channel === 'sms' && reason === 'no_address'
+            ? 'have no phone number'
+            : skipLabels[reason]}
+        </li>
+      ))}
+    </ul>
   );
 }
