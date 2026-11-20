@@ -115,6 +115,7 @@ test('writes options, saves one to the library and opens it in Create post', asy
     await database.pool.query('delete from post_targets where store_id=$1', [storeId]);
     await database.pool.query('delete from posts where store_id=$1', [storeId]);
     await database.pool.query('delete from content_pieces where store_id=$1', [storeId]);
+    await database.pool.query('delete from ai_runs where store_id=$1', [storeId]);
     await database.pool.query('delete from channel_connections where store_id=$1', [storeId]);
     await database.pool.end();
   }
