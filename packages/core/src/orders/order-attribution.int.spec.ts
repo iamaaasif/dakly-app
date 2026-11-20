@@ -120,6 +120,25 @@ describe('OrderAttributionService', () => {
     },
   );
 
+  it('keeps the captured amount when a new window selects the same touch', async () => {
+    const orderId = await order(fixture.a);
+    const buyer = (await service.find(fixture.a, orderId))!;
+    await service.record(fixture.a, orderId, { ...attribution, buyer });
+    await fixture.connection.pool.query(
+      'update orders set items_subtotal_poisha=100000 where id=$1',
+      [orderId],
+    );
+    const reference = { ...attribution, windowDays: 3 } as const;
+    await service.rebuild(fixture.a, [{ order: { ...buyer, id: orderId }, reference }]);
+    await service.rebuild(fixture.a, [{ order: { ...buyer, id: orderId }, reference }]);
+    expect(await fixture.row('orders', orderId)).toMatchObject({
+      attributed_touch_id: attribution.touchId,
+      attributed_window_days: 3,
+      attributed_amount_poisha: 120000,
+    });
+    expect((await events(orderId)).map(({ type }) => type)).toEqual(['attribution.created']);
+  });
+
   it('leaves a foreign order untouched and clears a cancelled order only once', async () => {
     const orderId = await order(fixture.b);
     const selection = { ...attribution, buyer: (await service.find(fixture.b, orderId))! };
