@@ -19,6 +19,8 @@ export class ContactMatchSuggestionsService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
   ) {}
 
+  // D27: a buyer's own phone given in a chat or at order entry. Returns nothing, so the caller
+  // cannot learn who else holds the number.
   captureOwnPhone(
     storeId: string,
     input: { contactId: string; phone: string; orderId?: string; conversationId?: string },

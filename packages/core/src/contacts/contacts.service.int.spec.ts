@@ -392,7 +392,7 @@ describe('ContactsService (Postgres)', () => {
         ])
       ).rows[0];
     const capture = (contactId: string, own: string, conversationId = randomUUID()) =>
-      service.captureOwnPhone(storeId, { contactId, phone: own, conversationId }, actor);
+      suggestions.captureOwnPhone(storeId, { contactId, phone: own, conversationId });
 
     it('saves an unused own phone before any order and makes the chat contact a lead', async () => {
       const id = await chatContact();
@@ -464,11 +464,10 @@ describe('ContactsService (Postgres)', () => {
 
     it('does not read or change a contact of another store', async () => {
       await expect(
-        service.captureOwnPhone(
-          otherStoreId,
-          { contactId: await chatContact(), phone: phone() },
-          actor,
-        ),
+        suggestions.captureOwnPhone(otherStoreId, {
+          contactId: await chatContact(),
+          phone: phone(),
+        }),
       ).rejects.toMatchObject({ code: 'CONTACT_NOT_FOUND' });
     });
   });

@@ -181,15 +181,6 @@ export class ContactsService {
     });
   }
 
-  // D27. Returns nothing, so the caller cannot learn who else holds the number.
-  captureOwnPhone(
-    storeId: string,
-    input: { contactId: string; phone: string; orderId?: string; conversationId?: string },
-    _actor: Actor,
-  ): Promise<void> {
-    return this.matchSuggestions.captureOwnPhone(storeId, input);
-  }
-
   async hasOrderPhoneMatch(
     storeId: string,
     {

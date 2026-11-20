@@ -30,6 +30,6 @@ import { OrderContactsRepository } from './order-contacts.repository';
     ImportContactsRepository,
     OrderContactsRepository,
   ],
-  exports: [ContactsService, ContactIdentitiesService],
+  exports: [ContactsService, ContactIdentitiesService, ContactMatchSuggestionsService],
 })
 export class ContactsModule {}
