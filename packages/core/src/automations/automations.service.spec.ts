@@ -12,6 +12,7 @@ import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { StoresService } from '../stores/stores.service';
 import type { TeamService } from '../team/team.service';
 import type { WalletService } from '../wallets/wallet.service';
+import type { AutomationAnalyticsRepository } from './automation-analytics.repository';
 import type { Automation, AutomationsRepository } from './automations.repository';
 import { AutomationsService } from './automations.service';
 
@@ -73,6 +74,7 @@ function serviceFor(graph: AutomationGraph) {
   const transaction = { run: (_storeId: string, work: () => Promise<unknown>) => work() };
   return new AutomationsService(
     repository as unknown as AutomationsRepository,
+    {} as AutomationAnalyticsRepository,
     transaction as unknown as StoreTransaction,
     { now: () => now } as Clock,
     {

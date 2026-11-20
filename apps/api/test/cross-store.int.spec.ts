@@ -2100,6 +2100,67 @@ fixture('GET /analytics/overview', async () => {
   expect((await f.request(a.owner, 'GET', '/analytics/overview?period=7')).statusCode).toBe(400);
 });
 
+async function seedAnalyticsSources(shop: { id: string }, label: string) {
+  const { current } = await app.get(AnalyticsService).periods(shop.id, 30);
+  const [campaign, automation, version] = [randomUUID(), randomUUID(), randomUUID()];
+  await f.admin.pool.query(
+    `insert into campaigns(id,store_id,name,channel,content,sent_count,delivered_count,actual_cost_poisha,started_at)
+     values($1,$2,$3,'sms','{}',10,9,500,now())`,
+    [campaign, shop.id, label],
+  );
+  await f.admin.pool.query(
+    "insert into automations(id,store_id,name,trigger_type,draft_graph) values($1,$2,$3,'manual','{}')",
+    [automation, shop.id, label],
+  );
+  await f.admin.pool.query(
+    'insert into automation_versions(id,store_id,automation_id,version,graph) values($1,$2,$3,1,$4)',
+    [version, shop.id, automation, '{}'],
+  );
+  await f.admin.pool.query(
+    "update automations set status='active', published_version_id=$1 where id=$2",
+    [version, automation],
+  );
+  await f.admin.pool.query(
+    `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
+     ($1,$2,'marketing_revenue',$3,70000),($1,$2,'marketing_orders',$3,7),
+     ($1,$2,'marketing_revenue',$4,20000),($1,$2,'marketing_orders',$4,2)`,
+    [shop.id, current.through, `campaign:${campaign}`, `automation:${automation}`],
+  );
+}
+
+async function expectAnalyticsRoute(
+  route: 'campaigns' | 'automations',
+  expected: Record<string, unknown>,
+) {
+  const { a, b } = await pair();
+  await seedAnalyticsSources(a, 'own-a');
+  await seedAnalyticsSources(b, 'own-b');
+  for (const [shop, name] of [
+    [a, 'own-a'],
+    [b, 'own-b'],
+  ] as const) {
+    const result = await success(shop, 'GET', `/analytics/${route}?period=30`, 200);
+    expect(result.json()[route]).toMatchObject([{ name, ...expected }]);
+  }
+  expect((await f.request(b.member, 'GET', `/analytics/${route}`)).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', `/analytics/${route}?storeId=${b.id}`)).statusCode).toBe(
+    400,
+  );
+}
+
+fixture('GET /analytics/campaigns', () =>
+  expectAnalyticsRoute('campaigns', {
+    sent: 10,
+    orders: 7,
+    revenuePoisha: '70000',
+    returnPerTaka: 140,
+  }),
+);
+
+fixture('GET /analytics/automations', () =>
+  expectAnalyticsRoute('automations', { isActive: true, orders: 2, revenuePoisha: '20000' }),
+);
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),

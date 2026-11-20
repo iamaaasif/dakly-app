@@ -53,6 +53,7 @@ const overview: AnalyticsOverviewResponse = {
     },
     { channel: 'messenger', sent: 0, deliveredPercent: null, costPoisha: '0', revenuePoisha: '0' },
   ],
+  best: { campaign: null, channel: null, mostMoneyChannel: null, automation: null },
   funnel: {
     sent: { count: 9182, percentOfPrevious: null },
     delivered: { count: 9026, percentOfPrevious: 98.3 },
