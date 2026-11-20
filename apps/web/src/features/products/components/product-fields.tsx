@@ -91,5 +91,10 @@ function DefaultOverride() {
   const { getValues } = useFormContext<ProductFormValues>();
   const [visible] = useState(() => Boolean(getValues('variants.0.priceOverridePoisha')));
   if (!visible) return null;
-  return <ProductInputField name="variants.0.priceOverridePoisha" label="Price override ৳" />;
+  return (
+    <ProductInputField
+      name="variants.0.priceOverridePoisha"
+      label="Default price override (Taka)"
+    />
+  );
 }

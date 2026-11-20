@@ -127,7 +127,10 @@ function updateSizeName(form: UseFormReturn<ProductFormValues>, index: number, n
   const current = form.getValues('variants') ?? [];
   if (current[index]) {
     const updated = [...current];
-    updated[index] = { ...updated[index]!, optionValues: { ...updated[index]!.optionValues, 0: name } };
+    updated[index] = {
+      ...updated[index]!,
+      optionValues: { ...updated[index]!.optionValues, 0: name },
+    };
     form.setValue('variants', updated, { shouldDirty: true });
   }
 }

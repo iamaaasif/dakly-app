@@ -198,7 +198,10 @@ function withDefaultCost(input: ProductFormInput): ProductFormInput {
 async function applyInitialStocks(
   product: ProductResponse,
   stocks: Record<number, number>,
-  adjustStock: (vars: { variantId: string; input: { quantity: number; reason: string } }) => Promise<unknown>,
+  adjustStock: (vars: {
+    variantId: string;
+    input: { quantity: number; reason: string };
+  }) => Promise<unknown>,
 ) {
   const adjustments = product.variants
     .map((variant, index) => {

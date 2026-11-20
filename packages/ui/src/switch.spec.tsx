@@ -10,7 +10,9 @@ describe('Switch', () => {
   it('renders switch with role and aria-checked', async () => {
     const user = userEvent.setup();
     const onCheckedChange = vi.fn();
-    render(<Switch checked={false} aria-label="Toggle setting" onCheckedChange={onCheckedChange} />);
+    render(
+      <Switch checked={false} aria-label="Toggle setting" onCheckedChange={onCheckedChange} />,
+    );
     const toggle = screen.getByRole('switch', { name: 'Toggle setting' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
 
