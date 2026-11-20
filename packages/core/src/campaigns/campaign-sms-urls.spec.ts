@@ -159,8 +159,24 @@ describe('SMS campaign body URLs', () => {
     'Open (‘https://shop.example.test/a’)—(‘today’).',
     'Open [(‘"https://shop.example.test/?item=1"’)]—[(‘"today"’)].',
     'Open (https://shop.example.test/?item=1)—(today).',
+    'Open ("https://shop.example.test/?item=1"—"today").',
+    'Open [(‘"https://shop.example.test/?item=1"—"today"’)].',
+    'Open "https://shop.example.test/?item=1"—("today").',
   ])('keeps adjacent quoted prose out of the URL in %s', (text) => {
     expect(campaignSmsUrls(text)).toEqual([]);
+  });
+
+  it.each([
+    { prefix: '(', target: 'https://shop.example.test/a(foo)-(bar)', suffix: ').' },
+    { prefix: '[', target: 'https://shop.example.test/search?filter=[[1],[2]]', suffix: '].' },
+  ])('keeps balanced URL brackets with the outer $prefix wrapper', ({ prefix, target, suffix }) => {
+    const text = `Open ${prefix}${target}${suffix}`;
+    const urls = campaignSmsUrls(text);
+
+    expect(urls.map((url) => url.target)).toEqual([new URL(target).href]);
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(
+      `Open ${prefix}/short${suffix}`,
+    );
   });
 
   it('keeps every surrounding bracket when a URL is nested in angle brackets', () => {

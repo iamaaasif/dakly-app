@@ -7,6 +7,7 @@ const sentencePunctuation = /[.,!?;:"'’”…।॥]+$/u;
 const trailingWrapperPunctuation = /^[)\]}.,!?;:"'’”…।॥]*$/u;
 const followingQuote = /^[.,!?:;–—…।॥-]*["'‘“]/u;
 const followingNestedQuote = /^[.,!?:;–—…।॥-]*[[({]*["'‘“]/u;
+const followingBracketedQuote = /^[.,!?;–—…।॥-]+[[({]+["'‘“]/u;
 const followingBracket = /^[.,!?;–—…।॥-]+[[({]/u;
 const closingWrapper: Partial<Record<string, string>> = {
   '<': '>',
@@ -15,7 +16,7 @@ const closingWrapper: Partial<Record<string, string>> = {
   '“': '”',
   '‘': '’',
 };
-const openingBracket: Partial<Record<string, string>> = { ')': '(', ']': '[', '}': '{' };
+const openingBracket: Readonly<Record<string, string>> = { ')': '(', ']': '[', '}': '{' };
 const wrapperEnds: Partial<Record<string, string>> = {
   ...closingWrapper,
   '(': ')',
@@ -60,10 +61,7 @@ export function replaceCampaignSmsUrls(
 function urlCandidate(raw: string, prefix: string): string | undefined {
   const opener = prefix.at(-1) ?? '';
   const closer = closingWrapper[opener];
-  if (!closer) {
-    if (prefix && hasAdjacentProse(raw, prefix, followingBracket)) return undefined;
-    return trimMessagePunctuation(raw);
-  }
+  if (!closer) return bareUrl(raw, prefix);
 
   const delimiter = closer === '>' ? '>'.repeat(prefix.match(/<+$/u)?.[0].length ?? 1) : closer;
   const end = raw.lastIndexOf(delimiter);
@@ -77,23 +75,53 @@ function urlCandidate(raw: string, prefix: string): string | undefined {
 }
 
 function isAmbiguousQuote(candidate: string, prefix: string, closer: string): boolean {
-  const following = prefix.length > 1 ? followingNestedQuote : followingQuote;
-  if (hasAdjacentProse(candidate, prefix, following)) return true;
+  const quotedProse = (following: string) =>
+    followingQuote.test(following) || followingBracketedQuote.test(following);
+  if (hasAdjacentProse(candidate, closer, quotedProse)) return true;
+  if (
+    prefix.length > 1 &&
+    hasAdjacentProse(candidate, matchingClosers(prefix), (following) =>
+      followingNestedQuote.test(following),
+    )
+  ) {
+    return true;
+  }
   if (closer === '”' && candidate.includes('“')) return true;
   if (closer !== '"' && closer !== '”') return false;
   const [location] = candidate.split(/[?#]/u, 1);
   return location?.includes(closer) ?? false;
 }
 
-function hasAdjacentProse(text: string, prefix: string, following: RegExp): boolean {
-  const closingRun = [...prefix]
+function bareUrl(raw: string, prefix: string): string | undefined {
+  if (!prefix) return trimMessagePunctuation(raw);
+  const bracketedProse = (following: string, end: number) =>
+    followingBracket.test(following) && bracketsBalanced(raw.slice(0, end));
+  if (hasAdjacentProse(raw, matchingClosers(prefix), bracketedProse)) return undefined;
+  return trimMessagePunctuation(raw);
+}
+
+function matchingClosers(prefix: string): string {
+  return [...prefix]
     .reverse()
     .map((opener) => wrapperEnds[opener])
     .join('');
+}
+
+function hasAdjacentProse(
+  text: string,
+  closingRun: string,
+  follows: (following: string, end: number) => boolean,
+): boolean {
   for (let end = text.indexOf(closingRun); end >= 0; end = text.indexOf(closingRun, end + 1)) {
-    if (following.test(text.slice(end + closingRun.length))) return true;
+    if (follows(text.slice(end + closingRun.length), end)) return true;
   }
   return false;
+}
+
+function bracketsBalanced(text: string): boolean {
+  return Object.entries(openingBracket).every(
+    ([close, open]) => text.split(open).length === text.split(close).length,
+  );
 }
 
 function trimMessagePunctuation(raw: string): string {
