@@ -199,7 +199,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ID     | Task                                               | Status    | Depends       | PR               | Notes                                                                              |
 | ------ | -------------------------------------------------- | --------- | ------------- | ---------------- | ---------------------------------------------------------------------------------- |
 | ANA-1  | Glossary report functions and daily summary tables | In review | ORD-3, CUS-3  | #194, #207, #210 | Daily summaries and report reads merged. Nightly reconciliation in review in #210. |
-| ANA-2  | Attribution of orders to messages and posts        | In review | ANA-1, CAMP-3 | #226             | Tracked-tap attribution in review. Window rebuild and report reads follow.         |
+| ANA-2  | Attribution of orders to messages and posts        | In review | ANA-1, CAMP-3 | #226, #243       | Tracked-tap attribution merged. Window rebuild in review. Report reads follow.     |
 | ANA-3  | Web: Analytics tabs                                | Todo      | ANA-2         |                  |                                                                                    |
 | HOME-3 | Web: Dashboard cards                               | Done      | ANA-1         | #211             |                                                                                    |
 | HOME-4 | Ask Dakly AI with read-only report tools           | Todo      | ANA-1, AI-2   |                  |                                                                                    |

@@ -4,6 +4,7 @@ import { AuditModule } from '../audit/audit.module';
 import { UsersModule } from '../auth/users.module';
 import { BillingModule } from '../billing/billing.module';
 import { ClockModule } from '../platform/clock.module';
+import { OutboxModule } from '../platform/outbox/outbox.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { TeamModule } from '../team/team.module';
 import { MaintenanceStoresRepository } from './maintenance-stores.repository';
@@ -14,7 +15,15 @@ import { StoresRepository } from './stores.repository';
 import { StoresService } from './stores.service';
 
 @Module({
-  imports: [UsersModule, AuditModule, BillingModule, SessionsModule, TeamModule, ClockModule],
+  imports: [
+    UsersModule,
+    AuditModule,
+    BillingModule,
+    SessionsModule,
+    TeamModule,
+    ClockModule,
+    OutboxModule,
+  ],
   controllers: [StoresController, PlansController, StoreSettingsController],
   providers: [StoresService, StoresRepository, MaintenanceStoresRepository],
   exports: [StoresService],

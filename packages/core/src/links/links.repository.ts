@@ -60,8 +60,14 @@ export class LinksRepository {
     return rows.map((row) => row.id);
   }
 
-  attributionTaps(storeId: string, contactId: string, from: Date, through: Date) {
+  attributionTaps(
+    storeId: string,
+    orders: { orderId: string; contactId: string; fromAt: Date; throughAt: Date }[],
+  ) {
     return this.tenant.forStore(storeId, (tx) => {
+      const requests = sql`jsonb_to_recordset(${JSON.stringify(orders)}::jsonb) as request(
+        "orderId" uuid, "contactId" uuid, "fromAt" timestamptz, "throughAt" timestamptz
+      )`;
       const latestVisit = tx
         .select({ id: trackedLinkVisits.id, eligibleAt: trackedLinkVisits.occurredAt })
         .from(trackedLinkVisits)
@@ -69,8 +75,8 @@ export class LinksRepository {
           and(
             eq(trackedLinkVisits.storeId, storeId),
             eq(trackedLinkVisits.trackedLinkId, trackedLinks.id),
-            gte(trackedLinkVisits.occurredAt, from),
-            lte(trackedLinkVisits.occurredAt, through),
+            gte(trackedLinkVisits.occurredAt, sql`request."fromAt"`),
+            lte(trackedLinkVisits.occurredAt, sql`request."throughAt"`),
           ),
         )
         .orderBy(desc(trackedLinkVisits.occurredAt), desc(trackedLinkVisits.id))
@@ -78,17 +84,19 @@ export class LinksRepository {
         .as('latest_visit');
       return tx
         .select({
+          orderId: sql<string>`request."orderId"`,
+          contactId: sql<string>`request."contactId"`,
           id: latestVisit.id,
           eligibleAt: latestVisit.eligibleAt,
           sourceType: trackedLinks.sourceType,
           sourceId: trackedLinks.sourceId,
         })
-        .from(trackedLinks)
+        .from(requests)
+        .innerJoin(trackedLinks, eq(trackedLinks.contactId, sql`request."contactId"`))
         .innerJoinLateral(latestVisit, sql`true`)
         .where(
           and(
             eq(trackedLinks.storeId, storeId),
-            eq(trackedLinks.contactId, contactId),
             eq(trackedLinks.kind, 'redirect'),
             isNotNull(trackedLinks.sourceId),
             inArray(trackedLinks.sourceType, ['campaign', 'automation']),

@@ -15,14 +15,19 @@ import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { StoresService } from '../stores/stores.service';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
+import { AttributionRebuildService } from './attribution-rebuild.service';
 import { AttributeOrderCreated } from './jobs/attribute-order-created.job';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
+import { ContinueAttributionRebuild } from './jobs/continue-attribution-rebuild.job';
+import { OnAttributionWindowChanged } from './jobs/on-attribution-window-changed.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
+import { OrderAttributionEngine } from './order-attribution-engine.service';
 
 class TestModule {}
 Module({
@@ -47,6 +52,13 @@ describe('Daily order summaries', () => {
   let queue: Queue;
   const now = new Date('2026-11-19T06:00:00Z');
   let number = 1000;
+  const ownerAccess = {
+    role: 'owner',
+    areas: {},
+    seeFullPhone: true,
+    exportLists: true,
+    refund: true,
+  } as const;
 
   beforeAll(async () => {
     await fixture.setup();
@@ -246,6 +258,147 @@ describe('Daily order summaries', () => {
       attributed_source_type: 'automation',
       attributed_source_id: workflow,
       attributed_channel: 'sms',
+    });
+  });
+
+  it('rebuilds recent orders using the newest window and exact visits from the oldest day', async () => {
+    const buyer = randomUUID();
+    const code = randomUUID();
+    const campaign = randomUUID();
+    const db = fixture.connection.pool;
+    await db.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Buyer','01710000009','manual','customer')",
+      [buyer, fixture.a],
+    );
+    await db.query(
+      "insert into campaigns(id,store_id,name,channel,content) values($1,$2,'Sale','sms','{}')",
+      [campaign, fixture.a],
+    );
+    await db.query(
+      `insert into campaign_recipients(id,store_id,campaign_id,contact_id,destination_address,status,sent_at)
+       values($1,$2,$3,$4,'01710000009','sent','2025-11-12T06:00:00Z')`,
+      [randomUUID(), fixture.a, campaign, buyer],
+    );
+    // New databases only have partitions from the current month forward.
+    await db.query(
+      `create table if not exists tracked_link_visits_y2025m11 partition of tracked_link_visits
+       for values from ('2025-11-01T00:00:00Z') to ('2025-12-01T00:00:00Z');
+       alter table tracked_link_visits_y2025m11 enable row level security;
+       revoke all on tracked_link_visits_y2025m11 from dakly_app`,
+    );
+    const link = randomUUID();
+    const visit = randomUUID();
+    await db.query(
+      `insert into tracked_links(id,store_id,code,source_type,source_id,contact_id,target_url)
+       values($1,$2,$3,'campaign',$4,$5,'https://example.test')`,
+      [link, fixture.a, code, campaign, buyer],
+    );
+    await db.query(
+      `insert into tracked_link_visits(id,store_id,tracked_link_id,event_key,occurred_at)
+       values($1::uuid,$2,$3,$1::uuid::text,'2025-11-12T18:00:00Z')`,
+      [visit, fixture.a, link],
+    );
+    const laterVisit = randomUUID();
+    await db.query(
+      `insert into tracked_link_visits(id,store_id,tracked_link_id,event_key,occurred_at)
+       values($1::uuid,$2,$3,$1::uuid::text,'2025-11-20T05:00:00Z')`,
+      [laterVisit, fixture.a, link],
+    );
+    const inRange = await order(fixture.a, '2025-11-19T18:00:00Z', buyer);
+    const outside = await order(fixture.a, '2025-11-19T17:59:59Z', buyer);
+    const later = await order(fixture.a, '2025-11-20T18:00:00Z', buyer);
+    await db.query("update orders set recipient_phone='01710000009' where id in ($1,$2,$3)", [
+      inRange,
+      outside,
+      later,
+    ]);
+    const stores = app.get(StoresService);
+    const owner = { userId: fixture.userA, access: ownerAccess };
+    const rebuild = app.get(AttributionRebuildService);
+    await stores.changeAttributionWindow(fixture.a, 3, owner);
+    const stale = (await stores.attributionRebuild(fixture.a)).rebuild!.id;
+    await stores.changeAttributionWindow(fixture.a, 7, owner);
+    const current = (await stores.attributionRebuild(fixture.a)).rebuild!.id;
+    await rebuild.runPage(fixture.a, stale, null);
+    expect((await stores.attributionRebuild(fixture.a)).rebuild?.id).toBe(current);
+    expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: null });
+    const engine = app.get(OrderAttributionEngine);
+    const select = engine.selectForOrders.bind(engine);
+    const changeDuringSelection = vi
+      .spyOn(engine, 'selectForOrders')
+      .mockImplementationOnce(async (...args) => {
+        const reference = await select(...args);
+        await db.query('update orders set is_recipient_buyer=false where id=$1', [inRange]);
+        return reference;
+      });
+    try {
+      await rebuild.runPage(fixture.a, current, null);
+    } finally {
+      changeDuringSelection.mockRestore();
+    }
+    await rebuild.runPage(fixture.a, current, null);
+    expect(await stores.attributionSettings(fixture.a)).toEqual({
+      windowDays: 7,
+      rebuilding: false,
+      processedOrders: null,
+    });
+    expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: visit });
+    expect(await fixture.row('orders', later)).toMatchObject({ attributed_touch_id: laterVisit });
+    expect(await fixture.row('orders', outside)).toMatchObject({ attributed_touch_id: null });
+  });
+
+  it('commits bounded rebuild progress and resumes past a microsecond cursor', async () => {
+    await fixture.connection.pool.query(
+      `insert into orders(id,store_id,number,source,created_by_type,recipient_name,
+         recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,
+         cod_amount_poisha,created_at)
+       select gen_random_uuid(),$1,5000+n,'manual','user','Buyer','01710000005','Mirpur','Dhaka',
+         100,100,'2026-11-18 06:00:00+00'::timestamptz + n*interval '1 microsecond'
+       from generate_series(1,501) n`,
+      [fixture.b],
+    );
+    const stores = app.get(StoresService);
+    await stores.changeAttributionWindow(fixture.b, 1, {
+      userId: fixture.userB,
+      access: ownerAccess,
+    });
+    const started = (await stores.attributionRebuild(fixture.b)).rebuild!;
+    const cursor = { id: randomUUID(), at: '2026-11-18 05:59:59+00' };
+    await fixture.connection.pool.query(
+      `update stores set settings=jsonb_set(settings,'{attributionRebuild}',$2::jsonb) where id=$1`,
+      [fixture.b, JSON.stringify({ ...started, after: cursor, processedOrders: 1500 })],
+    );
+    const event = {
+      id: randomUUID(),
+      type: 'attribution.window_changed',
+      storeId: fixture.b,
+      occurredAt: now.toISOString(),
+      payload: { rebuildId: started.id },
+    };
+    const subscriber = app.get(OnAttributionWindowChanged);
+    await subscriber.handle(event);
+    expect(await stores.attributionSettings(fixture.b)).toEqual({
+      windowDays: 1,
+      rebuilding: true,
+      processedOrders: 2000,
+    });
+    expect(await stores.attributionRebuild(fixture.b)).toMatchObject({
+      rebuild: { after: { at: expect.stringContaining('06:00:00.0005') } },
+    });
+    await subscriber.handle(event);
+    const { rows } = await fixture.connection.pool.query(
+      `select id, payload from outbox_events where store_id=$1
+       and type='attribution.rebuild_continued' and payload->>'rebuildId'=$2`,
+      [fixture.b, started.id],
+    );
+    expect(rows).toHaveLength(1);
+    const continuation = { ...event, ...rows[0], type: 'attribution.rebuild_continued' };
+    await app.get(ContinueAttributionRebuild).handle(continuation);
+    await app.get(ContinueAttributionRebuild).handle(continuation);
+    expect(await stores.attributionSettings(fixture.b)).toEqual({
+      windowDays: 1,
+      rebuilding: false,
+      processedOrders: null,
     });
   });
 
