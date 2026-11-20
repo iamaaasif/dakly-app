@@ -169,6 +169,7 @@ export type CampaignResponse = {
   startedAt: string | null;
   finishedAt: string | null;
   counts: CampaignCounts;
+  attribution?: { orders: string; revenuePoisha: string };
   createdAt: string;
   updatedAt: string;
 };

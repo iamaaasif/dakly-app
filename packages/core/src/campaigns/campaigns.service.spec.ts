@@ -6,6 +6,7 @@ import type { CampaignStatus } from '@dakly/contracts/campaigns';
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { AnalyticsService } from '../analytics/analytics.service';
 import type { LinksService } from '../links/links.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
@@ -273,6 +274,7 @@ describe('CampaignsService', () => {
         sampleRedirectUrl: () => 'http://localhost:4000/l/00000000',
       } as LinksService),
       { now: () => clockNow } as Clock,
+      { campaignAttribution: async () => ({}) } as unknown as AnalyticsService,
     );
   });
 

@@ -12,6 +12,7 @@ import type {
 } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import { AnalyticsService } from '../analytics/analytics.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -70,13 +71,19 @@ export class CampaignsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(CampaignSmsService) private readonly sms: CampaignSmsService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(AnalyticsService) private readonly reports: AnalyticsService,
   ) {}
 
   async list(storeId: string, query: CampaignListQuery): Promise<CampaignListResponse> {
     const timeZone =
       query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
     const rows = await this.repository.list(storeId, { ...query, timeZone });
-    const items = rows.slice(0, query.limit).map(toCampaignResponse);
+    const page = rows.slice(0, query.limit).map(toCampaignResponse);
+    const results = await this.reports.campaignAttribution(
+      storeId,
+      page.map(({ id }) => id),
+    );
+    const items = page.map((item) => ({ ...item, attribution: results[item.id] }));
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
@@ -85,7 +92,9 @@ export class CampaignsService {
   }
 
   async get(storeId: string, campaignId: string): Promise<CampaignResponse> {
-    return toCampaignResponse(await this.find(storeId, campaignId));
+    const campaign = await this.find(storeId, campaignId);
+    const results = await this.reports.campaignAttribution(storeId, [campaignId]);
+    return { ...toCampaignResponse(campaign), attribution: results[campaignId] };
   }
 
   async create(
