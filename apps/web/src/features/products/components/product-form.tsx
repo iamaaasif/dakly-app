@@ -18,26 +18,27 @@ import { ProductFields } from './product-fields';
 import { ProductOptions } from './product-options';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
-type ProductFormProps = { product?: ProductResponse; onSaved: (product: ProductResponse) => void };
-export function ProductForm({ product, onSaved }: ProductFormProps) {
+type ProductFormProps = {
+  product?: ProductResponse;
+  onSaved: (product: ProductResponse) => void;
+  onCancel?: () => void;
+};
+
+export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
+  const resolver = zodResolver(productFormSchema);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
-    resolver: zodResolver(productFormSchema),
+    resolver: (values, context, options) => resolver(parseFormValues(values), context, options),
     defaultValues: formValues(product),
   });
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
   const mutation = product ? change : create;
   const { dirtyFields, errors, isDirty } = form.formState;
-  const actions = product
-    ? [{ label: 'Save product', variant: 'primary' as const }]
-    : [
-        { status: 'hidden' as const, label: 'Save as hidden', variant: 'secondary' as const },
-        { status: 'active' as const, label: 'Save and show', variant: 'primary' as const },
-      ];
+
   return (
     <FormProvider {...form}>
       <form
-        className="space-y-6"
+        className="space-y-3.5"
         onSubmit={form.handleSubmit((input) => {
           const callbacks = {
             onSuccess: (saved: ProductResponse) => onSaved(saved),
@@ -51,36 +52,75 @@ export function ProductForm({ product, onSaved }: ProductFormProps) {
         })}
       >
         <ProductFields mode={product ? 'edit' : 'create'} />
-        <ProductOptions />
+        <ProductOptions mode={product ? 'edit' : 'create'} />
         {errors.root?.server?.message ? (
           <p role="alert" className="text-danger">
             {errors.root.server.message}
           </p>
         ) : null}
-        <div className="flex flex-wrap justify-end gap-2">
-          {actions.map((action) => (
-            <Button
-              key={action.label}
-              type="submit"
-              variant={action.variant}
-              loading={mutation.isPending}
-              disabled={Boolean(product && !isDirty)}
-              onClick={() => 'status' in action && form.setValue('status', action.status)}
-            >
-              {action.label}
-            </Button>
-          ))}
-        </div>
+        <ProductFormActions
+          isPending={mutation.isPending}
+          canSave={!product || isDirty}
+          product={product}
+          onCancel={onCancel}
+          onSetStatus={(status) => form.setValue('status', status)}
+        />
       </form>
     </FormProvider>
   );
 }
+
+type ProductFormActionsProps = {
+  isPending: boolean;
+  canSave: boolean;
+  product?: ProductResponse;
+  onCancel?: () => void;
+  onSetStatus: (status: 'active' | 'hidden') => void;
+};
+
+function ProductFormActions({
+  isPending,
+  canSave,
+  product,
+  onCancel,
+  onSetStatus,
+}: ProductFormActionsProps) {
+  const actions = product
+    ? [{ label: 'Save product', variant: 'primary' as const }]
+    : [
+        { status: 'hidden' as const, label: 'Save as hidden', variant: 'secondary' as const },
+        { status: 'active' as const, label: 'Save and show', variant: 'primary' as const },
+      ];
+
+  return (
+    <div className="flex flex-wrap justify-end gap-2 pt-2">
+      {onCancel ? (
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      ) : null}
+      {actions.map((action) => (
+        <Button
+          key={action.label}
+          type="submit"
+          variant={action.variant}
+          loading={isPending}
+          disabled={!canSave}
+          onClick={() => 'status' in action && onSetStatus(action.status)}
+        >
+          {action.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 function formValues(product?: ProductResponse): ProductFormValues {
   if (!product)
     return {
       name: '',
       options: [],
-      pricePoisha: '0.00',
+      pricePoisha: '',
       variants: [{ optionValues: {}, sku: null, priceOverridePoisha: '', costPoisha: '' }],
       isStockTracked: true,
       status: 'hidden',
@@ -126,4 +166,11 @@ function productErrorField(
 ): 'root.server' | 'variants' | 'variants.0.sku' {
   if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
   return variantCount === 1 ? 'variants.0.sku' : 'variants';
+}
+
+function parseFormValues(values: ProductFormValues) {
+  if (values.pricePoisha !== '') return values;
+  const copy: Record<string, unknown> = { ...values };
+  delete copy.pricePoisha;
+  return copy as ProductFormValues;
 }

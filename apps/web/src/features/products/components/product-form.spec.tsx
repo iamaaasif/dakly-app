@@ -110,8 +110,8 @@ describe('Product form', () => {
     });
     const { onSaved } = show();
     await userEvent.type(screen.getByLabelText('Name'), 'Cotton Panjabi');
-    await userEvent.clear(screen.getByLabelText('Selling price (Taka)'));
-    await userEvent.type(screen.getByLabelText('Selling price (Taka)'), '2450.50');
+    await userEvent.clear(screen.getByLabelText('Selling price ৳'));
+    await userEvent.type(screen.getByLabelText('Selling price ৳'), '2450.50');
     await userEvent.click(screen.getByRole('button', { name: label }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
     expect(submitted).toMatchObject({ name: 'Cotton Panjabi', pricePoisha: 245050, status });
@@ -125,9 +125,7 @@ describe('Product form', () => {
       return Response.json(product, { headers: { 'x-session-context': 'verified' } });
     });
     const { onSaved } = show(product);
-    expect((screen.getByLabelText('Selling price (Taka)') as HTMLInputElement).value).toBe(
-      '2450.50',
-    );
+    expect((screen.getByLabelText('Selling price ৳') as HTMLInputElement).value).toBe('2450.50');
     await userEvent.type(screen.getByLabelText('Product code'), '-1');
     await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
@@ -284,7 +282,7 @@ describe('Product form', () => {
 
   it('shows one selling price for a saved simple product without an override', () => {
     show(product);
-    expect(screen.getByLabelText('Selling price (Taka)')).toBeTruthy();
+    expect(screen.getByLabelText('Selling price ৳')).toBeTruthy();
     expect(screen.queryByLabelText('Default price override (Taka)')).toBeNull();
   });
 

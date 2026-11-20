@@ -5,12 +5,12 @@ import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/pro
 import { Button } from '@dakly/ui/button';
 
 import { productsSearch, useProducts } from '../api/products';
+import { ProductDialog } from './product-dialog';
 import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
 import { ProductResults } from './product-results';
 import { ProductSheet } from './product-sheet';
 import { StockAdjustmentForm } from './stock-adjustment-form';
-import { SessionDialog } from '@/components/session-dialog';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -53,11 +53,12 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
           />
         </section>
         {create && canEdit ? (
-          <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
+          <ProductDialog title="Add product" open onClose={() => router.replace(listHref)}>
             <ProductForm
               onSaved={(product) => router.replace(`${listHref}&product=${product.id}`)}
+              onCancel={() => router.replace(listHref)}
             />
-          </SessionDialog>
+          </ProductDialog>
         ) : null}
         {productId ? (
           <ProductSheet
