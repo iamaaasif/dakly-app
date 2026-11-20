@@ -122,6 +122,16 @@ export class ProductsService {
     return orderCatalogueProduct(product);
   }
 
+  async searchForChat(storeId: string, text: string, limit: number): Promise<ChatProduct[]> {
+    return (await this.repository.searchForChat(storeId, text, limit)).map(chatProduct);
+  }
+
+  async getForChat(storeId: string, id: string): Promise<ChatProduct> {
+    const product = await this.repository.findForChat(storeId, id);
+    if (!product) throw productError('PRODUCT_NOT_FOUND');
+    return chatProduct(product);
+  }
+
   remove(storeId: string, id: string, _actor: Actor): Promise<void> {
     return this.transaction.run(storeId, async () => {
       if (!(await this.repository.archive(storeId, id, this.clock.now())))
@@ -301,6 +311,16 @@ export class ProductsService {
       payload: { productId },
     });
   }
+}
+
+export type ChatProduct = OrderCatalogueProduct & Pick<ProductResponse, 'description' | 'category'>;
+
+function chatProduct(product: CatalogueProduct): ChatProduct {
+  return {
+    ...orderCatalogueProduct(product),
+    description: product.description,
+    category: product.category,
+  };
 }
 
 function orderCatalogueProduct(product: CatalogueProduct): OrderCatalogueProduct {

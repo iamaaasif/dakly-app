@@ -8,6 +8,8 @@ import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
+import { BuyerOrdersRepository } from './buyer-orders.repository';
+import { BuyerOrdersService } from './buyer-orders.service';
 import { OrderAttributionRepository } from './order-attribution.repository';
 import { OrderAttributionService } from './order-attribution.service';
 import { OrderCatalogueController } from './order-catalogue.controller';
@@ -39,6 +41,8 @@ import { OrdersService } from './orders.service';
     OrderConfirmationController,
   ],
   providers: [
+    BuyerOrdersRepository,
+    BuyerOrdersService,
     OrdersRepository,
     OrdersService,
     OrderReportingRepository,
@@ -49,6 +53,7 @@ import { OrdersService } from './orders.service';
     OrderConfirmationService,
   ],
   exports: [
+    BuyerOrdersService,
     OrdersService,
     OrderReportingService,
     OrderAttributionService,
