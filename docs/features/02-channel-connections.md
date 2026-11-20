@@ -16,7 +16,7 @@ Connects a shop's Facebook Page, Instagram professional account and WhatsApp num
 
 The product requirements below are the PRD text from 12 November 2026. Where a later decision changed it, the decision wins:
 
-- D9: WhatsApp goes through a BSP with a prepaid ৳ balance per shop (Q2 names the BSP).
+- D44 (changes D9 for release 1): each shop connects WhatsApp directly to Meta's Cloud API through Dakly's Meta app and pays Meta with its own card. A BSP with a prepaid ৳ balance comes after release 1 (Q2 names it).
 - Coexistence lets a shop keep using the WhatsApp Business app on its phone while Dakly uses the same number. Unofficial QR tools that act like WhatsApp Web are banned: they break WhatsApp's terms and get numbers blocked.
 - D20: the Email settings tab stays hidden because email campaigns are later; transactional email needs no shop setting.
 - D21: courier connections are not in release 1, so Integrations shows no courier section.
