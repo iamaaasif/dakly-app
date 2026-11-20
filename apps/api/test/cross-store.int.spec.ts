@@ -1244,6 +1244,29 @@ fixture('GET /automations/:automationId', async () => {
   expect(own.activeRuns).toBe(1);
   await hidden(b, 'GET', (value) => `/automations/${value}`, id);
 });
+fixture('GET /automations/:automationId/step-stats', async () => {
+  const { a, b } = await pair(),
+    { id, versionId } = await publishedAutomation(a);
+  const contactId = randomUUID();
+  const runId = randomUUID();
+  await f.admin.pool.query(
+    "insert into contacts(id,store_id,name,source,kind) values($1,$2,'রিনা','manual','customer')",
+    [contactId, a.id],
+  );
+  await f.admin.pool.query(
+    `insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,wake_at)
+     values($1,$2,$3,$4,$5,'consent-1','welcome','waiting',now()+interval '1 day')`,
+    [runId, a.id, id, versionId, contactId],
+  );
+  await f.admin.pool.query(
+    `insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,sent_at,tapped_at)
+     values(gen_random_uuid(),$1,$2,$3,'welcome','send','sent',now(),now())`,
+    [a.id, runId, contactId],
+  );
+  const own = await success(a, 'GET', `/automations/${id}/step-stats`, 200);
+  expect(own.json()).toEqual({ steps: { welcome: { reached: 1, sent: 1, tapped: 1 } } });
+  await hidden(b, 'GET', (value) => `/automations/${value}/step-stats`, id);
+});
 fixture('GET /automations/:automationId/trigger-preview', async () => {
   const { a, b } = await pair();
   const addGrants = async (shop: Shop) => {
