@@ -47,7 +47,7 @@ export function ImportConsentStep({ rowCount, error, loading, onBack }: ImportCo
           {error instanceof ApiError ? error.message : 'The import did not start. Try again.'}
         </p>
       ) : null}
-      <ImportStepActions onBack={onBack} next="Start import" loading={loading} />
+      <ImportStepActions onBack={onBack} next={`Import ${rowCount} customers`} loading={loading} />
     </div>
   );
 }

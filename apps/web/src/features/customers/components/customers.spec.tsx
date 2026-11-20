@@ -426,6 +426,11 @@ describe('Import customers', () => {
     expect((await screen.findByRole('status')).textContent).toContain('2 rows · 2 columns');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
+    expect(await screen.findByText('Step 2 of 7 · Detect')).toBeTruthy();
+    expect(screen.getByText('Rows').nextSibling?.textContent).toBe('2');
+    expect(screen.getByText('Columns', { selector: 'dt' }).nextSibling?.textContent).toBe('2');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
     expect(((await screen.findByLabelText('Phone')) as HTMLSelectElement).value).toBe('1');
     expect((screen.getByLabelText(/Name/) as HTMLSelectElement).value).toBe('0');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -434,7 +439,7 @@ describe('Import customers', () => {
     await user.click(screen.getByRole('radio', { name: /Leave existing customers/ }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.type(screen.getByLabelText(/WhatsApp: where/), 'Shopify checkout');
-    await user.click(screen.getByRole('button', { name: 'Start import' }));
+    await user.click(screen.getByRole('button', { name: 'Import 2 customers' }));
 
     expect(await screen.findByText('Import finished.')).toBeTruthy();
     expect(sent.find((request) => request.path.endsWith('/start'))?.body).toEqual({
@@ -462,8 +467,9 @@ describe('Import customers', () => {
     await screen.findByRole('status');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('Choose the column that has phone numbers')).toBeTruthy();
-    expect(screen.queryByText('Step 3 of 6 · Preview')).toBeNull();
+    expect(screen.queryByText('Step 4 of 7 · Preview')).toBeNull();
   });
 
   it('refuses a file that is not Excel or CSV before uploading it', async () => {

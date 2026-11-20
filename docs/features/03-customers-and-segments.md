@@ -115,21 +115,24 @@ The web app has two customer screens.
   returns to the list. The Marketing permission form records an answer for one channel with a
   required note saying how the customer told the shop. Agreed is offered only on WhatsApp and
   SMS; on Messenger and Instagram staff can record only a withdrawal.
-- The import window has six steps, with a progress bar and "Step N of 6" on top. Upload takes
+- The import window has seven steps, with a progress bar and "Step N of 7" on top. Upload takes
   a CSV or an Excel (.xlsx) file by choosing or dropping it, checks the name, the 10 MB limit, UTF-8 and the 50,000 row limit in
   the browser, and shows the file name, row count, column count and size. A template download is offered. Continue
   sends the file straight to storage (`POST /imports`, then the signed PUT). Map fields
   matches column names to the eight fields by name and lets the owner change each one; Phone
   is required and one column fills one field at most. Preview shows the first 20 rows as
-  Dakly will read them, read from the file in the browser. Duplicates chooses Update their
-  details (default) or Leave existing customers as they are. Consent takes where customers
-  agreed for WhatsApp and for SMS, each optional, and Start import calls
+  Dakly will read them, read from the file in the browser. Validate chooses Update their
+  details (default) or Leave existing customers as they are. Confirm takes where customers
+  agreed for WhatsApp and for SMS, each optional, and Import N customers calls
   `POST /imports/:importId/start`. Results polls `GET /imports/:importId` every 2 seconds
   and shows added, updated, skipped and failed counts with a link to the error report CSV.
   Undo import asks once, then calls `POST /imports/:importId/undo` and shows "Undoing the
   import" until `undoFinishedAt` is set. The customer list reloads when the window closes.
-  The prototype's Detect, Validate and Confirm steps are folded into Upload, Duplicates plus
-  Consent, and the Start import button. The preview has no Ready, Already in Dakly or Invalid
+  Detect shows the file name, row count, column count and size, as read in the browser, and
+  Continue. The steps are named as in the design: Upload, Detect, Map fields, Preview, Validate
+  (the duplicates choice), Confirm (the consent evidence and the Import N customers button) and
+  Results. The design's upload note says 20 MB; the API and this doc say 10 MB, so the screen says
+  10 MB. The preview has no Ready, Already in Dakly or Invalid
   labels, because no route checks rows before the import starts; row problems appear in the
   report after it.
 - Both screens show the phone as the API sent it: full for members with "See full phone

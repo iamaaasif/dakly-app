@@ -8,6 +8,12 @@ import { ImportStepActions } from './import-step-actions';
 import { prepareImportFile, type ImportFileSummary } from '@/lib/import-file';
 import { useUploadImport } from '@/lib/use-upload-import';
 
+export type UploadedImport = {
+  importId: string;
+  preview: ImportFileSummary;
+  file: { name: string; size: number };
+};
+
 type ImportUploadStepProps = {
   path: Parameters<typeof useUploadImport>[0];
   // What a row is, in the plural, the name of the file picker and the CSV a shop can download.
@@ -16,7 +22,7 @@ type ImportUploadStepProps = {
   template: { filename: string; csv: string };
   // Customer files may be Excel; the browser turns the first sheet into CSV before it uploads.
   excel?: boolean;
-  onUploaded: (upload: { importId: string; preview: ImportFileSummary }) => void;
+  onUploaded: (upload: UploadedImport) => void;
 };
 
 export function ImportUploadStep({
@@ -66,7 +72,12 @@ export function ImportUploadStep({
         onNext={() =>
           chosen &&
           upload.mutate(chosen.file, {
-            onSuccess: (importId) => onUploaded({ importId, preview: chosen.preview }),
+            onSuccess: (importId) =>
+              onUploaded({
+                importId,
+                preview: chosen.preview,
+                file: { name: chosen.file.name, size: chosen.file.size },
+              }),
           })
         }
       />
