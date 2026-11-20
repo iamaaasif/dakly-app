@@ -13,6 +13,11 @@ export function usesOrderFields(text: string): boolean {
   return [...text.matchAll(FIELD)].some(([, name]) => isOrderField(name ?? ''));
 }
 
+// A confirm link only means something while the order waits in To confirm.
+export function usesConfirmLink(text: string): boolean {
+  return [...text.matchAll(FIELD)].some(([, name]) => name === 'confirm_link');
+}
+
 export function renderOrderFields(text: string, values: Record<OrderTextField, string>): string {
   return text.replace(FIELD, (field, name: string) => (isOrderField(name) ? values[name] : field));
 }

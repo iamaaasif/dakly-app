@@ -41,14 +41,16 @@ describe('Worker job schedulers', () => {
     ]);
   });
 
-  it('registers post recovery on the sync queue every minute under a fixed id', async () => {
+  it('registers post recovery every minute and the metrics sweep every hour under fixed ids', async () => {
     const sync = recordingQueue();
     const publishing = new SocialPublishingModule(sync.queue);
     await publishing.onApplicationBootstrap();
     await publishing.onApplicationBootstrap();
     expect(sync.schedulers).toEqual([
       scheduler('recover-post-targets', 60000),
+      scheduler('queue-post-metrics-refreshes', 3600000),
       scheduler('recover-post-targets', 60000),
+      scheduler('queue-post-metrics-refreshes', 3600000),
     ]);
   });
 
@@ -89,8 +91,10 @@ describe('Worker job schedulers', () => {
     ]);
     expect(sync.schedulers).toEqual([
       scheduler('queue-channel-token-checks', 86400000),
+      scheduler('reconcile-meta-page-subscriptions', 86400000),
       scheduler('queue-conversation-returns', 60000),
       scheduler('queue-channel-token-checks', 86400000),
+      scheduler('reconcile-meta-page-subscriptions', 86400000),
       scheduler('queue-conversation-returns', 60000),
     ]);
     expect(payments.schedulers).toEqual([

@@ -455,6 +455,8 @@ The template library filters by type, goal and channel in the URL. Use workflow 
 
 Workflow settings change the saved draft graph, including wait times, message text, channel order, re-entry and exits. The settings form can add tag exits. Order, reply and link exits wait for their sources. An every-time workflow that removes its own trigger tag shows a warning. Starting or republishing saves any draft changes first. A refused publish leaves the draft saved. Before publish, the workflow detail reports the number of running and waiting entries so the shop can see how many people will continue on the version they entered.
 
+The workflow canvas (`/automations/<id>/canvas`, CAMP-6 part 1) draws the saved draft read-only for members with `automations.view`. The trigger card shows the trigger sentence, filters, audience, frequency, exit rules and channels. Each step is a card with a number in reading order: first step, then each path in turn. Waits are pills, sends show their channels and the start of the message, and splits show each path's label on its line and list where each path goes for screen readers. Exits are a marker without a number. A step that rejoins a path sits one row below its deepest parent, and a line that skips rows runs beside the cards in between. A flow wider than the screen scrolls sideways and opens on its middle. Zoom, Fit to screen and the seven-day entry count come in part 2. Adding, moving and deleting steps, the add-step menu, the checks with one-click fixes, Save draft and Publish come in part 3, and per-step stats in part 4.
+
 Limits: 50 steps a workflow, 90 days of waiting on any path, 5 exit conditions, 10 condition paths plus Else, 4 random paths, 100 workflows a store; warn when more than 10 active workflows share a trigger.
 
 Publish is blocked when a path has no end or loops, a send step has no reachable channel or approved template of the right category, a split on tapped or replied has less than 2 hours of wait before it, or the trigger's source is missing. It warns on offers over 20% off (Review before sending turns on), a marketing send right after the trigger, and a schedule the frequency cap will mostly block.
@@ -519,6 +521,10 @@ A workflow that starts from an order can write `{order_number}`, `{order_total}`
 
 `{confirm_link}` is `<short link base>/c/<token>`, where the token is 32 random bytes in base64url. `order_confirmations` keeps one row per issued token with only its sha256, so the address cannot be guessed or rebuilt from the database, and a tracked-link code never confirms anything. Every message about the order gets its own token, and all of them work while the order is in To confirm; a token left by a send that rolled back is harmless because nobody holds it. The page behind the address is described in feature 06, "Customer confirm page". `{order_total}` uses the shared `formatMoney` in `packages/contracts`. CAMP-14 adds the customer, link and product fields to the same renderer.
 
+### COD order confirmation template (ORD-4)
+
+The template starts on `order_placed` for orders with payment status COD pending and sends the SMS with `{confirm_link}`; a reminder follows after 6 hours. Its exits are Order is confirmed (the order has a confirmation time) and Order is cancelled (its stage is Cancelled). The runner reads the order before every step, so an order saved as confirmed (it still emits `order.created`) exits before the first message, and an order the customer or staff confirmed or cancelled gets no reminder. A send step that uses `{confirm_link}` goes out only while the order is in To confirm: the check runs inside the send gate, and an order on hold ends the run with reason `order_not_awaiting_confirmation` before the message. An order moved back to To confirm sends the next such message, because the stage is read at each send. Messenger buttons are a later part of ORD-4, and the other order templates follow in part 3.
+
 ### Workflow catalogue
 
 The graph schema is [`automations/graph.ts`](../../packages/contracts/src/automations/graph.ts) in `packages/contracts` (A5 in the [plan](../plans/campaigns-and-automations.md)). It rejects a path that loops, a step that leads to a missing step, a graph over the limits above, an unknown step kind, a trigger filter the trigger does not take, and a condition or wait that reads replies or taps from a step that is not a send step. The publish checks that need store data (reachable channel, approved template, wait before a split, missing source) belong to the service.
@@ -568,12 +574,13 @@ Templates are in [`automations/templates.ts`](../../packages/contracts/src/autom
 
 Festival greetings are campaigns, not workflows (Asif, 16 Nov): a shop sends them as an ordinary campaign and picks the send date in the builder, so there is no festival or date-reached trigger.
 
-| Template                | Trigger                                   | Steps (default)                                                         | Goal         | Category         | Needs     |
-| ----------------------- | ----------------------------------------- | ----------------------------------------------------------------------- | ------------ | ---------------- | --------- |
-| Welcome new subscribers | Consent given                             | Welcome now; wait 2 days; SMS with best sellers                         | Placed order | Welcome          |           |
-| Chat follow-up          | Chat started on Messenger                 | Wait 2 hours; Messenger follow-up inside the window; exit if they reply | Placed order | Abandoned        | Channels  |
-| Back in stock           | Variant restocked, person on waiting list | Message with the product and order link                                 | Placed order | Abandoned        | Products  |
-| Birthday                | Birthday                                  | Greeting at 10:00; wait 7 days                                          | Placed order | Special occasion | Birthdays |
+| Template                | Trigger                                   | Steps (default)                                                                                      | Goal         | Category         | Needs     |
+| ----------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------ | ---------------- | --------- |
+| Welcome new subscribers | Consent given                             | Welcome now; wait 2 days; SMS with best sellers                                                      | Placed order | Welcome          |           |
+| Chat follow-up          | Chat started on Messenger                 | Wait 2 hours; Messenger follow-up inside the window; exit if they reply                              | Placed order | Abandoned        | Channels  |
+| Back in stock           | Variant restocked, person on waiting list | Message with the product and order link                                                              | Placed order | Abandoned        | Products  |
+| Birthday                | Birthday                                  | Greeting at 10:00; wait 7 days                                                                       | Placed order | Special occasion | Birthdays |
+| COD order confirmation  | Order placed, payment status COD pending  | SMS with the confirm link; wait 6 hours; SMS reminder; exit when the order is confirmed or cancelled | None         | Transactional    | Orders    |
 
 "If no order" in a template is its goal: placing an order exits the run before the next step.
 

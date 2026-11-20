@@ -60,6 +60,8 @@ const MAX_QUEUED_STEPS = 1000;
 const CLAIMS_PER_STORE = 100;
 const system = { kind: 'system' } as const;
 
+const PURGE_BATCH = 5000;
+
 @Injectable()
 export class AutomationRunsService {
   constructor(
@@ -279,7 +281,7 @@ export class AutomationRunsService {
       { contactId, channel: 'sms', category: step.category },
       lockedContactExists,
     );
-    const exitReason = await this.conditions.refreshExitReason(facts, at);
+    const exitReason = await this.conditions.refreshExitReason(facts, step, at);
     if (exitReason) return { exitReason, at };
     const firstTriedAt = await this.repository.schedulerTime(storeId);
     const late = await this.readLateGateResult(facts, firstTriedAt);
@@ -425,5 +427,9 @@ export class AutomationRunsService {
           started.optOutUrl ?? undefined,
         ),
       });
+  }
+
+  async purgeExpiredSteps(storeId: string): Promise<void> {
+    while (await this.repository.purgeExpiredStepsBatch(storeId, PURGE_BATCH));
   }
 }

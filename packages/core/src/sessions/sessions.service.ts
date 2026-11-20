@@ -20,6 +20,8 @@ import { SessionsRepository } from './sessions.repository';
 
 const TOUCH_INTERVAL = 5 * 60 * 1000;
 
+const PURGE_BATCH = 5000;
+
 @Injectable()
 export class SessionsService {
   constructor(
@@ -56,10 +58,14 @@ export class SessionsService {
               canEditOrders: this.team.canAccess(access, 'orders', 'edit'),
               canViewCampaigns: this.team.canAccess(access, 'campaigns', 'view'),
               canEditCampaigns: this.team.canAccess(access, 'campaigns', 'edit'),
+              canViewSocial: this.team.canAccess(access, 'social', 'view'),
+              canEditSocial: this.team.canAccess(access, 'social', 'edit'),
               canViewAutomations: this.team.canAccess(access, 'automations', 'view'),
               canEditAutomations: this.team.canAccess(access, 'automations', 'edit'),
               canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
               canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
+              canViewChats: this.team.canAccess(access, 'chats', 'view'),
+              canEditChats: this.team.canAccess(access, 'chats', 'edit'),
               canViewSegments: this.team.canAccess(access, 'segments', 'view'),
               canEditSegments: this.team.canAccess(access, 'segments', 'edit'),
               canApproveSupport: this.team.canApproveSupport(access),
@@ -164,6 +170,10 @@ export class SessionsService {
         });
       }
     });
+  }
+
+  async purgeExpired(): Promise<void> {
+    while (await this.repository.purgeExpiredBatch(PURGE_BATCH));
   }
 }
 
