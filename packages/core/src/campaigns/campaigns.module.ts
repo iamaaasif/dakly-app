@@ -25,6 +25,7 @@ import { CampaignAudienceService } from './campaign-audience.service';
 import { CampaignBatchService } from './campaign-batch.service';
 import { CampaignCountsRepository } from './campaign-counts.repository';
 import { CampaignCountsService } from './campaign-counts.service';
+import { CampaignDuplicateService } from './campaign-duplicate.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
 import { CampaignMessengerSender } from './campaign-messenger-sender.service';
@@ -67,6 +68,7 @@ import { CampaignsService } from './campaigns.service';
     CampaignAudienceService,
     CampaignCountsRepository,
     CampaignCountsService,
+    CampaignDuplicateService,
     CampaignMessageTotalsRepository,
     CampaignResultsRepository,
     CampaignResultsService,
