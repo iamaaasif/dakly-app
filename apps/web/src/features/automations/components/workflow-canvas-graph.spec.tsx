@@ -55,7 +55,7 @@ describe('WorkflowCanvasGraph', () => {
     const steps = within(screen.getByRole('list', { name: 'Workflow steps' }));
 
     expect(steps.getByText('Trigger')).toBeTruthy();
-    expect(steps.getByText('customers receive a tag')).toBeTruthy();
+    expect(steps.getByText('receive a tag')).toBeTruthy();
     expect(steps.getByText('Tag: vip')).toBeTruthy();
     expect(steps.getByText('Once every 7 days')).toBeTruthy();
     expect(steps.getByText('Places an order')).toBeTruthy();

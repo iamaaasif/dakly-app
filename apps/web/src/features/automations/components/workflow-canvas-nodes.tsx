@@ -17,7 +17,7 @@ import type { ReactNode } from 'react';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { cn } from '@dakly/ui/cn';
 
-import { channelLabels, triggerLabels } from '../automation-labels';
+import { channelLabels, triggerEntryLabels } from '../automation-labels';
 import { actionDetail, actionLabel, triggerRows, waitParts } from '../workflow-canvas-labels';
 import type { CanvasLayout, CanvasNode } from '../workflow-canvas-layout';
 
@@ -116,7 +116,7 @@ function TriggerCard({ graph, layout }: { graph: AutomationGraph; layout: Canvas
         <div className="min-w-0">
           <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">Trigger</p>
           <p className="line-clamp-2">
-            When <strong>{triggerLabels[graph.trigger.key]}</strong>
+            Customers enter when they <strong>{triggerEntryLabels[graph.trigger.key]}</strong>
           </p>
         </div>
       </div>

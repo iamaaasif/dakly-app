@@ -9,7 +9,7 @@ import { buttonVariants } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useAutomation } from '../api/automations';
-import { statusLabels, triggerLabels } from '../automation-labels';
+import { statusLabels, triggerEntryLabels } from '../automation-labels';
 import { layoutWorkflow } from '../workflow-canvas-layout';
 import { WorkflowCanvasGraph } from './workflow-canvas-graph';
 import { WorkflowPageHeader } from './workflow-page-header';
@@ -48,7 +48,7 @@ function CanvasScreen({ workflow }: { workflow: AutomationDetailResponse }) {
     <div className="flex min-h-screen flex-col bg-background">
       <WorkflowPageHeader
         title={workflow.name}
-        subtitle={`When ${triggerLabels[workflow.graph.trigger.key]}`}
+        subtitle={`Customers enter when they ${triggerEntryLabels[workflow.graph.trigger.key]}`}
         badge={badge}
       >
         {canEdit && (
