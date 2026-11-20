@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 
 import { type StartImportInput, startImportSchema } from '@dakly/contracts/contacts';
+import { cn } from '@dakly/ui/cn';
 
 import { customersKeys } from '../api/customers-keys';
 import { useStartImport } from '../api/start-import';
@@ -114,7 +115,7 @@ function ImportStepHeader({ step }: { step: number }) {
         {steps.map((name, index) => (
           <li
             key={name}
-            className={`h-1 rounded-full ${index <= step ? 'bg-action' : 'bg-surface-muted'}`}
+            className={cn('h-1 rounded-full', index <= step ? 'bg-action' : 'bg-surface-muted')}
           />
         ))}
       </ol>

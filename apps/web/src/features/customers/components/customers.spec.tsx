@@ -14,6 +14,7 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { CustomerProfile } from './customer-profile';
 import { CustomersScreen } from './customers-screen';
+import { ImportResultStep } from './import-result-step';
 import { sessionContextKey } from '@/lib/session-context';
 
 const push = vi.fn();
@@ -407,5 +408,13 @@ describe('Import customers', () => {
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
     expect((await screen.findByRole('alert')).textContent).toContain('Only CSV files');
     expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
+  });
+
+  it('keeps waiting while the import has not started its job yet', async () => {
+    const statuses = ['uploaded', 'mapped', 'done'];
+    respond(() => ({ body: done(statuses.shift() ?? 'done') }));
+    show(<ImportResultStep importId={importId} onDone={() => undefined} />);
+    expect(await screen.findByText(/Importing customers/)).toBeTruthy();
+    expect(await screen.findByText('Import finished.', {}, { timeout: 6000 })).toBeTruthy();
   });
 });

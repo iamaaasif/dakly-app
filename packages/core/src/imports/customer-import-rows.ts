@@ -4,9 +4,10 @@ import {
   type ContactImportRow,
   contactImportRowSchema,
   MAX_IMPORT_COLUMNS,
+  MAX_IMPORT_ROWS,
 } from '@dakly/contracts/contacts';
 
-import { importError, MAX_IMPORT_ROWS } from './imports.errors';
+import { importError } from './imports.errors';
 
 // Row numbers are the ones the spreadsheet shows: the header is row 1. Messages never repeat
 // the cell, because the report goes back to members who may not see full phones.
