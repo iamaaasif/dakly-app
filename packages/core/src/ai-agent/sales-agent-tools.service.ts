@@ -172,8 +172,8 @@ export class SalesAgentToolsService {
     const input = draftOrderTool.input.parse(raw);
     if (!chat) return { error: 'NOT_IN_A_CHAT' };
     const areaId = await this.delivery.findAreaIdByName(storeId, input.area);
-    // The customer's own phone is saved first so a number held by another contact shows staff a
-    // possible match even if the order itself fails (D27).
+    // The own phone is saved before the order so a number held by another contact shows staff a
+    // possible match even when the order then fails (D27).
     await this.phoneMatches.captureOwnPhone(storeId, {
       contactId,
       phone: input.phone,

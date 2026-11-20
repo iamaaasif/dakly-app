@@ -25,7 +25,6 @@ import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
-import type { PlacedBy } from './order-placement';
 import { moveOrderReservations } from './order-reservations';
 import { returnRisk } from './order-risk';
 import {
@@ -48,6 +47,15 @@ import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
+
+// Staff and the AI share one creation path; the defaults are a staff order.
+type PlacedBy = {
+  idempotencyKey: string;
+  access: Access;
+  actor: AuditEntry['actor'];
+  source?: OrderWrite['source'];
+  createdByType?: OrderWrite['createdByType'];
+};
 
 @Injectable()
 export class OrdersService {
