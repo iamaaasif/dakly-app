@@ -80,7 +80,7 @@ test('records manual dispatch, a partly delivered parcel and the COD actually co
     );
 
     await page.goto('/orders?stage=to_pack');
-    const opener = page.getByRole('link', { name: 'Details for order #1050' });
+    const opener = page.getByRole('link', { name: 'Book courier for order #1050' });
     await opener.click();
     const detail = page.getByRole('dialog', { name: 'Order #1050' });
     await expect(detail.getByRole('button', { name: 'Sent with courier' })).toBeVisible();

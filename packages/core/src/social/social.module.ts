@@ -13,6 +13,8 @@ import { PostingSlotsController } from './posting-slots.controller';
 import { PostingSlotsService } from './posting-slots.service';
 import { SocialAnalyticsRepository } from './social-analytics.repository';
 import { SocialAnalyticsService } from './social-analytics.service';
+import { SocialRescheduleRepository } from './social-reschedule.repository';
+import { SocialRescheduleService } from './social-reschedule.service';
 import { SocialController } from './social.controller';
 import { SocialRepository } from './social.repository';
 import { SocialService } from './social.service';
@@ -33,7 +35,9 @@ import { SocialService } from './social.service';
     PostMediaService,
     SocialAnalyticsRepository,
     SocialAnalyticsService,
+    SocialRescheduleService,
     SocialService,
+    SocialRescheduleRepository,
     SocialRepository,
   ],
   exports: [SocialAnalyticsService],

@@ -14,9 +14,11 @@ import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { cn } from '@dakly/ui/cn';
 
-import { canConfirmOrder } from '../order-actions';
+import { isFinishedOrder } from '../order-actions';
 import { orderStageLabels } from '../order-labels';
 import { OrderRiskBadge } from './order-risk-badge';
+import { OrderRowAction } from './order-row-action';
+import { OrderRowParcel } from './order-row-parcel';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 
 type SourceStyle = { icon: LucideIcon; bgClass: string; textClass: string };
@@ -42,7 +44,6 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
     textClass: 'text-text',
   };
   const Icon = style.icon;
-  const canConfirm = canConfirmOrder(order, canEdit);
 
   return (
     <li className="grid grid-cols-[auto_1fr] items-center gap-3 p-4 md:grid-cols-[auto_1fr_auto_auto] md:gap-4">
@@ -74,16 +75,10 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
         {order.itemPreview ? (
           <p className="mt-0.5 text-sm wrap-anywhere text-text-muted">{order.itemPreview}</p>
         ) : null}
+        <OrderRowParcel order={order} />
       </div>
       <OrderAmount order={order} />
-      <Link
-        href={href}
-        data-order-row-action={order.id}
-        aria-label={`${canConfirm ? 'Confirm' : 'Details for'} order #${order.number}`}
-        className="col-start-2 inline-flex min-h-11 w-fit items-center justify-center rounded-md bg-inverse px-3.5 text-sm font-medium text-on-primary hover:bg-inverse/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:col-start-auto md:h-9 md:min-h-9"
-      >
-        {canConfirm ? 'Confirm' : 'Details'}
-      </Link>
+      <OrderRowAction order={order} href={href} canEdit={canEdit} />
     </li>
   );
 }
@@ -93,7 +88,7 @@ type OrderRowBadgesProps = { order: OrderListItem };
 function OrderRowBadges({ order }: OrderRowBadgesProps) {
   return (
     <>
-      <OrderRiskBadge risk={order.returnRisk} />
+      {isFinishedOrder(order.stage) ? null : <OrderRiskBadge risk={order.returnRisk} />}
       {(order.stage === 'on_hold' || order.stage === 'partially_delivered') && (
         <Badge variant="neutral" className="rounded-full px-2.5 py-0.5 text-xs font-medium">
           {orderStageLabels[order.stage]}

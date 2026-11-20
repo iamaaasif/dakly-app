@@ -30,3 +30,21 @@ export function canEditOrder(order: OrderSummary | undefined, canEditOrders?: bo
     editablePaymentStatuses.includes(order.paymentStatus)
   );
 }
+
+export function canMarkOrderDelivered(
+  order: Pick<OrderSummary, 'stage' | 'source'>,
+  canEditOrders?: boolean,
+): boolean {
+  return canChangeOrderStage(order, canEditOrders) && order.stage === 'with_courier';
+}
+
+export function canBookCourier(
+  order: Pick<OrderSummary, 'stage' | 'source'>,
+  canEditOrders?: boolean,
+): boolean {
+  return canChangeOrderStage(order, canEditOrders) && order.stage === 'to_pack';
+}
+
+export function isFinishedOrder(stage: OrderSummary['stage']): boolean {
+  return ['delivered', 'partially_delivered', 'returned', 'cancelled'].includes(stage);
+}
