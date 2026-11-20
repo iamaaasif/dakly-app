@@ -3,7 +3,7 @@ import { expect, it } from 'vitest';
 import type { PostResponse } from '@dakly/contracts/social';
 
 import type { SocialAccount } from './api/get-social-accounts';
-import { buildEntries, monthWeeks, shiftMonth, sortPublished, weekOf } from './post-calendar';
+import { buildEntries, monthWeeks, shiftMonth, weekOf } from './post-calendar';
 
 const facebook = { id: 'fb', kind: 'facebook_page', status: 'active' } as SocialAccount;
 const instagram = { id: 'ig', kind: 'instagram', status: 'needs_reconnect' } as SocialAccount;
@@ -17,13 +17,9 @@ function post(overrides: Partial<PostResponse['targets'][number]>[], media = ['p
       status: 'scheduled',
       scheduledFor: '2026-11-07T14:30:00.000Z',
       publishedAt: null,
-      reach: null,
-      reactions: null,
-      comments: null,
-      linkTaps: null,
       ...target,
     })),
-  } as PostResponse;
+  } as unknown as PostResponse;
 }
 
 it('starts every week on Saturday and covers the whole month', () => {
@@ -74,25 +70,4 @@ it('shows a failed target as Failed and filters by account', () => {
   expect(buildEntries([mixed], [facebook, instagram], null)[0]?.status).toBe('failed');
   expect(buildEntries([mixed], [facebook, instagram], 'fb')[0]?.status).toBe('scheduled');
   expect(buildEntries([mixed], [facebook, instagram], 'other')).toEqual([]);
-});
-
-it('sorts published posts by newest, reach or reactions, with unmeasured posts last', () => {
-  const entry = (id: string, at: string, [reach, reactions]: (number | null)[]) => {
-    const [built] = buildEntries(
-      [{ ...post([{ status: 'published', publishedAt: at, reach, reactions }]), id }],
-      [facebook],
-      null,
-    );
-    return built!;
-  };
-  const entries = [
-    entry('old', '2026-11-01T10:00:00.000Z', [900, 5]),
-    entry('new', '2026-11-05T10:00:00.000Z', [null, null]),
-    entry('mid', '2026-11-03T10:00:00.000Z', [100, 50]),
-  ];
-  const ids = (sort: 'newest' | 'reach' | 'reactions') =>
-    sortPublished(entries, sort).map(({ post: { id } }) => id);
-  expect(ids('newest')).toEqual(['new', 'mid', 'old']);
-  expect(ids('reach')).toEqual(['old', 'mid', 'new']);
-  expect(ids('reactions')).toEqual(['mid', 'old', 'new']);
 });

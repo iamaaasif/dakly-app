@@ -197,8 +197,6 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
     await expect(page.getByRole('region', { name: 'Reconnect @urbantrend.bd' })).toContainText(
       /\d+ scheduled Instagram posts/,
     );
-    await expect(page.getByRole('tab', { name: /Calendar/ })).toContainText('9');
-    await expect(page.getByRole('tab', { name: /Published/ })).toContainText('4');
     await capture(page, 'month');
 
     await page.getByRole('button', { name: 'Week', exact: true }).click();
@@ -213,13 +211,6 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
     await expect(details.getByText('Urban Trend')).toBeVisible();
     await capture(page, 'post-details');
     await details.getByRole('button', { name: 'Close', exact: true }).click();
-
-    await page.getByRole('tab', { name: /Published/ }).click();
-    await expect(page.getByText('18,240')).toBeVisible();
-    await capture(page, 'published');
-    await page.getByLabel('Sort published posts').click();
-    await page.getByRole('option', { name: 'Most reach' }).click();
-    await expect(page.getByRole('listitem').first()).toContainText('Pohela Falgun gift boxes');
 
     // A phone starts on the list, because the month grid is too small to read.
     await page.setViewportSize({ width: 360, height: 800 });

@@ -43,7 +43,8 @@ export function PostChip({ entry, onOpen }: PostChipProps) {
         tones[entry.status],
       )}
     >
-      <span aria-hidden="true" className="flex shrink-0 gap-0.5">
+      {/* A chip that needs attention shows its state instead of the networks, so the caption stays readable. */}
+      <span aria-hidden="true" className={cn('flex shrink-0 gap-0.5', StatusIcon && 'md:hidden')}>
         {entry.kinds.map((kind) => (
           <NetworkIcon key={kind} kind={kind} size="small" />
         ))}

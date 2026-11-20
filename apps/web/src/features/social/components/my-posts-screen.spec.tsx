@@ -65,10 +65,6 @@ const post = (id: string, caption: string, target: Partial<Target>): PostRespons
       externalPostId: null,
       errorCode: null,
       errorMessage: null,
-      reach: null,
-      reactions: null,
-      comments: null,
-      linkTaps: null,
       ...target,
     },
   ],
@@ -103,7 +99,7 @@ afterEach(() => {
   query = 'view=list&date=2026-11-06';
 });
 
-it('counts upcoming and published posts and tells how many Instagram posts are blocked', async () => {
+it('tells how many scheduled Instagram posts are blocked by the expired account', async () => {
   show([
     post('a', 'Weekend sale', {}),
     post('b', 'Reel for Instagram', {
@@ -113,15 +109,9 @@ it('counts upcoming and published posts and tells how many Instagram posts are b
     post('c', 'Mustard scarves', {
       status: 'published',
       publishedAt: '2026-11-02T14:00:00.000Z',
-      reach: 1200,
     }),
   ]);
-  expect(await screen.findByRole('tab', { name: /Calendar/ })).toHaveProperty(
-    'textContent',
-    'Calendar2',
-  );
-  expect(screen.getByRole('tab', { name: /Published/ }).textContent).toBe('Published1');
-  const banner = screen.getByRole('region', { name: 'Reconnect @urbantrend.bd' });
+  const banner = await screen.findByRole('region', { name: 'Reconnect @urbantrend.bd' });
   expect(within(banner).getByText(/1 scheduled Instagram post won’t publish/)).toBeTruthy();
 });
 
@@ -134,21 +124,6 @@ it('lists the month by day with each post’s state, and filters by account in t
   expect(replace).toHaveBeenCalledWith(expect.stringContaining('date=2026-12-01'), {
     scroll: false,
   });
-});
-
-it('shows results for a published post and a prompt when nothing is planned', async () => {
-  query = 'tab=published';
-  show([
-    post('c', 'Mustard scarves', {
-      status: 'published',
-      publishedAt: '2026-11-02T14:00:00.000Z',
-      reach: 1200,
-      reactions: 80,
-    }),
-  ]);
-  const list = await screen.findByRole('region', { name: 'Published posts' });
-  expect(within(list).getByText('1,200')).toBeTruthy();
-  expect(within(list).getAllByText('—')).toHaveLength(2);
 });
 
 it('offers Plan your first post when there are no posts', async () => {

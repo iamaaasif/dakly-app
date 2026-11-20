@@ -113,27 +113,3 @@ export const statusLabels: Record<CalendarStatus, string> = {
   published: 'Published',
   failed: 'Failed',
 };
-
-export type PublishedSort = 'newest' | 'reach' | 'reactions';
-
-export function publishedTotals(post: PostResponse) {
-  const published = post.targets.filter(({ status }) => status === 'published');
-  const sum = (pick: (target: (typeof published)[number]) => number | null) => {
-    const values = published.map(pick).filter((value): value is number => value !== null);
-    return values.length ? values.reduce((total, value) => total + value, 0) : null;
-  };
-  return {
-    reach: sum(({ reach }) => reach),
-    reactions: sum(({ reactions }) => reactions),
-    comments: sum(({ comments }) => comments),
-    linkTaps: sum(({ linkTaps }) => linkTaps),
-  };
-}
-
-export function sortPublished(entries: CalendarEntry[], sort: PublishedSort): CalendarEntry[] {
-  const key = (entry: CalendarEntry) =>
-    publishedTotals(entry.post)[sort === 'reach' ? 'reach' : 'reactions'] ?? -1;
-  return [...entries].sort((a, b) =>
-    sort === 'newest' ? b.at.localeCompare(a.at) : key(b) - key(a) || b.at.localeCompare(a.at),
-  );
-}

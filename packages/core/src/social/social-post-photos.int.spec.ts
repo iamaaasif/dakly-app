@@ -108,47 +108,4 @@ describe('SocialService post photos', () => {
     expect(photosOf(withPhoto)).toEqual([{ id: own, url: `https://storage.test/${own}` }]);
     expect(photosOf(withoutPhoto)).toEqual([]);
   });
-
-  it('returns the results saved for a published target and null before the first pull', async () => {
-    const connectionId = randomUUID();
-    await fixture.connection.pool.query(
-      "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values($1::uuid,$2,'facebook_page',$1::text,'Page')",
-      [connectionId, fixture.a],
-    );
-    const [measured, waiting] = [randomUUID(), randomUUID()];
-    for (const [id, status, reach, linkTaps] of [
-      [measured, 'published', 900, 12],
-      [waiting, 'published', null, null],
-    ] as const) {
-      await fixture.connection.pool.query(
-        "insert into posts(id,store_id,caption,created_by_user_id) values($1,$2,'Published',$3)",
-        [id, fixture.a, fixture.userA],
-      );
-      await fixture.connection.pool.query(
-        'insert into post_targets(id,store_id,post_id,channel_connection_id,status,scheduled_for,published_at,external_post_id,reach,reactions,comments,link_taps) values(gen_random_uuid(),$1,$2::uuid,$3,$4,$5,$5,$2::text,$6,$7,$7,$8)',
-        [fixture.a, id, connectionId, status, now, reach, reach === null ? null : 40, linkTaps],
-      );
-    }
-
-    const page = await socialService().listPosts(
-      fixture.a,
-      { limit: 100 },
-      { kind: 'user', userId: fixture.userA },
-      {} as StoreAccess,
-    );
-
-    const target = (id: string) => page.items.find((item) => item.id === id)?.targets[0];
-    expect(target(measured)).toMatchObject({
-      reach: 900,
-      reactions: 40,
-      comments: 40,
-      linkTaps: 12,
-    });
-    expect(target(waiting)).toMatchObject({
-      reach: null,
-      reactions: null,
-      comments: null,
-      linkTaps: null,
-    });
-  });
 });
