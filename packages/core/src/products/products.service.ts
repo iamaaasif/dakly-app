@@ -30,7 +30,6 @@ import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provi
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
-import { moveProductStock, type StockMovementInput } from './move-stock';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { productError } from './products.errors';
 import {
@@ -153,15 +152,6 @@ export class ProductsService {
       variantId,
       available: onHand - reserved,
     }));
-  }
-
-  moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
-    return moveProductStock(storeId, variantId, input, {
-      repository: this.repository,
-      transaction: this.transaction,
-      clock: this.clock,
-      outbox: this.outbox,
-    });
   }
 
   async requestPhotoUpload(

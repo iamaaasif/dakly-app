@@ -2,7 +2,7 @@ import type { AuditEntry } from '@dakly/contracts/audit';
 import type { OrderStageChange } from '@dakly/contracts/orders';
 import type { StockMovementKind } from '@dakly/contracts/products';
 
-import type { ProductsService } from '../products/products.service';
+import type { ProductStockService } from '../products/product-stock.service';
 import { partialOrderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import type { OrdersRepository, StageWrite } from './orders.repository';
@@ -10,7 +10,7 @@ import type { OrdersRepository, StageWrite } from './orders.repository';
 type Actor = AuditEntry['actor'];
 type LockedOrder = NonNullable<Awaited<ReturnType<OrdersRepository['lock']>>>;
 type Items = Awaited<ReturnType<OrdersRepository['items']>>;
-type FulfilmentDependencies = { orders: OrdersRepository; products: ProductsService };
+type FulfilmentDependencies = { orders: OrdersRepository; stock: ProductStockService };
 
 export async function applyOrderFulfilment(
   storeId: string,
@@ -20,14 +20,14 @@ export async function applyOrderFulfilment(
     actor,
     now,
   }: { order: LockedOrder; change: OrderStageChange; actor: Actor; now: Date },
-  { orders, products }: FulfilmentDependencies,
+  { orders, stock }: FulfilmentDependencies,
 ): Promise<StageWrite> {
   const orderId = order.id;
   const reference = { orderId, actor };
   switch (change.to) {
     case 'with_courier':
       if (actor.kind !== 'user') throw orderError('ORDER_STAGE_NOT_ALLOWED');
-      await moveOrderStock(storeId, products, await orders.items(storeId, orderId), {
+      await moveOrderStock(storeId, stock, await orders.items(storeId, orderId), {
         kind: 'ship',
         reference,
       });
@@ -40,14 +40,14 @@ export async function applyOrderFulfilment(
       };
     case 'delivered':
     case 'partially_delivered':
-      return recordDelivery(storeId, { order, change, actor, now }, { orders, products });
+      return recordDelivery(storeId, { order, change, actor, now }, { orders, stock });
     case 'returned':
       if (!change.isDamaged) {
         const lines = (await orders.items(storeId, orderId)).map((item) => ({
           ...item,
           quantity: item.deliveredQuantity ?? item.quantity,
         }));
-        await moveOrderStock(storeId, products, lines, {
+        await moveOrderStock(storeId, stock, lines, {
           kind: 'return',
           reference: { ...reference, reason: change.reason },
         });
@@ -74,14 +74,14 @@ async function recordDelivery(
     actor,
     now,
   }: { order: LockedOrder; change: DeliveryChange; actor: Actor; now: Date },
-  { orders, products }: FulfilmentDependencies,
+  { orders, stock }: FulfilmentDependencies,
 ): Promise<StageWrite> {
   const orderId = order.id;
   const items = await orders.items(storeId, orderId);
   const delivered = deliveredQuantities(change, items);
   await moveOrderStock(
     storeId,
-    products,
+    stock,
     delivered.map(({ item, quantity }) => ({ ...item, quantity: item.quantity - quantity })),
     { kind: 'return', reference: { orderId, actor } },
   );
@@ -119,7 +119,7 @@ function deliveredQuantities(change: DeliveryChange, items: Items) {
 
 async function moveOrderStock(
   storeId: string,
-  products: ProductsService,
+  stock: ProductStockService,
   items: Items,
   movement: {
     kind: StockMovementKind;
@@ -128,6 +128,6 @@ async function moveOrderStock(
 ): Promise<void> {
   for (const { variantId, quantity, isStockTracked } of items) {
     if (isStockTracked && quantity > 0)
-      await products.moveStock(storeId, variantId, { ...movement, quantity });
+      await stock.moveStock(storeId, variantId, { ...movement, quantity });
   }
 }

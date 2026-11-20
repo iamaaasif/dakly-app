@@ -125,7 +125,7 @@ List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) a
 
 1. A product has 0 to 3 option types (Size, Colour, Fabric) and one or more variants. A product with no options has one default variant, so an order always points at a variant.
 2. Stock lives on the variant: on hand and reserved. Available = on hand − reserved.
-3. Stock changes through `ProductsService.moveStock`. A movement takes a quantity,
+3. Stock changes through `ProductStockService.moveStock`. A movement takes a quantity,
    or an absolute on-hand count for an import. An import calculates the signed
    change from the locked variant count. The update guards the resulting stock
    and reservations. It writes a `stock_movements` row in the same transaction

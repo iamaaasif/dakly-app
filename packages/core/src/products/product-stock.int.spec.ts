@@ -3,35 +3,29 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
-import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { StoresService } from '../stores/stores.service';
-import { ProductOrderVariantsRepository } from './product-order-variants.repository';
-import { ProductsRepository } from './products.repository';
-import { ProductsService } from './products.service';
+import { ProductStockRepository } from './product-stock.repository';
+import { ProductStockService } from './product-stock.service';
 
 const reference = { actor: { kind: 'system' }, reason: 'Stock test' } as const;
 const now = new Date('2026-11-17T08:00:00Z');
 
-describe('ProductsService stock ledger', () => {
+describe('ProductStockService', () => {
   const f = new OwnerIsolationFixture();
   const app = createDatabase(process.env.DATABASE_URL!);
   const tenant = new TenantDatabase(app.db);
   const transaction = new StoreTransaction(tenant);
-  const repository = new ProductsRepository(tenant);
-  const service = new ProductsService(
+  const repository = new ProductStockRepository(tenant);
+  const service = new ProductStockService(
     repository,
-    new ProductOrderVariantsRepository(tenant),
     transaction,
-    new OutboxService(new OutboxRepository(app.db, tenant), transaction),
     { now: () => now },
-    {} as StoresService,
-    {} as FileStorageDriver,
+    new OutboxService(new OutboxRepository(app.db, tenant), transaction),
   );
   beforeAll(() => f.setup());
   afterAll(async () => {
@@ -141,7 +135,7 @@ describe('ProductsService stock ledger', () => {
     ).rejects.toMatchObject({
       code: 'PRODUCT_VARIANT_NOT_FOUND',
     });
-    const owner = new ProductsRepository(f.tenant);
+    const owner = new ProductStockRepository(f.tenant);
     expect(await owner.reconcileStock(f.b, id, 4, now)).toBeUndefined();
     expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 10, reserved: 2 });
     expect(await movements(id)).toEqual([]);
@@ -270,7 +264,7 @@ describe('ProductsService stock ledger', () => {
     ).rejects.toMatchObject({
       code: 'PRODUCT_VARIANT_NOT_FOUND',
     });
-    const owner = new ProductsRepository(f.tenant);
+    const owner = new ProductStockRepository(f.tenant);
     expect(await owner.findStockVariant(f.b, id)).toBeUndefined();
     expect(
       await owner.changeStock(f.b, id, { onHandDelta: 1, reservedDelta: 0 }, now),
