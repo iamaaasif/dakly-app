@@ -172,6 +172,13 @@ const examples: DaklyEvent[] = [
     },
   },
   {
+    type: 'attribution.created',
+    storeId,
+    occurredAt,
+    payload: { orderId, sourceType: 'campaign', sourceId: trackedLink.sourceId },
+  },
+  { type: 'attribution.removed', storeId, occurredAt, payload: { orderId } },
+  {
     type: 'wallet.credited',
     storeId,
     occurredAt,

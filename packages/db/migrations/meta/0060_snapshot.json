@@ -1,5 +1,5 @@
 {
-  "id": "4d162033-1156-4cf7-b7cd-81335773844d",
+  "id": "5fc53c15-4c66-42be-89f3-da3221134941",
   "prevId": "c8f16d24-212f-4b4a-a80a-f0c51fcd8220",
   "version": "7",
   "dialect": "postgresql",
@@ -7514,12 +7514,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "balance_pause_revision": {
-          "name": "balance_pause_revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "is_ai_written": {
           "name": "is_ai_written",
           "type": "boolean",
@@ -7814,29 +7808,7 @@
             }
           ],
           "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'sending' or (\"campaigns\".\"status\" = 'cancelled' and \"campaigns\".\"settlement_pending_at\" is not null)",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_balance_paused_idx": {
-          "name": "campaigns_balance_paused_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"status\" = 'paused' and \"campaigns\".\"pause_reason\" = 'balance'",
+          "where": "(\"campaigns\".\"status\" = 'sending' and \"campaigns\".\"short_link_base\" is not null) or (\"campaigns\".\"status\" = 'cancelled' and \"campaigns\".\"settlement_pending_at\" is not null)",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -15295,9 +15267,27 @@
           "primaryKey": false,
           "notNull": false
         },
+        "attributed_touch_id": {
+          "name": "attributed_touch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "attributed_touch_at": {
           "name": "attributed_touch_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attributed_amount_poisha": {
+          "name": "attributed_amount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attributed_window_days": {
+          "name": "attributed_window_days",
+          "type": "smallint",
           "primaryKey": false,
           "notNull": false
         },

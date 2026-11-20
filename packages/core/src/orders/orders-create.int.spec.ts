@@ -185,6 +185,37 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 0 });
   });
 
+  it('clears the attributed touch and publishes its removal when staff cancel an order', async () => {
+    const request = editor();
+    const order = await orders.createOrder(f.a, draft(await variant(1)), request);
+    await f.connection.pool.query(
+      `update orders set attributed_source_type='campaign', attributed_source_id=$3,
+        attributed_channel='sms', attributed_touch_id=$4, attributed_touch_at=created_at,
+        attributed_amount_poisha=items_subtotal_poisha, attributed_window_days=7
+       where store_id=$1 and id=$2`,
+      [f.a, order.id, randomUUID(), randomUUID()],
+    );
+
+    await orders.changeStage(f.a, order.id, { to: 'cancelled', reason: 'other' }, request);
+
+    expect(await f.row('orders', order.id)).toMatchObject({
+      stage: 'cancelled',
+      attributed_source_type: null,
+      attributed_source_id: null,
+      attributed_channel: null,
+      attributed_touch_id: null,
+      attributed_touch_at: null,
+      attributed_amount_poisha: null,
+      attributed_window_days: null,
+    });
+    const events = await f.connection.pool.query(
+      `select payload from outbox_events where store_id=$1
+       and type='attribution.removed' and payload->>'orderId'=$2`,
+      [f.a, order.id],
+    );
+    expect(events.rows).toEqual([{ payload: { orderId: order.id } }]);
+  });
+
   it('changes stock by the item difference, keeps prior prices, and rolls back an unavailable edit', async () => {
     const variantId = await variant(4);
     await f.connection.pool.query('update product_variants set cost_poisha=60000 where id=$1', [
