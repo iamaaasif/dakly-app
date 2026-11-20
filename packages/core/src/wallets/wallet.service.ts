@@ -5,6 +5,7 @@ import type { MessagingWallet, WalletBalancesResponse } from '@dakly/contracts/w
 
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import {
   type NewWalletEntry,
   type WalletEntry,
@@ -36,6 +37,8 @@ type LedgerWrite = {
   idempotencyKey: string;
   actor: ReturnType<typeof actorColumns>;
   changes: () => EntryChanges | Promise<EntryChanges>;
+  // Runs in the same transaction for a new entry only, never for a replay.
+  afterInsert?: (entryId: string, createdAt: Date) => Promise<void>;
 };
 // The entry is the row a write returns; a charge first releases its reservation.
 type EntryChanges = { release?: EntryChange; entry: EntryChange };
@@ -46,10 +49,22 @@ export class WalletService {
   constructor(
     @Inject(WalletLedgerRepository) private readonly ledger: WalletLedgerRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   async balance(storeId: string, wallet: MessagingWallet): Promise<number> {
     return (await this.ledger.latest(storeId, wallet))?.balanceQuantityAfter ?? 0;
+  }
+
+  async currentRevision(storeId: string, wallet: MessagingWallet): Promise<number> {
+    return (await this.ledger.latest(storeId, wallet))?.revision ?? 0;
+  }
+
+  async topUpRevision(storeId: string, wallet: MessagingWallet, entryId: string) {
+    const entry = await this.ledger.findById(storeId, entryId);
+    if (entry?.wallet === wallet && entry.kind === 'adjustment' && entry.quantityDelta > 0)
+      return entry.revision;
+    return undefined;
   }
 
   async balances(storeId: string): Promise<WalletBalancesResponse> {
@@ -62,6 +77,13 @@ export class WalletService {
   async findByIdempotencyKey(storeId: string, key: string): Promise<WalletWriteResult | undefined> {
     const entry = await this.ledger.findByIdempotencyKey(storeId, key);
     return entry && toResult(entry);
+  }
+
+  async reservationFor(storeId: string, wallet: MessagingWallet, key: string) {
+    const entry = await this.ledger.findByIdempotencyKey(storeId, key);
+    if (entry?.kind !== 'reserve' || entry.wallet !== wallet)
+      throw walletError('WALLET_RESERVATION_NOT_FOUND');
+    return { entryId: entry.id, quantity: -entry.quantityDelta };
   }
 
   // Dispatch takes this before its final checks, so a queued credit write cannot stale them.
@@ -133,6 +155,14 @@ export class WalletService {
             referenceId: input.staffAuditId,
           },
         }),
+        // Record the entry's database time on the event.
+        afterInsert: (entryId, createdAt) =>
+          this.outbox.publish({
+            type: 'wallet.credited',
+            storeId,
+            occurredAt: createdAt.toISOString(),
+            payload: { wallet: input.wallet, entryId },
+          }),
       }),
     );
   }
@@ -162,28 +192,42 @@ export class WalletService {
   // the insert one step per wallet.
   private async append(
     storeId: string,
-    { wallet, idempotencyKey, actor, changes }: LedgerWrite,
+    { wallet, idempotencyKey, actor, changes, afterInsert }: LedgerWrite,
   ): Promise<WalletWriteResult> {
     await this.ledger.lockWallet(storeId, wallet);
     const replay = await this.ledger.findByIdempotencyKey(storeId, idempotencyKey);
     if (replay) return toResult(replay);
     const latest = await this.ledger.latest(storeId, wallet);
-    let revision = latest?.revision ?? 0;
-    let balance = latest?.balanceQuantityAfter ?? 0;
     const { release, entry } = await changes();
     const entryId = newId();
-    const entries: NewWalletEntry[] = [];
-    for (const change of [...(release ? [release] : []), { ...entry, id: entryId }]) {
-      revision += 1;
-      balance += change.quantityDelta;
-      if (balance < 0) throw walletError('WALLET_BALANCE_TOO_LOW');
-      entries.push({ ...change, ...actor, wallet, revision, balanceQuantityAfter: balance });
-    }
+    const changed = [...(release ? [release] : []), { ...entry, id: entryId }];
+    const { entries, balance } = nextEntries(
+      latest,
+      changed.map((change) => ({ ...change, ...actor, wallet })),
+    );
     // The service check above normally prevents this; the database rule is the last guard.
-    if ((await this.ledger.insert(storeId, entries)) === 'balance_negative')
-      throw walletError('WALLET_BALANCE_TOO_LOW');
+    const createdAt = await this.ledger.insert(storeId, entries);
+    if (createdAt === 'balance_negative') throw walletError('WALLET_BALANCE_TOO_LOW');
+    await afterInsert?.(entryId, createdAt);
     return { entryId, balanceQuantity: balance };
   }
+}
+
+// Numbers the new rows after the latest one and refuses a balance below zero.
+function nextEntries(
+  latest: WalletEntry | undefined,
+  changes: Omit<NewWalletEntry, 'revision' | 'balanceQuantityAfter'>[],
+) {
+  let revision = latest?.revision ?? 0;
+  let balance = latest?.balanceQuantityAfter ?? 0;
+  const entries: NewWalletEntry[] = [];
+  for (const change of changes) {
+    revision += 1;
+    balance += change.quantityDelta;
+    if (balance < 0) throw walletError('WALLET_BALANCE_TOO_LOW');
+    entries.push({ ...change, revision, balanceQuantityAfter: balance });
+  }
+  return { entries, balance };
 }
 
 function releaseOf(reservation: WalletEntry, idempotencyKey: string): EntryChange {

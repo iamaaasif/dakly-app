@@ -360,6 +360,28 @@ Usage (PAY-1): every billable AI action goes through `UsageService.consume(store
 - Top-ups are not drawn yet. The AI top-up wallet (`ai_conversations`) has no service yet; PAY-11 serves only the SMS and WhatsApp wallets.
 - A consume that crosses 80% or 100% of the allowance notifies members with `billing.view` (Owner, Admin and custom roles that view billing, the roles that can top up) in the `billing` category, with dedupe key `usage-<percent>:<unit>:<period start>`, so each notice goes once per period. The `usage.threshold_reached` event is not emitted yet.
 
+### Payment intents and callbacks (PAY-2)
+
+Creating an intent records a `created` event in the same store transaction. A shop
+intent needs a connected credential for its gateway in that store. Billing
+intents use Dakly's own merchant account. When checkout starts, the intent
+records the gateway payment id and becomes `pending`.
+
+The API limits signed callback bodies to 64 KB and limits requests by IP.
+It saves the original bytes and the gateway's signature headers in
+`webhook_events`. The hash of both deduplicates exact replays. The API queues a
+job and returns 204. The worker looks up the
+merchant reference and verifies the bytes with that merchant's credentials.
+An unknown reference or invalid signature is marked ignored and its payload
+is cleared. A verified callback records one payment event per gateway event
+id and makes the intent due for a check. Completed intake rows use the
+seven-day webhook purge.
+A server-to-server result must match the reference, currency and amount.
+An amount or currency mismatch, duplicate transaction or late success goes
+to `needs_review` and leaves the intent unpaid. The event retains the gateway
+transaction id and verified amount for review. The browser return belongs to the
+gateway integration and can only request a server-to-server check.
+
 ### Rules
 
 The PRD's payment rules apply in full. The ones code must make impossible to break:
@@ -392,13 +414,13 @@ Wallet writers take a transaction-scoped advisory lock for `(store_id, wallet)`,
 
 `WalletService` in `wallets/` serves the two messaging wallets, `sms_credits` (a count) and `whatsapp_poisha` (poisha). AI top-ups (`ai_conversations`) stay with the usage allowance (P2), and wallets never call `UsageService`. Every write takes an idempotency key, unique per store: the same key again returns the first entry and writes nothing.
 
-| Method                                         | Rows written                                                                                        |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `balance(storeId, wallet)`                     | None; the `balance_quantity_after` of the highest revision, 0 for an empty wallet                   |
-| `reserve(storeId, { wallet, quantity, ... })`  | `reserve` of minus the quantity. Its row id is the reservation id                                   |
-| `release(storeId, { reservationId, ... })`     | `release` of plus the reserved quantity                                                             |
-| `charge(storeId, { reservationId, quantity })` | `release` of the whole reservation, then `charge` of minus the charged quantity, in one transaction |
-| `credit(storeId, { wallet, quantity, ... })`   | `adjustment` of plus the quantity, by staff, referencing the staff audit row                        |
+| Method                                         | Rows written                                                                                                                                        |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `balance(storeId, wallet)`                     | None; the `balance_quantity_after` of the highest revision, 0 for an empty wallet                                                                   |
+| `reserve(storeId, { wallet, quantity, ... })`  | `reserve` of minus the quantity. Its row id is the reservation id                                                                                   |
+| `release(storeId, { reservationId, ... })`     | `release` of plus the reserved quantity                                                                                                             |
+| `charge(storeId, { reservationId, quantity })` | `release` of the whole reservation, then `charge` of minus the charged quantity, in one transaction                                                 |
+| `credit(storeId, { wallet, quantity, ... })`   | `adjustment` of plus the quantity, by staff, referencing the staff audit row; a new entry publishes `wallet.credited`, at the entry's database time |
 
 Release and charge rows reference the reservation (`reference_type` `wallet_reservation`, `reference_id` the reserve row id). Every settled reservation has exactly one `release` row; under the wallet lock a second release or charge of the same reservation fails with `WALLET_RESERVATION_SETTLED`. A charge may be smaller than the reservation, never larger (`WALLET_CHARGE_OVER_RESERVATION`). Reserve, charge and credit quantities are whole numbers above 0 (`WALLET_QUANTITY_INVALID`); a charge of nothing is a release. Writing the charge as its own row keeps every delta non-zero, keeps the balance equal to the sum of deltas, and records the full charge of a reservation. A write that would take the balance below zero fails with `WALLET_BALANCE_TOO_LOW`; the service checks this before writing, and the `wallet_ledger_balance` check constraint maps to the same error.
 

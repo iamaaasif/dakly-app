@@ -13,6 +13,7 @@ import type {
 import { countSmsParts } from '@dakly/contracts/sms';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -44,7 +45,6 @@ type StatusChange = { from: CampaignStatusGuard; to: CampaignStatus; refused: Ca
 // others when their cause clears (CAMP-3, CHN-3).
 const STATUS_CHANGES = {
   unschedule: { from: { status: 'scheduled' }, to: 'draft', refused: 'CAMPAIGN_NOT_SCHEDULED' },
-  cancel: { from: { status: 'scheduled' }, to: 'cancelled', refused: 'CAMPAIGN_NOT_SCHEDULED' },
   pause: { from: { status: 'sending' }, to: 'paused', refused: 'CAMPAIGN_NOT_SENDING' },
   resume: {
     from: { status: 'paused', pauseReason: 'manual' },
@@ -54,7 +54,7 @@ const STATUS_CHANGES = {
 } as const satisfies Record<string, StatusChange>;
 // Approval runs in one request until CAMP-13 makes it a job; this bounds that work.
 export const MAX_CAMPAIGN_AUDIENCE = 20_000;
-// CAMP-R7: a scheduled campaign can be edited or cancelled until 5 minutes before it sends.
+// CAMP-R7: a scheduled campaign can be edited until 5 minutes before it sends.
 const LAST_CHANGE_BEFORE_SEND_MS = 5 * 60 * 1000;
 
 @Injectable()
@@ -68,6 +68,7 @@ export class CampaignsService {
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(LinksService) private readonly links: LinksService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -121,7 +122,11 @@ export class CampaignsService {
   async estimate(storeId: string, campaignId: string): Promise<CampaignEstimateResponse> {
     const campaign = await this.find(storeId, campaignId);
     if (campaign.status !== 'draft') throw campaignError('CAMPAIGN_NOT_DRAFT');
-    return toEstimate(campaign, await this.checkAudience(storeId, campaign));
+    return toEstimate(
+      campaign,
+      await this.checkAudience(storeId, campaign),
+      this.links.sampleOptOutUrl(),
+    );
   }
 
   // One store transaction (CAMP-2): the audience is frozen, the credits reserved and the event
@@ -142,7 +147,8 @@ export class CampaignsService {
       if (campaign.scheduledFor && campaign.scheduledFor <= now)
         throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
       const recipients = await this.checkAudience(storeId, campaign);
-      const estimate = toEstimate(campaign, recipients);
+      const shortLinkBase = this.links.shortLinkBase();
+      const estimate = toEstimate(campaign, recipients, this.links.sampleOptOutUrl(shortLinkBase));
       if (estimate.recipientsCount === 0) throw campaignError('CAMPAIGN_NO_RECIPIENTS');
       for (let start = 0; start < recipients.length; start += AUDIENCE_PAGE_SIZE)
         await this.repository.insertRecipients(
@@ -158,7 +164,11 @@ export class CampaignsService {
         actor: approver.actor,
       });
       return toCampaignResponse(
-        await this.markApproved(storeId, campaign, estimate, { actor: approver.actor, now }),
+        await this.markApproved(storeId, campaign, estimate, {
+          actor: approver.actor,
+          now,
+          shortLinkBase,
+        }),
       );
     });
   }
@@ -171,29 +181,57 @@ export class CampaignsService {
       const draft = await this.changeStatus(storeId, campaignId, 'unschedule', {
         approvedByUserId: null,
         approvedAt: null,
+        shortLinkBase: null,
         estimatedCostPoisha: null,
         recipientsCount: 0,
         skippedCount: 0,
       });
-      await this.releaseCredits(storeId, campaign, actor);
+      await this.settleReservation(
+        storeId,
+        { id: campaignId, approvedAt: campaign.approvedAt! },
+        actor,
+      );
       return draft;
     });
   }
 
   async cancel(storeId: string, campaignId: string, actor: Actor): Promise<CampaignResponse> {
     return this.transaction.run(storeId, async () => {
-      const campaign = await this.lockBeforeSend(storeId, campaignId);
+      const campaign = await this.repository.lockCampaign(storeId, campaignId, 'update');
+      if (!campaign) throw campaignError('CAMPAIGN_NOT_FOUND');
+      if (campaign.status === 'draft' || campaign.status === 'waiting_approval')
+        throw campaignError('CAMPAIGN_NOT_SCHEDULED');
+      if (
+        campaign.status === 'sent' ||
+        campaign.status === 'failed' ||
+        campaign.status === 'cancelled'
+      )
+        throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
       await this.repository.cancelQueuedRecipients(storeId, campaignId);
-      // Starts the 372-day recipient retention (growth.md).
-      const cancelled = await this.changeStatus(storeId, campaignId, 'cancel', {
-        finishedAt: this.clock.now(),
-      });
-      await this.releaseCredits(storeId, campaign, actor);
-      return cancelled;
+      const now = this.clock.now();
+      const cancelled = await this.repository.changeStatus(
+        storeId,
+        campaignId,
+        { status: campaign.status },
+        {
+          status: 'cancelled',
+          pauseReason: null,
+          finishedAt: now,
+          updatedAt: now,
+          settlementPendingAt: campaign.approvedAt ? now : null,
+        },
+      );
+      if (!cancelled) throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
+      if (campaign.approvedAt)
+        await this.settleReservation(
+          storeId,
+          { id: campaignId, approvedAt: campaign.approvedAt, cancelledAt: now },
+          actor,
+        );
+      return toCampaignResponse(cancelled);
     });
   }
 
-  // Only the status moves until the sender (CAMP-3) reads it.
   async pause(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
     return this.changeStatus(storeId, campaignId, 'pause', { pauseReason: 'manual' });
   }
@@ -211,19 +249,23 @@ export class CampaignsService {
     return campaign;
   }
 
-  // Last, as in approve, so the wallet lock is held only until commit.
-  private async releaseCredits(
+  // The caller holds the campaign lock. Take the wallet lock last.
+  async settleReservation(
     storeId: string,
-    campaign: Campaign & { approvedAt: Date | null },
+    { id, approvedAt, cancelledAt }: { id: string; approvedAt: Date; cancelledAt?: Date },
     actor: Actor,
-  ): Promise<void> {
-    const key = approvalKey(campaign.id, campaign.approvedAt!);
-    const reservation = await this.wallets.findByIdempotencyKey(storeId, key);
-    await this.wallets.release(storeId, {
-      reservationId: reservation!.entryId,
-      idempotencyKey: `${key}:release`,
-      actor,
-    });
+  ): Promise<boolean> {
+    const { unsettled, chargedCredits } = await this.repository.settlementTotals(storeId, id);
+    if (unsettled > 0) return false;
+    if (cancelledAt && !(await this.repository.markSettled(storeId, id, cancelledAt))) return false;
+    const key = approvalKey(id, approvedAt);
+    const reservation = await this.wallets.reservationFor(storeId, 'sms_credits', key);
+    const quantity = Math.min(chargedCredits, reservation.quantity);
+    const write = { reservationId: reservation.entryId, actor };
+    if (quantity)
+      await this.wallets.charge(storeId, { ...write, quantity, idempotencyKey: `${key}:charge` });
+    else await this.wallets.release(storeId, { ...write, idempotencyKey: `${key}:release` });
+    return true;
   }
 
   private async changeStatus(
@@ -254,13 +296,14 @@ export class CampaignsService {
     storeId: string,
     campaign: Campaign,
     estimate: CampaignEstimateResponse,
-    { actor, now }: { actor: Actor; now: Date },
+    { actor, now, shortLinkBase }: { actor: Actor; now: Date; shortLinkBase: string },
   ): Promise<Campaign> {
     const status = campaign.scheduledFor ? 'scheduled' : 'sending';
     const approved = await this.repository.markApproved(storeId, campaign.id, {
       status,
       approvedByUserId: actor.kind === 'user' ? actor.userId : null,
       approvedAt: now,
+      shortLinkBase,
       startedAt: status === 'sending' ? now : null,
       updatedAt: now,
       estimatedCostPoisha: estimate.costPoisha,
@@ -335,12 +378,24 @@ function approvalKey(campaignId: string, approvedAt: Date): string {
   return `campaign-approval:${campaignId}:${approvedAt.toISOString()}`;
 }
 
-function toEstimate(campaign: Campaign, recipients: FrozenRecipient[]): CampaignEstimateResponse {
+// CAMP-R4: every marketing SMS ends with the recipient's opt-out link.
+export function marketingSmsText(text: string, optOutUrl: string): string {
+  return `${text}\n${optOutUrl}`;
+}
+
+// Counts the opt-out link at its real length, so the reservation covers what the sender sends.
+function toEstimate(
+  campaign: Campaign,
+  recipients: FrozenRecipient[],
+  optOutUrl: string,
+): CampaignEstimateResponse {
   const skippedByReason: CampaignEstimateResponse['skippedByReason'] = {};
   for (const { skipReason } of recipients)
     if (skipReason) skippedByReason[skipReason] = (skippedByReason[skipReason] ?? 0) + 1;
   const recipientsCount = recipients.filter((recipient) => recipient.status === 'queued').length;
-  const smsParts = campaign.content.text ? countSmsParts(campaign.content.text) : 0;
+  const smsParts = campaign.content.text
+    ? countSmsParts(marketingSmsText(campaign.content.text, optOutUrl))
+    : 0;
   return {
     audienceCount: recipients.length,
     skippedByReason,

@@ -3,7 +3,7 @@ import type { ComponentProps } from 'react';
 
 import { cn } from './cn';
 
-const buttonVariants = cva(
+export const buttonVariants = cva(
   'inline-flex min-h-10 min-w-10 items-center justify-center gap-2 rounded-md px-4 py-2 text-base font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
@@ -11,6 +11,7 @@ const buttonVariants = cva(
         primary: 'bg-action text-on-primary hover:bg-action-hover',
         secondary: 'border border-input-border bg-surface text-text hover:bg-surface-muted',
         danger: 'bg-danger text-on-primary hover:bg-danger-hover',
+        link: 'px-0 text-action hover:underline',
       },
     },
     defaultVariants: { variant: 'primary' },

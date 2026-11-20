@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import type { DeliveryZoneListResponse } from '@dakly/contracts/delivery';
 import { createDatabase } from '@dakly/db/client';
@@ -45,6 +45,28 @@ async function capture(page: Page, name: string) {
   }
 }
 
+async function captureNewOrder(page: Page, dialog: Locator) {
+  const evidence = resolve(process.cwd(), '../../docs/design/evidence/web-7-new-order');
+  await mkdir(evidence, { recursive: true });
+  for (const [width, height] of [
+    [1440, 900],
+    [360, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await dialog
+      .locator('form > div.overflow-y-auto')
+      .evaluate((node) => node.scrollTo({ top: 0 }));
+    await expect(dialog.getByLabel('Phone', { exact: true })).toBeInViewport();
+    await expect(dialog.getByRole('button', { name: 'Save order' })).toBeInViewport();
+    if (width === 1440) await expect(dialog.getByText(/^Cash on delivery/)).toBeInViewport();
+    await page.mouse.move(width - 1, height - 1);
+    await page.screenshot({
+      path: resolve(evidence, `new-order-${width}x${height}.png`),
+      animations: 'disabled',
+    });
+  }
+}
+
 test('creates a staff order with the zone charge, stock and computed COD', async ({
   page,
   context,
@@ -57,6 +79,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
   const productId = `0${randomUUID().slice(1)}`;
   const otherProducts = Array.from({ length: 50 }, () => `f${randomUUID().slice(1)}`);
   const variantId = randomUUID();
+  const largerVariantId = randomUUID();
   let zoneId: string | undefined;
   let zoneIds: string[] = [];
   let insertedCounter = false;
@@ -91,16 +114,24 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       "insert into product_variants (id,store_id,product_id,title,on_hand) values ($1,$2,$3,'M',5)",
       [variantId, storeId, productId],
     );
+    await database.pool.query(
+      "insert into product_variants (id,store_id,product_id,title,on_hand,price_override_poisha,position) values ($1,$2,$3,'L',2,190000,1)",
+      [largerVariantId, storeId, productId],
+    );
     await page.goto('/orders');
     await expect(page.getByRole('button', { name: 'New order' })).toBeVisible();
     await capture(page, 'pipeline');
     await page.getByRole('button', { name: 'New order' }).click();
     const create = page.getByRole('dialog', { name: 'New order' });
-    await create.getByLabel('Buyer name').fill('Rahim Ahmed');
+    await expect(create.getByLabel('Phone', { exact: true })).toBeVisible();
+    await expect(create.getByLabel('Name', { exact: true })).toBeVisible();
+    await expect(create.getByLabel('Buyer name')).toHaveCount(0);
+    await create.getByLabel('Name', { exact: true }).fill('Rahim Ahmed');
     const gift = create.getByLabel('Deliver to someone else');
     const recipientPhone = create.getByLabel('Recipient phone');
-    await recipientPhone.fill('01701000014');
+    await create.getByLabel('Phone', { exact: true }).fill('01701000014');
     await gift.check();
+    await expect(create.getByLabel('Buyer name')).toHaveValue('Rahim Ahmed');
     await expect(recipientPhone).toHaveValue('');
     await create.getByLabel('Recipient name').fill('Karim Ahmed');
     await recipientPhone.fill('01701000015');
@@ -122,26 +153,49 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     zoneIds = zones.items.map(({ id }) => id);
     zoneId = zones.items.find(({ name }) => name === 'Inside Dhaka')?.id;
     expect(zoneId).toBeDefined();
-    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60.00');
-    const variant = create.getByLabel('Product and variant 1');
-    await expect(variant.getByRole('option', { name: 'Cotton Panjabi · M' })).toHaveCount(0);
+    await expect(create.getByLabel('Delivery (৳)')).toHaveAttribute('placeholder', '60.00');
+    const product = create.getByLabel('Product 1', { exact: true });
+    const size = create.getByLabel('Size 1', { exact: true });
+    await expect(product.getByRole('option', { name: /Cotton Panjabi/ })).toHaveCount(0);
     await create.getByRole('button', { name: 'Load more products' }).click();
-    await variant.selectOption({ label: 'Cotton Panjabi · M' });
-    await expect(variant).toHaveAttribute('aria-invalid', 'false');
+    await product.selectOption(productId);
+    await expect(size).toHaveValue('');
+    await create.getByRole('button', { name: 'Save order' }).click();
+    await expect(size).toHaveAttribute('aria-invalid', 'true');
+    await expect(size.getByRole('option', { name: 'M · 5 left' })).toHaveCount(1);
+    await size.selectOption(variantId);
+    await expect(size).toHaveAttribute('aria-invalid', 'false');
     await expect(create.getByText('5 in stock')).toBeVisible();
     const cod = create.getByText(/^Cash on delivery/);
     await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
     await create.getByRole('button', { name: 'Add product' }).click();
     await expect(create.getByText('Cash on delivery')).toHaveCount(0);
     await create.getByRole('button', { name: 'Remove' }).last().click();
-    const search = create.getByLabel('Search products');
+    const catalogueSearch = create.getByText('Search products', { exact: true });
+    await catalogueSearch.click();
+    const search = create.getByLabel('Product name');
+    const catalogueFiltered = page.waitForResponse((response) =>
+      response.url().includes('/orders/catalogue?search=Missing+product'),
+    );
     await search.fill('Missing product');
+    await catalogueFiltered;
+    await size.selectOption({ label: 'L · 2 left' });
+    await expect(cod.getByText('৳1,960', { exact: true })).toBeVisible();
+    await size.selectOption(variantId);
     await expect(create.getByText('5 in stock')).toBeVisible();
     await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
     await search.clear();
-    await create.getByLabel('Delivery charge (৳)').fill('90.25');
+    await catalogueSearch.click();
+    await create.getByLabel('Delivery (৳)').fill('90.25');
     await expect(cod.getByText('৳1,340.25', { exact: true })).toBeVisible();
     await capture(page, 'new');
+    if (process.env.WEB_7_ORDER_EVIDENCE === '1') {
+      await gift.uncheck();
+      await captureNewOrder(page, create);
+      await gift.check();
+      await create.getByLabel('Recipient name').fill('Karim Ahmed');
+      await recipientPhone.fill('01701000015');
+    }
     let firstKey: string | undefined;
     let firstBody: string | null;
     await page.route('**/api/orders', async (route) => {
@@ -186,9 +240,10 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     const { id: buyerId } = await buyer.json();
     existingBuyerId = buyerId;
     await page.getByRole('button', { name: 'New order' }).click();
-    await create.getByLabel('Find a customer').fill('Sonia Akter');
+    await create.getByText('Find a customer', { exact: true }).click();
+    await create.getByLabel('Customer name or phone').fill('Sonia Akter');
     await create.getByRole('button', { name: /Sonia Akter/ }).click();
-    await expect(recipientPhone).toHaveValue('01701000024');
+    await expect(create.getByLabel('Phone', { exact: true })).toHaveValue('01701000024');
     await gift.check();
     await expect(recipientPhone).toHaveValue('');
     await create.getByLabel('Recipient name').fill('Nusrat Akter');
@@ -196,8 +251,9 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await create.getByLabel('Address').fill('Road 4, Dhanmondi');
     await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
     await create.getByLabel('District').selectOption({ label: 'Dhaka' });
-    await expect(create.getByLabel('Delivery charge (৳)')).toHaveAttribute('placeholder', '60.00');
-    await create.getByLabel('Product and variant 1').selectOption({ label: 'Cotton Panjabi · M' });
+    await expect(create.getByLabel('Delivery (৳)')).toHaveAttribute('placeholder', '60.00');
+    await create.getByLabel('Product 1', { exact: true }).selectOption(productId);
+    await create.getByLabel('Size 1', { exact: true }).selectOption(variantId);
     await expect(create.getByText('4 in stock')).toBeVisible();
     await create.getByLabel('Discount (৳)').fill('1260');
     await expect(create.getByText('Discount cannot exceed the item total.')).toBeVisible();
@@ -289,6 +345,32 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(edit).toBeHidden();
     await expect(detail.getByText('Updated delivery address')).toBeVisible();
     await expect(detail.getByText('৳2,360')).toBeVisible();
+
+    await detail.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'New order' }).click();
+    await create.getByLabel('Name', { exact: true }).fill('Mina Akter');
+    await create.getByLabel('Phone', { exact: true }).fill('01701000026');
+    await create.getByLabel('Address').fill('House 10, Mirpur');
+    await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
+    await create.getByLabel('District').selectOption({ label: 'Dhaka' });
+    await create.getByText('Search products', { exact: true }).click();
+    await create.getByLabel('Product name').fill('Cotton Panjabi');
+    await create.getByLabel('Product 1', { exact: true }).selectOption(productId);
+    await create.getByLabel('Size 1', { exact: true }).selectOption(variantId);
+    const selfDelivery = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/orders') && response.request().method() === 'POST',
+    );
+    await create.getByRole('button', { name: 'Save order' }).click();
+    const saved = await selfDelivery;
+    expect(saved.status()).toBe(201);
+    expect(await saved.json()).toMatchObject({
+      buyerName: 'Mina Akter',
+      isRecipientBuyer: true,
+      recipientName: 'Mina Akter',
+      recipientPhone: '01701000026',
+    });
+    await expect(detail.getByText('House 10, Mirpur')).toBeVisible();
   } finally {
     const orders = await database.pool.query<{ id: string; buyer_contact_id: string | null }>(
       'select id,buyer_contact_id from orders where store_id=$1 and delivery_zone_id=$2',
@@ -314,10 +396,10 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       storeId,
       variantId,
     ]);
-    await database.pool.query('delete from product_variants where store_id=$1 and id=$2', [
-      storeId,
-      variantId,
-    ]);
+    await database.pool.query(
+      'delete from product_variants where store_id=$1 and id=any($2::uuid[])',
+      [storeId, [variantId, largerVariantId]],
+    );
     await database.pool.query('delete from products where store_id=$1 and id=any($2::uuid[])', [
       storeId,
       [productId, ...otherProducts],

@@ -28,7 +28,7 @@ export class IsolationFixture {
   constructor(readonly app: NestFastifyApplication) {}
   request(
     actor: Actor | string,
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
     payload?: object,
     headers?: Record<string, string>,
@@ -217,6 +217,8 @@ export class IsolationFixture {
       'orders',
       'messages',
       'conversations',
+      'posts',
+      'contact_identities',
       'channel_connections',
       'contacts',
       'stock_movements',
@@ -229,6 +231,10 @@ export class IsolationFixture {
       'files',
       'sms_sender_ids',
       'saved_replies',
+      'brand_profiles',
+      'usage_events',
+      'ai_runs',
+      'content_pieces',
       'notifications',
       'store_daily_metrics',
       'outbox_events',

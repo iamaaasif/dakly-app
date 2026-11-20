@@ -196,4 +196,19 @@ describe('UsageService.consume', () => {
     ).rejects.toMatchObject({ code: 'USAGE_ALLOWANCE_EXCEEDED' });
     expect(await service.consume(storeId, ask('draft-1', 5))).toMatchObject({ quantity: 5 });
   });
+
+  it('checks the current period allowance without spending a unit', async () => {
+    const { storeId } = await shop(1);
+    const another = await shop(0);
+    expect(await service.hasAllowance(storeId, 'ai_ask', 1)).toBe(true);
+    expect(await service.hasAllowance(storeId, 'ai_ask', 2)).toBe(false);
+    expect(await service.hasAllowance(storeId, 'ai_conversation', 1)).toBe(false);
+    expect(await service.hasAllowance(another.storeId, 'ai_ask', 1)).toBe(false);
+    expect(await usedInStore(storeId)).toEqual({ count: 0, total: 0 });
+
+    await service.consume(storeId, ask('limit'));
+    expect(await service.hasAllowance(storeId, 'ai_ask', 1)).toBe(false);
+    await startNextPeriod(storeId);
+    expect(await service.hasAllowance(storeId, 'ai_ask', 1)).toBe(true);
+  });
 });

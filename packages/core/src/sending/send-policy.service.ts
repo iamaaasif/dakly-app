@@ -31,8 +31,13 @@ export type SendDecision =
 export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
-type CapReadOptions = { excludeWorkflowStepId?: string; includeCommittedFuture?: boolean };
-type SendWindow = { windowClosesAt?: Date | null };
+type CapReadOptions = {
+  dispatch?: boolean;
+  excludeCampaignRecipientId?: string;
+  excludeWorkflowStepId?: string;
+  includeCommittedFuture?: boolean;
+};
+type SendWindow = { windowClosesAt?: Date | null; excludeCampaignRecipientId?: string };
 
 // The most contacts one checkAudience call takes: its consent read's limit.
 export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
@@ -58,19 +63,28 @@ export class SendPolicyService {
   ) {}
 
   // Check eligibility and freeze the destination after the contact locks.
-  async checkForSend(storeId: string, request: Omit<SendRequest, 'at'> & SendWindow) {
-    const exists = await this.lockForDispatch(storeId, request.contactId);
+  async checkForSend(
+    storeId: string,
+    request: Omit<SendRequest, 'at'> & SendWindow,
+    lockedContactExists?: boolean,
+  ) {
+    this.requireTransaction();
+    const exists = lockedContactExists ?? (await this.lockForDispatch(storeId, request.contactId));
     const at = this.clock.now();
     if (!exists) return { decision: skip('no_address'), destination: null, at };
     const [checked] = await this.evaluateAudience(
       storeId,
       { ...request, contactIds: [request.contactId], at },
-      { includeCommittedFuture: true },
+      {
+        includeCommittedFuture: true,
+        excludeCampaignRecipientId: request.excludeCampaignRecipientId,
+      },
     );
     return { decision: checked!.decision, destination: checked!.phone, at };
   }
 
-  private async lockForDispatch(storeId: string, contactId: string) {
+  // Workflow gates take this lock before locking the workflow, then pass the result to the check.
+  async lockForDispatch(storeId: string, contactId: string) {
     this.requireTransaction();
     await this.repository.lockContact(storeId, contactId);
     try {
@@ -93,7 +107,9 @@ export class SendPolicyService {
     const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
     if (quietUntil) return { action: 'defer', until: quietUntil };
     await this.repository.lockContact(storeId, request.contactId);
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at, {
+      dispatch: true,
+    });
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
@@ -110,8 +126,13 @@ export class SendPolicyService {
   }
 
   // The recipient and workflow stay locked while the runner prepares the final time and cap check.
-  async recheckRetryRecipient(storeId: string, request: Omit<SendRequest, 'at'>) {
-    const exists = await this.lockForDispatch(storeId, request.contactId);
+  async recheckRetryRecipient(
+    storeId: string,
+    request: Omit<SendRequest, 'at'>,
+    lockedContactExists?: boolean,
+  ) {
+    this.requireTransaction();
+    const exists = lockedContactExists ?? (await this.lockForDispatch(storeId, request.contactId));
     const at = this.clock.now();
     const reason = exists ? await this.recipientReason(storeId, { ...request, at }) : 'no_address';
     return { decision: reason ? skip(reason) : SEND, at };
@@ -123,12 +144,19 @@ export class SendPolicyService {
     {
       contactId,
       workflowStepId,
+      campaignRecipientId,
       settings: { quietHours, timeZone, frequencyCap },
-    }: { contactId: string; workflowStepId: string; settings: StoreSendingSettings },
+    }: {
+      contactId: string;
+      workflowStepId?: string;
+      campaignRecipientId?: string;
+      settings: StoreSendingSettings;
+    },
   ) {
     this.requireTransaction();
     const sends = await this.listWeekOfSends(storeId, [contactId], this.clock.now(), {
       excludeWorkflowStepId: workflowStepId,
+      excludeCampaignRecipientId: campaignRecipientId,
       includeCommittedFuture: true,
     });
     return (): { decision: SendDecision; at: Date } => {

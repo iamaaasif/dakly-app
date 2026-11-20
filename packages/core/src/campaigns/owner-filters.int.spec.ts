@@ -91,6 +91,7 @@ describe('campaign filters without RLS assistance', () => {
       status: 'sending',
       approvedByUserId: f.userB,
       approvedAt: now,
+      shortLinkBase: 'http://localhost:4000/l',
       startedAt: now,
       updatedAt: now,
       estimatedCostPoisha: 0,
@@ -135,6 +136,15 @@ describe('campaign filters without RLS assistance', () => {
     const now = new Date('2026-11-16T05:00:00Z');
 
     expect(await repository.lockScheduled(f.b, a.id)).toBeUndefined();
+    expect(
+      await f.tenant.forStore(f.b, () => repository.lockCampaign(f.b, a.id, 'update')),
+    ).toBeUndefined();
+    expect(
+      await f.tenant.forStore(f.a, () => repository.lockCampaign(f.a, a.id, 'update')),
+    ).toMatchObject({
+      id: a.id,
+      status: 'scheduled',
+    });
     expect(
       await repository.changeStatus(
         f.b,

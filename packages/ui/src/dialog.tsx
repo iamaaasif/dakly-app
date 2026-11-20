@@ -1,4 +1,5 @@
 'use client';
+import { X } from 'lucide-react';
 import { useEffect, useId, useRef, type ReactNode, type KeyboardEvent } from 'react';
 
 import { Button } from './button';
@@ -9,14 +10,26 @@ export type DialogProps = {
   open: boolean;
   suspended?: boolean;
   closeDisabled?: boolean;
+  closeAriaLabel?: string;
   className?: string;
   onClose: () => void;
   children: ReactNode;
 };
+
 export function Dialog(props: DialogProps) {
-  const { title, open, suspended = false, closeDisabled, className, onClose, children } = props;
+  const {
+    title,
+    open,
+    suspended = false,
+    closeDisabled,
+    closeAriaLabel = 'Close dialog',
+    className,
+    onClose,
+    children,
+  } = props;
   const element = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -26,11 +39,13 @@ export function Dialog(props: DialogProps) {
       previous?.focus();
     };
   }, [open]);
+
   useEffect(() => {
     const dialog = element.current;
     if (open && !suspended) dialog?.showModal();
     else dialog?.close();
   }, [open, suspended]);
+
   return (
     <dialog
       ref={element}
@@ -52,18 +67,19 @@ export function Dialog(props: DialogProps) {
         </h2>
         <Button
           variant="secondary"
-          className="shrink-0"
-          aria-label="Close dialog"
+          className="shrink-0 px-2"
+          aria-label={closeAriaLabel}
           disabled={closeDisabled}
           onClick={onClose}
         >
-          Close
+          <X aria-hidden="true" size={16} strokeWidth={1.75} />
         </Button>
       </div>
       {children}
     </dialog>
   );
 }
+
 function trapFocus(event: KeyboardEvent<HTMLDialogElement>) {
   if (event.key !== 'Tab') return;
   const elements = Array.from(

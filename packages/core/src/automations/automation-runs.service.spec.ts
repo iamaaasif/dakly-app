@@ -30,11 +30,13 @@ import type {
 import { AutomationRunsService } from './automation-runs.service';
 import { AutomationSendRetryService } from './automation-send-retry.service';
 import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
+import type { AutomationsService } from './automations.service';
 
 const STORE_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a01';
 const RUN_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a02';
 const CONTACT_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a03';
 const SEGMENT_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a04';
+const AUTOMATION_ID = '0196f5a2-3c4d-7e8f-9a0b-1c2d3e4f5a05';
 const HOUR = 60 * 60 * 1000;
 // Monday 16 November 2026, 11:00 in Dhaka (UTC+6).
 const now = new Date('2026-11-16T05:00:00Z');
@@ -85,8 +87,13 @@ class FakeRunsRepository {
 
   beforeDispatchLock: () => void = () => undefined;
 
-  async moveRunIfLive(storeId: string, claim: RunClaim, change: RunChange, gate?: 'dispatch') {
-    if (gate === 'dispatch') this.beforeDispatchLock();
+  async moveRunIfLive(
+    storeId: string,
+    claim: RunClaim,
+    change: RunChange,
+    gate?: 'first_send' | 'retry',
+  ) {
+    if (gate) this.beforeDispatchLock();
     const { automationStatus, isVersionStopped } = this.run;
     if (automationStatus !== 'active' || isVersionStopped) return false;
     return this.moveRun(storeId, claim, change);
@@ -161,13 +168,16 @@ describe('AutomationRunsService', () => {
   let schedulerUnavailable: 'during submission' | 'after authorization' | undefined;
   let submissionChecked: boolean;
   let submissionCommitted: boolean;
+  let failAfterPause: boolean;
   let balance: number;
   let ledger: { key: string; kind: 'reserve' | 'charge' | 'release'; quantity: number }[];
+  let pausedForBalance: string[];
   let service: AutomationRunsService;
 
   function start(first: AutomationStep, change: Partial<ClaimedRun> = {}, runId = RUN_ID) {
     repository.run = {
       id: runId,
+      automationId: AUTOMATION_ID,
       contactId: CONTACT_ID,
       status: 'running',
       currentStepKey: 'first',
@@ -177,6 +187,8 @@ describe('AutomationRunsService', () => {
       graph: graphWith(first),
       isVersionStopped: false,
       automationStatus: 'active',
+      balanceResumedAt: null,
+      hasBalanceResumeSendAllowance: false,
       lastError: 'The SMS provider did not answer; trying again',
       ...change,
     };
@@ -215,6 +227,7 @@ describe('AutomationRunsService', () => {
     schedulerUnavailable = undefined;
     submissionChecked = false;
     submissionCommitted = false;
+    failAfterPause = false;
     senderLookupError = undefined;
     balance = 10;
     ledger = [];
@@ -280,6 +293,7 @@ describe('AutomationRunsService', () => {
       return recheckDefer ? { action: 'defer', until: recheckDefer } : { action: 'send' };
     };
     const sendPolicy = {
+      lockForDispatch: async () => true,
       check: async () => decision,
       checkForSend: async () => {
         submissionChecked = true;
@@ -321,12 +335,21 @@ describe('AutomationRunsService', () => {
     const links = {
       create: async (_storeId: string, asked: NewTrackedLink[]) =>
         asked.map(() => ({ id: 'link-1', code: 'Ab3dE6gH', url: optOutUrl })),
-      optOutUrl: (code: string) => `https://links.dakly.test/s/${code}`,
+      sampleOptOutUrl: () => 'https://links.dakly.test/s/00000000',
+    };
+    // The workflow pauses once, for the first run short of credits.
+    pausedForBalance = [];
+    const automations = {
+      pauseForBalance: async (_storeId: string, automationId: string) => {
+        if (!pausedForBalance.includes(automationId)) pausedForBalance.push(automationId);
+      },
     };
     const transaction = {
       run: async (_storeId: string, work: () => Promise<unknown>) => {
         const result = await work();
         if (submissionChecked) submissionCommitted = true;
+        if (failAfterPause && pausedForBalance.length)
+          throw new Error('worker stopped after the balance pause committed');
         return result;
       },
     };
@@ -360,6 +383,7 @@ describe('AutomationRunsService', () => {
         conditions,
       ),
       conditions,
+      automations as unknown as AutomationsService,
     );
   });
 
@@ -685,6 +709,24 @@ describe('AutomationRunsService', () => {
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
     });
 
+    it('exits on a refreshed goal when the send also becomes late during the lock wait', async () => {
+      const wakeAt = new Date(now.getTime() - 24 * HOUR + 30_000);
+      repository.beforeDispatchLock = () => {
+        tags = ['paid'];
+        databaseNow = new Date(now.getTime() + 60_000);
+      };
+
+      await start(send, {
+        wakeAt,
+        graph: { ...graphWith(send), goal: { kind: 'got_tag', tag: 'paid' } },
+      });
+
+      expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'goal' });
+      expect(repository.steps).toEqual([]);
+      expect(ledger).toEqual([]);
+      expect(sent).toEqual([]);
+    });
+
     it('retries a temporary error with back-off, then sends the same text once', async () => {
       providerError = new Error('connection reset');
       await runWithJobContext(() => start(send), jobId);
@@ -782,6 +824,65 @@ describe('AutomationRunsService', () => {
       expect(repository.run).toMatchObject({ status: 'waiting', currentStepKey: 'first' });
       expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sending' })]);
       expect(ledger).toEqual([expect.objectContaining({ kind: 'reserve' })]);
+    });
+
+    it('renews a deferred retry after a long dispatch lock wait', async () => {
+      providerError = new Error('connection reset');
+      await runWithJobContext(() => start(send), jobId);
+      providerError = undefined;
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      const afterWait = new Date(now.getTime() + 6 * 60_000);
+      finalQuietUntil = new Date(afterWait.getTime() + HOUR);
+      repository.beforeDispatchLock = () => {
+        databaseNow = afterWait;
+      };
+
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(repository.run).toMatchObject({
+        status: 'waiting',
+        claimedAt: afterWait,
+        wakeAt: finalQuietUntil,
+      });
+      expect(sent).toEqual([]);
+    });
+
+    it('prepares on the next claim when a top-up makes an unprepared send eligible', async () => {
+      const wakeAt = new Date(now.getTime() - 25 * HOUR);
+      const resumedAt = new Date(wakeAt.getTime() + 23 * HOUR);
+      const read = repository.findRun.bind(repository);
+      let reads = 0;
+      repository.findRun = async (storeId, runId) => {
+        const snapshot = await read(storeId, runId);
+        if (++reads === 2) {
+          repository.run = {
+            ...repository.run,
+            balanceResumedAt: resumedAt,
+            hasBalanceResumeSendAllowance: true,
+          };
+        }
+        return snapshot;
+      };
+
+      await start(send, { wakeAt });
+
+      expect(repository.run).toMatchObject({ status: 'waiting', wakeAt });
+      expect(ledger).toEqual([]);
+      expect(sent).toEqual([]);
+
+      repository.run = { ...repository.run, status: 'running', claimedAt: now };
+      await service.continueRun(
+        STORE_ID,
+        { runId: RUN_ID, stepKey: 'first', claimedAt: now },
+        { kind: 'system' },
+      );
+
+      expect(sent).toHaveLength(1);
+      expect(ledger.map((entry) => entry.kind)).toEqual(['reserve', 'charge']);
     });
 
     it('ends an uncertain send when the goal is reached during the resend check', async () => {
@@ -1232,18 +1333,122 @@ describe('AutomationRunsService', () => {
       expect(ledger).toEqual([]);
     });
 
-    it('skips the step as no_credits on a short balance, then follows "if not reachable"', async () => {
+    it('pauses the workflow on a short balance and leaves the run waiting at its send', async () => {
       balance = 0;
-      expect(await start(send)).toMatchObject({ stepKey: 'end' });
+
+      expect(await start(send)).toBeUndefined();
+
+      expect(pausedForBalance).toEqual([AUTOMATION_ID]);
+      expect(repository.run).toMatchObject({
+        status: 'waiting',
+        currentStepKey: 'first',
+        wakeAt: claimedAt,
+        attempts: 0,
+      });
+      expect(repository.steps).toEqual([]);
+      expect(sent).toEqual([]);
+      expect(ledger).toEqual([]);
+    });
+
+    it('commits the waiting run before the worker can stop after a balance pause', async () => {
+      balance = 0;
+      failAfterPause = true;
+
+      await expect(start(send)).rejects.toThrow('worker stopped after the balance pause committed');
+
+      expect(pausedForBalance).toEqual([AUTOMATION_ID]);
+      expect(repository.run).toMatchObject({
+        status: 'waiting',
+        currentStepKey: 'first',
+        wakeAt: claimedAt,
+        attempts: 0,
+        lastError: null,
+      });
+      expect(ledger).toEqual([]);
+    });
+
+    it('after a balance pause, skips a send due over a day ago as no_credits and sends a newer one', async () => {
+      // Due at claimedAt; the top-up that ended the pause came 25 hours later.
+      clockNow = new Date(claimedAt.getTime() + 26 * HOUR);
+      const pausedAt = new Date(claimedAt.getTime() + 25 * HOUR);
+      expect(await start(send, { balanceResumedAt: pausedAt })).toMatchObject({ stepKey: 'end' });
       expect(repository.steps).toEqual([
         expect.objectContaining({ outcome: 'skipped', skipReason: 'no_credits' }),
       ]);
 
       repository.steps = [];
-      await start({ ...send, ifNotReachable: 'exit' });
+      await start({ ...send, ifNotReachable: 'exit' }, { balanceResumedAt: pausedAt });
       expect(repository.run).toMatchObject({ status: 'exited', exitReason: 'not_reachable' });
+
+      repository.steps = [];
+      clockNow = new Date(claimedAt.getTime() + 23 * HOUR);
+      await start(send, { balanceResumedAt: pausedAt });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(sent).toHaveLength(1);
+    });
+
+    it('sends when balance resumed just before the cutoff and the sweep runs just after it', async () => {
+      clockNow = new Date(claimedAt.getTime() + 24 * HOUR + 1000);
+      await start(send, {
+        balanceResumedAt: new Date(claimedAt.getTime() + 24 * HOUR - 1000),
+        hasBalanceResumeSendAllowance: true,
+      });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'sent' })]);
+      expect(sent).toHaveLength(1);
+    });
+
+    it('uses a balance resume that commits after the run was first loaded', async () => {
+      const read = repository.findRun.bind(repository);
+      const resumedAt = new Date(claimedAt.getTime() + 25 * HOUR);
+      clockNow = new Date(claimedAt.getTime() + 26 * HOUR);
+      repository.findRun = async (storeId: string, runId: string) => {
+        const found = await read(storeId, runId);
+        repository.run = { ...repository.run, balanceResumedAt: resumedAt };
+        return found;
+      };
+
+      await start(send);
+
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'skipped', skipReason: 'no_credits' }),
+      ]);
       expect(sent).toEqual([]);
       expect(ledger).toEqual([]);
+    });
+
+    it('judges a held send at the balance resume, so a later manual pause makes it late', async () => {
+      // Two hours old at the resume, then held a day longer by a manual pause.
+      clockNow = new Date(claimedAt.getTime() + 30 * HOUR);
+
+      await start(send, {
+        balanceResumedAt: new Date(claimedAt.getTime() + 2 * HOUR),
+        hasBalanceResumeSendAllowance: false,
+      });
+
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
+    });
+
+    it('keeps the late rule for a send due after the last balance resume', async () => {
+      clockNow = new Date(claimedAt.getTime() + 25 * HOUR);
+
+      await start(send, { balanceResumedAt: new Date(claimedAt.getTime() - HOUR) });
+
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
+    });
+
+    it('skips as no_credits a send that came due during a balance pause, also after two pauses', async () => {
+      // Due 30 hours ago, during the second of two balance pauses; the first ended before it.
+      const firstResume = new Date(claimedAt.getTime() - 2 * HOUR);
+      const secondResume = new Date(claimedAt.getTime() + 29 * HOUR);
+      clockNow = new Date(claimedAt.getTime() + 30 * HOUR);
+      await start(send, { balanceResumedAt: secondResume });
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'skipped', skipReason: 'no_credits' }),
+      ]);
+
+      repository.steps = [];
+      await start(send, { balanceResumedAt: firstResume });
+      expect(repository.steps).toEqual([expect.objectContaining({ outcome: 'late' })]);
     });
   });
 

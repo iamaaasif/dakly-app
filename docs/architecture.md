@@ -94,6 +94,8 @@ Pending review: cross-store workers read due work through SECURITY DEFINER funct
 
 Repeating sweeps are BullMQ job schedulers that the worker upserts at startup under fixed ids, one job per interval across all workers ([rules/jobs.md](rules/jobs.md)). Today they are the account security notice sweep and the staff alert relay on `transactional` and staff audit maintenance on `bulk`, each every 30 seconds, the outbox relay on `transactional` every second, and the workflow sweep on `workflow` every minute. Sign-in and TOTP recovery store their security notices, then queue one `send-security-notice` job per notice on `transactional`; the worker sends it, so no request waits for an email or SMS vendor. If queueing fails, the request still succeeds and the sweep sends the stored notice.
 
+The workflow sweep ranks due runs by store before applying its per-store cap. If the due set grows to hundreds of thousands, use bounded reads from each store’s due-run index, such as a lateral query with a limit for each store.
+
 Per-store concurrency limits on `campaign`, `bulk` and `sync` stop one shop from filling a queue. Failed jobs retry with exponential backoff, then move to a dead-letter list with an alert.
 | `payments` | Payment intent checks, renewals, reconciliation | High |
 
@@ -120,7 +122,7 @@ Per-store fairness for AI replies uses a Valkey semaphore (concurrency 3 per sto
 1. Meta (or the WhatsApp BSP) posts a webhook. The API checks the `X-Hub-Signature-256` signature, saves the raw payload to `webhook_events` with a provider-specific deduplication key (for Meta, the SHA-256 hex digest of the verified delivery bytes), queues an `inbound` job and returns 200. Target under 100 ms.
 2. The inbound worker resolves the store from the Page or phone id, finds or creates the contact and chat, saves the message, downloads media to R2, and pushes it to the inbox over Server-Sent Events.
 3. If AI is on for this chat and no person holds it, the worker schedules an `ai-reply` job 8 seconds later (the store's wait setting). A new customer message resets the timer, so one reply answers the whole thought.
-4. The AI worker runs the agent (see AI section). It may answer, ask a question, create a draft order through tools, or hand over. Saved replies that match are sent without calling the model.
+4. The AI worker runs the agent (see AI section). It may answer, ask a question, create a draft order through tools, or hand over. Staff choose saved replies by hand.
 5. The reply goes to the `outbound` queue, which sends it through the provider adapter with an idempotency key, then records the status callbacks (sent, delivered, read).
 6. If anything fails (model timeout, provider error) the chat is handed to the team with a reason; nothing is lost.
 

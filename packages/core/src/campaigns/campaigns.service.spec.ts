@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CampaignStatus } from '@dakly/contracts/campaigns';
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { LinksService } from '../links/links.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -38,7 +39,8 @@ const now = new Date('2026-11-16T05:00:00Z');
 class FakeCampaignsRepository {
   readonly rows = new Map<
     string,
-    Campaign & Pick<CampaignStatusChange, 'pauseReason' | 'finishedAt'>
+    Campaign &
+      Pick<CampaignStatusChange, 'pauseReason' | 'finishedAt'> & { approvedAt?: Date | null }
   >();
 
   add(
@@ -106,6 +108,10 @@ class FakeCampaignsRepository {
     return row?.status === 'scheduled' ? (row as Campaign & { approvedAt: Date }) : undefined;
   }
 
+  async lockCampaign(_storeId: string, id: string) {
+    return this.rows.get(id);
+  }
+
   async changeStatus(
     _storeId: string,
     id: string,
@@ -128,6 +134,19 @@ class FakeCampaignsRepository {
     for (const recipient of this.recipients)
       if (recipient.campaignId === campaignId && recipient.status === 'queued')
         Object.assign(recipient, { status: 'cancelled' });
+  }
+
+  async settlementTotals(_storeId: string, campaignId: string) {
+    return {
+      unsettled: this.recipients.filter(
+        (row) => row.campaignId === campaignId && row.status === 'queued',
+      ).length,
+      chargedCredits: 0,
+    };
+  }
+
+  async markSettled() {
+    return true;
   }
 
   async markApproved(_storeId: string, id: string, approval: CampaignApproval) {
@@ -212,6 +231,11 @@ describe('CampaignsService', () => {
         const reservation = reservations.get(key);
         return reservation && { entryId: reservation.entryId, balanceQuantity: balance };
       },
+      reservationFor: async (_storeId: string, _wallet: string, key: string) => {
+        const reservation = reservations.get(key);
+        if (!reservation) throw new Error('Test reservation not found');
+        return { entryId: reservation.entryId, quantity: reservation.quantity };
+      },
       release: async (_storeId: string, input: { reservationId: string }) => {
         const reservation = [...reservations.values()].find(
           (entry) => entry.entryId === input.reservationId,
@@ -233,6 +257,10 @@ describe('CampaignsService', () => {
       new TeamService(undefined as never),
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
       { publish: async (event: DaklyEvent) => void events.push(event) } as unknown as OutboxService,
+      {
+        shortLinkBase: () => 'http://localhost:4000/l',
+        sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000',
+      } as LinksService,
       { now: () => clockNow } as Clock,
     );
   });
@@ -295,6 +323,17 @@ describe('CampaignsService', () => {
       code: 'CAMPAIGN_NOT_DRAFT',
     });
     expect(repository.rows.has(campaign.id)).toBe(true);
+  });
+
+  it('counts the opt-out link, so 150 characters that fit one part take two', async () => {
+    const { campaign } = audienceDraft(3);
+    campaign.content = { text: 'a'.repeat(150) };
+
+    expect(await service.estimate(STORE_ID, campaign.id)).toMatchObject({
+      recipientsCount: 2,
+      smsParts: 2,
+      smsCredits: 4,
+    });
   });
 
   it('estimates the audience across pages, minus exclusions and skips, in credits', async () => {
@@ -447,22 +486,19 @@ describe('CampaignsService', () => {
     return campaign;
   }
 
-  it.each(['unschedule', 'cancel'] as const)(
-    'refuses to %s 4 minutes before the send and keeps the credits reserved',
-    async (change) => {
-      const campaign = await scheduled(4);
+  it('refuses to unschedule 4 minutes before the send and keeps the credits reserved', async () => {
+    const campaign = await scheduled(4);
 
-      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
-        code: 'CAMPAIGN_CHANGE_TOO_LATE',
-        status: 409,
-      });
-      expect(repository.rows.get(campaign.id)?.status).toBe('scheduled');
-      expect(balance).toBe(998);
-      expect(repository.recipients).toHaveLength(2);
-    },
-  );
+    await expect(service.unschedule(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_CHANGE_TOO_LATE',
+      status: 409,
+    });
+    expect(repository.rows.get(campaign.id)?.status).toBe('scheduled');
+    expect(balance).toBe(998);
+    expect(repository.recipients).toHaveLength(2);
+  });
 
-  it.each([6, 5])(
+  it.each([6, 5, 4])(
     'cancels %i minutes before the send, cancels the queued recipients and releases the credits',
     async (beforeSend) => {
       const campaign = await scheduled(beforeSend);
@@ -498,18 +534,42 @@ describe('CampaignsService', () => {
     expect(repository.recipients).toHaveLength(2);
   });
 
-  it.each(['unschedule', 'cancel'] as const)(
-    'refuses to %s a campaign that is not scheduled',
-    async (change) => {
-      const campaign = repository.add('sending');
+  it('keeps the reservation when the cancellation settlement is already stamped', async () => {
+    const campaign = await scheduled(6);
+    const stamp = vi.spyOn(repository, 'markSettled').mockResolvedValue(false);
 
-      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
-        code: 'CAMPAIGN_NOT_SCHEDULED',
+    await expect(service.cancel(STORE_ID, campaign.id, actor)).resolves.toMatchObject({
+      status: 'cancelled',
+    });
+    expect(stamp).toHaveBeenCalledOnce();
+    expect(balance).toBe(998);
+  });
+
+  it('refuses to unschedule a campaign that is already sending', async () => {
+    const campaign = repository.add('sending');
+
+    await expect(service.unschedule(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_SCHEDULED',
+    });
+    await expect(service.unschedule(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_FOUND',
+    });
+    expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+  });
+
+  it.each(['cancelled', 'sent', 'failed'] as const)(
+    'refuses to cancel a %s campaign',
+    async (status) => {
+      const campaign = repository.add(status);
+
+      await expect(service.cancel(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_CANCELLABLE',
+        status: 409,
       });
-      await expect(service[change](STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+      await expect(service.cancel(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_FOUND',
       });
-      expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+      expect(repository.rows.get(campaign.id)?.status).toBe(status);
     },
   );
 

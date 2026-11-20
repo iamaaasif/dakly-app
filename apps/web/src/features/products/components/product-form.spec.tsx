@@ -244,6 +244,61 @@ describe('Product form', () => {
     });
   });
 
+  it('picks a generated description without saving the product', async () => {
+    const requests: { method: string | undefined; body: unknown }[] = [];
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      requests.push({ method: init.method, body: JSON.parse(String(init.body)) });
+      const result =
+        init.method === 'POST'
+          ? { options: ['Made with cotton', 'Cotton for everyday wear', 'A cotton panjabi'] }
+          : product;
+      return Response.json(result, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(product);
+    fireEvent.click(screen.getByRole('button', { name: 'Write with AI' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Bangla' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Write 3 options' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Made with cotton' }));
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Description').value).toBe(
+      'Made with cotton',
+    );
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(requests).toEqual([{ method: 'POST', body: { tone: 'friendly', language: 'bn' } }]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { description: 'Made with cotton' } });
+  });
+
+  it('keeps a writing request pending when the panel is closed and reopened', async () => {
+    let finish!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    vi.stubGlobal('fetch', () => response);
+    show(product);
+    const toggle = screen.getByRole('button', { name: 'Write with AI' });
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Write 3 options' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Write 3 options' }).disabled,
+      ).toBe(true),
+    );
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Write 3 options' }).disabled,
+    ).toBe(true);
+    finish(
+      Response.json(
+        { options: ['Made with cotton', 'Cotton for everyday wear', 'A cotton panjabi'] },
+        { headers: { 'x-session-context': 'verified' } },
+      ),
+    );
+    await screen.findByRole('button', { name: 'Made with cotton' });
+  });
+
   it('saves a description without overwriting later visibility or variant changes', async () => {
     let submitted: unknown;
     vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {

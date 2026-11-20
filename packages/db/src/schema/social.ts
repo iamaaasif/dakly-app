@@ -117,6 +117,7 @@ export const posts = pgTable(
     // Plain reference: ai_runs is partitioned by month and expires (docs/data/growth.md).
     aiRunId: uuid('ai_run_id'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    idempotencyKey: text('idempotency_key'),
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
     approvedAt: timestamptz('approved_at'),
     deletedAt: timestamptz('deleted_at'),
@@ -126,7 +127,10 @@ export const posts = pgTable(
   (table) => [
     uniqueIndex('posts_store_id_id_key').on(table.storeId, table.id),
 
-    index('posts_store_id_created_at_idx').on(table.storeId, table.createdAt),
+    uniqueIndex('posts_store_creator_idempotency_key')
+      .on(table.storeId, table.createdByUserId, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} is not null`),
+    index('posts_store_id_created_at_idx').on(table.storeId, table.createdAt, table.id),
     index('posts_created_by_user_id_idx').on(table.createdByUserId),
     index('posts_approved_by_user_id_idx').on(table.approvedByUserId),
     check('posts_kind', isOneOf(table.kind, postKinds)),

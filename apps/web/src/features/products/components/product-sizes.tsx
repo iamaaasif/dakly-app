@@ -13,10 +13,12 @@ const PRESETS = [
 ] as const;
 
 type ProductSizesProps = {
+  sizeStocks?: Record<number, number>;
+  onStockChange?: (index: number, quantity: number) => void;
   onAddOption?: () => void;
 };
 
-export function ProductSizes({ onAddOption }: ProductSizesProps) {
+export function ProductSizes({ sizeStocks = {}, onStockChange, onAddOption }: ProductSizesProps) {
   const form = useFormContext<ProductFormValues>();
   const options = form.watch('options') ?? [];
   const sizes = options[0]?.name.toLowerCase() === 'size' ? options[0].values : [];
@@ -43,7 +45,9 @@ export function ProductSizes({ onAddOption }: ProductSizesProps) {
           key={index}
           index={index}
           size={size}
+          stock={sizeStocks[index] ?? 0}
           onUpdate={(i, name) => updateSizeName(form, i, name)}
+          onStockChange={(i, qty) => onStockChange?.(i, qty)}
           onRemove={(i) => removeSizeRow(form, sizes, i)}
         />
       ))}
@@ -123,10 +127,7 @@ function updateSizeName(form: UseFormReturn<ProductFormValues>, index: number, n
   const current = form.getValues('variants') ?? [];
   if (current[index]) {
     const updated = [...current];
-    updated[index] = {
-      ...updated[index]!,
-      optionValues: { ...updated[index]!.optionValues, 0: name },
-    };
+    updated[index] = { ...updated[index]!, optionValues: { ...updated[index]!.optionValues, 0: name } };
     form.setValue('variants', updated, { shouldDirty: true });
   }
 }
@@ -134,11 +135,20 @@ function updateSizeName(form: UseFormReturn<ProductFormValues>, index: number, n
 type ProductSizeRowProps = {
   index: number;
   size: string;
+  stock: number;
   onUpdate: (index: number, name: string) => void;
+  onStockChange: (index: number, quantity: number) => void;
   onRemove: (index: number) => void;
 };
 
-function ProductSizeRow({ index, size, onUpdate, onRemove }: ProductSizeRowProps) {
+function ProductSizeRow({
+  index,
+  size,
+  stock,
+  onUpdate,
+  onStockChange,
+  onRemove,
+}: ProductSizeRowProps) {
   return (
     <div className="flex items-center gap-2">
       <Input
@@ -151,9 +161,13 @@ function ProductSizeRow({ index, size, onUpdate, onRemove }: ProductSizeRowProps
       <Input
         type="number"
         min="0"
-        defaultValue="0"
+        value={stock === 0 ? '' : stock}
         placeholder="0"
         aria-label={`Stock for size ${size || index + 1}`}
+        onChange={(event) => {
+          const val = Number.parseInt(event.target.value, 10);
+          onStockChange(index, Number.isNaN(val) || val < 0 ? 0 : val);
+        }}
         className="w-20 text-center"
       />
       <button
