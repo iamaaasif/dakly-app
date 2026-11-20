@@ -216,6 +216,15 @@ caption generation and checks generated text before scheduling.
 
 ![My posts](../design/screenshots/my-posts.webp)
 
+### Web screens (SOC-5)
+
+The Social hub lists each connected Facebook Page and Instagram account with its status, then the signed-in person's drafts, and shows a reconnect banner for an account whose access expired. Connect account and Reconnect lead to Integrations, which owns the Meta sign-in. Where the screen differs from the design on purpose:
+
+- Follower counts, draft thumbnails and Notify me wait for data that does not exist yet (SOC-7): followers are not stored, post responses carry file ids and no image URLs, and nothing records TikTok interest.
+- Facebook and Instagram use the theme's info and AI colours, not the networks' brand colours.
+- Posting schedule, Duplicate and Delete arrive in the next SOC-5 part; Create post and Edit follow in the part after (SOC-5).
+- An AI-written draft that nobody approved shows Needs your OK (D7).
+
 TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagram "Access expired" disagrees with the campaign builder; status comes from the real connection.
 
 ### How it works
