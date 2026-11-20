@@ -89,8 +89,8 @@ describe('WorkflowCanvasGraph', () => {
     const steps = within(screen.getByRole('list', { name: 'Workflow steps' }));
 
     expect(steps.getByText(/^1,100 sent · 90 tapped/)).toBeTruthy();
-    expect(steps.getByText(/^1,300 reached/)).toBeTruthy();
-    expect(steps.getAllByText(/^0 reached/).length).toBeGreaterThan(0);
+    expect(steps.getByText(/^1,300 entries/)).toBeTruthy();
+    expect(steps.getAllByText(/^0 entries/).length).toBeGreaterThan(0);
   });
 
   it('scales the drawing without changing its content', () => {
