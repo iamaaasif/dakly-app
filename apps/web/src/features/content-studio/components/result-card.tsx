@@ -61,7 +61,9 @@ export function ResultCard({ number, text, aiRunId, asked }: ResultCardProps) {
           onPreview={() => setPreviewing(true)}
           onSave={() => save.mutate(piece, { onSuccess: ({ id }) => setSavedId(id) })}
         />
-        {postKinds.includes(piece.kind) && <UseInPostButton piece={piece} savedId={savedId} onSaved={setSavedId} />}
+        {postKinds.includes(piece.kind) && (
+          <UseInPostButton piece={piece} savedId={savedId} onSaved={setSavedId} />
+        )}
       </div>
       {previewing && (
         <PreviewDialog
