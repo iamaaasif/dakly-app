@@ -3353,6 +3353,68 @@ fixture('POST /products/:productId/write-description', async () => {
   }
 });
 
+fixture('POST /assistant/messages', async () => {
+  const { a, b } = await pair();
+  await f.admin.pool.query('update plans set limits=limits || $2::jsonb where id=$1', [
+    f.plan,
+    JSON.stringify({ ai_ask: 5 }),
+  ]);
+  const reports = app.get(AnalyticsService);
+  const { current } = await reports.periods(a.id, 30);
+  for (const [shop, count] of [
+    [a, 11],
+    [b, 37],
+  ] as const)
+    await f.admin.pool.query(
+      "insert into store_daily_metrics (store_id,day,metric,dimension,value) values ($1,$2,'orders','',$3)",
+      [shop.id, current.through, count],
+    );
+  const driver = app.get<{
+    respond(request: { input: string; model: string }): Promise<unknown>;
+  }>(LLM_DRIVER);
+  const usage = { inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 };
+  const model = vi.spyOn(driver, 'respond').mockImplementation(async ({ input, model }) => {
+    const results = /<tool_results[^>]*>(.*)<\/tool_results>/s.exec(input);
+    if (!results)
+      return {
+        kind: 'tool_calls',
+        toolCalls: [{ id: 'call', name: 'get_sales', argumentsJson: '{"window":"last_30_days"}' }],
+        model,
+        responseId: randomUUID(),
+        usage,
+      };
+    const [{ result }] = JSON.parse(results[1]!) as { result: { orders: number } }[];
+    return {
+      kind: 'output',
+      output: { reply: `You had ${result.orders} orders in the last 30 days.` },
+      model,
+      responseId: randomUUID(),
+      usage,
+    };
+  });
+  const ask = { question: 'How many orders did I get this month?' };
+  try {
+    for (const [shop, count] of [
+      [a, 11],
+      [b, 37],
+    ] as const) {
+      const answer = (await success(shop, 'POST', '/assistant/messages', 200, ask)).json();
+      expect(answer).toMatchObject({
+        kind: 'answer',
+        text: `You had ${count} orders in the last 30 days.`,
+      });
+      expect(answer.creditsLeft).toBe(4);
+    }
+    expect(
+      await f.admin.pool.query("select 1 from usage_events where unit='ai_ask' and store_id=$1", [
+        a.id,
+      ]),
+    ).toHaveProperty('rowCount', 1);
+  } finally {
+    model.mockRestore();
+  }
+});
+
 let logs: ReturnType<typeof captureRequestLogs>;
 
 describe('every production shop route isolates its data', () => {
