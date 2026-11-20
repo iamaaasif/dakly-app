@@ -14,6 +14,7 @@ import { QUEUE_CHANNEL_TOKEN_CHECKS } from '@dakly/core/channels/jobs/queue-chan
 import { RECOVER_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/recover-webhook-events.job';
 import { SWEEP_CONTACT_STATS } from '@dakly/core/contacts/jobs/sweep-contact-stats.job';
 import { FAIL_STUCK_IMPORTS } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
+import { RUN_MAINTENANCE } from '@dakly/core/maintenance/jobs/run-maintenance.job';
 import { QUEUE_CONVERSATION_RETURNS } from '@dakly/core/messaging/jobs/queue-conversation-returns.job';
 import { WAKE_SNOOZED_NOTIFICATIONS } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { loadEnv } from '@dakly/core/platform/config/env';
@@ -58,6 +59,8 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.sync, QUEUE_CONVERSATION_RETURNS, MINUTE_MS),
       scheduleJob(this.bulk, SWEEP_ANALYTICS, { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduleJob(this.bulk, PURGE_WEBHOOK_EVENTS, { pattern: '0 0 * * *', tz: 'UTC' }),
+      // 19:00 UTC is 01:00 in Dhaka, after the Dhaka day the rollups need has finished.
+      scheduleJob(this.bulk, RUN_MAINTENANCE, { pattern: '0 19 * * *', tz: 'UTC' }),
     ]);
   }
 }

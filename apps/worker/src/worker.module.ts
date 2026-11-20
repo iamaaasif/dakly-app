@@ -21,6 +21,8 @@ import { RecordAutomationBirthdaysJob } from '@dakly/core/automations/jobs/recor
 import { ResumeWorkflowsOnWalletCredited } from '@dakly/core/automations/jobs/resume-workflows-on-wallet-credited.job';
 import { StartAutomationOnBirthday } from '@dakly/core/automations/jobs/start-automation-on-birthday.job';
 import { StartAutomationOnConsent } from '@dakly/core/automations/jobs/start-automation-on-consent.job';
+import { StartAutomationOnOrderCreated } from '@dakly/core/automations/jobs/start-automation-on-order-created.job';
+import { StartAutomationOnOrderStageChanged } from '@dakly/core/automations/jobs/start-automation-on-order-stage-changed.job';
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
@@ -39,6 +41,7 @@ import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
+import { MaintenanceModule } from '@dakly/core/maintenance/maintenance.module';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
 import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
 import { MessagingModule } from '@dakly/core/messaging/messaging.module';
@@ -97,6 +100,8 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnBirthday,
     StartAutomationOnConsent,
     SweepAutomationBirthdaysJob,
+    StartAutomationOnOrderCreated,
+    StartAutomationOnOrderStageChanged,
     StartAutomationOnTagAdded,
     BuildCampaignAudienceJob,
     QueueAudienceBuildOnApprovalStarted,
@@ -139,6 +144,7 @@ import { JobSchedulers } from './job-schedulers';
     ImportsModule,
     ContactStatsRepairModule,
     AnalyticsModule,
+    MaintenanceModule,
     KnowledgeIndexModule,
     AiAgentModule,
     BullModule.forRootAsync({

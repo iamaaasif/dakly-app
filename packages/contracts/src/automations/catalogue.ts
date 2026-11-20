@@ -134,7 +134,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     availableBefore: 'orders',
   },
   order_placed: {
-    source: { plannedEvent: 'order.created' },
+    source: { event: 'order.created' },
     filters: {
       order_total: 'optional',
       product: 'optional',
@@ -153,25 +153,25 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
   },
   // D21: staff move the order to With courier; there is no courier status feed.
   order_shipped: {
-    source: { plannedEvent: 'order.stage_changed' },
+    source: { event: 'order.stage_changed' },
     filters: { order_total: 'optional', delivery_district: 'optional' },
     needs: 'orders',
     availableBefore: null,
   },
   order_delivered: {
-    source: { plannedEvent: 'order.stage_changed' },
+    source: { event: 'order.stage_changed' },
     filters: { order_total: 'optional', product: 'optional' },
     needs: 'orders',
     availableBefore: null,
   },
   order_cancelled: {
-    source: { plannedEvent: 'order.stage_changed' },
+    source: { event: 'order.stage_changed' },
     filters: { order_total: 'optional' },
     needs: 'orders',
     availableBefore: null,
   },
   order_returned: {
-    source: { plannedEvent: 'order.stage_changed' },
+    source: { event: 'order.stage_changed' },
     filters: { order_total: 'optional' },
     needs: 'orders',
     availableBefore: null,
@@ -222,9 +222,20 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
   },
 };
 
-export function isTriggerReadyBeforeChannels(key: TriggerKey): boolean {
+// The order triggers that a worker subscriber starts workflows from.
+const orderTriggerKeys: readonly TriggerKey[] = [
+  'order_placed',
+  'order_shipped',
+  'order_delivered',
+  'order_cancelled',
+  'order_returned',
+];
+
+export function isTriggerAvailable(key: TriggerKey): boolean {
   const trigger = automationTriggers[key];
-  return trigger.availableBefore === 'channels' && !('plannedEvent' in trigger.source);
+  const readyBeforeChannels =
+    trigger.availableBefore === 'channels' && !('plannedEvent' in trigger.source);
+  return readyBeforeChannels || orderTriggerKeys.includes(key);
 }
 
 export const actionKinds = [

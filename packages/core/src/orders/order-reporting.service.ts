@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { OrderReportingRepository } from './order-reporting.repository';
+import { orderTotalPoisha } from './order-totals';
 
 @Injectable()
 export class OrderReportingService {
@@ -14,6 +15,20 @@ export class OrderReportingService {
 
   buyerContactId(storeId: string, orderId: string) {
     return this.orders.buyerContactId(storeId, orderId);
+  }
+
+  async triggerFacts(storeId: string, orderId: string) {
+    const facts = await this.orders.triggerFacts(storeId, orderId);
+    if (!facts) return undefined;
+    const { contactId, paymentStatus, bdAreaId, productIds, isFirstOrder } = facts;
+    return {
+      contactId,
+      paymentStatus,
+      bdAreaId,
+      productIds,
+      isFirstOrder,
+      totalPoisha: orderTotalPoisha(facts),
+    };
   }
 
   reportingAnchor(storeId: string, orderId: string, timeZone: string) {

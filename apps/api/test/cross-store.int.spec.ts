@@ -2797,18 +2797,9 @@ fixture('GET /events/stream', async () => {
       return { shop, abort, read };
     }),
   );
-  // Nest can send headers while Valkey is still subscribing. Give both streams one deadline.
-  await vi.waitFor(
-    async () => {
-      for (const shop of [a, b]) {
-        const reply = await app
-          .get(ValkeyClient)
-          .connection.pubsub('NUMSUB', `notifications:${shop.id}`);
-        expect((reply as [string, number])[1]).toBe(1);
-      }
-    },
-    { timeout: 2_000 },
-  );
+  // Nest sends headers while Valkey is still subscribing; the server sends this comment once joined.
+  for (const { read } of streams)
+    await vi.waitFor(() => expect(read.text).toContain(': ready'), { timeout: 2_000 });
   const ids = new Map<string, string>();
   for (const shop of [a, b]) {
     ids.set(shop.id, await notification(shop));

@@ -220,6 +220,8 @@ Six tabs in the prototype. It ignores the new sales sources (chats, order link);
 
 `store_daily_metrics` (one row per store, day, metric and dimension), owned by `analytics/`. The order subscribers write `orders`, `sales`, `delivered_orders` and `net_spend` by the original creation day. Sales is split by order source. Delivered sales is net spend, which also supplies Average order value with the delivered count. COD collection and late returns restate that day.
 
+The daily maintenance job also writes `ai_runs`, `ai_cost_micro_usd`, `ai_input_tokens` and `ai_output_tokens` from `ai_runs`, split by AI purpose in the dimension (see the [glossary](../product/glossary.md#ai-usage-metrics)). `AnalyticsService.rollUpAiRunDay` writes them for one store and day.
+
 Each `buyer_activity` row records one buyer and day, with the first non-cancelled order day as its value. That lets a period count each repeat buyer once even when they order on several days. A cancellation can move the first order day, so the subscriber replaces that buyer's retained days.
 
 The nightly lifecycle snapshot stores the count for each of the six stages. Reports read the latest snapshot inside the selected period.
