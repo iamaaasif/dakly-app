@@ -89,10 +89,10 @@ test('shows accounts, drafts and the reconnect banner', async ({ page, context, 
     await capture(page, 'connect-account');
     await chooser.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByRole('button', { name: 'Continue with Facebook' })).toBeVisible();
-    await page.getByRole('button', { name: 'Back' }).click();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
     await channels.getByRole('button', { name: 'Reconnect' }).click();
     await expect(page.getByRole('dialog', { name: 'Reconnect @urbantrend.bd' })).toBeVisible();
-    await page.getByRole('button', { name: 'Back' }).click();
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
 
     await page.getByRole('button', { name: 'Posting schedule' }).click();
     const schedule = page.getByRole('dialog', { name: 'Posting schedule' });
