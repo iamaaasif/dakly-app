@@ -299,4 +299,56 @@ describe('MetaGraphChannelDriver', () => {
       message: 'Meta request failed',
     });
   });
+
+  describe('downloadMedia', () => {
+    const url = 'https://scontent.xx.fbcdn.net/photo.jpg';
+
+    it('downloads media from a Meta host with the Page credential', async () => {
+      vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+        expect(new Headers(init.headers).get('authorization')).toBe('Bearer test-page-credential');
+        return new Response(new Uint8Array([1, 2, 3]), {
+          headers: { 'content-type': 'image/jpeg; charset=binary' },
+        });
+      });
+      await expect(driver.downloadMedia('test-page-credential', url, 10)).resolves.toEqual({
+        kind: 'downloaded',
+        bytes: Buffer.from([1, 2, 3]),
+        contentType: 'image/jpeg',
+      });
+    });
+
+    it('never sends the credential to a host Meta does not own', async () => {
+      const fetchSpy = vi.fn();
+      vi.stubGlobal('fetch', fetchSpy);
+      for (const other of ['https://evil.example.test/photo', 'http://scontent.xx.fbcdn.net/p'])
+        await expect(driver.downloadMedia('test-page-credential', other, 10)).rejects.toMatchObject(
+          {
+            code: 'rejected',
+          },
+        );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('reports an expired link, an oversize body and an outage as different results', async () => {
+      vi.stubGlobal('fetch', async () => new Response('gone', { status: 404 }));
+      await expect(driver.downloadMedia('t', url, 10)).resolves.toEqual({ kind: 'expired' });
+      vi.stubGlobal('fetch', async () => new Response('denied', { status: 403 }));
+      await expect(driver.downloadMedia('t', `${url}?oe=1`, 10)).resolves.toEqual({
+        kind: 'expired',
+      });
+      await expect(driver.downloadMedia('t', `${url}?oe=ffffffffff`, 10)).rejects.toMatchObject({
+        code: 'unavailable',
+      });
+      vi.stubGlobal('fetch', async () => new Response(new Uint8Array(11)));
+      await expect(driver.downloadMedia('t', url, 10)).resolves.toEqual({ kind: 'too_large' });
+      vi.stubGlobal('fetch', async () => new Response('', { status: 302 }));
+      await expect(driver.downloadMedia('t', url, 10)).rejects.toMatchObject({ code: 'rejected' });
+      vi.stubGlobal('fetch', async () => new Response('', { status: 401 }));
+      await expect(driver.downloadMedia('t', url, 10)).rejects.toMatchObject({ code: 'rejected' });
+      vi.stubGlobal('fetch', async () => new Response('busy', { status: 503 }));
+      await expect(driver.downloadMedia('t', url, 10)).rejects.toMatchObject({
+        code: 'unavailable',
+      });
+    });
+  });
 });
