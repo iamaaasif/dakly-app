@@ -43,7 +43,3 @@ export const campaignGoalLabels: Record<CampaignGoal, string> = {
   seasonal: 'Seasonal campaign',
   from_scratch: 'Start from scratch',
 };
-
-// Campaigns that have started sending show their results, not the builder summary.
-const resultStatuses: CampaignStatus[] = ['sending', 'paused', 'sent', 'failed', 'cancelled'];
-export const hasCampaignResults = (status: CampaignStatus) => resultStatuses.includes(status);

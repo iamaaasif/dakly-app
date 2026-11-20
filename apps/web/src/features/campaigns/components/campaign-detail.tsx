@@ -3,7 +3,6 @@
 import { Button } from '@dakly/ui/button';
 
 import { useCampaign } from '../api/get-campaign';
-import { hasCampaignResults } from '../campaign-labels';
 import { CampaignBuilder } from './campaign-builder';
 import { CampaignLoading } from './campaign-loading';
 import { CampaignResults } from './campaign-results';
@@ -26,6 +25,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         Campaign not found
       </p>
     );
-  if (hasCampaignResults(campaign.data.status)) return <CampaignResults campaign={campaign.data} />;
+  // A campaign cancelled before it sent anything has no results to show.
+  if (campaign.data.startedAt !== null) return <CampaignResults campaign={campaign.data} />;
   return <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />;
 }

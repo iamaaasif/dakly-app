@@ -64,7 +64,7 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     const draft = await create('Winter Kurti collection');
     const sent = await create('Puja winback');
     await database.pool.query(
-      "update campaigns set status='sent', finished_at=now() where store_id=$1 and id=$2",
+      "update campaigns set status='sent', started_at=now(), finished_at=now() where store_id=$1 and id=$2",
       [storeId, sent],
     );
 

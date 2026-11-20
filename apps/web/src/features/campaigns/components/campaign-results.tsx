@@ -7,14 +7,10 @@ import {
   campaignStatusColors,
   campaignStatusLabels,
 } from '../campaign-labels';
-import { BuilderHeader } from './campaign-builder';
 import { CampaignFunnel } from './campaign-funnel';
-import { formatDate, formatDateTime } from '@/lib/format-date';
+import { CampaignPageHeader } from './campaign-page-header';
+import { formatDateTime } from '@/lib/format-date';
 import { formatCount, formatMoney } from '@/lib/format-money';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-// Orders count towards a campaign for 7 days after it finishes (feature 09, States).
-const ORDER_WINDOW_DAYS = 7;
 
 export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
   const { counts, channel } = campaign;
@@ -33,7 +29,7 @@ export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
   ];
   return (
     <main className="space-y-6 p-6 md:p-8">
-      <BuilderHeader
+      <CampaignPageHeader
         title={campaign.name}
         subtitle={`${campaignChannelLabels[channel]} · ${whenSent(campaign)}`}
         action={
@@ -83,16 +79,9 @@ function whenSent({ status, startedAt, finishedAt, createdAt }: CampaignResponse
 }
 
 function ResultNotes({ campaign }: { campaign: CampaignResponse }) {
-  const finalOn = campaign.finishedAt
-    ? new Date(Date.parse(campaign.finishedAt) + ORDER_WINDOW_DAYS * DAY_MS)
-    : undefined;
-  const now = new Date();
   return (
     <div className="space-y-1 text-sm text-text-muted">
       <p>Orders and revenue include returns up to today.</p>
-      {finalOn && finalOn > now ? (
-        <p>Results final on {formatDate(finalOn.toISOString(), now.toISOString())}.</p>
-      ) : null}
       {campaign.counts.countedAt === null ? <p role="status">Counts are being updated.</p> : null}
     </div>
   );
@@ -100,8 +89,10 @@ function ResultNotes({ campaign }: { campaign: CampaignResponse }) {
 
 function CampaignMessage({ campaign }: { campaign: CampaignResponse }) {
   return (
-    <section aria-label="Saved campaign" className="max-w-xl space-y-3">
-      <h2 className="text-lg font-semibold">Details</h2>
+    <section aria-labelledby="details-heading" className="max-w-xl space-y-3">
+      <h2 id="details-heading" className="text-lg font-semibold">
+        Details
+      </h2>
       <dl className="space-y-3">
         <div>
           <dt className="text-sm text-text-muted">Audience</dt>
