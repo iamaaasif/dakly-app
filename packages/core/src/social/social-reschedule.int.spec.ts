@@ -10,6 +10,7 @@ import type { AuditService } from '../audit/audit.service';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { TeamService } from '../team/team.service';
+import { SocialRescheduleRepository } from './social-reschedule.repository';
 import { SocialRescheduleService } from './social-reschedule.service';
 import { SocialRepository } from './social.repository';
 import type { SocialService } from './social.service';
@@ -26,6 +27,7 @@ describe('SocialRescheduleService', () => {
   function service(canReview = false) {
     return new SocialRescheduleService(
       new SocialRepository(fixture.tenant),
+      new SocialRescheduleRepository(fixture.tenant),
       { getPost: async () => ({}) as PostResponse } as unknown as SocialService,
       { canReviewSocialPosts: () => canReview } as unknown as TeamService,
       new StoreTransaction(fixture.tenant),

@@ -8,6 +8,7 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { TeamService } from '../team/team.service';
+import { SocialRescheduleRepository } from './social-reschedule.repository';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 import { SocialService } from './social.service';
@@ -20,6 +21,8 @@ type Editor = { actor: { kind: 'user'; userId: string }; access: StoreAccess };
 export class SocialRescheduleService {
   constructor(
     @Inject(SocialRepository) private readonly repository: SocialRepository,
+    @Inject(SocialRescheduleRepository)
+    private readonly rescheduleRepository: SocialRescheduleRepository,
     @Inject(SocialService) private readonly social: SocialService,
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -59,7 +62,7 @@ export class SocialRescheduleService {
       );
       if (reserved.length) throw socialError('POST_SLOT_TAKEN');
       const ids = moved.map(({ id }) => id);
-      await this.repository.moveScheduledTargets(storeId, ids, scheduledFor, now);
+      await this.rescheduleRepository.moveScheduledTargets(storeId, ids, scheduledFor, now);
       await this.audit.record(storeId, {
         actor,
         action: 'post.rescheduled',
