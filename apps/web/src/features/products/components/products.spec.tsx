@@ -194,11 +194,9 @@ describe('Products screen', () => {
     expect(allQuery.get('cursor')).toBeNull();
     expect(allQuery.get('search')).toBe('Cotton');
     await userEvent.clear(screen.getByRole('searchbox', { name: 'Search products' }));
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'ab');
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'ab{enter}');
     expect(push).not.toHaveBeenCalled();
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'c');
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'c{enter}');
     const searchQuery = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
     expect(searchQuery.get('search')).toBe('abc');
     expect(searchQuery.get('readiness')).toBe('running_low');

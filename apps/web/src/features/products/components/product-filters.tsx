@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { useFormContext, FormProvider, useForm } from 'react-hook-form';
 
 import { productListQuerySchema, type ProductListQuery } from '@dakly/contracts/products';
-import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
@@ -41,9 +40,6 @@ export function ProductFilters({ query }: ProductFiltersProps) {
           )}
         >
           <SearchField />
-          <Button type="submit" variant="secondary" className="sr-only">
-            Search
-          </Button>
         </form>
       </FormProvider>
       <ReadinessNav query={query} />
