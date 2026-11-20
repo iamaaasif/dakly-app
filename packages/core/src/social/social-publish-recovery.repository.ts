@@ -15,4 +15,11 @@ export class SocialPublishRecoveryRepository {
     );
     return rows.map(({ store_id }) => store_id);
   }
+
+  async dueMetricsTargets(limit: number) {
+    const { rows } = await this.database.execute<{ store_id: string; post_target_id: string }>(
+      sql`select store_id, post_target_id from due_post_metrics(${limit})`,
+    );
+    return rows.map((row) => ({ storeId: row.store_id, postTargetId: row.post_target_id }));
+  }
 }

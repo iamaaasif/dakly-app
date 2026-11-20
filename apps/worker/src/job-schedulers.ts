@@ -28,6 +28,7 @@ import {
 import { scheduleJob } from '@dakly/core/platform/queue/job-schedule';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { DAY_MS, MINUTE_MS } from '@dakly/core/platform/time';
+import { QUEUE_POST_METRICS_REFRESHES } from '@dakly/core/social/jobs/queue-post-metrics-refreshes.job';
 import { RECOVER_POST_TARGETS } from '@dakly/core/social/jobs/recover-post-targets.job';
 
 @Injectable()
@@ -43,7 +44,10 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
 
   async onModuleInit() {
     // A persisted scheduler could otherwise enqueue jobs with no handler after Meta is disabled.
-    if (!loadEnv().metaChannel) await this.sync.removeJobScheduler(RECOVER_POST_TARGETS);
+    if (!loadEnv().metaChannel) {
+      await this.sync.removeJobScheduler(RECOVER_POST_TARGETS);
+      await this.sync.removeJobScheduler(QUEUE_POST_METRICS_REFRESHES);
+    }
   }
 
   async onApplicationBootstrap() {
