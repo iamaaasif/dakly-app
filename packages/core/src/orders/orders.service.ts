@@ -47,10 +47,14 @@ import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
-type CreateEditor = {
-  actor: Extract<AuditEntry['actor'], { kind: 'user' }>;
-  access: Access;
+
+// Staff and the AI share one creation path; the defaults are a staff order.
+type PlacedBy = {
   idempotencyKey: string;
+  access: Access;
+  actor: AuditEntry['actor'];
+  source?: OrderWrite['source'];
+  createdByType?: OrderWrite['createdByType'];
 };
 
 @Injectable()
@@ -81,7 +85,7 @@ export class OrdersService {
   createOrder(
     storeId: string,
     input: CreateOrderInput,
-    { idempotencyKey, access, actor }: CreateEditor,
+    { idempotencyKey, access, actor, source = 'manual', createdByType = 'user' }: PlacedBy,
   ): Promise<OrderDetail> {
     return this.transaction.runLocked(storeId, async () => {
       const existing = await this.repository.findByIdempotencyKey(storeId, idempotencyKey);
@@ -124,9 +128,9 @@ export class OrdersService {
         recipientPhone: recipient.phone,
         recipientAddress: recipient.address,
         isRecipientBuyer: recipient.isBuyer,
-        source: 'manual',
-        createdByType: 'user',
-        createdByUserId: actor.userId,
+        source,
+        createdByType,
+        createdByUserId: actor.kind === 'user' ? actor.userId : null,
         idempotencyKey,
         ...delivery,
         ...totals,

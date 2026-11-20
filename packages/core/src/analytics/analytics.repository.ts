@@ -43,6 +43,44 @@ export class AnalyticsRepository {
     );
   }
 
+  readChannelOrders(storeId: string, period: ReportPeriod) {
+    return this.readMetrics(
+      storeId,
+      period,
+      ['marketing_orders'],
+      sql`${storeDailyMetrics.dimension} like 'channel:%'`,
+    );
+  }
+
+  // People delivered to and people who tapped, per channel, over campaign sends and workflow send steps.
+  async channelPeople(
+    storeId: string,
+    { from, through, timeZone }: ReportPeriod & { timeZone: string },
+  ) {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ channel: string; delivered: number; tapped: number }>(sql`
+        select channel, (count(distinct contact_id) filter (where delivered))::int as delivered,
+          (count(distinct contact_id) filter (where tapped))::int as tapped
+        from (
+          select c.channel, r.contact_id, coalesce(r.delivered_at, r.read_at) is not null as delivered,
+            r.tapped_at is not null as tapped, r.sent_at
+          from campaign_recipients r
+          join campaigns c on c.store_id = r.store_id and c.id = r.campaign_id
+          where r.store_id = ${storeId}
+          union all
+          select channel, contact_id, coalesce(delivered_at, read_at) is not null,
+            tapped_at is not null, sent_at
+          from automation_run_steps
+          where store_id = ${storeId} and kind = 'send' and category = 'marketing'
+            and channel is not null
+        ) sends
+        where sent_at >= (${from}::date)::timestamp at time zone ${timeZone}
+          and sent_at < (${through}::date + 1)::timestamp at time zone ${timeZone}
+        group by channel`),
+    );
+    return rows;
+  }
+
   private readMetrics(
     storeId: string,
     period: ReportPeriod,
