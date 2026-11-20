@@ -3,14 +3,14 @@ import { useMutation } from '@tanstack/react-query';
 import type { ImportUploadResponse } from '@dakly/contracts/contacts';
 import { ApiError } from '@dakly/ui/api-client';
 
-import { useStoreRequest } from '@/lib/store-request';
+import { useStoreRequest } from './store-request';
 
 // The file goes straight to storage; the API only sees its size.
-export function useUploadImport() {
+export function useUploadImport(path: '/imports' | '/product-imports') {
   const { request } = useStoreRequest();
   return useMutation({
     mutationFn: async (file: File) => {
-      const upload = await request<ImportUploadResponse>('/imports', {
+      const upload = await request<ImportUploadResponse>(path, {
         body: { sizeBytes: file.size },
       });
       const stored = await fetch(upload.uploadUrl, {

@@ -9,15 +9,19 @@ import { cn } from '@dakly/ui/cn';
 import { customersKeys } from '../api/customers-keys';
 import { useStartImport } from '../api/start-import';
 import { dropUnmappedFields, guessImportMapping } from '../import-fields';
-import type { ImportFileSummary } from '../import-file';
 import { ImportConsentStep } from './import-consent-step';
 import { ImportDuplicatesStep } from './import-duplicates-step';
 import { ImportMappingStep } from './import-mapping-step';
 import { ImportPreviewStep } from './import-preview-step';
 import { ImportResultStep } from './import-result-step';
-import { ImportUploadStep } from './import-upload-step';
+import { ImportUploadStep } from '@/components/import-upload-step';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
+import type { ImportFileSummary } from '@/lib/import-file';
 
+const customerTemplate = {
+  filename: 'dakly-customers-template.csv',
+  csv: 'Name,Phone,WhatsApp number,Email,Address,District,Tags,Notes\r\nRahima Akter,01712345678,,rahima@example.com,"House 4, Road 2",Dhaka,eid,\r\n',
+};
 const steps = ['Upload', 'Map fields', 'Preview', 'Duplicates', 'Consent', 'Results'] as const;
 
 type ImportCustomersDialogProps = { onClose: () => void };
@@ -49,6 +53,10 @@ export function ImportCustomersDialog({ onClose }: ImportCustomersDialogProps) {
       <ImportStepHeader step={step} />
       {upload === undefined ? (
         <ImportUploadStep
+          path="/imports"
+          rowName="customers"
+          fileLabel="Customer file"
+          template={customerTemplate}
           onUploaded={(uploaded) => {
             form.reset({
               ...form.getValues(),
