@@ -29,10 +29,14 @@ const channels = [
 
 export function CampaignChannelCards({
   focusSms,
+  hasMessengerPage,
   onChooseSms,
+  onChooseMessenger,
 }: {
   focusSms: boolean;
+  hasMessengerPage: boolean;
   onChooseSms: () => void;
+  onChooseMessenger: () => void;
 }) {
   return (
     <section aria-label="Campaign channels" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -43,15 +47,43 @@ export function CampaignChannelCards({
           </span>
           <h2 className="text-lg font-semibold text-action">{name}</h2>
           <p className="flex-1">{description}</p>
-          {name === 'SMS' ? (
-            <Button variant="secondary" autoFocus={focusSms} onClick={onChooseSms}>
-              Create SMS
-            </Button>
-          ) : (
-            <p className="flex min-h-10 items-center text-sm text-text-muted">Connect first</p>
-          )}
+          <ChannelAction
+            name={name}
+            focusSms={focusSms}
+            hasMessengerPage={hasMessengerPage}
+            onChooseSms={onChooseSms}
+            onChooseMessenger={onChooseMessenger}
+          />
         </Card>
       ))}
     </section>
   );
+}
+
+function ChannelAction({
+  name,
+  focusSms,
+  hasMessengerPage,
+  onChooseSms,
+  onChooseMessenger,
+}: {
+  name: string;
+  focusSms: boolean;
+  hasMessengerPage: boolean;
+  onChooseSms: () => void;
+  onChooseMessenger: () => void;
+}) {
+  if (name === 'SMS')
+    return (
+      <Button variant="secondary" autoFocus={focusSms} onClick={onChooseSms}>
+        Create SMS
+      </Button>
+    );
+  if (name === 'Facebook Messenger' && hasMessengerPage)
+    return (
+      <Button variant="secondary" onClick={onChooseMessenger}>
+        Create Messenger message
+      </Button>
+    );
+  return <p className="flex min-h-10 items-center text-sm text-text-muted">Connect first</p>;
 }
