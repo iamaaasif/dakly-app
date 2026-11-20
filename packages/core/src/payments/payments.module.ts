@@ -1,10 +1,12 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
+import { NotificationsModule } from '../notifications/notifications.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
 import { CryptoModule } from '../platform/crypto/crypto.module';
+import { OutboxModule } from '../platform/outbox/outbox.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { ProcessPaymentCallbackJob } from './jobs/process-payment-callback.job';
@@ -20,6 +22,8 @@ import { PaymentsService } from './payments.service';
   imports: [
     CacheModule,
     ClockModule,
+    NotificationsModule,
+    OutboxModule,
     BullModule.registerQueueAsync({
       name: QUEUES.inbound,
       useFactory: () => {
@@ -36,7 +40,13 @@ import { PaymentsService } from './payments.service';
     PaymentsRepository,
     PaymentsService,
   ],
-  exports: [PaymentsRepository, PaymentsService, PaymentCallbacksRepository, PAYMENT_DRIVERS],
+  exports: [
+    PaymentsRepository,
+    PaymentsService,
+    PaymentCallbacksRepository,
+    PaymentCallbacksService,
+    PAYMENT_DRIVERS,
+  ],
 })
 export class PaymentsModule {}
 

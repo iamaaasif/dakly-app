@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
+import { formatCount, formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
@@ -9,7 +10,6 @@ import {
   campaignStatusColors,
   campaignStatusLabels,
 } from '../campaign-labels';
-import { formatCount, formatMoney } from '@/lib/format-money';
 
 const campaignMetrics = ['Sent', 'Clicked', 'Orders', 'Revenue'] as const;
 

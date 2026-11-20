@@ -3,10 +3,9 @@ import {
   type ContactImportMapping,
   type ContactImportRow,
   contactImportRowSchema,
-  MAX_IMPORT_ROWS,
 } from '@dakly/contracts/contacts';
 
-import { csvRecords } from './csv-records';
+import { readCsvLines } from './csv-records';
 import { importError } from './imports.errors';
 
 // Row numbers are the ones the spreadsheet shows: the header is row 1. Messages never repeat
@@ -38,7 +37,7 @@ export function readCustomerImportRows(
   file: string,
   mapping: ContactImportMapping,
 ): CustomerImportRows {
-  const { header, lines } = readLines(file);
+  const { header, lines } = readCsvLines(file);
   if (lines.length === 0) throw importError('IMPORT_FILE_EMPTY');
   if (Object.values(mapping).some((column) => column >= header.length))
     throw importError('IMPORT_COLUMN_MISSING');
@@ -80,18 +79,4 @@ function mappedCells(cells: string[], mapping: ContactImportMapping): Record<str
   mapped.phone = phone;
   if (secondPhone && !mapped.whatsappPhone?.trim()) mapped.whatsappPhone = secondPhone;
   return mapped;
-}
-
-// Blank records are dropped as they are read and the count stops at the row limit, so a file of
-// empty lines never builds a list of empty rows.
-function readLines(file: string) {
-  const records = csvRecords(file);
-  const header = records.next().value?.cells ?? [];
-  const lines: { rowNumber: number; cells: string[] }[] = [];
-  for (const { rowNumber, cells, hasContent } of records) {
-    if (!hasContent) continue;
-    if (lines.length === MAX_IMPORT_ROWS) throw importError('IMPORT_FILE_TOO_MANY_ROWS');
-    lines.push({ rowNumber, cells });
-  }
-  return { header, lines };
 }

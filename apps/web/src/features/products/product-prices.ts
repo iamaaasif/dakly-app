@@ -1,6 +1,5 @@
+import { formatMoney } from '@dakly/contracts/money';
 import type { ProductResponse, ProductVariantResponse } from '@dakly/contracts/products';
-
-import { formatMoney } from '@/lib/format-money';
 
 export function productPriceRange(product: ProductResponse): string | null {
   const prices = product.variants.map((variant) => variant.pricePoisha);

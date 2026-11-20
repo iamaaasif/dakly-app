@@ -17,6 +17,7 @@ import {
   CampaignJobDispatcher,
   InboundJobDispatcher,
   OutboundJobDispatcher,
+  PaymentsJobDispatcher,
   SyncJobDispatcher,
   TransactionalJobDispatcher,
   WorkflowJobDispatcher,
@@ -51,6 +52,8 @@ class CampaignScheduledHandler extends TransactionalScheduledHandler {}
 
 class WorkflowScheduledHandler extends TransactionalScheduledHandler {}
 
+class PaymentsScheduledHandler extends TransactionalScheduledHandler {}
+
 HandlesJob({ queue: QUEUES.inbound, name: SCHEDULED })(InboundScheduledHandler);
 HandlesJob({ queue: QUEUES.aiReply, name: SCHEDULED })(AiReplyScheduledHandler);
 HandlesJob({ queue: QUEUES.outbound, name: SCHEDULED })(OutboundScheduledHandler);
@@ -59,6 +62,7 @@ HandlesJob({ queue: QUEUES.transactional, name: SCHEDULED })(TransactionalSchedu
 HandlesJob({ queue: QUEUES.bulk, name: SCHEDULED })(BulkScheduledHandler);
 HandlesJob({ queue: QUEUES.campaign, name: SCHEDULED })(CampaignScheduledHandler);
 HandlesJob({ queue: QUEUES.workflow, name: SCHEDULED })(WorkflowScheduledHandler);
+HandlesJob({ queue: QUEUES.payments, name: SCHEDULED })(PaymentsScheduledHandler);
 
 const setups = {
   inbound: [InboundScheduledHandler, InboundJobDispatcher],
@@ -69,6 +73,7 @@ const setups = {
   bulk: [BulkScheduledHandler, BulkJobDispatcher],
   workflow: [WorkflowScheduledHandler, WorkflowJobDispatcher],
   campaign: [CampaignScheduledHandler, CampaignJobDispatcher],
+  payments: [PaymentsScheduledHandler, PaymentsJobDispatcher],
 } satisfies Record<QueueName, unknown[]>;
 
 const reporter = new ErrorReporter(undefined);

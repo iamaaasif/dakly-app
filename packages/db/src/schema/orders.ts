@@ -32,7 +32,7 @@ import {
 import { bdAreas } from './areas';
 import { users } from './auth';
 import { conversations } from './chats';
-import { citext, createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
+import { bytea, citext, createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { contacts } from './contacts';
 import { productVariants } from './products';
 import { stores } from './stores';
@@ -319,6 +319,32 @@ export const orderItems = pgTable(
       'order_items_money',
       sql`${table.unitPricePoisha} > 0 and ${table.lineDiscountPoisha} >= 0`,
     ),
+  ],
+);
+
+// The link in a confirmation SMS carries a random token. Only its sha256 is kept, so the link
+// cannot be rebuilt or guessed from the database. Each issued token is its own row, so a later
+// message about the order does not kill the link in an earlier one.
+export const orderConfirmations = pgTable(
+  'order_confirmations',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    orderId: uuid('order_id').notNull(),
+    tokenHash: bytea('token_hash').notNull(),
+    createdAt: createdAt(),
+    usedAt: timestamptz('used_at'),
+  },
+  (table): PgTableExtraConfigValue[] => [
+    foreignKey({
+      name: 'order_confirmations_order_id_store_fk',
+      columns: [table.storeId, table.orderId],
+      foreignColumns: [orders.storeId, orders.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    uniqueIndex('order_confirmations_token_hash_key').on(table.tokenHash),
+    index('order_confirmations_store_order_idx').on(table.storeId, table.orderId),
   ],
 );
 

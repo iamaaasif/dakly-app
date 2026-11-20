@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+import { formatMoney } from '@dakly/contracts/money';
 import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { cn } from '@dakly/ui/cn';
@@ -17,7 +18,6 @@ import { canConfirmOrder } from '../order-actions';
 import { orderStageLabels } from '../order-labels';
 import { OrderRiskBadge } from './order-risk-badge';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
-import { formatMoney } from '@/lib/format-money';
 
 type SourceStyle = { icon: LucideIcon; bgClass: string; textClass: string };
 

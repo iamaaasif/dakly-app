@@ -8,6 +8,7 @@ const conversationId = '019c01ea-cf15-7d31-a7f5-d73d66007ad9';
 const messageId = '019c01ea-cf15-7d31-a7f5-d73d66007ada';
 const connectionId = '019c01ea-cf15-7d31-a7f5-d73d66007adb';
 const orderId = '019c01ea-cf15-7d31-a7f5-d73d66007ae3';
+const paymentIntentId = '019c01ea-cf15-7d31-a7f5-d73d66007ae4';
 const occurredAt = '2026-11-16T04:30:00.000Z';
 const message = { messageId, conversationId, contactId, channel: 'messenger' } as const;
 const trackedLink = {
@@ -53,6 +54,9 @@ const examples: DaklyEvent[] = [
   { type: 'order.edited', storeId, occurredAt, payload: { orderId } },
   { type: 'order.created', storeId, occurredAt, payload: { orderId } },
   { type: 'order.cod_collected', storeId, occurredAt, payload: { orderId } },
+  { type: 'payment.verification_requested', storeId, occurredAt, payload: { paymentIntentId } },
+  { type: 'payment.succeeded', storeId, occurredAt, payload: { paymentIntentId } },
+  { type: 'payment.failed', storeId, occurredAt, payload: { paymentIntentId } },
   {
     type: 'post.scheduled',
     storeId,

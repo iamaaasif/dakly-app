@@ -234,4 +234,20 @@ describe('automationGraphSchema', () => {
     const graph = workflow({ start: { ...send, channels: ['sms', 'sms'] }, end: { kind: 'exit' } });
     expect(automationGraphSchema.safeParse(graph).success).toBe(false);
   });
+
+  it('accepts order fields only when an order starts the workflow', () => {
+    const steps = {
+      start: {
+        ...send,
+        category: 'transactional',
+        message: { text: 'অর্ডার {order_number}', buttons: [] },
+      },
+      end: { kind: 'exit' },
+    };
+    expect(messages(automationGraphSchema.safeParse(workflow(steps)))).toEqual([
+      'Order fields need a trigger that starts from an order',
+    ]);
+    const fromOrder = workflow(steps, { trigger: { key: 'order_placed', filters: [] } });
+    expect(automationGraphSchema.safeParse(fromOrder).success).toBe(true);
+  });
 });

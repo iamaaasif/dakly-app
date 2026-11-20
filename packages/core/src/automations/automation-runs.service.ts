@@ -14,6 +14,7 @@ import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
 import { AutomationConditionsService } from './automation-conditions.service';
+import { AutomationOrderTextService } from './automation-order-text.service';
 import {
   AutomationRunsRepository,
   type ClaimedRun,
@@ -68,6 +69,7 @@ export class AutomationRunsService {
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(MessagingService) private readonly messaging: MessagingService,
+    @Inject(AutomationOrderTextService) private readonly orderText: AutomationOrderTextService,
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(WalletService) private readonly wallets: WalletService,
     @Inject(AutomationSmsDeliveryService)
@@ -144,6 +146,7 @@ export class AutomationRunsService {
       tags: await this.contacts.findTags(storeId, run.contactId),
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
       wakeAt: run.wakeAt,
+      orderId: run.triggerOrderId,
     };
     if (step.kind === 'send' && started) return this.resend(claim, step, facts, started);
     const exitReason = await this.conditions.exitReason(run.graph, facts, now);
@@ -285,7 +288,7 @@ export class AutomationRunsService {
       return { decision: { action: 'defer', until: facts.wakeAt ?? firstTriedAt } };
     if (decision.action !== 'send') return { decision };
     return this.reserveFirstSend(
-      { storeId, claim, contactId, step, destination },
+      { storeId, claim, contactId, orderId: facts.orderId, step, destination },
       facts,
       { sentAt: at, firstTriedAt },
       preparedPhone,
@@ -349,25 +352,33 @@ export class AutomationRunsService {
     return sendLateness(wakeAt, now, await this.repository.findRun(storeId, runId));
   }
 
+  private async reserveCredits(storeId: string, claim: RunClaim, quantity: number) {
+    try {
+      await this.wallets.reserve(storeId, {
+        wallet: 'sms_credits',
+        quantity,
+        idempotencyKey: operationKey(claim),
+        actor: system,
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return false;
+      throw error;
+    }
+  }
+
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
-    { storeId, claim, contactId, step, destination }: Omit<Delivery, 'body'>,
+    { storeId, claim, contactId, orderId, step, destination }: Omit<Delivery, 'body'>,
     times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<string | undefined> {
     const isMarketing = step.category === 'marketing';
     const standIn = isMarketing ? this.links.sampleOptOutUrl() : undefined;
-    try {
-      await this.wallets.reserve(storeId, {
-        wallet: 'sms_credits',
-        quantity: countSmsParts(messageBody(step, standIn)),
-        idempotencyKey: operationKey(claim),
-        actor: system,
-      });
-    } catch (error) {
-      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return undefined;
-      throw error;
-    }
+    const prepared = await this.orderText.prepare(storeId, orderId, step.message.text);
+    const quantity = countSmsParts(messageBody(prepared?.counted ?? step.message.text, standIn));
+    if (!(await this.reserveCredits(storeId, claim, quantity))) return undefined;
+    const text = await prepared?.render();
     const id = newId();
     // CAMP-R4: every marketing SMS ends with its one-tap opt-out link.
     const [optOut] = isMarketing
@@ -387,8 +398,9 @@ export class AutomationRunsService {
       ...times,
       destinationHash: workflowDestinationHash(storeId, destination),
       optOutUrl: optOut?.url,
+      renderedText: text,
     });
-    return messageBody(step, optOut?.url);
+    return messageBody(text ?? step.message.text, optOut?.url);
   }
 
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
@@ -408,7 +420,10 @@ export class AutomationRunsService {
     if (prepared)
       return this.smsDelivery.deliver({ storeId, contactId: facts.contactId, step }, prepared, {
         ...planned,
-        body: messageBody(step, started.optOutUrl ?? undefined),
+        body: messageBody(
+          started.renderedText ?? step.message.text,
+          started.optOutUrl ?? undefined,
+        ),
       });
   }
 }

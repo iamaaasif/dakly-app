@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { FieldArrayWithId, UseFormRegister } from 'react-hook-form';
 
+import { formatMoney } from '@dakly/contracts/money';
 import type { OrderEditorValues, OrderCatalogueProduct } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
@@ -9,7 +10,6 @@ import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 
 import { useOrderCatalogue } from '../api/order-catalogue';
-import { formatMoney } from '@/lib/format-money';
 
 export type VariantChoice = {
   productId?: string;
