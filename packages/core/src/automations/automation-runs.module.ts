@@ -18,6 +18,7 @@ import { AutomationBirthdaysService } from './automation-birthdays.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
+import { AutomationMessengerSendService } from './automation-messenger-send.service';
 import { AutomationOrderTextService } from './automation-order-text.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
@@ -50,6 +51,7 @@ import { AutomationsModule } from './automations.module';
     AutomationEntryRepository,
     AutomationEntryService,
     AutomationSendRetryService,
+    AutomationMessengerSendService,
     AutomationSmsDeliveryService,
     AutomationBirthdaysService,
     AutomationBirthdaySweepService,

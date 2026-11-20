@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import type { AnalyticsOverviewResponse, AnalyticsView } from '@dakly/contracts/analytics';
 import { formatCount } from '@dakly/contracts/money';
+import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
 
@@ -24,36 +25,50 @@ type FigureProps = {
 export function AnalyticsKeyFigures({
   data,
   view,
+  windowDays,
+  onOpenCounting,
 }: {
   data: AnalyticsOverviewResponse;
   view: AnalyticsView;
+  windowDays: number | undefined;
+  onOpenCounting: () => void;
 }) {
   return (
     <section aria-label="Key figures" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      {figuresFor(data, view.compare).map(({ title, icon: Icon, tone, value, change, note }) => (
-        <Card key={title} className="flex min-w-0 flex-col gap-3 p-4">
-          <h2 className="flex items-center gap-2 font-semibold">
-            <span className={cn('shrink-0 rounded-md p-2', tone)}>
-              <Icon aria-hidden="true" className="size-4" strokeWidth={1.75} />
-            </span>
-            {title}
-          </h2>
-          <p className="text-xl font-bold tabular-nums">{value}</p>
-          {change}
-          <p className="mt-auto text-sm text-text-muted">{note}</p>
-        </Card>
-      ))}
+      {figuresFor(data, view.compare, windowDays).map(
+        ({ title, icon: Icon, tone, value, change, note }) => (
+          <Card key={title} className="flex min-w-0 flex-col gap-3 p-4">
+            <h2 className="flex items-center gap-2 font-semibold">
+              <span className={cn('shrink-0 rounded-md p-2', tone)}>
+                <Icon aria-hidden="true" className="size-4" strokeWidth={1.75} />
+              </span>
+              {title}
+            </h2>
+            <p className="text-xl font-bold tabular-nums">{value}</p>
+            {change}
+            <p className="mt-auto text-sm text-text-muted">{note}</p>
+            {title === 'Money from marketing' && (
+              <Button
+                variant="link"
+                className="min-h-0 justify-start py-0 text-sm"
+                onClick={onOpenCounting}
+              >
+                How Dakly counts orders
+              </Button>
+            )}
+          </Card>
+        ),
+      )}
     </section>
   );
 }
 
-function figuresFor({ marketing, messages }: AnalyticsOverviewResponse, compare: boolean) {
-  const delta = (
-    current: number | string,
-    previous: number | string,
-    options: { minimum?: bigint; lowerIsBetter?: boolean } = {},
-  ) =>
-    compare && <AnalyticsChange total={BigInt(current)} previous={BigInt(previous)} {...options} />;
+function figuresFor(
+  { marketing, messages }: AnalyticsOverviewResponse,
+  compare: boolean,
+  windowDays: number | undefined,
+) {
+  const delta = deltaFor(compare);
   const { revenue, orders } = marketing;
   const people = messages.tappedPeople;
   const figures: FigureProps[] = [
@@ -63,7 +78,7 @@ function figuresFor({ marketing, messages }: AnalyticsOverviewResponse, compare:
       tone: 'bg-primary-soft text-action-hover',
       value: formatWholeTaka(BigInt(revenue.currentPoisha)),
       change: delta(revenue.currentPoisha, revenue.previousPoisha),
-      note: 'Orders placed after a message or post, including returns up to today.',
+      note: moneyNote(windowDays),
     },
     {
       title: 'Orders',
@@ -104,4 +119,20 @@ function figuresFor({ marketing, messages }: AnalyticsOverviewResponse, compare:
     },
   ];
   return figures;
+}
+
+function deltaFor(compare: boolean) {
+  return (
+    current: number | string,
+    previous: number | string,
+    options: { minimum?: bigint; lowerIsBetter?: boolean } = {},
+  ) =>
+    compare && <AnalyticsChange total={BigInt(current)} previous={BigInt(previous)} {...options} />;
+}
+
+function moneyNote(windowDays: number | undefined) {
+  if (windowDays === undefined)
+    return 'Orders placed after a message or post, including returns up to today.';
+  const unit = windowDays === 1 ? 'day' : 'days';
+  return `Orders placed within ${windowDays} ${unit} of a message or post, including returns up to today.`;
 }

@@ -166,12 +166,12 @@ describe('AutomationsService (Postgres)', () => {
       'AUTOMATION_TRIGGER_UNAVAILABLE',
     ],
     [
-      'a send step on Messenger and WhatsApp only',
+      'a send step on WhatsApp only',
       {
         ...welcome,
         steps: {
           ...welcome.steps,
-          welcome: { ...smsStep('wait'), channels: ['messenger', 'whatsapp'] },
+          welcome: { ...smsStep('wait'), channels: ['whatsapp'] },
         },
       },
       'AUTOMATION_CHANNEL_UNREACHABLE',
