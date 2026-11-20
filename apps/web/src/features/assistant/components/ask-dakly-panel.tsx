@@ -8,6 +8,7 @@ import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 
 import { useAskDakly } from '../api/ask-dakly';
+import { useSessionContext } from '@/lib/session-context';
 
 export type Turn =
   { role: 'user'; text: string } | { role: 'assistant'; text: string; sources: string[] };
@@ -18,11 +19,12 @@ type AskDaklyPanelProps = {
   onClose: () => void;
 };
 
+// Each one is answered by a report tool, and shows only when the member's role can view that report.
 const suggestions = [
-  'Which customers should I target today?',
-  'Explain my campaign performance',
-  'What should I do to increase repeat purchases?',
-];
+  { text: 'How much did I sell in the last 30 days?', canAsk: 'canViewOrders' },
+  { text: 'Explain my campaign performance', canAsk: 'canViewAnalytics' },
+  { text: 'How many customers came back in the last 30 days?', canAsk: 'canViewCustomers' },
+] as const;
 const pageNames: Record<string, string> = {
   dashboard: 'Dashboard',
   analytics: 'Analytics',
@@ -200,18 +202,21 @@ function Composer({ question, onQuestion, onSend, isPending, creditsLeft }: Comp
 }
 
 function Suggestions({ onPick, disabled }: { onPick: (text: string) => void; disabled: boolean }) {
+  const { data } = useSessionContext();
+  const shown = suggestions.filter(({ canAsk }) => data?.currentStore?.[canAsk]);
+  if (!shown.length) return null;
   return (
     <section aria-label="Suggested for this page" className="space-y-2">
       <h3 className="text-sm text-text-muted">Suggested for this page</h3>
-      {suggestions.map((suggestion) => (
+      {shown.map(({ text }) => (
         <button
-          key={suggestion}
+          key={text}
           type="button"
           disabled={disabled}
-          onClick={() => onPick(suggestion)}
+          onClick={() => onPick(text)}
           className="block w-full rounded-md border border-border bg-surface px-3 py-2 text-left text-base hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
-          {suggestion}
+          {text}
         </button>
       ))}
     </section>

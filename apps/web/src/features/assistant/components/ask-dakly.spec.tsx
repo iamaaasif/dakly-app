@@ -35,9 +35,18 @@ function serve(reply: (body: unknown) => Response) {
   return bodies;
 }
 
-function show() {
+function show(
+  can: Record<string, boolean> = {
+    canViewOrders: true,
+    canViewAnalytics: true,
+    canViewCustomers: true,
+  },
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(sessionContextKey, { contextTag: 'verified', currentStore: { id: 'shop' } });
+  client.setQueryData(sessionContextKey, {
+    contextTag: 'verified',
+    currentStore: { id: 'shop', ...can },
+  });
   render(
     <QueryClientProvider client={client}>
       <AskDaklyButton />
@@ -67,10 +76,32 @@ describe('Ask Dakly AI panel', () => {
     show();
     const panel = screen.getByRole('complementary', { name: 'Dakly AI' });
     expect(within(panel).getByText('Knows you’re on Dashboard')).toBeTruthy();
-    expect(within(panel).getAllByRole('button', { name: /\?$|performance$/ })).toHaveLength(3);
+    expect(
+      within(panel)
+        .getAllByRole('button', { name: /last 30 days\?$|performance$/ })
+        .map((button) => button.textContent),
+    ).toEqual([
+      'How much did I sell in the last 30 days?',
+      'Explain my campaign performance',
+      'How many customers came back in the last 30 days?',
+    ]);
     expect(
       within(panel).getByText('Dakly AI suggests. You approve before anything is sent.'),
     ).toBeTruthy();
+  });
+
+  it('shows only the suggestions for reports the role can view', () => {
+    show({ canViewOrders: true, canViewAnalytics: false, canViewCustomers: false });
+    expect(
+      screen
+        .getAllByRole('button', { name: /last 30 days\?$|performance$/ })
+        .map((b) => b.textContent),
+    ).toEqual(['How much did I sell in the last 30 days?']);
+  });
+
+  it('shows no suggestion block when the role can view no report', () => {
+    show({ canViewOrders: false, canViewAnalytics: false, canViewCustomers: false });
+    expect(screen.queryByText('Suggested for this page')).toBeNull();
   });
 
   it('asks a suggestion and shows the answer, its source and the credits left', async () => {
