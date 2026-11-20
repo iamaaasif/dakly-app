@@ -104,6 +104,16 @@ describe('Dashboard Ask box', () => {
     expect(screen.queryByText('Try:')).toBeNull();
   });
 
+  it('sends with the Ask button, which stays dimmed while the box is empty', async () => {
+    show();
+    const button = screen.getByRole('button', { name: 'Ask' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    await userEvent.type(screen.getByLabelText('Ask Dakly AI'), 'Which product sells best?');
+    expect(button.disabled).toBe(false);
+    await userEvent.click(button);
+    expect(navigation.replaced).toEqual(['/dashboard?ask=open']);
+  });
+
   it('ignores an empty question', async () => {
     show();
     await userEvent.type(screen.getByLabelText('Ask Dakly AI'), '   {Enter}');

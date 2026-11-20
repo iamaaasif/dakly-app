@@ -3,6 +3,7 @@ import { Sparkles } from 'lucide-react';
 import { type FormEvent, useState } from 'react';
 
 import { askDaklyRequestSchema } from '@dakly/contracts/assistant';
+import { Button } from '@dakly/ui/button';
 
 import { handOffQuestion } from '../ask-handoff';
 import { askSuggestions } from '../ask-suggestions';
@@ -36,11 +37,11 @@ export function DashboardAskBox() {
     <div className="space-y-3">
       <form
         onSubmit={submit}
-        className="flex items-center gap-3 rounded-lg border border-border bg-surface p-2 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus"
+        className="flex min-h-14 items-center gap-3 rounded-lg border border-border bg-surface p-2 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus"
       >
         <span
           aria-hidden="true"
-          className="grid size-8 shrink-0 place-items-center rounded-md bg-primary-soft text-action-hover"
+          className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-on-primary"
         >
           <Sparkles size={16} />
         </span>
@@ -52,6 +53,9 @@ export function DashboardAskBox() {
           placeholder="Ask Dakly anything, in Bangla or English…"
           className="min-w-0 flex-1 bg-transparent text-base text-text outline-none placeholder:text-text-muted"
         />
+        <Button type="submit" className="shrink-0 px-4" disabled={!question.trim()}>
+          Ask
+        </Button>
       </form>
       {tries.length ? (
         <div className="flex flex-wrap items-center gap-2">
