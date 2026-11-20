@@ -16,3 +16,4 @@ apps/web/e2e-artifacts/
 apps/web/playwright-report/
 apps/web/test-results/
 apps/web/AGENTS.md
+apps/admin/AGENTS.md

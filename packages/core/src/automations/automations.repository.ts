@@ -316,4 +316,31 @@ export class AutomationsRepository {
     );
     return rows.length > 0;
   }
+
+  // Marketing sends only, like the campaign totals, so both add up to Messages sent.
+  async messageTotals(
+    storeId: string,
+    { from, through, timeZone }: { from: string; through: string; timeZone: string },
+  ) {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{
+        channel: string;
+        sent: number;
+        delivered: number;
+        read: number;
+        costPoisha: string;
+      }>(sql`
+        select channel, count(*)::int as sent,
+          (count(*) filter (where coalesce(delivered_at, read_at) is not null))::int as delivered,
+          (count(*) filter (where read_at is not null))::int as read,
+          coalesce(sum(cost_poisha), 0)::text as "costPoisha"
+        from automation_run_steps
+        where store_id = ${storeId} and kind = 'send' and category = 'marketing'
+          and channel is not null and sent_at is not null
+          and sent_at >= (${from}::date)::timestamp at time zone ${timeZone}
+          and sent_at < (${through}::date + 1)::timestamp at time zone ${timeZone}
+        group by channel`),
+    );
+    return rows;
+  }
 }

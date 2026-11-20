@@ -33,6 +33,63 @@ export const messageKinds = [
   'note',
   'system',
 ] as const;
+export const messageAttachmentKinds = ['image', 'voice', 'video', 'file'] as const;
+export const messageAttachmentFailures = [
+  'expired',
+  'too_large',
+  'type_not_allowed',
+  'unavailable',
+  'rejected',
+  'connection_unavailable',
+] as const;
+// What an inbound attachment may be, by kind. Meta states the type; nothing here sniffs bytes.
+export const inboundAttachmentLimits = {
+  image: {
+    maxBytes: 8 * 1024 * 1024,
+    contentTypes: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+  },
+  voice: {
+    maxBytes: 16 * 1024 * 1024,
+    contentTypes: ['audio/mpeg', 'audio/mp4', 'audio/aac', 'audio/ogg', 'audio/wav', 'audio/webm'],
+  },
+  video: {
+    maxBytes: 25 * 1024 * 1024,
+    contentTypes: ['video/mp4', 'video/quicktime', 'video/webm'],
+  },
+  file: {
+    maxBytes: 25 * 1024 * 1024,
+    contentTypes: [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain',
+    ],
+  },
+} as const satisfies Record<
+  (typeof messageAttachmentKinds)[number],
+  { maxBytes: number; contentTypes: readonly string[] }
+>;
+const attachmentKindSchema = z.enum(messageAttachmentKinds);
+// pending keeps Meta's link until the copy finishes; the other two states drop it.
+export const messageAttachmentSchema = z.discriminatedUnion('status', [
+  z.strictObject({ kind: attachmentKindSchema, status: z.literal('pending'), sourceUrl: z.url() }),
+  z.strictObject({
+    kind: attachmentKindSchema,
+    status: z.literal('stored'),
+    objectKey: z.string().min(1),
+    contentType: z.string().min(1),
+    sizeBytes: z.number().int().positive(),
+  }),
+  z.strictObject({
+    kind: attachmentKindSchema,
+    status: z.literal('failed'),
+    reason: z.enum(messageAttachmentFailures),
+  }),
+]);
+export const messageAttachmentsSchema = z.array(messageAttachmentSchema);
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
 export const messageStatuses = [
   'received',
   'queued',

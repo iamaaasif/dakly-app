@@ -1,5 +1,6 @@
 'use client';
 import {
+  ChartLine,
   House,
   Layers,
   LogOut,
@@ -153,6 +154,17 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
     {
       heading: 'Social auto post',
       links: [{ href: '/social', label: 'Social hub', icon: Send, visible: store?.canViewSocial }],
+    },
+    {
+      heading: 'Intelligence',
+      links: [
+        {
+          href: '/analytics',
+          label: 'Analytics',
+          icon: ChartLine,
+          visible: store?.canViewAnalytics,
+        },
+      ],
     },
     ...settingsGroups(store),
   ];

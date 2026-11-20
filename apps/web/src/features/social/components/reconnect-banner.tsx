@@ -1,15 +1,17 @@
 import { TriangleAlert } from 'lucide-react';
-import Link from 'next/link';
 
-import { buttonVariants } from '@dakly/ui/button';
+import { Button } from '@dakly/ui/button';
 
 import type { SocialAccount } from '../api/get-social-accounts';
 import { formatShortDate } from '@/lib/format-date';
 
-type ReconnectBannerProps = { account: SocialAccount; canReconnect: boolean };
+type ReconnectBannerProps = {
+  account: SocialAccount;
+  canReconnect: boolean;
+  onReconnect: () => void;
+};
 
-// Reconnecting happens on Integrations, which owns the Meta sign-in.
-export function ReconnectBanner({ account, canReconnect }: ReconnectBannerProps) {
+export function ReconnectBanner({ account, canReconnect, onReconnect }: ReconnectBannerProps) {
   const label = account.kind === 'instagram' ? 'Instagram' : 'Facebook';
   const expiredAt = account.tokenExpiresAt ? formatShortDate(account.tokenExpiresAt) : null;
   return (
@@ -26,9 +28,9 @@ export function ReconnectBanner({ account, canReconnect }: ReconnectBannerProps)
         </p>
       </div>
       {canReconnect && (
-        <Link href="/integrations" className={buttonVariants({ variant: 'secondary' })}>
+        <Button variant="secondary" onClick={onReconnect}>
           Reconnect {label}
-        </Link>
+        </Button>
       )}
     </section>
   );

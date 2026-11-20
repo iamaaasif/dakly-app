@@ -45,6 +45,7 @@ describe('navigationGroups', () => {
         canViewOrders: permissions.canViewOrders ?? false,
         canEditOrders: false,
         canViewCampaigns: false,
+        canViewAnalytics: false,
         canEditCampaigns: false,
         canViewSocial: permissions.canViewSocial ?? false,
         canEditSocial: false,
@@ -99,6 +100,7 @@ describe('navigationGroups', () => {
       'Sales',
       'Marketing',
       'Social auto post',
+      'Intelligence',
       'Store information',
       'Configuration',
     ]);
