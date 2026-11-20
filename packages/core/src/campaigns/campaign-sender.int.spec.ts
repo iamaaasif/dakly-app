@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
+import { BullModule } from '@nestjs/bullmq';
 import { Logger, Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -10,16 +11,27 @@ import { createDatabase } from '@dakly/db/client';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { ErrorReporter } from '../platform/logging/error-reporter';
 import { runWithJobContext } from '../platform/logging/job-context';
+import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS } from '../platform/time';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignSweepService } from './campaign-sweep.service';
 import { CampaignsModule } from './campaigns.module';
 
 class TestModule {}
-Module({ imports: [DatabaseModule, CampaignsModule] })(TestModule);
+Module({
+  imports: [
+    DatabaseModule,
+    CampaignsModule.forWorker(),
+    BullModule.forRoot({
+      connection: toRedisConnection(loadEnv().REDIS_URL),
+      prefix: `${loadEnv().QUEUE_PREFIX}-campaign-sweep-${randomUUID()}`,
+    }),
+  ],
+})(TestModule);
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeId = randomUUID();

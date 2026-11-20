@@ -1,47 +1,28 @@
-import type { Queue } from 'bullmq';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { CampaignSenderService } from '../campaign-sender.service';
-import type { CampaignSweepService } from '../campaign-sweep.service';
+import type { CampaignBatchService } from '../campaign-batch.service';
 import { SendCampaignBatchJob } from './send-campaign-batch.job';
 
-const payload = {
-  storeId: '019c01ea-cf15-7d31-a7f5-d73d66007ad7',
-  campaignId: '019c01ea-cf15-7d31-a7f5-d73d66007ad8',
-};
+const storeId = '019c01ea-cf15-7d31-a7f5-d73d66007ad7';
 
-function buildJob(sender: { sendBatch: CampaignSenderService['sendBatch'] }) {
-  const client = { runCommand: vi.fn().mockResolvedValueOnce('OK').mockResolvedValueOnce(1) };
-  const queue = { client: Promise.resolve(client), toKey: (key: string) => `test:${key}` };
-  return new SendCampaignBatchJob(
-    sender as unknown as CampaignSenderService,
-    queue as unknown as Queue,
-    {
-      nextForLane: vi.fn().mockResolvedValue(payload.campaignId),
-    } as unknown as CampaignSweepService,
-  );
+function buildJob(sendStoreBatch: CampaignBatchService['sendStoreBatch']) {
+  return new SendCampaignBatchJob({ sendStoreBatch } as CampaignBatchService);
 }
 
 describe('campaign batch job', () => {
   it('delays the same job until the sender can continue', async () => {
     const next = new Date('2026-11-16T05:00:00Z');
-    const sender = { sendBatch: vi.fn().mockResolvedValue(next) };
-    const job = buildJob(sender);
+    const sendStoreBatch = vi.fn().mockResolvedValue({ delayUntil: next.getTime() });
+    const job = buildJob(sendStoreBatch);
 
-    expect(await job.handle({ storeId: payload.storeId, lane: 'sending' })).toEqual({
-      delayUntil: next.getTime(),
-    });
-    expect(sender.sendBatch).toHaveBeenCalledWith(
-      payload.storeId,
-      payload.campaignId,
-      expect.any(Function),
-    );
+    expect(await job.handle({ storeId })).toEqual({ delayUntil: next.getTime() });
+    expect(sendStoreBatch).toHaveBeenCalledWith(storeId);
   });
 
   it('lets the batch finish when there is no continuation', async () => {
-    const sender = { sendBatch: vi.fn().mockResolvedValue(null) };
-    const job = buildJob(sender);
+    const sendStoreBatch = vi.fn().mockResolvedValue(undefined);
+    const job = buildJob(sendStoreBatch);
 
-    expect(await job.handle({ storeId: payload.storeId, lane: 'sending' })).toBeUndefined();
+    expect(await job.handle({ storeId })).toBeUndefined();
   });
 });

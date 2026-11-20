@@ -79,7 +79,12 @@ export class CampaignSendingRepository {
     });
   }
 
-  // Keep the active lane and the cancellation lane independent of one another.
+  async nextCampaignId(storeId: string, expiredBefore: Date): Promise<string | undefined> {
+    const work = await this.firstWork(storeId, expiredBefore);
+    return (work.find(({ status }) => status === 'cancelled') ?? work[0])?.campaignId;
+  }
+
+  // Find the earliest actionable campaign of each status, skipping live claims.
   async firstWork(storeId: string, expiredBefore: Date) {
     const active = sql`${campaigns.status} = 'sending'`;
     const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null`;

@@ -128,7 +128,7 @@ import { JobSchedulers } from './job-schedulers';
     ConversationReturnsModule,
     AutomationRunsModule,
     AutomationsModule,
-    CampaignsModule,
+    CampaignsModule.forWorker(),
     ClockModule,
     ImportsModule,
     ContactStatsRepairModule,
