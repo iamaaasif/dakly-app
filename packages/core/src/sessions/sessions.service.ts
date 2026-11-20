@@ -58,6 +58,7 @@ export class SessionsService {
               canEditOrders: this.team.canAccess(access, 'orders', 'edit'),
               canViewCampaigns: this.team.canAccess(access, 'campaigns', 'view'),
               canViewAnalytics: this.team.canAccess(access, 'analytics', 'view'),
+              canChangeAttributionWindow: this.team.canChangeAttributionWindow(access),
               canEditCampaigns: this.team.canAccess(access, 'campaigns', 'edit'),
               canViewSocial: this.team.canAccess(access, 'social', 'view'),
               canEditSocial: this.team.canAccess(access, 'social', 'edit'),

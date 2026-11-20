@@ -137,17 +137,20 @@ export type PostResponse = Omit<CreatePostInput, 'targets'> & {
 };
 export type PostListResponse = { items: PostResponse[]; nextCursor: string | null };
 
+const scheduledForSchema = z.iso
+  .datetime({ offset: true })
+  .transform((time) => new Date(time).toJSON())
+  .pipe(z.iso.datetime());
+
 export const schedulePostSchema = z.union([
-  z.strictObject({
-    scheduledFor: z.iso
-      .datetime({ offset: true })
-      .transform((time) => new Date(time).toJSON())
-      .pipe(z.iso.datetime()),
-  }),
+  z.strictObject({ scheduledFor: scheduledForSchema }),
   z.strictObject({ nextSlot: z.literal(true) }),
 ]);
 
+export const reschedulePostSchema = z.strictObject({ scheduledFor: scheduledForSchema });
+
 export type SchedulePostInput = z.infer<typeof schedulePostSchema>;
+export type ReschedulePostInput = z.infer<typeof reschedulePostSchema>;
 
 export const postingSlotsQuerySchema = z.strictObject({ channelConnectionId: postIdSchema });
 export const savePostingSlotsSchema = postingSlotsQuerySchema.extend({ slots: postingSlotsSchema });

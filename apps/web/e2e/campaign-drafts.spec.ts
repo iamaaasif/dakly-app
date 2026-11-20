@@ -81,7 +81,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await expect(name).toHaveAccessibleDescription('Enter a campaign name.');
     await page.getByLabel('Campaign name').fill('New Kurti collection');
     await expect(name).toHaveAttribute('aria-invalid', 'false');
-    await page.getByLabel('Goal').selectOption('new_collection');
+    await page.getByText('Promote a new collection', { exact: true }).click();
     let draftPosts = 0;
     page.on('request', (request) => {
       if (request.method() === 'POST' && request.url().endsWith('/api/campaigns')) draftPosts++;
@@ -134,18 +134,18 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Winter Kurti collection' })).toBeVisible();
     await expect(name).toHaveValue('Winter Kurti collection');
-    const goal = page.getByLabel('Goal');
-    await expect(goal).toHaveValue('new_collection');
+    const goal = page.getByRole('radio', { name: 'Seasonal campaign' });
+    await expect(page.getByRole('radio', { name: 'Promote a new collection' })).toBeChecked();
     const changeGoal = page.waitForRequest(
       (request) =>
         request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
     );
-    await goal.selectOption('seasonal');
+    await page.getByText('Seasonal campaign', { exact: true }).click();
     await saveDraft.click();
     expect((await changeGoal).postDataJSON()).toEqual({ goal: 'seasonal' });
     await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
     await page.reload();
-    await expect(goal).toHaveValue('seasonal');
+    await expect(goal).toBeChecked();
     await expect(name).toHaveValue('Winter Kurti collection');
 
     const detailUrl = `**/api/campaigns/${draft.id}`;
@@ -170,12 +170,21 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await name.fill(longName);
     await saveDraft.click();
     await expect(page.getByRole('heading', { name: longName })).toBeVisible();
-    await expect(goal).toHaveValue('seasonal');
+    await expect(goal).toBeChecked();
     await page.setViewportSize({ width: 360, height: 800 });
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
+
+    await name.fill('Winter Kurti collection');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(/step=content$/);
+    await page
+      .getByLabel('Message', { exact: true })
+      .fill('Winter Kurti collection is in. Order today and get free delivery in Dhaka.');
+    await expect(page.getByText('Live preview · SMS', { exact: true })).toBeVisible();
+    await capture(page, 'sms-content-step');
 
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();

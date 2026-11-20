@@ -47,7 +47,11 @@ function errorMessage(issue: { path?: PropertyKey[]; code: string }) {
   return issue.path?.includes('buttons') ? 'Enter the button text.' : undefined;
 }
 
-export function useMessengerDraftForm(pages: ChannelConnection[], campaign?: CampaignResponse) {
+export function useMessengerDraftForm(
+  pages: ChannelConnection[],
+  campaign?: CampaignResponse,
+  onSaved?: () => void,
+) {
   const save = useSaveCampaign();
   const router = useRouter();
   const form = useForm<DraftInput, unknown, Draft>({
@@ -55,27 +59,36 @@ export function useMessengerDraftForm(pages: ChannelConnection[], campaign?: Cam
     defaultValues: startingValues(pages, campaign),
   });
   const { dirtyFields, isDirty } = form.formState;
-  const submit = form.handleSubmit((input) => {
-    if (!campaign) {
-      const { name, goal, channelConnectionId } = input;
-      const created = { name, goal, channel: 'messenger', channelConnectionId } as const;
+  // Continue saves what changed, then moves on; Save draft saves and stays.
+  const saveThen = (afterSave?: () => void) =>
+    form.handleSubmit((input) => {
+      if (!campaign) {
+        const { name, goal, channelConnectionId } = input;
+        const created = { name, goal, channel: 'messenger', channelConnectionId } as const;
+        save.mutate(
+          { input: created },
+          { onSuccess: (saved) => router.replace(`/campaigns/${saved.id}`) },
+        );
+        return;
+      }
+      const change = {
+        ...(dirtyFields.name && { name: input.name }),
+        ...(dirtyFields.goal && { goal: input.goal }),
+        ...(dirtyFields.channelConnectionId && { channelConnectionId: input.channelConnectionId }),
+        ...(dirtyFields.content && { content: input.content }),
+      };
+      if (!Object.keys(change).length) return afterSave?.();
       save.mutate(
-        { input: created },
-        { onSuccess: (saved) => router.replace(`/campaigns/${saved.id}`) },
+        { id: campaign.id, input: change },
+        {
+          onSuccess: (saved) => {
+            form.reset(valuesOf(saved, saved.channelConnectionId ?? ''));
+            afterSave?.();
+          },
+        },
       );
-      return;
-    }
-    const change = {
-      ...(dirtyFields.name && { name: input.name }),
-      ...(dirtyFields.goal && { goal: input.goal }),
-      ...(dirtyFields.channelConnectionId && { channelConnectionId: input.channelConnectionId }),
-      ...(dirtyFields.content && { content: input.content }),
-    };
-    if (!Object.keys(change).length) return;
-    save.mutate(
-      { id: campaign.id, input: change },
-      { onSuccess: (saved) => form.reset(valuesOf(saved, saved.channelConnectionId ?? '')) },
-    );
-  });
-  return { form, submit, save, isDirty, opening: !campaign && save.isSuccess };
+    });
+  const submit = saveThen(onSaved);
+  const saveDraft = saveThen();
+  return { form, submit, saveDraft, save, isDirty, opening: !campaign && save.isSuccess };
 }

@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 
 import type {
   CreateStoreInput,
+  SetupProfile,
   StoreResponse,
   StoreSettingsResponse,
   ChangeStoreSettingsInput,
@@ -17,6 +18,11 @@ const storeColumns = {
   name: stores.name,
   slug: stores.slug,
   extensions: stores.extensions,
+};
+const setupColumns = {
+  howYouSell: stores.howYouSell,
+  extensions: stores.extensions,
+  guideHidden: sql<boolean>`coalesce((${stores.settings}->>'setupGuideHidden')::boolean, false)`,
 };
 const settingsColumns = {
   ...storeColumns,
@@ -208,5 +214,48 @@ export class StoresRepository {
         .returning(settingsColumns),
     );
     return row;
+  }
+
+  async setupProfile(storeId: string): Promise<SetupProfile | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select(setupColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
+    );
+    return row as SetupProfile | undefined;
+  }
+
+  // New answers mean new steps, so the guide comes back if it was hidden.
+  async changeHowYouSell(
+    storeId: string,
+    howYouSell: SetupProfile['howYouSell'],
+    extensions: string[],
+    updatedAt: Date,
+  ): Promise<SetupProfile | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .update(stores)
+        .set({
+          howYouSell,
+          extensions,
+          updatedAt,
+          settings: sql`${stores.settings} - 'setupGuideHidden'`,
+        })
+        .where(eq(stores.id, storeId))
+        .returning(setupColumns),
+    );
+    return row as SetupProfile | undefined;
+  }
+
+  async hideSetupGuide(storeId: string, updatedAt: Date): Promise<SetupProfile | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .update(stores)
+        .set({
+          updatedAt,
+          settings: sql`jsonb_set(${stores.settings}, '{setupGuideHidden}', 'true'::jsonb)`,
+        })
+        .where(eq(stores.id, storeId))
+        .returning(setupColumns),
+    );
+    return row as SetupProfile | undefined;
   }
 }

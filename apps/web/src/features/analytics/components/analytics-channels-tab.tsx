@@ -8,6 +8,7 @@ import { Skeleton } from '@dakly/ui/skeleton';
 
 import { channelFills, channelLabels } from '../analytics-labels';
 import { useAnalyticsChannels } from '../api/analytics-overview';
+import { AnalyticsDownloadButton } from './analytics-download-button';
 import { ChannelTile } from './channel-tile';
 import { formatWholeTaka } from '@/lib/format-money';
 
@@ -27,7 +28,10 @@ export function AnalyticsChannelsTab({ view }: { view: AnalyticsView }) {
   const bestReturn = Math.max(1, ...channels.map((channel) => channel.returnPerTaka ?? 0));
   return (
     <section aria-label="Channels" className="space-y-4">
-      <p className="text-text-muted">Compare what each channel costs and earns.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-text-muted">Compare what each channel costs and earns.</p>
+        <AnalyticsDownloadButton view={view} />
+      </div>
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {channels.map((channel) => (
           <li key={channel.channel}>
