@@ -4,28 +4,35 @@ import { useState, type DragEvent } from 'react';
 import { ApiError } from '@dakly/ui/api-client';
 import { cn } from '@dakly/ui/cn';
 
-import { useUploadImport } from '../api/upload-import';
-import { checkImportFile, readImportFile, type ImportFileSummary } from '../import-file';
 import { ImportStepActions } from './import-step-actions';
-
-const templateHref = `data:text/csv;charset=utf-8,${encodeURIComponent(
-  'Name,Phone,WhatsApp number,Email,Address,District,Tags,Notes\r\nRahima Akter,01712345678,,rahima@example.com,"House 4, Road 2",Dhaka,eid,\r\n',
-)}`;
+import { checkImportFile, readImportFile, type ImportFileSummary } from '@/lib/import-file';
+import { useUploadImport } from '@/lib/use-upload-import';
 
 type ImportUploadStepProps = {
+  path: Parameters<typeof useUploadImport>[0];
+  // What a row is, in the plural, the name of the file picker and the CSV a shop can download.
+  rowName: string;
+  fileLabel: string;
+  template: { filename: string; csv: string };
   onUploaded: (upload: { importId: string; preview: ImportFileSummary }) => void;
 };
 
-export function ImportUploadStep({ onUploaded }: ImportUploadStepProps) {
+export function ImportUploadStep({
+  path,
+  rowName,
+  fileLabel,
+  template,
+  onUploaded,
+}: ImportUploadStepProps) {
   const [chosen, setChosen] = useState<{ file: File; preview: ImportFileSummary }>();
   const [problem, setProblem] = useState<string>();
-  const upload = useUploadImport();
+  const upload = useUploadImport(path);
 
   async function choose(file: File | undefined) {
     if (!file) return;
     setChosen(undefined);
     const fileProblem = checkImportFile(file);
-    const read = fileProblem ? undefined : readImportFile(await file.arrayBuffer());
+    const read = fileProblem ? undefined : readImportFile(await file.arrayBuffer(), rowName);
     const message = fileProblem ?? (typeof read === 'string' ? read : undefined);
     setProblem(message);
     if (!message && typeof read === 'object') setChosen({ file, preview: read });
@@ -33,7 +40,7 @@ export function ImportUploadStep({ onUploaded }: ImportUploadStepProps) {
 
   return (
     <div className="space-y-4">
-      <ImportDropzone onFile={(file) => void choose(file)} />
+      <ImportDropzone label={fileLabel} onFile={(file) => void choose(file)} />
       {chosen ? (
         <p role="status" className="text-sm">
           <span className="font-semibold wrap-anywhere">{chosen.file.name}</span>
@@ -50,16 +57,7 @@ export function ImportUploadStep({ onUploaded }: ImportUploadStepProps) {
           {upload.error instanceof ApiError ? upload.error.message : 'The file did not upload.'}
         </p>
       ) : null}
-      <p className="text-sm text-text-muted">
-        CSV, up to 10 MB and 50,000 customers.{' '}
-        <a
-          href={templateHref}
-          download="dakly-customers-template.csv"
-          className="text-action underline"
-        >
-          Download a template
-        </a>
-      </p>
+      <ImportFileNote rowName={rowName} template={template} />
       <ImportStepActions
         next="Continue"
         disabled={!chosen}
@@ -75,7 +73,13 @@ export function ImportUploadStep({ onUploaded }: ImportUploadStepProps) {
   );
 }
 
-function ImportDropzone({ onFile }: { onFile: (file: File | undefined) => void }) {
+function ImportDropzone({
+  label,
+  onFile,
+}: {
+  label: string;
+  onFile: (file: File | undefined) => void;
+}) {
   const [dragging, setDragging] = useState(false);
   const drop = (event: DragEvent<HTMLLabelElement>) => {
     event.preventDefault();
@@ -102,9 +106,27 @@ function ImportDropzone({ onFile }: { onFile: (file: File | undefined) => void }
         type="file"
         accept=".csv,text/csv"
         className="sr-only"
-        aria-label="Customer file"
+        aria-label={label}
         onChange={(event) => onFile(event.target.files?.[0])}
       />
     </label>
+  );
+}
+
+function ImportFileNote({
+  rowName,
+  template,
+}: Pick<ImportUploadStepProps, 'rowName' | 'template'>) {
+  return (
+    <p className="text-sm text-text-muted">
+      CSV, up to 10 MB and 50,000 {rowName}.{' '}
+      <a
+        href={`data:text/csv;charset=utf-8,${encodeURIComponent(template.csv)}`}
+        download={template.filename}
+        className="text-action underline"
+      >
+        Download a template
+      </a>
+    </p>
   );
 }
