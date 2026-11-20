@@ -3,7 +3,7 @@
 |           |                                                                                                                                        |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | Release   | 1                                                                                                                                      |
-| Status    | Not started                                                                                                                            |
+| Status    | In progress                                                                                                                            |
 | Extension | Core                                                                                                                                   |
 | Code      | `packages/core/src/channels/`, `packages/providers/src/channel/{messenger,instagram,whatsapp}/`, `apps/web/src/features/integrations/` |
 | Tasks     | CHN-1 to CHN-6                                                                                                                         |
@@ -118,6 +118,12 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 ### Screens in release 1
 
 ![Integrations](../design/screenshots/integrations.webp)
+
+CHN-5 builds the Messaging and social part of this screen at `/integrations`: a Messenger card and an Instagram card that list the connected accounts with Connect, Reconnect and Disconnect, a WhatsApp card that reads "Waiting for setup", and an SMS sender card that shows the latest request from `GET /sms-sender-ids`. The sections for Shopify, WooCommerce and POS are left out: nothing sits behind them in release 1 (D6, D21).
+
+Connect opens the Facebook window from the URL that `POST /channel-connections/meta/start` returns. Facebook sends the window back to `/integrations/meta`, which hands the code and state to the Integrations tab and closes. The tab lists the accounts, the shop ticks the ones to connect, and `POST /channel-connections/meta` saves them. Reconnect runs the same flow for an account in `needs_reconnect` or whose access ends within 7 days, with that account ticked. Disconnect asks for confirmation first and keeps all chats. Members without `storeSettings.edit` see the cards without buttons. Development and browser tests set `META_CHANNEL_DRIVER=fake` and `META_OAUTH_REDIRECT_URI` to this page.
+
+Left out until their tasks land: the SMS sender request form, test SMS and document uploads (CHN-7), WhatsApp connect (CHN-3), and the expiry banner on Chats and Social (their screens).
 
 The prototype's WhatsApp connect is a one-click stub. The real flow is Meta Embedded Signup, which is not designed yet. POS cards show demo partners; release 1 is CSV only (D6).
 
