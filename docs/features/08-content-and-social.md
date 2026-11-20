@@ -220,7 +220,7 @@ caption generation and checks generated text before scheduling.
 
 The Social hub lists each connected Facebook Page and Instagram account with its status, then the signed-in person's drafts, and shows a reconnect banner for an account whose access expired. Connect account opens the choice of Facebook Page or Instagram account, then the same Facebook sign-in dialog as Integrations (`components/meta-connect/`). Reconnect opens that dialog for the expired account. Where the screen differs from the design on purpose:
 
-- Follower counts and Notify me wait for SOC-7 (followers are not stored and nothing records TikTok interest). Draft thumbnails arrive in SOC-5 part 2, with image URLs on post responses.
+- Follower counts and Notify me wait for SOC-7 (followers are not stored and nothing records TikTok interest). Draft rows show the first photo as a thumbnail; post responses carry `photos` (id and a 15 minute download link for each ready photo, in post order; a photo that is not ready is left out).
 - Instagram shows its single brand pink (`--color-instagram`) in place of the gradient.
 - Posting schedule edits one account's weekly slots at a time (an account picker shows when there are several), because slots are stored per connection. Use recommended times waits for follower-activity data and moves to SOC-7.
 - Duplicate copies the draft with its accounts and captions; Delete asks first. Create post and Edit arrive in a later SOC-5 part.

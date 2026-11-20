@@ -9,18 +9,21 @@ import type {
   SchedulePostInput,
 } from '@dakly/contracts/social';
 import type { StoreAccess } from '@dakly/contracts/team';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { AuditService } from '../audit/audit.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
 import { validateInstagramPhotos, validateInstagramPost } from './post-content';
+import { photosOf, response } from './post-response';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
@@ -31,20 +34,6 @@ type Target = Awaited<ReturnType<SocialRepository['listTargets']>>[number];
 type PostingConnection = Awaited<
   ReturnType<ChannelConnectionsService['postingConnections']>
 >[number];
-
-function response(post: Post, targets: Target[]): PostResponse {
-  return {
-    ...post,
-    createdAt: post.createdAt.toISOString(),
-    updatedAt: post.updatedAt.toISOString(),
-    approvedAt: post.approvedAt?.toISOString() ?? null,
-    targets: targets.map(({ postId: _postId, scheduledFor, publishedAt, ...target }) => ({
-      ...target,
-      scheduledFor: scheduledFor?.toISOString() ?? null,
-      publishedAt: publishedAt?.toISOString() ?? null,
-    })),
-  };
-}
 
 @Injectable()
 export class SocialService {
@@ -57,6 +46,8 @@ export class SocialService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(FILE_STORAGE_DRIVER)
+    private readonly storage: Pick<FileStorageDriver, 'createDownloadUrl'>,
   ) {}
 
   createDraft(
@@ -73,7 +64,7 @@ export class SocialService {
       );
       if (existing) {
         const { post, targets } = await this.findPost(storeId, existing.id);
-        return response(post, targets);
+        return this.respond(storeId, post, targets);
       }
       const now = this.clock.now();
       const connections = await this.validateTargets(storeId, input, []);
@@ -103,8 +94,30 @@ export class SocialService {
         entityType: 'post',
         entityId: post.id,
       });
-      return response(post, await this.repository.listTargets(storeId, [post.id]));
+      return this.respond(storeId, post, await this.repository.listTargets(storeId, [post.id]));
     });
+  }
+
+  private async respond(storeId: string, post: Post, targets: Target[]) {
+    return response(post, targets, photosOf(post, await this.photoUrls(storeId, [post])));
+  }
+
+  private async respondAll(storeId: string, rows: { post: Post; targets: Target[] }[]) {
+    const urls = await this.photoUrls(
+      storeId,
+      rows.map(({ post }) => post),
+    );
+    return rows.map(({ post, targets }) => response(post, targets, photosOf(post, urls)));
+  }
+
+  private async photoUrls(storeId: string, posts: Post[]) {
+    const ids = [...new Set(posts.flatMap(({ mediaFileIds }) => mediaFileIds))];
+    const files = ids.length
+      ? await this.repository.listPostMedia(storeId, ids, this.clock.now())
+      : [];
+    return new Map(
+      files.map(({ id, objectKey }) => [id, this.storage.createDownloadUrl(objectKey, 15 * 60)]),
+    );
   }
 
   async listPosts(
@@ -118,7 +131,7 @@ export class SocialService {
     const rows = await this.repository.listPosts(storeId, query, actor.userId);
     const page = rows.slice(0, query.limit);
     return {
-      items: page.map(({ post, targets }) => response(post, targets)),
+      items: await this.respondAll(storeId, page),
       nextCursor: rows.length > query.limit ? (page.at(-1)?.post.id ?? null) : null,
     };
   }
@@ -136,7 +149,7 @@ export class SocialService {
       !this.team.canReviewSocialPosts(access, 'view')
     )
       throw socialError('POST_NOT_FOUND');
-    return response(post, targets);
+    return this.respond(storeId, post, targets);
   }
 
   editDraft(
@@ -184,7 +197,7 @@ export class SocialService {
         entityType: 'post',
         entityId: postId,
       });
-      return response(edited, await this.repository.listTargets(storeId, [postId]));
+      return this.respond(storeId, edited, await this.repository.listTargets(storeId, [postId]));
     });
   }
 
@@ -207,7 +220,11 @@ export class SocialService {
       const { post, targets, now } = await this.draftForScheduling(storeId, postId, editor);
       if (!this.team.canReviewSocialPosts(editor.access, 'approve'))
         throw socialError('POST_APPROVAL_REQUIRED');
-      return response(await this.recordApproval(storeId, post, editor.actor, now), targets);
+      return this.respond(
+        storeId,
+        await this.recordApproval(storeId, post, editor.actor, now),
+        targets,
+      );
     });
   }
 
@@ -241,7 +258,7 @@ export class SocialService {
           payload: { postId, postTargetId: id, scheduledFor: scheduledFor.toISOString() },
         })),
       );
-      return response(reviewed, scheduled);
+      return this.respond(storeId, reviewed, scheduled);
     });
   }
 
