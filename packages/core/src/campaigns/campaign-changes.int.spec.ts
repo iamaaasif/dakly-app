@@ -9,10 +9,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { createCampaignSchema } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
 
+import { runApprovalJob } from '../../test/approve-campaign';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { SegmentsService } from '../segments/segments.service';
 import { WalletService } from '../wallets/wallet.service';
+import { CampaignApprovalService } from './campaign-approval.service';
 import { CampaignsModule } from './campaigns.module';
 import { CampaignsService } from './campaigns.service';
 
@@ -64,6 +66,7 @@ async function approvedCampaign(scheduledFor: Date | null) {
   });
   const { id } = await service.create(storeId, draft, actor);
   await service.approve(storeId, id, owner);
+  await runApprovalJob(app.get(CampaignApprovalService), admin.pool, storeId, id);
   return id;
 }
 
@@ -178,7 +181,9 @@ describe('Campaign edit, cancel, pause and resume (Postgres)', () => {
     });
 
     await service.changeDraft(storeId, id, { content: { text: 'শীতের সব চাদরে ২০% ছাড়' } }, actor);
-    expect((await service.approve(storeId, id, owner)).status).toBe('scheduled');
+    await service.approve(storeId, id, owner);
+    await runApprovalJob(app.get(CampaignApprovalService), admin.pool, storeId, id);
+    expect((await service.get(storeId, id)).status).toBe('scheduled');
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
     expect(await recipientRows(id)).toHaveLength(3);
   });

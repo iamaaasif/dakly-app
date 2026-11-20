@@ -35,6 +35,7 @@ test('adds a customer, finds it by name and opens the profile', async ({
     expect(selected.status()).toBe(204);
     await page.goto('/customers');
     await page.getByRole('button', { name: 'Add customers' }).click();
+    await page.getByRole('button', { name: /Add manually/ }).click();
     await page.getByLabel('Name', { exact: true }).fill(name);
     await page.getByLabel('Phone', { exact: true }).fill(phone);
     await page.getByRole('button', { name: 'Add customer', exact: true }).click();

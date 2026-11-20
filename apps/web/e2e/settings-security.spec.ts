@@ -279,10 +279,14 @@ async function deleteTeamRole(page: Page) {
   await page.getByLabel('Role name').fill('Disposable settings role');
   await page.getByRole('button', { name: 'Save role', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
-  const role = page.getByRole('heading', { name: 'Disposable settings role', exact: true });
-  await role.locator('..').getByRole('button', { name: 'Delete role', exact: true }).click();
+  await page
+    .getByRole('article', { name: 'Disposable settings role', exact: true })
+    .getByRole('button', { name: 'Delete role', exact: true })
+    .click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete role', exact: true }).click();
-  await expect(role).toBeHidden();
+  await expect(
+    page.getByRole('heading', { name: 'Disposable settings role', exact: true }),
+  ).toBeHidden();
 }
 
 async function privateLayout(page: Page, submit: string) {

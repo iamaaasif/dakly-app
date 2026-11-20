@@ -456,6 +456,27 @@
       "when": 1795153510453,
       "tag": "0064_campaign_sms_redirect_links",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1795159401468,
+      "tag": "0065_campaign_approval_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795160307601,
+      "tag": "0066_campaign_stalled_approvals",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1795162367648,
+      "tag": "0067_campaign_approval_segment_failure",
+      "breakpoints": true
     }
   ]
 }
