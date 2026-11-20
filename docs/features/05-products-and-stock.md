@@ -125,7 +125,12 @@ List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) a
 
 1. A product has 0 to 3 option types (Size, Colour, Fabric) and one or more variants. A product with no options has one default variant, so an order always points at a variant.
 2. Stock lives on the variant: on hand and reserved. Available = on hand − reserved.
-3. Stock changes only through `ProductsService.moveStock(storeId, variantId, { kind, quantity, reference })`. It runs one guarded `UPDATE ... WHERE on_hand - reserved >= quantity` and writes a `stock_movements` row in the same transaction. Zero rows updated throws `STOCK_NOT_AVAILABLE`.
+3. Stock changes through `ProductStockService.moveStock`. A movement takes a quantity,
+   or an absolute on-hand count for an import. An import calculates the signed
+   change from the locked variant count. The update guards the resulting stock
+   and reservations. It writes a `stock_movements` row in the same transaction
+   when stock or reservations change. A count that would put on-hand stock below
+   reserved stock throws `STOCK_NOT_AVAILABLE`.
 4. Movement kinds: `reserve`, `release`, `ship`, `return`, `adjust`, `import`.
 5. Products with stock tracking off skip all of this and never block an order.
 6. Readiness labels are computed, not stored. Running low is any tracked variant at or under the store threshold (default 3).
@@ -227,7 +232,7 @@ Emits `product.updated`, `stock.changed`, `variant.restocked`.
 
 `products` (options as JSON; 512-dimension text and photo embeddings with the model that built them), `product_variants` (on hand and reserved; `price_override_poisha` is empty when the size sells at the product price, so a size's price is its override or else the product's `price_poisha`, and 0 means Needs a price), `stock_movements` (append-only), `restock_requests`, `files` for photos. Full design: [docs/data](../data/README.md).
 
-Product CSV imports use `imports.kind = products_csv` with the same mapping, preview, counts and downloadable error report as customer imports. Reconciliation uses a store-scoped SKU or a supplied external identity; rows without a stable key are new products and the importer must persist the import row result before retry. Duplicate mode applies to matching rows, and stock changes write ledger entries once per import row. A failed or repeated batch must not apply an absolute stock count twice over later stock movements.
+Product CSV imports use `imports.kind = products_csv` with the same mapping, preview, counts and downloadable error report as customer imports. The customer import repository filters every read and write on `kind = customers_csv`, so a product import never shows in the customer import report, undo or recovery. Reconciliation uses a store-scoped SKU or a supplied external identity; rows without a stable key are new products and the importer must persist the import row result before retry. Duplicate mode applies to matching rows, and stock changes write ledger entries once per import row. A failed or repeated batch must not apply an absolute stock count twice over later stock movements.
 
 Variant external identity is `(store_id, external_source, external_account_id, external_ref)`. Source names the provider; account is its stable shop/account ID, never a display name. All three external fields are supplied together or all are null. Provider synchronization remains planned work.
 

@@ -1,14 +1,21 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
+import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import {
   consentChangedEventSchema,
   contactBirthdayEventSchema,
   contactTagAddedEventSchema,
 } from '@dakly/contracts/events/contacts';
+import {
+  orderCreatedEventSchema,
+  orderStageChangedEventSchema,
+} from '@dakly/contracts/events/orders';
+import type { OrderStage } from '@dakly/contracts/orders';
 
 import { ContactsService } from '../contacts/contacts.service';
+import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -19,10 +26,29 @@ import { AutomationEntryRepository } from './automation-entry.repository';
 export const automationConsentEvent = consentChangedEventSchema.extend({ id: z.uuid() });
 export const automationTagEvent = contactTagAddedEventSchema.extend({ id: z.uuid() });
 export const automationBirthdayEvent = contactBirthdayEventSchema.extend({ id: z.uuid() });
+export const automationOrderCreatedEvent = orderCreatedEventSchema.extend({ id: z.uuid() });
+export const automationOrderStageEvent = orderStageChangedEventSchema.extend({ id: z.uuid() });
+type OrderEvent =
+  | Omit<z.infer<typeof automationOrderCreatedEvent>, 'storeId'>
+  | Omit<z.infer<typeof automationOrderStageEvent>, 'storeId'>;
+type OrderFacts = NonNullable<Awaited<ReturnType<OrderReportingService['triggerFacts']>>>;
+// An order event carries the buyer and the order facts that the trigger filters read.
+type WithFacts<E> = E extends { payload: infer P }
+  ? Omit<E, 'payload'> & { payload: P & OrderFacts }
+  : never;
+type OrderTriggerEvent = WithFacts<OrderEvent>;
 type TriggerEvent =
   | Omit<z.infer<typeof automationConsentEvent>, 'storeId'>
   | Omit<z.infer<typeof automationTagEvent>, 'storeId'>
-  | Omit<z.infer<typeof automationBirthdayEvent>, 'storeId'>;
+  | Omit<z.infer<typeof automationBirthdayEvent>, 'storeId'>
+  | OrderTriggerEvent;
+
+const stageTriggers: Partial<Record<OrderStage, TriggerKey>> = {
+  with_courier: 'order_shipped',
+  delivered: 'order_delivered',
+  cancelled: 'order_cancelled',
+  returned: 'order_returned',
+};
 
 @Injectable()
 export class AutomationEntryService {
@@ -31,6 +57,7 @@ export class AutomationEntryService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(SegmentsService) private readonly segments: SegmentsService,
+    @Inject(OrderReportingService) private readonly orders: OrderReportingService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -39,6 +66,19 @@ export class AutomationEntryService {
     if (!key) return;
     const workflows = await this.repository.activeWorkflows(storeId, key);
     for (const { id } of workflows) await this.start(storeId, id, event);
+  }
+
+  async startMatchingOrder(storeId: string, event: OrderEvent): Promise<void> {
+    if (!orderTriggerFor(event)) return;
+    const facts = await this.orders.triggerFacts(storeId, event.payload.orderId);
+    if (!facts) return;
+    // Spreading the union loses the link between type and payload, so each branch is typed alone.
+    await this.startMatching(
+      storeId,
+      event.type === 'order.created'
+        ? { ...event, payload: { ...event.payload, ...facts } }
+        : { ...event, payload: { ...event.payload, ...facts } },
+    );
   }
 
   async start(storeId: string, automationId: string, event: TriggerEvent): Promise<void> {
@@ -87,9 +127,14 @@ export class AutomationEntryService {
   }
 }
 
+function orderTriggerFor(event: OrderEvent): TriggerKey | undefined {
+  return event.type === 'order.created' ? 'order_placed' : stageTriggers[event.payload.to];
+}
+
 function triggerFor(event: TriggerEvent) {
   if (event.type === 'contact.tag_added') return 'tag_added';
   if (event.type === 'contact.birthday') return 'birthday';
+  if (isOrderEvent(event)) return orderTriggerFor(event);
   if (event.payload.status === 'granted' && event.payload.source !== 'import')
     return 'consent_given';
   return null;
@@ -97,20 +142,52 @@ function triggerFor(event: TriggerEvent) {
 
 function matchesTrigger(trigger: AutomationGraph['trigger'], event: TriggerEvent): boolean {
   if (trigger.key !== triggerFor(event)) return false;
-  return trigger.filters.every((filter) => {
-    switch (filter.field) {
-      case 'segment':
-        return event.type === 'contact.birthday';
-      case 'tag':
-        return event.type === 'contact.tag_added' && event.payload.tag === filter.tag;
-      case 'channel':
-        return event.type === 'consent.changed' && filter.channels.includes(event.payload.channel);
-      case 'consent_source':
-        return event.type === 'consent.changed' && filter.sources.includes(event.payload.source);
-      default:
-        return false;
-    }
-  });
+  return trigger.filters.every((filter) =>
+    isOrderEvent(event) ? matchesOrderFilter(filter, event) : matchesContactFilter(filter, event),
+  );
+}
+
+type TriggerFilter = AutomationGraph['trigger']['filters'][number];
+
+function matchesContactFilter(
+  filter: TriggerFilter,
+  event: Exclude<TriggerEvent, OrderTriggerEvent>,
+): boolean {
+  switch (filter.field) {
+    case 'segment':
+      return event.type === 'contact.birthday';
+    case 'tag':
+      return event.type === 'contact.tag_added' && event.payload.tag === filter.tag;
+    case 'channel':
+      return event.type === 'consent.changed' && filter.channels.includes(event.payload.channel);
+    case 'consent_source':
+      return event.type === 'consent.changed' && filter.sources.includes(event.payload.source);
+    default:
+      return false;
+  }
+}
+
+function matchesOrderFilter(filter: TriggerFilter, { payload }: OrderTriggerEvent): boolean {
+  switch (filter.field) {
+    case 'order_total':
+      return filter.operator === 'at_least'
+        ? payload.totalPoisha >= filter.amountPoisha
+        : payload.totalPoisha <= filter.amountPoisha;
+    case 'product':
+      return payload.productIds.some((id) => filter.productIds.includes(id));
+    case 'payment_status':
+      return filter.statuses.includes(payload.paymentStatus);
+    case 'delivery_district':
+      return payload.bdAreaId !== null && filter.bdAreaIds.includes(payload.bdAreaId);
+    case 'first_order':
+      return payload.isFirstOrder;
+    default:
+      return false;
+  }
+}
+
+function isOrderEvent(event: TriggerEvent): event is OrderTriggerEvent {
+  return event.type === 'order.created' || event.type === 'order.stage_changed';
 }
 
 function canReEnter(rule: AutomationGraph['reEntry'], enteredAt: Date, now: Date) {

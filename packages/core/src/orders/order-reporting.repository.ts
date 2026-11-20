@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 
-import { orders } from '@dakly/db/schema/orders';
+import { orderItems, orders } from '@dakly/db/schema/orders';
+import { productVariants } from '@dakly/db/schema/products';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -180,6 +181,50 @@ export class OrderReportingRepository {
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
     );
     return order?.contactId;
+  }
+
+  // What a workflow trigger filter looks at. Undefined when the buyer was purged or never linked.
+  async triggerFacts(storeId: string, orderId: string) {
+    return this.database.forStore(storeId, async (tx) => {
+      const [order] = await tx
+        .select({
+          contactId: orders.buyerContactId,
+          number: orders.number,
+          paymentStatus: orders.paymentStatus,
+          bdAreaId: orders.recipientBdAreaId,
+          itemsSubtotalPoisha: orders.itemsSubtotalPoisha,
+          orderDiscountPoisha: orders.orderDiscountPoisha,
+          deliveryChargePoisha: orders.deliveryChargePoisha,
+          deliveredItemsSubtotalPoisha: orders.deliveredItemsSubtotalPoisha,
+          deliveredOrderDiscountPoisha: orders.deliveredOrderDiscountPoisha,
+        })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)));
+      if (!order?.contactId) return undefined;
+      const products = await tx
+        .selectDistinct({ productId: productVariants.productId })
+        .from(orderItems)
+        .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+        .where(and(eq(orderItems.storeId, storeId), eq(orderItems.orderId, orderId)));
+      const [earlier] = await tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.buyerContactId, order.contactId),
+            ne(orders.stage, 'cancelled'),
+            lt(orders.number, order.number),
+          ),
+        )
+        .limit(1);
+      return {
+        ...order,
+        contactId: order.contactId,
+        productIds: products.map(({ productId }) => productId),
+        isFirstOrder: !earlier,
+      };
+    });
   }
 
   async contactOrderTotals(storeId: string, contactId: string, timeZone: string) {

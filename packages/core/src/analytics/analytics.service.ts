@@ -147,6 +147,11 @@ export class AnalyticsService {
     );
     return { total: BigInt(totals?.value ?? 0), points: fillDays(period, points) };
   }
+
+  // The maintenance job calls this for every store and finished Dhaka day; a rerun gives the same rows.
+  rollUpAiRunDay(storeId: string, day: string) {
+    return this.repository.rollUpAiRunDay(storeId, day);
+  }
 }
 
 function fillDays(period: ReportPeriod, rows: Point[]): Point[] {

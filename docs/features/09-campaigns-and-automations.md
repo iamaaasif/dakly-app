@@ -531,12 +531,12 @@ Triggers and actions are in [`automations/catalogue.ts`](../../packages/contract
 | `lead_captured`           | `chat.lead_saved`, not yet           | channel                                                              | Channels                  | Orders       |
 | `back_in_stock`           | `variant.restocked`, not yet         | product                                                              | Products                  | Orders       |
 | `price_dropped`           | `product.price_dropped`, not yet     | product                                                              | Products                  | Orders       |
-| `order_placed`            | `order.created`, not yet             | order total, product, payment status, delivery district, first order | Orders                    |              |
+| `order_placed`            | `order.created`                      | order total, product, payment status, delivery district, first order | Orders                    |              |
 | `order_paid`              | `payment.succeeded`, not yet         | order total                                                          | Orders                    |              |
-| `order_shipped`           | `order.stage_changed`, not yet       | order total, delivery district                                       | Orders                    |              |
-| `order_delivered`         | `order.stage_changed`, not yet       | order total, product                                                 | Orders                    |              |
-| `order_cancelled`         | `order.stage_changed`, not yet       | order total                                                          | Orders                    |              |
-| `order_returned`          | `order.stage_changed`, not yet       | order total                                                          | Orders                    |              |
+| `order_shipped`           | `order.stage_changed`                | order total, delivery district                                       | Orders                    |              |
+| `order_delivered`         | `order.stage_changed`                | order total, product                                                 | Orders                    |              |
+| `order_cancelled`         | `order.stage_changed`                | order total                                                          | Orders                    |              |
+| `order_returned`          | `order.stage_changed`                | order total                                                          | Orders                    |              |
 | `order_link_abandoned`    | `order_link.abandoned`, not yet      | product                                                              | Orders                    |              |
 | `lifecycle_stage_entered` | `contact.stage_changed`, not yet     | **lifecycle stage**                                                  | Orders                    |              |
 | `days_since_last_order`   | Daily job in store time              | **days**                                                             | Orders                    |              |
@@ -546,6 +546,8 @@ Triggers and actions are in [`automations/catalogue.ts`](../../packages/contract
 | `product_viewed`          | `product.viewed`, not yet            | product                                                              | Tracking script           |              |
 
 Shipped means staff moved the order to With courier (D21). Lifecycle stages come from orders, so every contact is in no stage until Orders exists. Segment joined waits for stored segment membership, which segments do not keep yet (feature 03); the same holds for an "enters a segment" exit condition. A custom event by API, "update a field" and "add to Due reminder" are not release 1: Dakly has no public API in release 1, no editable contact field is named for workflows, and Due is release 2.
+
+Order triggers (ORD-4): `order.created` starts `order_placed`, and `order.stage_changed` starts `order_shipped` (to With courier), `order_delivered`, `order_cancelled` or `order_returned`. The subscriber reads the buyer and the filter facts (order total, products, payment status, delivery area, first order) from Orders when it runs, so an order with no buyer contact starts nothing. A first order ignores cancelled earlier orders. Payment, order link, lifecycle and the date-based order triggers are still to come.
 
 | Action           | Settings                                                        | Needs           | Ready before |
 | ---------------- | --------------------------------------------------------------- | --------------- | ------------ |

@@ -34,6 +34,8 @@ type Stream = { userId: string; deliver: (notificationId: string) => void; close
 export class NotificationStreamService implements BeforeApplicationShutdown, OnApplicationShutdown {
   private readonly logger = new Logger(NotificationStreamService.name);
   private readonly streams = new Map<string, Set<Stream>>();
+  // Every stream joining a store waits for the store's subscribe, so none reports ready early.
+  private readonly subscribing = new Map<string, Promise<unknown>>();
   private subscriber?: Redis;
 
   constructor(
@@ -78,6 +80,9 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
         enqueue(async () =>
           (await this.notifications.listCreatedAfter(storeId, userId, lastEventId)).forEach(send),
         );
+      // Tells the client, and the tests, that the stream is subscribed and replayed, since the
+      // HTTP headers go out before Valkey confirms the subscription.
+      enqueue(async () => subscriber.next({ comment: 'ready' }));
       const heartbeat = setInterval(
         () =>
           enqueue(async () => {
@@ -108,16 +113,20 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
     const streams = this.streams.get(storeId);
     if (streams) {
       streams.add(stream);
+      await this.subscribing.get(storeId);
       return;
     }
     this.streams.set(storeId, new Set([stream]));
-    await this.connection().subscribe(CHANNEL_PREFIX + storeId);
+    const subscribing = this.connection().subscribe(CHANNEL_PREFIX + storeId);
+    this.subscribing.set(storeId, subscribing);
+    await subscribing;
   }
 
   private leave(storeId: string, stream: Stream) {
     const streams = this.streams.get(storeId);
     if (!streams?.delete(stream) || streams.size) return;
     this.streams.delete(storeId);
+    this.subscribing.delete(storeId);
     // A dropped connection forgets its channels anyway; nothing waits for this answer.
     void this.subscriber?.unsubscribe(CHANNEL_PREFIX + storeId).catch(() => undefined);
   }

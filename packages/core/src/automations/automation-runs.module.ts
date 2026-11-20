@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
+import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
 import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
@@ -34,6 +35,7 @@ import { AutomationsModule } from './automations.module';
     OutboxModule,
     LinksModule,
     MessagingModule,
+    OrdersModule,
     SegmentsModule,
     SendingModule,
     StoresModule,

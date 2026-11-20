@@ -166,4 +166,49 @@ describe('import filters without RLS assistance', () => {
     await repository.markUndoFinished(f.a, importId, at);
     expect(new Date((await f.row('imports', importId)).undo_finished_at as string)).toEqual(at);
   });
+
+  it('never reads or changes a product import', async () => {
+    const importId = randomUUID();
+    const file = upload(f.a);
+    await repository.createCustomerImport(f.a, importId, file, f.userA);
+    const at = new Date('2026-11-17T04:30:00Z');
+    const late = new Date('2026-11-17T06:00:00Z');
+    const lease = new Date('2026-11-17T04:30:00Z');
+    await f.connection.pool.query(
+      "update imports set kind='products_csv', status='importing', claimed_at=$2, last_progress_at=$2 where id=$1",
+      [importId, lease],
+    );
+
+    expect(await repository.findById(f.a, importId)).toBeUndefined();
+    expect(await repository.listStuck(f.a, late)).toEqual([]);
+    expect(await repository.requeue(f.a, importId, { before: late, now: late, limit: 4 })).toBe(
+      false,
+    );
+    expect(await repository.claim(f.a, importId, at, new Date('2026-11-17T04:40:00Z'))).toBe(false);
+    expect(
+      await repository.saveProgress(f.a, importId, counts, {
+        held: lease,
+        renewed: late,
+        checkpoint: { processedRows: 1, fileHash: 'hash', report: [], omittedRows: 0 },
+      }),
+    ).toBe(false);
+    expect(
+      await repository.finish(f.a, importId, {
+        lease,
+        result: { status: 'done', counts, finishedAt: late },
+      }),
+    ).toBe(false);
+    expect((await f.row('imports', importId)).status).toBe('importing');
+
+    await f.connection.pool.query(
+      "update imports set status='done', claimed_at=null, finished_at=$2 where id=$1",
+      [importId, at],
+    );
+    expect(await repository.markUndone(f.a, importId, late)).toBe(false);
+    await f.connection.pool.query("update imports set status='undone' where id=$1", [importId]);
+    expect(await repository.requeuePendingUndos(f.a, late, late)).toEqual([]);
+    await repository.markUndoFinished(f.a, importId, at);
+    await repository.renewUndoProgress(f.a, importId, late);
+    expect((await f.row('imports', importId)).undo_finished_at).toBeNull();
+  });
 });

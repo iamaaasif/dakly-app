@@ -151,7 +151,8 @@ async function openStream(viewer: Member, storeId: string, lastEventId?: string)
       text += chunk.value;
     isEnded = true;
   })().catch(() => (isEnded = true));
-  await until(async () => (await subscribers(storeId)) > 0);
+  // The server sends this comment once this stream has joined its channel.
+  await until(() => text.includes(': ready'));
   return {
     ids: () => [...text.matchAll(/^id: (.+)$/gm)].map((match) => match[1]),
     text: () => text,
@@ -357,6 +358,17 @@ describe('NotificationsService and its routes', () => {
     expect(ownerA.text()).not.toContain(a.owner.userId);
     expect(marketerA.ids()).toEqual([]);
     expect(ownerB.ids()).toEqual([]);
+  });
+
+  it('reports ready on every stream of a store opened at the same moment, so none misses a live row', async () => {
+    const a = await shop();
+    const [owner, agent] = await Promise.all([
+      openStream(a.owner, a.id),
+      openStream(a.agent, a.id),
+    ]);
+    await service.notify(a.id, handedOver());
+    await relay(a.id);
+    await until(() => owner.ids().length === 1 && agent.ids().length === 1);
   });
 
   it('sends the rows created while disconnected once each, then live ones', async () => {

@@ -119,6 +119,8 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 
 ![Integrations](../design/screenshots/integrations.webp)
 
+CHN-5 builds the Messaging and social part of this screen at `/integrations`, in two PRs. Part 1: a Messenger card and an Instagram card that list the connected accounts and disconnect one after confirmation, a WhatsApp card that reads "Waiting for setup", and an SMS sender card that shows the latest request from `GET /sms-sender-ids`. Members without `storeSettings.edit` see no buttons. The sections for Shopify, WooCommerce and POS are left out: nothing sits behind them in release 1 (D6, D21). Part 2 adds Connect and Reconnect. Left out until their tasks land: the SMS sender request form, test SMS and uploads (CHN-7), WhatsApp connect (CHN-3).
+
 The prototype's WhatsApp connect is a one-click stub. The real flow is Meta Embedded Signup, which is not designed yet. POS cards show demo partners; release 1 is CSV only (D6).
 
 ### How it works
