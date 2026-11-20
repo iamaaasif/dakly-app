@@ -13,7 +13,7 @@ const ROW_GAP = 56;
 const PADDING = 16;
 // Cards show one truncated line per row, so heights are fixed and edges can be computed.
 const heights = {
-  trigger: 208,
+  trigger: 232,
   wait: 44,
   send: 72,
   action: 72,

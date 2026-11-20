@@ -53,6 +53,8 @@ export const changeAutomationSchema = automationDraftSchema
   .refine((input) => input.name !== undefined || input.graph !== undefined, 'Nothing to change');
 export type AutomationTriggerPreview = {
   items: { id: string; contactId: string; occurredAt: string }[];
+  // People with a matching event in the last 7 days; atLeast is true when the scan stopped early.
+  lastSevenDays: { people: number; atLeast: boolean };
 };
 
 export const automationListQuerySchema = z.strictObject({

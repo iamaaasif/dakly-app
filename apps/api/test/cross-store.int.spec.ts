@@ -1235,6 +1235,7 @@ fixture('GET /automations/:automationId/trigger-preview', async () => {
   ] as const) {
     const response = await success(shop, 'GET', path(id), 200);
     expect(response.json().items.map((item: { id: string }) => item.id)).toEqual(ids);
+    expect(response.json().lastSevenDays).toEqual({ people: 1, atLeast: false });
   }
   await hidden(b, 'GET', path, aId);
 });
