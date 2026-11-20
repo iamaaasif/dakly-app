@@ -21,6 +21,8 @@ import { RebuildAttributionJob } from './jobs/rebuild-attribution.job';
 import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { ScheduleLifecycleOnStatsRepaired } from './jobs/schedule-lifecycle-on-stats-repaired.job';
+import { SummarizeAttributionCreated } from './jobs/summarize-attribution-created.job';
+import { SummarizeAttributionRemoved } from './jobs/summarize-attribution-removed.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderEdited } from './jobs/summarize-order-edited.job';
@@ -53,6 +55,8 @@ import { OrderAttributionEngine } from './order-attribution-engine.service';
     ReconcileAnalyticsJob,
     RemoveDeletedBuyer,
     ScheduleLifecycleOnStatsRepaired,
+    SummarizeAttributionCreated,
+    SummarizeAttributionRemoved,
     SummarizeOrderCodCollected,
     SummarizeOrderCreated,
     SummarizeOrderEdited,

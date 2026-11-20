@@ -226,7 +226,7 @@ The nightly lifecycle snapshot stores the count for each of the six stages. Repo
 
 Nightly reconciliation repairs up to 31 order days or 100 buyers per job and prunes expired report rows in pages of 5,000. A contact deletion removes that buyer’s activity. The completed nightly contact stats repair schedules one bulk job per store and local day. The job counts the six lifecycle stages when it runs and replaces the snapshot for the event’s local date.
 
-Order subscribers run on the sync queue. Pending order changes for the same store and original day share a refresh. A change received during a refresh schedules another run. Replaying an event recomputes from current orders and leaves unchanged summary rows as they were. Order edits publish `order.edited` with the order ID. Marketing summaries wait for the ANA-2 report slice. Full design: [docs/data](../data/README.md).
+Order subscribers run on the sync queue. Pending order changes for the same store and original day share a refresh. A change received during a refresh schedules another run. Replaying an event recomputes from current orders and leaves unchanged summary rows as they were. Order edits publish `order.edited` with the order ID. Attribution changes and order stage changes refresh marketing counts and revenue for the original order day. Full design: [docs/data](../data/README.md).
 
 The attribution record is kept on the order. It stores the winning evidence ID and eligibility time, source, channel, item amount after discount in poisha, and the window used. Recording credit leaves the staff order editor revision unchanged. Cancelling an attributed order clears the record and publishes a removal event in the same transaction. The same order and evidence can be recorded again without adding another attribution event.
 
@@ -239,6 +239,8 @@ The order-created subscriber uses the buyer's contact. For self-delivery the ord
 The Owner changes the window through `PATCH /store/attribution` with 1, 3 or 7 days. A change records the old and new window in the audit log and starts a rebuild. `GET /store/attribution` shows the current window, whether the rebuild is running and how many orders it has processed. The banner and window control are part of ANA-3.
 
 The bulk worker covers the latest 365 shop-local dates up to the time of the change. It commits up to 25 orders and its place in the date-and-order cursor together. A newer window replaces the old job's progress. A retry resumes from the last committed cursor, and a rebuild keeps the captured amount when it selects the same touch. It reads the exact tap records across the full lookback horizon.
+
+The marketing rollups store order counts and revenue for the shop and each campaign or workflow. A full return keeps one attributed order and has no revenue. A partial return subtracts the returned item value after discounts from the captured amount. Cancellation and reassignment also refresh the old source bucket. The Dashboard, workflow list and campaign results read these same rollups. The Dashboard uses the selected period and Analytics view permission. Workflows show the last 30 shop-local dates. Campaign results show figures within the two-year summary retention.
 
 The current and previous periods use store-local calendar days. Sales returns the total and the amounts by order source. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
 

@@ -9,12 +9,12 @@ import { formatCount, formatMoney } from '@/lib/format-money';
 
 const metrics = [
   {
-    id: 'sales',
-    title: 'Sales',
+    id: 'marketingRevenue',
+    title: 'Money from Dakly messages',
     icon: ShoppingBag,
     color: 'text-action-hover',
     fill: 'bg-primary-soft',
-    description: 'Item totals after discounts, excluding delivery.',
+    description: 'Item totals from attributed orders, including returns up to today.',
   },
   {
     id: 'customersWhoCameBack',
@@ -40,6 +40,14 @@ const metrics = [
     fill: 'bg-surface-muted',
     description: 'Orders from all sources, excluding cancelled orders.',
   },
+  {
+    id: 'sales',
+    title: 'Sales',
+    icon: ShoppingBag,
+    color: 'text-action-hover',
+    fill: 'bg-primary-soft',
+    description: 'Item totals after discounts, excluding delivery.',
+  },
 ] as const;
 
 type MetricsProps = { cards: DashboardResponse['cards']; period: number };
@@ -56,7 +64,7 @@ export function DashboardMetrics({ cards, period }: MetricsProps) {
         const points = sales ? card.pointsPoisha : card.points;
         return (
           <Card key={id} className="flex min-w-0 flex-col gap-3 p-4">
-            <h2 className="flex items-center gap-2 text-md font-semibold xl:gap-1 xl:tracking-tight xl:whitespace-nowrap">
+            <h2 className="flex items-center gap-2 text-md font-semibold xl:gap-1 xl:tracking-tight">
               <span className={cn('shrink-0 rounded-md p-2 xl:p-1', color, fill)}>
                 <Icon aria-hidden className="size-4" strokeWidth={1.75} />
               </span>

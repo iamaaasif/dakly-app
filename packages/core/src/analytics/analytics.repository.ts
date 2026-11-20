@@ -10,11 +10,22 @@ type Metric = { day: string; metric: string; dimension?: string; value: bigint }
 
 const BUYER_ACTIVITY = 'buyer_activity';
 
+export const marketingMetrics = ['marketing_orders', 'marketing_revenue'] as const;
+
 @Injectable()
 export class AnalyticsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  readDailyMetrics(storeId: string, period: ReportPeriod, metrics: string[]) {
+  readDailyMetrics(
+    storeId: string,
+    period: ReportPeriod,
+    metrics: string[],
+    dimensions?: string[] | 'all',
+  ) {
+    let filter: ReturnType<typeof sql> | undefined;
+    if (dimensions === undefined)
+      filter = sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`;
+    else if (dimensions !== 'all') filter = inArray(storeDailyMetrics.dimension, dimensions);
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -30,7 +41,7 @@ export class AnalyticsRepository {
             gte(storeDailyMetrics.day, period.from),
             lte(storeDailyMetrics.day, period.through),
             inArray(storeDailyMetrics.metric, metrics),
-            sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`,
+            filter,
           ),
         ),
     );

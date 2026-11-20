@@ -285,3 +285,4 @@ Listens to most events to create notifications: `conversation.handed_over`, `pay
 ## Open questions
 
 None.
+The Money from Dakly messages card uses the same attribution rollup as Analytics. It needs Analytics view access.

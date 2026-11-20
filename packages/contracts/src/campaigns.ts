@@ -166,6 +166,7 @@ export type CampaignResponse = {
   excludeSegmentIds: string[];
   scheduledFor: string | null;
   status: CampaignStatus;
+  attribution?: { orders: string; revenuePoisha: string };
   createdAt: string;
   updatedAt: string;
 };

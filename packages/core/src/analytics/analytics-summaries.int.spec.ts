@@ -16,8 +16,10 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { StoresService } from '../stores/stores.service';
+import { AnalyticsReportsModule } from './analytics-reports.module';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
+import { AnalyticsService } from './analytics.service';
 import { AttributionRebuildService } from './attribution-rebuild.service';
 import { AttributeOrderCreated } from './jobs/attribute-order-created.job';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
@@ -33,6 +35,7 @@ Module({
   imports: [
     DatabaseModule,
     AnalyticsModule,
+    AnalyticsReportsModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();
@@ -767,5 +770,42 @@ describe('Daily order summaries', () => {
     ]);
     await repairs.reconcileBuyerPage(fixture.a, null);
     expect(await activity()).toEqual([]);
+  });
+
+  it('restates original-day attribution for partial and full returns and reassignment', async () => {
+    const day = '2026-11-18';
+    const id = await order(fixture.a, day + 'T06:00:00Z');
+    const campaign = randomUUID();
+    const workflow = randomUUID();
+    const db = fixture.connection.pool;
+    await db.query(
+      "update orders set attributed_source_type='campaign',attributed_source_id=$2,attributed_amount_poisha=120000 where id=$1",
+      [id, campaign],
+    );
+    const reports = app.get(AnalyticsService);
+    const summaries = app.get(AnalyticsSummariesService);
+    const period = { from: day, through: day };
+    await summaries.refreshOrderDays(fixture.a, period);
+    expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 120000n });
+    await db.query(
+      `update orders set stage='partially_delivered',delivered_items_subtotal_poisha=60000,
+       delivered_order_discount_poisha=0 where id=$1`,
+      [id],
+    );
+    await summaries.refreshOrderDays(fixture.a, period);
+    expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 55000n });
+    await db.query(
+      "update orders set stage='returned',attributed_source_type='automation',attributed_source_id=$2 where id=$1",
+      [id, workflow],
+    );
+    await summaries.refreshOrderDays(fixture.a, period);
+    await summaries.refreshOrderDays(fixture.a, period);
+    expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 0n });
+    const totals = await reports.attributionBySource(fixture.a, period, 'campaign', [campaign]);
+    expect(totals[campaign]).toEqual({ orders: '0', revenuePoisha: '0' });
+    const workflows = await reports.attributionBySource(fixture.a, period, 'automation', [
+      workflow,
+    ]);
+    expect(workflows[workflow]).toEqual({ orders: '1', revenuePoisha: '0' });
   });
 });

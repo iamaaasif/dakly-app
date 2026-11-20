@@ -17,6 +17,7 @@ import {
 
 import { useChangeAutomationStatus, useDuplicateAutomation } from '../api/automation-actions';
 import { channelLabels, statusLabels, triggerLabels } from '../automation-labels';
+import { formatMoney } from '@/lib/format-money';
 
 export function AutomationRow({
   workflow,
@@ -58,7 +59,11 @@ export function AutomationRow({
         </div>
         <div>
           <dt className="text-text-muted">Revenue, 30 days</dt>
-          <dd className="text-base font-semibold">—</dd>
+          <dd className="text-base font-semibold tabular-nums">
+            {draft || workflow.attributedRevenuePoisha === undefined
+              ? '—'
+              : formatMoney(BigInt(workflow.attributedRevenuePoisha))}
+          </dd>
         </div>
       </dl>
       {canEdit && <WorkflowActions workflow={workflow} />}

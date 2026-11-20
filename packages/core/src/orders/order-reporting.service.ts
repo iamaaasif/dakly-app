@@ -36,6 +36,13 @@ export class OrderReportingService {
     return this.orders.buyerActivityDays(storeId, contactId, timeZone, since);
   }
 
+  dailyAttributionMetrics(
+    storeId: string,
+    range: { from: string; through: string; timeZone: string },
+  ) {
+    return this.orders.dailyAttributionMetrics(storeId, range);
+  }
+
   dailyOrderMetrics(storeId: string, range: { from: string; through: string; timeZone: string }) {
     return this.orders.dailyOrderMetrics(storeId, range);
   }

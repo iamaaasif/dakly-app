@@ -5,6 +5,7 @@ import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automatio
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { AnalyticsService } from '../analytics/analytics.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
@@ -82,6 +83,10 @@ function serviceFor(graph: AutomationGraph) {
     } as unknown as TeamService,
     { notify: async () => undefined } as unknown as NotificationsService,
     {} as WalletService,
+    {
+      periods: async () => ({ current: { from: '2026-11-01', through: '2026-11-30' } }),
+      attributionBySource: async () => ({}),
+    } as unknown as AnalyticsService,
   );
 }
 
