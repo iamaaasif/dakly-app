@@ -13,7 +13,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS, JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
-import { AnalyticsRepository } from './analytics.repository';
+import { AnalyticsRepository, marketingMetrics } from './analytics.repository';
 import { reportDay, retainedSince, shiftReportDay, type ReportPeriod } from './report-period';
 
 const BUYER_PAGE_SIZE = 100;
@@ -46,6 +46,12 @@ export class AnalyticsSummariesService {
       });
     }
     await this.scheduleOrderDay(storeId, day);
+  }
+
+  async refreshAttributionOrders(storeId: string, orderIds: string[]) {
+    const timeZone = await this.stores.timeZone(storeId);
+    const days = await this.orders.reportingDays(storeId, orderIds, timeZone);
+    for (const { day } of days) await this.scheduleOrderDay(storeId, day);
   }
 
   async removeBuyer(storeId: string, contactId: string) {
@@ -83,7 +89,31 @@ export class AnalyticsSummariesService {
         );
       }
       await this.summaries.save(storeId, metrics, now);
+      await this.refreshAttribution(storeId, { ...period, from, timeZone }, now);
     });
+  }
+
+  private async refreshAttribution(
+    storeId: string,
+    range: ReportPeriod & { timeZone: string },
+    now: Date,
+  ) {
+    const existing = await this.summaries.readAttributionMetrics(storeId, range);
+    const metrics = new Map(
+      existing.map((row) => [`${row.day}/${row.metric}/${row.dimension}`, { ...row, value: 0n }]),
+    );
+    const rows = await this.orders.dailyAttributionMetrics(storeId, range);
+    for (const { day, dimension, ...values } of rows)
+      for (const metric of marketingMetrics)
+        metrics.set(`${day}/${metric}/${dimension}`, {
+          day,
+          dimension,
+          metric,
+          value: BigInt(values[metric]),
+        });
+    const rowsToSave = [...metrics.values()];
+    for (let start = 0; start < rowsToSave.length; start += 1000)
+      await this.summaries.save(storeId, rowsToSave.slice(start, start + 1000), now);
   }
 
   async reconciliationRange(storeId: string): Promise<ReportPeriod> {

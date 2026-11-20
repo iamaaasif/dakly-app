@@ -1,8 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { OrderAttributionService } from '../orders/order-attribution.service';
+import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionEngine } from './order-attribution-engine.service';
 
@@ -16,6 +18,8 @@ export class AttributionRebuildService {
     @Inject(OrderAttributionService) private readonly orders: OrderAttributionService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   async runPage(storeId: string, rebuildId: string, checkpoint: string | null) {
@@ -56,7 +60,21 @@ export class AttributionRebuildService {
           checkpoint: atCheckpoint ? after.id : checkpoint,
         },
       );
+      await this.refreshReports(
+        storeId,
+        selections.map(({ order }) => order.id),
+      );
       return after !== null && !atCheckpoint;
+    });
+  }
+
+  private async refreshReports(storeId: string, orderIds: string[]) {
+    if (!orderIds.length) return;
+    await this.outbox.publish({
+      type: 'attribution.orders_rebuilt',
+      storeId,
+      occurredAt: this.clock.now().toISOString(),
+      payload: { orderIds },
     });
   }
 }

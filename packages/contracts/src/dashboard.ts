@@ -21,6 +21,7 @@ export type DashboardResponse = {
   cards: {
     orders?: CountCard;
     sales?: SalesCard;
+    marketingRevenue?: SalesCard;
     newCustomers?: CountCard;
     customersWhoCameBack?: CountCard;
   };
