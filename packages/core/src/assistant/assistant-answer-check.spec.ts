@@ -12,6 +12,17 @@ describe('numbersAreFromTools', () => {
     expect(numbersAreFromTools('বিক্রি ৩,৪২,৮০০ টাকা, অর্ডার ৯০৪টি', [sales])).toBe(true);
   });
 
+  it('accepts the size of a negative change when the reply says down', () => {
+    expect(
+      numbersAreFromTools('Sales are down 12.5% on the 30 days before.', [
+        { salesChangePercent: -12.5, days: 30 },
+      ]),
+    ).toBe(true);
+    expect(
+      numbersAreFromTools('Sales are down 13.5%.', [{ salesChangePercent: -12.5, days: 30 }]),
+    ).toBe(false);
+  });
+
   it('rejects a figure no tool returned', () => {
     expect(numbersAreFromTools('Sales were ৳3,42,900.', [sales])).toBe(false);
     expect(numbersAreFromTools('You made 904 orders and 50 returns.', [sales])).toBe(false);

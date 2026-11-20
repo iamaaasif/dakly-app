@@ -9,7 +9,8 @@ export function numbersAreFromTools(reply: string, toolResults: readonly object[
 }
 
 function numbersIn(value: unknown, found = new Set<number>()): Set<number> {
-  if (typeof value === 'number') found.add(value);
+  // A reply says "down 12.5%", so a negative change is known by its size.
+  if (typeof value === 'number') found.add(Math.abs(value));
   else if (typeof value === 'string')
     for (const [digits] of toAsciiDigits(value).matchAll(numberPattern))
       found.add(Number(digits.replaceAll(',', '')));
