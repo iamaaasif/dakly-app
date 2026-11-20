@@ -7,8 +7,10 @@ type CustomerBadgesProps = { customer: Pick<ContactResponse, 'kind' | 'tags'> };
 
 export function CustomerBadges({ customer }: CustomerBadgesProps) {
   return (
-    <div className="flex flex-wrap gap-1">
-      <Badge>{customerKindLabels[customer.kind]}</Badge>
+    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+      <Badge variant={customer.kind === 'customer' ? 'neutral' : 'info'}>
+        {customerKindLabels[customer.kind]}
+      </Badge>
       {customer.tags.map((tag) => (
         <Badge key={tag} variant="info">
           {tag}

@@ -1,50 +1,114 @@
 import Link from 'next/link';
 
 import type { ContactResponse } from '@dakly/contracts/contacts';
+import { Badge } from '@dakly/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
-import { customerPhone } from '../customer-labels';
+import { customerKindLabels, customerPhone } from '../customer-labels';
 import { CustomerBadges } from './customer-badges';
+import { initialsOf } from '@/lib/initials';
 
 type CustomerListProps = { customers: ContactResponse[] };
 
+const headers = [
+  { label: 'Customer' },
+  { label: 'Phone' },
+  { label: 'WhatsApp' },
+  { label: 'Email' },
+  { label: 'Location' },
+  { label: 'Type' },
+  { label: 'Orders', right: true },
+  { label: 'Spent', right: true },
+  { label: 'Last purchase' },
+] as const;
+
 export function CustomerList({ customers }: CustomerListProps) {
   return (
-    <>
-      <ul className="space-y-3 md:hidden">
-        {customers.map((customer) => (
-          <li key={customer.id} className="rounded-lg border border-border bg-surface p-4">
-            <CustomerLink customer={customer} />
-            <p className="tabular-nums">{customerPhone(customer)}</p>
-            <CustomerBadges customer={customer} />
-          </li>
-        ))}
-      </ul>
-      <div className="hidden md:block">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Customer</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Type and tags</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {customers.map((customer) => (
-              <TableRow key={customer.id}>
-                <TableCell>
-                  <CustomerLink customer={customer} />
-                </TableCell>
-                <TableCell className="tabular-nums">{customerPhone(customer)}</TableCell>
-                <TableCell>
-                  <CustomerBadges customer={customer} />
-                </TableCell>
-              </TableRow>
+    <div className="space-y-4">
+      <CustomerMobileList customers={customers} />
+      <CustomerTable customers={customers} />
+    </div>
+  );
+}
+
+function CustomerMobileList({ customers }: CustomerListProps) {
+  return (
+    <ul className="space-y-3 md:hidden">
+      {customers.map((customer) => (
+        <li key={customer.id} className="space-y-2 rounded-lg border border-border bg-surface p-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-text-muted">
+              {initialsOf(customer.name ?? 'Customer')}
+            </span>
+            <div className="min-w-0 flex-1">
+              <CustomerLink customer={customer} />
+              <p className="text-sm text-text-muted tabular-nums">{customerPhone(customer)}</p>
+            </div>
+            <Badge variant={customer.kind === 'customer' ? 'neutral' : 'info'}>
+              {customerKindLabels[customer.kind]}
+            </Badge>
+          </div>
+          <CustomerBadges customer={customer} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function CustomerTable({ customers }: CustomerListProps) {
+  return (
+    <div className="hidden overflow-hidden rounded-lg border border-border bg-surface md:block">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-surface-muted/50 hover:bg-surface-muted/50">
+            {headers.map((h) => (
+              <TableHead
+                key={h.label}
+                className={`text-xs font-semibold tracking-wider text-text-muted uppercase ${'right' in h ? 'text-right' : ''}`}
+              >
+                {h.label}
+              </TableHead>
             ))}
-          </TableBody>
-        </Table>
-      </div>
-    </>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {customers.map((customer) => (
+            <CustomerTableRow key={customer.id} customer={customer} />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function CustomerTableRow({ customer }: { customer: ContactResponse }) {
+  const name = customer.name ?? 'No name';
+  return (
+    <TableRow className="hover:bg-surface-muted/30">
+      <TableCell>
+        <div className="flex items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-text-muted">
+            {initialsOf(name)}
+          </span>
+          <div className="min-w-0">
+            <CustomerLink customer={customer} />
+            <CustomerBadges customer={customer} />
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="text-sm tabular-nums">{customerPhone(customer)}</TableCell>
+      <TableCell className="text-sm text-text-muted tabular-nums">—</TableCell>
+      <TableCell className="text-sm text-text-muted">No email</TableCell>
+      <TableCell className="text-sm text-text-muted">—</TableCell>
+      <TableCell>
+        <Badge variant={customer.kind === 'customer' ? 'neutral' : 'info'}>
+          {customerKindLabels[customer.kind]}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right text-sm text-text-muted tabular-nums">—</TableCell>
+      <TableCell className="text-right text-sm text-text-muted tabular-nums">—</TableCell>
+      <TableCell className="text-sm text-text-muted">—</TableCell>
+    </TableRow>
   );
 }
 
@@ -52,7 +116,7 @@ function CustomerLink({ customer }: { customer: ContactResponse }) {
   return (
     <Link
       href={`/customers/${customer.id}`}
-      className="inline-flex min-h-10 items-center font-medium text-action underline"
+      className="inline-flex min-h-10 items-center font-semibold text-text hover:underline"
     >
       {customer.name ?? 'No name'}
     </Link>

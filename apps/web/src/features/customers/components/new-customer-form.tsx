@@ -6,13 +6,16 @@ import { useForm } from 'react-hook-form';
 import { type CreateContactInput, createContactSchema } from '@dakly/contracts/contacts';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
-import { Card } from '@dakly/ui/card';
 
 import { useCreateCustomer } from '../api/create-customer';
 import { isPhoneTaken } from '../customer-errors';
 import { NewCustomerFields } from './new-customer-fields';
 
-export function NewCustomerForm() {
+type NewCustomerFormProps = {
+  onDone?: () => void;
+};
+
+export function NewCustomerForm({ onDone }: NewCustomerFormProps) {
   const { register, handleSubmit, reset, setError, formState } = useForm<CreateContactInput>({
     resolver: zodResolver(createContactSchema),
   });
@@ -20,7 +23,10 @@ export function NewCustomerForm() {
 
   const onSubmit = handleSubmit((input) =>
     createCustomer.mutate(input, {
-      onSuccess: () => reset(),
+      onSuccess: () => {
+        reset();
+        onDone?.();
+      },
       onError: (error) => {
         if (isPhoneTaken(error)) setError('phone', { message: error.message });
       },
@@ -28,24 +34,28 @@ export function NewCustomerForm() {
   );
 
   return (
-    <Card>
-      <h2 className="mb-6 text-md font-semibold">Add customer</h2>
-      <form onSubmit={onSubmit} className="space-y-4">
-        <NewCustomerFields register={register} errors={formState.errors} />
-        {createCustomer.error && !isPhoneTaken(createCustomer.error) && (
-          <p role="alert" className="text-danger">
-            {createCustomer.error.message}
-          </p>
-        )}
+    <form onSubmit={onSubmit} className="space-y-4">
+      <NewCustomerFields register={register} errors={formState.errors} />
+      {createCustomer.error && !isPhoneTaken(createCustomer.error) && (
+        <p role="alert" className="text-danger">
+          {createCustomer.error.message}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+        {onDone ? (
+          <Button type="button" variant="secondary" onClick={onDone}>
+            Cancel
+          </Button>
+        ) : null}
         <Button type="submit" loading={createCustomer.isPending}>
           Add customer
         </Button>
-        {createCustomer.isSuccess && (
-          <p role="status">
-            <Badge variant="success">Customer added</Badge>
-          </p>
-        )}
-      </form>
-    </Card>
+      </div>
+      {createCustomer.isSuccess && (
+        <p role="status">
+          <Badge variant="success">Customer added</Badge>
+        </p>
+      )}
+    </form>
   );
 }

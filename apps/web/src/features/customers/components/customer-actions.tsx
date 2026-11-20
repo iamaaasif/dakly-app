@@ -20,7 +20,7 @@ export function CustomerActions({ customer }: CustomerActionsProps) {
       <Button variant="secondary" onClick={() => setAction('edit')}>
         Edit customer
       </Button>
-      <Button variant="danger" onClick={() => setAction('delete')}>
+      <Button variant="secondary" onClick={() => setAction('delete')}>
         Delete customer
       </Button>
       {action === 'edit' ? (
