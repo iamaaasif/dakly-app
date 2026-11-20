@@ -20,11 +20,11 @@ describe('SMS campaign body URLs', () => {
   });
 
   it('preserves message brackets and matched brackets inside the URL', () => {
-    const text = 'Open (https://shop.example.test/item(foo)).';
+    const text = 'Open (https://shop.example.test/item(foo))).';
     const urls = campaignSmsUrls(text);
 
     expect(urls.map(({ target }) => target)).toEqual(['https://shop.example.test/item(foo)']);
-    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe('Open (/short).');
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe('Open (/short)).');
   });
 
   it('wraps two links in order', () => {

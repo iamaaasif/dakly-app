@@ -368,7 +368,7 @@ When no queued or claimed recipient remains, the sender settles the reservation,
 
 Approving an SMS freezes its short-link base. The estimate and reservation count the final SMS parts using sample redirect and opt-out codes of the same length as real codes. Approval creates no tracked links.
 
-During recipient preparation, the sender wraps each HTTP or HTTPS URL that starts a word in the message. The URL can be inside parentheses or square brackets and ends at the next space. Trailing sentence punctuation and unmatched closing brackets stay in the message. The sender stores the ordered redirect codes and the opt-out code under the recipient lock, with an empty redirect list when there are no links. Retries use the same codes and short-link base. Settlement uses the SMS parts in the rendered body.
+During recipient preparation, the sender wraps each HTTP or HTTPS URL that starts a word in the message. The URL can be inside parentheses or square brackets and ends at the next whitespace. Trailing sentence punctuation and unmatched closing brackets stay in the message. The sender stores the ordered redirect codes and the opt-out code under the recipient lock, with an empty redirect list when there are no links. Retries use the same codes and short-link base. Settlement uses the SMS parts in the rendered body.
 
 ### Results counts (CAMP-3)
 

@@ -9,11 +9,10 @@ export function campaignSmsUrls(text: string): SmsUrl[] {
     const prefix = match[1] ?? '';
     const start = match.index + prefix.length;
     let url = match[0].slice(prefix.length).replace(sentencePunctuation, '');
-    const close = url.at(-1);
-    if (close === ')' || close === ']') {
+    for (let close = url.at(-1); close === ')' || close === ']'; close = url.at(-1)) {
       const open = close === ')' ? '(' : '[';
-      if (url.split(close).length > url.split(open).length)
-        url = url.slice(0, -1).replace(sentencePunctuation, '');
+      if (url.split(close).length <= url.split(open).length) break;
+      url = url.slice(0, -1).replace(sentencePunctuation, '');
     }
     if (URL.canParse(url)) urls.push({ start, end: start + url.length, target: new URL(url).href });
   }
