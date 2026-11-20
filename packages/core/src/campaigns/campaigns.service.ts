@@ -102,6 +102,10 @@ export class CampaignsService {
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
+  hasStarted(storeId: string): Promise<boolean> {
+    return this.repository.hasStarted(storeId);
+  }
+
   messageTotals(storeId: string, range: { from: string; through: string; timeZone: string }) {
     return this.messageTotalsRepository.messageTotals(storeId, range);
   }
