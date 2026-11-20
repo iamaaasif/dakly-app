@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
 
-import { parseMetaReceipts, parseMetaWebhook } from '@dakly/providers/channel/meta/meta-webhook';
+import {
+  parseMetaPostbacks,
+  parseMetaReceipts,
+  parseMetaWebhook,
+} from '@dakly/providers/channel/meta/meta-webhook';
 
 import { MessagingModule } from '../messaging/messaging.module';
 import { ClockModule } from '../platform/clock.module';
@@ -13,7 +17,11 @@ import { MetaWebhooksRepository } from './meta-webhooks.repository';
   providers: [
     {
       provide: META_WEBHOOK_DRIVER,
-      useValue: { parseWebhook: parseMetaWebhook, parseReceipts: parseMetaReceipts },
+      useValue: {
+        parseWebhook: parseMetaWebhook,
+        parseReceipts: parseMetaReceipts,
+        parsePostbacks: parseMetaPostbacks,
+      },
     },
     ProcessWebhookEventJob,
     MetaWebhookRoutingService,

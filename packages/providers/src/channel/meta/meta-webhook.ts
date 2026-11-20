@@ -2,7 +2,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { z } from 'zod';
 
-import type { ChannelReceipt, InboundAttachmentKind, InboundMessage } from '../channel-driver';
+import type {
+  ChannelReceipt,
+  InboundAttachmentKind,
+  InboundMessage,
+  InboundPostback,
+} from '../channel-driver';
 
 const deliverySchema = z.looseObject({
   object: z.string().min(1),
@@ -26,6 +31,11 @@ const messagingEvent = z.object({
     is_self: z.boolean().optional(),
     is_deleted: z.boolean().optional(),
   }),
+});
+const postbackEvent = z.object({
+  ...participants,
+  timestamp,
+  postback: z.object({ payload: z.string().min(1).max(1000) }),
 });
 const attachmentKinds = {
   image: 'image',
@@ -83,6 +93,18 @@ function inboundMessage(channel: MetaMessagingChannel, account: string, event: u
     attachments,
     sentAt: new Date(timestamp),
   } satisfies InboundMessage;
+}
+
+function inboundPostback(channel: MetaMessagingChannel, account: string, event: unknown) {
+  const parsed = postbackEvent.safeParse(event).data;
+  if (!parsed || parsed.recipient.id !== account || parsed.sender.id === account) return undefined;
+  return {
+    channel,
+    accountExternalId: account,
+    senderExternalId: parsed.sender.id,
+    payload: parsed.postback.payload,
+    occurredAt: new Date(parsed.timestamp),
+  } satisfies InboundPostback;
 }
 
 function receipt(
@@ -158,6 +180,10 @@ function parseDelivery<T>(
 
 export function parseMetaWebhook(payload: unknown): InboundMessage[] {
   return parseDelivery(payload, inboundMessage);
+}
+
+export function parseMetaPostbacks(payload: unknown): InboundPostback[] {
+  return parseDelivery(payload, inboundPostback);
 }
 
 export function parseMetaReceipts(payload: unknown): ChannelReceipt[] {

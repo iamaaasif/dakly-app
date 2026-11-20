@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseMetaReceipts, parseMetaWebhook } from './meta-webhook';
+import { parseMetaPostbacks, parseMetaReceipts, parseMetaWebhook } from './meta-webhook';
 
 const timestamp = 1795053600000;
 const message = {
@@ -219,5 +219,45 @@ describe('Meta webhook receipts', () => {
     expect(
       parseMetaReceipts({ object: 'instagram', entry: [{ id: '10001', messaging: [outbound] }] }),
     ).toEqual([]);
+  });
+});
+
+describe('Meta webhook postbacks', () => {
+  const tap = {
+    sender: { id: '10003' },
+    recipient: { id: '10001' },
+    timestamp,
+    postback: { title: 'হ্যাঁ, নিশ্চিত করুন', payload: 'order-confirm:v1:abc', mid: 'm_tap' },
+  };
+
+  it('reads a button tap from a Page delivery', () => {
+    expect(
+      parseMetaPostbacks({ object: 'page', entry: [{ id: '10001', messaging: [tap] }] }),
+    ).toEqual([
+      {
+        channel: 'messenger',
+        accountExternalId: '10001',
+        senderExternalId: '10003',
+        payload: 'order-confirm:v1:abc',
+        occurredAt: new Date(timestamp),
+      },
+    ]);
+  });
+
+  it('skips a tap without a payload, one sent by the Page itself and a normal message', () => {
+    const messaging = [
+      { ...tap, postback: { title: 'x' } },
+      { ...tap, postback: { payload: '' } },
+      { ...tap, sender: { id: '10001' } },
+      { ...tap, recipient: { id: '10002' } },
+      message,
+    ];
+    expect(parseMetaPostbacks({ object: 'page', entry: [{ id: '10001', messaging }] })).toEqual([]);
+  });
+
+  it('does not read a button tap as a message or a receipt', () => {
+    const delivery = { object: 'page', entry: [{ id: '10001', messaging: [tap] }] };
+    expect(parseMetaWebhook(delivery)).toEqual([]);
+    expect(parseMetaReceipts(delivery)).toEqual([]);
   });
 });
