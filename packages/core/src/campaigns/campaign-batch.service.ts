@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { Clock } from '../platform/clock';
 import { ErrorReporter } from '../platform/logging/error-reporter';
@@ -11,6 +11,7 @@ import { CampaignSendingRepository } from './campaign-sending.repository';
 
 @Injectable()
 export class CampaignBatchService {
+  private readonly logger = new Logger(CampaignBatchService.name);
   constructor(
     @Inject(CampaignSendingRepository) private readonly repository: CampaignSendingRepository,
     @Inject(CampaignSenderService) private readonly sender: CampaignSenderService,
@@ -24,10 +25,12 @@ export class CampaignBatchService {
     const campaignId = await this.repository.nextCampaignId(storeId, expired);
     const next = campaignId
       ? await this.sender.sendBatch(storeId, campaignId).catch(async (dispatchError: unknown) => {
-          await this.counts.repairNext(storeId).catch((error: unknown) => {
+          const repair = this.counts.repairNext(storeId).catch((error: unknown) => {
+            this.logger.error({ storeId }, 'Campaign results repair failed after dispatch error');
             const { jobId } = jobLogBindings();
             if (jobId) this.reporter.reportJob(serializeError(error), jobId);
           });
+          await repair.catch(() => undefined);
           throw dispatchError;
         })
       : null;

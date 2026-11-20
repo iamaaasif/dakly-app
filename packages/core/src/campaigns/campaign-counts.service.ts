@@ -13,7 +13,6 @@ type RecipientOutcome = {
   guard: RecipientUpdate[2];
   change: RecipientUpdate[3];
 };
-
 type Acceptance = {
   recipientId: string;
   providerMessageId: string;
@@ -54,7 +53,6 @@ export class CampaignCountsService {
     id: string,
     { recipientId, providerMessageId, credits, sentAt, requireSavedReceipt }: Acceptance,
   ): Promise<void> {
-    // A late acceptance can replace an unresolved outcome for the same receipt.
     await this.recordOutcome(storeId, id, {
       recipientId,
       guard: {

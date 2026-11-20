@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { Queue } from 'bullmq';
@@ -754,30 +754,43 @@ describe('Campaign sender (Postgres)', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('reports a repair failure without replacing the original dispatch error', async () => {
-    const pending = await finishedWithoutCounts();
-    const active = await sendingCampaign(1);
-    const batch = app.get(SendCampaignBatchJob);
-    const save = vi.spyOn(app.get(CampaignCountsRepository), 'save');
-    const report = vi.spyOn(app.get(ErrorReporter), 'reportJob');
-    save.mockRejectedValueOnce(new Error('repair unavailable'));
-    vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new SmsSendRefused());
-    try {
-      await expect(
-        runWithJobContext(() => batch.handle({ storeId }), 'repair-test'),
-      ).rejects.toMatchObject({ code: 'SMS_SEND_REFUSED' });
-      expect(report).toHaveBeenCalledWith(
-        expect.objectContaining({ errorClass: 'Error' }),
-        'repair-test',
-      );
-      expect((await campaigns.get(storeId, pending)).counts.countedAt).toBeNull();
-    } finally {
-      save.mockRestore();
-      report.mockRestore();
-      await campaigns.cancel(storeId, active.id, actor);
-      await batch.handle({ storeId });
-    }
-  });
+  it.each([false, true])(
+    'keeps the original dispatch error when reporting a repair failure (reporter throws: %s)',
+    async (reporterThrows) => {
+      const pending = await finishedWithoutCounts();
+      const active = await sendingCampaign(1);
+      const batch = app.get(SendCampaignBatchJob);
+      const save = vi.spyOn(app.get(CampaignCountsRepository), 'save');
+      const report = vi.spyOn(app.get(ErrorReporter), 'reportJob');
+      if (reporterThrows)
+        report.mockImplementationOnce(() => {
+          throw new Error('reporter unavailable');
+        });
+      const log = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      save.mockRejectedValueOnce(new Error('repair unavailable'));
+      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new SmsSendRefused());
+      try {
+        await expect(
+          runWithJobContext(() => batch.handle({ storeId }), 'repair-test'),
+        ).rejects.toMatchObject({ code: 'SMS_SEND_REFUSED' });
+        expect(report).toHaveBeenCalledWith(
+          expect.objectContaining({ errorClass: 'Error' }),
+          'repair-test',
+        );
+        expect(log).toHaveBeenCalledWith(
+          { storeId },
+          'Campaign results repair failed after dispatch error',
+        );
+        expect((await campaigns.get(storeId, pending)).counts.countedAt).toBeNull();
+      } finally {
+        save.mockRestore();
+        report.mockRestore();
+        log.mockRestore();
+        await campaigns.cancel(storeId, active.id, actor);
+        await batch.handle({ storeId });
+      }
+    },
+  );
 
   it('preserves a paused campaign acceptance when its rollup fails and repairs it in a later batch', async () => {
     const { id } = await sendingCampaign(1);

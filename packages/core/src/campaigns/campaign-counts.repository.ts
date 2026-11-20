@@ -10,7 +10,6 @@ import { recipientsWhere } from './campaigns.repository';
 @Injectable()
 export class CampaignCountsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
-
   async nextPending(storeId: string) {
     const [next] = await this.database.forStore(storeId, (tx) =>
       tx
