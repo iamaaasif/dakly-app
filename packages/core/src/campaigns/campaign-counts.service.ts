@@ -31,9 +31,11 @@ export class CampaignCountsService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
   ) {}
 
-  async repairNext(storeId: string): Promise<void> {
+  async repairNext(storeId: string): Promise<boolean> {
     const id = await this.counts.nextPending(storeId);
-    if (id) await this.refresh(storeId, id, 'batch');
+    if (!id) return false;
+    await this.refresh(storeId, id, 'batch');
+    return Boolean(await this.counts.nextPending(storeId));
   }
 
   async refresh(storeId: string, id: string, mode: 'batch' | 'force'): Promise<void> {

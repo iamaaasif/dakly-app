@@ -677,7 +677,7 @@ describe('Campaign sender (Postgres)', () => {
     },
   );
 
-  it('repairs an older campaign’s stored totals while a send waits for quiet hours', async () => {
+  async function finishedWithoutCounts() {
     const { id } = await sendingCampaign(2);
     await admin.pool.query("update campaigns set status='sent', finished_at=$2 where id=$1", [
       id,
@@ -691,6 +691,11 @@ describe('Campaign sender (Postgres)', () => {
        (select id from campaign_recipients where campaign_id=$1 limit 1)`,
       [id],
     );
+    return id;
+  }
+
+  it('repairs an older campaign’s stored totals while a send waits for quiet hours', async () => {
+    const id = await finishedWithoutCounts();
     expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 0, countedAt: null });
     expect(await app.get(CampaignSendingRepository).listDueStores(noon, null, 100)).toContain(
       storeId,
@@ -714,6 +719,37 @@ describe('Campaign sender (Postgres)', () => {
     expect((await campaigns.get(storeId, id)).counts).toMatchObject(counts);
     const { items } = await campaigns.list(storeId, { limit: 100 });
     expect(items.find((item) => item.id === id)?.counts).toMatchObject(counts);
+  });
+
+  it('repairs an older rollup even when the provider refuses a send', async () => {
+    const pending = await finishedWithoutCounts();
+    const active = await sendingCampaign(1);
+    vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new SmsSendRefused());
+    try {
+      await expect(app.get(SendCampaignBatchJob).handle({ storeId })).rejects.toMatchObject({
+        code: 'SMS_SEND_REFUSED',
+      });
+      expect((await campaigns.get(storeId, pending)).counts).toMatchObject({
+        sent: 1,
+        failed: 1,
+        countedAt: expect.any(String),
+      });
+      expect((await recipients(active.id))[0]).toMatchObject({ status: 'queued' });
+    } finally {
+      await campaigns.cancel(storeId, active.id, actor);
+    }
+  });
+
+  it('continues an idle store batch through pending rollups one at a time', async () => {
+    const pending = [await finishedWithoutCounts(), await finishedWithoutCounts()].sort();
+    const batch = app.get(SendCampaignBatchJob);
+
+    expect(await batch.handle({ storeId })).toEqual({ delayUntil: clockNow.getTime() });
+    expect((await campaigns.get(storeId, pending[0]!)).counts.sent).toBe(1);
+    expect((await campaigns.get(storeId, pending[1]!)).counts.countedAt).toBeNull();
+    expect(await batch.handle({ storeId })).toBeUndefined();
+    expect((await campaigns.get(storeId, pending[1]!)).counts.sent).toBe(1);
+    expect(calls).toHaveLength(0);
   });
 
   it('preserves a paused campaign acceptance when its rollup fails and repairs it in a later batch', async () => {
