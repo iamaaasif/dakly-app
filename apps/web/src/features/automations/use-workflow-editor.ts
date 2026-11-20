@@ -2,7 +2,11 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import type { AutomationDetailResponse } from '@dakly/contracts/automations';
-import { type AutomationGraph, automationGraphSchema } from '@dakly/contracts/automations/graph';
+import {
+  type AutomationGraph,
+  automationGraphSchema,
+  type AutomationStep,
+} from '@dakly/contracts/automations/graph';
 
 import { usePublishAutomation, useSaveAutomation } from './api/automation-settings';
 import type { useAutomation } from './api/automations';
@@ -13,6 +17,7 @@ import {
   moveStep,
   type NewStepKind,
   removeStep,
+  replaceStep,
 } from './workflow-graph-edit';
 
 type Refresh = ReturnType<typeof useAutomation>['refetch'];
@@ -24,6 +29,7 @@ function graphEdits(graph: AutomationGraph, change: (next: AutomationGraph) => v
       change(insertStep(graph, edge, kind)),
     append: (kind: NewStepKind) => change(appendStep(graph, kind)),
     remove: (key: string) => change(removeStep(graph, key)),
+    update: (key: string, step: AutomationStep) => change(replaceStep(graph, key, step)),
     canMove: (key: string, direction: 'up' | 'down') =>
       moveStep(graph, key, direction) !== undefined,
     move: (key: string, direction: 'up' | 'down') =>

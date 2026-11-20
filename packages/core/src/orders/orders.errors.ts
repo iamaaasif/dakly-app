@@ -26,6 +26,10 @@ const ORDER_ERRORS = {
     status: 429,
     message: 'Too many taps. Try again in a minute',
   },
+  ORDER_ADVANCE_REQUIRED: {
+    status: 409,
+    message: 'This customer must pay the delivery charge in advance before the order is confirmed',
+  },
   ORDER_STAGE_NOT_ALLOWED: { status: 409, message: 'This order cannot move to that stage' },
 } as const satisfies ErrorCatalog;
 

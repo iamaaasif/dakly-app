@@ -125,6 +125,7 @@ export type CanvasEditing = {
   remove: (key: string) => void;
   canMove: (key: string, direction: 'up' | 'down') => boolean;
   move: (key: string, direction: 'up' | 'down') => void;
+  open: (key: string) => void;
 };
 
 function StepMenu({
@@ -176,12 +177,12 @@ function StatsChip({
   const parts =
     step.kind === 'send'
       ? [`${formatCount(counts.sent)} sent`, `${formatCount(counts.tapped)} tapped`]
-      : [`${formatCount(counts.reached)} reached`];
+      : [`${formatCount(counts.reached)} ${counts.reached === 1 ? 'entry' : 'entries'}`];
   return (
     <p className="shadow-sm absolute -top-2.5 right-3 rounded-full border border-border bg-surface px-2 text-xs text-text-muted tabular-nums">
       {parts.join(' · ')}
       <span className="sr-only">
-        {`. ${formatCount(counts.reached)} people reached this step.`}
+        {`. ${formatCount(counts.reached)} ${counts.reached === 1 ? 'entry' : 'entries'} reached this step.`}
       </span>
     </p>
   );
@@ -218,6 +219,28 @@ function TriggerCard({ graph, layout, recentEntries }: TriggerCardProps) {
   );
 }
 
+function EditOverlays({
+  node,
+  number,
+  editing,
+}: {
+  node: CanvasNode;
+  number: number;
+  editing: CanvasEditing;
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`Edit step ${number}`}
+        onClick={() => editing.open(node.key)}
+        className="absolute inset-0 rounded-lg focus-visible:outline-2 focus-visible:outline-focus"
+      />
+      <StepMenu node={node} number={number} editing={editing} />
+    </>
+  );
+}
+
 function NodeExtras({
   node,
   editing,
@@ -232,7 +255,7 @@ function NodeExtras({
     <>
       {stats && step && step.kind !== 'exit' && <StatsChip step={step} stats={stats[node.key]} />}
       {editing && step && number !== null && (
-        <StepMenu node={node} number={number} editing={editing} />
+        <EditOverlays node={node} number={number} editing={editing} />
       )}
       {node.branches.length > 0 && (
         <ul className="sr-only">

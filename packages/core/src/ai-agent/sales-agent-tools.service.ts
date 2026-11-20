@@ -1,7 +1,11 @@
+import { createHash } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 import { ZodError } from 'zod';
 
 import {
+  confirmOrderTool,
+  draftOrderTool,
   getDeliveryChargeTool,
   getMyOrdersTool,
   getOrderStatusTool,
@@ -16,13 +20,20 @@ import { formatMoney } from '@dakly/contracts/money';
 import type { LlmTool } from '@dakly/providers/llm/llm-driver';
 
 import { KnowledgeSearchService } from '../ai/knowledge-search.service';
+import { ContactMatchSuggestionsService } from '../contacts/contact-match-suggestions.service';
 import { DeliveryService } from '../delivery/delivery.service';
 import { BuyerOrdersService } from '../orders/buyer-orders.service';
+import { ChatOrdersService } from '../orders/chat-orders.service';
 import { AppError } from '../platform/errors/app-error';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 
 // The agent job supplies both ids. No tool argument can name another store or customer.
-export type ToolScope = { storeId: string; contactId: string };
+export type ToolScope = {
+  storeId: string;
+  contactId: string;
+  // A practice question has no chat, so it can read but cannot take an order.
+  chat?: { conversationId: string; channel: 'messenger' | 'instagram' };
+};
 type Handler = (scope: ToolScope, raw: unknown) => Promise<object>;
 
 const SEARCH_PRODUCT_LIMIT = 3;
@@ -51,6 +62,8 @@ export class SalesAgentToolsService {
     [getMyOrdersTool.name]: (scope, raw) => this.getMyOrders(scope, raw),
     [getOrderStatusTool.name]: (scope, raw) => this.getOrderStatus(scope, raw),
     [sendProductCardTool.name]: (scope, raw) => this.sendProductCard(scope, raw),
+    [draftOrderTool.name]: (scope, raw) => this.draftOrder(scope, raw),
+    [confirmOrderTool.name]: (scope, raw) => this.confirmOrder(scope, raw),
     [handOverTool.name]: (_scope, raw) => this.handOver(raw),
   };
 
@@ -59,6 +72,9 @@ export class SalesAgentToolsService {
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(KnowledgeSearchService) private readonly knowledge: KnowledgeSearchService,
     @Inject(BuyerOrdersService) private readonly orders: BuyerOrdersService,
+    @Inject(ChatOrdersService) private readonly chatOrders: ChatOrdersService,
+    @Inject(ContactMatchSuggestionsService)
+    private readonly phoneMatches: ContactMatchSuggestionsService,
   ) {}
 
   // The result goes back to the model, so a failure the model can act on is a result, not a throw.
@@ -152,6 +168,56 @@ export class SalesAgentToolsService {
     return { cardText: productCardText(product), ...productResult(product) };
   }
 
+  private async draftOrder({ storeId, contactId, chat }: ToolScope, raw: unknown) {
+    const input = draftOrderTool.input.parse(raw);
+    if (!chat) return { error: 'NOT_IN_A_CHAT' };
+    const areaId = await this.delivery.findAreaIdByName(storeId, input.area);
+    // The own phone is saved before the order so a number held by another contact shows staff a
+    // possible match even when the order then fails (D27).
+    await this.phoneMatches.captureOwnPhone(storeId, {
+      contactId,
+      phone: input.phone,
+      conversationId: chat.conversationId,
+    });
+    const items = input.items.map(({ variantId, quantity }) => ({ variantId, quantity }));
+    const order = await this.chatOrders.draft(
+      storeId,
+      {
+        contactId,
+        items: items.map((item) => ({ ...item, lineDiscountPoisha: 0 })),
+        recipient: {
+          name: input.recipientName,
+          phone: input.phone,
+          address: input.address,
+          areaId,
+          isBuyer: true,
+        },
+        orderDiscountPoisha: 0,
+        advancePaidPoisha: 0,
+      },
+      { channel: chat.channel, idempotencyKey: draftKey(chat.conversationId, input, areaId) },
+    );
+    return {
+      orderNumber: order.number,
+      stage: order.stage,
+      items: order.items.map((item) => ({
+        product: item.productName,
+        variant: item.variantTitle,
+        quantity: item.quantity,
+        unitPriceTaka: taka(item.unitPricePoisha),
+      })),
+      deliveryTo: `${order.recipientAddress}, ${order.recipientDistrict}`,
+      deliveryChargeTaka: taka(order.deliveryChargePoisha),
+      totalTaka: taka(order.totalPoisha),
+    };
+  }
+
+  private async confirmOrder({ storeId, contactId }: ToolScope, raw: unknown) {
+    const { orderNumber } = confirmOrderTool.input.parse(raw);
+    const order = await this.chatOrders.confirm(storeId, contactId, orderNumber);
+    return { orderNumber: order.number, stage: order.stage };
+  }
+
   private async handOver(raw: unknown) {
     const { reason } = handOverTool.input.parse(raw);
     return { handedOver: true, reason };
@@ -167,6 +233,18 @@ function parseJson(text: string): unknown {
 }
 
 const taka = (poisha: number) => poisha / 100;
+
+// The same chat and the same details give the same key, so a retried job or a repeated model call
+// returns the order it already made.
+function draftKey(
+  conversationId: string,
+  input: ReturnType<typeof draftOrderTool.input.parse>,
+  areaId: number,
+) {
+  const items = input.items.map(({ variantId, quantity }) => `${variantId}x${quantity}`).sort();
+  const details = [...items, input.phone, input.address, areaId].join('|');
+  return `ai-order:${conversationId}:${createHash('sha256').update(details).digest('hex').slice(0, 32)}`;
+}
 
 function productResult(product: ChatProduct) {
   return {
