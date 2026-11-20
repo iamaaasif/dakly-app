@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { isTriggerAvailable } from '@dakly/contracts/automations/catalogue';
 import { type AutomationGraph, automationGraphSchema } from '@dakly/contracts/automations/graph';
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 
@@ -28,14 +29,33 @@ function reread(): AutomationGraph {
 }
 
 describe('checkWorkflow', () => {
-  it.each(Object.entries(automationTemplates))(
-    'has no blockers for the %s template',
-    (_name, item) => {
-      const graph: AutomationGraph = item.graph;
-      const numberOf = (key: string) => Object.keys(graph.steps).indexOf(key) + 1;
-      expect(checkWorkflow(graph, numberOf).filter((check) => check.level === 'block')).toEqual([]);
-    },
-  );
+  it.each(
+    Object.entries(automationTemplates).filter(([, item]) =>
+      isTriggerAvailable(item.graph.trigger.key),
+    ),
+  )('has no blockers for the %s template', (_name, item) => {
+    const graph: AutomationGraph = item.graph;
+    const numberOf = (key: string) => Object.keys(graph.steps).indexOf(key) + 1;
+    expect(checkWorkflow(graph, numberOf).filter((check) => check.level === 'block')).toEqual([]);
+  });
+
+  it('blocks a message step with no channel that can send yet', () => {
+    const [key, step] = Object.entries(template.steps).find(([, item]) => item.kind === 'send')!;
+    const graph = {
+      ...template,
+      steps: { ...template.steps, [key]: { ...step, channels: ['whatsapp'] } as never },
+    };
+    const checks = checkWorkflow(graph, number);
+    expect(checks.find((check) => check.id === `no-channel:${key}`)?.level).toBe('block');
+  });
+
+  it('blocks a workflow whose trigger the shop cannot use yet', () => {
+    const unavailable = Object.values(automationTemplates).find(
+      (item) => !isTriggerAvailable(item.graph.trigger.key),
+    )!;
+    const checks = checkWorkflow(unavailable.graph, () => 1);
+    expect(checks.map((check) => check.id)).toContain('trigger-unavailable');
+  });
 
   it('blocks a split that reads a message which comes after it', () => {
     const send = Object.entries(template.steps).find(([, step]) => step.kind === 'send')!;
