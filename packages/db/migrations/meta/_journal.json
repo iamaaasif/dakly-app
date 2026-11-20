@@ -442,6 +442,13 @@
       "when": 1795142819463,
       "tag": "0062_product_categories_index",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1795146170109,
+      "tag": "0063_campaign_result_repair",
+      "breakpoints": true
     }
   ]
 }

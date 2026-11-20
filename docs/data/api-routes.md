@@ -225,6 +225,8 @@ An Owner, Admin or Marketer must approve an AI-written draft.
 | `GET /automations/:automationId/trigger-preview`                                                                                                   | `automations` |
 | `GET /automations/:automationId/runs`                                                                                                              | `automations` |
 
+Campaign detail and list responses include the send start, finish and stored recipient counts. The count time identifies when the worker last refreshed the recipient totals.
+
 `POST /campaigns/:campaignId/approve` takes no `Idempotency-Key` header: the draft row lock, `CAMPAIGN_NOT_DRAFT` (409) on a repeat and the wallet reservation key make a retry safe. A send-now route outside approval (CAMP-3) takes a real key.
 
 ## Dashboard, notifications and assistant (10)

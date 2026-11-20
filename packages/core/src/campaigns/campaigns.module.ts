@@ -17,6 +17,8 @@ import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { CampaignBatchService } from './campaign-batch.service';
+import { CampaignCountsRepository } from './campaign-counts.repository';
+import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
@@ -44,13 +46,15 @@ import { CampaignsService } from './campaigns.service';
   ],
   controllers: [CampaignsController],
   providers: [
+    CampaignCountsRepository,
+    CampaignCountsService,
     CampaignsRepository,
     CampaignSendingRepository,
     CampaignsService,
     CampaignSenderService,
     CampaignFundingService,
   ],
-  exports: [CampaignFundingService, CampaignsService],
+  exports: [CampaignCountsService, CampaignFundingService, CampaignsService],
 })
 export class CampaignsModule {
   static forWorker(): DynamicModule {

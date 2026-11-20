@@ -1314,7 +1314,13 @@ fixture('POST /campaigns', async () => {
 fixture('GET /campaigns/:campaignId', async () => {
   const { a, b } = await pair(),
     id = await campaign(a);
-  expect((await success(a, 'GET', `/campaigns/${id}`, 200)).json().id).toBe(id);
+  const own = (await success(a, 'GET', `/campaigns/${id}`, 200)).json();
+  expect(own.id).toBe(id);
+  expect(own).toMatchObject({
+    startedAt: null,
+    finishedAt: null,
+    counts: { recipients: 0, sent: 0, tapped: 0, countedAt: null },
+  });
   await hidden(b, 'GET', (value) => `/campaigns/${value}`, id);
 });
 for (const method of ['PATCH', 'DELETE'] as const)

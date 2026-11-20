@@ -27,6 +27,7 @@ import {
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
+import { toCampaignResponse } from './campaign-response';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
 import {
   type Campaign,
@@ -233,6 +234,7 @@ export class CampaignsService {
           finishedAt: now,
           updatedAt: now,
           settlementPendingAt: campaign.approvedAt ? now : null,
+          countsAt: null,
         },
       );
       if (!cancelled) throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
@@ -247,7 +249,10 @@ export class CampaignsService {
   }
 
   async pause(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
-    return this.changeStatus(storeId, campaignId, 'pause', { pauseReason: 'manual' });
+    return this.changeStatus(storeId, campaignId, 'pause', {
+      pauseReason: 'manual',
+      countsAt: null,
+    });
   }
 
   async resume(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
@@ -432,13 +437,4 @@ function toFrozenRecipient({ contactId, phone, decision }: AudienceDecision): Fr
   return decision.action === 'skip'
     ? { contactId, destinationAddress: phone, status: 'skipped', skipReason: decision.reason }
     : { contactId, destinationAddress: phone, status: 'queued', skipReason: null };
-}
-
-function toCampaignResponse(campaign: Campaign): CampaignResponse {
-  return {
-    ...campaign,
-    scheduledFor: campaign.scheduledFor?.toISOString() ?? null,
-    createdAt: campaign.createdAt.toISOString(),
-    updatedAt: campaign.updatedAt.toISOString(),
-  };
 }

@@ -100,11 +100,12 @@ Where the feature docs disagree, the gate follows these:
 
 ### CAMP-3 · Sender job, callbacks and results counts
 
-Branches in merge order: `feat/camp-3-send-with-recovery`, `feat/camp-3-resume-campaigns-on-top-up`, and `feat/camp-3-count-campaign-results`.
+Branches in merge order: `feat/camp-3-send-with-recovery`, `feat/camp-3-resume-campaigns-on-top-up`, `feat/camp-3-count-campaign-results`, and `feat/camp-3-wrap-sms-urls`.
 
 - Sender and recovery. Register `send-campaign-batch` on the campaign queue. Claim up to 200 recipients per batch under store RLS and run the final send checks under the campaign and contact locks. A committed claim is the cutoff for cancellation, withdrawal and block. Release the locks before calling `MessagingService.send` with operation key `campaign-<recipientId>`. Look up a saved provider receipt after expiry. For an unresolved attempt without a receipt, a still-eligible recipient may retry under the same key up to the attempt limit. Completed and cancelled campaigns keep confirmed and unknown charges up to the reserved credits. Settle the single campaign reservation once and release unused credits.
 - Top-up and activation. Count the opt-out link in the approval estimate and save its base. Reprice older approvals before the first send. A short balance pauses the campaign and alerts the owner. A verified SMS top-up resumes it when the wallet covers the difference. Only a manual pause resumes by hand. Upgrade all API replicas and drain predecessor workers and relays before starting recurring dispatch. The [sender deployment sequence](../features/09-campaigns-and-automations.md#sender-camp-3) covers rollback too. The scheduled sweep calls `campaign_send_work_stores()` and queues one batch per store. The batch handles a recoverable cancellation before sending.
 - Results and callbacks. Emit `campaign.sent` when the last recipient settles. Refresh campaign counts from recipient rows, throttling active refreshes to once per 10 seconds. Record tracked link taps. Route external SMS delivery and failure callbacks through verified provider receipts when ACC-14 connects the provider.
+- Wrap SMS body URLs in the final part. Estimate the cost using fixed-length sample links at approval. Create the real tracked links per recipient during message preparation. Retries reuse the same links, and settlement uses the wrapped message length.
 - Integration tests cover quiet-hours deferral, the claim cutoff, cancellation and settlement, known receipts, same-key recovery and its staging limits, verified top-ups and results counts.
 
 ### CAMP-7 · Messenger campaigns to open windows

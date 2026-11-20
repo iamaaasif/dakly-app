@@ -25,6 +25,16 @@ export type Campaign = {
   excludeSegmentIds: string[];
   scheduledFor: Date | null;
   status: CampaignStatus;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  recipientsCount: number;
+  skippedCount: number;
+  sentCount: number;
+  deliveredCount: number;
+  readCount: number;
+  tappedCount: number;
+  failedCount: number;
+  countsAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -62,6 +72,7 @@ export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   finishedAt?: Date;
   startedAt?: Date;
   settlementPendingAt?: Date | null;
+  countsAt?: null;
   approvedByUserId?: null;
   approvedAt?: null;
   shortLinkBase?: string | null;
@@ -80,6 +91,16 @@ const campaignColumns = {
   excludeSegmentIds: campaigns.excludeSegmentIds,
   scheduledFor: campaigns.scheduledFor,
   status: campaigns.status,
+  startedAt: campaigns.startedAt,
+  finishedAt: campaigns.finishedAt,
+  recipientsCount: campaigns.recipientsCount,
+  skippedCount: campaigns.skippedCount,
+  sentCount: campaigns.sentCount,
+  deliveredCount: campaigns.deliveredCount,
+  readCount: campaigns.readCount,
+  tappedCount: campaigns.tappedCount,
+  failedCount: campaigns.failedCount,
+  countsAt: campaigns.countsAt,
   createdAt: campaigns.createdAt,
   updatedAt: campaigns.updatedAt,
 };
@@ -264,8 +285,6 @@ export class CampaignsRepository {
           settlementPendingAt: campaigns.settlementPendingAt,
           balancePauseRevision: campaigns.balancePauseRevision,
           pauseReason: campaigns.pauseReason,
-          recipientsCount: campaigns.recipientsCount,
-          startedAt: campaigns.startedAt,
         })
         .from(campaigns)
         .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id)))
