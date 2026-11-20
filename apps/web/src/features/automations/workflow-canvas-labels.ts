@@ -11,15 +11,9 @@ type TriggerFilter = AutomationGraph['trigger']['filters'][number];
 type WaitStep = Extract<AutomationStep, { kind: 'wait' }>['wait'];
 type ActionStep = Extract<AutomationStep, { kind: 'action' }>['action'];
 
-const weekdayLabels = {
-  sun: 'Sunday',
-  mon: 'Monday',
-  tue: 'Tuesday',
-  wed: 'Wednesday',
-  thu: 'Thursday',
-  fri: 'Friday',
-  sat: 'Saturday',
-};
+function weekdayName(day: string) {
+  return day.charAt(0).toUpperCase() + day.slice(1);
+}
 
 function words(value: string) {
   return value.replaceAll('_', ' ');
@@ -38,8 +32,7 @@ function durationLabel(minutes: number) {
 export function waitParts(wait: WaitStep): [string, string] {
   if (wait.until === 'duration') return ['Wait for', durationLabel(wait.minutes)];
   if (wait.until === 'time_of_day') return ['Wait until', wait.time];
-  if (wait.until === 'weekday')
-    return ['Wait until', `${weekdayLabels[wait.weekday]} ${wait.time}`];
+  if (wait.until === 'weekday') return ['Wait until', `${weekdayName(wait.weekday)} ${wait.time}`];
   if (wait.until === 'event') {
     const event = wait.event === 'replied' ? 'a reply' : 'a tap';
     return [`Wait for ${event}, up to`, durationLabel(wait.timeoutMinutes)];

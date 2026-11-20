@@ -21,7 +21,7 @@ describe('workflow canvas labels', () => {
     expect(waitParts({ until: 'duration', minutes: 1440 })).toEqual(['Wait for', '1 day']);
     expect(waitParts({ until: 'weekday', weekday: 'mon', time: '10:00' })).toEqual([
       'Wait until',
-      'Monday 10:00',
+      'Mon 10:00',
     ]);
   });
 });
