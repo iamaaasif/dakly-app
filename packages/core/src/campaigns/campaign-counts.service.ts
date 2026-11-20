@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { CampaignCountsRepository } from './campaign-counts.repository';
 import { CampaignSendingRepository } from './campaign-sending.repository';
@@ -18,7 +19,7 @@ type Acceptance = {
   providerMessageId: string;
   credits: number;
   sentAt: Date;
-  requireSavedReceipt?: boolean;
+  requireSavedReceipt: boolean;
 };
 
 @Injectable()
@@ -28,6 +29,7 @@ export class CampaignCountsService {
     @Inject(CampaignCountsRepository) private readonly counts: CampaignCountsRepository,
     @Inject(CampaignSendingRepository) private readonly sending: CampaignSendingRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   async repairNext(storeId: string): Promise<boolean> {
@@ -41,7 +43,7 @@ export class CampaignCountsService {
     await this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
       if (!campaign || ['draft', 'scheduled'].includes(campaign.status)) return;
-      const now = await this.counts.currentTime(storeId);
+      const now = this.clock.now().getTime();
       const previous = campaign.countsAt?.getTime() ?? -Infinity;
       if (mode === 'batch' && campaign.status === 'sending' && now - previous < REFRESH_MS) return;
       await this.counts.save(storeId, id, new Date(Math.max(now, previous)));

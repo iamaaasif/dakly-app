@@ -73,6 +73,7 @@ export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   finishedAt?: Date;
   startedAt?: Date;
   settlementPendingAt?: Date | null;
+  countsAt?: null;
   approvedByUserId?: null;
   approvedAt?: null;
   shortLinkBase?: string | null;

@@ -29,15 +29,6 @@ export class CampaignCountsRepository {
     return next?.id;
   }
 
-  async currentTime(storeId: string): Promise<number> {
-    const result = await this.database.inTransaction(storeId, (tx) =>
-      tx.execute<{ milliseconds: number }>(sql`
-        select floor(extract(epoch from clock_timestamp()) * 1000)::double precision as milliseconds
-      `),
-    );
-    return result.rows[0]!.milliseconds;
-  }
-
   async save(storeId: string, id: string, countedAt: Date): Promise<void> {
     await this.database.inTransaction(storeId, async (tx) => {
       const [counts] = await tx

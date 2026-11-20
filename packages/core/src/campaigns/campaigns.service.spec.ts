@@ -20,7 +20,6 @@ import type {
 import type { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import type { WalletService } from '../wallets/wallet.service';
-import type { CampaignCountsService } from './campaign-counts.service';
 import { CampaignSmsService } from './campaign-sms.service';
 import type {
   Campaign,
@@ -274,7 +273,6 @@ describe('CampaignsService', () => {
         sampleRedirectUrl: () => 'http://localhost:4000/l/00000000',
       } as LinksService),
       { now: () => clockNow } as Clock,
-      { refresh: async () => undefined } as unknown as CampaignCountsService,
     );
   });
 

@@ -24,7 +24,6 @@ import {
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
-import { CampaignCountsService } from './campaign-counts.service';
 import { toCampaignResponse } from './campaign-response';
 import { CampaignSmsService } from './campaign-sms.service';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
@@ -71,7 +70,6 @@ export class CampaignsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(CampaignSmsService) private readonly sms: CampaignSmsService,
     @Inject(Clock) private readonly clock: Clock,
-    @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
   ) {}
 
   async list(storeId: string, query: CampaignListQuery): Promise<CampaignListResponse> {
@@ -224,6 +222,7 @@ export class CampaignsService {
           finishedAt: now,
           updatedAt: now,
           settlementPendingAt: campaign.approvedAt ? now : null,
+          countsAt: null,
         },
       );
       if (!cancelled) throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
@@ -233,16 +232,14 @@ export class CampaignsService {
           { id: campaignId, approvedAt: campaign.approvedAt, cancelledAt: now },
           actor,
         );
-      await this.counts.refresh(storeId, campaignId, 'force');
-      return this.get(storeId, campaignId);
+      return toCampaignResponse(cancelled);
     });
   }
 
   async pause(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
-    return this.transaction.run(storeId, async () => {
-      await this.changeStatus(storeId, campaignId, 'pause', { pauseReason: 'manual' });
-      await this.counts.refresh(storeId, campaignId, 'force');
-      return this.get(storeId, campaignId);
+    return this.changeStatus(storeId, campaignId, 'pause', {
+      pauseReason: 'manual',
+      countsAt: null,
     });
   }
 

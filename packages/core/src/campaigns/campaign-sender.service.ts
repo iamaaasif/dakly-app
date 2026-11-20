@@ -145,9 +145,13 @@ export class CampaignSenderService {
     campaign: LockedCampaign,
     { recipient, reason }: { recipient: ClaimableRecipient; reason?: SkipReason },
   ): Promise<Claim> {
-    if (recipient.status === 'sending' && recipient.dispatchStartedAt)
-      await this.failUnknown(storeId, recipient, this.estimateCredits(campaign));
-    else {
+    if (recipient.status === 'sending' && recipient.dispatchStartedAt) {
+      const { recipientId, guard, change } = this.unknownOutcome(
+        recipient,
+        this.estimateCredits(campaign),
+      );
+      await this.repository.changeRecipient(storeId, recipientId, guard, change);
+    } else {
       const restored = campaign.status === 'cancelled' ? 'cancelled' : 'queued';
       await this.repository.changeRecipient(
         storeId,
@@ -236,7 +240,11 @@ export class CampaignSenderService {
       idempotencyKey: `campaign-${recipientId}`,
     });
     if (result === 'unknown') {
-      await this.failUnknown(storeId, { id: recipientId, claimedAt }, credits, campaignId);
+      await this.counts.recordOutcome(
+        storeId,
+        campaignId,
+        this.unknownOutcome({ id: recipientId, claimedAt }, credits),
+      );
       return;
     }
     const from = {
@@ -268,22 +276,17 @@ export class CampaignSenderService {
     });
   }
 
-  private failUnknown(
-    storeId: string,
-    { id, claimedAt }: { id: string; claimedAt?: Date | null },
-    credits: number,
-    campaignId?: string,
-  ) {
-    const from = { status: 'sending', claimedAt: claimedAt ?? undefined } as const;
-    const change = {
-      status: 'failed',
-      errorCode: 'outcome_unknown',
-      failedAt: this.clock.now(),
-      smsCredits: credits,
+  private unknownOutcome({ id, claimedAt }: { id: string; claimedAt: Date }, credits: number) {
+    return {
+      recipientId: id,
+      guard: { status: 'sending', claimedAt },
+      change: {
+        status: 'failed',
+        errorCode: 'outcome_unknown',
+        failedAt: this.clock.now(),
+        smsCredits: credits,
+      },
     } as const;
-    return campaignId
-      ? this.counts.recordOutcome(storeId, campaignId, { recipientId: id, guard: from, change })
-      : this.repository.changeRecipient(storeId, id, from, change);
   }
 
   private async deliver(storeId: string, submission: Submission): Promise<boolean> {
@@ -319,11 +322,10 @@ export class CampaignSenderService {
     } catch (error) {
       if (!(error instanceof AppError)) throw error;
       if (recipient.status === 'sending') {
-        await this.failUnknown(
+        await this.counts.recordOutcome(
           storeId,
-          { id: recipientId, claimedAt },
-          countSmsParts(body),
           submission.campaignId,
+          this.unknownOutcome({ id: recipientId, claimedAt }, countSmsParts(body)),
         );
         return true;
       }
@@ -350,6 +352,7 @@ export class CampaignSenderService {
       providerMessageId,
       credits,
       sentAt: claimedAt,
+      requireSavedReceipt: false,
     });
   }
 
