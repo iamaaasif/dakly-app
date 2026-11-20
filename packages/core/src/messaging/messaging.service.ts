@@ -96,8 +96,9 @@ export class MessagingService {
     });
   }
 
-  // A tap is not a message: it is not stored, does not reopen the chat and does not move the
-  // window. Meta can redeliver it, so a consumer must tolerate a repeated event.
+  // A tap is not a message: it is not stored and does not reopen the chat, but Meta counts it as
+  // the customer acting, so it moves the 24-hour window. Meta can redeliver it, so a consumer
+  // must tolerate a repeated event.
   receivePostback(storeId: string, input: PostbackInput): Promise<ReceiveOutcome> {
     return this.transaction.run(storeId, async () => {
       const connection = await this.connections.findInbound(storeId, input);
@@ -122,6 +123,15 @@ export class MessagingService {
           contactId: identity.contactId,
         }));
       if (!identity || !conversation) return 'unknown_contact';
+      await this.inbound.recordTap(
+        storeId,
+        {
+          conversationId: conversation.id,
+          at: input.sentAt,
+          expiry: new Date(input.sentAt.getTime() + DAY_MS),
+        },
+        this.clock.now(),
+      );
       await this.outbox.publish({
         type: 'message.postback_received',
         storeId,

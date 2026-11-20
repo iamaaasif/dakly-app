@@ -104,15 +104,35 @@ describe('MetaGraphChannelDriver', () => {
     ]);
   });
 
-  it('does not send the text after the image was rejected', async () => {
-    const fetchMock = vi.fn(async () => Response.json({ error: { code: 100 } }, { status: 400 }));
+  it('still sends the text when Meta refuses the image and reports it', async () => {
+    const bodies: { message: { text?: string } }[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      const body = await new Request(url, init).json();
+      bodies.push(body);
+      return bodies.length === 1
+        ? Response.json({ error: { code: 100 } }, { status: 400 })
+        : Response.json({ message_id: 'm_text' });
+    });
+    await expect(
+      driver.send(pageCredentials, {
+        ...messengerReply,
+        imageUrl: 'https://cdn.example.test/a.jpg',
+      }),
+    ).resolves.toEqual({ externalMessageId: 'm_text', imageRejected: true });
+    expect(bodies.map((body) => body.message.text)).toEqual([undefined, messengerReply.text]);
+  });
+
+  it('does not send the text when the image outcome is uncertain', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new DOMException('Request timed out', 'TimeoutError');
+    });
     vi.stubGlobal('fetch', fetchMock);
     await expect(
       driver.send(pageCredentials, {
         ...messengerReply,
         imageUrl: 'https://cdn.example.test/a.jpg',
       }),
-    ).rejects.toMatchObject({ code: 'rejected' });
+    ).rejects.toMatchObject({ code: 'unavailable' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

@@ -189,12 +189,21 @@ export class MetaGraphChannelDriver
 
   async send(credentials: ChannelCredentials, message: OutboundMessage) {
     // Messenger cannot put an image and a text with buttons in one message, so the image goes
-    // first. Only the last message carries the operation key, so one send echoes one key.
-    if (message.channel === 'messenger' && message.imageUrl)
-      await this.post(credentials, message, {
-        attachment: { type: 'image', payload: { url: message.imageUrl } },
-      });
-    return this.post(credentials, message, messageContent(message));
+    // first. Only the text message carries the operation key, so one send echoes one key.
+    // A refused image does not stop the text, but an uncertain one does: it may have gone out.
+    let imageRejected = false;
+    if (message.channel === 'messenger' && message.imageUrl) {
+      try {
+        await this.post(credentials, message, {
+          attachment: { type: 'image', payload: { url: message.imageUrl } },
+        });
+      } catch (error) {
+        if (!(error instanceof MetaRequestError) || error.code !== 'rejected') throw error;
+        imageRejected = true;
+      }
+    }
+    const sent = await this.post(credentials, message, messageContent(message));
+    return imageRejected ? { ...sent, imageRejected: true as const } : sent;
   }
 
   private async post(

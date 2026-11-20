@@ -125,4 +125,23 @@ export class InboundMessagingRepository {
         .where(and(eq(conversations.storeId, storeId), eq(conversations.id, conversationId))),
     );
   }
+
+  // A tap is the customer acting, so it keeps the window open like a message, but it adds no
+  // message, preview or unread count.
+  async recordTap(
+    storeId: string,
+    { conversationId, at, expiry }: { conversationId: string; at: Date; expiry: Date },
+    now: Date,
+  ) {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(conversations)
+        .set({
+          lastInboundAt: sql`greatest(${conversations.lastInboundAt}, ${at.toISOString()}::timestamptz)`,
+          windowExpiresAt: sql`greatest(${conversations.windowExpiresAt}, ${expiry.toISOString()}::timestamptz)`,
+          updatedAt: now,
+        })
+        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, conversationId))),
+    );
+  }
 }

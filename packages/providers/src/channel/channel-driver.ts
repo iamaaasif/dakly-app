@@ -52,6 +52,8 @@ export type OutboundMessage = {
 
 export type SendResult = {
   externalMessageId: string;
+  // Set when Meta refused the image and the text still went out.
+  imageRejected?: true;
 };
 
 export type ChannelDriver = {
