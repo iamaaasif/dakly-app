@@ -297,7 +297,7 @@ Builder steps: Goal, Channel, Content, Audience, Schedule, Review and approve. T
 
 ### How it works
 
-Campaign states: `draft` → `waiting_approval` → `scheduled` → `sending` → `sent` | `cancelled`, with `paused` and `failed`. Every allowed change is in [state-machines.md](../data/state-machines.md#campaign-and-recipients).
+Campaign states: `draft` → `waiting_approval` or `approving` → `scheduled` → `sending` → `sent` | `cancelled`, with `paused` and `failed`. Every allowed change is in [state-machines.md](../data/state-machines.md#campaign-and-recipients).
 
 1. On approval, the audience is frozen into `campaign_recipients`, one row per contact, with a skip reason where it applies (no consent, Not a customer, no phone, frequency cap, quiet hours).
 2. The cost estimate is recipients × the real rate (WhatsApp marketing about ৳9, utility about ৳0.45, SMS ৳0.35 to ৳0.40 per part, plus margin). Approval reserves it from the wallet; actual cost settles after delivery reports; undelivered messages are refunded.
@@ -338,16 +338,17 @@ The audience is every contact in any include segment and in no exclude segment, 
 
 Each change is a guarded update. All four routes need `campaigns.edit` and return the campaign.
 
-| Route                                    | From                                  | To          | Refused with                                                                                           |
-| ---------------------------------------- | ------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
-| `POST /campaigns/:campaignId/unschedule` | `scheduled`                           | `draft`     | `CAMPAIGN_NOT_SCHEDULED`                                                                               |
-| `POST /campaigns/:campaignId/cancel`     | `scheduled`, `sending` or `paused`    | `cancelled` | `CAMPAIGN_NOT_CANCELLABLE` for finished states, `CAMPAIGN_NOT_SCHEDULED` for draft or waiting approval |
-| `POST /campaigns/:campaignId/pause`      | `sending`                             | `paused`    | `CAMPAIGN_NOT_SENDING`                                                                                 |
-| `POST /campaigns/:campaignId/resume`     | `paused` with `pause_reason` `manual` | `sending`   | `CAMPAIGN_NOT_PAUSED`; `CAMPAIGN_PAUSED_BY_SYSTEM` for any other reason                                |
+| Route                                    | From                                  | To          | Refused with                                                                                                      |
+| ---------------------------------------- | ------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------- |
+| `POST /campaigns/:campaignId/unschedule` | `scheduled`                           | `draft`     | `CAMPAIGN_NOT_SCHEDULED`                                                                                          |
+| `POST /campaigns/:campaignId/cancel`     | `scheduled`, `sending` or `paused`    | `cancelled` | `CAMPAIGN_NOT_CANCELLABLE` for finished states, `CAMPAIGN_NOT_SCHEDULED` for draft, waiting approval or approving |
+| `POST /campaigns/:campaignId/pause`      | `sending`                             | `paused`    | `CAMPAIGN_NOT_SENDING`                                                                                            |
+| `POST /campaigns/:campaignId/resume`     | `paused` with `pause_reason` `manual` | `sending`   | `CAMPAIGN_NOT_PAUSED`; `CAMPAIGN_PAUSED_BY_SYSTEM` for any other reason                                           |
 
 - Edit (CAMP-R7) works until 5 minutes before `scheduledFor`. Inside that window or past the send time, it returns `CAMPAIGN_CHANGE_TOO_LATE` (409). Edit locks the campaign and releases its credit reservation in one store transaction.
 - Edit is its own action, because returning to draft lets go of the frozen audience and the credits, which a `PATCH` should not do on the side. It deletes the recipients and clears the approver, approval time, estimated cost and counts. The draft can then be changed and approved again, which freezes the audience and reserves anew. The reservation key holds the approval time, so a second approval is not taken for a replay of the first.
 - Cancel can run within five minutes of the scheduled time or after it. In one store transaction it locks the campaign, moves queued recipients to `cancelled`, clears the pause reason, sets `finished_at` and settles its approval reservation. Skipped recipients keep their status. Already claimed recipients keep their claims. Confirmed submissions and unresolved outcomes use the reservation up to its approved amount. A cancellation with live claims settles after the sender reconciles or expires them. The finish time starts the 372-day recipient retention ([growth.md](../data/growth.md)).
+- Cancelling while the campaign is `approving` is not supported yet; it is refused with `CAMPAIGN_NOT_SCHEDULED`.
 - Pause sets `pause_reason` to `manual`, and resume clears it. A pause stops new recipient claims until resume.
 - Only a `manual` pause resumes by hand. Resume is guarded on `status = 'paused'` and `pause_reason = 'manual'`, so it cannot race a system pause; any other reason is refused with `CAMPAIGN_PAUSED_BY_SYSTEM` (409), with the reason in the error's `fields` under `pauseReason`. Each other reason resumes through its own rule: balance on top-up (CAMP-3), and quality, template and provider pauses when their cause clears (CAMP-3 and CHN-3).
 - No event is emitted for these changes; the [event catalogue](../data/jobs.md#events-in-m2-and-m3) lists none.

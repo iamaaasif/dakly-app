@@ -456,6 +456,13 @@
       "when": 1795153510453,
       "tag": "0064_campaign_sms_redirect_links",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1795159401468,
+      "tag": "0065_campaign_approval_progress",
+      "breakpoints": true
     }
   ]
 }
