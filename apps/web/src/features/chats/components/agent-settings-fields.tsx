@@ -90,13 +90,12 @@ function ReplySection({ form, disabled }: SectionProps) {
             Dakly replies within a minute. You can take over any chat.
           </span>
         </label>
-        <span className={disabled ? 'pointer-events-none opacity-50' : undefined}>
-          <Switch
-            id="auto-reply"
-            checked={values.isAutoReplyOn}
-            onCheckedChange={(on) => form.setValue('isAutoReplyOn', on, dirty)}
-          />
-        </span>
+        <Switch
+          id="auto-reply"
+          checked={values.isAutoReplyOn}
+          onCheckedChange={(on) => form.setValue('isAutoReplyOn', on, dirty)}
+          disabled={disabled}
+        />
       </div>
       <h3 className={sectionLabel}>Reply in</h3>
       <SegmentedChoice

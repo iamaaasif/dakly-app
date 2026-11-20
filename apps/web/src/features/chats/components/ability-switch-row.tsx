@@ -23,9 +23,7 @@ export function AbilitySwitchRow({
         <span className="block font-semibold">{title}</span>
         <span className="block text-sm text-text-muted">{description}</span>
       </label>
-      <span className={disabled ? 'pointer-events-none opacity-50' : undefined}>
-        <Switch id={id} checked={checked} onCheckedChange={onChange} />
-      </span>
+      <Switch id={id} checked={checked} disabled={disabled} onCheckedChange={onChange} />
     </div>
   );
 }

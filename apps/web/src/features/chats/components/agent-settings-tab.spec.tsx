@@ -102,5 +102,8 @@ describe('AI agent settings tab', () => {
     show(false);
     expect(await screen.findByText('You can view these settings.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+    const switches = screen.getAllByRole('switch') as HTMLButtonElement[];
+    expect(switches.length).toBeGreaterThan(0);
+    expect(switches.every((toggle) => toggle.disabled)).toBe(true);
   });
 });
