@@ -11,12 +11,12 @@ import { matchText } from '../segment-labels';
 
 export function LiveCount() {
   const rules = useWatch<CreateSegmentInput, 'rules'>({ name: 'rules' });
-  // Compared as text: the watched tree can change inside the same object.
   const settled = useDebouncedValue(JSON.stringify(rules), 400);
   const parsed = segmentRulesSchema.safeParse(JSON.parse(settled));
   const count = useSegmentCount(parsed.success ? parsed.data : undefined);
+
   return (
-    <Card className="h-fit space-y-2">
+    <Card className="h-fit space-y-3 p-4">
       <h2 className="text-md font-semibold">Estimated customers</h2>
       <div aria-live="polite">{countState(parsed.success, count)}</div>
     </Card>
@@ -24,21 +24,21 @@ export function LiveCount() {
 }
 
 function countState(valid: boolean, count: ReturnType<typeof useSegmentCount>) {
-  if (!valid) return <p>Finish each condition to see how many customers match.</p>;
+  if (!valid) return <p className="text-sm text-text-muted">Finish each condition to see how many customers match.</p>;
   if (count.error)
     return (
       <div role="alert" className="space-y-2">
-        <p>{count.error.message}</p>
+        <p className="text-sm text-danger">{count.error.message}</p>
         <Button variant="secondary" onClick={() => void count.refetch()}>
           Count again
         </Button>
       </div>
     );
-  if (!count.data) return <p>Counting…</p>;
+  if (!count.data) return <p className="text-sm text-text-muted">Counting…</p>;
   return (
-    <>
-      <p className="text-xl font-bold tabular-nums">{matchText(count.data.count)}</p>
-      {count.isFetching ? <p className="text-sm text-text-muted">Updating…</p> : null}
-    </>
+    <div className="space-y-1">
+      <p className="text-2xl font-bold tabular-nums text-text">{matchText(count.data.count)}</p>
+      {count.isFetching ? <p className="text-xs text-text-muted">Updating…</p> : null}
+    </div>
   );
 }

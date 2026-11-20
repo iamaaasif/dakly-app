@@ -1,5 +1,6 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -11,6 +12,7 @@ import {
 } from '@dakly/contracts/segments';
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
+import { Card } from '@dakly/ui/card';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
@@ -51,34 +53,99 @@ export function SegmentBuilder({ segment, listHref }: SegmentBuilderProps) {
 
   return (
     <FormProvider {...form}>
-      <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-3">
-        <div className="min-w-0 space-y-4 lg:col-span-2">
-          <h1 className="text-xl font-bold break-words">
-            {segment ? `Edit ${segment.name}` : 'New segment'}
-          </h1>
-          <FormField name="name" label="Segment name">
-            {(control) => <Input {...control} {...form.register('name')} />}
-          </FormField>
-          <SegmentConditions />
-          {form.formState.errors.root ? (
-            <p role="alert" className="text-danger">
-              {form.formState.errors.root.message}
-            </p>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-4">
-            <Button type="submit" loading={create.isPending || change.isPending}>
-              Save segment
-            </Button>
-            <Link
-              href={listHref}
-              className="inline-flex min-h-10 items-center text-action underline"
-            >
-              Cancel
-            </Link>
+      <form onSubmit={handleSubmit} className="space-y-6 p-4 md:p-8">
+        <SegmentBuilderHeader
+          segment={segment}
+          listHref={listHref}
+          isPending={create.isPending || change.isPending}
+        />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="min-w-0 space-y-4 lg:col-span-2">
+            <SegmentAiCard />
+            <FormField name="name" label="Segment name">
+              {(control) => (
+                <Input
+                  {...control}
+                  {...form.register('name')}
+                  placeholder="e.g. Winback customers"
+                />
+              )}
+            </FormField>
+            <Card className="space-y-4 p-4">
+              <SegmentConditions />
+              <div className="rounded-md bg-primary-soft p-3 text-xs text-text-muted">
+                THEN add them to this segment. Customers join and leave automatically every day.
+              </div>
+            </Card>
+            {form.formState.errors.root ? (
+              <p role="alert" className="text-danger">
+                {form.formState.errors.root.message}
+              </p>
+            ) : null}
           </div>
+          <LiveCount />
         </div>
-        <LiveCount />
       </form>
     </FormProvider>
+  );
+}
+
+function SegmentBuilderHeader({
+  segment,
+  listHref,
+  isPending,
+}: {
+  segment?: SegmentResponse;
+  listHref: string;
+  isPending: boolean;
+}) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex items-center gap-2">
+        <Link
+          href={listHref}
+          aria-label="Back to segments"
+          className="inline-flex min-h-10 items-center gap-1.5 text-sm text-text-muted hover:text-text"
+        >
+          <ArrowLeft aria-hidden="true" size={16} />
+        </Link>
+        <h1 className="text-xl font-bold break-words">
+          {segment ? `Edit ${segment.name}` : 'New segment'}
+        </h1>
+      </div>
+      <div className="flex items-center gap-3">
+        <Link
+          href={listHref}
+          className="inline-flex min-h-10 items-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-surface-muted"
+        >
+          Cancel
+        </Link>
+        <Button type="submit" variant="primary" loading={isPending}>
+          Save segment
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+function SegmentAiCard() {
+  return (
+    <Card className="space-y-3 p-4">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <Sparkles aria-hidden="true" size={16} className="text-action" />
+        <span>Ask Dakly AI to write the rules</span>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          disabled
+          aria-label="Describe customers for AI rule generation"
+          placeholder="Describe the customers in your own words"
+          className="text-sm"
+        />
+        <Button variant="secondary" disabled className="shrink-0">
+          Generate rules
+        </Button>
+      </div>
+    </Card>
   );
 }
