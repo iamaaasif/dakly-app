@@ -15,6 +15,7 @@ const unitNames: Record<UsageUnit, string> = {
   ai_content: 'AI content drafts',
   ai_ask: 'Ask Dakly AI answers',
 };
+const PURGE_BATCH = 5000;
 const thresholdPercents = [80, 100] as const;
 
 @Injectable()
@@ -75,5 +76,10 @@ export class UsageService {
           : `You have used ${percent}% of your ${name} for this plan period`,
       body: 'Top up or change your plan to keep using them.',
     });
+  }
+
+  // Totals live on invoice lines and in daily metrics, so raw events go after 13 months.
+  async purgeExpired(): Promise<void> {
+    while ((await this.repository.purgeExpiredBatch(PURGE_BATCH)) === PURGE_BATCH);
   }
 }

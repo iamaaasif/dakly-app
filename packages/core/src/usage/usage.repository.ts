@@ -2,8 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 
 import type { UsageUnit, usageSources } from '@dakly/contracts/billing';
+import type { Database } from '@dakly/db/client';
 import { usageEvents } from '@dakly/db/schema/billing';
 
+import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type UsageEvent = {
@@ -26,7 +28,10 @@ const usageEventColumns = {
 
 @Injectable()
 export class UsageRepository {
-  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+  constructor(
+    @Inject(TenantDatabase) private readonly database: TenantDatabase,
+    @Inject(DATABASE) private readonly global: Database,
+  ) {}
 
   // Held until the caller's store transaction ends, so the sum and the insert see no rival writer.
   async lockUnit(storeId: string, unit: UsageUnit): Promise<void> {
@@ -82,5 +87,14 @@ export class UsageRepository {
         .returning(usageEventColumns),
     );
     return row!;
+  }
+
+  // Usage rows span every store and the app role cannot delete them, so a SQL function removes
+  // events whose period started over 13 months ago. Returns the rows deleted.
+  async purgeExpiredBatch(limit: number): Promise<number> {
+    const { rows } = await this.global.execute<{ deleted: number }>(
+      sql`select public.purge_expired_usage_events(${limit}) as deleted`,
+    );
+    return rows[0]?.deleted ?? 0;
   }
 }
