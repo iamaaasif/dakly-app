@@ -152,8 +152,8 @@ export function CanvasNodeItem({
       {step ? stepBody(step) : <TriggerCard graph={graph} layout={layout} />}
       {node.branches.length > 0 && (
         <ul className="sr-only">
-          {node.branches.map((branch) => (
-            <li key={branch}>{branch}</li>
+          {node.branches.map((branch, index) => (
+            <li key={index}>{branch}</li>
           ))}
         </ul>
       )}

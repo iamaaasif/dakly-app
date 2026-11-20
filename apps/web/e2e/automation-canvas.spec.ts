@@ -62,6 +62,22 @@ async function captureEvidence(page: Page, directory: string | undefined, name: 
   }
 }
 
+// The Else path skips two rows, so its line must run beside the cards in between.
+const skipping: AutomationGraph = {
+  ...branching,
+  firstStepKey: 'split',
+  steps: {
+    split: {
+      kind: 'condition',
+      paths: [{ condition: { kind: 'has_tag', tag: 'vip' }, next: 'pause' }],
+      elseNext: 'end',
+    },
+    pause: { kind: 'wait', wait: { until: 'duration', minutes: 60 }, next: 'tag' },
+    tag: { kind: 'action', action: { action: 'add_tag', tag: 'waited' }, next: 'end' },
+    end: { kind: 'exit' },
+  },
+};
+
 test('shows a saved workflow as a numbered canvas', async ({ page, context, baseURL }) => {
   const { token } = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string };
   await context.addCookies([
@@ -77,6 +93,7 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
     const drafts = [
       { name: 'Welcome new subscribers', templateKey: 'welcome_new_subscriber' },
       { name: 'Welcome with a follow-up split', graph: branching },
+      { name: 'Skip ahead for new people', graph: skipping },
     ];
     for (const [index, data] of drafts.entries()) {
       const response = await context.request.post('/api/automations', { headers, data });

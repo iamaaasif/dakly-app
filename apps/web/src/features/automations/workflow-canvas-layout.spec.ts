@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 
 import { layoutWorkflow, TRIGGER_KEY } from './workflow-canvas-layout';
@@ -15,6 +15,22 @@ const base: Omit<AutomationGraph, 'firstStepKey' | 'steps'> = {
 
 function overlap(a: { x: number; y: number; width: number; height: number }, b: typeof a) {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+
+// The up and down parts of an edge path, which is made of M, V and H commands.
+function verticalLines(path: string) {
+  const lines: { x: number; from: number; to: number }[] = [];
+  let x = 0;
+  let y = 0;
+  for (const [, command, first, second] of path.matchAll(/([MVH])([\d.]+)(?: ([\d.]+))?/g)) {
+    if (command === 'M') [x, y] = [Number(first), Number(second)];
+    if (command === 'H') x = Number(first);
+    if (command === 'V') {
+      lines.push({ x, from: y, to: Number(first) });
+      y = Number(first);
+    }
+  }
+  return lines;
 }
 
 describe('layoutWorkflow', () => {
@@ -83,6 +99,42 @@ describe('layoutWorkflow', () => {
     expect(nodes).toHaveLength(Object.keys(template.graph.steps).length + 1);
     for (const [index, node] of nodes.entries()) {
       for (const other of nodes.slice(index + 1)) expect(overlap(node, other)).toBe(false);
+    }
+  });
+
+  it('keeps the line of a skipping path out of the cards it passes', () => {
+    const wait = (next: string): AutomationStep => ({
+      kind: 'wait',
+      wait: { until: 'duration', minutes: 60 },
+      next,
+    });
+    const graph: AutomationGraph = {
+      ...base,
+      firstStepKey: 'split',
+      steps: {
+        split: {
+          kind: 'condition',
+          paths: [{ condition: { kind: 'has_tag', tag: 'vip' }, next: 'one' }],
+          elseNext: 'end',
+        },
+        one: wait('two'),
+        two: wait('three'),
+        three: wait('end'),
+        end: { kind: 'exit' },
+      },
+    };
+    const { nodes, edges } = layoutWorkflow(graph);
+    const skipping = edges.find(({ label }) => label === 'Else')!;
+    const lines = verticalLines(skipping.path);
+    expect(lines.length).toBeGreaterThan(2);
+    for (const node of nodes) {
+      for (const line of lines) {
+        const inside = node.x < line.x && line.x < node.x + node.width;
+        const along =
+          Math.min(line.from, line.to) < node.y + node.height &&
+          node.y < Math.max(line.from, line.to);
+        expect(inside && along).toBe(false);
+      }
     }
   });
 });

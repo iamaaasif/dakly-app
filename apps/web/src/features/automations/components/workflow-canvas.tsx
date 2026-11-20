@@ -2,7 +2,7 @@
 
 import { Minus, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { AutomationDetailResponse } from '@dakly/contracts/automations';
 import { Badge } from '@dakly/ui/badge';
@@ -39,15 +39,22 @@ export function WorkflowCanvas({ id }: { id: string }) {
 
 function useViewportWidth() {
   const [width, setWidth] = useState(0);
-  const ref = useCallback((element: HTMLDivElement | null) => {
-    if (!element) return;
-    // A flow wider than the screen opens on its middle, where the trigger sits.
-    element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2;
-    setWidth(element.clientWidth);
-    const observer = new ResizeObserver(() => setWidth(element.clientWidth));
-    observer.observe(element);
+  const element = useRef<HTMLDivElement | null>(null);
+  const ref = useCallback((node: HTMLDivElement | null) => {
+    element.current = node;
+    if (!node) return;
+    setWidth(node.clientWidth);
+    const observer = new ResizeObserver(() => setWidth(node.clientWidth));
+    observer.observe(node);
     return () => observer.disconnect();
   }, []);
+  // A flow wider than the screen opens on its middle, where the trigger sits. This waits for the
+  // first measured width, because that is when the opening zoom is applied.
+  const measured = width > 0;
+  useEffect(() => {
+    const node = element.current;
+    if (measured && node) node.scrollLeft = (node.scrollWidth - node.clientWidth) / 2;
+  }, [measured]);
   return { width, ref };
 }
 
