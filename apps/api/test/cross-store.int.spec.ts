@@ -2994,6 +2994,7 @@ fixture('GET /channel-connections', async () => {
         tokenExpiresAt: null,
         connectedAt: expect.any(String),
         disconnectedAt: null,
+        isAiLive: false,
       },
     ],
   });

@@ -2,7 +2,13 @@ import { z } from 'zod';
 
 import { campaignChannels } from './campaigns';
 
-export const analyticsTabs = ['overview', 'campaigns', 'automations'] as const;
+export const analyticsTabs = [
+  'overview',
+  'campaigns',
+  'automations',
+  'channels',
+  'social',
+] as const;
 export const campaignSorts = [
   'name',
   'date',
@@ -23,10 +29,8 @@ export const analyticsQuerySchema = z.strictObject({
     .transform((value) => periodDays[value]),
 });
 
-// Download covers the tabs that have a table, including the two that arrive with the Channels and Social posts screens.
-export const analyticsExportTabs = [...analyticsTabs, 'channels', 'social'] as const;
 export const analyticsExportQuerySchema = z.strictObject({
-  tab: z.enum(analyticsExportTabs),
+  tab: z.enum(analyticsTabs),
   period: analyticsQuerySchema.shape.period,
 });
 export type AnalyticsExportQuery = z.infer<typeof analyticsExportQuerySchema>;

@@ -128,6 +128,11 @@ export type PostResponse = Omit<CreatePostInput, 'targets'> & {
     externalPostId: string | null;
     errorCode: string | null;
     errorMessage: string | null;
+    // Null until the first insights pull after publishing.
+    reach: number | null;
+    reactions: number | null;
+    comments: number | null;
+    linkTaps: number | null;
   })[];
 };
 export type PostListResponse = { items: PostResponse[]; nextCursor: string | null };
