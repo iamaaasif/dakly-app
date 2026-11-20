@@ -93,7 +93,7 @@ Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialo
 
 ![Add product](../design/screenshots/products-and-stock/add-product.webp)
 
-**Import products**
+**Import products** (differs: this capture shows the Integrations page, not an import dialog)
 
 ![Import products](../design/screenshots/products-and-stock/import.webp)
 
@@ -120,6 +120,16 @@ In the saved product editor, choose a tone and language to write three descripti
 ![Products](../design/screenshots/products.webp)
 
 List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
+
+### Missing design: import products
+
+The prototype capture for this screen shows the Integrations page, so there is no product import design to match. The import dialog follows the customer import dialog (CUS-8) element by element: step bar, file drop area, column mapping, preview, duplicate choice and result counts. Evidence: `docs/design/evidence/prod-5-import/`.
+
+The Import from a CSV button sits beside Add product for members who can edit products, and opens the dialog at `/products?import=1`. Steps: Upload, Map fields, Preview, Duplicates, Results.
+
+- Mapping: Product name and Price are required. Category, description, status, SKU, cost and on hand are optional. Up to three option columns (such as Size or Colour) are named in the dialog; columns called Size, Color or Colour are suggested.
+- Duplicates: update or skip, by SKU. The step says a stock count in the file replaces the shop's count and is recorded in the stock history, and that a product imported without a count is not tracked for stock.
+- Results: added, updated, skipped and failed counts and the error report. There is no Undo (see the import rules above).
 
 ### How it works
 
