@@ -16,6 +16,7 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { SmsService } from '../sms/sms.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
+import { ChannelDispatchService, type CampaignMessageContent } from './channel-dispatch.service';
 import { InboundMessagingRepository } from './inbound-messaging.repository';
 import { messagingError } from './messaging.errors';
 import { OutboundMessagingRepository } from './outbound-messaging.repository';
@@ -88,6 +89,7 @@ export class MessagingService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(OutboundMessagingRepository) private readonly outbound: OutboundMessagingRepository,
+    @Inject(ChannelDispatchService) private readonly dispatch: ChannelDispatchService,
   ) {}
 
   receiveInboundMessage(storeId: string, input: InboundMessageInput): Promise<ReceiveOutcome> {
@@ -281,7 +283,51 @@ export class MessagingService {
     return { providerMessageId, parts, credits: parts };
   }
 
+  // Who a Messenger campaign can reach on one Page: a contact's id on that Page is Page-scoped, so
+  // the identity and the last message come from the selected connection only.
+  async pageAudience(storeId: string, connectionId: string, contactIds: string[]) {
+    const [identities, conversations] = await Promise.all([
+      this.identities.findOnConnection(storeId, connectionId, contactIds),
+      this.inbound.findLastInbound(storeId, connectionId, contactIds),
+    ]);
+    const lastInboundAt = new Map(conversations.map((row) => [row.contactId, row.lastInboundAt]));
+    return new Map(
+      identities.map(({ id, contactId, externalId }) => [
+        contactId,
+        {
+          identityId: id,
+          address: externalId,
+          lastInboundAt: lastInboundAt.get(contactId) ?? null,
+        },
+      ]),
+    );
+  }
+
   queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
+    return this.queueMessage(storeId, input, true);
+  }
+
+  // A campaign recipient's Messenger message is stored in the chat and sent by the same
+  // transport. The campaign has already run its own checks and sends right away, so no
+  // send job is requested. Call it outside a store transaction.
+  async sendCampaignMessage(
+    storeId: string,
+    input: Omit<OutgoingChannelMessage, 'category' | 'actor'> & {
+      imageUrl?: string;
+      buttons?: { title: string; payload: string }[];
+    },
+  ) {
+    const { imageUrl, buttons, ...message } = input;
+    const { messageId } = await this.queueMessage(
+      storeId,
+      { ...message, category: 'marketing', actor: { kind: 'system' } },
+      false,
+    );
+    const content: CampaignMessageContent = { imageUrl, buttons };
+    return this.dispatch.sendCampaignMessage(storeId, messageId, content);
+  }
+
+  private queueMessage(storeId: string, input: OutgoingChannelMessage, requestSend: boolean) {
     return this.transaction.run(storeId, async () => {
       const conversation = await this.outbound.findConversation(storeId, input);
       if (!conversation || !(await this.identities.findOutboundIdentity(storeId, input)))
@@ -294,7 +340,7 @@ export class MessagingService {
         now,
       );
       if (!message) throw messagingError('MESSAGE_OPERATION_CONFLICT');
-      if (created)
+      if (created && requestSend)
         await this.outbox.publish({
           type: 'message.send_requested',
           storeId,
