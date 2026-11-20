@@ -20,7 +20,8 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { TeamService } from '../team/team.service';
 import { CHANNEL_CONNECTION_ERRORS } from './channel-connections.errors';
 import { ChannelConnectionsRepository } from './channel-connections.repository';
-import { META_CHANNEL_DRIVER } from './meta-authorization.service';
+import { META_CHANNEL_DRIVER } from './meta-channel-driver';
+import { MetaPageSubscriptionsService } from './meta-page-subscriptions.service';
 
 function connectionError(code: keyof typeof CHANNEL_CONNECTION_ERRORS) {
   return new AppError(code, CHANNEL_CONNECTION_ERRORS[code]);
@@ -47,6 +48,8 @@ export class ChannelConnectionsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(EnvelopeEncryption) private readonly encryption: EnvelopeEncryption,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(MetaPageSubscriptionsService)
+    private readonly pageSubscriptions: MetaPageSubscriptionsService,
     @Inject(META_CHANNEL_DRIVER) private readonly driver: Pick<ChannelDriver, 'send'> | null,
   ) {}
 
@@ -189,15 +192,34 @@ export class ChannelConnectionsService {
     if (!this.team.canManageChannelConnections(access))
       throw connectionError('CHANNEL_CONNECTION_ROLE_REQUIRED');
     const now = this.clock.now();
-    await this.transaction.runLocked(storeId, async () => {
-      const disconnected = await this.repository.disconnect(storeId, channelConnectionId, now);
-      if (!disconnected) throw connectionError('CHANNEL_CONNECTION_NOT_FOUND');
+    const disconnected = await this.transaction.runLocked(storeId, async () => {
+      const previous = await this.repository.disconnect(storeId, channelConnectionId, now);
+      if (!previous) throw connectionError('CHANNEL_CONNECTION_NOT_FOUND');
       await this.outbox.publish({
         type: 'channel.disconnected',
         storeId,
         occurredAt: now.toISOString(),
         payload: { channelConnectionId },
       });
+      // An Instagram account messages through its linked Page, which stays subscribed while
+      // either connection to that Page is live.
+      const pageId =
+        previous.kind === 'facebook_page'
+          ? previous.externalAccountId
+          : previous.linkedPageExternalId;
+      if (pageId && previous.ciphertext && previous.keyVersion !== null)
+        await this.pageSubscriptions.keepForDisconnect(storeId, pageId, {
+          ciphertext: previous.ciphertext,
+          keyVersion: previous.keyVersion,
+        });
+      return pageId;
     });
+    if (!disconnected) return;
+    try {
+      await this.pageSubscriptions.unsubscribeDisconnectedPage(storeId, disconnected);
+    } catch {
+      // The disconnect is done; the daily reconciliation retries the unsubscribe.
+      this.logger.error('Could not unsubscribe the Page after disconnect');
+    }
   }
 }

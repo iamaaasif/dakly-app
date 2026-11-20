@@ -89,8 +89,10 @@ describe('Worker job schedulers', () => {
     ]);
     expect(sync.schedulers).toEqual([
       scheduler('queue-channel-token-checks', 86400000),
+      scheduler('reconcile-meta-page-subscriptions', 86400000),
       scheduler('queue-conversation-returns', 60000),
       scheduler('queue-channel-token-checks', 86400000),
+      scheduler('reconcile-meta-page-subscriptions', 86400000),
       scheduler('queue-conversation-returns', 60000),
     ]);
     expect(payments.schedulers).toEqual([
