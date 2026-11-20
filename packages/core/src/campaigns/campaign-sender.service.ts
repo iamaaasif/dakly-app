@@ -12,6 +12,19 @@ import { SmsService } from '../sms/sms.service';
 import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
 import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
+import {
+  CampaignMessengerSender,
+  messengerBody,
+  skipReasonFor,
+  type MessengerPayload,
+  type PageRoute,
+} from './campaign-messenger-sender.service';
+import {
+  canProcess,
+  CampaignReceiptReconciler,
+  unknownOutcome,
+  type ReceiptClaim,
+} from './campaign-receipt-reconciler.service';
 import { CampaignSendingRepository, type ClaimableRecipient } from './campaign-sending.repository';
 import { CampaignSmsService } from './campaign-sms.service';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
@@ -28,14 +41,7 @@ type Submission = {
   destination: string;
   sender: string | undefined;
   body: string;
-};
-type ReceiptClaim = {
-  kind: 'receipt';
-  recipientId: string;
-  providerMessageId: string;
-  claimedAt: Date;
-  dispatchStartedAt: Date;
-  credits: number;
+  messenger?: MessengerPayload;
 };
 type Claim =
   Submission | ReceiptClaim | { kind: 'stop' } | { kind: 'next' } | { kind: 'defer'; until: Date };
@@ -52,6 +58,8 @@ export class CampaignSenderService {
     @Inject(CampaignSmsService) private readonly smsText: CampaignSmsService,
     @Inject(CampaignFundingService) private readonly funding: CampaignFundingService,
     @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
+    @Inject(CampaignMessengerSender) private readonly messengerSender: CampaignMessengerSender,
+    @Inject(CampaignReceiptReconciler) private readonly reconciler: CampaignReceiptReconciler,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
@@ -73,7 +81,7 @@ export class CampaignSenderService {
         await this.counts.refresh(storeId, campaignId, 'force');
         return claim.until;
       }
-      if (claim.kind === 'receipt') await this.reconcileReceipt(storeId, campaignId, claim);
+      if (claim.kind === 'receipt') await this.reconciler.reconcile(storeId, campaignId, claim);
       if (performance.now() >= deadline) break;
     }
     await this.counts.refresh(storeId, campaignId, 'batch');
@@ -85,7 +93,7 @@ export class CampaignSenderService {
   private claimNext(storeId: string, campaignId: string): Promise<Claim> {
     return this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, campaignId, 'share');
-      if (!canProcess(campaign)) return { kind: 'stop' };
+      if (!campaign || !canProcess(campaign)) return { kind: 'stop' };
       const now = this.clock.now();
       const recipient = await this.repository.lockNextRecipient(
         storeId,
@@ -108,7 +116,9 @@ export class CampaignSenderService {
     });
   }
 
-  private estimateCredits(campaign: LockedCampaign): number {
+  // Only SMS costs credits.
+  private estimateCredits(campaign: LockedCampaign): number | null {
+    if (campaign.channel !== 'sms') return null;
     return this.smsText.estimate(campaign.content.text, campaign.shortLinkBase ?? undefined)
       .smsParts;
   }
@@ -122,19 +132,23 @@ export class CampaignSenderService {
     const resend = recipient.status === 'sending';
     // Channel dispatch also locks store settings before locking the contact.
     const settings = await this.stores.sendingSettings(storeId, 'share');
-    const { decision, destination } = await this.policy.checkForSend(storeId, {
+    const page = await this.messengerSender.route(storeId, campaign, recipient);
+    const checked = await this.policy.checkForSend(storeId, {
       contactId,
-      channel: 'sms',
+      channel: campaign.channel,
       category: 'marketing',
+      windowClosesAt: page?.windowClosesAt,
       excludeCampaignRecipientId: resend ? id : undefined,
     });
+    const { decision } = checked;
+    const destination = page ? page.address : checked.destination;
     if (decision.action === 'defer') return { kind: 'defer', until: decision.until };
     if (decision.action === 'skip' || !destination || destination !== destinationAddress)
       return this.skipSubmission(storeId, campaign, {
         recipient,
-        reason: decision.action === 'skip' ? decision.reason : 'no_address',
+        reason: decision.action === 'skip' ? skipReasonFor(decision.reason, page) : 'no_address',
       });
-    return this.saveSubmission(storeId, campaign, { recipient, destination, settings });
+    return this.saveSubmission(storeId, campaign, { recipient, destination, settings, page });
   }
 
   private async skipSubmission(
@@ -143,7 +157,8 @@ export class CampaignSenderService {
     { recipient, reason }: { recipient: ClaimableRecipient; reason?: SkipReason },
   ): Promise<Claim> {
     if (recipient.status === 'sending' && recipient.dispatchStartedAt) {
-      const { recipientId, guard, change } = this.unknownOutcome(
+      const { recipientId, guard, change } = unknownOutcome(
+        this.clock.now(),
         recipient,
         this.estimateCredits(campaign),
       );
@@ -163,19 +178,22 @@ export class CampaignSenderService {
   private async saveSubmission(
     storeId: string,
     campaign: LockedCampaign,
-    input: { recipient: ClaimableRecipient; destination: string; settings: StoreSendingSettings },
+    input: {
+      recipient: ClaimableRecipient;
+      destination: string;
+      settings: StoreSendingSettings;
+      page: PageRoute | undefined;
+    },
   ): Promise<Claim> {
-    const { recipient, destination, settings } = input;
-    const { name: sender } = await this.messaging.prepareSender(storeId);
-    // The recipient lock orders code creation with all retries of this submission.
-    const { body, optOutLinkCode, redirectLinkCodes, createdLinks } = await this.smsText.prepare(
-      storeId,
-      campaign,
-      recipient,
-    );
+    const { recipient, destination, settings, page } = input;
+    const prepared = page
+      ? messengerBody(campaign, recipient)
+      : await this.prepareSms(storeId, campaign, recipient);
+    const { body, optOutLinkCode, redirectLinkCodes, createdLinks } = prepared;
     const decide = await this.policy.prepareMarketingRetryCheck(storeId, {
       contactId: recipient.contactId,
       campaignRecipientId: recipient.id,
+      channel: campaign.channel,
       settings,
     });
     const { decision, at } = decide();
@@ -201,9 +219,21 @@ export class CampaignSenderService {
       recipient,
       claimedAt: at,
       destination,
-      sender,
+      sender: prepared.sender,
       body,
+      messenger: page && prepared.messenger,
     };
+  }
+
+  private async prepareSms(
+    storeId: string,
+    campaign: LockedCampaign,
+    recipient: ClaimableRecipient,
+  ) {
+    const { name: sender } = await this.messaging.prepareSender(storeId);
+    // The recipient lock orders code creation with all retries of this submission.
+    const prepared = await this.smsText.prepare(storeId, campaign, recipient);
+    return { ...prepared, sender, messenger: undefined };
   }
 
   private async claimReceipt(
@@ -226,69 +256,14 @@ export class CampaignSenderService {
       providerMessageId: recipient.providerMessageId,
       claimedAt,
       dispatchStartedAt,
+      channel: campaign.channel,
       credits: this.estimateCredits(campaign),
     };
   }
 
-  private async reconcileReceipt(storeId: string, campaignId: string, receipt: ReceiptClaim) {
-    const { recipientId, providerMessageId, claimedAt, credits } = receipt;
-    const result = await this.sms.receiptStatus({
-      providerMessageId,
-      idempotencyKey: `campaign-${recipientId}`,
-    });
-    if (result === 'unknown') {
-      await this.counts.recordOutcome(
-        storeId,
-        campaignId,
-        this.unknownOutcome({ id: recipientId, claimedAt }, credits),
-      );
-      return;
-    }
-    const from = {
-      status: 'sending',
-      uncertainReceipt: providerMessageId,
-      providerMessageId,
-    } as const;
-    if (result === 'sent') {
-      await this.counts.recordAcceptance(storeId, campaignId, {
-        recipientId,
-        providerMessageId,
-        credits,
-        sentAt: receipt.dispatchStartedAt,
-        requireSavedReceipt: true,
-      });
-      return;
-    }
-    await this.transaction.run(storeId, async () => {
-      const campaign = await this.campaigns.lockCampaign(storeId, campaignId, 'update');
-      if (!campaign || !(canProcess(campaign) || campaign.status === 'paused')) return;
-      const recorded = await this.repository.changeRecipient(storeId, recipientId, from, {
-        status: 'failed',
-        claimedAt: null,
-        errorCode: 'provider_confirmed_not_sent',
-        failedAt: this.clock.now(),
-        smsCredits: null,
-      });
-      await this.counts.markPending(storeId, campaign, recorded);
-    });
-  }
-
-  private unknownOutcome({ id, claimedAt }: { id: string; claimedAt: Date }, credits: number) {
-    return {
-      recipientId: id,
-      guard: { status: 'sending', claimedAt },
-      change: {
-        status: 'failed',
-        errorCode: 'outcome_unknown',
-        failedAt: this.clock.now(),
-        smsCredits: credits,
-      },
-    } as const;
-  }
-
   private async deliver(storeId: string, submission: Submission): Promise<boolean> {
-    const { recipient, destination, body, claimedAt, sender } = submission;
-    const { id: recipientId, contactId } = recipient;
+    const { recipient, claimedAt } = submission;
+    const recipientId = recipient.id;
     const expiresAt = new Date(claimedAt.getTime() + CAMPAIGN_CLAIM_MS);
     const canSubmit = () => this.clock.now() < expiresAt;
     const authorized =
@@ -303,6 +278,16 @@ export class CampaignSenderService {
       await this.recordRefusal(storeId, submission, true);
       return false;
     }
+    const { messenger } = submission;
+    if (!messenger) return this.deliverSms(storeId, submission);
+    if (await this.messengerSender.deliver(storeId, { ...submission, messenger }))
+      await this.recordRefusal(storeId, submission);
+    return true;
+  }
+
+  private async deliverSms(storeId: string, submission: Submission): Promise<boolean> {
+    const { recipient, destination, body, claimedAt, sender } = submission;
+    const { id: recipientId, contactId } = recipient;
     let receipt: SentMessage;
     try {
       receipt = await this.messaging.send(
@@ -322,7 +307,7 @@ export class CampaignSenderService {
         await this.counts.recordOutcome(
           storeId,
           submission.campaignId,
-          this.unknownOutcome({ id: recipientId, claimedAt }, countSmsParts(body)),
+          unknownOutcome(this.clock.now(), { id: recipientId, claimedAt }, countSmsParts(body)),
         );
         return true;
       }
@@ -334,7 +319,12 @@ export class CampaignSenderService {
     return true;
   }
 
-  private async saveAcceptance(storeId: string, submission: Submission, receipt: SentMessage) {
+  private async saveAcceptance(
+    storeId: string,
+    submission: Submission,
+    receipt: { providerMessageId: string; credits: number | null },
+    note?: 'image_rejected' | false,
+  ) {
     const {
       campaignId,
       recipient: { id: recipientId },
@@ -349,6 +339,7 @@ export class CampaignSenderService {
       providerMessageId,
       credits,
       sentAt: claimedAt,
+      errorCode: note || undefined,
       requireSavedReceipt: false,
     });
   }
@@ -388,14 +379,4 @@ export class CampaignSenderService {
       return false;
     });
   }
-}
-
-function canProcess(
-  campaign: LockedCampaign | undefined,
-): campaign is LockedCampaign & { shortLinkBase: string } {
-  return (
-    !!campaign?.shortLinkBase &&
-    (campaign.status === 'sending' ||
-      (campaign.status === 'cancelled' && campaign.settlementPendingAt !== null))
-  );
 }

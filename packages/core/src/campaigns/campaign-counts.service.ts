@@ -17,9 +17,12 @@ type RecipientOutcome = {
 type Acceptance = {
   recipientId: string;
   providerMessageId: string;
-  credits: number;
+  // Null for a message that costs no credits.
+  credits: number | null;
   sentAt: Date;
   requireSavedReceipt: boolean;
+  // Set on a sent message that went out without its image.
+  errorCode?: 'image_rejected';
 };
 
 @Injectable()
@@ -53,7 +56,7 @@ export class CampaignCountsService {
   async recordAcceptance(
     storeId: string,
     id: string,
-    { recipientId, providerMessageId, credits, sentAt, requireSavedReceipt }: Acceptance,
+    { recipientId, providerMessageId, credits, sentAt, requireSavedReceipt, errorCode }: Acceptance,
   ): Promise<void> {
     await this.recordOutcome(storeId, id, {
       recipientId,
@@ -68,7 +71,7 @@ export class CampaignCountsService {
         smsCredits: credits,
         sentAt,
         claimedAt: null,
-        errorCode: null,
+        errorCode: errorCode ?? null,
         failedAt: null,
       },
     });
