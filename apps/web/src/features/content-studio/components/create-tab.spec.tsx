@@ -128,6 +128,28 @@ it('opens Create post with the saved piece and offers no post for an SMS', async
   expect(screen.queryByRole('button', { name: 'Schedule post' })).toBeNull();
 });
 
+it('opens Create post with the piece already saved, and saves again only after an edit', async () => {
+  const user = userEvent.setup();
+  show();
+  await user.type(screen.getByLabelText(/Anything else Dakly should know/), 'Winter kurtis');
+  await user.click(screen.getByRole('button', { name: /Write 3 options/ }));
+  const [first] = await screen.findAllByRole('article');
+  const saves = () =>
+    requests.filter(({ method, url }) => method === 'POST' && url.endsWith('/content-pieces'));
+  await user.click(within(first!).getByRole('button', { name: 'Save' }));
+  await within(first!).findByRole('button', { name: 'Saved' });
+  push.mockClear();
+  await user.click(within(first!).getByRole('button', { name: 'Schedule post' }));
+  await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+  expect(saves()).toHaveLength(1);
+
+  await user.click(within(first!).getByRole('button', { name: 'Edit' }));
+  await user.type(within(first!).getByLabelText('Edit text'), ' today');
+  await user.click(within(first!).getByRole('button', { name: 'Schedule post' }));
+  await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(2));
+  expect(saves()).toHaveLength(2);
+});
+
 it('rewrites one option with a Make it tool and saves it with the new AI run', async () => {
   const user = userEvent.setup();
   show();

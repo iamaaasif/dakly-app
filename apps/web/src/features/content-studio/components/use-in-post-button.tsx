@@ -7,7 +7,13 @@ import { Button } from '@dakly/ui/button';
 import { useSavePiece } from '../api/save-piece';
 
 // The post editor opens with the saved piece, so its AI provenance carries over.
-export function UseInPostButton({ piece }: { piece: CreateContentPieceInput }) {
+type UseInPostButtonProps = {
+  piece: CreateContentPieceInput;
+  savedId: string | null;
+  onSaved: (id: string) => void;
+};
+
+export function UseInPostButton({ piece, savedId, onSaved }: UseInPostButtonProps) {
   const router = useRouter();
   const save = useSavePiece();
   return (
@@ -16,11 +22,15 @@ export function UseInPostButton({ piece }: { piece: CreateContentPieceInput }) {
         className="ml-auto"
         loading={save.isPending}
         disabled={!piece.body.trim()}
-        onClick={() =>
+        onClick={() => {
+          if (savedId) return router.push(`/social/posts/new?piece=${savedId}`);
           save.mutate(piece, {
-            onSuccess: ({ id }) => router.push(`/social/posts/new?piece=${id}`),
-          })
-        }
+            onSuccess: ({ id }) => {
+              onSaved(id);
+              router.push(`/social/posts/new?piece=${id}`);
+            },
+          });
+        }}
       >
         Schedule post <ChevronRight aria-hidden="true" size={14} strokeWidth={1.75} />
       </Button>
