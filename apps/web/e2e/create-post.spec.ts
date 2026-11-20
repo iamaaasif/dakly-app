@@ -62,7 +62,6 @@ test('writes a caption and schedules the post', async ({ page, context, baseURL 
         })
       ).status(),
     ).toBe(204);
-    // The real model is not called in tests; the reply carries the context header the app checks.
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/social/posts/new');
     await expect(page.getByRole('heading', { name: 'Create post', level: 1 })).toBeVisible();

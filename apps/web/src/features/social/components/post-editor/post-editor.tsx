@@ -42,34 +42,36 @@ export function PostEditor({ accounts, initial, onSubmit, ...frame }: PostEditor
   };
   return (
     <FormProvider {...form}>
-      <EditorHeader
-        title={frame.title}
-        backHref={frame.backHref}
-        pending={frame.pending}
-        canQueue={post.targets.length > 0}
-        queueLabel={submitButtonLabel(when.choice)}
-        onSaveDraft={() => submit({ mode: 'draft' })}
-        onQueue={queue}
-      />
-      {frame.error && (
-        <p role="alert" className="m-4 rounded-md bg-danger-soft p-3 text-sm text-danger md:mx-6">
-          {frame.error}
-        </p>
-      )}
-      <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] xl:grid-cols-2">
-        <div className="space-y-4 p-4 md:p-6">
-          <PostDestinations accounts={accounts} />
-          <CaptionField accounts={accounts} />
-          <PostWhenField
-            choice={when.choice}
-            time={when.time}
-            timeError={when.timeError}
-            onChoice={when.setChoice}
-            onTime={when.setTime}
-          />
+      <main className="min-h-screen bg-background">
+        <EditorHeader
+          title={frame.title}
+          backHref={frame.backHref}
+          pending={frame.pending}
+          canQueue={post.targets.length > 0}
+          queueLabel={submitButtonLabel(when.choice)}
+          onSaveDraft={() => submit({ mode: 'draft' })}
+          onQueue={queue}
+        />
+        {frame.error && (
+          <p role="alert" className="m-4 rounded-md bg-danger-soft p-3 text-sm text-danger md:mx-6">
+            {frame.error}
+          </p>
+        )}
+        <div className="grid lg:grid-cols-[minmax(0,7fr)_minmax(0,8fr)]">
+          <div className="space-y-4 p-4 md:p-6">
+            <PostDestinations accounts={accounts} />
+            <CaptionField accounts={accounts} />
+            <PostWhenField
+              choice={when.choice}
+              time={when.time}
+              timeError={when.timeError}
+              onChoice={when.setChoice}
+              onTime={when.setTime}
+            />
+          </div>
+          <PreviewColumn preview={preview} whenLabel={whenLabelOf(when.choice, when.time)} />
         </div>
-        <PreviewColumn preview={preview} whenLabel={whenLabelOf(when.choice, when.time)} />
-      </div>
+      </main>
     </FormProvider>
   );
 }
@@ -81,7 +83,7 @@ type PreviewColumnProps = {
 
 function PreviewColumn({ preview, whenLabel }: PreviewColumnProps) {
   return (
-    <div className="bg-surface-muted p-4 md:p-6 lg:min-h-[calc(100vh-8rem)]">
+    <div className="bg-surface-muted p-4 md:p-6 lg:min-h-[calc(100vh-4.25rem)]">
       <div className="lg:sticky lg:top-24">
         <PostPreview {...preview} whenLabel={whenLabel} />
       </div>

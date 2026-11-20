@@ -43,7 +43,7 @@ export function CaptionField({ accounts }: { accounts: SocialAccount[] }) {
         <Textarea
           aria-label="Caption"
           className="min-h-48"
-          placeholder="Write a caption, or generate one with Dakly AI above"
+          placeholder="Write a caption"
           value={caption}
           onChange={(event) => setValue('caption', event.target.value, { shouldDirty: true })}
         />
