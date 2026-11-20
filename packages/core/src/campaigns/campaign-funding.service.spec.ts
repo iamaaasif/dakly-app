@@ -66,6 +66,19 @@ function fixture(status: 'sending' | 'paused' = 'sending') {
 }
 
 describe('legacy campaign SMS funding', () => {
+  it('reports an approved-state campaign with no approval time before touching its wallet', async () => {
+    const { service, campaigns, wallets } = fixture();
+    campaigns.lockCampaign.mockResolvedValueOnce({
+      channel: 'sms',
+      status: 'sending',
+      approvedAt: null,
+    });
+    await expect(service.prepare(storeId, campaignId)).rejects.toMatchObject({
+      code: 'CAMPAIGN_APPROVAL_TIME_MISSING',
+    });
+    expect(wallets.lockForReservation).not.toHaveBeenCalled();
+  });
+
   it('keeps the original reservation and pauses before an unaffordable first send', async () => {
     const { service, campaigns, wallets, notification } = fixture();
 
