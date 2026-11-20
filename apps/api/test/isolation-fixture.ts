@@ -9,6 +9,13 @@ import { StaffTransaction } from '@dakly/core/platform/database/staff-transactio
 import { SessionsService } from '@dakly/core/sessions/sessions.service';
 import { createDatabase } from '@dakly/db/client';
 
+let phoneCounter = randomInt(0, 40_000_000);
+// A counter, not randomInt, so two phones in one run can never collide on users_phone_key.
+export function uniquePhone(prefix: '017' | '018'): string {
+  phoneCounter = (phoneCounter + 1) % 80_000_000;
+  return `${prefix}${10_000_000 + phoneCounter}`;
+}
+
 export type Actor = { id: string; phone: string; cookie: string };
 export type Shop = {
   id: string;
@@ -49,7 +56,7 @@ export class IsolationFixture {
 
   async account(): Promise<Actor> {
     const id = randomUUID(),
-      phone = `017${randomInt(10000000, 99999999)}`;
+      phone = uniquePhone('017');
     this.users.push(id);
     await this.admin.pool.query(
       'insert into users(id,name,phone,phone_verified_at) values($1,$2,$3,now())',
