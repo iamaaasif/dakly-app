@@ -20,6 +20,8 @@ import { OrderConfirmationService } from './order-confirmation.service';
 import { OrderProductArchiveController } from './order-product-archive.controller';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
+import { OrderSetupRepository } from './order-setup.repository';
+import { OrderSetupService } from './order-setup.service';
 import { OrdersController } from './orders.controller';
 import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
@@ -47,6 +49,8 @@ import { OrdersService } from './orders.service';
     ChatOrdersService,
     OrdersRepository,
     OrdersService,
+    OrderSetupRepository,
+    OrderSetupService,
     OrderReportingRepository,
     OrderReportingService,
     OrderAttributionRepository,
@@ -58,6 +62,7 @@ import { OrdersService } from './orders.service';
     BuyerOrdersService,
     ChatOrdersService,
     OrdersService,
+    OrderSetupService,
     OrderReportingService,
     OrderAttributionService,
     OrderConfirmationService,

@@ -27,6 +27,7 @@ const connectionFields = {
   displayName: channelConnections.displayName,
   externalAccountId: channelConnections.externalAccountId,
   status: channelConnections.status,
+  isAiLive: channelConnections.isAiLive,
   tokenExpiresAt: channelConnections.tokenExpiresAt,
   connectedAt: channelConnections.connectedAt,
   disconnectedAt: channelConnections.disconnectedAt,

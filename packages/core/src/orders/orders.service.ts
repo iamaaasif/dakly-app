@@ -25,8 +25,9 @@ import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
+import { toOrderListItem } from './order-list-item';
 import { moveOrderReservations } from './order-reservations';
-import { returnRisk } from './order-risk';
+import { orderRiskFields } from './order-risk';
 import {
   isSyncedOrder,
   orderStageCounts,
@@ -196,10 +197,6 @@ export class OrdersService {
     });
   }
 
-  hasChatOrder(storeId: string): Promise<boolean> {
-    return this.repository.hasChatOrder(storeId);
-  }
-
   async list(
     storeId: string,
     query: OrderListQuery,
@@ -223,13 +220,9 @@ export class OrdersService {
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
     ]);
     const byPhone = new Map(outcomes.map((row) => [row.phone, row]));
-    const items = page.map(({ recipientPhone, createdAt, ...row }) => ({
-      ...row,
-      createdAt: createdAt.toISOString(),
-      totalPoisha: orderTotalPoisha(row),
-      returnRisk: returnRisk(byPhone.get(recipientPhone)),
-      isWaitingForConfirmation: row.stage === 'to_confirm' && createdAt < overdueBefore,
-    }));
+    const items = page.map((row) =>
+      toOrderListItem(row, byPhone.get(row.recipientPhone), overdueBefore),
+    );
     return {
       items,
       counts: orderStageCounts(await this.repository.countByStage(storeId)),
@@ -255,7 +248,7 @@ export class OrdersService {
       returnedAt: isoTime(order.returnedAt),
       codCollectedAt: isoTime(order.codCollectedAt),
       totalPoisha: orderTotalPoisha(order),
-      returnRisk: returnRisk(outcomes[0]),
+      ...orderRiskFields(outcomes[0]),
       items: await this.repository.items(storeId, orderId),
       timeline,
     };

@@ -18,9 +18,9 @@ const badgeVariants = {
   failed: 'danger',
 } as const satisfies Record<CalendarStatus, string>;
 
-type PostListViewProps = { entries: CalendarEntry[] };
+type PostListViewProps = { entries: CalendarEntry[]; onOpen: (entry: CalendarEntry) => void };
 
-export function PostListView({ entries }: PostListViewProps) {
+export function PostListView({ entries, onOpen }: PostListViewProps) {
   const days = [...entriesByDay(entries)];
   if (!days.length)
     return <p className="border-t border-border p-6 text-text-muted">No posts in this month.</p>;
@@ -32,7 +32,11 @@ export function PostListView({ entries }: PostListViewProps) {
           <ul className="divide-y divide-border">
             {dayEntries.map((entry) => (
               <li key={entry.post.id}>
-                <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => onOpen(entry)}
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus"
+                >
                   <span className="w-20 shrink-0 font-medium">{formatTime(entry.at)}</span>
                   <span className="flex gap-1">
                     {entry.kinds.map((kind) => (
@@ -44,7 +48,7 @@ export function PostListView({ entries }: PostListViewProps) {
                     {entry.kinds.map((kind) => networkNames[kind]).join(' and ')}
                   </span>
                   <Badge variant={badgeVariants[entry.status]}>{statusLabels[entry.status]}</Badge>
-                </div>
+                </button>
               </li>
             ))}
           </ul>

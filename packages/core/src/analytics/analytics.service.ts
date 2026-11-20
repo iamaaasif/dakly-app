@@ -5,6 +5,7 @@ import { lifecycleStages } from '@dakly/contracts/contacts';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoresService } from '../stores/stores.service';
+import { returnPerTaka } from './analytics-ratios';
 import { AnalyticsRepository } from './analytics.repository';
 import {
   monthToDate,
@@ -83,6 +84,19 @@ export class AnalyticsService {
       'campaign',
       ids,
     );
+  }
+
+  // One rounding rule for every page that shows return per ৳1 (glossary).
+  returnPerTaka(revenuePoisha: bigint, costPoisha: bigint) {
+    return returnPerTaka(revenuePoisha, costPoisha);
+  }
+
+  attributedOrders(
+    storeId: string,
+    source: { type: 'campaign' | 'automation'; id: string },
+    page: { cursor?: string; limit: number },
+  ) {
+    return this.repository.attributedOrders(storeId, source, page);
   }
 
   async attributionBySource(
