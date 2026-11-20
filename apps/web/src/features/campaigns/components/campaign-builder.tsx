@@ -28,7 +28,6 @@ import {
 } from '../campaign-labels';
 import { CampaignChannelCards } from './campaign-channel-cards';
 import { formatDateTime } from '@/lib/format-date';
-import { formatCount, formatMoney } from '@/lib/format-money';
 import { useSessionContext } from '@/lib/session-context';
 
 const detailsSchema = createCampaignSchema.pick({ name: true, goal: true });
@@ -77,7 +76,7 @@ function NewCampaignBuilder() {
   );
 }
 
-function BuilderHeader({
+export function BuilderHeader({
   title,
   subtitle,
   onBack,
@@ -301,26 +300,6 @@ function CampaignSummary({ campaign }: { campaign: CampaignResponse }) {
           </div>
         )}
       </dl>
-      {campaign.attribution && campaign.status !== 'draft' && (
-        <div className="space-y-2 border-t border-border pt-4">
-          <h2 className="font-semibold">Campaign results</h2>
-          <dl className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <dt className="text-text-muted">Orders</dt>
-              <dd className="font-semibold tabular-nums">
-                {formatCount(BigInt(campaign.attribution.orders))}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-text-muted">Revenue</dt>
-              <dd className="font-semibold tabular-nums">
-                {formatMoney(BigInt(campaign.attribution.revenuePoisha))}
-              </dd>
-            </div>
-          </dl>
-          <p className="text-sm text-text-muted">Includes returns up to today.</p>
-        </div>
-      )}
     </section>
   );
 }

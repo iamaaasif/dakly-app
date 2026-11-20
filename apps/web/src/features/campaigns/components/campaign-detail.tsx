@@ -3,8 +3,10 @@
 import { Button } from '@dakly/ui/button';
 
 import { useCampaign } from '../api/get-campaign';
+import { hasCampaignResults } from '../campaign-labels';
 import { CampaignBuilder } from './campaign-builder';
 import { CampaignLoading } from './campaign-loading';
+import { CampaignResults } from './campaign-results';
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const campaign = useCampaign(campaignId);
@@ -24,5 +26,6 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         Campaign not found
       </p>
     );
+  if (hasCampaignResults(campaign.data.status)) return <CampaignResults campaign={campaign.data} />;
   return <CampaignBuilder key={campaign.data.id} campaign={campaign.data} />;
 }
