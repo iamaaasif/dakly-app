@@ -28,11 +28,20 @@ export class AttributionRebuildService {
       const { windowDays, rebuild } = await this.stores.attributionRebuild(storeId);
       if (rebuild?.id !== rebuildId) return null;
       const page = await this.orders.rebuildPage(storeId, { ...rebuild, limit: PAGE_SIZE });
-      for (const { id } of page) await this.engine.attribute(storeId, id, windowDays);
-      const after = page.length === PAGE_SIZE ? (page.at(-1) ?? null) : null;
+      const selections = [];
+      for (const order of page) {
+        selections.push({ order, reference: await this.engine.select(storeId, order, windowDays) });
+      }
+      for (const { order, reference } of selections)
+        await this.orders.rebuild(storeId, order.id, order, reference);
+      const after = page.length === PAGE_SIZE ? (selections.at(-1)?.order ?? null) : null;
       await this.stores.saveAttributionRebuild(
         storeId,
-        after && { ...rebuild, after, processedOrders: rebuild.processedOrders + page.length },
+        after && {
+          ...rebuild,
+          after: { id: after.id, at: after.at },
+          processedOrders: rebuild.processedOrders + page.length,
+        },
       );
       return after;
     });

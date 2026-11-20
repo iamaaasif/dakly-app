@@ -26,6 +26,23 @@ const clearedAttribution = {
   amountPoisha: null,
 };
 
+const attributionFields = {
+  buyerContactId: orders.buyerContactId,
+  stage: orders.stage,
+  recipientPhone: orders.recipientPhone,
+  isRecipientBuyer: orders.isRecipientBuyer,
+  createdAt: orders.createdAt,
+  itemsSubtotalPoisha: orders.itemsSubtotalPoisha,
+  orderDiscountPoisha: orders.orderDiscountPoisha,
+  sourceType: orders.attributedSourceType,
+  sourceId: orders.attributedSourceId,
+  channel: orders.attributedChannel,
+  touchId: orders.attributedTouchId,
+  touchAt: orders.attributedTouchAt,
+  windowDays: orders.attributedWindowDays,
+  amountPoisha: orders.attributedAmountPoisha,
+};
+
 @Injectable()
 export class OrderAttributionRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -42,16 +59,16 @@ export class OrderAttributionRepository {
     const { startedAt, timeZone, after, limit } = range;
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: orders.id, at: sql<string>`${orders.createdAt}::text` })
+        .select({ ...attributionFields, id: orders.id, at: sql<string>`${orders.createdAt}::text` })
         .from(orders)
         .where(
           and(
             eq(orders.storeId, storeId),
             lte(orders.createdAt, new Date(startedAt)),
             sql`${orders.createdAt} >= ((${startedAt}::timestamptz at time zone ${timeZone})::date - 364)::timestamp at time zone ${timeZone}`,
-            (after &&
-              sql`(${orders.createdAt}, ${orders.id}) > (${after.at}::timestamptz, ${after.id}::uuid)`) ||
-              undefined,
+            after
+              ? sql`(${orders.createdAt}, ${orders.id}) > (${after.at}::timestamptz, ${after.id}::uuid)`
+              : undefined,
           ),
         )
         .orderBy(asc(orders.createdAt), asc(orders.id))
@@ -59,29 +76,14 @@ export class OrderAttributionRepository {
     );
   }
 
-  async lock(storeId: string, orderId: string) {
-    const [order] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({
-          buyerContactId: orders.buyerContactId,
-          stage: orders.stage,
-          recipientPhone: orders.recipientPhone,
-          isRecipientBuyer: orders.isRecipientBuyer,
-          createdAt: orders.createdAt,
-          amountPoisha: orders.attributedAmountPoisha,
-          itemsSubtotalPoisha: orders.itemsSubtotalPoisha,
-          orderDiscountPoisha: orders.orderDiscountPoisha,
-          sourceType: orders.attributedSourceType,
-          sourceId: orders.attributedSourceId,
-          channel: orders.attributedChannel,
-          touchId: orders.attributedTouchId,
-          touchAt: orders.attributedTouchAt,
-          windowDays: orders.attributedWindowDays,
-        })
+  async find(storeId: string, orderId: string, lock?: 'no key update') {
+    const [order] = await this.database.forStore(storeId, (tx) => {
+      const query = tx
+        .select(attributionFields)
         .from(orders)
-        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)))
-        .for('no key update'),
-    );
+        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)));
+      return lock ? query.for(lock) : query;
+    });
     return order;
   }
 

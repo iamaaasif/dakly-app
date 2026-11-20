@@ -158,8 +158,8 @@ export class StoresService {
     return this.repository.writeAttributionState(storeId, rebuild);
   }
 
-  async attributionWindowDays(storeId: string): Promise<1 | 3 | 7> {
-    const days = await this.repository.attributionWindowDays(storeId);
+  async attributionWindowDays(storeId: string, lock?: 'share'): Promise<AttributionWindow> {
+    const days = await this.repository.attributionWindowDays(storeId, lock);
     if (days !== 1 && days !== 3 && days !== 7) throw storeError('STORE_NOT_FOUND');
     return days;
   }

@@ -7,6 +7,7 @@ import { CampaignsService } from '../campaigns/campaigns.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { LinksService } from '../links/links.service';
 import { OrderAttributionService } from '../orders/order-attribution.service';
+import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { selectAttributionTouch, type AttributionTouch } from './attribution-touch';
@@ -20,39 +21,36 @@ export class OrderAttributionEngine {
     @Inject(LinksService) private readonly links: LinksService,
     @Inject(OrderAttributionService) private readonly orders: OrderAttributionService,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
   ) {}
 
-  attribute(storeId: string, orderId: string, rebuildWindow?: AttributionWindow) {
-    return this.orders.record(
-      storeId,
-      orderId,
-      async (order) => {
-        // A replay keeps the live decision even if the buyer edited their phone since.
-        if (order.isAttributed && rebuildWindow === undefined) return undefined;
-        const [buyer] = await this.contacts.findRecipients(storeId, [order.buyerContactId]);
-        if (!buyer?.phone || buyer.kind !== 'customer' || buyer.isBlocked) return null;
-        if (order.isRecipientBuyer && order.recipientPhone !== buyer.phone) return null;
-        const windowDays = rebuildWindow ?? (await this.stores.attributionWindowDays(storeId));
-        return this.findReference(
-          storeId,
-          { id: buyer.id, phone: buyer.phone },
-          order.createdAt,
-          windowDays,
-        );
-      },
-      { kind: 'system' },
-    );
+  async attribute(storeId: string, orderId: string) {
+    const order = await this.orders.find(storeId, orderId);
+    if (!order?.buyerContactId || order.stage === 'cancelled' || order.sourceType) return;
+    for (;;) {
+      const windowDays = await this.stores.attributionWindowDays(storeId);
+      const selection = await this.select(storeId, order, windowDays);
+      const current = await this.transaction.run(storeId, async () => {
+        if ((await this.stores.attributionWindowDays(storeId, 'share')) !== windowDays)
+          return false;
+        if (selection) await this.orders.record(storeId, orderId, { ...selection, buyer: order });
+        return true;
+      });
+      if (current) return;
+    }
   }
 
-  private async findReference(
+  async select(
     storeId: string,
-    buyer: { id: string; phone: string },
-    orderAt: Date,
+    order: NonNullable<Awaited<ReturnType<OrderAttributionService['find']>>>,
     windowDays: AttributionWindow,
   ) {
+    if (!order.buyerContactId || order.stage === 'cancelled') return null;
+    const buyer = await this.buyer(storeId, order.buyerContactId);
+    if (!buyer || (order.isRecipientBuyer && order.recipientPhone !== buyer.phone)) return null;
     const selected = selectAttributionTouch(
-      await this.taps(storeId, buyer, orderAt, windowDays),
-      orderAt,
+      await this.taps(storeId, buyer, order.createdAt, windowDays),
+      order.createdAt,
       windowDays,
     );
     if (!selected) return null;
@@ -64,6 +62,12 @@ export class OrderAttributionEngine {
       touchAt: selected.eligibleAt,
       windowDays,
     };
+  }
+
+  private async buyer(storeId: string, contactId: string) {
+    const [buyer] = await this.contacts.findRecipients(storeId, [contactId]);
+    if (!buyer?.phone || buyer.kind !== 'customer' || buyer.isBlocked) return;
+    return { id: buyer.id, phone: buyer.phone };
   }
 
   private async taps(
@@ -97,7 +101,6 @@ export class OrderAttributionEngine {
         {
           id,
           eligibleAt,
-          kind: 'tap',
           sourceType,
           sourceId: source.sourceId,
           channel: source.channel,

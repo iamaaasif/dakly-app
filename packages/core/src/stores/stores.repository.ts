@@ -139,10 +139,14 @@ export class StoresRepository {
     );
   }
 
-  async attributionWindowDays(storeId: string) {
-    const [row] = await this.tenant.forStore(storeId, (tx) =>
-      tx.select({ days: stores.attributionWindowDays }).from(stores).where(eq(stores.id, storeId)),
-    );
+  async attributionWindowDays(storeId: string, lock?: 'share') {
+    const [row] = await this.tenant.forStore(storeId, (tx) => {
+      const query = tx
+        .select({ days: stores.attributionWindowDays })
+        .from(stores)
+        .where(eq(stores.id, storeId));
+      return lock ? query.for(lock) : query;
+    });
     return row?.days;
   }
 

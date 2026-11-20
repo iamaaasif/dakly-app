@@ -1,10 +1,5 @@
 import { z } from 'zod';
 
-import {
-  attributionCreatedEventSchema,
-  attributionRemovedEventSchema,
-  attributionWindowChangedEventSchema,
-} from './analytics';
 import { campaignApprovedEventSchema } from './campaigns';
 import {
   channelConnectedEventSchema,
@@ -37,6 +32,8 @@ import {
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
 import {
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
@@ -53,6 +50,7 @@ import {
   postPublishedEventSchema,
   postScheduledEventSchema,
 } from './social';
+import { attributionWindowChangedEventSchema } from './stores';
 import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [

@@ -285,7 +285,7 @@ export class OrdersService {
           ? { paymentStatus: 'refund_due' }
           : {}),
       });
-      if (change.to === 'cancelled') await this.attribution.record(storeId, orderId, null, actor);
+      if (change.to === 'cancelled') await this.attribution.clear(storeId, orderId);
       await recordOrderStage(
         storeId,
         orderId,

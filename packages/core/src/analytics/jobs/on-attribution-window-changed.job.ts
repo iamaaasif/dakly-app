@@ -1,7 +1,7 @@
 import { Inject } from '@nestjs/common';
 import { z } from 'zod';
 
-import { attributionWindowChangedEventSchema } from '@dakly/contracts/events/analytics';
+import { attributionWindowChangedEventSchema } from '@dakly/contracts/events/stores';
 
 import { HandlesEvent } from '../../platform/outbox/handles-event';
 import type { JobHandler } from '../../platform/queue/job-handler';
