@@ -6,6 +6,8 @@ import { useRef, type ReactElement, type ReactNode } from 'react';
 import { Button } from './button';
 import { cn } from './cn';
 
+const widthClasses = { default: 'max-w-sm', wide: 'max-w-xl' };
+
 const sideClasses = {
   left: 'left-0 border-r',
   right: 'right-0 border-l',
@@ -17,6 +19,9 @@ export type SheetProps = {
   footer?: ReactNode;
   open: boolean;
   side?: keyof typeof sideClasses;
+  width?: keyof typeof widthClasses;
+  // Shown beside the title, such as the tile in a drawer header.
+  icon?: ReactNode;
   onClose: () => void;
   restoreFocusTo?: () => HTMLElement | null;
   children: ReactNode;
@@ -28,6 +33,8 @@ export function Sheet({
   footer,
   open,
   side = 'right',
+  width = 'default',
+  icon,
   onClose,
   restoreFocusTo,
   children,
@@ -48,12 +55,13 @@ export function Sheet({
               target.focus();
           }}
           className={cn(
-            'fixed inset-y-0 z-50 flex h-dvh w-full max-w-sm flex-col border-border bg-surface text-text shadow-overlay',
+            'fixed inset-y-0 z-50 flex h-dvh w-full flex-col border-border bg-surface text-text shadow-overlay',
             footer ? 'overflow-hidden' : 'overflow-y-auto',
+            widthClasses[width],
             sideClasses[side],
           )}
         >
-          <SheetHeader title={title} description={description} />
+          <SheetHeader title={title} description={description} icon={icon} />
           <div
             className={cn(
               'flex-1 px-6 pb-6',
@@ -73,10 +81,15 @@ export function Sheet({
   );
 }
 
-function SheetHeader({ title, description }: Pick<SheetProps, 'title' | 'description'>) {
+function SheetHeader({
+  title,
+  description,
+  icon,
+}: Pick<SheetProps, 'title' | 'description' | 'icon'>) {
   return (
     <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6 pb-4">
-      <div>
+      {icon}
+      <div className="min-w-0 flex-1">
         <DialogPrimitive.Title className="text-lg font-semibold">{title}</DialogPrimitive.Title>
         {description && (
           <DialogPrimitive.Description className="text-sm text-text-muted">

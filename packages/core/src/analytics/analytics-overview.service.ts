@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type {
   AnalyticsChannel,
-  AnalyticsFunnelStep,
   AnalyticsOverviewResponse,
   AnalyticsQuery,
 } from '@dakly/contracts/analytics';
@@ -11,6 +10,7 @@ import { campaignChannels } from '@dakly/contracts/campaigns';
 import { AutomationsService } from '../automations/automations.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { DAY_MS } from '../platform/time';
+import { funnel } from './analytics-funnel';
 import { emptyTotals, readMessageTotals, sumTotals, type Totals } from './analytics-message-totals';
 import { percent, returnPerTaka } from './analytics-ratios';
 import { AnalyticsTabsService } from './analytics-tabs.service';
@@ -105,28 +105,6 @@ function channelRows(totals: Map<string, Totals>, revenue: Map<string, bigint>) 
       revenuePoisha: (revenue.get(channel) ?? 0n).toString(),
     };
   });
-}
-
-function funnel(
-  all: Totals,
-  readable: Totals,
-  people: { delivered: number; tapped: number },
-  ordered: number,
-) {
-  // An order can follow a read with no tap, so Ordered can pass the step before it; that has no sensible percent.
-  const step = (count: number, before: number): AnalyticsFunnelStep => {
-    const share = percent(count, before);
-    return { count, percentOfPrevious: share !== null && share > 100 ? null : share };
-  };
-  return {
-    sent: { count: all.sent, percentOfPrevious: null },
-    delivered: step(all.delivered, all.sent),
-    // The read step divides by delivered on the channels that report reads, not by all delivered.
-    read: step(readable.read, readable.delivered),
-    // Tapped counts people, so it is measured against people delivered to, as the tap rate is.
-    tapped: step(people.tapped, people.delivered),
-    ordered: step(ordered, people.tapped),
-  };
 }
 
 function weeklyRevenue(

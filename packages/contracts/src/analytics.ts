@@ -23,6 +23,13 @@ export const analyticsQuerySchema = z.strictObject({
     .transform((value) => periodDays[value]),
 });
 
+// Download covers the tabs that have a table, including the two that arrive with the Channels and Social posts screens.
+export const analyticsExportTabs = [...analyticsTabs, 'channels', 'social'] as const;
+export const analyticsExportQuerySchema = z.strictObject({
+  tab: z.enum(analyticsExportTabs),
+  period: analyticsQuerySchema.shape.period,
+});
+export type AnalyticsExportQuery = z.infer<typeof analyticsExportQuerySchema>;
 // What the page keeps in the URL: the tab, the period, the Compare toggle and the Campaigns table filters.
 export const analyticsViewSchema = z.object({
   tab: z.enum(analyticsTabs).default('overview'),
@@ -61,6 +68,8 @@ export type AnalyticsCampaignRow = {
   startedAt: string;
   sent: number;
   delivered: number;
+  read: number;
+  costPoisha: string;
   tapPercent: number | null;
   orders: number;
   revenuePoisha: string;
@@ -74,6 +83,7 @@ export type AnalyticsAutomationRow = {
   isActive: boolean;
   entered: number;
   sent: number;
+  costPoisha: string;
   orders: number;
   revenuePoisha: string;
   orderedPercent: number | null;
@@ -167,4 +177,17 @@ export type AnalyticsOverviewResponse = {
     tapped: AnalyticsFunnelStep;
     ordered: AnalyticsFunnelStep;
   };
+};
+
+export const analyticsTipSteps = ['delivered', 'read', 'tapped', 'ordered'] as const;
+export type AnalyticsTipStep = (typeof analyticsTipSteps)[number];
+
+// `suggestion` is null when the model was unavailable; the drop is still shown.
+export type AnalyticsTipResponse = {
+  tip: {
+    step: AnalyticsTipStep;
+    currentPercent: number;
+    usualPercent: number;
+    suggestion: string | null;
+  } | null;
 };
