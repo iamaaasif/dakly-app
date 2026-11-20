@@ -1133,6 +1133,7 @@ fixture('GET /automations', async () => {
   expect((await success(a, 'GET', '/automations', 200)).json().items[0]).toMatchObject({
     id: aId,
     enteredLast30Days: 0,
+    attributedRevenuePoisha: '0',
     trigger: 'consent_given',
     channels: ['sms'],
   });

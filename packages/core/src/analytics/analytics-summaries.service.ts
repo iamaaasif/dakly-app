@@ -98,12 +98,7 @@ export class AnalyticsSummariesService {
     range: ReportPeriod & { timeZone: string },
     now: Date,
   ) {
-    const existing = await this.summaries.readDailyMetrics(
-      storeId,
-      range,
-      [...marketingMetrics],
-      'all',
-    );
+    const existing = await this.summaries.readAttributionMetrics(storeId, range);
     const metrics = new Map(
       existing.map((row) => [`${row.day}/${row.metric}/${row.dimension}`, { ...row, value: 0n }]),
     );

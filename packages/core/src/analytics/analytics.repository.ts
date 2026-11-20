@@ -16,16 +16,30 @@ export const marketingMetrics = ['marketing_orders', 'marketing_revenue'] as con
 export class AnalyticsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  readDailyMetrics(
+  readDailyMetrics(storeId: string, period: ReportPeriod, metrics: string[]) {
+    return this.readMetrics(
+      storeId,
+      period,
+      metrics,
+      sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`,
+    );
+  }
+
+  readAttributionMetrics(storeId: string, period: ReportPeriod, dimensions?: string[]) {
+    return this.readMetrics(
+      storeId,
+      period,
+      [...marketingMetrics],
+      dimensions ? inArray(storeDailyMetrics.dimension, dimensions) : undefined,
+    );
+  }
+
+  private readMetrics(
     storeId: string,
     period: ReportPeriod,
     metrics: string[],
-    dimensions?: string[] | 'all',
+    filter: ReturnType<typeof sql> | undefined,
   ) {
-    let filter: ReturnType<typeof sql> | undefined;
-    if (dimensions === undefined)
-      filter = sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`;
-    else if (dimensions !== 'all') filter = inArray(storeDailyMetrics.dimension, dimensions);
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({

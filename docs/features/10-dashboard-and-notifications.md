@@ -238,7 +238,7 @@ Setup banner, greeting with the Ask box, a 3-step getting started card, KPI card
 
 ### How it works
 
-The dashboard reads `GET /dashboard` once per period. The `period` query accepts 7, 30 or 90 days and defaults to 30. The API uses the same report functions as Analytics for both periods and the daily points. Orders and Sales require Orders access. New customers, Customers who came back and lifecycle groups require Customers access. The lifecycle groups use the latest snapshot in the selected period. Money from Dakly messages uses the attribution rollup and requires Analytics view access. The Ask box waits for HOME-4, and the setup checklist waits for ACC-13. Campaign suggestions and the posts calendar are outside HOME-3. Lifecycle counts are visible without stage links until All customers can filter by lifecycle stage.
+The dashboard reads `GET /dashboard` once per period. The `period` query accepts 7, 30 or 90 days and defaults to 30. The API uses the same report functions as Analytics for both periods and the daily points. Orders and Sales require Orders access. New customers, Customers who came back and lifecycle groups require Customers access. The lifecycle groups use the latest snapshot in the selected period. Money from Dakly messages uses the attribution rollup and requires Analytics view access. The dashboard shows money cards in whole taka, with report values kept in poisha. The Ask box waits for HOME-4, and the setup checklist waits for ACC-13. Campaign suggestions and the posts calendar are outside HOME-3. Lifecycle counts are visible without stage links until All customers can filter by lifecycle stage.
 
 Notifications
 

@@ -54,7 +54,13 @@ type MetricsProps = { cards: DashboardResponse['cards']; period: number };
 
 export function DashboardMetrics({ cards, period }: MetricsProps) {
   return (
-    <section aria-label="Key figures" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <section
+      aria-label="Key figures"
+      className={cn(
+        'grid gap-4 sm:grid-cols-2',
+        metrics.every(({ id }) => cards[id]) ? 'xl:grid-cols-5' : 'xl:grid-cols-4',
+      )}
+    >
       {metrics.map(({ id, title, icon: Icon, color, fill, description }) => {
         const card = cards[id];
         if (!card) return null;
@@ -62,6 +68,7 @@ export function DashboardMetrics({ cards, period }: MetricsProps) {
         const total = BigInt(sales ? card.totalPoisha : card.total);
         const previous = BigInt(sales ? card.previousPoisha : card.previous);
         const points = sales ? card.pointsPoisha : card.points;
+        const amount = sales ? formatMoney(((total + 50n) / 100n) * 100n) : formatCount(total);
         return (
           <Card key={id} className="flex min-w-0 flex-col gap-3 p-4">
             <h2 className="flex items-center gap-2 text-md font-semibold xl:gap-1 xl:tracking-tight">
@@ -70,9 +77,9 @@ export function DashboardMetrics({ cards, period }: MetricsProps) {
               </span>
               {title}
             </h2>
-            <div className="flex flex-wrap items-end gap-2">
-              <p className="max-w-full text-2xl font-bold wrap-anywhere tabular-nums">
-                {sales ? formatMoney(total) : formatCount(total)}
+            <div className="flex min-w-0 items-end gap-2">
+              <p className="min-w-0 truncate text-xl font-bold tabular-nums" title={amount}>
+                {amount}
               </p>
               <Sparkline points={points} className={color} />
             </div>

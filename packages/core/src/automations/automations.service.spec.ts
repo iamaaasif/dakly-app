@@ -85,7 +85,12 @@ function serviceFor(graph: AutomationGraph) {
     {} as WalletService,
     {
       periods: async () => ({ current: { from: '2026-11-01', through: '2026-11-30' } }),
-      attributionBySource: async () => ({}),
+      attributionBySource: async (
+        _storeId: string,
+        _period: unknown,
+        _source: string,
+        ids: string[],
+      ) => Object.fromEntries(ids.map((id) => [id, { orders: '0', revenuePoisha: '0' }])),
     } as unknown as AnalyticsService,
   );
 }

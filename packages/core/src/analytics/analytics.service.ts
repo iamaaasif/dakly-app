@@ -4,7 +4,7 @@ import { lifecycleStages } from '@dakly/contracts/contacts';
 
 import { Clock } from '../platform/clock';
 import { StoresService } from '../stores/stores.service';
-import { AnalyticsRepository, marketingMetrics } from './analytics.repository';
+import { AnalyticsRepository } from './analytics.repository';
 import { reportDay, retainedSince, shiftReportDay, type ReportPeriod } from './report-period';
 
 type Point = { day: string; value: bigint };
@@ -59,12 +59,7 @@ export class AnalyticsService {
   ) {
     if (!ids.length) return {};
     const dimensions = ids.map((id) => `${source}:${id}`);
-    const rows = await this.repository.readDailyMetrics(
-      storeId,
-      period,
-      [...marketingMetrics],
-      dimensions,
-    );
+    const rows = await this.repository.readAttributionMetrics(storeId, period, dimensions);
     const totals = new Map<string, bigint>();
     for (const { dimension, metric, value } of rows) {
       const key = `${dimension}/${metric}`;

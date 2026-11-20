@@ -99,7 +99,7 @@ export class AutomationsService {
         stepCount: steps.length,
         channels,
         enteredLast30Days,
-        attributedRevenuePoisha: attribution[row.id]?.revenuePoisha,
+        attributedRevenuePoisha: attribution[row.id]!.revenuePoisha,
       };
     });
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };

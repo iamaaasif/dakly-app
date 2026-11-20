@@ -68,6 +68,29 @@ test('changes the report period and keeps cards scoped to the selected shop', as
     ]) {
       await expect(figures.getByRole('heading', { name: title, exact: true })).toBeVisible();
     }
+    const marketing = figures
+      .getByRole('heading', { name: 'Money from Dakly messages' })
+      .locator('..');
+    const amount = marketing.getByText('৳2,97,107', { exact: true });
+    async function expectAmountBesideTrend() {
+      await expect(amount).toBeVisible();
+      const amountBox = (await amount.boundingBox())!;
+      const chart = (await amount.locator('..').locator('svg').boundingBox())!;
+      const card = (await marketing.boundingBox())!;
+      expect(chart.x).toBeGreaterThanOrEqual(amountBox.x + amountBox.width);
+      expect(chart.x + chart.width).toBeLessThan(card.x + card.width);
+      expect(chart.y).toBeLessThan(amountBox.y + amountBox.height);
+      expect(chart.y + chart.height).toBeGreaterThan(amountBox.y);
+      expect(await amount.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+      expect(amountBox.height).toBeLessThan(40);
+    }
+    await expectAmountBesideTrend();
+    const rows = await figures
+      .getByRole('heading')
+      .evaluateAll((elements) =>
+        elements.map((heading) => heading.parentElement!.getBoundingClientRect().top),
+      );
+    expect(new Set(rows).size).toBe(1);
     await expect(figures.getByRole('img', { name: 'Up', exact: true })).toHaveCount(5);
     const lifecycle = page.getByRole('region', { name: 'Your customers at a glance' });
     await expect(lifecycle.getByText('2,486 customers', { exact: true })).toBeVisible();
@@ -83,6 +106,7 @@ test('changes the report period and keeps cards scoped to the selected shop', as
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       360,
     );
+    await expectAmountBesideTrend();
     if (process.env.DASHBOARD_EVIDENCE) {
       await page.screenshot({ path: testInfo.outputPath('dashboard-360x800.png') });
     }

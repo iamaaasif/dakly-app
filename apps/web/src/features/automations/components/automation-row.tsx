@@ -60,9 +60,7 @@ export function AutomationRow({
         <div>
           <dt className="text-text-muted">Revenue, 30 days</dt>
           <dd className="text-base font-semibold tabular-nums">
-            {draft || workflow.attributedRevenuePoisha === undefined
-              ? '—'
-              : formatMoney(BigInt(workflow.attributedRevenuePoisha))}
+            {draft ? '—' : formatMoney(BigInt(workflow.attributedRevenuePoisha))}
           </dd>
         </div>
       </dl>
