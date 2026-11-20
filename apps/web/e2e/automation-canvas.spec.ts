@@ -294,3 +294,29 @@ test('shows how many entries reached each step', async ({ page, context, baseURL
     await db.pool.end();
   }
 });
+
+test('blocks Start workflow for a trigger the shop cannot use yet', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const { headers } = await signIn(context, baseURL!);
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const evidence = process.env.CAMP6_CANVAS_EVIDENCE;
+  if (evidence) await mkdir(evidence, { recursive: true });
+  const created = await context.request.post('/api/automations', {
+    headers,
+    data: { name: 'Not ready yet', templateKey: 'back_in_stock' },
+  });
+  const { id } = (await created.json()) as { id: string };
+  try {
+    await page.goto(`/automations/${id}/canvas`);
+    const checks = page.getByRole('region', { name: 'Workflow checks' });
+    await expect(checks.getByText(/cannot use yet/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start workflow' })).toBeDisabled();
+    await captureEvidence(page, evidence, 'readiness');
+  } finally {
+    await db.pool.query('delete from automations where id=$1', [id]);
+    await db.pool.end();
+  }
+});

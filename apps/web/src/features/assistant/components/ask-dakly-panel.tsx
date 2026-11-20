@@ -9,6 +9,7 @@ import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
 
 import { useAskDakly } from '../api/ask-dakly';
+import { askSuggestions, MAX_SUGGESTIONS } from '../ask-suggestions';
 import { useSessionContext } from '@/lib/session-context';
 
 export type Turn =
@@ -20,12 +21,6 @@ type AskDaklyPanelProps = {
   onClose: () => void;
 };
 
-// Each one is answered by a report tool, and shows only when the member's role can view that report.
-const suggestions = [
-  { text: 'How much did I sell in the last 30 days?', canAsk: 'canViewOrders' },
-  { text: 'Explain my campaign performance', canAsk: 'canViewAnalytics' },
-  { text: 'How many customers came back in the last 30 days?', canAsk: 'canViewCustomers' },
-] as const;
 const pageNames: Record<string, string> = {
   dashboard: 'Dashboard',
   analytics: 'Analytics',
@@ -203,7 +198,9 @@ function Composer({ question, onQuestion, onSend, isPending, creditsLeft }: Comp
 
 function Suggestions({ onPick, disabled }: { onPick: (text: string) => void; disabled: boolean }) {
   const { data } = useSessionContext();
-  const shown = suggestions.filter(({ canAsk }) => data?.currentStore?.[canAsk]);
+  const shown = askSuggestions
+    .filter(({ canAsk }) => data?.currentStore?.[canAsk])
+    .slice(0, MAX_SUGGESTIONS);
   if (!shown.length) return null;
   return (
     <section aria-label="Suggested for this page" className="space-y-2">

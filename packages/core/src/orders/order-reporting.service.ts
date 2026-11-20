@@ -70,4 +70,12 @@ export class OrderReportingService {
   dailyOrderMetrics(storeId: string, range: { from: string; through: string; timeZone: string }) {
     return this.orders.dailyOrderMetrics(storeId, range);
   }
+
+  topProducts(
+    storeId: string,
+    range: { from: string; through: string; timeZone: string },
+    limit: number,
+  ) {
+    return this.orders.topProducts(storeId, range, limit);
+  }
 }

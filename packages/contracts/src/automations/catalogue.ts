@@ -238,6 +238,13 @@ export function isTriggerAvailable(key: TriggerKey): boolean {
   return readyBeforeChannels || orderTriggerKeys.includes(key);
 }
 
+// MSG-1 sends SMS only. Messenger comes with CHN-2 and CHAT-2, WhatsApp with Q2.
+const sendableChannels: readonly string[] = ['sms'];
+
+export function isChannelSendable(channel: string): boolean {
+  return sendableChannels.includes(channel);
+}
+
 export const actionKinds = [
   'add_tag',
   'remove_tag',
