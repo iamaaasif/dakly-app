@@ -36,6 +36,7 @@ export class MaintenanceService {
       ['archive audit months', () => this.auditArchive.archiveExpiredMonths()],
       ['purge expired files', () => this.files.purgeExpiredFiles()],
       ['purge orphan product objects', () => this.files.purgeOrphanProductObjects()],
+      ['archive old messages', () => this.retention.archiveStoreMessages()],
       ['purge expired store rows', () => this.retention.purgeStoreTables()],
       ['purge expired sessions', () => this.sessions.purgeExpired()],
       ['purge published outbox events', () => this.outbox.purgePublished()],
