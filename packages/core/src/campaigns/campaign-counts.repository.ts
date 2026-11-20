@@ -42,15 +42,12 @@ export class CampaignCountsRepository {
     });
   }
 
-  async read(storeId: string, ids: string[]) {
-    return this.database.forStore(storeId, (tx) =>
+  async markPending(storeId: string, id: string): Promise<void> {
+    await this.database.inTransaction(storeId, (tx) =>
       tx
-        .select({ id: campaignRecipients.campaignId, ...recipientTotals })
-        .from(campaignRecipients)
-        .where(
-          and(eq(campaignRecipients.storeId, storeId), inArray(campaignRecipients.campaignId, ids)),
-        )
-        .groupBy(campaignRecipients.campaignId),
+        .update(campaigns)
+        .set({ countsAt: null, updatedAt: sql`${campaigns.updatedAt}` })
+        .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id))),
     );
   }
 

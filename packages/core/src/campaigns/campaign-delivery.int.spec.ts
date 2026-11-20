@@ -25,8 +25,8 @@ import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
-import { CampaignCompletionService } from './campaign-completion.service';
 import { CampaignCountsRepository } from './campaign-counts.repository';
+import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsModule } from './campaigns.module';
@@ -677,7 +677,7 @@ describe('Campaign sender (Postgres)', () => {
     },
   );
 
-  it('reads recipient totals for a campaign finished before rollups existed', async () => {
+  it('repairs stored totals in the worker for a campaign finished before rollups existed', async () => {
     const { id } = await sendingCampaign(2);
     await admin.pool.query("update campaigns set status='sent', finished_at=$2 where id=$1", [
       id,
@@ -691,13 +691,26 @@ describe('Campaign sender (Postgres)', () => {
        (select id from campaign_recipients where campaign_id=$1 limit 1)`,
       [id],
     );
-    const counts = { sent: 1, delivered: 1, read: 1, failed: 1, countedAt: null };
+    expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 0, countedAt: null });
+    expect(await app.get(CampaignSendingRepository).listDueStores(noon, null, 100)).toContain(
+      storeId,
+    );
+    const queue = app.get<Queue>(getQueueToken(QUEUES.campaign));
+    await app.get(StartDueCampaignsJob).handle({});
+    const jobs = await queue.getWaiting();
+    try {
+      expect(jobs.map(({ data }) => data)).toContainEqual({ storeId });
+      await app.get(SendCampaignBatchJob).handle({ storeId });
+    } finally {
+      for (const job of jobs) await job.remove();
+    }
+    const counts = { sent: 1, delivered: 1, read: 1, failed: 1, countedAt: expect.any(String) };
     expect((await campaigns.get(storeId, id)).counts).toMatchObject(counts);
     const { items } = await campaigns.list(storeId, { limit: 100 });
     expect(items.find((item) => item.id === id)?.counts).toMatchObject(counts);
   });
 
-  it('preserves the provider receipt and rolls back acceptance if paused totals fail to save', async () => {
+  it('preserves a paused campaign acceptance when its rollup fails and repairs it in a later batch', async () => {
     const { id } = await sendingCampaign(1);
     const counts = app.get(CampaignCountsRepository);
     const save = vi.spyOn(counts, 'save');
@@ -713,8 +726,14 @@ describe('Campaign sender (Postgres)', () => {
         'select status, provider_message_id from campaign_recipients where campaign_id=$1',
         [id],
       );
-      expect(rows).toMatchObject([{ status: 'sending', provider_message_id: expect.any(String) }]);
-      expect((await campaigns.get(storeId, id)).counts.sent).toBe(0);
+      expect(rows).toMatchObject([{ status: 'sent', provider_message_id: expect.any(String) }]);
+      expect((await campaigns.get(storeId, id)).counts.countedAt).toBeNull();
+      await app.get(SendCampaignBatchJob).handle({ storeId });
+      expect((await campaigns.get(storeId, id)).counts).toMatchObject({
+        sent: 1,
+        countedAt: expect.any(String),
+      });
+      expect(driver.messages).toHaveLength(1);
     } finally {
       save.mockRestore();
     }
@@ -948,7 +967,7 @@ describe('Campaign sender (Postgres)', () => {
 
   it('counts an accepted SMS when the worker stops after a pause', async () => {
     const { id } = await sendingCampaign(2);
-    const finish = vi.spyOn(app.get(CampaignCompletionService), 'finish');
+    const finish = vi.spyOn(app.get(CampaignFundingService), 'finish');
     finish.mockRejectedValueOnce(new Error('worker stopped after acceptance'));
     vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
       calls.push({ ...message });
@@ -961,12 +980,48 @@ describe('Campaign sender (Postgres)', () => {
         'worker stopped after acceptance',
       );
       expect(calls).toHaveLength(1);
+      expect((await campaigns.get(storeId, id)).counts.countedAt).toBeNull();
+      await app.get(SendCampaignBatchJob).handle({ storeId });
       expect(await campaigns.get(storeId, id)).toMatchObject({
         status: 'paused',
         counts: { recipients: 2, sent: 1, failed: 0 },
       });
       expect(await settlementRows(id)).toEqual([]);
     } finally {
+      finish.mockRestore();
+    }
+  });
+
+  it('repairs a failed receipt recorded after the campaign pauses', async () => {
+    const { id } = await unknownFirstSend();
+    await admin.pool.query(
+      "update campaign_recipients set provider_message_id='pending-receipt' where campaign_id=$1",
+      [id],
+    );
+    clockNow = new Date(noon.getTime() + 6 * MINUTE);
+    const receipt = vi
+      .spyOn(MailpitSmsDriver.prototype, 'receiptStatus')
+      .mockImplementationOnce(async () => {
+        await campaigns.pause(storeId, id, actor);
+        return 'not_sent';
+      });
+    const finish = vi.spyOn(app.get(CampaignFundingService), 'finish');
+    finish.mockRejectedValueOnce(new Error('worker stopped after receipt lookup'));
+    try {
+      await expect(sender.sendBatch(storeId, id)).rejects.toThrow(
+        'worker stopped after receipt lookup',
+      );
+      expect((await recipients(id))[0]).toMatchObject({ status: 'failed' });
+      expect((await campaigns.get(storeId, id)).counts.countedAt).toBeNull();
+      await app.get(SendCampaignBatchJob).handle({ storeId });
+      expect(await campaigns.get(storeId, id)).toMatchObject({
+        status: 'paused',
+        counts: { sent: 0, failed: 1, countedAt: expect.any(String) },
+      });
+      expect(calls).toHaveLength(1);
+      expect(await settlementRows(id)).toEqual([]);
+    } finally {
+      receipt.mockRestore();
       finish.mockRestore();
     }
   });

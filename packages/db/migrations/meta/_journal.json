@@ -428,6 +428,13 @@
       "when": 1795129703521,
       "tag": "0060_campaign_balance_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1795140580166,
+      "tag": "0061_campaign_result_repair",
+      "breakpoints": true
     }
   ]
 }

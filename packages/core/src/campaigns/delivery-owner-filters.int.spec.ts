@@ -105,24 +105,21 @@ describe('campaign sending filters without RLS assistance', () => {
   });
 
   it('reads and writes campaign counts only in the selected store', async () => {
-    const campaignBefore = await f.row('campaigns', campaignA);
     const recipientBefore = await f.row('campaign_recipients', recipientA);
     const tap = { campaignId: campaignA, contactId: contactA, at: now };
-    await f.tenant.forStore(f.b, async () => {
-      await counts.save(f.b, campaignA, now);
-      await counts.recordTap(f.b, tap);
-      expect(await counts.read(f.b, [campaignA])).toEqual([]);
-    });
-    expect(await f.row('campaigns', campaignA)).toEqual(campaignBefore);
-    expect(await f.row('campaign_recipients', recipientA)).toEqual(recipientBefore);
-
     await f.tenant.forStore(f.a, async () => {
       await counts.save(f.a, campaignA, now);
-      await counts.recordTap(f.a, tap);
-      expect(await counts.read(f.a, [campaignA])).toMatchObject([
-        { id: campaignA, tappedCount: 1 },
-      ]);
     });
+    const saved = await f.row('campaigns', campaignA);
+    expect(saved).toMatchObject({ counts_at: '2026-11-16T05:00:00+00:00' });
+    await f.tenant.forStore(f.b, async () => {
+      await counts.save(f.b, campaignA, new Date(now.getTime() + 1_000));
+      await counts.markPending(f.b, campaignA);
+      await counts.recordTap(f.b, tap);
+    });
+    expect(await f.row('campaigns', campaignA)).toEqual(saved);
+    expect(await f.row('campaign_recipients', recipientA)).toEqual(recipientBefore);
+    await f.tenant.forStore(f.a, () => counts.recordTap(f.a, tap));
     expect(await f.row('campaigns', campaignA)).toMatchObject({
       tapped_count: 1,
       counts_at: '2026-11-16T05:00:00+00:00',
@@ -130,5 +127,7 @@ describe('campaign sending filters without RLS assistance', () => {
     expect(await f.row('campaign_recipients', recipientA)).toMatchObject({
       tapped_at: '2026-11-16T05:00:00+00:00',
     });
+    await f.tenant.forStore(f.a, () => counts.markPending(f.a, campaignA));
+    expect(await f.row('campaigns', campaignA)).toMatchObject({ counts_at: null });
   });
 });

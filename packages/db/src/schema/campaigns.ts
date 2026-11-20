@@ -176,6 +176,11 @@ export const campaigns = pgTable(
     index('campaigns_balance_paused_idx')
       .on(table.storeId, table.id)
       .where(sql`${table.status} = 'paused' and ${table.pauseReason} = 'balance'`),
+    index('campaigns_counts_pending_idx')
+      .on(table.storeId, table.id)
+      .where(
+        sql`${table.countsAt} is null and ${table.approvedAt} is not null and ${table.status} in ('paused', 'sent', 'cancelled', 'failed')`,
+      ),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),

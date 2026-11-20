@@ -10,7 +10,7 @@ import { CampaignCountsService } from '../campaign-counts.service';
 
 const payload = messageTappedEventSchema.extend({ id: z.uuid() });
 
-@HandlesEvent('message.tapped', { queue: QUEUES.campaign })
+@HandlesEvent('message.tapped', { queue: QUEUES.sync })
 export class RecordCampaignTapJob implements JobHandler {
   constructor(@Inject(CampaignCountsService) private readonly counts: CampaignCountsService) {}
 

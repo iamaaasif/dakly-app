@@ -11,7 +11,6 @@ import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService, type SkipReason } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
 import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
-import { CampaignCompletionService, canProcess } from './campaign-completion.service';
 import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSendingRepository, type ClaimableRecipient } from './campaign-sending.repository';
@@ -53,7 +52,6 @@ export class CampaignSenderService {
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(SmsService) private readonly sms: SmsService,
     @Inject(LinksService) private readonly links: LinksService,
-    @Inject(CampaignCompletionService) private readonly completion: CampaignCompletionService,
     @Inject(CampaignFundingService) private readonly funding: CampaignFundingService,
     @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -63,7 +61,6 @@ export class CampaignSenderService {
   async sendBatch(storeId: string, campaignId: string): Promise<Date | null> {
     if (!(await this.funding.prepare(storeId, campaignId))) return null;
     const deadline = performance.now() + MINUTE_MS / 4;
-    let processed = false;
     for (let position = 0; position < BATCH_SIZE; position++) {
       const claim = await this.claimNext(storeId, campaignId);
       if (claim.kind === 'send' && !(await this.deliver(storeId, claim))) {
@@ -71,7 +68,7 @@ export class CampaignSenderService {
         return null;
       }
       if (claim.kind === 'stop') {
-        await this.completion.finish(storeId, campaignId, processed);
+        await this.funding.finish(storeId, campaignId);
         return null;
       }
       if (claim.kind === 'defer') {
@@ -79,7 +76,6 @@ export class CampaignSenderService {
         return claim.until;
       }
       if (claim.kind === 'receipt') await this.reconcileReceipt(storeId, campaignId, claim);
-      processed = true;
       if (performance.now() >= deadline) break;
     }
     await this.counts.refresh(storeId, campaignId, 'batch');
@@ -244,7 +240,7 @@ export class CampaignSenderService {
       idempotencyKey: `campaign-${recipientId}`,
     });
     if (result === 'unknown') {
-      await this.failUnknown(storeId, { id: recipientId, claimedAt }, credits);
+      await this.failUnknown(storeId, { id: recipientId, claimedAt }, credits, campaignId);
       return;
     }
     const from = {
@@ -263,15 +259,16 @@ export class CampaignSenderService {
       return;
     }
     await this.transaction.run(storeId, async () => {
-      const campaign = await this.campaigns.lockCampaign(storeId, campaignId, 'share');
+      const campaign = await this.campaigns.lockCampaign(storeId, campaignId, 'update');
       if (!campaign || !(canProcess(campaign) || campaign.status === 'paused')) return;
-      await this.repository.changeRecipient(storeId, recipientId, from, {
+      const recorded = await this.repository.changeRecipient(storeId, recipientId, from, {
         status: 'failed',
         claimedAt: null,
         errorCode: 'provider_confirmed_not_sent',
         failedAt: this.clock.now(),
         smsCredits: null,
       });
+      if (recorded) await this.counts.markPending(storeId, campaign);
     });
   }
 
@@ -279,18 +276,18 @@ export class CampaignSenderService {
     storeId: string,
     { id, claimedAt }: { id: string; claimedAt?: Date | null },
     credits: number,
+    campaignId?: string,
   ) {
-    return this.repository.changeRecipient(
-      storeId,
-      id,
-      { status: 'sending', claimedAt: claimedAt ?? undefined },
-      {
-        status: 'failed',
-        errorCode: 'outcome_unknown',
-        failedAt: this.clock.now(),
-        smsCredits: credits,
-      },
-    );
+    const from = { status: 'sending', claimedAt: claimedAt ?? undefined } as const;
+    const change = {
+      status: 'failed',
+      errorCode: 'outcome_unknown',
+      failedAt: this.clock.now(),
+      smsCredits: credits,
+    } as const;
+    return campaignId
+      ? this.counts.recordOutcome(storeId, campaignId, id, from, change)
+      : this.repository.changeRecipient(storeId, id, from, change);
   }
 
   private async deliver(storeId: string, submission: Submission): Promise<boolean> {
@@ -326,7 +323,12 @@ export class CampaignSenderService {
     } catch (error) {
       if (!(error instanceof AppError)) throw error;
       if (recipient.status === 'sending') {
-        await this.failUnknown(storeId, { id: recipientId, claimedAt }, countSmsParts(body));
+        await this.failUnknown(
+          storeId,
+          { id: recipientId, claimedAt },
+          countSmsParts(body),
+          submission.campaignId,
+        );
         return true;
       }
       const retry = await this.recordRefusal(storeId, submission);
@@ -357,7 +359,7 @@ export class CampaignSenderService {
 
   private async recordRefusal(storeId: string, submission: Submission, unsubmitted = false) {
     return this.transaction.run(storeId, async () => {
-      const campaign = await this.campaigns.lockCampaign(storeId, submission.campaignId, 'share');
+      const campaign = await this.campaigns.lockCampaign(storeId, submission.campaignId, 'update');
       if (!campaign || !(canProcess(campaign) || campaign.status === 'paused')) return false;
       const cancelled = campaign.status === 'cancelled';
       const { recipient, claimedAt } = submission;
@@ -374,7 +376,7 @@ export class CampaignSenderService {
         });
         if (requeued) return true;
       }
-      await this.repository.changeRecipient(
+      const recorded = await this.repository.changeRecipient(
         storeId,
         id,
         { ...claim, uncertainReceipt: null },
@@ -386,7 +388,18 @@ export class CampaignSenderService {
           smsCredits: null,
         },
       );
+      if (recorded) await this.counts.markPending(storeId, campaign);
       return false;
     });
   }
+}
+
+function canProcess(
+  campaign: LockedCampaign | undefined,
+): campaign is LockedCampaign & { shortLinkBase: string } {
+  return (
+    !!campaign?.shortLinkBase &&
+    (campaign.status === 'sending' ||
+      (campaign.status === 'cancelled' && campaign.settlementPendingAt !== null))
+  );
 }
