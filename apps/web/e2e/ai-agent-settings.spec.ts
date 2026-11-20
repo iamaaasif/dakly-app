@@ -292,6 +292,8 @@ test('tests the agent with a customer message and shows a reply and a hand-over'
     await expect(drawer.getByText('This is about a refund or exchange.')).toBeVisible();
     await capture(page, 'test-handover');
   } finally {
+    // The agent may log a run if the browser route is bypassed; leave none behind.
+    await database.pool.query('delete from ai_runs where store_id = $1', [storeId]);
     await database.pool.end();
   }
 });
