@@ -94,7 +94,7 @@ test('writes options, saves one to the library and opens it in Create post', asy
     await page.getByLabel(/Anything else Dakly should know/).fill('New winter kurtis, 15% off');
     await page.getByRole('button', { name: /Write 3 options/ }).click();
     await expect(page.getByRole('article')).toHaveCount(3);
-    await capture(page, 'options');
+    await capture(page, 'options', page.getByRole('article').first());
 
     const first = page.getByRole('article').first();
     await first.getByRole('button', { name: 'Save', exact: true }).click();

@@ -22,11 +22,12 @@ export function ResultCard({ number, text, aiRunId, asked }: ResultCardProps) {
   });
   const [editing, setEditing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
-  const [saved, setSaved] = useState(false);
+  // The saved piece's id, so Schedule post reuses it until the text changes.
+  const [savedId, setSavedId] = useState<string | null>(null);
   const save = useSavePiece();
   const change = (next: Partial<typeof piece>) => {
     setPiece({ ...piece, ...next });
-    setSaved(false);
+    setSavedId(null);
   };
   return (
     <article className="space-y-4 rounded-lg border border-border bg-surface p-4 md:p-5">
@@ -54,13 +55,13 @@ export function ResultCard({ number, text, aiRunId, asked }: ResultCardProps) {
         <ResultActions
           body={piece.body}
           editing={editing}
-          saved={saved}
+          saved={savedId !== null}
           saving={save.isPending}
           onEdit={() => setEditing(!editing)}
           onPreview={() => setPreviewing(true)}
-          onSave={() => save.mutate(piece, { onSuccess: () => setSaved(true) })}
+          onSave={() => save.mutate(piece, { onSuccess: ({ id }) => setSavedId(id) })}
         />
-        {postKinds.includes(piece.kind) && <UseInPostButton piece={piece} />}
+        {postKinds.includes(piece.kind) && <UseInPostButton piece={piece} savedId={savedId} onSaved={setSavedId} />}
       </div>
       {previewing && (
         <PreviewDialog
