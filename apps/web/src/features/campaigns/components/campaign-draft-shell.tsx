@@ -82,14 +82,7 @@ export function CampaignDraftShell({
             saving={saving}
           />
         </form>
-        {sideColumn && (
-          <div className="min-w-0 space-y-2">
-            <p className="text-sm font-medium text-text-muted">
-              Live preview · {campaignChannelLabels[channel]}
-            </p>
-            {sideColumn}
-          </div>
-        )}
+        {sideColumn && <PreviewColumn channel={channel}>{sideColumn}</PreviewColumn>}
       </div>
     </div>
   );
@@ -121,6 +114,17 @@ function StepButtons({
           Continue
         </Button>
       )}
+    </div>
+  );
+}
+
+function PreviewColumn({ channel, children }: { channel: CampaignChannel; children: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-2">
+      <p className="text-sm font-medium text-text-muted">
+        Live preview · {campaignChannelLabels[channel]}
+      </p>
+      {children}
     </div>
   );
 }
