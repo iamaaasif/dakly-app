@@ -1,6 +1,6 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -61,7 +61,6 @@ export function SegmentBuilder({ segment, listHref }: SegmentBuilderProps) {
         />
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="min-w-0 space-y-4 lg:col-span-2">
-            <SegmentAiCard />
             <FormField name="name" label="Segment name">
               {(control) => (
                 <Input
@@ -125,27 +124,5 @@ function SegmentBuilderHeader({
         </Button>
       </div>
     </header>
-  );
-}
-
-function SegmentAiCard() {
-  return (
-    <Card className="space-y-3 p-4">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Sparkles aria-hidden="true" size={16} className="text-action" />
-        <span>Ask Dakly AI to write the rules</span>
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Input
-          disabled
-          aria-label="Describe customers for AI rule generation"
-          placeholder="Describe the customers in your own words"
-          className="text-sm"
-        />
-        <Button variant="secondary" disabled className="shrink-0">
-          Generate rules
-        </Button>
-      </div>
-    </Card>
   );
 }

@@ -62,9 +62,6 @@ export function SegmentRow({ segment, editHref, canEdit }: SegmentRowProps) {
             >
               Delete
             </Button>
-            <Button variant="secondary" disabled className="border-action/30 text-action">
-              Create campaign
-            </Button>
           </div>
         ) : null}
       </div>

@@ -1,5 +1,5 @@
 'use client';
-import { Plus, Sparkles } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
 import type { SegmentListResponse } from '@dakly/contracts/segments';
@@ -22,7 +22,6 @@ export function SegmentList({ page, cursor, canEdit }: SegmentListProps) {
   return (
     <main className="space-y-6 p-4 md:p-8">
       <SegmentListHeader canEdit={canEdit} />
-      <SegmentAiBanner />
 
       {page.items.length ? (
         <div className="space-y-3">
@@ -75,32 +74,6 @@ function SegmentListHeader({ canEdit }: { canEdit: boolean }) {
           Create segment
         </Link>
       ) : null}
-    </div>
-  );
-}
-
-function SegmentAiBanner() {
-  return (
-    <div className="rounded-xl space-y-3 bg-inverse p-5 text-surface">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Sparkles aria-hidden="true" size={16} className="text-primary" />
-        <span>Describe the customers you want to target</span>
-      </div>
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          type="text"
-          disabled
-          aria-label="Describe customers for AI rule generation"
-          placeholder="e.g. Customers who bought more than twice but haven't ordered in the last 45 days"
-          className="flex-1 rounded-md border border-border-strong bg-surface px-3 py-2 text-sm text-text placeholder:text-text-muted"
-        />
-        <Button variant="primary" disabled className="shrink-0">
-          Generate rules
-        </Button>
-      </div>
-      <p className="text-xs text-text-subtle">
-        Dakly turns your words into rules you can see and edit before saving.
-      </p>
     </div>
   );
 }
