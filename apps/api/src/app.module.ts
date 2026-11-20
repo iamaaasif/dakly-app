@@ -25,6 +25,7 @@ import { PaymentsModule } from '@dakly/core/payments/payments.module';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
 import { ProductsModule } from '@dakly/core/products/products.module';
+import { AiReplyFeedbackModule } from '@dakly/core/messaging/ai-reply-feedback.module';
 import { SavedRepliesModule } from '@dakly/core/saved-replies/saved-replies.module';
 import { SegmentsModule } from '@dakly/core/segments/segments.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
@@ -52,6 +53,7 @@ import { HealthController } from './health.controller';
     DeliveryModule,
     ProductsModule,
     SavedRepliesModule,
+    AiReplyFeedbackModule,
     OrdersModule,
     PaymentsModule,
     ConsentsModule,
