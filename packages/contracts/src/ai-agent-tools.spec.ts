@@ -29,6 +29,7 @@ describe('sales agent tools', () => {
       'get_delivery_charge',
       'get_my_orders',
       'get_order_status',
+      'draft_order',
     ]);
   });
 
@@ -46,6 +47,23 @@ describe('sales agent tools', () => {
   it('reject arguments the model was not given', () => {
     for (const tool of salesAgentTools)
       expect(tool.input.safeParse({ storeId: crypto.randomUUID() }).success, tool.name).toBe(false);
+  });
+
+  it('take an order only with a valid own mobile number and bounded quantities', () => {
+    const draft = salesAgentTools.find((tool) => tool.name === 'draft_order')!;
+    const order = {
+      items: [{ variantId: crypto.randomUUID(), quantity: 2 }],
+      recipientName: 'রিনা',
+      phone: '01712345678',
+      address: 'মিরপুর ১০',
+      area: 'Dhaka',
+    };
+    expect(draft.input.safeParse(order).success).toBe(true);
+    expect(draft.input.safeParse({ ...order, phone: '12345' }).success).toBe(false);
+    expect(draft.input.safeParse({ ...order, items: [] }).success).toBe(false);
+    expect(
+      draft.input.safeParse({ ...order, items: [{ ...order.items[0], quantity: 21 }] }).success,
+    ).toBe(false);
   });
 
   it('only accept hand-over reasons the model may choose', () => {

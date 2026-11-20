@@ -35,7 +35,7 @@ export type ComposedReply =
   | { kind: 'handover'; reason: Reason }
   | { kind: 'busy' };
 
-export type ComposeInput = ToolScope & { conversationId?: string; customerTexts: string[] };
+export type ComposeInput = ToolScope & { customerTexts: string[] };
 
 // Runs the model and the read-only tools. It sends nothing and holds no transaction.
 @Injectable()
@@ -103,8 +103,10 @@ export class SalesAgentService {
   private async context(input: ComposeInput, candidates: ToolResult | undefined) {
     const shop = await this.stores.settings(input.storeId);
     // A practice question has no conversation, so it has no history.
-    const history = input.conversationId
-      ? await this.inbox.messages(input.storeId, input.conversationId, { limit: HISTORY_LENGTH })
+    const history = input.chat
+      ? await this.inbox.messages(input.storeId, input.chat.conversationId, {
+          limit: HISTORY_LENGTH,
+        })
       : { items: [] };
     const conversation = history.items
       .filter((message) => message.kind !== 'note' && message.body)

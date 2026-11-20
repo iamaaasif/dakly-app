@@ -80,10 +80,17 @@ describe('people reached by messages', () => {
     expect(await repository.messagePeople(f.a, range)).toEqual({ delivered: 2, tapped: 1 });
   });
 
+  it('counts people per channel, once each', async () => {
+    expect(await repository.channelPeople(f.a, range)).toEqual([
+      { channel: 'sms', delivered: 2, tapped: 1 },
+    ]);
+  });
+
   it('leaves other stores and days out', async () => {
     expect(await repository.messagePeople(f.b, { ...range, through: '2026-11-09' })).toEqual({
       delivered: 0,
       tapped: 0,
     });
+    expect(await repository.channelPeople(f.b, { ...range, through: '2026-11-09' })).toEqual([]);
   });
 });
