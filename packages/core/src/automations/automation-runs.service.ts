@@ -77,6 +77,10 @@ export class AutomationRunsService {
     @Inject(AutomationsService) private readonly automations: AutomationsService,
   ) {}
 
+  attributionSources(storeId: string, contactId: string, ids: string[]) {
+    return ids.length ? this.repository.attributionSources(storeId, contactId, ids) : [];
+  }
+
   // Claims, then queues, with no transaction open. A sweep that stops in between leaves running
   // claims that a later sweep takes again once they are five minutes old. Claiming only what the
   // queue has room for keeps a lease from running out while its job waits.

@@ -83,6 +83,10 @@ export class CampaignsService {
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
+  attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
+    return ids.length ? this.repository.attributionSources(storeId, buyer, ids) : [];
+  }
+
   async get(storeId: string, campaignId: string): Promise<CampaignResponse> {
     return toCampaignResponse(await this.find(storeId, campaignId));
   }

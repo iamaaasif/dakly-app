@@ -1,6 +1,6 @@
 {
-  "id": "12cf2c88-42f6-43d5-8e2f-67a57acf4255",
-  "prevId": "4d162033-1156-4cf7-b7cd-81335773844d",
+  "id": "b654d351-41f6-48b6-98dc-b7b5831791a1",
+  "prevId": "5fc53c15-4c66-42be-89f3-da3221134941",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7841,28 +7841,6 @@
           "method": "btree",
           "with": {}
         },
-        "campaigns_counts_pending_idx": {
-          "name": "campaigns_counts_pending_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"counts_at\" is null and \"campaigns\".\"approved_at\" is not null and \"campaigns\".\"status\" in ('paused', 'sent', 'cancelled', 'failed')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "campaigns_channel_connection_id_idx": {
           "name": "campaigns_channel_connection_id_idx",
           "columns": [
@@ -15317,9 +15295,27 @@
           "primaryKey": false,
           "notNull": false
         },
+        "attributed_touch_id": {
+          "name": "attributed_touch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "attributed_touch_at": {
           "name": "attributed_touch_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attributed_amount_poisha": {
+          "name": "attributed_amount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "attributed_window_days": {
+          "name": "attributed_window_days",
+          "type": "smallint",
           "primaryKey": false,
           "notNull": false
         },

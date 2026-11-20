@@ -73,6 +73,12 @@ export class StoresService {
     return (await this.repository.lockedStatus(storeId)) === 'active';
   }
 
+  async attributionWindowDays(storeId: string): Promise<1 | 3 | 7> {
+    const days = await this.repository.attributionWindowDays(storeId);
+    if (days !== 1 && days !== 3 && days !== 7) throw storeError('STORE_NOT_FOUND');
+    return days;
+  }
+
   async timeZone(storeId: string): Promise<string> {
     const timeZone = await this.repository.timeZone(storeId);
     if (timeZone === undefined) throw storeError('STORE_NOT_FOUND');

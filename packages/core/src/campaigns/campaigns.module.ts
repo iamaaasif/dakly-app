@@ -52,7 +52,7 @@ import { CampaignsService } from './campaigns.service';
     CampaignSenderService,
     CampaignFundingService,
   ],
-  exports: [CampaignCountsService, CampaignFundingService],
+  exports: [CampaignCountsService, CampaignFundingService, CampaignsService],
 })
 export class CampaignsModule {
   static forWorker(): DynamicModule {
