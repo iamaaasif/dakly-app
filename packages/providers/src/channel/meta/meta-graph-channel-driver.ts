@@ -97,7 +97,8 @@ function failedMediaResult(response: Response, url: string): MediaDownload | und
   const { status } = response;
   // The token must never follow a redirect, so a redirect is a final answer.
   if (status >= 300 && status < 400) throw new MetaRequestError('rejected');
-  if (status === 401) throw new MetaRequestError('auth_error');
+  // A CDN answer says nothing certain about the Page token, so it never marks it rejected.
+  if (status === 401) throw new MetaRequestError('rejected');
   if ([400, 404, 410].includes(status)) return { kind: 'expired' };
   // A 403 is only an expired link when the link's own expiry has passed; otherwise it may pass
   // on a retry, so it counts as a fetch failure.

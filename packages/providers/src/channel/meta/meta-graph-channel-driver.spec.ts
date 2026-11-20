@@ -344,9 +344,7 @@ describe('MetaGraphChannelDriver', () => {
       vi.stubGlobal('fetch', async () => new Response('', { status: 302 }));
       await expect(driver.downloadMedia('t', url, 10)).rejects.toMatchObject({ code: 'rejected' });
       vi.stubGlobal('fetch', async () => new Response('', { status: 401 }));
-      await expect(driver.downloadMedia('t', url, 10)).rejects.toMatchObject({
-        code: 'auth_error',
-      });
+      await expect(driver.downloadMedia('t', url, 10)).rejects.toMatchObject({ code: 'rejected' });
       vi.stubGlobal('fetch', async () => new Response('busy', { status: 503 }));
       await expect(driver.downloadMedia('t', url, 10)).rejects.toMatchObject({
         code: 'unavailable',

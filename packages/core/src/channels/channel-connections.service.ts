@@ -151,7 +151,7 @@ export class ChannelConnectionsService {
   async downloadMetaMedia(prepared: PreparedMetaSend, url: string, maxBytes: number) {
     if (hasDatabaseTransactionScope()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
     if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
-    const { storeId, connectionId, ciphertext, keyVersion } = prepared;
+    const { storeId, ciphertext, keyVersion } = prepared;
     const token = this.encryption.decrypt(
       { owner: 'store', storeId, purpose: 'channel-access-token' },
       { ciphertext, keyVersion },
@@ -161,9 +161,6 @@ export class ChannelConnectionsService {
       return await measureVendorCall(this.logger, 'meta_media', 'Meta media measured', () =>
         driver.downloadMedia(token.toString(), url, maxBytes),
       );
-    } catch (error) {
-      await this.recordSendCredentialRejection(storeId, connectionId, ciphertext, error);
-      throw error;
     } finally {
       token.fill(0);
     }
