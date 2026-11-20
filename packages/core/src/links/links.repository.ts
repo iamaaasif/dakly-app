@@ -48,6 +48,24 @@ export class LinksRepository {
     return result.rows[0];
   }
 
+  async findOrderConfirmCode(storeId: string, orderId: string): Promise<string | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ code: trackedLinks.code })
+        .from(trackedLinks)
+        .where(
+          and(
+            eq(trackedLinks.storeId, storeId),
+            eq(trackedLinks.kind, 'order_confirm'),
+            eq(trackedLinks.sourceType, 'order'),
+            eq(trackedLinks.sourceId, orderId),
+          ),
+        )
+        .limit(1),
+    );
+    return row?.code;
+  }
+
   // A code taken by another link is skipped, so the caller sees which rows it must retry.
   async insert(storeId: string, links: NewTrackedLinkRow[]): Promise<string[]> {
     const rows = await this.tenant.forStore(storeId, (tx) =>
