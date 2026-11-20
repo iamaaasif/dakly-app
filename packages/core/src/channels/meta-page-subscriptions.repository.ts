@@ -12,6 +12,7 @@ const subscriptionFields = {
   pageExternalId: metaPageSubscriptions.pageExternalId,
   ciphertext: metaPageSubscriptions.accessTokenCiphertext,
   keyVersion: metaPageSubscriptions.keyVersion,
+  createdAt: metaPageSubscriptions.createdAt,
 };
 
 @Injectable()
@@ -104,10 +105,11 @@ export class MetaPageSubscriptionsRepository {
   }
 
   async isPageConnected(storeId: string, pageExternalId: string): Promise<boolean> {
-    // Any store's connection counts: unsubscribing would stop its deliveries too.
+    // Any store's connection counts, and so does an Instagram account linked to the Page:
+    // unsubscribing would stop their deliveries too.
     const result = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ connected: boolean }>(
-        sql`select store_id_for_channel_account('facebook_page', ${pageExternalId}) is not null as connected`,
+        sql`select meta_page_is_connected(${pageExternalId}) as connected`,
       ),
     );
     return result.rows[0]?.connected ?? false;

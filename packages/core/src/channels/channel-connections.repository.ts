@@ -14,6 +14,7 @@ type MetaConnection = Pick<
   Connection,
   | 'kind'
   | 'externalAccountId'
+  | 'linkedPageExternalId'
   | 'displayName'
   | 'accessTokenCiphertext'
   | 'keyVersion'
@@ -266,6 +267,7 @@ export class ChannelConnectionsRepository {
         .select({
           kind: channelConnections.kind,
           externalAccountId: channelConnections.externalAccountId,
+          linkedPageExternalId: channelConnections.linkedPageExternalId,
           ciphertext: channelConnections.accessTokenCiphertext,
           keyVersion: channelConnections.keyVersion,
         })

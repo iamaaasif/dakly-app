@@ -35,6 +35,8 @@ export const channelConnections = pgTable(
       .references(() => stores.id),
     kind: text('kind', { enum: channelConnectionKinds }).notNull(),
     externalAccountId: text('external_account_id').notNull(),
+    // The Facebook Page an Instagram account messages through, so the Page stays subscribed while it is connected.
+    linkedPageExternalId: text('linked_page_external_id'),
     displayName: text('display_name').notNull(),
     accessTokenCiphertext: bytea('access_token_ciphertext'),
     keyVersion: smallint('key_version'),
@@ -59,6 +61,9 @@ export const channelConnections = pgTable(
       .on(table.kind, table.externalAccountId)
       .where(sql`${table.status} <> 'disconnected'`),
     index('channel_connections_store_id_idx').on(table.storeId, table.kind),
+    index('channel_connections_linked_page_idx')
+      .on(table.linkedPageExternalId)
+      .where(sql`${table.status} <> 'disconnected'`),
     index('channel_connections_token_expires_at_idx')
       .on(table.tokenExpiresAt)
       .where(sql`${table.status} = 'active'`),

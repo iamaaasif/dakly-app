@@ -231,7 +231,11 @@ export class MetaAuthorizationService {
       .map(([key, account]) => {
         const match = eligible.get(key);
         if (!match) throw loginError('META_ACCOUNT_UNAVAILABLE');
-        return { ...account, ...match };
+        return {
+          ...account,
+          ...match,
+          linkedPageExternalId: account.kind === 'instagram' ? match.page.id : null,
+        };
       });
   }
 

@@ -201,20 +201,22 @@ export class ChannelConnectionsService {
         occurredAt: now.toISOString(),
         payload: { channelConnectionId },
       });
-      // Instagram has no Page id here; only the Messenger connection owns the Page subscription.
-      if (previous.kind === 'facebook_page' && previous.ciphertext && previous.keyVersion !== null)
-        await this.pageSubscriptions.keepForDisconnect(storeId, previous.externalAccountId, {
+      // An Instagram account messages through its linked Page, which stays subscribed while
+      // either connection to that Page is live.
+      const pageId =
+        previous.kind === 'facebook_page'
+          ? previous.externalAccountId
+          : previous.linkedPageExternalId;
+      if (pageId && previous.ciphertext && previous.keyVersion !== null)
+        await this.pageSubscriptions.keepForDisconnect(storeId, pageId, {
           ciphertext: previous.ciphertext,
           keyVersion: previous.keyVersion,
         });
-      return previous;
+      return pageId;
     });
-    if (disconnected.kind !== 'facebook_page') return;
+    if (!disconnected) return;
     try {
-      await this.pageSubscriptions.unsubscribeDisconnectedPage(
-        storeId,
-        disconnected.externalAccountId,
-      );
+      await this.pageSubscriptions.unsubscribeDisconnectedPage(storeId, disconnected);
     } catch {
       // The disconnect is done; the daily reconciliation retries the unsubscribe.
       this.logger.error('Could not unsubscribe the Page after disconnect');

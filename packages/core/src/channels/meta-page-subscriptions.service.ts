@@ -8,14 +8,22 @@ import {
 import { Clock } from '../platform/clock';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
-import { HOUR_MS } from '../platform/time';
+import { DAY_MS, HOUR_MS } from '../platform/time';
 import { META_CHANNEL_DRIVER } from './meta-channel-driver';
 import { MetaPageSubscriptionsRepository } from './meta-page-subscriptions.repository';
 
 // A Page login lasts 10 minutes, so a record older than an hour has no selection still running.
 const selectionGraceMs = HOUR_MS;
+// Meta rejects a token when the shop removed the app or lost the Page, and then stops delivering.
+const rejectedTokenRetentionMs = 30 * DAY_MS;
 
-type Subscription = { id: string; pageExternalId: string; ciphertext: Buffer; keyVersion: number };
+type Subscription = {
+  id: string;
+  pageExternalId: string;
+  ciphertext: Buffer;
+  keyVersion: number;
+  createdAt: Date;
+};
 
 @Injectable()
 export class MetaPageSubscriptionsService {
@@ -87,7 +95,7 @@ export class MetaPageSubscriptionsService {
 
   private async reconcile(storeId: string, subscription: Subscription) {
     if (!this.driver) return;
-    const { id, pageExternalId, ciphertext, keyVersion } = subscription;
+    const { id, pageExternalId, ciphertext, keyVersion, createdAt } = subscription;
     if (await this.repository.isPageConnected(storeId, pageExternalId)) {
       await this.repository.removeIfUnchanged(storeId, id, ciphertext);
       return;
@@ -106,6 +114,12 @@ export class MetaPageSubscriptionsService {
       );
     } catch (error) {
       if (!(error instanceof MetaRequestError)) throw error;
+      const isStale = this.clock.now().getTime() - createdAt.getTime() > rejectedTokenRetentionMs;
+      if (error.code === 'auth_error' && isStale) {
+        this.logger.warn('Dropped a Page subscription whose token Meta has rejected for 30 days');
+        await this.repository.removeIfUnchanged(storeId, id, ciphertext);
+        return;
+      }
       // The record stays, so the next daily run tries again.
       this.logger.warn(`Meta Page unsubscribe failed: ${error.code}`);
       return;

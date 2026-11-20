@@ -2196,6 +2196,14 @@ fixture('POST /channel-connections/meta', async () => {
   expect(await pendingSubscriptions(a)).toEqual([]);
   await expectSavedMetaCredential(a, ids[0], 'facebook_page');
   await expectSavedMetaCredential(a, ids[1], 'instagram');
+  const linked = await f.admin.pool.query(
+    'select kind, linked_page_external_id from channel_connections where id = any($1::uuid[]) order by kind',
+    [ids],
+  );
+  expect(linked.rows).toEqual([
+    { kind: 'facebook_page', linked_page_external_id: null },
+    { kind: 'instagram', linked_page_external_id: pageSelection.externalAccountId },
+  ]);
   expect((await f.request(a.owner, 'POST', metaConnect, input)).statusCode).toBe(404);
 
   await rejectMetaConflict(b, [pageSelection]);

@@ -16,7 +16,7 @@ import { Clock } from '../platform/clock';
 import { resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { DatabaseModule } from '../platform/database/database.module';
-import { HOUR_MS } from '../platform/time';
+import { DAY_MS, HOUR_MS } from '../platform/time';
 import { ChannelConnectionsService } from './channel-connections.service';
 import { ReconcileMetaPageSubscriptionsJob } from './jobs/reconcile-meta-page-subscriptions.job';
 import { META_CHANNEL_DRIVER } from './meta-channel-driver';
@@ -109,7 +109,7 @@ async function pendingPages() {
   return rows.map((row) => row.page_external_id);
 }
 
-async function connectPage(pageId: string) {
+async function connectPage(pageId: string, kind: 'facebook_page' | 'instagram' = 'facebook_page') {
   const id = randomUUID();
   const secret = app
     .get(EnvelopeEncryption)
@@ -119,9 +119,17 @@ async function connectPage(pageId: string) {
     );
   await admin.pool.query(
     `insert into channel_connections
-    (id, store_id, kind, external_account_id, display_name, access_token_ciphertext, key_version)
-    values ($1, $2, 'facebook_page', $3, 'Test Page', $4, $5)`,
-    [id, storeId, pageId, secret.ciphertext, secret.keyVersion],
+    (id, store_id, kind, external_account_id, linked_page_external_id, display_name, access_token_ciphertext, key_version)
+    values ($1, $2, $3, $4, $5, 'Test account', $6, $7)`,
+    [
+      id,
+      storeId,
+      kind,
+      kind === 'facebook_page' ? pageId : randomUUID(),
+      kind === 'instagram' ? pageId : null,
+      secret.ciphertext,
+      secret.keyVersion,
+    ],
   );
   return id;
 }
@@ -227,24 +235,55 @@ it('keeps the Page for the daily run when Meta fails during disconnect', async (
   expect(await pendingPages()).toEqual([]);
 });
 
-it('does not unsubscribe when an Instagram account is disconnected', async () => {
+it('keeps a Page subscribed while its Instagram account is connected', async () => {
   stubMeta();
-  const id = randomUUID();
-  const secret = app
-    .get(EnvelopeEncryption)
-    .encrypt(
-      { owner: 'store', storeId, purpose: 'channel-access-token' },
-      Buffer.from('instagram-token'),
-    );
-  await admin.pool.query(
-    `insert into channel_connections
-    (id, store_id, kind, external_account_id, display_name, access_token_ciphertext, key_version)
-    values ($1, $2, 'instagram', $3, 'Shop', $4, $5)`,
-    [id, storeId, randomUUID(), secret.ciphertext, secret.keyVersion],
-  );
-  await app.get(ChannelConnectionsService).disconnect(storeId, id, owner);
+  const pageId = randomUUID();
+  const messenger = await connectPage(pageId);
+  const instagram = await connectPage(pageId, 'instagram');
+  const service = app.get(ChannelConnectionsService);
+  await service.disconnect(storeId, messenger, owner);
   expect(unsubscribe).not.toHaveBeenCalled();
   expect(await pendingPages()).toEqual([]);
+  await service.disconnect(storeId, instagram, owner);
+  expect(unsubscribe).toHaveBeenCalledWith(pageId, `token-${pageId}`);
+  expect(await pendingPages()).toEqual([]);
+});
+
+it('keeps a Page subscribed while its Messenger connection is live after Instagram disconnects', async () => {
+  stubMeta();
+  const pageId = randomUUID();
+  await connectPage(pageId);
+  const instagram = await connectPage(pageId, 'instagram');
+  await app.get(ChannelConnectionsService).disconnect(storeId, instagram, owner);
+  expect(unsubscribe).not.toHaveBeenCalled();
+  expect(await pendingPages()).toEqual([]);
+});
+
+it('unsubscribes the linked Page when an Instagram-only shop disconnects', async () => {
+  stubMeta();
+  const pageId = randomUUID();
+  const instagram = await connectPage(pageId, 'instagram');
+  await app.get(ChannelConnectionsService).disconnect(storeId, instagram, owner);
+  expect(unsubscribe).toHaveBeenCalledWith(pageId, `token-${pageId}`);
+  expect(await pendingPages()).toEqual([]);
+});
+
+it('drops a record after 30 days when Meta rejects its token', async () => {
+  stubMeta(new MetaRequestError('auth_error'));
+  const stale = randomUUID();
+  const recent = randomUUID();
+  await pending(stale, 'revoked-token', 31 * DAY_MS);
+  await pending(recent, 'revoked-token', 29 * DAY_MS);
+  await runDaily();
+  expect(await pendingPages()).toEqual([recent]);
+});
+
+it('keeps an old record when Meta is only unavailable', async () => {
+  stubMeta(new MetaRequestError('unavailable'));
+  const pageId = randomUUID();
+  await pending(pageId, 'old-token', 31 * DAY_MS);
+  await runDaily();
+  expect(await pendingPages()).toEqual([pageId]);
 });
 
 it('records a Page for its own store only', async () => {
