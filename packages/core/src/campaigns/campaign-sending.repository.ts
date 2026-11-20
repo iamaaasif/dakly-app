@@ -11,6 +11,7 @@ import { type Campaign, recipientsWhere } from './campaigns.repository';
 export type ClaimableRecipient = {
   id: string;
   contactId: string;
+  contactIdentityId: string | null;
   destinationAddress: string | null;
   providerMessageId: string | null;
   dispatchStartedAt: Date | null;
@@ -125,6 +126,7 @@ export class CampaignSendingRepository {
         .select({
           id: campaignRecipients.id,
           contactId: campaignRecipients.contactId,
+          contactIdentityId: campaignRecipients.contactIdentityId,
           destinationAddress: campaignRecipients.destinationAddress,
           providerMessageId: campaignRecipients.providerMessageId,
           claimedAt: campaignRecipients.claimedAt,

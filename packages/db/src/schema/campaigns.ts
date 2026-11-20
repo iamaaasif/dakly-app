@@ -24,7 +24,7 @@ import {
   messageCategories,
   recipientSkipReasons,
   recipientStatuses,
-  type SmsCampaignContent,
+  type CampaignContent,
   templateStatuses,
   whatsappQualityRatings,
   trackedLinkKinds,
@@ -133,7 +133,7 @@ export const campaigns = pgTable(
     channelConnectionId: uuid('channel_connection_id').references(() => channelConnections.id),
     category: text('category', { enum: messageCategories }).notNull().default('marketing'),
     whatsappTemplateId: uuid('whatsapp_template_id').references(() => whatsappTemplates.id),
-    content: jsonb('content').$type<SmsCampaignContent>().notNull(),
+    content: jsonb('content').$type<CampaignContent>().notNull(),
     includeSegmentIds: uuid('include_segment_ids')
       .array()
       .notNull()

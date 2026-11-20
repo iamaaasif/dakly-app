@@ -1,7 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
+import {
+  messengerCampaignContentSchema,
+  smsCampaignContentSchema,
+} from '@dakly/contracts/campaigns';
 import type {
+  CampaignChannel,
   CampaignEstimateResponse,
   CampaignListQuery,
   CampaignListResponse,
@@ -13,6 +18,7 @@ import type {
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AnalyticsService } from '../analytics/analytics.service';
+import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -22,7 +28,7 @@ import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignAnalyticsRepository } from './campaign-analytics.repository';
 import { CampaignApprovalRepository } from './campaign-approval.repository';
-import { CampaignAudienceService } from './campaign-audience.service';
+import { audienceDecisionTime, CampaignAudienceService } from './campaign-audience.service';
 import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
 import { toCampaignResponse } from './campaign-response';
 import { CampaignSmsService } from './campaign-sms.service';
@@ -80,6 +86,7 @@ export class CampaignsService {
     @Inject(CampaignSmsService) private readonly sms: CampaignSmsService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(AnalyticsService) private readonly reports: AnalyticsService,
+    @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
   ) {}
 
   async list(storeId: string, query: CampaignListQuery): Promise<CampaignListResponse> {
@@ -118,8 +125,11 @@ export class CampaignsService {
     input: CreateCampaignInput,
     actor: Actor,
   ): Promise<CampaignResponse> {
+    const channelConnectionId = input.channel === 'messenger' ? input.channelConnectionId : null;
+    if (channelConnectionId) await this.channels.requireFacebookPage(storeId, channelConnectionId);
     const campaign = await this.repository.insert(storeId, {
       ...input,
+      channelConnectionId,
       scheduledFor: input.scheduledFor === null ? null : new Date(input.scheduledFor),
       createdByUserId: actor.kind === 'user' ? actor.userId : null,
     });
@@ -132,6 +142,7 @@ export class CampaignsService {
     { scheduledFor, ...input }: ChangeCampaignInput,
     _actor: Actor,
   ): Promise<CampaignResponse> {
+    await this.checkChangeFitsChannel(storeId, campaignId, input);
     const campaign = await this.repository.changeDraft(storeId, campaignId, {
       ...input,
       ...(scheduledFor !== undefined && {
@@ -143,6 +154,23 @@ export class CampaignsService {
     return toCampaignResponse(campaign);
   }
 
+  // The channel cannot change after a draft is made, so reading it outside the guarded write is safe.
+  private async checkChangeFitsChannel(
+    storeId: string,
+    campaignId: string,
+    { content, channelConnectionId }: Pick<ChangeCampaignInput, 'content' | 'channelConnectionId'>,
+  ) {
+    const { channel } = await this.find(storeId, campaignId);
+    const messenger = channel === 'messenger';
+    const contentFits =
+      content === undefined ||
+      (messenger ? messengerCampaignContentSchema : smsCampaignContentSchema).safeParse(content)
+        .success;
+    if (!contentFits || (channelConnectionId !== undefined && !messenger))
+      throw campaignError('CAMPAIGN_CHANGE_NOT_FOR_CHANNEL');
+    if (channelConnectionId) await this.channels.requireFacebookPage(storeId, channelConnectionId);
+  }
+
   async removeDraft(storeId: string, campaignId: string, _actor: Actor): Promise<void> {
     if (!(await this.repository.removeDraft(storeId, campaignId)))
       throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_DRAFT');
@@ -152,7 +180,9 @@ export class CampaignsService {
     const campaign = await this.find(storeId, campaignId);
     if (campaign.status !== 'draft') throw campaignError('CAMPAIGN_NOT_DRAFT');
     const { recipients, isComplete } = await this.sampleAudience(storeId, campaign);
-    return toEstimate(recipients, this.sms.estimate(campaign.content.text).smsParts, isComplete);
+    const smsParts =
+      campaign.channel === 'sms' ? this.sms.estimate(campaign.content.text).smsParts : 0;
+    return toEstimate(recipients, smsParts, isComplete);
   }
 
   // The request does the cheap checks and marks the draft approving. A job (CAMP-13) freezes the
@@ -206,7 +236,7 @@ export class CampaignsService {
       });
       await this.settleReservation(
         storeId,
-        { id: campaignId, approvedAt: campaign.approvedAt! },
+        { id: campaignId, channel: campaign.channel, approvedAt: campaign.approvedAt! },
         actor,
       );
       return draft;
@@ -244,7 +274,12 @@ export class CampaignsService {
       if (campaign.approvedAt)
         await this.settleReservation(
           storeId,
-          { id: campaignId, approvedAt: campaign.approvedAt, cancelledAt: now },
+          {
+            id: campaignId,
+            channel: campaign.channel,
+            approvedAt: campaign.approvedAt,
+            cancelledAt: now,
+          },
           actor,
         );
       return toCampaignResponse(cancelled);
@@ -274,12 +309,19 @@ export class CampaignsService {
   // The caller holds the campaign lock. Take the wallet lock last.
   async settleReservation(
     storeId: string,
-    { id, approvedAt, cancelledAt }: { id: string; approvedAt: Date; cancelledAt?: Date },
+    {
+      id,
+      channel,
+      approvedAt,
+      cancelledAt,
+    }: { id: string; channel: CampaignChannel; approvedAt: Date; cancelledAt?: Date },
     actor: Actor,
   ): Promise<boolean> {
     const { unsettled, chargedCredits } = await this.repository.settlementTotals(storeId, id);
     if (unsettled > 0) return false;
     if (cancelledAt && !(await this.repository.markSettled(storeId, id, cancelledAt))) return false;
+    // Only SMS holds credits.
+    if (channel !== 'sms') return true;
     const key = approvalKey(id, approvedAt);
     const replacement = approvalKey(id, approvedAt, 'with-opt-out');
     const adjusted = await this.wallets.findByIdempotencyKey(storeId, replacement);
@@ -335,7 +377,7 @@ export class CampaignsService {
     const recipients = new Map<string, FrozenRecipient>();
     let cursor = { segmentIndex: 0, contactId: null as string | null };
     let checked = 0;
-    const at = campaign.scheduledFor ?? this.clock.now();
+    const at = audienceDecisionTime(campaign, this.clock.now());
     while (cursor.segmentIndex < campaign.includeSegmentIds.length) {
       const page = await this.audience.page(storeId, campaign, cursor, at);
       for (const recipient of page.recipients)

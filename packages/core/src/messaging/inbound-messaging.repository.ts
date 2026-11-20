@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import type { MessageAttachment, messageAttachmentKinds } from '@dakly/contracts/chats';
 import { conversations, messages } from '@dakly/db/schema/chats';
@@ -147,6 +147,21 @@ export class InboundMessagingRepository {
           updatedAt: now,
         })
         .where(and(eq(conversations.storeId, storeId), eq(conversations.id, conversationId))),
+    );
+  }
+
+  findLastInbound(storeId: string, connectionId: string, contactIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ contactId: conversations.contactId, lastInboundAt: conversations.lastInboundAt })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.storeId, storeId),
+            eq(conversations.channelConnectionId, connectionId),
+            inArray(conversations.contactId, contactIds),
+          ),
+        ),
     );
   }
 }
