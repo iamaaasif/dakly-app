@@ -523,7 +523,9 @@ A workflow that starts from an order can write `{order_number}`, `{order_total}`
 
 ### COD order confirmation template (ORD-4)
 
-The template starts on `order_placed` for orders with payment status COD pending and sends the SMS with `{confirm_link}`; a reminder follows after 6 hours. Its exits are Order is confirmed (the order has a confirmation time) and Order is cancelled (its stage is Cancelled). The runner reads the order before every step, so an order saved as confirmed (it still emits `order.created`) exits before the first message, and an order the customer or staff confirmed or cancelled gets no reminder. A send step that uses `{confirm_link}` goes out only while the order is in To confirm: the check runs inside the send gate, and an order on hold ends the run with reason `order_not_awaiting_confirmation` before the message. An order moved back to To confirm sends the next such message, because the stage is read at each send. Messenger buttons are a later part of ORD-4, and the other order templates follow in part 3.
+The template starts on `order_placed` for orders with payment status COD pending and sends the SMS with `{confirm_link}`; a reminder follows after 6 hours. Its exits are Order is confirmed (the order has a confirmation time) and Order is cancelled (its stage is Cancelled). The runner reads the order before every step, so an order saved as confirmed (it still emits `order.created`) exits before the first message, and an order the customer or staff confirmed or cancelled gets no reminder. A send step that uses `{confirm_link}` goes out only while the order is in To confirm: the check runs inside the send gate, and an order on hold ends the run with reason `order_not_awaiting_confirmation` before the message. An order moved back to To confirm sends the next such message, because the stage is read at each send. Messenger Confirm and Cancel buttons wait on CAMP-7: they need workflow sends on Messenger, buttons in the Meta driver and postback parsing. They come back as a small ORD-4 part that adds the buttons, the postback parsing and the call into `OrderConfirmationService`.
+
+The other order templates wait on their sources: delivery feedback and cross-sell need the link field (CAMP-14); advance not paid needs payment events (PAY); order link not finished, win back, reorder reminder and welcome new lead need their triggers (`order_link.abandoned`, the daily order schedules, `chat.lead_saved`). Abandoned cart and checkout wait for store sync (Q13).
 
 ### Workflow catalogue
 
@@ -574,13 +576,16 @@ Templates are in [`automations/templates.ts`](../../packages/contracts/src/autom
 
 Festival greetings are campaigns, not workflows (Asif, 16 Nov): a shop sends them as an ordinary campaign and picks the send date in the builder, so there is no festival or date-reached trigger.
 
-| Template                | Trigger                                   | Steps (default)                                                                                      | Goal         | Category         | Needs     |
-| ----------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------ | ---------------- | --------- |
-| Welcome new subscribers | Consent given                             | Welcome now; wait 2 days; SMS with best sellers                                                      | Placed order | Welcome          |           |
-| Chat follow-up          | Chat started on Messenger                 | Wait 2 hours; Messenger follow-up inside the window; exit if they reply                              | Placed order | Abandoned        | Channels  |
-| Back in stock           | Variant restocked, person on waiting list | Message with the product and order link                                                              | Placed order | Abandoned        | Products  |
-| Birthday                | Birthday                                  | Greeting at 10:00; wait 7 days                                                                       | Placed order | Special occasion | Birthdays |
-| COD order confirmation  | Order placed, payment status COD pending  | SMS with the confirm link; wait 6 hours; SMS reminder; exit when the order is confirmed or cancelled | None         | Transactional    | Orders    |
+| Template                        | Trigger                                   | Steps (default)                                                                                      | Goal         | Category         | Needs     |
+| ------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------ | ---------------- | --------- |
+| Welcome new subscribers         | Consent given                             | Welcome now; wait 2 days; SMS with best sellers                                                      | Placed order | Welcome          |           |
+| Chat follow-up                  | Chat started on Messenger                 | Wait 2 hours; Messenger follow-up inside the window; exit if they reply                              | Placed order | Abandoned        | Channels  |
+| Back in stock                   | Variant restocked, person on waiting list | Message with the product and order link                                                              | Placed order | Abandoned        | Products  |
+| Birthday                        | Birthday                                  | Greeting at 10:00; wait 7 days                                                                       | Placed order | Special occasion | Birthdays |
+| COD order confirmation          | Order placed, payment status COD pending  | SMS with the confirm link; wait 6 hours; SMS reminder; exit when the order is confirmed or cancelled | None         | Transactional    | Orders    |
+| Order shipped                   | Order moved to With courier               | SMS that the order is on its way; exit if the order is cancelled                                     | None         | Transactional    | Orders    |
+| Thank you after the first order | First order placed                        | Wait 1 day; thank-you message; exit if the order is cancelled                                        | None         | Post-purchase    | Orders    |
+| Cancellation follow-up          | Order cancelled                           | Wait 1 day; message asking whether you can help                                                      | Placed order | Post-purchase    | Orders    |
 
 "If no order" in a template is its goal: placing an order exits the run before the next step.
 
