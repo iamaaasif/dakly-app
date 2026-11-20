@@ -1,7 +1,6 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 // Feature 03: a customer file holds at most 50,000 rows.
-export const MAX_IMPORT_ROWS = 50_000;
 
 const IMPORT_ERRORS = {
   IMPORT_FILE_UNREADABLE: {
