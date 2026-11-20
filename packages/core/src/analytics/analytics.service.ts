@@ -2,11 +2,18 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { lifecycleStages } from '@dakly/contracts/contacts';
 
+import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoresService } from '../stores/stores.service';
 import { returnPerTaka } from './analytics-ratios';
 import { AnalyticsRepository } from './analytics.repository';
-import { reportDay, retainedSince, shiftReportDay, type ReportPeriod } from './report-period';
+import {
+  monthToDate,
+  reportDay,
+  retainedSince,
+  shiftReportDay,
+  type ReportPeriod,
+} from './report-period';
 
 type Point = { day: string; value: bigint };
 
@@ -16,6 +23,7 @@ export class AnalyticsService {
     @Inject(AnalyticsRepository) private readonly repository: AnalyticsRepository,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(OrderReportingService) private readonly orderReports: OrderReportingService,
   ) {}
 
   async periods(storeId: string, days: 7 | 30 | 90 | 365) {
@@ -32,6 +40,28 @@ export class AnalyticsService {
         through: shiftReportDay(from, -1),
       },
     };
+  }
+
+  // Calendar days of the shop, each against the period right before it, for the same readers as periods().
+  async calendarPeriods(storeId: string, calendar: 'today' | 'yesterday' | 'this_month') {
+    const timeZone = await this.stores.timeZone(storeId);
+    const now = this.clock.now();
+    const today = reportDay(now, timeZone);
+    const day = calendar === 'today' ? today : shiftReportDay(today, -1);
+    const { current, previous } =
+      calendar === 'this_month'
+        ? monthToDate(today)
+        : {
+            current: { from: day, through: day },
+            previous: { from: shiftReportDay(day, -1), through: shiftReportDay(day, -1) },
+          };
+    return { asOf: now.toISOString(), timeZone, current, previous };
+  }
+
+  // Best sellers by items sold, cancelled orders left out; money is after discount, delivery left out.
+  async topProducts(storeId: string, period: ReportPeriod, limit: number) {
+    const timeZone = await this.stores.timeZone(storeId);
+    return this.orderReports.topProducts(storeId, { ...period, timeZone }, limit);
   }
 
   orders(storeId: string, period: ReportPeriod) {

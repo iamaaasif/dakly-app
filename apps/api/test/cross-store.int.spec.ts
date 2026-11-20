@@ -3884,6 +3884,62 @@ fixture('POST /assistant/messages', async () => {
   } finally {
     model.mockRestore();
   }
+
+  // Best sellers and today's orders come from the asking shop only.
+  for (const [shop, name, quantity] of [
+    [a, 'পাঞ্জাবি এ', 3],
+    [b, 'শাড়ি বি', 8],
+  ] as const) {
+    const orderId = await order(shop);
+    const variantId = await orderVariant(shop);
+    await f.admin.pool.query(
+      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
+       values($1,$2,$3,$4,$5,'Default',$6,125000,false)`,
+      [randomUUID(), shop.id, orderId, variantId, name, quantity],
+    );
+  }
+  const reportsModel = vi.spyOn(driver, 'respond').mockImplementation(async ({ input, model }) => {
+    const results = /<tool_results[^>]*>(.*)<\/tool_results>/s.exec(input);
+    if (!results)
+      return {
+        kind: 'tool_calls',
+        toolCalls: [
+          { id: 'one', name: 'get_top_products', argumentsJson: '{"window":"last_30_days"}' },
+          { id: 'two', name: 'get_sales_today', argumentsJson: '{}' },
+        ],
+        model,
+        responseId: randomUUID(),
+        usage,
+      };
+    const [top, today] = JSON.parse(results[1]!) as {
+      result: { products?: { name: string; units: number }[]; orders?: number };
+    }[];
+    const [best] = top!.result.products ?? [];
+    return {
+      kind: 'output',
+      output: {
+        reply: `${best?.name} sold ${best?.units} items. You had ${today!.result.orders} orders today.`,
+      },
+      model,
+      responseId: randomUUID(),
+      usage,
+    };
+  });
+  try {
+    for (const [shop, text] of [
+      [a, 'পাঞ্জাবি এ sold 3 items. You had 11 orders today.'],
+      [b, 'শাড়ি বি sold 8 items. You had 37 orders today.'],
+    ] as const) {
+      const answer = (await success(shop, 'POST', '/assistant/messages', 200, ask)).json();
+      expect(answer).toMatchObject({
+        kind: 'answer',
+        text,
+        sources: ['Orders, last 30 days', 'Orders, today'],
+      });
+    }
+  } finally {
+    reportsModel.mockRestore();
+  }
 });
 
 let logs: ReturnType<typeof captureRequestLogs>;

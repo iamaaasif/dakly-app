@@ -116,6 +116,53 @@ export class OrderReportingRepository {
     );
   }
 
+  async topProducts(
+    storeId: string,
+    { from, through, timeZone }: { from: string; through: string; timeZone: string },
+    limit: number,
+  ) {
+    const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
+    const units = sql<string>`sum(${orderItems.quantity})`;
+    const salesPoisha = sql<string>`sum(${orderItems.quantity} * ${orderItems.unitPricePoisha} - ${orderItems.lineDiscountPoisha})`;
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          // A renamed product shows its latest name.
+          name: sql<string>`(array_agg(${orderItems.productName} order by ${orders.createdAt} desc))[1]`,
+          units: sql<string>`${units}::text`,
+          salesPoisha: sql<string>`${salesPoisha}::text`,
+        })
+        .from(orderItems)
+        .innerJoin(
+          orders,
+          and(eq(orders.storeId, orderItems.storeId), eq(orders.id, orderItems.orderId)),
+        )
+        .innerJoin(
+          productVariants,
+          and(
+            eq(productVariants.storeId, orderItems.storeId),
+            eq(productVariants.id, orderItems.variantId),
+          ),
+        )
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            ne(orders.stage, 'cancelled'),
+            sql`${orders.createdAt} >= (${from}::date - 1)::timestamp at time zone 'UTC' and ${orders.createdAt} < (${through}::date + 2)::timestamp at time zone 'UTC'`,
+            sql`${day} between ${from}::date and ${through}::date`,
+          ),
+        )
+        .groupBy(productVariants.productId)
+        .orderBy(sql`${units} desc`, sql`${salesPoisha} desc`, productVariants.productId)
+        .limit(limit),
+    );
+    return rows.map(({ name, units: sold, salesPoisha: sales }) => ({
+      name,
+      units: Number(sold),
+      salesPoisha: BigInt(sales),
+    }));
+  }
+
   reportingDays(storeId: string, orderIds: string[], timeZone: string) {
     return this.database.forStore(storeId, (tx) =>
       tx

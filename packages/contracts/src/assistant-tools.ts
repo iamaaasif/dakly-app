@@ -85,4 +85,82 @@ export const getCustomersTool = {
   },
 } satisfies AssistantToolDefinition;
 
-export const assistantTools = [getSalesTool, getMarketingResultsTool, getCustomersTool] as const;
+const calendarInput = z.strictObject({});
+
+const calendarSalesUnits = {
+  orders: 'count of orders created in the period, cancelled ones left out',
+  salesTaka: 'taka, converted from poisha; items after discount, delivery left out',
+  averageOrderValueTaka: 'taka, delivered orders only; 0 when nothing was delivered',
+  'previous… and …ChangePercent':
+    'the period right before it, and percent change against it; null when the earlier period had 0',
+  from: 'first day of the period, in Asia/Dhaka days',
+  through: 'last day of the period, in Asia/Dhaka days',
+};
+
+export const getSalesTodayTool = {
+  name: 'get_sales_today',
+  area: 'orders',
+  description:
+    'Orders and sales of the shop so far today, with the average order value, against all of yesterday. Use it for questions about today. It takes no arguments.',
+  aliases: ['আজ কত বিক্রি', 'আজকের অর্ডার', 'sales today', 'ajke koto bikri', 'today orders'],
+  input: calendarInput,
+  units: calendarSalesUnits,
+} satisfies AssistantToolDefinition;
+
+export const getSalesYesterdayTool = {
+  name: 'get_sales_yesterday',
+  area: 'orders',
+  description:
+    'Orders and sales of the shop for all of yesterday, with the average order value, against the day before. Use it for questions about yesterday. It takes no arguments.',
+  aliases: ['গতকাল কত বিক্রি', 'গতকালের অর্ডার', 'sales yesterday', 'gotokal koto bikri'],
+  input: calendarInput,
+  units: calendarSalesUnits,
+} satisfies AssistantToolDefinition;
+
+export const getSalesThisMonthTool = {
+  name: 'get_sales_this_month',
+  area: 'orders',
+  description:
+    'Orders and sales of the shop from the first of this month until today, with the average order value, against the same days of last month. Use it for questions about this month. It takes no arguments.',
+  aliases: [
+    'এই মাসে কত বিক্রি',
+    'এই মাসের অর্ডার',
+    'sales this month',
+    'ei mashe koto bikri',
+    'monthly sales',
+  ],
+  input: calendarInput,
+  units: calendarSalesUnits,
+} satisfies AssistantToolDefinition;
+
+export const getTopProductsTool = {
+  name: 'get_top_products',
+  area: 'orders',
+  description: `The products that sold most in a window, best first, up to 5. Use it for questions about the best selling or most popular product. ${windowWords}`,
+  aliases: [
+    'কোন পণ্য বেশি বিক্রি হয়',
+    'সেরা পণ্য',
+    'best selling product',
+    'top products',
+    'kon product beshi bikri hoy',
+    'popular product',
+  ],
+  input: windowInput,
+  units: {
+    'products[].name': 'the product name as it was on its latest order in the window',
+    'products[].units': 'count of items sold in the window, cancelled orders left out',
+    'products[].salesTaka':
+      'taka, converted from poisha; those items after discount, delivery left out',
+    days: 'length of the window in days, in Asia/Dhaka days',
+  },
+} satisfies AssistantToolDefinition;
+
+export const assistantTools = [
+  getSalesTool,
+  getSalesTodayTool,
+  getSalesYesterdayTool,
+  getSalesThisMonthTool,
+  getTopProductsTool,
+  getMarketingResultsTool,
+  getCustomersTool,
+] as const;
