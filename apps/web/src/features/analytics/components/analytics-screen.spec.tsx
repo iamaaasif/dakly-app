@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AnalyticsAutomationRow,
   AnalyticsCampaignRow,
+  AnalyticsChannelsResponse,
   AnalyticsOverviewResponse,
+  AnalyticsSocialPostsResponse,
   AnalyticsView,
 } from '@dakly/contracts/analytics';
 import type { SessionContext } from '@dakly/contracts/sessions';
@@ -120,11 +122,86 @@ const automations: AnalyticsAutomationRow[] = [
   },
 ];
 
+const channelsResponse: AnalyticsChannelsResponse = {
+  current: overview.current,
+  channels: [
+    {
+      channel: 'whatsapp',
+      revenuePoisha: '166282500',
+      orders: 1497,
+      sharePercent: 66,
+      sent: 45130,
+      deliveredPercent: 98,
+      readPercent: 78,
+      tapPercent: 21.5,
+      costPoisha: '6650000',
+      costPerMessagePoisha: '95',
+      returnPerTaka: 25,
+    },
+    {
+      channel: 'sms',
+      revenuePoisha: '35575000',
+      orders: 188,
+      sharePercent: 14,
+      sent: 8101,
+      deliveredPercent: 97,
+      readPercent: null,
+      tapPercent: 9.1,
+      costPoisha: '340000',
+      costPerMessagePoisha: '42',
+      returnPerTaka: 104,
+    },
+    {
+      channel: 'messenger',
+      revenuePoisha: '0',
+      orders: 0,
+      sharePercent: null,
+      sent: 0,
+      deliveredPercent: null,
+      readPercent: null,
+      tapPercent: null,
+      costPoisha: '0',
+      costPerMessagePoisha: null,
+      returnPerTaka: null,
+    },
+  ],
+  social: { posts: 2, reach: 10330 },
+};
+
+const socialResponse: AnalyticsSocialPostsResponse = {
+  current: overview.current,
+  posts: [
+    {
+      id: 'p1',
+      caption: 'Thank you for 18,000 followers.',
+      networks: ['facebook'],
+      publishedAt: '2026-10-30T06:00:00.000Z',
+      reach: 6120,
+      reactions: 540,
+      comments: 12,
+      linkTaps: null,
+    },
+    {
+      id: 'p2',
+      caption: 'Our winter kurti collection is here.',
+      networks: ['facebook', 'instagram'],
+      publishedAt: '2026-11-02T06:00:00.000Z',
+      reach: 4210,
+      reactions: null,
+      comments: null,
+      linkTaps: null,
+    },
+  ],
+  totals: { reach: 10330, reactions: 540 },
+};
+
 function show(view: Partial<AnalyticsView> = {}) {
   vi.stubGlobal('fetch', async (url: string) => {
     const bodies = {
       '/analytics/campaigns': { current: overview.current, campaigns },
       '/analytics/automations': { current: overview.current, automations },
+      '/analytics/channels': channelsResponse,
+      '/analytics/social-posts': socialResponse,
     };
     const path = new URL(url, 'http://localhost').pathname.replace(/^.*(?=\/analytics)/, '');
     return Response.json(bodies[path as keyof typeof bodies] ?? overview, {
@@ -249,5 +326,42 @@ describe('Analytics screen', () => {
     ).toBeTruthy();
     expect(within(list).getByText('861 orders')).toBeTruthy();
     expect(screen.getByText('Earned on autopilot')).toBeTruthy();
+  });
+
+  it('compares what each channel costs and earns, and says SMS reads cannot be tracked', async () => {
+    show({ tab: 'channels' });
+    const whatsapp = (await screen.findByRole('heading', { name: 'WhatsApp' })).closest('div')!
+      .parentElement!.parentElement!;
+    expect(within(whatsapp).getByText('66% of your marketing money')).toBeTruthy();
+    expect(within(whatsapp).getByText('৳16,62,825')).toBeTruthy();
+    expect(within(whatsapp).getByText('1,497 orders')).toBeTruthy();
+    expect(within(whatsapp).getByText('৳25')).toBeTruthy();
+    expect(within(whatsapp).getByText('45,130 messages')).toBeTruthy();
+    expect(within(whatsapp).getByText('78%')).toBeTruthy();
+    expect(within(whatsapp).getByText('৳0.95')).toBeTruthy();
+    expect(screen.getByText('Can’t be tracked')).toBeTruthy();
+    expect(screen.getByText('No money from marketing yet')).toBeTruthy();
+  });
+
+  it('shows social posts with no money or taps, because Dakly links in posts are not tracked', async () => {
+    show({ tab: 'channels' });
+    expect(await screen.findByText('10,330 people reached')).toBeTruthy();
+    expect(screen.getByText('Dakly links in posts are not tracked yet')).toBeTruthy();
+    expect(screen.getByText('Free')).toBeTruthy();
+  });
+
+  it('ranks posts by reach and shows where and when each was published', async () => {
+    show({ tab: 'social' });
+    const list = await screen.findByRole('list', { name: 'Social posts' });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows[0]!.textContent).toContain('Thank you for 18,000 followers.');
+    expect(within(rows[0]!).getByText('Facebook · Oct 30')).toBeTruthy();
+    expect(within(rows[1]!).getByText('Facebook + Instagram · Nov 2')).toBeTruthy();
+    expect(within(rows[0]!).getByText('6,120')).toBeTruthy();
+    expect(screen.getByText('10,330 people reached · 540 reactions')).toBeTruthy();
+    expect(screen.getByText(/update these numbers for up to 2 days/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'See all posts' }).getAttribute('href')).toBe(
+      '/social',
+    );
   });
 });
