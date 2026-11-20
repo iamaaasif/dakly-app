@@ -5,7 +5,9 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AskDaklyAnswer } from '@dakly/contracts/assistant';
+import { assistantTools } from '@dakly/contracts/assistant-tools';
 
+import { askSuggestions } from '../ask-suggestions';
 import { AskDaklyButton } from './ask-dakly-button';
 import { sessionContextKey } from '@/lib/session-context';
 
@@ -55,6 +57,8 @@ function show(
   return client;
 }
 
+const suggestionName = /\?$|performance$/;
+
 beforeEach(() => {
   navigation.search = 'ask=open';
   navigation.replaced = [];
@@ -73,15 +77,19 @@ describe('Ask Dakly AI panel', () => {
     expect(navigation.replaced).toEqual(['/dashboard?ask=open']);
   });
 
-  it('shows the page it is on, three suggestions and the approval note', () => {
+  it('shows the page it is on, a suggestion for every report and the approval note', () => {
     show();
     const panel = screen.getByRole('complementary', { name: 'Dakly AI' });
     expect(within(panel).getByText('Knows you’re on Dashboard')).toBeTruthy();
     expect(
       within(panel)
-        .getAllByRole('button', { name: /last 30 days\?$|performance$/ })
+        .getAllByRole('button', { name: suggestionName })
         .map((button) => button.textContent),
     ).toEqual([
+      'Which product sells best?',
+      'How much did I sell today?',
+      'How much did I sell this month?',
+      'How much did I sell yesterday?',
       'How much did I sell in the last 30 days?',
       'Explain my campaign performance',
       'How many customers came back in the last 30 days?',
@@ -94,10 +102,20 @@ describe('Ask Dakly AI panel', () => {
   it('shows only the suggestions for reports the role can view', () => {
     show({ canViewOrders: true, canViewAnalytics: false, canViewCustomers: false });
     expect(
-      screen
-        .getAllByRole('button', { name: /last 30 days\?$|performance$/ })
-        .map((b) => b.textContent),
-    ).toEqual(['How much did I sell in the last 30 days?']);
+      screen.getAllByRole('button', { name: suggestionName }).map((b) => b.textContent),
+    ).toEqual([
+      'Which product sells best?',
+      'How much did I sell today?',
+      'How much did I sell this month?',
+      'How much did I sell yesterday?',
+      'How much did I sell in the last 30 days?',
+    ]);
+  });
+
+  it('suggests nothing for an area that has no report tool', () => {
+    const areas = new Set<string>(assistantTools.map(({ area }) => area));
+    for (const { text, canAsk } of askSuggestions)
+      expect(areas.has(canAsk.replace('canView', '').toLowerCase()), text).toBe(true);
   });
 
   it('shows no suggestion block when the role can view no report', () => {

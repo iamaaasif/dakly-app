@@ -17,7 +17,6 @@ describe('Ask Dakly AI tools', () => {
         tool.aliases.some((alias) => /^[\x20-\x7e]+$/.test(alias)),
         tool.name,
       ).toBe(true);
-      expect(tool.description, tool.name).toContain('last_30_days');
     }
   });
 
@@ -33,7 +32,8 @@ describe('Ask Dakly AI tools', () => {
   });
 
   it('accept only the listed windows and no other argument', () => {
-    for (const tool of assistantTools) {
+    for (const tool of assistantTools.filter(({ input }) => !input.safeParse({}).success)) {
+      expect(tool.description, tool.name).toContain('last_30_days');
       expect(tool.input.safeParse({ window: 'last_7_days' }).success, tool.name).toBe(true);
       expect(tool.input.safeParse({ window: 'last_year' }).success, tool.name).toBe(false);
       expect(
@@ -41,5 +41,16 @@ describe('Ask Dakly AI tools', () => {
         tool.name,
       ).toBe(false);
     }
+  });
+
+  it('ask for today, yesterday and this month with no argument at all', () => {
+    const calendarTools = assistantTools.filter(({ input }) => input.safeParse({}).success);
+    expect(calendarTools.map(({ name }) => name)).toEqual([
+      'get_sales_today',
+      'get_sales_yesterday',
+      'get_sales_this_month',
+    ]);
+    for (const tool of calendarTools)
+      expect(tool.input.safeParse({ storeId: crypto.randomUUID() }).success, tool.name).toBe(false);
   });
 });
