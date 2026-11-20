@@ -1633,6 +1633,14 @@ fixture('GET /campaigns/:campaignId/estimate', async () => {
   expect(estimate).toMatchObject({ audienceCount: 1, recipientsCount: 1, smsCredits: 1 });
   await hidden(b, 'GET', (value) => `/campaigns/${value}/estimate`, id);
 });
+fixture('POST /campaigns/:campaignId/duplicate', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  const copy = (await success(a, 'POST', `/campaigns/${id}/duplicate`, 201)).json();
+  expect(copy).toMatchObject({ status: 'draft', name: 'Copy of ঈদের অফার' });
+  expect((await f.row('campaigns', copy.id)).store_id).toBe(a.id);
+  await hidden(b, 'POST', (value) => `/campaigns/${value}/duplicate`, id);
+});
 fixture('GET /campaigns/:campaignId/results', async () => {
   const { a, b } = await pair(),
     id = await approvableCampaign(a);
