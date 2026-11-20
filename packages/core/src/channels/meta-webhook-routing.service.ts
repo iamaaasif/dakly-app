@@ -3,7 +3,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import type {
   ChannelDriver,
   ChannelKind,
+  ChannelReceipt,
   InboundMessage,
+  InboundPostback,
 } from '@dakly/providers/channel/channel-driver';
 
 import { ChannelReceiptsService } from '../messaging/channel-receipts.service';
@@ -33,7 +35,10 @@ export class MetaWebhookRoutingService {
   constructor(
     @Inject(MetaWebhooksRepository) private readonly repository: MetaWebhooksRepository,
     @Inject(META_WEBHOOK_DRIVER)
-    private readonly driver: Pick<ChannelDriver, 'parseWebhook' | 'parseReceipts'>,
+    private readonly driver: Pick<
+      ChannelDriver,
+      'parseWebhook' | 'parseReceipts' | 'parsePostbacks'
+    >,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(ChannelReceiptsService) private readonly receipts: ChannelReceiptsService,
@@ -60,6 +65,7 @@ export class MetaWebhookRoutingService {
     const receipts = this.driver.parseReceipts(delivery.payload);
     const events = [
       ...messages,
+      ...this.driver.parsePostbacks(delivery.payload),
       ...receipts.filter(
         (receipt) => receipt.kind === 'echo' && receipt.appExternalId === this.appId,
       ),
@@ -92,11 +98,7 @@ export class MetaWebhookRoutingService {
         accountKey(connectionKind[event.channel], event.accountExternalId),
       );
       if (!storeId) continue;
-      outcomes.push(
-        'kind' in event
-          ? await this.receipts.record(storeId, event, delivery.receivedAt, finalAttempt)
-          : await this.routeMessage(storeId, event, delivery.receivedAt),
-      );
+      outcomes.push(await this.routeEvent(storeId, event, delivery.receivedAt, finalAttempt));
     }
     if (outcomes.includes('receipt_pending'))
       throw new AppError('META_RECEIPT_PENDING', META_WEBHOOK_ERRORS.META_RECEIPT_PENDING);
@@ -107,6 +109,28 @@ export class MetaWebhookRoutingService {
       error: processed ? null : reason,
       processedAt: this.clock.now(),
       payload: null,
+    });
+  }
+
+  private routeEvent(
+    storeId: string,
+    event: InboundMessage | InboundPostback | ChannelReceipt,
+    receivedAt: Date,
+    finalAttempt: boolean,
+  ) {
+    if ('kind' in event) return this.receipts.record(storeId, event, receivedAt, finalAttempt);
+    if ('payload' in event) return this.routePostback(storeId, event, receivedAt);
+    return this.routeMessage(storeId, event, receivedAt);
+  }
+
+  private routePostback(storeId: string, postback: InboundPostback, receivedAt: Date) {
+    return this.messaging.receivePostback(storeId, {
+      kind: connectionKind[postback.channel],
+      externalAccountId: postback.accountExternalId,
+      externalSenderId: postback.senderExternalId,
+      payload: postback.payload,
+      sentAt: postback.occurredAt,
+      receivedAt,
     });
   }
 

@@ -77,6 +77,24 @@ function permissionDenied(code: number): boolean {
   return code === 10 || (code >= 200 && code <= 299);
 }
 
+function messageContent(message: OutboundMessage) {
+  if (message.channel === 'instagram') return { text: message.text };
+  const metadata = message.operationKey;
+  if (!message.buttons?.length) return { text: message.text, metadata };
+  const buttons = message.buttons.map(({ title, payload }) => ({
+    type: 'postback',
+    title,
+    payload,
+  }));
+  return {
+    attachment: {
+      type: 'template',
+      payload: { template_type: 'button', text: message.text, buttons },
+    },
+    metadata,
+  };
+}
+
 type MetaApp = {
   appId: string;
   appSecret: string;
@@ -169,14 +187,28 @@ export class MetaGraphChannelDriver
     return result.data.is_valid;
   }
 
-  async send({ accountExternalId, accessToken }: ChannelCredentials, message: OutboundMessage) {
+  async send(credentials: ChannelCredentials, message: OutboundMessage) {
+    // Messenger cannot put an image and a text with buttons in one message, so the image goes
+    // first. Only the last message carries the operation key, so one send echoes one key.
+    if (message.channel === 'messenger' && message.imageUrl)
+      await this.post(credentials, message, {
+        attachment: { type: 'image', payload: { url: message.imageUrl } },
+      });
+    return this.post(credentials, message, messageContent(message));
+  }
+
+  private async post(
+    { accountExternalId, accessToken }: ChannelCredentials,
+    message: OutboundMessage,
+    content: Record<string, unknown>,
+  ) {
     const messenger = message.channel === 'messenger';
     const delivery = message.humanAgent
       ? { messaging_type: 'MESSAGE_TAG', tag: 'HUMAN_AGENT' }
       : messenger && { messaging_type: 'RESPONSE' };
     const body = JSON.stringify({
       recipient: { id: message.externalConversationId },
-      message: { text: message.text, ...(messenger && { metadata: message.operationKey }) },
+      message: content,
       ...delivery,
     });
     const endpoint = messenger ? encodeURIComponent(accountExternalId) : 'me';

@@ -166,6 +166,12 @@ const examples: DaklyEvent[] = [
     payload: { conversationId, reason: 'asked_for_person' },
   },
   { type: 'message.received', storeId, occurredAt, payload: message },
+  {
+    type: 'message.postback_received',
+    storeId,
+    occurredAt,
+    payload: { conversationId, contactId, channel: 'messenger', postback: 'order-confirm:v1:abc' },
+  },
   { type: 'message.send_requested', storeId, occurredAt, payload: { messageId } },
   { type: 'message.sent', storeId, occurredAt, payload: message },
   { type: 'message.delivered', storeId, occurredAt, payload: message },

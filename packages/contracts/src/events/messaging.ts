@@ -30,6 +30,16 @@ export const messageReceivedEventSchema = z.strictObject({
   payload: messagePayloadSchema,
 });
 
+// The payload string is what the shop attached to the button; the consumer decides what it means.
+export const messagePostbackReceivedEventSchema = z.strictObject({
+  type: z.literal('message.postback_received'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: messagePayloadSchema.omit({ messageId: true }).extend({
+    postback: z.string().min(1).max(1000),
+  }),
+});
+
 export const conversationHandedOverEventSchema = z.strictObject({
   type: z.literal('conversation.handed_over'),
   storeId: z.uuid(),

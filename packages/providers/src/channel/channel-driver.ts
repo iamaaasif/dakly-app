@@ -15,6 +15,15 @@ export type InboundMessage = {
   sentAt: Date;
 };
 
+// A tap on a button the shop sent. The payload is the string the shop attached to that button.
+export type InboundPostback = {
+  channel: Exclude<ChannelKind, 'whatsapp'>;
+  accountExternalId: string;
+  senderExternalId: string;
+  payload: string;
+  occurredAt: Date;
+};
+
 export type ChannelReceipt = {
   channel: Exclude<ChannelKind, 'whatsapp'>;
   accountExternalId: string;
@@ -30,13 +39,16 @@ export type ChannelReceipt = {
     }
 );
 
+export type OutboundButton = { title: string; payload: string };
+
 export type OutboundMessage = {
-  channel: Exclude<ChannelKind, 'whatsapp'>;
   externalConversationId: string;
   text: string;
   operationKey: string;
   humanAgent?: boolean;
-};
+} & (
+  { channel: 'instagram' } | { channel: 'messenger'; imageUrl?: string; buttons?: OutboundButton[] }
+);
 
 export type SendResult = {
   externalMessageId: string;
@@ -47,6 +59,7 @@ export type ChannelDriver = {
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string): boolean;
   parseWebhook(payload: unknown): InboundMessage[];
   parseReceipts(payload: unknown): ChannelReceipt[];
+  parsePostbacks(payload: unknown): InboundPostback[];
   send(credentials: ChannelCredentials, message: OutboundMessage): Promise<SendResult>;
 };
 
