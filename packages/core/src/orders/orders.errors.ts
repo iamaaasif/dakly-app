@@ -22,6 +22,10 @@ const ORDER_ERRORS = {
   },
   ORDER_COD_NOT_COLLECTABLE: { status: 409, message: 'COD cannot be recorded for this order' },
   ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
+  ORDER_CONFIRMATION_RATE_LIMITED: {
+    status: 429,
+    message: 'Too many taps. Try again in a minute',
+  },
   ORDER_STAGE_NOT_ALLOWED: { status: 409, message: 'This order cannot move to that stage' },
 } as const satisfies ErrorCatalog;
 

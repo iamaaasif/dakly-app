@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
-  orderStageTransitions,
   type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
@@ -33,11 +32,13 @@ import {
   orderStageCounts,
   orderStageHistory,
   productArchiveStages,
+  createdStageWrite,
   recordOrderCreation,
   recordOrderEdit,
   recordOrderStage,
   requireEditableOrder,
-  staffConfirmation,
+  requireStageChange,
+  type StageEditor,
   stageWrite,
   stagesForOrderTab,
 } from './order-stage';
@@ -46,7 +47,6 @@ import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
-type StageEditor = { actor: AuditEntry['actor']; access: Access };
 type CreateEditor = {
   actor: Extract<AuditEntry['actor'], { kind: 'user' }>;
   access: Access;
@@ -130,7 +130,7 @@ export class OrdersService {
         idempotencyKey,
         ...delivery,
         ...totals,
-        ...stageWrite(input.confirm ? staffConfirmation : { to: 'to_confirm' }, now, input.confirm),
+        ...createdStageWrite(input.confirm, now),
         paymentStatus: input.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         possibleDuplicateOfOrderId: duplicate,
         createdAt: now,
@@ -257,13 +257,12 @@ export class OrdersService {
     storeId: string,
     orderId: string,
     change: OrderStageChange,
-    { actor, access }: StageEditor,
+    { actor, access, onlyFrom, confirmationMethod = 'staff' }: StageEditor,
   ): Promise<OrderDetail> {
     return this.transaction.run(storeId, async () => {
       const order = await this.repository.lock(storeId, orderId);
       if (!order) throw orderError('ORDER_NOT_FOUND');
-      if (!orderStageTransitions[order.stage].includes(change.to) || isSyncedOrder(order.source))
-        throw orderError('ORDER_STAGE_NOT_ALLOWED');
+      requireStageChange(order, change.to, onlyFrom);
 
       const now = this.clock.now();
       const confirmed = change.to === 'to_pack' && !order.confirmedAt;
@@ -282,7 +281,7 @@ export class OrdersService {
       );
       await this.repository.updateOrder(storeId, orderId, {
         ...fulfilment,
-        ...stageWrite(change, now, confirmed),
+        ...stageWrite(change, now, confirmed && confirmationMethod),
         ...(change.to === 'cancelled' && order.paymentStatus === 'advance_paid'
           ? { paymentStatus: 'refund_due' }
           : {}),

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0070_snapshot.json`: **96 tables, 1298 columns, 397 explicit indexes and 303 foreign keys**.
+Built from `packages/db/migrations/meta/0073_snapshot.json`: **97 tables, 1305 columns, 400 explicit indexes and 304 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -382,6 +382,7 @@ erDiagram
     bd_areas |o..o{ bd_areas : "parent_id"
     stores ||..o{ channel_connections : "store_id"
     users |o..o{ channel_connections : "connected_by_user_id"
+    stores ||..o{ meta_page_subscriptions : "store_id"
     stores ||..o{ sms_sender_ids : "store_id"
     files |o..o{ sms_sender_ids : "trade_licence_file_id"
     files |o..o{ sms_sender_ids : "nid_file_id"
@@ -474,6 +475,7 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         text kind "NOT NULL; text"
         text external_account_id "NOT NULL; text"
+        text linked_page_external_id "NULL; text"
         text display_name "NOT NULL; text"
         bytea access_token_ciphertext "NULL; bytea"
         smallint key_version "NULL; smallint"
@@ -488,6 +490,14 @@ erDiagram
         timestamp_with_time_zone disconnected_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    meta_page_subscriptions {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text page_external_id "NOT NULL; text"
+        bytea access_token_ciphertext "NOT NULL; bytea"
+        smallint key_version "NOT NULL; smallint"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     sms_sender_ids {
         uuid id PK "NOT NULL; uuid"
@@ -1978,6 +1988,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `whatsapp_templates_channel_connection_id_store_fk`                  | `whatsapp_templates(store_id, channel_connection_id)`     | `channel_connections(store_id, id)`         | no action |
 | `channel_connections_store_id_stores_id_fk`                          | `channel_connections(store_id)`                           | `stores(id)`                                | no action |
 | `channel_connections_connected_by_user_id_users_id_fk`               | `channel_connections(connected_by_user_id)`               | `users(id)`                                 | no action |
+| `meta_page_subscriptions_store_id_stores_id_fk`                      | `meta_page_subscriptions(store_id)`                       | `stores(id)`                                | no action |
 | `sms_sender_ids_store_id_stores_id_fk`                               | `sms_sender_ids(store_id)`                                | `stores(id)`                                | no action |
 | `sms_sender_ids_trade_licence_file_id_files_id_fk`                   | `sms_sender_ids(trade_licence_file_id)`                   | `files(id)`                                 | no action |
 | `sms_sender_ids_nid_file_id_files_id_fk`                             | `sms_sender_ids(nid_file_id)`                             | `files(id)`                                 | no action |

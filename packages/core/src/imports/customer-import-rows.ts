@@ -8,6 +8,19 @@ import {
 import { readCsvLines } from './csv-records';
 import { importError } from './imports.errors';
 
+export const FIELD_LABELS = {
+  phone: 'Phone',
+  name: 'Name',
+  whatsappPhone: 'WhatsApp number',
+  email: 'Email',
+  address: 'Address',
+  district: 'District',
+  tags: 'Tags',
+  notes: 'Notes',
+  sms: 'SMS',
+  whatsapp: 'WhatsApp',
+} as const satisfies Record<string, string>;
+
 // Row numbers are the ones the spreadsheet shows: the header is row 1. Messages never repeat
 // the cell, because the report goes back to members who may not see full phones.
 export type CustomerImportRowError = {
@@ -20,18 +33,6 @@ export type CustomerImportRows = {
   rows: { rowNumber: number; contact: ContactImportRow }[];
   errors: CustomerImportRowError[];
 };
-
-// A file that is not valid UTF-8, such as UTF-16 from Excel, is refused rather than read as
-// garbled text.
-export function decodeCustomerImportFile(bytes: Uint8Array): string {
-  if (bytes.some((byte) => byte < 32 && byte !== 9 && byte !== 10 && byte !== 13))
-    throw importError('IMPORT_FILE_UNREADABLE');
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch {
-    throw importError('IMPORT_FILE_UNREADABLE');
-  }
-}
 
 export function readCustomerImportRows(
   file: string,

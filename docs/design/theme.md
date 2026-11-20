@@ -4,36 +4,39 @@ The tokens Dakly's web app is built from. Values were measured from the design p
 
 ## Colour
 
-| Token                   | Light     | Use                                                         |
-| ----------------------- | --------- | ----------------------------------------------------------- |
-| `--color-background`    | `#FAF9F5` | Page background                                             |
-| `--color-surface`       | `#FFFFFF` | Cards, panels, inputs                                       |
-| `--color-surface-muted` | `#F3EFEB` | Table headers, selected rows, quiet fills                   |
-| `--color-border`        | `#EEE8E3` | Decorative card borders                                     |
-| `--color-border-strong` | `#DDD7D2` | Decorative dividers only                                    |
-| `--color-text`          | `#211A16` | Body text, headings                                         |
-| `--color-text-muted`    | `#766C65` | Secondary text, labels, captions                            |
-| `--color-text-subtle`   | `#A79D96` | Disabled or decorative text only                            |
-| `--color-primary`       | `#F06306` | Decorative brand accent                                     |
-| `--color-primary-hover` | `#C24F04` | Brand text on white only                                    |
-| `--color-primary-soft`  | `#FEF0E6` | Active nav background, highlighted cards                    |
-| `--color-action`        | `#C24F04` | Interactive fills and link text on white or page background |
-| `--color-action-hover`  | `#A84303` | Primary button hover                                        |
-| `--color-focus`         | `#C24F04` | Focus outline on white or page background                   |
-| `--color-input-border`  | `#8F8178` | Essential input and secondary button boundaries             |
-| `--color-danger-hover`  | `#961D15` | Destructive button hover                                    |
-| `--color-on-primary`    | `#FFFFFF` | Text on primary                                             |
-| `--color-inverse`       | `#211A16` | Dark buttons (Ask Dakly AI, AI agent), toasts               |
-| `--color-success`       | `#14663D` | Positive change, "AI is handling", delivered                |
-| `--color-success-soft`  | `#E6F4EC` | Success badges and banners                                  |
-| `--color-warning`       | `#8A5A00` | Needs attention, running low                                |
-| `--color-warning-soft`  | `#FDF3DC` | Warning badges                                              |
-| `--color-danger`        | `#B4231A` | Errors, destructive actions, failed                         |
-| `--color-danger-soft`   | `#FDECEA` | Error banners                                               |
-| `--color-info`          | `#1F4FA3` | Neutral information, links in tables                        |
-| `--color-info-soft`     | `#E4ECFA` | Info badges                                                 |
-| `--color-ai`            | `#7A2B8A` | The AI badge and AI-written labels                          |
-| `--color-ai-soft`       | `#F1E3F6` | AI badge background                                         |
+| Token                    | Light     | Use                                                                                    |
+| ------------------------ | --------- | -------------------------------------------------------------------------------------- |
+| `--color-background`     | `#FAF9F5` | Page background                                                                        |
+| `--color-surface`        | `#FFFFFF` | Cards, panels, inputs                                                                  |
+| `--color-surface-muted`  | `#F3EFEB` | Table headers, selected rows, quiet fills                                              |
+| `--color-border`         | `#EEE8E3` | Decorative card borders                                                                |
+| `--color-border-strong`  | `#DDD7D2` | Decorative dividers only                                                               |
+| `--color-text`           | `#211A16` | Body text, headings                                                                    |
+| `--color-text-muted`     | `#766C65` | Secondary text, labels, captions                                                       |
+| `--color-text-subtle`    | `#A79D96` | Disabled or decorative text only                                                       |
+| `--color-primary`        | `#F06306` | Decorative brand accent                                                                |
+| `--color-primary-hover`  | `#C24F04` | Brand text on white only                                                               |
+| `--color-primary-soft`   | `#FEF0E6` | Active nav background, highlighted cards                                               |
+| `--color-action`         | `#C24F04` | Interactive fills and link text on white or page background                            |
+| `--color-action-hover`   | `#A84303` | Primary button hover                                                                   |
+| `--color-focus`          | `#C24F04` | Focus outline on white or page background                                              |
+| `--color-input-border`   | `#8F8178` | Essential input and secondary button boundaries                                        |
+| `--color-danger-hover`   | `#961D15` | Destructive button hover                                                               |
+| `--color-on-primary`     | `#FFFFFF` | Text on primary                                                                        |
+| `--color-inverse`        | `#211A16` | Dark buttons (Ask Dakly AI, AI agent), toasts                                          |
+| `--color-success`        | `#14663D` | Positive change, "AI is handling", delivered                                           |
+| `--color-success-soft`   | `#E6F4EC` | Success badges and banners                                                             |
+| `--color-warning`        | `#8A5A00` | Needs attention, running low                                                           |
+| `--color-warning-soft`   | `#FDF3DC` | Warning badges                                                                         |
+| `--color-danger`         | `#B4231A` | Errors, destructive actions, failed                                                    |
+| `--color-danger-soft`    | `#FDECEA` | Error banners                                                                          |
+| `--color-info`           | `#1F4FA3` | Neutral information, links in tables                                                   |
+| `--color-info-soft`      | `#E4ECFA` | Info badges                                                                            |
+| `--color-facebook`       | `#1665D8` | The Continue with Facebook button (white text, 5.4:1)                                  |
+| `--color-facebook-hover` | `#1255B3` | Hover fill of the Facebook button                                                      |
+| `--color-instagram`      | `#B82D7C` | Instagram channel icon (white icon, 5.7:1; the single pink stands in for the gradient) |
+| `--color-ai`             | `#7A2B8A` | The AI badge and AI-written labels                                                     |
+| `--color-ai-soft`        | `#F1E3F6` | AI badge background                                                                    |
 
 Channel colours (Messenger blue, WhatsApp green, Instagram gradient) appear only in channel icons, never as UI colours.
 
