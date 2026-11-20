@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import { cn } from '@dakly/ui/cn';
 
-export const campaignSteps = [
+const campaignSteps = [
   { id: 'goal', label: 'Goal' },
   { id: 'content', label: 'Content' },
 ] as const;
