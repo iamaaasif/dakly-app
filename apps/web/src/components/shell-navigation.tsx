@@ -3,6 +3,7 @@ import {
   House,
   Layers,
   LogOut,
+  MessageSquare,
   Megaphone,
   Package,
   Plug,
@@ -113,7 +114,10 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
   return [
     {
       heading: 'Workspace',
-      links: [{ href: '/dashboard', label: 'Dashboard', icon: House, visible: Boolean(store) }],
+      links: [
+        { href: '/dashboard', label: 'Dashboard', icon: House, visible: Boolean(store) },
+        { href: '/chats', label: 'Chats', icon: MessageSquare, visible: store?.canViewChats },
+      ],
     },
     {
       heading: 'Customers',

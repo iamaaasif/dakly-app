@@ -278,6 +278,8 @@ describe('Session boundary over Fastify and Postgres', () => {
       canEditCampaigns: false,
       canViewAutomations: false,
       canEditAutomations: false,
+      canViewChats: true,
+      canEditChats: true,
       canViewSegments: true,
       canEditSegments: false,
       canApproveSupport: false,

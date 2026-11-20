@@ -93,6 +93,8 @@ function show(
       canEditAutomations: false,
       canViewCustomers: false,
       canCreateCustomer: false,
+      canViewChats: false,
+      canEditChats: false,
       canViewSegments: false,
       canEditSegments: false,
       canApproveSupport: false,

@@ -389,6 +389,8 @@ The inbox routes require the Chats extension. Staff with view access can list co
 
 Staff with edit access can set status, assign an active member or clear the assignment, take over and hand back to AI. Each change bumps the conversation version and records the names of the changed fields in the audit log. Changing the responder leaves status and assignment alone. An inbound message newer than the previous one reopens a Done or Later conversation and keeps its responder and assignee. If staff change the conversation while the message is being saved, their change wins.
 
+The list shows the contact name on each row. `GET /conversations/counts` returns the tab numbers: all chats, chats that need you, chats the AI is handling and chats set to follow up. The chat list screen (`/chats`) keeps its tab and channel filter in the URL. It shows no search, assignee filter, label, sort or select controls yet because the API has nothing behind them.
+
 Staff can add internal notes to the inbox thread. A note records its author and time, stays inside Dakly, and leaves the customer preview, reply window and unread count as they were.
 
 Staff can take over until they hand back, or choose a return after 30 minutes, one hour or six hours. The worker checks for due returns every minute in stores with Chats enabled. It checks the extension and reads the current deadline again when it handles the job. Turning off Chats keeps the deadline, and an extended takeover keeps its new deadline even if a job has already been queued.
