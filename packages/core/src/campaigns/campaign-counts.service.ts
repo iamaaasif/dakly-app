@@ -87,12 +87,9 @@ export class CampaignCountsService {
     });
   }
 
-  async markPending(
-    storeId: string,
-    { id, status }: Pick<LockedCampaign, 'id' | 'status'>,
-    recorded: boolean,
-  ) {
-    if (recorded && status !== 'sending') await this.counts.markPending(storeId, id);
+  async markPending(storeId: string, campaign: LockedCampaign, recorded: boolean) {
+    if (recorded && campaign.status !== 'sending')
+      await this.counts.markPending(storeId, campaign.id);
   }
 
   async recordTap(

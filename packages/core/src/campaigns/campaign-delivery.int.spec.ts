@@ -19,6 +19,8 @@ import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { ErrorReporter } from '../platform/logging/error-reporter';
+import { runWithJobContext } from '../platform/logging/job-context';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SegmentsService } from '../segments/segments.service';
@@ -750,6 +752,31 @@ describe('Campaign sender (Postgres)', () => {
     expect(await batch.handle({ storeId })).toBeUndefined();
     expect((await campaigns.get(storeId, pending[1]!)).counts.sent).toBe(1);
     expect(calls).toHaveLength(0);
+  });
+
+  it('reports a repair failure without replacing the original dispatch error', async () => {
+    const pending = await finishedWithoutCounts();
+    const active = await sendingCampaign(1);
+    const batch = app.get(SendCampaignBatchJob);
+    const save = vi.spyOn(app.get(CampaignCountsRepository), 'save');
+    const report = vi.spyOn(app.get(ErrorReporter), 'reportJob');
+    save.mockRejectedValueOnce(new Error('repair unavailable'));
+    vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new SmsSendRefused());
+    try {
+      await expect(
+        runWithJobContext(() => batch.handle({ storeId }), 'repair-test'),
+      ).rejects.toMatchObject({ code: 'SMS_SEND_REFUSED' });
+      expect(report).toHaveBeenCalledWith(
+        expect.objectContaining({ errorClass: 'Error' }),
+        'repair-test',
+      );
+      expect((await campaigns.get(storeId, pending)).counts.countedAt).toBeNull();
+    } finally {
+      save.mockRestore();
+      report.mockRestore();
+      await campaigns.cancel(storeId, active.id, actor);
+      await batch.handle({ storeId });
+    }
   });
 
   it('preserves a paused campaign acceptance when its rollup fails and repairs it in a later batch', async () => {
