@@ -25,20 +25,16 @@ export class FilePurgeService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  // The object goes first and the row second, so a crash between them leaves a row that the next
-  // run finds again; deleting a missing object is not an error. No transaction stays open while
-  // R2 is called.
+  // The rows go first, in their own transaction, then the objects. A row that something still
+  // points at fails the batch before R2 is touched. A crash in between leaves a stray object, which
+  // costs little and, under products/, the orphan sweep removes. No transaction stays open while
+  // R2 is called, and deleting a missing object is not an error.
   purgeExpiredFiles() {
     return this.forEachStore(async (storeId) => {
       for (;;) {
-        const batch = await this.repository.expiredUnreferenced(storeId, FILE_BATCH);
-        for (const { objectKey } of batch) await this.storage.deleteObject(objectKey);
-        if (batch.length > 0)
-          await this.repository.deleteRows(
-            storeId,
-            batch.map(({ id }) => id),
-          );
-        if (batch.length < FILE_BATCH) return;
+        const keys = await this.repository.deleteExpiredBatch(storeId, FILE_BATCH);
+        for (const key of keys) await this.storage.deleteObject(key);
+        if (keys.length < FILE_BATCH) return;
       }
     });
   }

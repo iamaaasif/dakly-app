@@ -10,7 +10,7 @@ import type {
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import type { Clock } from '../platform/clock';
 import type { StoresService } from '../stores/stores.service';
-import { FilePurgeRepository } from './file-purge.repository';
+import { FILE_REFERENCES, FilePurgeRepository } from './file-purge.repository';
 import { FilePurgeService } from './file-purge.service';
 
 const NOW = new Date('2026-11-20T00:00:00Z');
@@ -78,6 +78,21 @@ describe('file purges (Postgres)', () => {
       [fixture.a, fixture.b],
     ]);
     await fixture.close();
+  });
+
+  it('excludes every foreign key that points at files, apart from store-less settlement reports', async () => {
+    const { rows } = await owner.query(`
+      select distinct c.conrelid::regclass::text as "table", a.attname as "column"
+      from pg_constraint c
+      cross join lateral unnest(c.conkey, c.confkey) as k(local_column, files_column)
+      join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.local_column
+      join pg_attribute f on f.attrelid = c.confrelid and f.attnum = k.files_column and f.attname = 'id'
+      where c.contype = 'f' and c.confrelid = 'public.files'::regclass`);
+    const found = rows.map((row) => `${row.table}.${row.column}`).sort();
+    const excluded = FILE_REFERENCES.flatMap(({ table, columns }) =>
+      columns.map((column) => `${table}.${column}`),
+    );
+    expect(found).toEqual([...excluded, 'gateway_settlement_lines.report_file_id'].sort());
   });
 
   it('deletes expired files and their objects in every store, and leaves live and referenced ones', async () => {

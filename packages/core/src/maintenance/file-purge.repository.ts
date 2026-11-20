@@ -3,37 +3,47 @@ import { sql } from 'drizzle-orm';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
-export type ExpiredFile = { id: string; objectKey: string };
+// Every column that points at files.id for a store's files. A test reads the foreign keys from the
+// catalogue and fails when a table is missing here. Settlement reports belong to no store, so the
+// per-store pass never sees them.
+export const FILE_REFERENCES = [
+  { table: 'imports', columns: ['file_id', 'report_file_id'] },
+  { table: 'knowledge_items', columns: ['file_id'] },
+  { table: 'sms_sender_ids', columns: ['trade_licence_file_id', 'nid_file_id'] },
+  { table: 'data_requests', columns: ['file_id'] },
+];
+
+const unreferenced = sql.join(
+  FILE_REFERENCES.map(({ table, columns }) => {
+    const alias = sql.identifier(table);
+    const matches = sql.join(
+      columns.map((column) => sql`${alias}.${sql.identifier(column)} = f.id`),
+      sql` or `,
+    );
+    return sql`not exists (select 1 from ${alias} where ${matches})`;
+  }),
+  sql` and `,
+);
 
 @Injectable()
 export class FilePurgeRepository {
   constructor(@Inject(TenantDatabase) private readonly tenant: TenantDatabase) {}
 
-  // Files an import, knowledge item, sender request or data request still points at stay: their
-  // owner clears the reference first, and deleting the row now would break the foreign key. Leaving
-  // them out also keeps one such file from filling every batch.
-  expiredUnreferenced(storeId: string, limit: number): Promise<ExpiredFile[]> {
+  // Returns the object keys of the rows it deleted. Files that something still points at stay:
+  // their owner clears the reference first. Leaving them out also keeps one such file from filling
+  // every batch.
+  deleteExpiredBatch(storeId: string, limit: number): Promise<string[]> {
     return this.tenant.forStore(storeId, async (tx) => {
-      const { rows } = await tx.execute<ExpiredFile>(sql`
-        select f.id, f.object_key as "objectKey" from files f
-        where f.store_id = ${storeId} and f.expires_at < now()
-          and not exists (select 1 from imports i where i.file_id = f.id or i.report_file_id = f.id)
-          and not exists (select 1 from knowledge_items k where k.file_id = f.id)
-          and not exists (select 1 from sms_sender_ids s
-            where s.trade_licence_file_id = f.id or s.nid_file_id = f.id)
-          and not exists (select 1 from data_requests d where d.file_id = f.id)
-        order by f.expires_at, f.id
-        limit ${limit}`);
-      return rows;
+      const { rows } = await tx.execute<{ objectKey: string }>(sql`
+        delete from files where id in (
+          select f.id from files f
+          where f.store_id = ${storeId} and f.expires_at < now() and ${unreferenced}
+          order by f.expires_at, f.id
+          limit ${limit}
+          for update skip locked)
+        returning object_key as "objectKey"`);
+      return rows.map(({ objectKey }) => objectKey);
     });
-  }
-
-  async deleteRows(storeId: string, ids: string[]) {
-    await this.tenant.forStore(storeId, (tx) =>
-      tx.execute(
-        sql`delete from files where store_id = ${storeId} and id = any(${sql.param(ids)}::uuid[])`,
-      ),
-    );
   }
 
   async knownKeys(storeId: string, keys: string[]): Promise<Set<string>> {
