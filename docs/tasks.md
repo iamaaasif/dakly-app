@@ -206,7 +206,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ANA-2  | Attribution of orders to messages and posts        | Done        | ANA-1, CAMP-3 | #226, #243, #244       | Tracked taps, window rebuild and shared reports merged.                              |
 | ANA-3  | Web: Analytics tabs                                | In progress | ANA-2         | #287, #310, #315, #318 | Part 2 adds the Campaigns and Automations reads and tabs; the AI tip waits on part 3 |
 | HOME-3 | Web: Dashboard cards                               | Done        | ANA-1         | #211                   |                                                                                      |
-| HOME-4 | Ask Dakly AI with read-only report tools           | Todo        | ANA-1, AI-2   |                        |                                                                                      |
+| HOME-4 | Ask Dakly AI with read-only report tools           | In progress | ANA-1, AI-2   | #314                   | Part 1 is the API and report tools. Part 2 is the panel.                             |
 
 ## M12. Admin panel
 
