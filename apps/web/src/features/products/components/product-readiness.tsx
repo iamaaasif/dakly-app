@@ -1,36 +1,31 @@
 import type { ProductResponse } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
 
-import { readinessLabels } from '../product-labels';
-
 type ProductReadinessProps = {
-  product: Pick<ProductResponse, 'readiness'>;
+  product: Pick<ProductResponse, 'readiness'> & Partial<Pick<ProductResponse, 'status'>>;
 };
 
-function readinessBadgeVariant(label: ProductResponse['readiness'][number]) {
-  if (label === 'needs_price') return 'danger';
-  if (label === 'hidden') return 'neutral';
-  return 'warning';
+function getProductStatus(product: ProductReadinessProps['product']): {
+  label: string;
+  variant: 'danger' | 'warning' | 'neutral' | 'success';
+} {
+  if (product.readiness.includes('needs_price')) {
+    return { label: 'Needs a price', variant: 'danger' };
+  }
+  if (product.status === 'hidden' || product.readiness.includes('hidden')) {
+    return { label: 'Hidden', variant: 'neutral' };
+  }
+  if (product.readiness.includes('running_low')) {
+    return { label: 'Running low', variant: 'warning' };
+  }
+  return { label: 'Selling', variant: 'success' };
 }
 
 export function ProductReadiness({ product }: ProductReadinessProps) {
+  const { label, variant } = getProductStatus(product);
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {product.readiness.length ? (
-        product.readiness.map((label) => (
-          <Badge
-            key={label}
-            variant={readinessBadgeVariant(label)}
-            className="rounded-full px-2.5 py-0.5 text-xs font-medium"
-          >
-            {readinessLabels[label]}
-          </Badge>
-        ))
-      ) : (
-        <Badge variant="success" className="rounded-full px-2.5 py-0.5 text-xs font-medium">
-          Ready
-        </Badge>
-      )}
-    </div>
+    <Badge variant={variant} className="rounded-full px-2.5 py-0.5 text-xs font-medium">
+      {label}
+    </Badge>
   );
 }

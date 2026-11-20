@@ -146,11 +146,21 @@ function ProductIdentity({ product, query }: ProductPartProps & { query: Product
   );
 }
 
+function getProductProfit(product: ProductResponse): string | null {
+  const variant = product.variants.find((v) => v.costPoisha !== null && v.pricePoisha > 0);
+  if (!variant || variant.costPoisha === null || variant.pricePoisha <= 0) return null;
+  const profit = Math.round(
+    ((variant.pricePoisha - variant.costPoisha) / variant.pricePoisha) * 100,
+  );
+  return `${profit}% profit`;
+}
+
 function ProductPrice({ product }: ProductPartProps) {
   const prices = product.variants.map((variant) => variant.pricePoisha);
   const minimum = Math.min(...prices),
     maximum = Math.max(...prices);
   if (maximum === 0) return <span className="font-medium text-danger">No price</span>;
+  const profit = getProductProfit(product);
   return (
     <div className="space-y-0.5">
       <span className="font-semibold text-text">
@@ -163,51 +173,69 @@ function ProductPrice({ product }: ProductPartProps) {
           {formatMoney(product.compareAtPricePoisha)}
         </del>
       ) : null}
+      {profit ? <span className="block text-xs font-medium text-success">{profit}</span> : null}
     </div>
   );
 }
 
-function stockBadgeVariant(available: number): 'danger' | 'neutral' {
+function stockBadgeVariant(available: number): 'danger' | 'warning' | 'neutral' {
   if (available <= 0) return 'danger';
+  if (available <= 2) return 'warning';
   return 'neutral';
 }
 
 function variantStockColorClass(available: number) {
   if (available <= 0) return 'bg-danger-soft text-danger border-border hover:bg-danger-soft/80';
+  if (available <= 2) return 'bg-warning-soft text-warning border-border hover:bg-warning-soft/80';
   return 'bg-surface-muted text-text border-border hover:bg-surface-muted/80';
 }
 
 type ProductStockProps = ProductPartProps & Pick<ProductListProps, 'onAdjust'>;
 
 function ProductStock({ product, onAdjust }: ProductStockProps) {
-  if (!product.isStockTracked) return <p className="text-sm text-text-muted">Not tracked</p>;
+  const waiting = product.variants.reduce((sum, v) => sum + v.reserved, 0);
+  const waitingText =
+    waiting > 0 ? <p className="text-xs text-text-muted">{waiting} waiting to confirm</p> : null;
+
+  if (!product.isStockTracked) {
+    return (
+      <div className="space-y-1">
+        <p className="text-sm text-text-muted">Not tracked</p>
+        {waitingText}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {product.variants.map((variant) => {
-        const colorClass = variantStockColorClass(variant.available);
-        return onAdjust ? (
-          <Button
-            key={variant.id}
-            variant="secondary"
-            className={cn(
-              'min-h-11 max-w-full rounded-md border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs',
-              colorClass,
-            )}
-            aria-label={`Adjust stock for ${product.name}, ${variant.title}`}
-            onClick={() => onAdjust(variant.id)}
-          >
-            {variant.title}: {variant.available}
-          </Button>
-        ) : (
-          <Badge
-            key={variant.id}
-            variant={stockBadgeVariant(variant.available)}
-            className="min-h-11 max-w-full rounded-md border border-border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs"
-          >
-            {variant.title}: {variant.available}
-          </Badge>
-        );
-      })}
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        {product.variants.map((variant) => {
+          const label = `${variant.title} ${variant.available}`;
+          return onAdjust ? (
+            <Button
+              key={variant.id}
+              variant="secondary"
+              className={cn(
+                'min-h-11 max-w-full rounded-md border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs',
+                variantStockColorClass(variant.available),
+              )}
+              aria-label={`Adjust stock for ${product.name}, ${variant.title}`}
+              onClick={() => onAdjust(variant.id)}
+            >
+              {label}
+            </Button>
+          ) : (
+            <Badge
+              key={variant.id}
+              variant={stockBadgeVariant(variant.available)}
+              className="min-h-11 max-w-full rounded-md border border-border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs"
+            >
+              {label}
+            </Badge>
+          );
+        })}
+      </div>
+      {waitingText}
     </div>
   );
 }
