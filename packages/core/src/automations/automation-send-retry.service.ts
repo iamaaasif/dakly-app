@@ -192,6 +192,7 @@ export class AutomationSendRetryService {
     const check = await this.sendPolicy.prepareMarketingRetryCheck(storeId, {
       contactId,
       workflowStepId: id,
+      channel: 'sms',
       settings,
     });
     return (checkedAt) => {

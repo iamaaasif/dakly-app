@@ -149,9 +149,11 @@ export class SendPolicyService {
       contactId,
       workflowStepId,
       campaignRecipientId,
+      channel,
       settings: { quietHours, timeZone, frequencyCap },
     }: {
       contactId: string;
+      channel: SendRequest['channel'];
       workflowStepId?: string;
       campaignRecipientId?: string;
       settings: StoreSendingSettings;
@@ -169,7 +171,7 @@ export class SendPolicyService {
       if (until) return { decision: { action: 'defer', until }, at };
       const weekStart = new Date(at.getTime() - WEEK_MS);
       const counted = sends.filter((send) => send.sentAt > weekStart);
-      const reached = capReached(counted, { channel: 'sms', at }, frequencyCap);
+      const reached = capReached(counted, { channel, at }, frequencyCap);
       return { decision: reached ? skip('frequency_cap') : SEND, at };
     };
   }
