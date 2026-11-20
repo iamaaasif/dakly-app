@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 
 import type {
+  CampaignApprovalFailureCode,
   CampaignChannel,
   CampaignGoal,
   CampaignListQuery,
@@ -25,6 +26,9 @@ export type Campaign = {
   excludeSegmentIds: string[];
   scheduledFor: Date | null;
   status: CampaignStatus;
+  approvalCheckedCount: number;
+  approvalEstimatedTotal: number;
+  approvalFailureCode: CampaignApprovalFailureCode | null;
   startedAt: Date | null;
   finishedAt: Date | null;
   recipientsCount: number;
@@ -81,7 +85,7 @@ export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   skippedCount?: 0;
 };
 
-const campaignColumns = {
+export const campaignColumns = {
   id: campaigns.id,
   name: campaigns.name,
   goal: campaigns.goal,
@@ -91,6 +95,9 @@ const campaignColumns = {
   excludeSegmentIds: campaigns.excludeSegmentIds,
   scheduledFor: campaigns.scheduledFor,
   status: campaigns.status,
+  approvalCheckedCount: campaigns.approvalCheckedCount,
+  approvalEstimatedTotal: campaigns.approvalEstimatedTotal,
+  approvalFailureCode: campaigns.approvalFailureCode,
   startedAt: campaigns.startedAt,
   finishedAt: campaigns.finishedAt,
   recipientsCount: campaigns.recipientsCount,
@@ -391,7 +398,7 @@ export class CampaignsRepository {
 
 export type LockedCampaign = NonNullable<Awaited<ReturnType<CampaignsRepository['lockCampaign']>>>;
 
-function statusWhere(storeId: string, id: string, status: CampaignStatus) {
+export function statusWhere(storeId: string, id: string, status: CampaignStatus) {
   return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
 }
 

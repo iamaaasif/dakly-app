@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0064_snapshot.json`: **95 tables, 1284 columns, 392 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0065_snapshot.json`: **95 tables, 1290 columns, 393 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1393,6 +1393,12 @@ erDiagram
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
+        integer approval_segment_index "NOT NULL; integer"
+        uuid approval_cursor "NULL; uuid"
+        integer approval_checked_count "NOT NULL; integer"
+        integer approval_estimated_total "NOT NULL; integer"
+        timestamp_with_time_zone approval_progress_at "NULL; timestamp with time zone"
+        text approval_failure_code "NULL; text"
         text short_link_base "NULL; text"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"

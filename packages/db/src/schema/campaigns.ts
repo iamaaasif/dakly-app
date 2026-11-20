@@ -17,6 +17,7 @@ import {
 
 import {
   type CampaignGoal,
+  campaignApprovalFailureCodes,
   campaignChannels,
   campaignPauseReasons,
   campaignStatuses,
@@ -89,6 +90,33 @@ export const whatsappTemplates = pgTable(
   ],
 );
 
+// Approval of a large audience runs as a job (CAMP-13).
+const approvalColumns = {
+  // The cursor is the last contact checked in the include segment at segment_index, so a retry
+  // continues where the last committed batch stopped.
+  approvalSegmentIndex: integer('approval_segment_index').notNull().default(0),
+  approvalCursor: uuid('approval_cursor'),
+  approvalCheckedCount: integer('approval_checked_count').notNull().default(0),
+  // The include segments' counts when approval started: an upper bound, not the final audience.
+  approvalEstimatedTotal: integer('approval_estimated_total').notNull().default(0),
+  approvalProgressAt: timestamptz('approval_progress_at'),
+  // Why the last approval went back to draft; a new approval clears it.
+  approvalFailureCode: text('approval_failure_code', { enum: campaignApprovalFailureCodes }),
+};
+
+// The sweep that recovers a lost approval job reads campaigns by their last progress time.
+const approvalConstraints = (
+  table: Record<'id' | 'status' | 'approvalProgressAt' | 'approvalFailureCode', AnyPgColumn>,
+) => [
+  index('campaigns_approving_idx')
+    .on(table.approvalProgressAt, table.id)
+    .where(sql`${table.status} = 'approving'`),
+  check(
+    'campaigns_approval_failure_code',
+    isOneOf(table.approvalFailureCode, campaignApprovalFailureCodes),
+  ),
+];
+
 // One message to a frozen audience, once, after approval. Counts are roll-ups refreshed every
 // minute from campaign_recipients so the list page never counts recipients.
 export const campaigns = pgTable(
@@ -121,6 +149,7 @@ export const campaigns = pgTable(
     scheduledFor: timestamptz('scheduled_for'),
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
     approvedAt: timestamptz('approved_at'),
+    ...approvalColumns,
     shortLinkBase: text('short_link_base'),
     startedAt: timestamptz('started_at'),
     finishedAt: timestamptz('finished_at'),
@@ -173,6 +202,7 @@ export const campaigns = pgTable(
       .where(
         sql`${table.status} = 'sending' or (${table.status} = 'cancelled' and ${table.settlementPendingAt} is not null)`,
       ),
+    ...approvalConstraints(table),
     index('campaigns_balance_paused_idx')
       .on(table.storeId, table.id)
       .where(sql`${table.status} = 'paused' and ${table.pauseReason} = 'balance'`),

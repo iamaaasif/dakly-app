@@ -9,12 +9,20 @@ export const messageCategories = ['marketing', 'utility', 'authentication'] as c
 export const campaignStatuses = [
   'draft',
   'waiting_approval',
+  'approving',
   'scheduled',
   'sending',
   'paused',
   'sent',
   'cancelled',
   'failed',
+] as const;
+// The refusals an approval can end with once its job has started; each is an error code of the
+// campaigns feature.
+export const campaignApprovalFailureCodes = [
+  'WALLET_BALANCE_TOO_LOW',
+  'CAMPAIGN_NO_RECIPIENTS',
+  'CAMPAIGN_SEND_TIME_PASSED',
 ] as const;
 export const campaignPauseReasons = [
   'manual',
@@ -152,6 +160,7 @@ export const campaignListQuerySchema = z
 export type CampaignChannel = (typeof campaignChannels)[number];
 export type CampaignGoal = (typeof campaignGoals)[number];
 export type CampaignStatus = (typeof campaignStatuses)[number];
+export type CampaignApprovalFailureCode = (typeof campaignApprovalFailureCodes)[number];
 export type SmsCampaignContent = z.infer<typeof smsCampaignContentSchema>;
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
 export type ChangeCampaignInput = z.infer<typeof changeCampaignSchema>;
@@ -166,6 +175,10 @@ export type CampaignResponse = {
   excludeSegmentIds: string[];
   scheduledFor: string | null;
   status: CampaignStatus;
+  // Set while the status is approving. The total is an upper bound: segments can overlap and
+  // exclusions apply, so it can be higher than the final recipient count.
+  approval: { checked: number; estimatedTotal: number } | null;
+  approvalFailureCode: CampaignApprovalFailureCode | null;
   startedAt: string | null;
   finishedAt: string | null;
   counts: CampaignCounts;

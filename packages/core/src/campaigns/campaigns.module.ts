@@ -16,6 +16,7 @@ import { SmsModule } from '../sms/sms.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { CampaignApprovalRepository } from './campaign-approval.repository';
 import { CampaignBatchService } from './campaign-batch.service';
 import { CampaignCountsRepository } from './campaign-counts.repository';
 import { CampaignCountsService } from './campaign-counts.service';
@@ -47,6 +48,7 @@ import { CampaignsService } from './campaigns.service';
   ],
   controllers: [CampaignsController],
   providers: [
+    CampaignApprovalRepository,
     CampaignCountsRepository,
     CampaignCountsService,
     CampaignsRepository,

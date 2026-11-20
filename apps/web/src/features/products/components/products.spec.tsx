@@ -139,9 +139,9 @@ describe('Products screen', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByText('৳2,450')).toBeTruthy();
     expect(within(table).getByText('৳2,950').tagName).toBe('DEL');
-    expect(within(table).getByText('Default: 3')).toBeTruthy();
-    expect(within(table).getByText('Needs a photo')).toBeTruthy();
+    expect(within(table).getByText('Default 3')).toBeTruthy();
     expect(within(table).getByText('Running low')).toBeTruthy();
+    expect(within(table).queryByText('Needs a photo')).toBeNull();
     expect(screen.queryByRole('button', { name: /Adjust stock/ })).toBeNull();
     expect(screen.queryByText(/asked|Best seller|Stock value/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Import|AI/ })).toBeNull();
@@ -194,11 +194,9 @@ describe('Products screen', () => {
     expect(allQuery.get('cursor')).toBeNull();
     expect(allQuery.get('search')).toBe('Cotton');
     await userEvent.clear(screen.getByRole('searchbox', { name: 'Search products' }));
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'ab');
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'ab{enter}');
     expect(push).not.toHaveBeenCalled();
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'c');
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'c{enter}');
     const searchQuery = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
     expect(searchQuery.get('search')).toBe('abc');
     expect(searchQuery.get('readiness')).toBe('running_low');
@@ -280,7 +278,7 @@ describe('Products screen', () => {
     await userEvent.type(within(dialog).getByLabelText('Change in stock'), '2');
     await userEvent.type(within(dialog).getByLabelText('Reason'), 'Counted new delivery');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save stock' }));
-    expect(await within(screen.getByRole('table')).findByText('Default: 5')).toBeTruthy();
+    expect(await within(screen.getByRole('table')).findByText('Default 5')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
   it('keeps rejected adjustments and their error visible', async () => {
@@ -420,5 +418,66 @@ describe('Product editor navigation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry product' }));
     expect(await screen.findByRole('dialog', { name: product.name })).toBeTruthy();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('shows profit percentage, size chips, and restock button', async () => {
+    const itemWithProfit: ProductResponse = {
+      ...product,
+      variants: [
+        {
+          ...product.variants[0]!,
+          sku: 'UT-PJ-01',
+          pricePoisha: 200000,
+          costPoisha: 120000,
+          reserved: 3,
+          available: 2,
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', async () => response({ items: [itemWithProfit], nextCursor: null }));
+    show({ limit: 50 });
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Men · UT-PJ-01')).toBeTruthy();
+    expect(within(table).getByText('40% profit')).toBeTruthy();
+    expect(
+      within(table).getByRole('button', { name: `Restock ${itemWithProfit.name}` }),
+    ).toBeTruthy();
+  });
+
+  it('shows Selling status when product is active and not running low, and Needs a price when price is 0', async () => {
+    const sellingItem: ProductResponse = {
+      ...product,
+      id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+      name: 'Selling Shirt',
+      readiness: [],
+    };
+    const noPriceItem: ProductResponse = {
+      ...product,
+      id: '019c01ea-cf15-7d31-a7f5-d73d66007ae6',
+      name: 'No Price Shoes',
+      readiness: ['needs_price'],
+    };
+    vi.stubGlobal('fetch', async () =>
+      response({ items: [sellingItem, noPriceItem], nextCursor: null }),
+    );
+    show({ limit: 50 });
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Selling')).toBeTruthy();
+    expect(within(table).getByText('Needs a price')).toBeTruthy();
+  });
+
+  it('renders inline toolbar with search input and all readiness chips', async () => {
+    vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
+    show({ limit: 50 });
+    await screen.findByRole('table');
+    expect(screen.getByRole('searchbox', { name: 'Search products' })).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search by name')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'All' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Running low' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Needs a price' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Needs a photo' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Hidden' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Category' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Sort' })).toBeNull();
   });
 });

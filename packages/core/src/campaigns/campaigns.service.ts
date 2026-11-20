@@ -55,6 +55,8 @@ const STATUS_CHANGES = {
 } as const satisfies Record<string, StatusChange>;
 // Approval runs in one request until CAMP-13 makes it a job; this bounds that work.
 export const MAX_CAMPAIGN_AUDIENCE = 20_000;
+// Cancel and unschedule need an approved campaign; approving is cancelled in a later task.
+const NOT_YET_APPROVED: CampaignStatus[] = ['draft', 'waiting_approval', 'approving'];
 // CAMP-R7: a scheduled campaign can be edited until 5 minutes before it sends.
 const LAST_CHANGE_BEFORE_SEND_MS = 5 * 60 * 1000;
 
@@ -209,8 +211,7 @@ export class CampaignsService {
     return this.transaction.run(storeId, async () => {
       const campaign = await this.repository.lockCampaign(storeId, campaignId, 'update');
       if (!campaign) throw campaignError('CAMPAIGN_NOT_FOUND');
-      if (campaign.status === 'draft' || campaign.status === 'waiting_approval')
-        throw campaignError('CAMPAIGN_NOT_SCHEDULED');
+      if (NOT_YET_APPROVED.includes(campaign.status)) throw campaignError('CAMPAIGN_NOT_SCHEDULED');
       if (
         campaign.status === 'sent' ||
         campaign.status === 'failed' ||
