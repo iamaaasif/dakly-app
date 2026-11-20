@@ -222,7 +222,8 @@ The Social hub lists each connected Facebook Page and Instagram account with its
 
 - Follower counts and Notify me wait for SOC-7 (followers are not stored and nothing records TikTok interest). Draft thumbnails arrive in SOC-5 part 2, with image URLs on post responses.
 - Instagram shows its single brand pink (`--color-instagram`) in place of the gradient.
-- Posting schedule, Duplicate and Delete arrive in the next SOC-5 part; Create post and Edit follow in the part after (SOC-5).
+- Posting schedule edits one account's weekly slots at a time (an account picker shows when there are several), because slots are stored per connection. Use recommended times waits for follower-activity data and moves to SOC-7.
+- Duplicate copies the draft with its accounts and captions; Delete asks first. Create post and Edit arrive in a later SOC-5 part.
 - An AI-written draft that nobody approved shows Needs your OK (D7).
 
 TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagram "Access expired" disagrees with the campaign builder; status comes from the real connection.
