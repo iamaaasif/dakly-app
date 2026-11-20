@@ -113,7 +113,7 @@ View Campaigns or Automations: see lists and results. Edit: create, edit, approv
 
 ### Events
 
-campaign.approved, campaign.sent, message.delivered, message.read, message.failed, message.tapped, message.opted\_out, order.attributed, automation.enabled, workflow.person\_entered, workflow.step\_sent, workflow.person\_exited.
+campaign.approval_started, campaign.approved, campaign.sent, message.delivered, message.read, message.failed, message.tapped, message.opted\_out, order.attributed, automation.enabled, workflow.person\_entered, workflow.step\_sent, workflow.person\_exited.
 
 ### Acceptance criteria
 
@@ -323,16 +323,21 @@ The public routes take no session. They find the store and link from the code th
 
 SMS is the only channel a draft accepts: its content is `{ text }`, up to 1,000 characters, and the builder counts its parts with `countSmsParts`. Messenger content (text, image and buttons) comes with CAMP-7, and WhatsApp templates with CAMP-1. A draft does not check that its segment ids exist; the estimate and approval do, with `SEGMENT_NOT_FOUND`.
 
-### Estimate and approval (CAMP-2)
+### Estimate and approval (CAMP-2, CAMP-13)
 
-The audience is every contact in any include segment and in no exclude segment, read through `SegmentsService` in pages of 500. Each page goes through `SendPolicyService.checkAudience` as of the send time: `scheduledFor`, or now when it is empty.
+The audience is every contact in any include segment and in no exclude segment, read through `SegmentsService` in pages of 500. Each page goes through `SendPolicyService.checkAudience` as of the send time: `scheduledFor`, or now when it is empty. For a send now, the approval time.
 
-- `GET /campaigns/:campaignId/estimate` (`campaigns.view`, drafts only) returns `audienceCount`, `skippedByReason`, `recipientsCount` (the final audience), `smsParts` and `smsCredits` (parts × final recipients). An empty message has 0 parts. SMS has no poisha rate yet, so `costPoisha` is 0.
-- `POST /campaigns/:campaignId/approve` (`campaigns.edit`) works in one store transaction. It locks the draft and refuses an empty message (`CAMPAIGN_TEXT_EMPTY`), a send time at or before now (`CAMPAIGN_SEND_TIME_PASSED`) or no final recipients (`CAMPAIGN_NO_RECIPIENTS`). It writes one `campaign_recipients` row per contact with its phone as `destination_address`: `queued`, or `skipped` with the gate's reason. Only then does it reserve the credits with `WalletService.reserve` under the key `campaign-approval:<campaignId>:<approvedAt>`, so the wallet lock is held only until commit. A short balance refuses with `WALLET_BALANCE_TOO_LOW` and rolls everything back (CAMP-R5). The campaign moves to `scheduled` when it has a send time and to `sending` otherwise, with `recipients_count` set to the final queued count, as in the estimate, and `skipped_count` to the skips. `campaign.approved` is emitted. Later segment or contact changes do not touch the frozen rows. A second approval is `CAMPAIGN_NOT_DRAFT`.
+- `GET /campaigns/:campaignId/estimate` (`campaigns.view`, drafts only) returns `audienceCount`, `skippedByReason`, `recipientsCount` (the final audience), `smsParts` and `smsCredits` (parts × final recipients). An empty message has 0 parts. SMS has no poisha rate yet, so `costPoisha` is 0. It runs in the request, so it stops after reading 20,000 contacts. `isComplete` is false then, and the counts are a floor: the builder shows "at least N". Approval checks the whole audience.
+- `POST /campaigns/:campaignId/approve` (`campaigns.edit`) is short. In one store transaction it locks the draft and refuses an empty message (`CAMPAIGN_TEXT_EMPTY`), a send time at or before now (`CAMPAIGN_SEND_TIME_PASSED`), a segment that does not exist (`SEGMENT_NOT_FOUND`) or include segments with no contacts (`CAMPAIGN_NO_RECIPIENTS`). Then one guarded change moves the draft to `approving`, records the approver and the approval time, clears any earlier failure and writes the `campaign.approval_started` event. The response is the campaign in `approving`. A second approval is `CAMPAIGN_NOT_DRAFT`.
+- A job, `build-campaign-audience`, does the rest on the `campaign` queue. It takes one include segment's page of 500 contacts, drops the exclude segments' contacts, runs the send check and writes one `campaign_recipients` row per contact with its phone as `destination_address`: `queued`, or `skipped` with the gate's reason. The rows and the campaign's cursor commit in one short transaction, so a crash repeats at most one page, and a contact that is already frozen keeps its first row. No transaction or lock is held between pages. A run stops after about 10 seconds and asks to run again, so one large approval does not hold the queue's worker slot against other stores.
+- When every segment is read, one short store transaction counts the queued and skipped rows, reserves the credits with `WalletService.reserve` under the key `campaign-approval:<campaignId>:<approvedAt>` (the approval time from the request, so a campaign approved again after an edit reserves anew), moves the campaign to `scheduled` when it has a send time and to `sending` otherwise, with `recipients_count` set to the queued count and `skipped_count` to the skips, and emits `campaign.approved`. Later segment or contact changes do not touch the frozen rows.
+- If the balance is short (`WALLET_BALANCE_TOO_LOW`, CAMP-R5), no contact in the audience can get the message (`CAMPAIGN_NO_RECIPIENTS`), the send time passed while the job ran (`CAMPAIGN_SEND_TIME_PASSED`) or a segment was deleted after approval started (`SEGMENT_NOT_FOUND`), the job saves the code first, deletes the rows in batches of 5,000 and moves the campaign back to `draft` with the code in `approvalFailureCode`. Nothing is reserved before this point, so there is nothing to release. A job that stops partway through the deletes finishes them on the retry. A new approval clears the code.
+- While the campaign is `approving`, the response carries `approval: { checked, estimatedTotal }`: contacts read so far, and the include segments' sizes added up when approval started. The total is an upper bound and can be higher than the final recipient count, because segments overlap and exclusions apply. The screen shows "Checked N of about M".
+- The outbox guarantees the first queueing of the job. The every-minute campaign sweep also queues the job again for any `approving` campaign whose cursor has not moved for 5 minutes, for example after a Valkey flush. One approval has one job at a time.
+- Edit, delete and cancel are refused while the campaign is `approving`. Cancelling during approval is not supported yet.
 - While the sending setting `onlyOwnersAndAdminsApprove` is on (the default), only an Owner or Admin approves; anyone else gets `CAMPAIGN_APPROVAL_DENIED` (403). Only an Owner or Admin may change the setting itself through `PATCH /store` (`STORE_APPROVAL_SETTING_DENIED`), so a custom role with settings edit cannot turn it off.
 - A quiet-hours defer is frozen as `queued`, and the sender waits for the allowed time. During quiet hours the cap is therefore not shown at approval; the sender's own check applies it.
 - The estimate and reservation count the message with its CAMP-R4 opt-out link. Approval saves the short-link base used for that count.
-- An audience over 20,000 contacts (`MAX_CAMPAIGN_AUDIENCE`) is refused with `CAMPAIGN_AUDIENCE_TOO_LARGE` (409) by both the estimate and the approval, before any send check or recipient row. The cap counts the audience, before skips, because that is the number of contacts approval reads and writes in the request. It is temporary: CAMP-13 makes approval a job with progress and removes it.
 
 ### Edit, cancel, pause and resume (CAMP-2)
 
@@ -582,7 +587,7 @@ Also: quiet hours 9 pm to 9 am store time for marketing; consent is checked agai
 
 ### Events
 
-Emits `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`, `message.failed`, `message.tapped`, `message.opted_out`, `order.attributed`, `automation.enabled`, `automation.run_sent`.
+Emits `campaign.approval_started`, `campaign.approved`, `campaign.sent`, `message.delivered`, `message.read`, `message.failed`, `message.tapped`, `message.opted_out`, `order.attributed`, `automation.enabled`, `automation.run_sent`.
 
 ### Data
 

@@ -10,11 +10,13 @@ import { createCampaignSchema } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 
+import { runApprovalJob } from '../../test/approve-campaign';
 import { resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { SegmentsService } from '../segments/segments.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
+import { CampaignApprovalService } from './campaign-approval.service';
 import { CampaignsModule } from './campaigns.module';
 import { CampaignsService } from './campaigns.service';
 
@@ -157,6 +159,7 @@ describe('Campaign estimate and approval (Postgres)', () => {
     estimate = await service.estimate(storeId, campaignId);
 
     expect(estimate).toEqual({
+      isComplete: true,
       audienceCount: 128,
       skippedByReason: { no_consent: 19, frequency_cap: 6 },
       recipientsCount: 103,
@@ -199,14 +202,18 @@ describe('Campaign estimate and approval (Postgres)', () => {
     );
   });
 
-  it('refuses an approval the balance cannot cover and changes nothing', async () => {
+  it('returns the draft with the reason when the balance cannot cover the approval', async () => {
     await smsCredits(205, 1);
 
-    await expect(service.approve(storeId, campaignId, owner)).rejects.toMatchObject({
-      code: 'WALLET_BALANCE_TOO_LOW',
-    });
+    const started = await service.approve(storeId, campaignId, owner);
+    expect(started.status).toBe('approving');
+    await runApprovalJob(app.get(CampaignApprovalService), admin.pool, storeId, campaignId);
 
-    expect((await service.get(storeId, campaignId)).status).toBe('draft');
+    expect(await service.get(storeId, campaignId)).toMatchObject({
+      status: 'draft',
+      approval: null,
+      approvalFailureCode: 'WALLET_BALANCE_TOO_LOW',
+    });
     expect(await recipientRows(campaignId)).toEqual([]);
     expect(await app.get(WalletService).balance(storeId, 'sms_credits')).toBe(205);
     const events = await admin.pool.query(
@@ -219,9 +226,11 @@ describe('Campaign estimate and approval (Postgres)', () => {
   it('freezes the audience, reserves the estimated credits and schedules the campaign', async () => {
     await smsCredits(95, 2);
 
-    const approved = await service.approve(storeId, campaignId, owner);
+    expect((await service.approve(storeId, campaignId, owner)).status).toBe('approving');
+    await runApprovalJob(app.get(CampaignApprovalService), admin.pool, storeId, campaignId);
+    const approved = await service.get(storeId, campaignId);
 
-    expect(approved.status).toBe('scheduled');
+    expect(approved).toMatchObject({ status: 'scheduled', approvalFailureCode: null });
     const { rows: times } = await admin.pool.query(
       'select approved_at, started_at, short_link_base from campaigns where id=$1',
       [campaignId],

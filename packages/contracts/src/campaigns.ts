@@ -23,6 +23,7 @@ export const campaignApprovalFailureCodes = [
   'WALLET_BALANCE_TOO_LOW',
   'CAMPAIGN_NO_RECIPIENTS',
   'CAMPAIGN_SEND_TIME_PASSED',
+  'SEGMENT_NOT_FOUND',
 ] as const;
 export const campaignPauseReasons = [
   'manual',
@@ -199,7 +200,10 @@ export type CampaignCounts = {
 };
 export type CampaignListResponse = { items: CampaignResponse[]; nextCursor: string | null };
 // SMS is counted in credits, one per part, and has no poisha rate yet, so costPoisha is 0.
+// The estimate reads at most 20,000 contacts; isComplete is false when the audience is larger, so
+// the counts are a floor. Approval checks the whole audience.
 export type CampaignEstimateResponse = {
+  isComplete: boolean;
   audienceCount: number;
   skippedByReason: Partial<Record<(typeof recipientSkipReasons)[number], number>>;
   recipientsCount: number;
