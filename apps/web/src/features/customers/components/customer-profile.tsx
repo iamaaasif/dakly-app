@@ -22,7 +22,6 @@ type CustomerProfileProps = { contactId: string };
 export function CustomerProfile({ contactId }: CustomerProfileProps) {
   const customer = useCustomer(contactId);
   const { data: context } = useSessionContext();
-  const timeZone = (context?.currentStore as { timeZone?: string })?.timeZone ?? 'Asia/Dhaka';
   return (
     <main className="space-y-6 p-4 md:p-8">
       <Link
@@ -34,7 +33,6 @@ export function CustomerProfile({ contactId }: CustomerProfileProps) {
       <ProfileBody
         customer={customer}
         canEdit={Boolean(context?.currentStore?.canCreateCustomer)}
-        timeZone={timeZone}
       />
     </main>
   );
@@ -43,11 +41,9 @@ export function CustomerProfile({ contactId }: CustomerProfileProps) {
 function ProfileBody({
   customer,
   canEdit,
-  timeZone,
 }: {
   customer: ReturnType<typeof useCustomer>;
   canEdit: boolean;
-  timeZone: string;
 }) {
   if (customer.error instanceof ApiError && customer.error.code === 'CONTACT_NOT_FOUND')
     return <p>This customer was deleted or is not in this shop.</p>;
@@ -72,7 +68,7 @@ function ProfileBody({
     <div className="space-y-6">
       <ProfileHeader contact={contact} canEdit={canEdit} />
       <div className="grid gap-6 lg:grid-cols-3">
-        <ProfileContent contact={contact} canEdit={canEdit} timeZone={timeZone} />
+        <ProfileContent contact={contact} canEdit={canEdit} />
         <ProfileSegmentsCard contact={contact} />
       </div>
     </div>
@@ -107,17 +103,15 @@ function ProfileHeader({ contact, canEdit }: { contact: ContactDetailResponse; c
 function ProfileContent({
   contact,
   canEdit,
-  timeZone,
 }: {
   contact: ContactDetailResponse;
   canEdit: boolean;
-  timeZone: string;
 }) {
   return (
     <div className="space-y-6 lg:col-span-2">
       <Card className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {customerDetails(contact, timeZone).map(({ label, value }) => (
+          {customerDetails(contact).map(({ label, value }) => (
             <div key={label}>
               <p className="text-xs text-text-muted">{label}</p>
               <p className="font-medium tabular-nums">{value}</p>
@@ -167,9 +161,9 @@ function ProfileSegmentsCard({ contact }: { contact: ContactResponse }) {
   );
 }
 
-function customerDetails(contact: ContactResponse, timeZone: string) {
+function customerDetails(contact: ContactResponse) {
   return [
     { label: 'Customer type', value: customerKindLabels[contact.kind] },
-    { label: 'Customer since', value: formatCalendarDate(contact.createdAt, timeZone) },
+    { label: 'Customer since', value: formatCalendarDate(contact.createdAt, 'Asia/Dhaka') },
   ];
 }

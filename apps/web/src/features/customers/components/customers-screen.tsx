@@ -58,10 +58,11 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
       {adding ? (
         <Dialog open title="Add customer" onClose={() => setAdding(false)}>
           <NewCustomerForm
-            onDone={(success) => {
+            onAdded={() => {
               setAdding(false);
-              if (success) setAdded(true);
+              setAdded(true);
             }}
+            onCancel={() => setAdding(false)}
           />
         </Dialog>
       ) : null}

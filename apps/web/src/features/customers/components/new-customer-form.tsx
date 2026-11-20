@@ -11,10 +11,11 @@ import { isPhoneTaken } from '../customer-errors';
 import { NewCustomerFields } from './new-customer-fields';
 
 type NewCustomerFormProps = {
-  onDone: (success?: boolean) => void;
+  onAdded: () => void;
+  onCancel: () => void;
 };
 
-export function NewCustomerForm({ onDone }: NewCustomerFormProps) {
+export function NewCustomerForm({ onAdded, onCancel }: NewCustomerFormProps) {
   const { register, handleSubmit, reset, setError, formState } = useForm<CreateContactInput>({
     resolver: zodResolver(createContactSchema),
   });
@@ -24,7 +25,7 @@ export function NewCustomerForm({ onDone }: NewCustomerFormProps) {
     createCustomer.mutate(input, {
       onSuccess: () => {
         reset();
-        onDone(true);
+        onAdded();
       },
       onError: (error) => {
         if (isPhoneTaken(error)) setError('phone', { message: error.message });
@@ -41,7 +42,7 @@ export function NewCustomerForm({ onDone }: NewCustomerFormProps) {
         </p>
       )}
       <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-        <Button type="button" variant="secondary" onClick={() => onDone(false)}>
+        <Button type="button" variant="secondary" onClick={onCancel}>
           Cancel
         </Button>
         <Button type="submit" loading={createCustomer.isPending}>

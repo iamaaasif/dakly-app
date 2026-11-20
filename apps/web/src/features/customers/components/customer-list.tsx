@@ -5,7 +5,7 @@ import { Badge } from '@dakly/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import { customerKindLabels, customerPhone } from '../customer-labels';
-import { CustomerTags } from './customer-badges';
+import { CustomerTags } from './customer-tags';
 import { initialsOf } from '@/lib/initials';
 
 type CustomerListProps = { customers: ContactResponse[] };
