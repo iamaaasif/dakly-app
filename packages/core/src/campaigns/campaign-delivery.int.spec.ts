@@ -765,6 +765,9 @@ describe('Campaign sender (Postgres)', () => {
     ]);
     try {
       expect((await lock())?.wrapSmsLinks).toBe(false);
+      await admin.pool.query('update campaigns set approved_at=null where id=$1', [id]);
+      await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [id, noon]);
+      expect((await lock())?.wrapSmsLinks).toBe(false);
     } finally {
       await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [id, noon]);
       await campaigns.cancel(storeId, id, actor);
