@@ -5,7 +5,7 @@ const nonEmptyAuthority = /^https?:\/\/[^/?#]/iu;
 const unsupportedUrlCharacter = /[<>\\]/u;
 const sentencePunctuation = /[.,!?;:"'’”…।॥]+$/u;
 const trailingWrapperPunctuation = /^[)\]}.,!?;:"'’”…।॥]*$/u;
-const adjacentQuotes = /["'’”](?=[\p{P}\p{S}]*?["'‘“])/gu;
+const adjacentQuotes = /["'’”](?=["'’”]*?[.,!?:;–—…।॥-]*?["'‘“])/gu;
 const closingWrapper: Partial<Record<string, string>> = {
   '<': '>',
   '"': '"',
