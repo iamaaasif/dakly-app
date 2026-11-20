@@ -268,7 +268,7 @@ export class CampaignSenderService {
         failedAt: this.clock.now(),
         smsCredits: null,
       });
-      if (recorded) await this.counts.markPending(storeId, campaign);
+      await this.counts.markPending(storeId, campaign, recorded);
     });
   }
 
@@ -286,7 +286,7 @@ export class CampaignSenderService {
       smsCredits: credits,
     } as const;
     return campaignId
-      ? this.counts.recordOutcome(storeId, campaignId, id, from, change)
+      ? this.counts.recordOutcome(storeId, campaignId, { recipientId: id, guard: from, change })
       : this.repository.changeRecipient(storeId, id, from, change);
   }
 
@@ -388,7 +388,7 @@ export class CampaignSenderService {
           smsCredits: null,
         },
       );
-      if (recorded) await this.counts.markPending(storeId, campaign);
+      await this.counts.markPending(storeId, campaign, recorded);
       return false;
     });
   }

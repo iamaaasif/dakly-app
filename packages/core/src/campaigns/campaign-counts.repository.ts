@@ -7,15 +7,6 @@ import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { recipientsWhere } from './campaigns.repository';
 
-const recipientTotals = {
-  skippedCount: countOf(['skipped']),
-  sentCount: countOf(['sent', 'delivered', 'read']),
-  deliveredCount: countOf(['delivered', 'read']),
-  readCount: countOf(['read']),
-  failedCount: countOf(['failed']),
-  tappedCount: sql<number>`count(${campaignRecipients.tappedAt})`.mapWith(Number),
-};
-
 @Injectable()
 export class CampaignCountsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -32,7 +23,14 @@ export class CampaignCountsRepository {
   async save(storeId: string, id: string, countedAt: Date): Promise<void> {
     await this.database.inTransaction(storeId, async (tx) => {
       const [counts] = await tx
-        .select(recipientTotals)
+        .select({
+          skippedCount: countOf(['skipped']),
+          sentCount: countOf(['sent', 'delivered', 'read']),
+          deliveredCount: countOf(['delivered', 'read']),
+          readCount: countOf(['read']),
+          failedCount: countOf(['failed']),
+          tappedCount: sql<number>`count(${campaignRecipients.tappedAt})`.mapWith(Number),
+        })
         .from(campaignRecipients)
         .where(recipientsWhere(storeId, id));
       await tx

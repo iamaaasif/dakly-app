@@ -41,22 +41,21 @@ export class CampaignFundingService {
       const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
       if (!campaign?.approvedAt) return;
       const now = this.clock.now();
-      const active = campaign.status === 'sending' && campaign.shortLinkBase;
-      const cancelledAt =
-        campaign.status === 'cancelled' && campaign.settlementPendingAt ? now : undefined;
-      if (!active && !cancelledAt) {
+      const cancelled = campaign.status === 'cancelled';
+      const canSettle = cancelled
+        ? campaign.settlementPendingAt
+        : campaign.status === 'sending' && campaign.shortLinkBase;
+      if (!canSettle) {
         if (!campaign.countsAt) await this.counts.refresh(storeId, id, 'batch');
         return;
       }
       const settled = await this.service.settleReservation(
         storeId,
-        { id, approvedAt: campaign.approvedAt, cancelledAt },
+        { id, approvedAt: campaign.approvedAt, cancelledAt: cancelled ? now : undefined },
         ACTOR,
       );
-      if (!settled || cancelledAt) {
-        await this.counts.refresh(storeId, id, cancelledAt ? 'force' : 'batch');
-        return;
-      }
+      if (cancelled) return this.counts.refresh(storeId, id, 'force');
+      if (!settled) return this.counts.refresh(storeId, id, 'batch');
       await this.campaigns.changeStatus(
         storeId,
         id,
