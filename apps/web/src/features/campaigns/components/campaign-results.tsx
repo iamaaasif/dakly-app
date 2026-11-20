@@ -1,4 +1,6 @@
-import type { CampaignResponse } from '@dakly/contracts/campaigns';
+import type { ReactNode } from 'react';
+
+import type { CampaignResponse, CampaignResultsResponse } from '@dakly/contracts/campaigns';
 import { formatCount, formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 
@@ -8,11 +10,20 @@ import {
   campaignStatusColors,
   campaignStatusLabels,
 } from '../campaign-labels';
+import { CampaignFailures } from './campaign-failures';
 import { CampaignFunnel } from './campaign-funnel';
 import { CampaignPageHeader } from './campaign-page-header';
 import { formatDateTime } from '@/lib/format-date';
 
-export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
+type CampaignResultsProps = {
+  campaign: CampaignResponse;
+  // Cost, return and failures come from a second request; the counts above render without it.
+  results?: CampaignResultsResponse;
+  actions?: ReactNode;
+  customers?: ReactNode;
+};
+
+export function CampaignResults({ campaign, results, actions, customers }: CampaignResultsProps) {
   const { counts, channel } = campaign;
   const orders = BigInt(campaign.attribution?.orders ?? '0');
   const revenue = BigInt(campaign.attribution?.revenuePoisha ?? '0');
@@ -26,6 +37,18 @@ export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
     { label: 'Failed', value: formatCount(counts.failed) },
     { label: 'Orders', value: formatCount(orders) },
     { label: 'Revenue', value: formatMoney(revenue) },
+    ...(results
+      ? [
+          { label: 'Cost', value: formatMoney(BigInt(results.costPoisha)) },
+          {
+            label: 'Return per ৳1',
+            value:
+              results.returnPerTaka === null
+                ? '—'
+                : formatMoney(BigInt(results.returnPerTaka) * 100n),
+          },
+        ]
+      : []),
   ];
   return (
     <main className="space-y-6 p-6 md:p-8">
@@ -33,9 +56,12 @@ export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
         title={campaign.name}
         subtitle={`${campaignChannelLabels[channel]} · ${whenSent(campaign)}`}
         action={
-          <Badge variant={campaignStatusColors[campaign.status]}>
-            {campaignStatusLabels[campaign.status]}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={campaignStatusColors[campaign.status]}>
+              {campaignStatusLabels[campaign.status]}
+            </Badge>
+            {actions}
+          </div>
         }
       />
       <section aria-labelledby="results-heading" className="space-y-4">
@@ -50,7 +76,7 @@ export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
             </div>
           ))}
         </dl>
-        <ResultNotes campaign={campaign} />
+        <ResultNotes campaign={campaign} results={results} />
       </section>
       <section aria-labelledby="funnel-heading" className="max-w-xl space-y-3">
         <h2 id="funnel-heading" className="text-lg font-semibold">
@@ -66,6 +92,8 @@ export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
           ]}
         />
       </section>
+      {results ? <CampaignFailures results={results} /> : null}
+      {customers}
       <CampaignMessage campaign={campaign} />
     </main>
   );
@@ -78,10 +106,19 @@ function whenSent({ status, startedAt, finishedAt, createdAt }: CampaignResponse
     : `Created ${formatDateTime(createdAt)}`;
 }
 
-function ResultNotes({ campaign }: { campaign: CampaignResponse }) {
+function ResultNotes({
+  campaign,
+  results,
+}: {
+  campaign: CampaignResponse;
+  results?: CampaignResultsResponse;
+}) {
   return (
     <div className="space-y-1 text-sm text-text-muted">
       <p>Orders and revenue include returns up to today.</p>
+      {results?.resultsFinalAt ? (
+        <p>Results final on {formatDateTime(results.resultsFinalAt)}</p>
+      ) : null}
       {campaign.counts.countedAt === null ? <p role="status">Counts are being updated.</p> : null}
     </div>
   );
