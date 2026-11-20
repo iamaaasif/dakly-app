@@ -15,11 +15,10 @@ export class AiReplyFeedbackRepository {
 
   async rate(
     storeId: string,
-    userId: string,
     messageId: string,
-    input: RateAiReplyInput,
-    now: Date,
+    rating: { userId: string; input: RateAiReplyInput; now: Date },
   ) {
+    const { userId, input, now } = rating;
     const [rated] = await this.database.forStore(storeId, (tx) =>
       tx
         .update(messages)

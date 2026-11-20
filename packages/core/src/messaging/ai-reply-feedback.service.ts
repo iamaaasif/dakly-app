@@ -1,12 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { AuditEntry } from '@dakly/contracts/audit';
 import {
   aiRatingReasons,
   type AiFeedbackQuery,
   type AiFeedbackResponse,
   type RateAiReplyInput,
 } from '@dakly/contracts/ai-feedback';
+import type { AuditEntry } from '@dakly/contracts/audit';
 
 import { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
@@ -30,13 +30,11 @@ export class AiReplyFeedbackService {
   rate(storeId: string, actor: Actor, messageId: string, input: RateAiReplyInput) {
     return this.transaction.run(storeId, async () => {
       await this.requireChats(storeId);
-      const rated = await this.repository.rate(
-        storeId,
-        actor.userId,
-        messageId,
+      const rated = await this.repository.rate(storeId, messageId, {
+        userId: actor.userId,
         input,
-        this.clock.now(),
-      );
+        now: this.clock.now(),
+      });
       if (!rated) throw messagingError('AI_REPLY_NOT_FOUND');
       await this.audit.record(storeId, {
         actor,
