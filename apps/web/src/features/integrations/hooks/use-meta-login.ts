@@ -17,6 +17,9 @@ export function useMetaLogin() {
   const list = useListMetaAccounts();
   const { mutate: listAccounts } = list;
 
+  // Leaving the dialog, by any route, closes the window Facebook is still showing.
+  useEffect(() => () => facebook.current?.close(), []);
+
   useEffect(() => {
     if (step !== 'waiting') return;
     const back = (message: string) => {

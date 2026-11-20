@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { Facebook, Loader2 } from 'lucide-react';
 
 import type { ChannelConnection } from '@dakly/contracts/channels';
 import { Button } from '@dakly/ui/button';
@@ -62,7 +62,12 @@ export function MetaConnectDialog(props: MetaConnectDialogProps) {
         <Button variant="secondary" onClick={onClose}>
           Back
         </Button>
-        <Button loading={login.starting} onClick={login.continueWithFacebook}>
+        <Button
+          className="bg-facebook hover:bg-facebook-hover"
+          loading={login.starting}
+          onClick={login.continueWithFacebook}
+        >
+          <Facebook aria-hidden="true" size={18} strokeWidth={2} fill="currentColor" />
           Continue with Facebook
         </Button>
       </div>
@@ -75,7 +80,7 @@ function Permissions() {
     <div className="mt-4 grid gap-3 sm:grid-cols-2">
       <div className="rounded-md bg-success-soft p-3">
         <p className="text-sm font-semibold text-success">Dakly can</p>
-        <ul className="mt-2 space-y-1 text-sm">
+        <ul className="mt-2 space-y-1 text-sm text-success">
           <li>Read and answer customer messages</li>
           <li>Publish posts you schedule</li>
           <li>Read likes, comments and reach</li>
