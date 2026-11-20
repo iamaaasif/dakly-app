@@ -241,3 +241,68 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
     await database.pool.end();
   }
 });
+
+test('moves a scheduled post to another day by dragging it', async ({ page, context, baseURL }) => {
+  const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
+    token: string;
+    storeIds: [string, string];
+  };
+  const storeId = fixture.storeIds[0];
+  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  try {
+    await context.addCookies([
+      {
+        name: 'dakly_session',
+        value: fixture.token,
+        url: baseURL!,
+        httpOnly: true,
+        sameSite: 'Lax',
+      },
+    ]);
+    const { rows } = await database.pool.query<{ user_id: string }>(
+      'select user_id from memberships where store_id=$1 limit 1',
+      [storeId],
+    );
+    const account = await database.pool.query<{ id: string }>(
+      "insert into channel_connections(id,store_id,kind,external_account_id,display_name,status) values(gen_random_uuid(),$1,'facebook_page','4001001','Urban Trend','active') returning id",
+      [storeId],
+    );
+    const post = await database.pool.query<{ id: string }>(
+      "insert into posts(id,store_id,caption,created_by_user_id) values(gen_random_uuid(),$1,'Drag me to Friday',$2) returning id",
+      [storeId, rows[0]!.user_id],
+    );
+    // Far in the future, so the move is never in the past whenever this runs.
+    await database.pool.query(
+      "insert into post_targets(id,store_id,post_id,channel_connection_id,status,scheduled_for) values(gen_random_uuid(),$1,$2,$3,'scheduled','2099-03-10T14:30:00Z')",
+      [storeId, post.rows[0]!.id, account.rows[0]!.id],
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/social/posts?view=month&date=2099-03-01');
+    await page
+      .getByRole('button', { name: /Drag me to Friday/ })
+      .dragTo(
+        page.getByRole('gridcell').filter({ has: page.locator('time[datetime="2099-03-13"]') }),
+      );
+    await expect(page.getByText(/Moved “Drag me to Friday” to Mar 13/)).toBeVisible();
+    await page.getByRole('button', { name: /Drag me to Friday/ }).click();
+    await expect(page.getByLabel('Move to')).toHaveValue('2099-03-13T20:30');
+    await capture(page, 'move-to');
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(
+      page
+        .getByRole('gridcell')
+        .filter({ has: page.locator('time[datetime="2099-03-13"]') })
+        .getByRole('button', { name: /Drag me to Friday/ }),
+    ).toBeVisible();
+    const saved = await database.pool.query<{ scheduled_for: Date }>(
+      'select scheduled_for from post_targets where post_id=$1',
+      [post.rows[0]!.id],
+    );
+    expect(saved.rows[0]!.scheduled_for.toISOString()).toBe('2099-03-13T14:30:00.000Z');
+  } finally {
+    await database.pool.query('delete from post_targets where store_id=$1', [storeId]);
+    await database.pool.query('delete from posts where store_id=$1', [storeId]);
+    await database.pool.query('delete from channel_connections where store_id=$1', [storeId]);
+    await database.pool.end();
+  }
+});

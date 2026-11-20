@@ -39,6 +39,7 @@ type CalendarPanelProps = {
   accountId: string | null;
   setParams: (changes: Record<string, string | null>) => void;
   onOpen: (entry: CalendarEntry) => void;
+  onMove?: (entry: CalendarEntry, day: string) => void;
 };
 
 function heading(view: CalendarView, date: string) {
@@ -106,8 +107,19 @@ function CalendarToolbar({ accounts, view, date, accountId, setParams }: Toolbar
 }
 
 export function CalendarPanel(props: CalendarPanelProps) {
-  const { accounts, entries, hasPosts, canEdit, view, date, today, accountId, setParams, onOpen } =
-    props;
+  const {
+    accounts,
+    entries,
+    hasPosts,
+    canEdit,
+    view,
+    date,
+    today,
+    accountId,
+    setParams,
+    onOpen,
+    onMove,
+  } = props;
   const month = date.slice(0, 7);
   return (
     <section aria-label="Calendar" className="rounded-lg border border-border bg-surface">
@@ -118,17 +130,7 @@ export function CalendarPanel(props: CalendarPanelProps) {
         accountId={accountId}
         setParams={setParams}
       />
-      <ul
-        aria-label="Colour legend"
-        className="flex flex-wrap gap-4 px-4 pb-3 text-sm text-text-muted"
-      >
-        {legend.map((status) => (
-          <li key={status} className="flex items-center gap-2">
-            <span aria-hidden="true" className={cn('size-2 rounded-full', statusDots[status])} />
-            {statusLabels[status]}
-          </li>
-        ))}
-      </ul>
+      <StatusLegend />
       {!hasPosts && (
         <p className="flex flex-wrap items-center gap-3 border-t border-border p-4 text-text-muted">
           No posts planned yet.
@@ -152,8 +154,25 @@ export function CalendarPanel(props: CalendarPanelProps) {
           month={view === 'week' ? null : month}
           tall={view === 'week'}
           onOpen={onOpen}
+          onMove={onMove}
         />
       )}
     </section>
+  );
+}
+
+function StatusLegend() {
+  return (
+    <ul
+      aria-label="Colour legend"
+      className="flex flex-wrap gap-4 px-4 pb-3 text-sm text-text-muted"
+    >
+      {legend.map((status) => (
+        <li key={status} className="flex items-center gap-2">
+          <span aria-hidden="true" className={cn('size-2 rounded-full', statusDots[status])} />
+          {statusLabels[status]}
+        </li>
+      ))}
+    </ul>
   );
 }

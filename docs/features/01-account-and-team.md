@@ -1098,3 +1098,15 @@ acceptance send the available verified tag; responses remain checked before use.
 
 The broader feature remains in progress: billing checkout, setup checklist, full
 audit log, store closing and export are separate tasks.
+
+### Setup checklist API (ACC-13, first PR)
+
+`GET /setup-checklist` returns the steps for the shop in order, each as an id and a `done` flag, with the saved "how you sell" answers and whether the guide is hidden. The API sends ids and state only; the Dashboard owns the titles, texts and buttons. Any member can read it.
+
+Steps follow the table under Setup checklist, with three differences for release 1. Shopify, WooCommerce and POS connections do not exist yet (D6, D21), and the counter-sale steps arrive with Physical Shop, so those answers add no steps. A step is left out while its extension is off: the Facebook Page, "Teach Dakly AI" and "Turn chats into orders" steps need Chats, and "Add your products" needs Sales. A store with no answers saved gets only the two steps every store has.
+
+Each step checks its real condition. "Connect your Facebook Page" needs an active Page connection. "Teach Dakly AI your answers" needs one active knowledge item. "Add your products" needs a product the AI can show in chats. "Turn chats into orders" needs an order from Messenger, Instagram or WhatsApp. "Set up WhatsApp and SMS" needs an active WhatsApp connection or an approved SMS sender, because WhatsApp connect (CHN-3) is blocked. "Send your first campaign" needs a campaign that has started sending.
+
+`PATCH /setup-checklist` takes either `{ howYouSell }` or `{ hidden: true }`. New answers replace the saved ones, turn on the extensions from ACC-R5 that are still off (never turning one off), bring a hidden guide back, and return the extensions turned on in `turnedOn` for the toast. `hidden: true` is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can change it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`.
+
+The Dashboard banner and card are the next PR in this task.
