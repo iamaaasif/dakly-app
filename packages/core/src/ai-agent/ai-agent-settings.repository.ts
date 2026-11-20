@@ -12,7 +12,11 @@ export class AiAgentSettingsRepository {
   async enabled(storeId: string) {
     const [settings] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ debounceSeconds: aiAgentSettings.debounceSeconds })
+        .select({
+          debounceSeconds: aiAgentSettings.debounceSeconds,
+          claimTimeoutMinutes: aiAgentSettings.claimTimeoutMinutes,
+          returnToAiMinutes: aiAgentSettings.returnToAiMinutes,
+        })
         .from(aiAgentSettings)
         .where(and(eq(aiAgentSettings.storeId, storeId), eq(aiAgentSettings.isAutoReplyOn, true))),
     );

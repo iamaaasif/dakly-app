@@ -58,4 +58,12 @@ export class OutboxRepository {
       sql`select mark_outbox_events_published(${sql.param(ids)}::uuid[])`,
     );
   }
+
+  // The SQL function removes only events published over 7 days ago. Returns the rows deleted.
+  async purgePublishedBatch(limit: number): Promise<number> {
+    const { rows } = await this.database.execute<{ deleted: number }>(
+      sql`select public.purge_published_outbox_batch(${limit}) as deleted`,
+    );
+    return rows[0]?.deleted ?? 0;
+  }
 }

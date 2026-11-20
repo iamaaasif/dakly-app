@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, isNull, lt, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lt, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import type {
   ConversationListQuery,
@@ -190,6 +190,49 @@ export class InboxRepository {
         inbound,
       };
     });
+  }
+
+  async findStaffReply(storeId: string, messageId: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ conversationId: messages.conversationId, createdAt: messages.createdAt })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(messages.id, messageId),
+            eq(messages.direction, 'out'),
+            eq(messages.authorType, 'user'),
+          ),
+        ),
+    );
+    return row;
+  }
+
+  async firstAiReplySince(storeId: string, contactId: string, since: Date) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ createdAt: messages.createdAt })
+        .from(messages)
+        .innerJoin(
+          conversations,
+          and(
+            eq(conversations.storeId, messages.storeId),
+            eq(conversations.id, messages.conversationId),
+          ),
+        )
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(conversations.contactId, contactId),
+            eq(messages.authorType, 'ai'),
+            gte(messages.createdAt, since),
+          ),
+        )
+        .orderBy(asc(messages.createdAt))
+        .limit(1),
+    );
+    return row?.createdAt;
   }
 
   messages(storeId: string, conversationId: string, query: ConversationMessageListQuery) {

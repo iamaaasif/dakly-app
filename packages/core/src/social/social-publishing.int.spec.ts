@@ -19,7 +19,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
-import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { DAY_MS, HOUR_MS, MINUTE_MS } from '../platform/time';
 import type { StoresService } from '../stores/stores.service';
 import { SocialPublishRecoveryRepository } from './social-publish-recovery.repository';
 import { SocialPublishingQueueService } from './social-publishing-queue.service';
@@ -174,6 +174,8 @@ describe('SocialPublishingService', () => {
       external_post_id: expect.stringContaining('fake-facebook'),
       attempts: 1,
     });
+    const { next_metrics_at: firstRefresh } = await fixture.row('post_targets', page.postTargetId);
+    expect(new Date(String(firstRefresh))).toEqual(new Date(now.getTime() + 6 * HOUR_MS));
     expect(await fixture.row('post_targets', ig.postTargetId)).toMatchObject({
       status: 'failed',
       attempts: 4,

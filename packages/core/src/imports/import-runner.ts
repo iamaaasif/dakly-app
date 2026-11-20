@@ -47,6 +47,8 @@ type Outcome = {
 export type ImportKind<Row> = {
   // Names the upload rate limit.
   name: string;
+  // The outbox event that queues this kind's run job.
+  startedEvent: 'import.started' | 'product_import.started';
   batchSize: number;
   fieldLabels: Record<string, string>;
   readFile(text: string, found: Pick<Import, 'columnMapping'>): ImportFile<Row>;
@@ -115,7 +117,7 @@ export class ImportRunner<Row> {
         throw importError('IMPORT_ALREADY_STARTED');
       }
       await outbox.publish({
-        type: 'import.started',
+        type: this.kind.startedEvent,
         storeId,
         occurredAt: change.startedAt.toISOString(),
         payload: { importId },
@@ -186,7 +188,7 @@ export class ImportRunner<Row> {
           const requeue = { before, now, limit: MAX_REQUEUES };
           if (!(await repository.requeue(storeId, stuck.id, requeue))) return false;
           await outbox.publish({
-            type: 'import.started',
+            type: this.kind.startedEvent,
             storeId,
             occurredAt: now.toISOString(),
             payload: { importId: stuck.id },

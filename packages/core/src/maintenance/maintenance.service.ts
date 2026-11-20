@@ -1,10 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
+import { OutboxService } from '../platform/outbox/outbox.service';
+import { SessionsService } from '../sessions/sessions.service';
+import { UsageService } from '../usage/usage.service';
 import { AuditArchiveService } from './audit-archive.service';
 import { FilePurgeService } from './file-purge.service';
 import { MaintenanceRollupsService } from './maintenance-rollups.service';
 import { maintenanceError } from './maintenance.errors';
+import { RetentionPurgeService } from './retention-purge.service';
 
 @Injectable()
 export class MaintenanceService {
@@ -16,6 +20,10 @@ export class MaintenanceService {
     @Inject(FilePurgeService) private readonly files: FilePurgeService,
     @Inject(AccountSecurityEventsService)
     private readonly accountEvents: AccountSecurityEventsService,
+    @Inject(RetentionPurgeService) private readonly retention: RetentionPurgeService,
+    @Inject(SessionsService) private readonly sessions: SessionsService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(UsageService) private readonly usage: UsageService,
   ) {}
 
   // Each step is safe to repeat, and a failed step does not stop the others: dropping a month
@@ -28,6 +36,11 @@ export class MaintenanceService {
       ['archive audit months', () => this.auditArchive.archiveExpiredMonths()],
       ['purge expired files', () => this.files.purgeExpiredFiles()],
       ['purge orphan product objects', () => this.files.purgeOrphanProductObjects()],
+      ['archive old messages', () => this.retention.archiveStoreMessages()],
+      ['purge expired store rows', () => this.retention.purgeStoreTables()],
+      ['purge expired sessions', () => this.sessions.purgeExpired()],
+      ['purge published outbox events', () => this.outbox.purgePublished()],
+      ['purge expired usage events', () => this.usage.purgeExpired()],
       ['purge account history', () => this.accountEvents.purgeExpired()],
     ] as const;
     let failed = 0;

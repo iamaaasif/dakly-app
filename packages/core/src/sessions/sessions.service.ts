@@ -20,6 +20,8 @@ import { SessionsRepository } from './sessions.repository';
 
 const TOUCH_INTERVAL = 5 * 60 * 1000;
 
+const PURGE_BATCH = 5000;
+
 @Injectable()
 export class SessionsService {
   constructor(
@@ -168,6 +170,10 @@ export class SessionsService {
         });
       }
     });
+  }
+
+  async purgeExpired(): Promise<void> {
+    while (await this.repository.purgeExpiredBatch(PURGE_BATCH));
   }
 }
 

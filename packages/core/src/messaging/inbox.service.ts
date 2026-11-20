@@ -17,7 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { MINUTE_MS } from '../platform/time';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { InboxRepository } from './inbox.repository';
@@ -162,19 +162,69 @@ export class InboxService {
     return turn?.windowExpiresAt && turn.windowExpiresAt > this.clock.now() ? turn : undefined;
   }
 
-  async handOver(storeId: string, id: string, reason: (typeof handoverReasons)[number]) {
+  // The earliest AI reply to this contact in the last 24 hours, on any channel.
+  firstAiReplyInDay(storeId: string, contactId: string) {
+    return this.repository.firstAiReplySince(
+      storeId,
+      contactId,
+      new Date(this.clock.now().getTime() - DAY_MS),
+    );
+  }
+
+  // A hand-over nobody claims returns to the AI after returnAfterMinutes; null keeps it with people.
+  async handOver(
+    storeId: string,
+    id: string,
+    reason: (typeof handoverReasons)[number],
+    returnAfterMinutes: number | null,
+  ) {
     return this.transaction.run(storeId, async () => {
       const before = await this.repository.find(storeId, id, 'no key update');
       if (before?.responder !== 'ai') return undefined;
       const now = this.clock.now();
+      const aiResumesAt =
+        returnAfterMinutes === null
+          ? null
+          : new Date(now.getTime() + returnAfterMinutes * MINUTE_MS);
       const after = await this.repository.update(
         storeId,
         id,
-        { status: 'needs_you', responder: 'human', handoverReason: reason, handedOverAt: now },
+        {
+          status: 'needs_you',
+          responder: 'human',
+          handoverReason: reason,
+          handedOverAt: now,
+          aiResumesAt,
+        },
         { now },
       );
       if (after) await this.recordChange(storeId, { kind: 'system' }, before, after);
       return after;
+    });
+  }
+
+  // A staff reply puts the chat with people and restarts the return timer, unless staff took over
+  // until they hand back, or a longer take-over timer is already running.
+  async restartReturnAfterStaffReply(storeId: string, messageId: string, minutes: number) {
+    await this.transaction.run(storeId, async () => {
+      const reply = await this.repository.findStaffReply(storeId, messageId);
+      if (!reply) return;
+      const before = await this.repository.find(storeId, reply.conversationId, 'no key update');
+      if (!before || before.responder === 'paused') return;
+      const untilHandBack =
+        before.responder === 'human' && !before.aiResumesAt && !before.handoverReason;
+      if (untilHandBack) return;
+      // Count from when the person replied, so a late job does not push the return back.
+      const restart = new Date(reply.createdAt.getTime() + minutes * MINUTE_MS);
+      const aiResumesAt =
+        before.aiResumesAt && before.aiResumesAt > restart ? before.aiResumesAt : restart;
+      const after = await this.repository.update(
+        storeId,
+        before.id,
+        { responder: 'human', aiResumesAt, handoverReason: null, handedOverAt: null },
+        { now: this.clock.now() },
+      );
+      if (after) await this.recordChange(storeId, { kind: 'system' }, before, after);
     });
   }
 

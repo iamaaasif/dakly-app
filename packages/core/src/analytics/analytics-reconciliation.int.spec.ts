@@ -168,7 +168,7 @@ describe('Analytics reconciliation', () => {
     await fixture.connection.pool.query(
       `insert into store_daily_metrics(store_id,day,metric,dimension,value) values
        ($1,'2024-11-19','orders','',8),($1,'2024-11-18','sales','manual',20),
-       ($1,'2024-11-18','ai_runs','',2),($2,'2024-11-18','sales','manual',5),
+       ($1,'2024-11-18','ai_runs','',2),($1,'2024-11-18','other_feature','',1),($2,'2024-11-18','sales','manual',5),
        ($1,'2024-11-18','marketing_revenue','',30),
        ($1,'2024-11-18','marketing_orders','campaign:test',0)`,
       [fixture.a, fixture.b],
@@ -184,7 +184,7 @@ describe('Analytics reconciliation', () => {
       [fixture.a],
     );
     expect(rows).toEqual([
-      { metric: 'ai_runs', day: '2024-11-18' },
+      { metric: 'other_feature', day: '2024-11-18' },
       { metric: 'orders', day: '2024-11-19' },
     ]);
     expect(
