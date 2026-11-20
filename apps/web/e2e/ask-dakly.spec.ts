@@ -84,4 +84,33 @@ test('asks Dakly AI from the header on the dashboard', async ({ page, context, b
   await panel.getByRole('button', { name: 'Close' }).click();
   await expect(panel).toBeHidden();
   await expect(page).not.toHaveURL(/ask=open/);
+
+  // The Ask box on the Dashboard opens the panel with the typed question already sent.
+  const askBoxEvidence = resolve(
+    process.cwd(),
+    '../../docs/design/evidence/home-7-dashboard-ask-box',
+  );
+  await mkdir(askBoxEvidence, { recursive: true });
+  for (const [width, height] of [
+    [1440, 900],
+    [360, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.screenshot({ path: resolve(askBoxEvidence, `ask-box-${width}.png`) });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  asked.length = 0;
+  await page.getByLabel('Ask Dakly AI', { exact: true }).first().fill('Which product sells best?');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/ask=open/);
+  await expect(panel.getByText(answer.kind === 'answer' ? answer.text : '')).toBeVisible();
+  // The conversation survives closing the panel, so the earlier turns go along.
+  expect(asked).toMatchObject([{ question: 'Which product sells best?', history: [{}, {}] }]);
+  for (const [width, height] of [
+    [1440, 900],
+    [360, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.screenshot({ path: resolve(askBoxEvidence, `ask-box-asked-${width}.png`) });
+  }
 });
