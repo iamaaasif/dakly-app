@@ -45,11 +45,11 @@ export function StoreForm({
         }
       })}
     >
-      <p>
+      <p className="text-sm text-text-muted">
         Business contact details appear here independently of your account contacts. Clear an
         optional field to remove it.
       </p>
-      <StoreFields form={form} disabled={!editable || change.isPending} />
+      <StoreFields form={form} disabled={!editable || change.isPending} store={store} />
       {form.formState.errors.root ? (
         <p role="alert" className="text-danger">
           {form.formState.errors.root.message}
