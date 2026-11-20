@@ -278,7 +278,7 @@ Staff with Orders edit can read the order catalogue. It gives product and varian
 
 Product archive uses the same variant locks as order creation and edits. It returns `PRODUCT_HAS_OPEN_ORDERS` if any variant is on an order in To confirm, On hold or To pack.
 
-The order list uses an order-number cursor and returns counts for all stages. The detail includes the recipient snapshot, items, and stage history. Staff without the full-phone permission see a masked recipient number.
+The order list uses an order-number cursor and returns counts for all stages. Each list item and the detail carry `parcelHistory` (`parcels` and `returned`, counted from this store's delivered, partly delivered and returned orders to the same recipient phone, which is what return risk uses), and each list item carries the courier, return reason and return time so a row can show them. The detail includes the recipient snapshot, items, and stage history. Staff without the full-phone permission see a masked recipient number.
 
 Create order (`OrdersService.createOrder`, one transaction)
 
