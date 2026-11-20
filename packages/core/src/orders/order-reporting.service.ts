@@ -23,6 +23,7 @@ export class OrderReportingService {
     const { contactId, paymentStatus, bdAreaId, productIds, isFirstOrder } = facts;
     return {
       contactId,
+      orderNumber: facts.number,
       paymentStatus,
       bdAreaId,
       productIds,

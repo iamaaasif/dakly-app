@@ -513,6 +513,12 @@ In CAMP-5, the `wake-due-runs` job on the `workflow` queue runs every minute in 
 - Advancing to the next step sets its due time to the advancement time. Renewing the same step keeps its existing due time. A worker lease that expires during SMS preparation also keeps the original due time for recovery.
 - Step outcomes: `scheduled` (wait), `path_N` or `else` (splits), `sending`, `sent`, `skipped`, `late`, `unconfirmed` and `failed` (send), `done` (action and exit).
 
+### Order fields in workflow text (ORD-4)
+
+A workflow that starts from an order can write `{order_number}`, `{order_total}` and `{confirm_link}` in a send step's text. The graph is refused when another trigger uses them. The run keeps the order that started it (`trigger_order_id`). On the first send the runner reads the order, fills the fields, and counts SMS parts on the filled text with a stand-in link of the real length before it reserves credits. The filled text is kept on the send step (`rendered_text`), so a retry sends the same words even if the order is edited meanwhile.
+
+`{confirm_link}` is `<short link base>/c/<token>`, where the token is 32 random bytes in base64url. `order_confirmations` keeps one row per issued token with only its sha256, so the address cannot be guessed or rebuilt from the database, and a tracked-link code never confirms anything. Every message about the order gets its own token, and all of them work while the order is in To confirm; a token left by a send that rolled back is harmless because nobody holds it. The page behind the address is ORD-4 part 2(b). `{order_total}` uses the shared `formatMoney` in `packages/contracts`. CAMP-14 adds the customer, link and product fields to the same renderer.
+
 ### Workflow catalogue
 
 The graph schema is [`automations/graph.ts`](../../packages/contracts/src/automations/graph.ts) in `packages/contracts` (A5 in the [plan](../plans/campaigns-and-automations.md)). It rejects a path that loops, a step that leads to a missing step, a graph over the limits above, an unknown step kind, a trigger filter the trigger does not take, and a condition or wait that reads replies or taps from a step that is not a send step. The publish checks that need store data (reachable channel, approved template, wait before a split, missing source) belong to the service.

@@ -29,6 +29,7 @@ export type DueRun = RunClaim & { storeId: string };
 export type ClaimedRun = {
   automationId: string;
   contactId: string;
+  triggerOrderId: string | null;
   status: AutomationRunStatus;
   currentStepKey: string;
   claimedAt: Date | null;
@@ -60,6 +61,7 @@ export type NewRunStep = {
   channel?: 'sms';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
   optOutUrl?: string | null;
+  renderedText?: string | null;
   destinationHash?: string | null;
   skipReason?: SkipReason;
   sentAt?: Date;
@@ -78,6 +80,7 @@ export type SendingStep = {
   firstTriedAt: Date | null;
   latestDispatchAt: Date | null;
   optOutUrl: string | null;
+  renderedText: string | null;
   destinationHash: string | null;
   providerMessageId: string | null;
 };
@@ -137,6 +140,7 @@ export class AutomationRunsRepository {
         .select({
           automationId: automationRuns.automationId,
           contactId: automationRuns.contactId,
+          triggerOrderId: automationRuns.triggerOrderId,
           status: automationRuns.status,
           currentStepKey: automationRuns.currentStepKey,
           claimedAt: automationRuns.claimedAt,
@@ -198,6 +202,7 @@ export class AutomationRunsRepository {
           firstTriedAt: automationRunSteps.firstTriedAt,
           latestDispatchAt: automationRunSteps.sentAt,
           optOutUrl: automationRunSteps.optOutUrl,
+          renderedText: automationRunSteps.renderedText,
           destinationHash: automationRunSteps.destinationHash,
           providerMessageId: automationRunSteps.providerMessageId,
         })
@@ -225,7 +230,11 @@ export class AutomationRunsRepository {
         .update(automationRunSteps)
         .set({
           ...change,
-          ...(change.outcome !== 'sending' && { destinationHash: null, optOutUrl: null }),
+          ...(change.outcome !== 'sending' && {
+            destinationHash: null,
+            optOutUrl: null,
+            renderedText: null,
+          }),
         })
         .where(
           and(

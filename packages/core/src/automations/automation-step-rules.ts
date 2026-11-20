@@ -39,12 +39,14 @@ export type RunFacts = {
   tags: string[];
   tappedStepKeys: string[];
   wakeAt: Date | null;
+  orderId: string | null;
 };
 export type Delivery = {
   preparedSender?: PreparedSmsSender;
   storeId: string;
   claim: RunClaim;
   contactId: string;
+  orderId: string | null;
   step: SendStep;
   body: string;
   destination: string | null;
@@ -178,8 +180,8 @@ export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
   return false;
 }
 
-export function messageBody(step: SendStep, optOutUrl: string | undefined): string {
-  return optOutUrl ? `${step.message.text}\n${optOutUrl}` : step.message.text;
+export function messageBody(text: string, optOutUrl: string | undefined): string {
+  return optOutUrl ? `${text}\n${optOutUrl}` : text;
 }
 
 export function workflowDestinationHash(storeId: string, phone: string | null): string | null {

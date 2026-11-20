@@ -1,11 +1,10 @@
 import { Clock, PackageCheck, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 
+import { formatMoney } from '@dakly/contracts/money';
 import type { OrderAlerts as Alerts } from '@dakly/contracts/orders';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
-
-import { formatMoney } from '@/lib/format-money';
 
 type OrderAlertsProps = { alerts: Alerts };
 

@@ -1,4 +1,4 @@
-import { formatCount } from '@/lib/format-money';
+import { formatCount } from '@dakly/contracts/money';
 
 type FunnelStep = { label: string; count: number };
 

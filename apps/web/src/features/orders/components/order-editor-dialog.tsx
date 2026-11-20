@@ -9,6 +9,7 @@ import {
   type Resolver,
 } from 'react-hook-form';
 
+import { formatMoney } from '@dakly/contracts/money';
 import {
   createOrderFormSchema,
   type CreateOrderInput,
@@ -35,7 +36,6 @@ import {
 } from './order-product-fields';
 import { OrderRecipientFields } from './order-recipient-fields';
 import { SessionDialog } from '@/components/session-dialog';
-import { formatMoney } from '@/lib/format-money';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
 const newOrderDefaults: CreateOrderValues = {

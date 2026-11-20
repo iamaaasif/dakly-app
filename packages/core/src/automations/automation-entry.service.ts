@@ -107,6 +107,7 @@ export class AutomationEntryService {
         contactId,
         versionId: version.id,
         triggerKey: event.id,
+        triggerOrderId: orderIdOf(event),
         currentStepKey: version.graph.firstStepKey,
         enteredAt: now,
         wakeAt: now,
@@ -184,6 +185,10 @@ function matchesOrderFilter(filter: TriggerFilter, { payload }: OrderTriggerEven
     default:
       return false;
   }
+}
+
+function orderIdOf(event: TriggerEvent) {
+  return isOrderEvent(event) ? event.payload.orderId : null;
 }
 
 function isOrderEvent(event: TriggerEvent): event is OrderTriggerEvent {

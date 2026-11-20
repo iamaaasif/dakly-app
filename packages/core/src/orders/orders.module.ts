@@ -10,6 +10,8 @@ import { StoresModule } from '../stores/stores.module';
 import { OrderAttributionRepository } from './order-attribution.repository';
 import { OrderAttributionService } from './order-attribution.service';
 import { OrderCatalogueController } from './order-catalogue.controller';
+import { OrderConfirmationRepository } from './order-confirmation.repository';
+import { OrderConfirmationService } from './order-confirmation.service';
 import { OrderProductArchiveController } from './order-product-archive.controller';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
@@ -35,7 +37,14 @@ import { OrdersService } from './orders.service';
     OrderReportingService,
     OrderAttributionRepository,
     OrderAttributionService,
+    OrderConfirmationRepository,
+    OrderConfirmationService,
   ],
-  exports: [OrdersService, OrderReportingService, OrderAttributionService],
+  exports: [
+    OrdersService,
+    OrderReportingService,
+    OrderAttributionService,
+    OrderConfirmationService,
+  ],
 })
 export class OrdersModule {}

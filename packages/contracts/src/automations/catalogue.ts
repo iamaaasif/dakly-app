@@ -223,7 +223,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
 };
 
 // The order triggers that a worker subscriber starts workflows from.
-const orderTriggerKeys: readonly TriggerKey[] = [
+export const orderTriggerKeys: readonly TriggerKey[] = [
   'order_placed',
   'order_shipped',
   'order_delivered',
