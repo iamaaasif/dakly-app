@@ -70,32 +70,40 @@ function placeholderChecks(graph: AutomationGraph, stepNumber: StepNumber) {
   return checks;
 }
 
+function readKeys(step: AutomationGraph['steps'][string]) {
+  if (step.kind === 'wait' && step.wait.until === 'event') return [step.wait.stepKey];
+  if (step.kind !== 'condition') return [];
+  return step.paths.flatMap(({ condition }) =>
+    condition.kind === 'tapped' || condition.kind === 'replied' ? [condition.stepKey] : [],
+  );
+}
+
 function splitChecks(graph: AutomationGraph, stepNumber: StepNumber) {
   const checks: WorkflowCheck[] = [];
   for (const [key, step] of Object.entries(graph.steps)) {
-    if (step.kind !== 'condition') continue;
-    const reads = step.paths.flatMap(({ condition }) =>
-      condition.kind === 'tapped' || condition.kind === 'replied' ? [condition.stepKey] : [],
-    );
-    const short = reads.some((sendKey) => {
-      const gap = shortestWait(graph, sendKey, key);
-      return gap < MIN_MINUTES_BEFORE_SPLIT;
-    });
-    if (!short) continue;
-    checks.push({
-      id: `split-wait:${key}`,
-      level: 'block',
-      message: `Step ${stepNumber(key)} reads a tap or reply with under 2 hours of waiting before it.`,
-      fix: {
-        label: 'Add a 2 hour wait',
-        apply: (current) =>
-          insertDelay(
-            current,
-            { parent: parentOf(current, key), target: key },
-            MIN_MINUTES_BEFORE_SPLIT,
-          ),
-      },
-    });
+    const gaps = readKeys(step).map((sendKey) => shortestWait(graph, sendKey, key));
+    if (gaps.includes(Infinity)) {
+      checks.push({
+        id: `read-order:${key}`,
+        level: 'block',
+        message: `Step ${stepNumber(key)} reads a tap or reply from a message that does not come before it. Move the message up or this step down.`,
+      });
+    } else if (step.kind === 'condition' && gaps.some((gap) => gap < MIN_MINUTES_BEFORE_SPLIT)) {
+      checks.push({
+        id: `split-wait:${key}`,
+        level: 'block',
+        message: `Step ${stepNumber(key)} reads a tap or reply with under 2 hours of waiting before it.`,
+        fix: {
+          label: 'Add a 2 hour wait',
+          apply: (current) =>
+            insertDelay(
+              current,
+              { parent: parentOf(current, key), target: key },
+              MIN_MINUTES_BEFORE_SPLIT,
+            ),
+        },
+      });
+    }
   }
   return checks;
 }

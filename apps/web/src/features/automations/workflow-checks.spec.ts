@@ -28,9 +28,32 @@ function reread(): AutomationGraph {
 }
 
 describe('checkWorkflow', () => {
-  it('has no blockers for a template', () => {
-    const checks = checkWorkflow(template, number);
-    expect(checks.filter((check) => check.level === 'block')).toEqual([]);
+  it.each(Object.entries(automationTemplates))(
+    'has no blockers for the %s template',
+    (_name, item) => {
+      const graph: AutomationGraph = item.graph;
+      const numberOf = (key: string) => Object.keys(graph.steps).indexOf(key) + 1;
+      expect(checkWorkflow(graph, numberOf).filter((check) => check.level === 'block')).toEqual([]);
+    },
+  );
+
+  it('blocks a split that reads a message which comes after it', () => {
+    const send = Object.entries(template.steps).find(([, step]) => step.kind === 'send')!;
+    const graph: AutomationGraph = {
+      ...template,
+      firstStepKey: 'split',
+      steps: {
+        split: {
+          kind: 'condition',
+          paths: [{ condition: { kind: 'tapped', stepKey: send[0] }, next: send[0] }],
+          elseNext: send[0],
+        },
+        [send[0]]: { ...send[1], next: 'end' } as never,
+        end: { kind: 'exit' },
+      },
+    };
+    const ids = checkWorkflow(graph, number).map((check) => check.id);
+    expect(ids).toContain('read-order:split');
   });
 
   it('blocks a new step until its sample text is changed, and offers to delete it', () => {

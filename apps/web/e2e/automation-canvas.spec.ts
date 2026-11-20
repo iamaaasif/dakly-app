@@ -165,6 +165,12 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     const before = await steps.getByRole('listitem').count();
     await page.getByRole('button', { name: 'Delay' }).click();
     await expect(steps.getByText('Wait for')).toHaveCount(2);
+    await page.getByRole('button', { name: /Options for step 4/ }).click();
+    await expect(page.getByRole('menuitem', { name: 'Move down' })).toBeDisabled();
+    await page.getByRole('menuitem', { name: 'Move up' }).click();
+    await page.getByRole('button', { name: /Options for step 3/ }).click();
+    await expect(page.getByRole('menuitem', { name: 'Move down' })).toBeEnabled();
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Add a step here' }).first().click();
     await page.getByRole('menuitem', { name: 'Tag contact' }).click();
     await expect(steps.getByText('Add tag')).toBeVisible();

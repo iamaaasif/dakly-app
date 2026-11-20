@@ -134,3 +134,34 @@ export function removeStep(graph: AutomationGraph, key: string) {
   if (step.kind === 'exit') return graph;
   return dropUnreachable(redirectParents(graph, key, nextStepKeys(step).at(-1)!));
 }
+
+function parentsOf(graph: AutomationGraph, key: string) {
+  return Object.keys(graph.steps).filter((item) => nextStepKeys(graph.steps[item]!).includes(key));
+}
+
+function singleNext(step: AutomationStep | undefined) {
+  return step && (step.kind === 'wait' || step.kind === 'send' || step.kind === 'action')
+    ? step
+    : undefined;
+}
+
+// Swaps a step with the one after it. Only plain steps with one way on can swap, and the step
+// after must have no other way in, or people on another path would meet the moved step.
+function swapWithNext(graph: AutomationGraph, key: string) {
+  const step = singleNext(graph.steps[key]);
+  const other = step && singleNext(graph.steps[step.next]);
+  if (!step || !other || parentsOf(graph, step.next).length !== 1) return undefined;
+  const moved = redirectParents(graph, key, step.next);
+  const steps = {
+    ...moved.steps,
+    [step.next]: { ...other, next: key },
+    [key]: { ...step, next: other.next },
+  };
+  return { ...moved, steps };
+}
+
+export function moveStep(graph: AutomationGraph, key: string, direction: 'up' | 'down') {
+  if (direction === 'down') return swapWithNext(graph, key);
+  const parents = parentsOf(graph, key);
+  return parents.length === 1 ? swapWithNext(graph, parents[0]!) : undefined;
+}

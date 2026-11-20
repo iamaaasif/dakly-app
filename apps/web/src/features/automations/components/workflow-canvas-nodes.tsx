@@ -121,9 +121,19 @@ export type CanvasEditing = {
   canAdd: boolean;
   insert: (edge: { parent: string; target: string }, kind: NewStepKind) => void;
   remove: (key: string) => void;
+  canMove: (key: string, direction: 'up' | 'down') => boolean;
+  move: (key: string, direction: 'up' | 'down') => void;
 };
 
-function StepMenu({ number, onRemove }: { number: number; onRemove: () => void }) {
+function StepMenu({
+  node,
+  number,
+  editing,
+}: {
+  node: CanvasNode;
+  number: number;
+  editing: CanvasEditing;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -133,7 +143,16 @@ function StepMenu({ number, onRemove }: { number: number; onRemove: () => void }
         <EllipsisVertical size={16} aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={onRemove}>Delete step</DropdownMenuItem>
+        {(['up', 'down'] as const).map((direction) => (
+          <DropdownMenuItem
+            key={direction}
+            disabled={!editing.canMove(node.key, direction)}
+            onSelect={() => editing.move(node.key, direction)}
+          >
+            Move {direction}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuItem onSelect={() => editing.remove(node.key)}>Delete step</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -189,7 +208,7 @@ export function CanvasNodeItem({
         <TriggerCard graph={graph} layout={layout} recentEntries={recentEntries} />
       )}
       {editing && step && number !== null && (
-        <StepMenu number={number} onRemove={() => editing.remove(node.key)} />
+        <StepMenu node={node} number={number} editing={editing} />
       )}
       {node.branches.length > 0 && (
         <ul className="sr-only">
