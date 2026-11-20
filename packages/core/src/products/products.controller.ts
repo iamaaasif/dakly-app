@@ -16,6 +16,7 @@ import {
   type ChangeProductInput,
   productListQuerySchema,
   type CreateProductInput,
+  type ProductCategoriesResponse,
   type ProductListQuery,
   type ProductListResponse,
   type ProductResponse,
@@ -38,6 +39,12 @@ export class ProductsController {
     @Query(new ZodValidationPipe(productListQuerySchema)) query: ProductListQuery,
   ): Promise<ProductListResponse> {
     return this.service.list(storeId, query);
+  }
+
+  @Get('categories')
+  @RequirePermission('products.view')
+  listCategories(@CurrentStore() storeId: string): Promise<ProductCategoriesResponse> {
+    return this.service.listCategories(storeId);
   }
 
   @Get(':productId')
