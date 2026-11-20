@@ -303,24 +303,41 @@ export class MessagingService {
     );
   }
 
+  // A workflow is not tied to a Page: it answers where the contact wrote last.
+  async latestMessengerRoute(storeId: string, contactId: string) {
+    const latest = await this.inbound.findLatestInbound(storeId, contactId);
+    if (!latest?.connectionId || !latest.lastInboundAt) return undefined;
+    const [identity] = await this.identities.findOnConnection(storeId, latest.connectionId, [
+      contactId,
+    ]);
+    if (!identity) return undefined;
+    return {
+      connectionId: latest.connectionId,
+      identityId: identity.id,
+      address: identity.externalId,
+      lastInboundAt: latest.lastInboundAt,
+    };
+  }
+
   queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
     return this.queueMessage(storeId, input, true);
   }
 
-  // A campaign recipient's Messenger message is stored in the chat and sent by the same
-  // transport. The campaign has already run its own checks and sends right away, so no
+  // A campaign recipient's or workflow step's Messenger message is stored in the chat and sent by
+  // the same transport. The campaign has already run its own checks and sends right away, so no
   // send job is requested. Call it outside a store transaction.
   async sendCampaignMessage(
     storeId: string,
     input: Omit<OutgoingChannelMessage, 'category' | 'actor'> & {
+      category?: OutgoingChannelMessage['category'];
       imageUrl?: string;
       buttons?: { title: string; payload: string }[];
     },
   ) {
-    const { imageUrl, buttons, ...message } = input;
+    const { imageUrl, buttons, category = 'marketing', ...message } = input;
     const { messageId } = await this.queueMessage(
       storeId,
-      { ...message, category: 'marketing', actor: { kind: 'system' } },
+      { ...message, category, actor: { kind: 'system' } },
       false,
     );
     const content: CampaignMessageContent = { imageUrl, buttons };

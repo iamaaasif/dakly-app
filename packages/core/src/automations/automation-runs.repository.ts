@@ -58,7 +58,7 @@ export type NewRunStep = {
   stepKey: string;
   kind: AutomationStepKind;
   outcome: string;
-  channel?: 'sms';
+  channel?: 'sms' | 'messenger';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
   optOutUrl?: string | null;
   renderedText?: string | null;
@@ -83,6 +83,7 @@ export type SendingStep = {
   renderedText: string | null;
   destinationHash: string | null;
   providerMessageId: string | null;
+  channel: string | null;
 };
 
 @Injectable()
@@ -205,6 +206,7 @@ export class AutomationRunsRepository {
           renderedText: automationRunSteps.renderedText,
           destinationHash: automationRunSteps.destinationHash,
           providerMessageId: automationRunSteps.providerMessageId,
+          channel: automationRunSteps.channel,
         })
         .from(automationRunSteps)
         .where(
