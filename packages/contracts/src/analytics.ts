@@ -1,8 +1,17 @@
 import { z } from 'zod';
 
-import type { campaignChannels } from './campaigns';
+import { campaignChannels } from './campaigns';
 
-export const analyticsTabs = ['overview'] as const;
+export const analyticsTabs = ['overview', 'campaigns', 'automations'] as const;
+export const campaignSorts = [
+  'name',
+  'date',
+  'sent',
+  'tapped',
+  'orders',
+  'earned',
+  'return',
+] as const;
 export type AnalyticsTab = (typeof analyticsTabs)[number];
 
 // ANA-R8: no period over 12 months in release 1.
@@ -14,7 +23,7 @@ export const analyticsQuerySchema = z.strictObject({
     .transform((value) => periodDays[value]),
 });
 
-// What the page keeps in the URL: the tab, the period and the Compare toggle.
+// What the page keeps in the URL: the tab, the period, the Compare toggle and the Campaigns table filters.
 export const analyticsViewSchema = z.object({
   tab: z.enum(analyticsTabs).default('overview'),
   period: analyticsQuerySchema.shape.period,
@@ -22,6 +31,9 @@ export const analyticsViewSchema = z.object({
     .enum(['on', 'off'])
     .default('on')
     .transform((value) => value === 'on'),
+  sort: z.enum(campaignSorts).default('earned'),
+  channel: z.enum(['all', ...campaignChannels]).default('all'),
+  search: z.string().max(80).default(''),
 });
 export type AnalyticsView = z.infer<typeof analyticsViewSchema>;
 

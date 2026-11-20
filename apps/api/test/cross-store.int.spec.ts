@@ -433,6 +433,38 @@ fixture('GET /contacts', async () => {
     expect(ids).not.toContain(foreign);
   }
 });
+async function matchSuggestion(shop: Shop) {
+  const [contactId, matchedContactId] = [await contact(shop), await contact(shop)];
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into contact_match_suggestions (id,store_id,contact_id,matched_contact_id,reason,phone)
+     values($1,$2,$3,$4,'same_phone',$5)`,
+    [id, shop.id, contactId, matchedContactId, phone()],
+  );
+  return { id, contactId };
+}
+fixture('GET /contact-match-suggestions', async () => {
+  const { a, b } = await pair(),
+    own = await matchSuggestion(b),
+    foreign = await matchSuggestion(a);
+  const read = async (shop: Shop, contactId: string) =>
+    (await success(shop, 'GET', `/contact-match-suggestions?contactId=${contactId}`, 200)).json();
+  expect(await read(b, own.contactId)).toMatchObject([{ id: own.id, reason: 'same_phone' }]);
+  expect(await read(b, foreign.contactId)).toEqual([]);
+});
+fixture('POST /contact-match-suggestions/:suggestionId/dismiss', async () => {
+  const { a, b } = await pair(),
+    own = await matchSuggestion(b),
+    foreign = await matchSuggestion(a);
+  const before = await f.row('contact_match_suggestions', foreign.id);
+  await hidden(b, 'POST', (id) => `/contact-match-suggestions/${id}/dismiss`, foreign.id);
+  expect(await f.row('contact_match_suggestions', foreign.id)).toEqual(before);
+  await success(b, 'POST', `/contact-match-suggestions/${own.id}/dismiss`, 204);
+  expect(await f.row('contact_match_suggestions', own.id)).toMatchObject({
+    status: 'dismissed',
+    decided_by_user_id: b.owner.id,
+  });
+});
 for (const method of ['PATCH', 'DELETE'] as const)
   fixture(`${method} /contacts/:contactId`, async () => {
     const positive = await f.shop(),
@@ -1356,6 +1388,29 @@ fixture('GET /automations/:automationId', async () => {
   expect(own.versions.map((version: { id: string }) => version.id)).toEqual([versionId]);
   expect(own.activeRuns).toBe(1);
   await hidden(b, 'GET', (value) => `/automations/${value}`, id);
+});
+fixture('GET /automations/:automationId/step-stats', async () => {
+  const { a, b } = await pair(),
+    { id, versionId } = await publishedAutomation(a);
+  const contactId = randomUUID();
+  const runId = randomUUID();
+  await f.admin.pool.query(
+    "insert into contacts(id,store_id,name,source,kind) values($1,$2,'রিনা','manual','customer')",
+    [contactId, a.id],
+  );
+  await f.admin.pool.query(
+    `insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,wake_at)
+     values($1,$2,$3,$4,$5,'consent-1','welcome','waiting',now()+interval '1 day')`,
+    [runId, a.id, id, versionId, contactId],
+  );
+  await f.admin.pool.query(
+    `insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,sent_at,tapped_at)
+     values(gen_random_uuid(),$1,$2,$3,'welcome','send','sent',now(),now())`,
+    [a.id, runId, contactId],
+  );
+  const own = await success(a, 'GET', `/automations/${id}/step-stats`, 200);
+  expect(own.json()).toEqual({ steps: { welcome: { reached: 1, sent: 1, tapped: 1 } } });
+  await hidden(b, 'GET', (value) => `/automations/${value}/step-stats`, id);
 });
 fixture('GET /automations/:automationId/trigger-preview', async () => {
   const { a, b } = await pair();
@@ -3522,6 +3577,69 @@ fixture('POST /products/:productId/write-description', async () => {
     await hidden(b, 'POST', url, foreign, () => request);
     expect((await f.request(b.member, 'POST', url(own), request)).statusCode).toBe(403);
     expect(await contentCharges(a)).toEqual([]);
+  } finally {
+    model.mockRestore();
+  }
+});
+
+fixture('POST /assistant/messages', async () => {
+  const { a, b } = await pair();
+  await f.admin.pool.query('update plans set limits=limits || $2::jsonb where id=$1', [
+    f.plan,
+    JSON.stringify({ ai_ask: 5 }),
+  ]);
+  const reports = app.get(AnalyticsService);
+  const { current } = await reports.periods(a.id, 30);
+  for (const [shop, count] of [
+    [a, 11],
+    [b, 37],
+  ] as const)
+    await f.admin.pool.query(
+      "insert into store_daily_metrics (store_id,day,metric,dimension,value) values ($1,$2,'orders','',$3)",
+      [shop.id, current.through, count],
+    );
+  const driver = app.get<{
+    respond(request: { input: string; model: string }): Promise<unknown>;
+  }>(LLM_DRIVER);
+  const usage = { inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 };
+  const model = vi.spyOn(driver, 'respond').mockImplementation(async ({ input, model }) => {
+    const results = /<tool_results[^>]*>(.*)<\/tool_results>/s.exec(input);
+    if (!results)
+      return {
+        kind: 'tool_calls',
+        toolCalls: [{ id: 'call', name: 'get_sales', argumentsJson: '{"window":"last_30_days"}' }],
+        model,
+        responseId: randomUUID(),
+        usage,
+      };
+    const [first] = JSON.parse(results[1]!) as { result: { orders: number } }[];
+    const orders = first?.result.orders;
+    return {
+      kind: 'output',
+      output: { reply: `You had ${orders} orders in the last 30 days.` },
+      model,
+      responseId: randomUUID(),
+      usage,
+    };
+  });
+  const ask = { question: 'How many orders did I get this month?' };
+  try {
+    for (const [shop, count] of [
+      [a, 11],
+      [b, 37],
+    ] as const) {
+      const answer = (await success(shop, 'POST', '/assistant/messages', 200, ask)).json();
+      expect(answer).toMatchObject({
+        kind: 'answer',
+        text: `You had ${count} orders in the last 30 days.`,
+      });
+      expect(answer.creditsLeft).toBe(4);
+    }
+    expect(
+      await f.admin.pool.query("select 1 from usage_events where unit='ai_ask' and store_id=$1", [
+        a.id,
+      ]),
+    ).toHaveProperty('rowCount', 1);
   } finally {
     model.mockRestore();
   }

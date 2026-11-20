@@ -104,6 +104,7 @@ export type EditPostInput = z.infer<typeof editPostSchema>;
 export type PostListQuery = z.infer<typeof postListQuerySchema>;
 export type PostResponse = Omit<CreatePostInput, 'targets'> & {
   id: string;
+  photos: { id: string; url: string }[];
   createdByUserId: string | null;
   approvedByUserId: string | null;
   approvedAt: string | null;

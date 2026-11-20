@@ -209,3 +209,63 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await db.pool.end();
   }
 });
+
+test('shows how many people reached each step', async ({ page, context, baseURL }) => {
+  const { headers, storeIds } = await signIn(context, baseURL!);
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const evidence = process.env.CAMP6_CANVAS_EVIDENCE;
+  if (evidence) await mkdir(evidence, { recursive: true });
+  const created = await context.request.post('/api/automations', {
+    headers,
+    data: { name: 'Stats on the canvas', templateKey: 'welcome_new_subscriber' },
+  });
+  const { id } = (await created.json()) as { id: string };
+  const contactId = randomUUID();
+  const versionId = randomUUID();
+  const runId = randomUUID();
+  const [storeId] = storeIds;
+  try {
+    await db.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'Rina','manual','customer')",
+      [contactId, storeId],
+    );
+    await db.pool.query(
+      `insert into automation_versions(id,store_id,automation_id,version,graph)
+       select $1,$2,id,1,draft_graph from automations where id=$3`,
+      [versionId, storeId, id],
+    );
+    await db.pool.query(
+      `insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,wake_at)
+       values($1,$2,$3,$4,$5,'consent-1','wait','waiting',now() + interval '1 day')`,
+      [runId, storeId, id, versionId, contactId],
+    );
+    await db.pool.query(
+      `insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,sent_at,tapped_at)
+       values(gen_random_uuid(),$1,$2,$3,'welcome','send','sent',now(),now()),
+             (gen_random_uuid(),$1,$2,$3,'wait','wait','waiting',null,null)`,
+      [storeId, runId, contactId],
+    );
+    await page.goto(`/automations/${id}/canvas`);
+    const steps = page.getByRole('list', { name: 'Workflow steps' });
+    await expect(steps.getByText('Trigger', { exact: true })).toBeVisible();
+    await expect(steps.getByText(/reached|tapped/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Show stats' }).click();
+    await expect(steps.getByText(/^1 sent · 1 tapped/)).toBeVisible();
+    await expect(steps.getByText(/^1 reached/)).toBeVisible();
+    await expect(steps.getByText(/^0 sent · 0 tapped/)).toBeVisible();
+    for (const [width, height] of [
+      [1440, 900],
+      [360, 800],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      if (evidence) await page.screenshot({ path: resolve(evidence, `stats-${width}.png`) });
+    }
+  } finally {
+    await db.pool.query('delete from automation_runs where automation_id=$1', [id]);
+    await db.pool.query('update automations set published_version_id=null where id=$1', [id]);
+    await db.pool.query('delete from automation_versions where automation_id=$1', [id]);
+    await db.pool.query('delete from automations where id=$1', [id]);
+    await db.pool.query('delete from contacts where id=$1', [contactId]);
+    await db.pool.end();
+  }
+});

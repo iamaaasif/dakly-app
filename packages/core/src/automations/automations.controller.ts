@@ -17,6 +17,7 @@ import {
   automationListQuerySchema,
   type AutomationListResponse,
   type AutomationResponse,
+  type AutomationStepStats,
   type AutomationTriggerPreview,
   type ChangeAutomationInput,
   changeAutomationSchema,
@@ -56,6 +57,15 @@ export class AutomationsController {
     @Param('automationId', ParseUUIDPipe) automationId: string,
   ): Promise<AutomationDetailResponse> {
     return this.automations.get(storeId, automationId);
+  }
+
+  @Get(':automationId/step-stats')
+  @RequirePermission('automations.view')
+  stepStats(
+    @CurrentStore() storeId: string,
+    @Param('automationId', ParseUUIDPipe) automationId: string,
+  ): Promise<AutomationStepStats> {
+    return this.automations.stepStats(storeId, automationId);
   }
 
   @Get(':automationId/trigger-preview')

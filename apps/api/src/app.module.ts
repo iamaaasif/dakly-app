@@ -4,6 +4,7 @@ import { AdminModule } from '@dakly/core/admin/admin.module';
 import { KnowledgeModule } from '@dakly/core/ai/knowledge/knowledge.module';
 import { AiPracticeModule } from '@dakly/core/ai-agent/ai-practice.module';
 import { AnalyticsOverviewModule } from '@dakly/core/analytics/analytics-overview.module';
+import { AssistantModule } from '@dakly/core/assistant/assistant.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
 import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
@@ -43,6 +44,7 @@ import { HealthController } from './health.controller';
     ContactsModule,
     ContentModule,
     AnalyticsOverviewModule,
+    AssistantModule,
     DashboardModule,
     MetaWebhooksModule,
     MetaAuthorizationModule,

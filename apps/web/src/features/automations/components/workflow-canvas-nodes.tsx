@@ -15,7 +15,9 @@ import {
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import type { AutomationStepStats } from '@dakly/contracts/automations';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
+import { formatCount } from '@dakly/contracts/money';
 import { cn } from '@dakly/ui/cn';
 import {
   DropdownMenu,
@@ -158,6 +160,33 @@ function StepMenu({
   );
 }
 
+export type StepStats = AutomationStepStats['steps'];
+
+const noStats = { reached: 0, sent: 0, tapped: 0 };
+
+// Sends show what happened to the message; every other step shows how many people got there.
+function StatsChip({
+  step,
+  stats,
+}: {
+  step: AutomationStep;
+  stats: StepStats[string] | undefined;
+}) {
+  const counts = stats ?? noStats;
+  const parts =
+    step.kind === 'send'
+      ? [`${formatCount(counts.sent)} sent`, `${formatCount(counts.tapped)} tapped`]
+      : [`${formatCount(counts.reached)} reached`];
+  return (
+    <p className="shadow-sm absolute -top-2.5 right-3 rounded-full border border-border bg-surface px-2 text-xs text-text-muted tabular-nums">
+      {parts.join(' · ')}
+      <span className="sr-only">
+        {`. ${formatCount(counts.reached)} people reached this step.`}
+      </span>
+    </p>
+  );
+}
+
 type TriggerCardProps = { graph: AutomationGraph; layout: CanvasLayout; recentEntries?: string };
 
 function TriggerCard({ graph, layout, recentEntries }: TriggerCardProps) {
@@ -189,24 +218,19 @@ function TriggerCard({ graph, layout, recentEntries }: TriggerCardProps) {
   );
 }
 
-export function CanvasNodeItem({
+function NodeExtras({
   node,
-  graph,
-  layout,
-  recentEntries,
   editing,
-}: TriggerCardProps & { node: CanvasNode; editing?: CanvasEditing }): ReactNode {
+  stats,
+}: {
+  node: CanvasNode;
+  editing?: CanvasEditing;
+  stats?: StepStats;
+}) {
   const { step, number } = node;
   return (
-    <li
-      className={cn('absolute list-none', step?.kind === 'exit' && 'pointer-events-none')}
-      style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
-    >
-      {step ? (
-        stepBody(step)
-      ) : (
-        <TriggerCard graph={graph} layout={layout} recentEntries={recentEntries} />
-      )}
+    <>
+      {stats && step && step.kind !== 'exit' && <StatsChip step={step} stats={stats[node.key]} />}
       {editing && step && number !== null && (
         <StepMenu node={node} number={number} editing={editing} />
       )}
@@ -223,6 +247,30 @@ export function CanvasNodeItem({
           {number}
         </span>
       )}
+    </>
+  );
+}
+
+export function CanvasNodeItem({
+  node,
+  graph,
+  layout,
+  recentEntries,
+  editing,
+  stats,
+}: TriggerCardProps & { node: CanvasNode; editing?: CanvasEditing; stats?: StepStats }): ReactNode {
+  const { step } = node;
+  return (
+    <li
+      className={cn('absolute list-none', step?.kind === 'exit' && 'pointer-events-none')}
+      style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
+    >
+      {step ? (
+        stepBody(step)
+      ) : (
+        <TriggerCard graph={graph} layout={layout} recentEntries={recentEntries} />
+      )}
+      <NodeExtras node={node} editing={editing} stats={stats} />
     </li>
   );
 }

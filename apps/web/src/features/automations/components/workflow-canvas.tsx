@@ -1,26 +1,29 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { AutomationDetailResponse } from '@dakly/contracts/automations';
+import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { formatCount } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 import { Button, buttonVariants } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useRenameAutomation } from '../api/automation-settings';
-import { useAutomation, useTriggerPreview } from '../api/automations';
+import { useAutomation, useStepStats, useTriggerPreview } from '../api/automations';
 import { statusLabels } from '../automation-labels';
 import { useWorkflowEditor } from '../use-workflow-editor';
-import { layoutWorkflow } from '../workflow-canvas-layout';
+import { type CanvasLayout, layoutWorkflow } from '../workflow-canvas-layout';
 import { checkWorkflow } from '../workflow-checks';
+import type { CanvasEditing } from './workflow-canvas-nodes';
 import { WorkflowCanvasViewport } from './workflow-canvas-viewport';
 import { WorkflowChecksPanel } from './workflow-checks-panel';
 import { WorkflowEditorHeader } from './workflow-editor-header';
 import { WorkflowPageHeader } from './workflow-page-header';
 import { WorkflowPalette } from './workflow-palette';
 import { WorkflowPublishDialog } from './workflow-publish-dialog';
+import { WorkflowStatsToggle } from './workflow-stats-toggle';
 import { useSessionContext } from '@/lib/session-context';
 
 export function WorkflowCanvas({ id }: { id: string }) {
@@ -105,6 +108,15 @@ function EditorActions({
   );
 }
 
+function useStats(id: string) {
+  const [on, setOn] = useState(false);
+  const query = useStepStats(id, on);
+  return {
+    stats: on ? query.data?.steps : undefined,
+    control: <WorkflowStatsToggle on={on} failed={query.isError} onChange={setOn} />,
+  };
+}
+
 function useCanvasPreview(workflow: Workflow) {
   const counted = countedTriggers.includes(workflow.graph.trigger.key);
   const preview = useTriggerPreview(workflow.id, counted);
@@ -133,18 +145,33 @@ function StatusBadge({ workflow }: { workflow: Workflow }) {
   );
 }
 
-function ReadOnlyViewport({ workflow }: { workflow: Workflow }) {
+type ViewportProps = {
+  workflow: Workflow;
+  graph: AutomationGraph;
+  layout: CanvasLayout;
+  editing?: CanvasEditing;
+};
+
+function CanvasMain({ workflow, graph, layout, editing }: ViewportProps) {
   const recentEntries = useCanvasPreview(workflow);
-  const layout = useMemo(() => layoutWorkflow(workflow.graph), [workflow.graph]);
+  const { stats, control } = useStats(workflow.id);
   return (
     <main className="relative flex-1">
       <WorkflowCanvasViewport
-        graph={workflow.graph}
+        graph={graph}
         layout={layout}
         recentEntries={recentEntries}
+        editing={editing}
+        stats={stats}
+        extraControl={control}
       />
     </main>
   );
+}
+
+function ReadOnlyViewport({ workflow }: { workflow: Workflow }) {
+  const layout = useMemo(() => layoutWorkflow(workflow.graph), [workflow.graph]);
+  return <CanvasMain workflow={workflow} graph={workflow.graph} layout={layout} />;
 }
 
 function EditorAlerts({ renameFailed, error }: { renameFailed: boolean; error?: string }) {
@@ -159,7 +186,6 @@ function EditorAlerts({ renameFailed, error }: { renameFailed: boolean; error?: 
 }
 
 function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Refresh }) {
-  const recentEntries = useCanvasPreview(workflow);
   const rename = useRenameAutomation(workflow.id);
   const editor = useWorkflowEditor(workflow, refresh);
   const layout = useMemo(() => layoutWorkflow(editor.graph), [editor.graph]);
@@ -192,14 +218,7 @@ function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Re
       <WorkflowChecksPanel checks={checks} onFix={(fix) => editor.apply(fix.apply(editor.graph))} />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <WorkflowPalette disabled={!editor.canAdd || editor.pending} onAdd={editor.append} />
-        <main className="relative flex-1">
-          <WorkflowCanvasViewport
-            graph={editor.graph}
-            layout={layout}
-            recentEntries={recentEntries}
-            editing={editor}
-          />
-        </main>
+        <CanvasMain workflow={workflow} graph={editor.graph} layout={layout} editing={editor} />
       </div>
       {editor.count !== undefined && (
         <WorkflowPublishDialog

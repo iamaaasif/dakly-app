@@ -2,6 +2,7 @@ import type { AnalyticsOverviewResponse, AnalyticsView } from '@dakly/contracts/
 import { formatCount } from '@dakly/contracts/money';
 import { Card } from '@dakly/ui/card';
 
+import { AnalyticsBestCards } from './analytics-best-cards';
 import { RevenueChart } from './revenue-chart';
 
 export function AnalyticsOverviewTab({
@@ -20,6 +21,7 @@ export function AnalyticsOverviewTab({
         </div>
         <RevenueChart data={data} compare={view.compare} />
       </Card>
+      <AnalyticsBestCards best={data.best} />
       <Funnel funnel={data.funnel} />
     </div>
   );

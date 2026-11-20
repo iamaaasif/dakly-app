@@ -1,11 +1,28 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { createDatabase } from '@dakly/db/client';
 
 import { scrubPage } from './auth-browser';
+
+async function captureAtBothSizes(page: Page, name: string) {
+  const evidence = process.env.ANA3_EVIDENCE;
+  if (evidence) await mkdir(evidence, { recursive: true });
+  await page.evaluate(async () => document.fonts.ready);
+  for (const [width, height] of [
+    [1440, 900],
+    [360, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
+    if (evidence)
+      await page.screenshot({ path: resolve(evidence, `${name}-${width}.png`), fullPage: true });
+  }
+}
 
 test('shows the overview from the glossary reports and keeps the period and toggle in the URL', async ({
   page,
@@ -29,9 +46,37 @@ test('shows the overview from the glossary reports and keeps the period and togg
       [shop],
     );
     await database.pool.query(
-      `insert into campaigns(id,store_id,name,channel,content) values
-       ($2,$1,'Eid offer','sms','{}'),($3,$1,'Puja winback','whatsapp','{}')`,
+      `insert into campaigns(id,store_id,name,channel,content,sent_count,delivered_count,tapped_count,actual_cost_poisha,started_at) values
+       ($2,$1,'Eid offer','sms','{}',400,380,60,14000,now() - interval '3 days'),
+       ($3,$1,'Puja winback','whatsapp','{}',300,290,45,28500,now() - interval '5 days')`,
       [shop, sms, whatsapp],
+    );
+    const welcome = (
+      await database.pool.query<{ id: string }>('select gen_random_uuid()::text as id')
+    ).rows[0]!.id;
+    const version = (
+      await database.pool.query<{ id: string }>('select gen_random_uuid()::text as id')
+    ).rows[0]!.id;
+    await database.pool.query(
+      "insert into automations(id,store_id,name,trigger_type,draft_graph) values($1,$2,'Welcome new subscribers','manual','{}')",
+      [welcome, shop],
+    );
+    await database.pool.query(
+      'insert into automation_versions(id,store_id,automation_id,version,graph) values($1,$2,$3,1,$4)',
+      [version, shop, welcome, '{}'],
+    );
+    await database.pool.query(
+      "update automations set status='active', published_version_id=$1 where id=$2",
+      [version, welcome],
+    );
+    await database.pool.query(
+      `with entered as (
+         insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,status,entered_at)
+         select gen_random_uuid(),$1,$2,$3,id,'welcome-'||id,'first','done',now() - interval '2 days'
+         from contacts where store_id=$1 limit 80 returning id, contact_id)
+       insert into automation_run_steps(id,store_id,run_id,contact_id,step_key,kind,outcome,channel,category,sent_at,cost_poisha)
+       select gen_random_uuid(),$1,id,contact_id,'first','send','sent','whatsapp','marketing',now() - interval '2 days',95 from entered`,
+      [shop, welcome, version],
     );
     await database.pool.query(
       `insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at,delivered_at,read_at,tapped_at,cost_poisha)
@@ -52,8 +97,14 @@ test('shows the overview from the glossary reports and keeps the period and togg
        select $1::uuid,day,'marketing_revenue','',900000 + (59-age)*12000 from days
        union all select $1,day,'marketing_revenue','channel:whatsapp',600000 + (59-age)*7000 from days
        union all select $1,day,'marketing_revenue','channel:sms',300000 + (59-age)*5000 from days
-       union all select $1,day,'marketing_orders','',4 + (59-age)/20 from days`,
-      [shop],
+       union all select $1,day,'marketing_orders','',4 + (59-age)/20 from days
+       union all select $1,day,'marketing_revenue','campaign:'||$2,200000 from days where age < 10
+       union all select $1,day,'marketing_orders','campaign:'||$2,2 from days where age < 10
+       union all select $1,day,'marketing_revenue','campaign:'||$3,150000 from days where age < 10
+       union all select $1,day,'marketing_orders','campaign:'||$3,1 from days where age < 10
+       union all select $1,day,'marketing_revenue','automation:'||$4,120000 from days where age < 10
+       union all select $1,day,'marketing_orders','automation:'||$4,1 from days where age < 10`,
+      [shop, sms, whatsapp, welcome],
     );
     await context.addCookies([
       {
@@ -78,28 +129,25 @@ test('shows the overview from the glossary reports and keeps the period and togg
       'Tapped your link',
       'Cost of messages',
     ]);
-    await expect(figures.getByText('120', { exact: true })).toBeVisible();
+    await expect(figures.getByText('200', { exact: true })).toBeVisible();
     await expect(
       page.getByRole('img', { name: /Money from your marketing by week/ }),
     ).toBeVisible();
     await expect(page.getByText('Read (not SMS)')).toBeVisible();
 
-    await page.evaluate(async () => document.fonts.ready);
-    const evidence = process.env.ANA3_EVIDENCE;
-    if (evidence) await mkdir(evidence, { recursive: true });
-    for (const [width, height] of [
-      [1440, 900],
-      [360, 800],
-    ] as const) {
-      await page.setViewportSize({ width, height });
-      await expect
-        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-        .toBe(true);
-      if (evidence)
-        await page.screenshot({ path: resolve(evidence, `overview-${width}.png`), fullPage: true });
-    }
+    await captureAtBothSizes(page, 'overview');
 
+    await expect(page.getByRole('region', { name: 'What worked best' })).toBeVisible();
+    for (const [tab, ready] of [
+      ['campaigns', page.getByRole('link', { name: 'Eid offer' })],
+      ['automations', page.getByRole('link', { name: 'Welcome new subscribers' })],
+    ] as const) {
+      await page.goto(`/analytics?tab=${tab}`);
+      await expect(ready).toBeVisible();
+      await captureAtBothSizes(page, tab);
+    }
     await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/analytics');
     await page.getByRole('checkbox', { name: 'Compare with before' }).click();
     await expect(page).toHaveURL(/compare=off/);
     await expect(page.getByText(/vs the 30 days before/)).toHaveCount(0);
@@ -112,6 +160,14 @@ test('shows the overview from the glossary reports and keeps the period and togg
     await expect(page.getByText(/in the last 3 months$/)).toBeVisible();
   } finally {
     await scrubPage(page);
+    await database.pool.query('delete from automation_run_steps where store_id=$1', [shop]);
+    await database.pool.query('delete from automation_runs where store_id=$1', [shop]);
+    await database.pool.query(
+      'update automations set published_version_id=null where store_id=$1',
+      [shop],
+    );
+    await database.pool.query('delete from automation_versions where store_id=$1', [shop]);
+    await database.pool.query('delete from automations where store_id=$1', [shop]);
     await database.pool.query('delete from campaign_recipients where store_id=$1', [shop]);
     await database.pool.query('delete from campaigns where store_id=$1', [shop]);
     await database.pool.query('delete from contacts where store_id=$1', [shop]);

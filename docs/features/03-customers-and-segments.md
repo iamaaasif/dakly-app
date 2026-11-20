@@ -104,6 +104,11 @@ The web app has two customer screens.
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
   The browser test selects the fixture's owner shop before checking the full phone number.
+- When another contact has the same phone, the profile shows a "Possible same person" note above
+  Chat channels. It names the other contact (a link to their profile), shows their phone as the
+  API sent it (masked unless the member sees full numbers) and says they have the same phone
+  number. Members with Edit Customers can Dismiss it. Merge waits on CUS-14, so the note has no
+  Merge button. It shows from either contact's profile and is hidden when nothing is open.
 - Members with Edit Customers also change the customer from the profile. Edit changes the
   name, the tags (separated by commas) and the phone. The phone field starts empty, because
   the shown phone may be masked, and is sent only when typed. Delete asks "Delete <name>?" and
@@ -346,6 +351,8 @@ Self-delivery is the default. Save a valid own phone on the current buyer contac
 
 If another contact in the same store already has the normalised phone, leave both profiles and the buyer link unchanged. Keep the supplied phone in the draft or order snapshot and show a possible match to staff. Apply this rule even if the conflict appears during a concurrent save. Staff may resolve the suggestion through the existing merge workflow; the conflict does not block ordering, confirmation or delivery and gives the buyer no access to the other contact's history.
 
+`ContactMatchSuggestionsService.captureOwnPhone` does this for the AI `draft_order` tool and staff order entry, with an order id or a conversation id as the source of the suggestion. It returns nothing, so a typed phone never tells the caller who else has it. Saving it turns a `chat_only` contact into a `lead`. `GET /contact-match-suggestions?contactId=` lists the open suggestions on a profile from either side, with the other contact's phone masked unless the member sees full numbers; `POST /contact-match-suggestions/:suggestionId/dismiss` closes one.
+
 A saved own phone is self-reported, not proof of ownership. It does not trigger a merge or add marketing consent. A chat contact with that phone and zero orders qualifies as a Lead under the glossary; a conflicting phone kept only on a draft does not qualify that contact. Existing identity-matching rules remain separate. For delivery to someone else, save the recipient's phone only on the draft or order.
 
 **Consent**
@@ -526,6 +533,12 @@ Bugs in the mock: a segment "View" says "Showing 2 of 186" but "Page 1 of 208", 
 - Assigning follow-ups to team members (Support agents).
 
 **Bulk actions, design:** a bar that appears when rows are selected, with Add tag, Remove tag, Add to segment, Send message (opens the campaign builder with these customers), Change consent (with the logged-change warning already used on profiles), Export selected and Delete. Include "Select all 2,486 matching this filter", not only the 12 on the page.
+
+**Missing design: possible same person.** The prototype has no note for two contacts that share a
+phone (D27). It is built as a card in the profile's main column, in the style of the Chat
+channels card: heading, the other contact's name and phone, and a Dismiss button. Evidence at
+1440x900 and 360x800 is in `docs/design/evidence/cus-4-possible-same-person/`. Merge waits on
+CUS-14.
 
 **Also missing on customers.** Duplicate merge (same phone from Shopify and Facebook), delete customer and data-removal requests, and the empty profile state for a customer with no orders yet.
 

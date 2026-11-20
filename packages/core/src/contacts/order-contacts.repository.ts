@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 
 import { contactMatchSuggestions, contacts } from '@dakly/db/schema/contacts';
 
@@ -17,7 +17,13 @@ export class OrderContactsRepository {
         const [saved] = await tx.transaction((savepoint) =>
           savepoint
             .update(contacts)
-            .set({ phone, phoneVerifiedAt: null, updatedAt: now })
+            .set({
+              phone,
+              phoneVerifiedAt: null,
+              // Giving an own phone makes a phone-less chat contact a lead (glossary).
+              kind: sql`case when ${contacts.kind} = 'chat_only' then 'lead' else ${contacts.kind} end`,
+              updatedAt: now,
+            })
             .where(
               and(
                 eq(contacts.storeId, storeId),
@@ -40,7 +46,7 @@ export class OrderContactsRepository {
     storeId: string,
     match: Pick<
       typeof contactMatchSuggestions.$inferInsert,
-      'contactId' | 'matchedContactId' | 'phone' | 'orderId' | 'createdAt'
+      'contactId' | 'matchedContactId' | 'phone' | 'orderId' | 'conversationId' | 'createdAt'
     >,
   ): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
@@ -83,6 +89,57 @@ export class OrderContactsRepository {
         )
         .limit(1),
     );
+  }
+
+  listOpenSuggestions(storeId: string, contactId: string) {
+    const other = sql<string>`case when ${contactMatchSuggestions.contactId} = ${contactId} then ${contactMatchSuggestions.matchedContactId} else ${contactMatchSuggestions.contactId} end`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: contactMatchSuggestions.id,
+          reason: contactMatchSuggestions.reason,
+          createdAt: contactMatchSuggestions.createdAt,
+          otherId: contacts.id,
+          otherName: contacts.name,
+          otherPhone: contacts.phone,
+        })
+        .from(contactMatchSuggestions)
+        .innerJoin(contacts, and(eq(contacts.storeId, storeId), eq(contacts.id, other)))
+        .where(
+          and(
+            eq(contactMatchSuggestions.storeId, storeId),
+            or(
+              eq(contactMatchSuggestions.contactId, contactId),
+              eq(contactMatchSuggestions.matchedContactId, contactId),
+            ),
+            eq(contactMatchSuggestions.status, 'open'),
+            isNull(contacts.deletedAt),
+          ),
+        )
+        .orderBy(desc(contactMatchSuggestions.createdAt), contactMatchSuggestions.id)
+        .limit(20),
+    );
+  }
+
+  async dismissSuggestion(
+    storeId: string,
+    id: string,
+    decision: { userId: string; now: Date },
+  ): Promise<boolean> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(contactMatchSuggestions)
+        .set({ status: 'dismissed', decidedByUserId: decision.userId, decidedAt: decision.now })
+        .where(
+          and(
+            eq(contactMatchSuggestions.storeId, storeId),
+            eq(contactMatchSuggestions.id, id),
+            eq(contactMatchSuggestions.status, 'open'),
+          ),
+        )
+        .returning({ id: contactMatchSuggestions.id }),
+    );
+    return row !== undefined;
   }
 
   async markOrderLinked(storeId: string, contactId: string, now: Date): Promise<boolean> {
