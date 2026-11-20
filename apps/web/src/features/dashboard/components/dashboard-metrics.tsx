@@ -5,7 +5,7 @@ import { Badge } from '@dakly/ui/badge';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
 
-import { formatCount, formatMoney } from '@/lib/format-money';
+import { formatCount, formatWholeTaka } from '@/lib/format-money';
 
 const metrics = [
   {
@@ -68,7 +68,7 @@ export function DashboardMetrics({ cards, period }: MetricsProps) {
         const total = BigInt(sales ? card.totalPoisha : card.total);
         const previous = BigInt(sales ? card.previousPoisha : card.previous);
         const points = sales ? card.pointsPoisha : card.points;
-        const amount = sales ? formatMoney(((total + 50n) / 100n) * 100n) : formatCount(total);
+        const amount = sales ? formatWholeTaka(total) : formatCount(total);
         return (
           <Card key={id} className="flex min-w-0 flex-col gap-3 p-4">
             <h2 className="flex items-center gap-2 text-md font-semibold xl:gap-1 xl:tracking-tight">
