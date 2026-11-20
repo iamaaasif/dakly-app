@@ -33,6 +33,7 @@ const draft = (overrides: Partial<PostResponse>): PostResponse => ({
   kind: 'post',
   caption: 'Mustard silk scarves are back in stock.',
   mediaFileIds: [],
+  photos: [],
   linkUrl: null,
   firstComment: null,
   isAiWritten: false,
@@ -162,6 +163,14 @@ it('shows a draft with its accounts and warns when it has no caption or photo', 
   expect(within(drafts).getByText('No caption yet')).toBeTruthy();
   expect(within(drafts).getAllByText('Add a caption or photo')).toHaveLength(1);
   expect(within(drafts).getAllByText(/Facebook · Post · Edited Nov 6, 4:20 pm/)).toHaveLength(2);
+});
+
+it('shows the first photo of a draft as its thumbnail', async () => {
+  const photos = [{ id: 'photo-1', url: 'https://storage.test/photo-1.jpg' }];
+  show({ drafts: [draft({ mediaFileIds: ['photo-1'], photos })] });
+  const drafts = await screen.findByRole('region', { name: 'Drafts' });
+  const thumbnail = drafts.querySelector('img');
+  expect(thumbnail?.getAttribute('src')).toBe('https://storage.test/photo-1.jpg');
 });
 
 it('marks an AI-written draft that nobody approved yet', async () => {

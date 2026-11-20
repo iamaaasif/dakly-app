@@ -189,23 +189,23 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M10. Content and social
 
-| ID    | Task                                             | Status    | Depends | PR               | Notes                                                                                                                                                                                   |
-| ----- | ------------------------------------------------ | --------- | ------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SOC-1 | Posts, targets, posting slots, approval          | Done      | CHN-2   | #227, #234       |                                                                                                                                                                                         |
-| SOC-2 | Publish jobs for Facebook and Instagram, retries | Done      | SOC-1   | #236, #237, #239 |                                                                                                                                                                                         |
-| SOC-3 | Post insights job                                | Done      | SOC-2   | #282             |                                                                                                                                                                                         |
-| SOC-4 | Content Studio writing                           | Done      | AI-2    | #225, #230, #232 | Brand profile, library, generation and product descriptions merged. The AI caption panel in Create post is SOC-5.                                                                       |
-| SOC-5 | Web: Social hub, My posts, Content Studio        | In review | SOC-4   | #286, #294, #312 | Parts 1 to 2b: Social hub, connect dialog, draft actions, posting schedule. Left: thumbnails with image URLs on posts; My posts; Create post with the AI caption panel; Content Studio. |
+| ID    | Task                                             | Status    | Depends | PR                     | Notes                                                                                                                                                                                         |
+| ----- | ------------------------------------------------ | --------- | ------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SOC-1 | Posts, targets, posting slots, approval          | Done      | CHN-2   | #227, #234             |                                                                                                                                                                                               |
+| SOC-2 | Publish jobs for Facebook and Instagram, retries | Done      | SOC-1   | #236, #237, #239       |                                                                                                                                                                                               |
+| SOC-3 | Post insights job                                | Done      | SOC-2   | #282                   |                                                                                                                                                                                               |
+| SOC-4 | Content Studio writing                           | Done      | AI-2    | #225, #230, #232       | Brand profile, library, generation and product descriptions merged. The AI caption panel in Create post is SOC-5.                                                                             |
+| SOC-5 | Web: Social hub, My posts, Content Studio        | In review | SOC-4   | #286, #294, #312, #316 | Part 1 and 2: Social hub, connect dialog, draft actions, posting schedule, draft thumbnails with photo links on posts. Left: My posts; Create post with the AI caption panel; Content Studio. |
 
 ## M11. Analytics and insights
 
-| ID     | Task                                               | Status      | Depends       | PR               | Notes                                                                                |
-| ------ | -------------------------------------------------- | ----------- | ------------- | ---------------- | ------------------------------------------------------------------------------------ |
-| ANA-1  | Glossary report functions and daily summary tables | Done        | ORD-3, CUS-3  | #194, #207, #210 | Daily summaries, report reads and nightly reconciliation merged.                     |
-| ANA-2  | Attribution of orders to messages and posts        | Done        | ANA-1, CAMP-3 | #226, #243, #244 | Tracked taps, window rebuild and shared reports merged.                              |
-| ANA-3  | Web: Analytics tabs                                | In progress | ANA-2         | #287, #310, #315 | Part 2 adds the Campaigns and Automations reads and tabs; the AI tip waits on part 3 |
-| HOME-3 | Web: Dashboard cards                               | Done        | ANA-1         | #211             |                                                                                      |
-| HOME-4 | Ask Dakly AI with read-only report tools           | In progress | ANA-1, AI-2   | #314             | Part 1 is the API and report tools. Part 2 is the panel.                             |
+| ID     | Task                                               | Status      | Depends       | PR                     | Notes                                                                                |
+| ------ | -------------------------------------------------- | ----------- | ------------- | ---------------------- | ------------------------------------------------------------------------------------ |
+| ANA-1  | Glossary report functions and daily summary tables | Done        | ORD-3, CUS-3  | #194, #207, #210       | Daily summaries, report reads and nightly reconciliation merged.                     |
+| ANA-2  | Attribution of orders to messages and posts        | Done        | ANA-1, CAMP-3 | #226, #243, #244       | Tracked taps, window rebuild and shared reports merged.                              |
+| ANA-3  | Web: Analytics tabs                                | In progress | ANA-2         | #287, #310, #315, #318 | Part 2 adds the Campaigns and Automations reads and tabs; the AI tip waits on part 3 |
+| HOME-3 | Web: Dashboard cards                               | Done        | ANA-1         | #211                   |                                                                                      |
+| HOME-4 | Ask Dakly AI with read-only report tools           | In progress | ANA-1, AI-2   | #314                   | Part 1 is the API and report tools. Part 2 is the panel.                             |
 
 ## M12. Admin panel
 

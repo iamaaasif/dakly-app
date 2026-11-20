@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { ClockModule } from '../platform/clock.module';
+import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
@@ -16,6 +17,7 @@ import { SocialService } from './social.service';
   imports: [
     AuditModule,
     ClockModule,
+    FileStorageModule,
     MetaAuthorizationModule,
     OutboxModule,
     StoresModule,
