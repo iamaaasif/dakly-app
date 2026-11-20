@@ -17,6 +17,9 @@ import { FAIL_STUCK_IMPORTS } from '@dakly/core/imports/jobs/fail-stuck-imports.
 import { RUN_MAINTENANCE } from '@dakly/core/maintenance/jobs/run-maintenance.job';
 import { QUEUE_CONVERSATION_RETURNS } from '@dakly/core/messaging/jobs/queue-conversation-returns.job';
 import { WAKE_SNOOZED_NOTIFICATIONS } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
+import { RECOVER_PAYMENT_CALLBACKS } from '@dakly/core/payments/jobs/recover-payment-callbacks.job';
+import { SWEEP_PAYMENT_CHECKS } from '@dakly/core/payments/jobs/sweep-payment-checks.job';
+import { SWEEP_PAYMENT_SETTLEMENTS } from '@dakly/core/payments/jobs/sweep-payment-settlements.job';
 import { loadEnv } from '@dakly/core/platform/config/env';
 import {
   RELAY_OUTBOX,
@@ -33,6 +36,7 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
     @InjectQueue(QUEUES.transactional) private readonly transactional: Queue,
     @InjectQueue(QUEUES.bulk) private readonly bulk: Queue,
     @InjectQueue(QUEUES.sync) private readonly sync: Queue,
+    @InjectQueue(QUEUES.payments) private readonly payments: Queue,
     @InjectQueue(QUEUES.workflow) private readonly workflow: Queue,
     @InjectQueue(QUEUES.campaign) private readonly campaign: Queue,
   ) {}
@@ -57,6 +61,12 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.bulk, SWEEP_AUTOMATION_BIRTHDAYS, { pattern: '0 * * * *', tz: 'UTC' }),
       scheduleJob(this.sync, QUEUE_CHANNEL_TOKEN_CHECKS, DAY_MS),
       scheduleJob(this.sync, QUEUE_CONVERSATION_RETURNS, MINUTE_MS),
+      scheduleJob(this.payments, RECOVER_PAYMENT_CALLBACKS, MINUTE_MS),
+      scheduleJob(this.payments, SWEEP_PAYMENT_CHECKS),
+      scheduleJob(this.payments, SWEEP_PAYMENT_SETTLEMENTS, {
+        pattern: '0 0 * * *',
+        tz: 'Asia/Dhaka',
+      }),
       scheduleJob(this.bulk, SWEEP_ANALYTICS, { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduleJob(this.bulk, PURGE_WEBHOOK_EVENTS, { pattern: '0 0 * * *', tz: 'UTC' }),
       // 19:00 UTC is 01:00 in Dhaka, after the Dhaka day the rollups need has finished.

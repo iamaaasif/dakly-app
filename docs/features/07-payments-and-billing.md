@@ -382,6 +382,18 @@ to `needs_review` and leaves the intent unpaid. The event retains the gateway
 transaction id and verified amount for review. The browser return belongs to the
 gateway integration and can only request a server-to-server check.
 
+The payments worker opens checkout and checks due intents through the saved
+merchant. It decrypts shop credentials only for those calls. A new callback
+queues verification through the outbox. The due sweep recovers verification
+after a missing callback or a lost queue entry. A separate sweep requeues
+deliveries that are still waiting and clears any left after seven days.
+The outbox records verified live successes and failures. An amount mismatch
+also creates an in-app notice.
+Nightly reconciliation matches loaded settlement lines for Dakly billing by
+gateway, transaction id and verified gross amount. A match updates the line and
+the intent together. Unmatched lines remain available for staff review. Shop and
+sandbox payments are excluded from this settlement match.
+
 ### Rules
 
 The PRD's payment rules apply in full. The ones code must make impossible to break:

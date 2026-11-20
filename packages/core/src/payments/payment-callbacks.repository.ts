@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, lt, sql } from 'drizzle-orm';
 
 import { gateways } from '@dakly/contracts/payments';
 import type { Database } from '@dakly/db/client';
@@ -22,6 +22,13 @@ export class PaymentCallbacksRepository {
       sql`select store_id, payment_intent_id from payment_intent_for_reference(${reference})`,
     );
     return rows[0];
+  }
+
+  async dueChecks(limit: number) {
+    const { rows } = await this.database.execute<{ store_id: string; payment_intent_id: string }>(
+      sql`select store_id, payment_intent_id from due_payment_checks(${limit})`,
+    );
+    return rows;
   }
 
   async save(
@@ -53,6 +60,25 @@ export class PaymentCallbacksRepository {
         ),
       );
     return receipt;
+  }
+
+  listReceivedBefore(before: Date, after?: string) {
+    return this.database
+      .select({
+        id: webhookEvents.id,
+        receivedAt: webhookEvents.receivedAt,
+      })
+      .from(webhookEvents)
+      .where(
+        and(
+          inArray(webhookEvents.provider, gateways),
+          eq(webhookEvents.status, 'received'),
+          lt(webhookEvents.receivedAt, before),
+          after ? gt(webhookEvents.id, after) : undefined,
+        ),
+      )
+      .orderBy(webhookEvents.id)
+      .limit(100);
   }
 
   async finish(id: string, status: 'processed' | 'ignored' | 'failed', now: Date) {

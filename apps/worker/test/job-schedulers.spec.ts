@@ -56,12 +56,14 @@ describe('Worker job schedulers', () => {
     const transactional = recordingQueue();
     const bulk = recordingQueue();
     const sync = recordingQueue();
+    const payments = recordingQueue();
     const workflow = recordingQueue();
     const campaign = recordingQueue();
     const schedulers = new JobSchedulers(
       transactional.queue,
       bulk.queue,
       sync.queue,
+      payments.queue,
       workflow.queue,
       campaign.queue,
     );
@@ -90,6 +92,13 @@ describe('Worker job schedulers', () => {
       scheduler('queue-conversation-returns', 60000),
       scheduler('queue-channel-token-checks', 86400000),
       scheduler('queue-conversation-returns', 60000),
+    ]);
+    expect(payments.schedulers).toEqual([
+      scheduler('recover-payment-callbacks', 60000),
+      scheduler('sweep-payment-checks'),
+      scheduler('sweep-payment-settlements', { pattern: '0 0 * * *', tz: 'Asia/Dhaka' }),
+      scheduler('recover-payment-callbacks', 60000),
+      scheduler('sweep-payment-checks'),
     ]);
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),
