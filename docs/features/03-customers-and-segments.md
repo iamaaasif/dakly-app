@@ -96,7 +96,7 @@ The web app has two customer screens.
   search box takes a name or a mobile number and a tag box takes one tag. The kind, search,
   tag and page live in the URL. A name search under 3 letters shows the API's message on the
   search field. Rows link to the profile and become cards on a phone. Members with Edit
-  Customers press Add customers and choose Add manually or Import from a CSV file. The manual
+  Customers press Add customers and choose Add manually or Import from an Excel or CSV file. The manual
   form shows a phone the store already has as an error on the phone field. Add by voice, Scan
   your khata, Connect your store and Connect your POS are not offered until their tasks ship
   (CUS-10, release 2 and the store and POS connectors).
@@ -116,7 +116,7 @@ The web app has two customer screens.
   required note saying how the customer told the shop. Agreed is offered only on WhatsApp and
   SMS; on Messenger and Instagram staff can record only a withdrawal.
 - The import window has six steps, with a progress bar and "Step N of 6" on top. Upload takes
-  a CSV by choosing or dropping it, checks the name, the 10 MB limit, UTF-8 and the 50,000 row limit in
+  a CSV or an Excel (.xlsx) file by choosing or dropping it, checks the name, the 10 MB limit, UTF-8 and the 50,000 row limit in
   the browser, and shows the file name, row count, column count and size. A template download is offered. Continue
   sends the file straight to storage (`POST /imports`, then the signed PUT). Map fields
   matches column names to the eight fields by name and lets the owner change each one; Phone
@@ -176,7 +176,13 @@ undo the contacts it added and the consent grants it recorded.
   cell with two numbers (split by a comma, semicolon or slash) keeps the second as the
   WhatsApp number when the WhatsApp cell is empty; a WhatsApp number equal to the phone is
   dropped. Tags are split by commas.
-- Only CSV is read. XLSX comes with CUS-16.
+- The API reads only CSV. The browser turns an `.xlsx` file into CSV before it uploads, so the
+  preview and the import see the same rows. It reads the first sheet only, keeps numbers as the file
+  spells them (a phone typed as a number arrives as digits, and the phone schema restores the leading
+  zero), writes dates as `YYYY-MM-DD` and booleans as `TRUE` or `FALSE`, and replaces control bytes
+  with spaces. The 10 MB limit applies to the Excel file and again to the CSV made from it. A file
+  that is not a spreadsheet shows "This Excel file could not be read". The upload and the error
+  report stay CSV. Products still take CSV only.
 - The job (`run-contact-import` on the bulk queue) reads the whole file through the storage
   driver before any transaction opens; a file over 10 MB is refused before it is read in full
   or parsed. It marks the upload's `files` row `ready`, then applies the rows in batches of 500. Each batch commits in its own short transaction and saves the counts so far. A file

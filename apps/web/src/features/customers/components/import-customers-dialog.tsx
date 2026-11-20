@@ -57,6 +57,7 @@ export function ImportCustomersDialog({ onClose }: ImportCustomersDialogProps) {
           rowName="customers"
           fileLabel="Customer file"
           template={customerTemplate}
+          excel
           onUploaded={(uploaded) => {
             form.reset({
               ...form.getValues(),

@@ -23,7 +23,7 @@ export function AddCustomersChooser({ onChoose, onClose }: AddCustomersChooserPr
         />
         <Way
           icon={<FileUp aria-hidden="true" size={20} strokeWidth={1.75} />}
-          title="Import from a CSV file"
+          title="Import from an Excel or CSV file"
           hint="Upload a customer list. We find duplicates for you."
           onClick={() => onChoose('import')}
         />
