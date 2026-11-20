@@ -35,6 +35,5 @@ export function ConnectionRow({ connection, canEdit, onDisconnect }: ConnectionR
 function note(connection: ChannelConnection) {
   if (connection.status === 'needs_reconnect')
     return 'Facebook no longer accepts this connection. Messages are paused until you reconnect.';
-  const date = formatDate(connection.connectedAt, new Date().toISOString());
-  return `Connected ${date === 'Today' || date === 'Yesterday' ? date.toLowerCase() : `on ${date}`}`;
+  return `Connected: ${formatDate(connection.connectedAt, new Date().toISOString())}`;
 }

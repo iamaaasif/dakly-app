@@ -53,6 +53,7 @@ export function ChannelCard({ kind, connections, canEdit, onNotice }: ChannelCar
       {disconnecting ? (
         <DisconnectDialog
           connection={disconnecting}
+          account={channel.account}
           onClose={() => setDisconnecting(null)}
           onDisconnected={() => {
             setDisconnecting(null);

@@ -2,18 +2,22 @@ import type { ChannelConnection } from '@dakly/contracts/channels';
 import { Button } from '@dakly/ui/button';
 
 import { useDisconnectChannel } from '../api/disconnect-channel';
-import { metaChannels, type MetaKind } from '../channel-labels';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 
 type DisconnectDialogProps = {
   connection: ChannelConnection;
+  account: string;
   onClose: () => void;
   onDisconnected: () => void;
 };
 
-export function DisconnectDialog({ connection, onClose, onDisconnected }: DisconnectDialogProps) {
+export function DisconnectDialog({
+  connection,
+  account,
+  onClose,
+  onDisconnected,
+}: DisconnectDialogProps) {
   const disconnect = useDisconnectChannel(connection.id);
-  const account = metaChannels[connection.kind as MetaKind].account;
   return (
     <Dialog open title={`Disconnect ${connection.displayName}?`} onClose={onClose}>
       <p>
