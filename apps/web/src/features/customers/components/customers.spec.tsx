@@ -426,7 +426,12 @@ describe('Import customers', () => {
     show(<ImportResultStep importId={importId} onDone={() => undefined} />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Undo import' }));
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Keep the import' }));
+    expect(screen.getByRole('button', { name: 'Undo import' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy();
     expect(sent.some((request) => request.path.endsWith('/undo'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Undo import' }));
     await user.click(screen.getByRole('button', { name: 'Yes, undo the import' }));
     expect(await screen.findByText('Undoing the import.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Undo import' })).toBeNull();
