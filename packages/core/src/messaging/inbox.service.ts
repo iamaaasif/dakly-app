@@ -214,15 +214,15 @@ export class InboxService {
       const untilHandBack =
         before.responder === 'human' && !before.aiResumesAt && !before.handoverReason;
       if (untilHandBack) return;
-      const now = this.clock.now();
-      const restart = new Date(now.getTime() + minutes * MINUTE_MS);
+      // Count from when the person replied, so a late job does not push the return back.
+      const restart = new Date(reply.createdAt.getTime() + minutes * MINUTE_MS);
       const aiResumesAt =
         before.aiResumesAt && before.aiResumesAt > restart ? before.aiResumesAt : restart;
       const after = await this.repository.update(
         storeId,
         before.id,
         { responder: 'human', aiResumesAt, handoverReason: null, handedOverAt: null },
-        { now },
+        { now: this.clock.now() },
       );
       if (after) await this.recordChange(storeId, { kind: 'system' }, before, after);
     });

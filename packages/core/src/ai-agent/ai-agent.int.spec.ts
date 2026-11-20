@@ -613,6 +613,18 @@ async function conversationTimer({ storeId }: Shop) {
   };
 }
 
+it("counts the return timer from the person's reply when the job runs late", async () => {
+  const late = await shop();
+  const first = await receive(late, 'Hello');
+  const replyId = await staffReply(late, first.conversation_id, first.sender_identity_id);
+  await admin.pool.query(
+    "update messages set created_at = now() - interval '20 minutes' where id = $1",
+    [replyId],
+  );
+  await agent.restartReturnAfterStaffReply(late.storeId, replyId);
+  expect(await conversationTimer(late)).toEqual({ responder: 'human', minutes: 10 });
+});
+
 it('records the fact check failure on the AI run and marks a sent reply', async () => {
   const blocked = await sellingShop();
   const first = await receive(blocked, 'price koto?');

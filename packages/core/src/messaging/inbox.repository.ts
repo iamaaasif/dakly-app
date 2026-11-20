@@ -195,7 +195,7 @@ export class InboxRepository {
   async findStaffReply(storeId: string, messageId: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ conversationId: messages.conversationId })
+        .select({ conversationId: messages.conversationId, createdAt: messages.createdAt })
         .from(messages)
         .where(
           and(
