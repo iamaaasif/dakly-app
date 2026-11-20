@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
+import { AuditArchiveService } from './audit-archive.service';
 import { MaintenanceRollupsService } from './maintenance-rollups.service';
 import { maintenanceError } from './maintenance.errors';
 
@@ -9,6 +10,7 @@ export class MaintenanceService {
 
   constructor(
     @Inject(MaintenanceRollupsService) private readonly rollups: MaintenanceRollupsService,
+    @Inject(AuditArchiveService) private readonly auditArchive: AuditArchiveService,
   ) {}
 
   // Each step is safe to repeat, and a failed step does not stop the others: dropping a month
@@ -18,6 +20,7 @@ export class MaintenanceService {
       ['ensure partitions', () => this.rollups.ensurePartitions()],
       ['roll up finished days', () => this.rollups.rollUpFinishedDays()],
       ['drop expired partitions', () => this.rollups.dropExpiredPartitions()],
+      ['archive audit months', () => this.auditArchive.archiveExpiredMonths()],
     ] as const;
     let failed = 0;
     for (const [name, step] of steps) {
