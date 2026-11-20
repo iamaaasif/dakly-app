@@ -1,4 +1,4 @@
-import { ChartLine } from 'lucide-react';
+import { ChartLine, Megaphone, Zap } from 'lucide-react';
 import Link from 'next/link';
 
 import type { AnalyticsView } from '@dakly/contracts/analytics';
@@ -6,7 +6,11 @@ import { cn } from '@dakly/ui/cn';
 
 import { analyticsHref } from '../api/analytics-overview';
 
-const tabs = [{ id: 'overview', label: 'Overview', icon: ChartLine }] as const;
+const tabs = [
+  { id: 'overview', label: 'Overview', icon: ChartLine },
+  { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
+  { id: 'automations', label: 'Automations', icon: Zap },
+] as const;
 
 export function AnalyticsTabs({ view }: { view: AnalyticsView }) {
   return (
@@ -21,7 +25,7 @@ export function AnalyticsTabs({ view }: { view: AnalyticsView }) {
             view.tab === id && 'border-action font-medium text-text',
           )}
         >
-          <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
+          <Icon aria-hidden="true" size={16} strokeWidth={1.75} className="hidden sm:block" />
           {label}
         </Link>
       ))}
