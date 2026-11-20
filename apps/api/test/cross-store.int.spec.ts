@@ -2499,6 +2499,21 @@ async function enableChats(shop: Shop) {
   await success(shop, 'PATCH', '/store/extensions', 200, { extensions: ['chats'] });
 }
 
+fixture('GET /conversations/counts', async () => {
+  const { a, b } = await pair();
+  await seedConversation(a);
+  await seedConversation(a);
+  await seedConversation(b);
+  expect((await f.request(b.owner, 'GET', '/conversations/counts')).statusCode).toBe(403);
+  await enableChats(b);
+  expect((await success(b, 'GET', '/conversations/counts', 200)).json()).toEqual({
+    all: 1,
+    needsYou: 0,
+    aiHandling: 1,
+    followUp: 0,
+  });
+});
+
 fixture('GET /conversations', async () => {
   const { a, b } = await pair();
   await seedConversation(a);
