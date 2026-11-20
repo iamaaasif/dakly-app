@@ -29,7 +29,7 @@ Numbers per active store per day, averaged across stores. The busiest 5% of shop
 
 | Table                                              | Kept in Postgres                                                     | Partitioning                    | After that                                                                  | Rollup kept                                                        |
 | -------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `messages`                                         | 12 months from when each message was sent                            | None yet; trigger below         | Archived to R2 by conversation and month, then deleted                      | `contact_memories` summary, `contact_stats`, `store_daily_metrics` |
+| `messages`                                         | 12 months from when each message was created                         | None yet; trigger below         | Archived to R2 by conversation and month, then deleted                      | `contact_memories` summary, `contact_stats`, `store_daily_metrics` |
 | `webhook_events`                                   | 7 days; payload cleared once processed                               | None; daily purge in batches    | Deleted                                                                     | none needed                                                        |
 | `outbox_events`                                    | 7 days after publish                                                 | None; daily purge in batches    | Deleted                                                                     | none needed                                                        |
 | `ai_runs`                                          | 13 months                                                            | Monthly on `created_at`         | Partition dropped by `drop_expired_partitions()`                            | Daily cost, tokens and runs by purpose in `store_daily_metrics`    |
@@ -60,7 +60,7 @@ Rules that come with this plan:
 
 ## R2 archives
 
-Archived `audit_log` months and archived messages are kept in R2 for the life of the store (D39). When a store is purged, 30 days after it closes, its archive objects are deleted with the rest of its data. A customer's deletion request also reaches the archive: that customer's archived messages are removed or anonymised, as they are in Postgres.
+Archived `audit_log` months and archived messages are kept in R2 for the life of the store (D39). When a store is purged, 30 days after it closes, its archive objects are deleted with the rest of its data. A customer's deletion request also reaches the archive: that customer's archived messages are removed or anonymised, as they are in Postgres. Message objects are named by conversation (`stores/<storeId>/archive/messages/<yyyy-mm>/<conversationId>.jsonl.gz`), so the erasure task (CUS-11) finds them from the customer's conversations. The job does not do this yet.
 
 ## Link visits without personal data
 

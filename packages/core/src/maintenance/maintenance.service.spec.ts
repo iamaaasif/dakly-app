@@ -21,7 +21,7 @@ function build(rollUp: () => Promise<void>) {
     archive: { archiveExpiredMonths: done() },
     files: { purgeExpiredFiles: done(), purgeOrphanProductObjects: done() },
     accountEvents: { purgeExpired: done() },
-    retention: { purgeStoreTables: done() },
+    retention: { purgeStoreTables: done(), archiveStoreMessages: done() },
     sessions: { purgeExpired: done() },
     outbox: { purgePublished: done() },
     usage: { purgeExpired: done() },
@@ -52,6 +52,7 @@ describe('MaintenanceService', () => {
     expect(files.purgeOrphanProductObjects).toHaveBeenCalledOnce();
     expect(accountEvents.purgeExpired).toHaveBeenCalledOnce();
     expect(retention.purgeStoreTables).toHaveBeenCalledOnce();
+    expect(retention.archiveStoreMessages).toHaveBeenCalledOnce();
     expect(sessions.purgeExpired).toHaveBeenCalledOnce();
     expect(outbox.purgePublished).toHaveBeenCalledOnce();
     expect(usage.purgeExpired).toHaveBeenCalledOnce();
