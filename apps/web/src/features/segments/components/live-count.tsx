@@ -11,6 +11,7 @@ import { matchText } from '../segment-labels';
 
 export function LiveCount() {
   const rules = useWatch<CreateSegmentInput, 'rules'>({ name: 'rules' });
+  // Compared as text: the watched tree can change inside the same object.
   const settled = useDebouncedValue(JSON.stringify(rules), 400);
   const parsed = segmentRulesSchema.safeParse(JSON.parse(settled));
   const count = useSegmentCount(parsed.success ? parsed.data : undefined);

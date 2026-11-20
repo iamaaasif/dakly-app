@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import type { SegmentResponse } from '@dakly/contracts/segments';
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 
 import { useRemoveSegment } from '../api/remove-segment';
@@ -51,7 +51,7 @@ export function SegmentRow({ segment, editHref, canEdit }: SegmentRowProps) {
             <Link
               href={editHref}
               aria-label={`Edit ${segment.name}`}
-              className="inline-flex min-h-10 items-center justify-center rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-surface-muted"
+              className={buttonVariants({ variant: 'secondary' })}
             >
               Edit
             </Link>

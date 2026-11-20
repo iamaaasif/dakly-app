@@ -1,8 +1,8 @@
-'use client';
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
 import type { SegmentListResponse } from '@dakly/contracts/segments';
+import { buttonVariants } from '@dakly/ui/button';
 
 import { SegmentRow } from './segment-row';
 
@@ -65,10 +65,7 @@ function SegmentListHeader({ canEdit }: { canEdit: boolean }) {
         </p>
       </div>
       {canEdit ? (
-        <Link
-          href="/segments?edit=new"
-          className="inline-flex min-h-10 items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover"
-        >
+        <Link href="/segments?edit=new" className={buttonVariants()}>
           <Plus aria-hidden="true" size={16} strokeWidth={2} />
           Create segment
         </Link>

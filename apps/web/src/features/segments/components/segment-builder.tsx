@@ -11,7 +11,7 @@ import {
   type SegmentResponse,
 } from '@dakly/contracts/segments';
 import { ApiError } from '@dakly/ui/api-client';
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
@@ -113,10 +113,7 @@ function SegmentBuilderHeader({
         </h1>
       </div>
       <div className="flex items-center gap-3">
-        <Link
-          href={listHref}
-          className="inline-flex min-h-10 items-center rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-surface-muted"
-        >
+        <Link href={listHref} className={buttonVariants({ variant: 'secondary' })}>
           Cancel
         </Link>
         <Button type="submit" variant="primary" loading={isPending}>
