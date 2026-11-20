@@ -22,8 +22,7 @@ export function ProductOptions({ mode, onStockChange }: ProductOptionsProps) {
   const { fields, append, remove } = useFieldArray({ control: form.control, name: 'options' });
 
   const isSizesOnly =
-    options.length === 0 ||
-    (options.length === 1 && options[0]?.name.toLowerCase() === 'size');
+    options.length === 0 || (options.length === 1 && options[0]?.name.toLowerCase() === 'size');
 
   if (mode === 'create' && isStockTracked && isSizesOnly) {
     return (

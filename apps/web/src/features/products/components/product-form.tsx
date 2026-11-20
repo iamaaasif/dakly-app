@@ -5,7 +5,6 @@ import { FormProvider, useForm, type FormState } from 'react-hook-form';
 import {
   productFormSchema,
   type ChangeProductInput,
-  type CreateProductInput,
   type ProductFormInput,
   type ProductFormValues,
   type ProductResponse,
@@ -41,73 +40,38 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
     form.setValue(`variants.${index}.initialStock`, quantity, { shouldDirty: true });
   };
 
+  const onSubmit = form.handleSubmit((input) => {
+    const setError = (error: Error) =>
+      form.setError(productErrorField(error, input.variants.length), {
+        message: error.message,
+      });
+    if (product) {
+      change.mutate(productChanges(input, dirtyFields), {
+        onSuccess: (saved) => onSaved(saved),
+        onError: setError,
+      });
+      return;
+    }
+    create.mutate(input, {
+      onError: setError,
+      onSuccess: async (saved) => {
+        const failed = await saveInitialStocks({
+          saved,
+          input,
+          formVariants: form.getValues('variants'),
+          adjustStock: adjustStock.mutateAsync,
+        });
+        if (failed.length > 0) onSaved(saved, failed);
+        else onSaved(saved);
+      },
+    });
+  });
+
   return (
     <FormProvider {...form}>
-      <form
-        className="space-y-3.5"
-        onSubmit={form.handleSubmit((input) => {
-          if (product) {
-            change.mutate(productChanges(input, dirtyFields), {
-              onSuccess: (saved: ProductResponse) => onSaved(saved),
-              onError: (error: Error) =>
-                form.setError(productErrorField(error, input.variants.length), {
-                  message: error.message,
-                }),
-            });
-          } else {
-            create.mutate(input, {
-              onError: (error: Error) =>
-                form.setError(productErrorField(error, input.variants.length), {
-                  message: error.message,
-                }),
-              onSuccess: async (saved: ProductResponse) => {
-                const formVariants = form.getValues('variants') ?? [];
-                const initialAdjustments = formVariants
-                  .map((variant, index) => {
-                    const raw = variant.initialStock;
-                    const quantity = typeof raw === 'number' ? raw : 0;
-                    if (quantity <= 0) return null;
-                    const variantId = saved.variants[index]?.id;
-                    if (!variantId) return null;
-                    const sizeName = input.options[0]?.values[index] || `Size ${index + 1}`;
-                    return { sizeName, variantId, quantity };
-                  })
-                  .filter(
-                    (item): item is { sizeName: string; variantId: string; quantity: number } =>
-                      Boolean(item),
-                  );
-
-                if (initialAdjustments.length > 0) {
-                  const results = await Promise.allSettled(
-                    initialAdjustments.map((item) =>
-                      adjustStock.mutateAsync({
-                        variantId: item.variantId,
-                        input: { quantity: item.quantity, reason: 'Initial stock' },
-                      }),
-                    ),
-                  );
-                  const failedSizes = results
-                    .map((result, i) =>
-                      result.status === 'rejected' ? initialAdjustments[i]?.sizeName : null,
-                    )
-                    .filter((name): name is string => Boolean(name));
-
-                  if (failedSizes.length > 0) {
-                    onSaved(saved, failedSizes);
-                    return;
-                  }
-                }
-                onSaved(saved);
-              },
-            });
-          }
-        })}
-      >
+      <form className="space-y-3.5" onSubmit={onSubmit}>
         <ProductFields productId={product?.id} />
-        <ProductOptions
-          mode={product ? 'edit' : 'create'}
-          onStockChange={onStockChange}
-        />
+        <ProductOptions mode={product ? 'edit' : 'create'} onStockChange={onStockChange} />
         {errors.root?.server?.message ? (
           <p role="alert" className="text-danger">
             {errors.root.server.message}
@@ -123,6 +87,51 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
       </form>
     </FormProvider>
   );
+}
+
+type SaveInitialStocksArgs = {
+  saved: ProductResponse;
+  input: ProductFormInput;
+  formVariants: ProductFormValues['variants'];
+  adjustStock: (args: {
+    variantId: string;
+    input: { quantity: number; reason: string };
+  }) => Promise<unknown>;
+};
+
+async function saveInitialStocks({
+  saved,
+  input,
+  formVariants,
+  adjustStock,
+}: SaveInitialStocksArgs): Promise<string[]> {
+  const adjustments = (formVariants ?? [])
+    .map((variant, index) => {
+      const quantity = typeof variant.initialStock === 'number' ? variant.initialStock : 0;
+      if (quantity <= 0) return null;
+      const variantId = saved.variants[index]?.id;
+      if (!variantId) return null;
+      const sizeName = input.options[0]?.values[index] || `Size ${index + 1}`;
+      return { sizeName, variantId, quantity };
+    })
+    .filter((item): item is { sizeName: string; variantId: string; quantity: number } =>
+      Boolean(item),
+    );
+
+  if (adjustments.length === 0) return [];
+
+  const results = await Promise.allSettled(
+    adjustments.map((item) =>
+      adjustStock({
+        variantId: item.variantId,
+        input: { quantity: item.quantity, reason: 'Initial stock' },
+      }),
+    ),
+  );
+
+  return results
+    .map((result, i) => (result.status === 'rejected' ? adjustments[i]?.sizeName : null))
+    .filter((name): name is string => Boolean(name));
 }
 
 type ProductFormActionsProps = {
@@ -222,4 +231,3 @@ function productErrorField(
   if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
   return variantCount === 1 ? 'variants.0.sku' : 'variants';
 }
-
