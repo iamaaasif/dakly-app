@@ -18,7 +18,12 @@ export function ProductPhotos({ product }: ProductPhotosProps) {
   const { data } = useSessionContext();
   return (
     <section className="space-y-4" aria-label="Product photos">
-      <h2 className="font-semibold">Photos ({product.photos.length})</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-text">Photos</h2>
+        <span className="text-xs text-text-muted">
+          {product.photos.length} photo{product.photos.length === 1 ? '' : 's'}
+        </span>
+      </div>
       {data?.currentStore?.canEditProducts ? (
         <EditablePhotos product={product} />
       ) : (
@@ -187,11 +192,12 @@ function PhotoInput({ id, input, disabled, onFile }: PhotoInputProps) {
         className="flex size-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-input-border bg-surface-muted text-xs font-medium text-text-muted focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus hover:border-text hover:text-text has-disabled:cursor-not-allowed has-disabled:opacity-50"
       >
         <Plus aria-hidden="true" size={16} strokeWidth={1.75} />
-        Add photo
+        + Add
         <input
           ref={input}
           id={id}
           type="file"
+          aria-label="Add photo"
           className="sr-only"
           accept="image/jpeg,image/png,image/webp"
           aria-describedby={`${id}-hint`}
