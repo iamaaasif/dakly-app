@@ -8,9 +8,14 @@ import { agentTabs, type AgentTab } from '../agent-tabs';
 import { AgentSettingsTab } from './agent-settings-tab';
 import { GoLivePanel } from './go-live-panel';
 import { KnowledgeTab } from './knowledge-tab';
+import { TestAgentTab } from './test-agent-tab';
 import { useSessionContext } from '@/lib/session-context';
 
-const tabLabels: Record<AgentTab, string> = { settings: 'Settings', knowledge: 'Knowledge' };
+const tabLabels: Record<AgentTab, string> = {
+  settings: 'Settings',
+  knowledge: 'Knowledge',
+  test: 'Test the agent',
+};
 
 type AiAgentDrawerProps = {
   tab: AgentTab | undefined;
@@ -48,6 +53,9 @@ export function AiAgentDrawer({ tab, onTabChange, onClose }: AiAgentDrawerProps)
         </TabsContent>
         <TabsContent value="knowledge">
           <KnowledgeTab canEdit={canEdit} />
+        </TabsContent>
+        <TabsContent value="test">
+          <TestAgentTab canEdit={canEdit} />
         </TabsContent>
       </Tabs>
     </Sheet>
