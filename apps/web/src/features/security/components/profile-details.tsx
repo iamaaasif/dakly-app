@@ -1,32 +1,42 @@
 import type { AccountProfile } from '@dakly/contracts/sessions';
+import { Badge } from '@dakly/ui/badge';
 
 import { formatPhone } from '@/lib/format-phone';
 
 export function ProfileDetails({ profile }: { profile: AccountProfile }) {
   return (
-    <dl className="space-y-3 break-words">
-      <div>
-        <dt className="font-medium">Name</dt>
-        <dd>{profile.name}</dd>
+    <dl className="grid min-w-0 gap-4 sm:grid-cols-2">
+      <div className="rounded-lg border border-border p-3">
+        <dt className="text-xs font-medium tracking-wider text-text-muted uppercase">Name</dt>
+        <dd className="mt-1 font-medium text-text">{profile.name}</dd>
       </div>
-      <div>
-        <dt className="font-medium">Mobile number</dt>
-        <dd>
-          {profile.phone ? formatPhone(profile.phone) : 'No mobile number'}{' '}
-          {profile.isPhoneVerified ? '· Verified' : ''}
+      <div className="rounded-lg border border-border p-3">
+        <dt className="flex items-center justify-between text-xs font-medium tracking-wider text-text-muted uppercase">
+          <span>Email</span>
+          {profile.isEmailVerified ? (
+            <Badge variant="success">Verified</Badge>
+          ) : (
+            <Badge variant="neutral">Not verified</Badge>
+          )}
+        </dt>
+        <dd className="mt-1 font-medium text-text">{profile.email ?? 'No email added'}</dd>
+      </div>
+      <div className="rounded-lg border border-border p-3">
+        <dt className="flex items-center justify-between text-xs font-medium tracking-wider text-text-muted uppercase">
+          <span>Mobile number</span>
+          {profile.isPhoneVerified ? <Badge variant="success">Verified</Badge> : null}
+        </dt>
+        <dd className="mt-1 font-medium text-text">
+          {profile.phone ? formatPhone(profile.phone) : 'No mobile number'}
         </dd>
       </div>
-      <div>
-        <dt className="font-medium">Email</dt>
-        <dd>
-          {profile.email ?? 'No email added'} ·{' '}
-          {profile.isEmailVerified ? 'Verified' : 'Not verified'}
+      <div className="rounded-lg border border-border p-3">
+        <dt className="text-xs font-medium tracking-wider text-text-muted uppercase">Password</dt>
+        <dd className="mt-1 font-medium text-text">
+          {profile.hasPassword ? 'Password set' : 'No password set'}
         </dd>
       </div>
-      <div>
-        <dt className="font-medium">Password</dt>
-        <dd>{profile.hasPassword ? 'Password set' : 'No password set'}</dd>
-      </div>
+      <div className="text-xs text-text-muted sm:col-span-2">Time zone: Asia/Dhaka (GMT+6)</div>
     </dl>
   );
 }

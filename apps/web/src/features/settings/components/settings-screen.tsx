@@ -21,11 +21,17 @@ export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
     { href: '/settings?tab=store', label: 'Store information', current: tab === 'store' },
     { href: '/settings?tab=extensions', label: 'Extensions', current: tab === 'extensions' },
   ];
+  const title = tab === 'store' ? 'Store settings' : 'Extensions';
+  const subtitle =
+    tab === 'store'
+      ? 'Your store details and how Dakly sends SMS, WhatsApp and email for you.'
+      : 'Turn store features on and off for your store.';
+
   return (
     <main className="space-y-6 p-4 md:p-8">
       <div>
-        <h1 className="text-xl font-bold">Settings</h1>
-        <p className="text-text-muted">Your account and store details.</p>
+        <h1 className="text-xl font-bold md:text-2xl">{title}</h1>
+        <p className="mt-1 text-sm text-text-muted">{subtitle}</p>
       </div>
       <div className="grid gap-6 md:grid-cols-[14rem_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className="space-y-4">
