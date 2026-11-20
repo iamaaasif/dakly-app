@@ -8,8 +8,10 @@ import { LinksModule } from '../links/links.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
+import { OutboxModule } from '../platform/outbox/outbox.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { StoresModule } from '../stores/stores.module';
+import { UsageModule } from '../usage/usage.module';
 import { AuditArchiveRepository } from './audit-archive.repository';
 import { AuditArchiveService } from './audit-archive.service';
 import { FilePurgeRepository } from './file-purge.repository';
@@ -29,7 +31,9 @@ import { RetentionPurgeService } from './retention-purge.service';
     FileStorageModule,
     LinksModule,
     NotificationsModule,
+    OutboxModule,
     SessionsModule,
+    UsageModule,
     StoresModule,
     ClockModule,
   ],
