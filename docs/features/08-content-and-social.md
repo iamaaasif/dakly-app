@@ -207,7 +207,7 @@ Meta app review for `pages_manage_posts` and `instagram_content_publish`. Stores
 may need to reconnect to grant them. An Instagram first comment needs comment
 permission. Dakly shows a warning if it cannot confirm the comment.
 
-Insights (SOC-3) and the web screens (SOC-5) are separate tasks. SOC-4 adds AI
+The web screens (SOC-5) are a separate task. SOC-4 adds AI
 caption generation and checks generated text before scheduling.
 
 ### Screens in release 1
@@ -234,7 +234,7 @@ TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagra
 3. Add to queue picks the first free posting slot at least 15 minutes ahead in Asia/Dhaka. A unique index on account and time settles a race; the loser takes the next slot.
 4. Publishing is a delayed job per target. Instagram uses the container flow (create, wait for finished, publish). Three retries over 30 minutes, then `failed` with a Fix now notification.
 5. 24 hours ahead, a job flags targets whose token is expired or whose media is missing.
-6. Insights are fetched every 6 hours for 7 days, then daily to day 30.
+6. Insights are fetched every 6 hours for 7 days, then daily to day 30. Publishing sets the first refresh 6 hours out. An hourly sweep queues one refresh job per due published target, and the job reads reach, reactions, comments and shares through the Meta driver and overwrites the saved numbers, so a repeat run writes the same values. A count Meta does not report for that post stays empty; a story has reach only. A rate limit or outage retries with exponential backoff starting at 5 minutes. A rejected token marks the account for reconnect through the channels service, and a post Meta refuses to read keeps its last numbers; both move on to the next refresh time. After day 30 the target has no next refresh time.
 7. Content Studio writes 3 options per request using the brand profile. Shorten, Friendlier and Translate return one option. Product writing uses saved product details. The model gets the brand profile only when the member can view it. The store's words to avoid always apply. A valid generation uses 3 `ai_content` credits and a valid edit uses 1.
 8. Save to library stores the edited text, format, language, creator and AI provenance in `content_pieces`. Formats are Facebook post, Instagram caption, WhatsApp, SMS and product description; languages are Bangla, English and Banglish. Save to library checks that an AI run belongs to this store and completed content writing before adding AI provenance. Copying or editing an AI piece keeps its AI-written approval provenance. Library filters use kind and language, ordered by `(created_at, id)`.
 9. Each `(post, connection)` has one target. A null caption override uses the post caption; an empty override intentionally has no caption. Resolve this effective text before validating each selected network's format and limits at save, approval and publish. The storage ceiling is not proof that a provider accepts the caption.

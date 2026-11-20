@@ -1052,6 +1052,58 @@ fixture('GET /imports/:importId', async () => {
   });
   await hidden(b, 'GET', (value) => `/imports/${value}`, id);
 });
+async function productImport(shop: Shop) {
+  const result = await success(shop, 'POST', '/product-imports', 201, { sizeBytes: 120 });
+  expect(result.json().uploadUrl).toContain(`/imports/${shop.id}/`);
+  return result.json().importId as string;
+}
+const startProductImport = {
+  mapping: { name: 0, price: 1 },
+  duplicateMode: 'update',
+};
+fixture('POST /product-imports', async () => {
+  const { a, b } = await pair(),
+    id = await productImport(a),
+    before = await f.row('imports', id);
+  const own = await productImport(b);
+  expect((await f.row('imports', own)).store_id).toBe(b.id);
+  expect(await f.row('imports', id)).toEqual(before);
+});
+fixture('POST /product-imports/:importId/start', async () => {
+  const { a, b } = await pair(),
+    own = await productImport(a),
+    foreign = await productImport(a),
+    customers = await customerImport(a);
+  const started = await success(
+    a,
+    'POST',
+    `/product-imports/${own}/start`,
+    202,
+    startProductImport,
+  );
+  expect(started.json()).toMatchObject({ id: own, status: 'importing' });
+  const before = await f.row('imports', foreign);
+  // Another store's import and this store's customer import are both out of reach.
+  for (const id of [foreign, customers])
+    await hidden(
+      id === foreign ? b : a,
+      'POST',
+      (value) => `/product-imports/${value}/start`,
+      id,
+      () => startProductImport,
+    );
+  expect(await f.row('imports', foreign)).toEqual(before);
+});
+fixture('GET /product-imports/:importId', async () => {
+  const { a, b } = await pair(),
+    id = await productImport(a);
+  expect((await success(a, 'GET', `/product-imports/${id}`, 200)).json()).toMatchObject({
+    id,
+    status: 'uploaded',
+  });
+  await hidden(b, 'GET', (value) => `/product-imports/${value}`, id);
+  await hidden(a, 'GET', (value) => `/product-imports/${value}`, await customerImport(a));
+});
 const dhaka = {
   match: 'all',
   conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],

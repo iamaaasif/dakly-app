@@ -122,4 +122,112 @@ describe('MetaGraphPublishingDriver', () => {
       code: 'unavailable',
     });
   });
+
+  it('reads Facebook counts and reach from the post and its insights', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          reactions: { summary: { total_count: 12 } },
+          comments: { summary: { total_count: 3 } },
+          shares: { count: 2 },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          data: [{ name: 'post_total_media_view_unique', values: [{ value: 450 }] }],
+        }),
+      );
+    vi.stubGlobal('fetch', fetch);
+
+    expect(
+      await driver.postMetrics(account, {
+        kind: 'facebook_page',
+        externalPostId: '123_456',
+        isStory: false,
+      }),
+    ).toEqual({ reach: 450, reactions: 12, comments: 3, shares: 2, rejectedInsights: null });
+  });
+
+  it('reads Instagram likes, comments, reach and shares, and only reach for a story', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ like_count: 25, comments_count: 6 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          data: [
+            { name: 'reach', values: [{ value: 300 }] },
+            { name: 'shares', values: [{ value: 4 }] },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ data: [{ name: 'reach', values: [{ value: 80 }] }] }));
+    vi.stubGlobal('fetch', fetch);
+
+    const post = { kind: 'instagram' as const, externalPostId: '999', isStory: false };
+    expect(await driver.postMetrics(account, post)).toEqual({
+      reach: 300,
+      reactions: 25,
+      comments: 6,
+      shares: 4,
+      rejectedInsights: null,
+    });
+    expect(await driver.postMetrics(account, { ...post, isStory: true })).toEqual({
+      reach: 80,
+      reactions: null,
+      comments: null,
+      shares: null,
+      rejectedInsights: null,
+    });
+  });
+
+  it('reports a rate limit as retryable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(Response.json({ error: { code: 4 } }, { status: 429 })),
+    );
+    await expect(
+      driver.postMetrics(account, { kind: 'instagram', externalPostId: '9', isStory: false }),
+    ).rejects.toMatchObject({ code: 'retryable' });
+  });
+
+  it('keeps the counts when Meta rejects the insights metric', async () => {
+    const rejected = () => Response.json({ error: { code: 100 } }, { status: 400 });
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          reactions: { summary: { total_count: 12 } },
+          comments: { summary: { total_count: 3 } },
+          shares: { count: 2 },
+        }),
+      )
+      .mockResolvedValueOnce(rejected())
+      .mockResolvedValueOnce(Response.json({ like_count: 25, comments_count: 6 }))
+      .mockResolvedValueOnce(rejected());
+    vi.stubGlobal('fetch', fetch);
+
+    expect(
+      await driver.postMetrics(account, {
+        kind: 'facebook_page',
+        externalPostId: '123_456',
+        isStory: false,
+      }),
+    ).toEqual({
+      reach: null,
+      reactions: 12,
+      comments: 3,
+      shares: 2,
+      rejectedInsights: 'post_total_media_view_unique',
+    });
+    expect(
+      await driver.postMetrics(account, { kind: 'instagram', externalPostId: '9', isStory: false }),
+    ).toEqual({
+      reach: null,
+      reactions: 25,
+      comments: 6,
+      shares: null,
+      rejectedInsights: 'reach,shares',
+    });
+  });
 });

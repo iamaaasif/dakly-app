@@ -15,12 +15,20 @@ import { FileStorageModule } from '../platform/file-storage/file-storage.module'
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { scheduleJob } from '../platform/queue/job-schedule';
 import { QUEUES } from '../platform/queue/queues';
-import { MINUTE_MS } from '../platform/time';
+import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import { StoresModule } from '../stores/stores.module';
 import { CheckPostTargetJob } from './jobs/check-post-target.job';
 import { PublishPostTargetJob } from './jobs/publish-post-target.job';
+import {
+  QUEUE_POST_METRICS_REFRESHES,
+  QueuePostMetricsRefreshesJob,
+} from './jobs/queue-post-metrics-refreshes.job';
 import { QueuePostOnScheduledJob } from './jobs/queue-post-on-scheduled.job';
 import { RECOVER_POST_TARGETS, RecoverPostTargetsJob } from './jobs/recover-post-targets.job';
+import { RefreshPostMetricsJob } from './jobs/refresh-post-metrics.job';
+import { SocialInsightsQueueService } from './social-insights-queue.service';
+import { SocialInsightsRepository } from './social-insights.repository';
+import { SocialInsightsService } from './social-insights.service';
 import { SocialPublishRecoveryRepository } from './social-publish-recovery.repository';
 import { SocialPublishingQueueService } from './social-publishing-queue.service';
 import { META_PUBLISHING_DRIVER, SocialPublishingService } from './social-publishing.service';
@@ -43,10 +51,15 @@ import { SocialRepository } from './social.repository';
     SocialPublishRecoveryRepository,
     SocialPublishingService,
     SocialPublishingQueueService,
+    SocialInsightsRepository,
+    SocialInsightsService,
+    SocialInsightsQueueService,
     CheckPostTargetJob,
     PublishPostTargetJob,
     QueuePostOnScheduledJob,
     RecoverPostTargetsJob,
+    QueuePostMetricsRefreshesJob,
+    RefreshPostMetricsJob,
   ],
 })
 export class SocialPublishingModule implements OnApplicationBootstrap {
@@ -67,5 +80,6 @@ export class SocialPublishingModule implements OnApplicationBootstrap {
 
   async onApplicationBootstrap() {
     await scheduleJob(this.sync, RECOVER_POST_TARGETS, MINUTE_MS);
+    await scheduleJob(this.sync, QUEUE_POST_METRICS_REFRESHES, HOUR_MS);
   }
 }

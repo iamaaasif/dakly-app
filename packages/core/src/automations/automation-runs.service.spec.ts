@@ -9,6 +9,7 @@ import type {
   OutgoingMessage,
   PreparedSms,
 } from '../messaging/messaging.service';
+import type { OrderReportingService } from '../orders/order-reporting.service';
 import * as env from '../platform/config/env';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -357,6 +358,7 @@ describe('AutomationRunsService', () => {
       segments as unknown as SegmentsService,
       sendPolicy as unknown as SendPolicyService,
       contacts as unknown as ContactsService,
+      {} as OrderReportingService,
       repository as unknown as AutomationRunsRepository,
     );
     service = new AutomationRunsService(
