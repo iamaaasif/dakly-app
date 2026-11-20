@@ -1,9 +1,6 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
 import { Clock } from '../platform/clock';
-import { ErrorReporter } from '../platform/logging/error-reporter';
-import { jobLogBindings } from '../platform/logging/job-context';
-import { serializeError } from '../platform/logging/safe-error';
 import { JOB_POLL_INTERVAL_MS } from '../platform/time';
 import { CampaignCountsService } from './campaign-counts.service';
 import { CAMPAIGN_CLAIM_MS, CampaignSenderService } from './campaign-sender.service';
@@ -11,30 +8,18 @@ import { CampaignSendingRepository } from './campaign-sending.repository';
 
 @Injectable()
 export class CampaignBatchService {
-  private readonly logger = new Logger(CampaignBatchService.name);
   constructor(
     @Inject(CampaignSendingRepository) private readonly repository: CampaignSendingRepository,
     @Inject(CampaignSenderService) private readonly sender: CampaignSenderService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
-    @Inject(ErrorReporter) private readonly reporter: ErrorReporter,
   ) {}
 
   async sendStoreBatch(storeId: string): Promise<void | { delayUntil: number }> {
+    const moreRepairs = await this.counts.repairNext(storeId);
     const expired = new Date(this.clock.now().getTime() - CAMPAIGN_CLAIM_MS);
     const campaignId = await this.repository.nextCampaignId(storeId, expired);
-    const next = campaignId
-      ? await this.sender.sendBatch(storeId, campaignId).catch(async (dispatchError: unknown) => {
-          const repair = this.counts.repairNext(storeId).catch((error: unknown) => {
-            this.logger.error({ storeId }, 'Campaign results repair failed after dispatch error');
-            const { jobId } = jobLogBindings();
-            if (jobId) this.reporter.reportJob(serializeError(error), jobId);
-          });
-          await repair.catch(() => undefined);
-          throw dispatchError;
-        })
-      : null;
-    const moreRepairs = await this.counts.repairNext(storeId);
+    const next = campaignId ? await this.sender.sendBatch(storeId, campaignId) : null;
     const now = this.clock.now().getTime();
     // Wake at least every poll interval so this store can settle a cancellation
     // while the next send waits.

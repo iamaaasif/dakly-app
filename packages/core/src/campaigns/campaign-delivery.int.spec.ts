@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
-import { Logger, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import type { INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { Queue } from 'bullmq';
@@ -19,8 +19,6 @@ import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { ErrorReporter } from '../platform/logging/error-reporter';
-import { runWithJobContext } from '../platform/logging/job-context';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { SegmentsService } from '../segments/segments.service';
@@ -28,6 +26,7 @@ import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignCountsRepository } from './campaign-counts.repository';
+import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
@@ -194,8 +193,12 @@ describe('Campaign sender (Postgres)', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.mocked(MailpitSmsDriver.prototype.send).mockRestore();
+    const counts = app.get(CampaignCountsService);
+    while (await counts.repairNext(storeId)) {
+      // The next case starts without pending rollups from earlier campaigns.
+    }
   });
 
   afterAll(async () => {
@@ -723,6 +726,40 @@ describe('Campaign sender (Postgres)', () => {
     expect(items.find((item) => item.id === id)?.counts).toMatchObject(counts);
   });
 
+  it('marks pause and cancel counts pending without aggregating in the request', async () => {
+    const paused = await sendingCampaign(1);
+    const cancelled = await sendingCampaign(1);
+    await admin.pool.query('update campaigns set counts_at=$2 where id=any($1::uuid[])', [
+      [paused.id, cancelled.id],
+      clockNow,
+    ]);
+    const save = vi.spyOn(app.get(CampaignCountsRepository), 'save');
+    try {
+      expect(await campaigns.pause(storeId, paused.id, actor)).toMatchObject({
+        status: 'paused',
+        counts: { countedAt: null },
+      });
+      expect(await campaigns.cancel(storeId, cancelled.id, actor)).toMatchObject({
+        status: 'cancelled',
+        counts: { countedAt: null },
+      });
+      expect(save).not.toHaveBeenCalled();
+      const batch = app.get(SendCampaignBatchJob);
+      await batch.handle({ storeId });
+      await batch.handle({ storeId });
+      expect((await campaigns.get(storeId, paused.id)).counts.countedAt).toBe(
+        clockNow.toISOString(),
+      );
+      expect((await campaigns.get(storeId, cancelled.id)).counts.countedAt).toBe(
+        clockNow.toISOString(),
+      );
+    } finally {
+      save.mockRestore();
+      await campaigns.cancel(storeId, paused.id, actor);
+      await app.get(SendCampaignBatchJob).handle({ storeId });
+    }
+  });
+
   it('repairs an older rollup even when the provider refuses a send', async () => {
     const pending = await finishedWithoutCounts();
     const active = await sendingCampaign(1);
@@ -755,39 +792,41 @@ describe('Campaign sender (Postgres)', () => {
   });
 
   it.each([false, true])(
-    'keeps the original dispatch error when reporting a repair failure (reporter throws: %s)',
-    async (reporterThrows) => {
+    'retries a failed repair before dispatch (provider refuses: %s)',
+    async (providerRefuses) => {
       const pending = await finishedWithoutCounts();
       const active = await sendingCampaign(1);
       const batch = app.get(SendCampaignBatchJob);
-      const save = vi.spyOn(app.get(CampaignCountsRepository), 'save');
-      const report = vi.spyOn(app.get(ErrorReporter), 'reportJob');
-      if (reporterThrows)
-        report.mockImplementationOnce(() => {
-          throw new Error('reporter unavailable');
-        });
-      const log = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
-      save.mockRejectedValueOnce(new Error('repair unavailable'));
-      vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new SmsSendRefused());
+      const save = vi
+        .spyOn(app.get(CampaignCountsRepository), 'save')
+        .mockRejectedValueOnce(new Error('repair unavailable'));
+      if (providerRefuses)
+        vi.mocked(MailpitSmsDriver.prototype.send).mockRejectedValueOnce(new SmsSendRefused());
       try {
-        await expect(
-          runWithJobContext(() => batch.handle({ storeId }), 'repair-test'),
-        ).rejects.toMatchObject({ code: 'SMS_SEND_REFUSED' });
-        expect(report).toHaveBeenCalledWith(
-          expect.objectContaining({ errorClass: 'Error' }),
-          'repair-test',
-        );
-        expect(log).toHaveBeenCalledWith(
-          { storeId },
-          'Campaign results repair failed after dispatch error',
-        );
+        await expect(batch.handle({ storeId })).rejects.toThrow('repair unavailable');
+        expect(calls).toHaveLength(0);
+        expect((await recipients(active.id))[0]).toMatchObject({ status: 'queued' });
         expect((await campaigns.get(storeId, pending)).counts.countedAt).toBeNull();
+
+        if (providerRefuses) {
+          await expect(batch.handle({ storeId })).rejects.toMatchObject({
+            code: 'SMS_SEND_REFUSED',
+          });
+        } else {
+          await batch.handle({ storeId });
+          expect(driver.messages).toHaveLength(1);
+        }
+        expect((await campaigns.get(storeId, pending)).counts).toMatchObject({
+          sent: 1,
+          failed: 1,
+          countedAt: clockNow.toISOString(),
+        });
       } finally {
         save.mockRestore();
-        report.mockRestore();
-        log.mockRestore();
-        await campaigns.cancel(storeId, active.id, actor);
-        await batch.handle({ storeId });
+        if ((await campaignRow(active.id)).status === 'sending') {
+          await campaigns.cancel(storeId, active.id, actor);
+          await batch.handle({ storeId });
+        }
       }
     },
   );
