@@ -12,10 +12,10 @@ import {
   statusWhere,
 } from './campaigns.repository';
 
-// Where an approval job continues: the include segment, and the last contact checked in it.
 // The approval time identifies one approval, so a job left from an earlier one finds nothing.
 export type ApprovalKey = { id: string; approvedAt: Date };
 
+// Where an approval job continues: the include segment, and the last contact checked in it.
 export type ApprovalCursor = { segmentIndex: number; contactId: string | null };
 
 export type ApprovalProgress = ApprovalCursor & { checkedCount: number };
