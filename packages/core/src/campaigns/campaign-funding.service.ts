@@ -7,6 +7,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { WalletService } from '../wallets/wallet.service';
+import { campaignError } from './campaigns.errors';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
 import { approvalKey, marketingSmsText } from './campaigns.service';
 
@@ -46,8 +47,11 @@ export class CampaignFundingService {
 
   private async fund(storeId: string, id: string, source: Source): Promise<boolean> {
     const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
-    if (!campaign || !needsFunding(campaign, source)) return true;
-    if (!campaign.approvedAt) throw new Error('Sending campaign has no approval time');
+    if (!campaign) return true;
+    const reprice = needsFunding(campaign, source);
+    if (!reprice && campaign.status !== 'sending') return true;
+    if (!campaign.approvedAt) throw campaignError('CAMPAIGN_APPROVAL_TIME_MISSING');
+    if (!reprice) return true;
     const base = this.links.shortLinkBase();
     const body = marketingSmsText(campaign.content.text, this.links.sampleOptOutUrl(base));
     const needed = countSmsParts(body) * campaign.recipientsCount;

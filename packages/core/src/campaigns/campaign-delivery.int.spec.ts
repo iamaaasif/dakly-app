@@ -38,7 +38,7 @@ class TestModule {}
 Module({
   imports: [
     DatabaseModule,
-    CampaignsModule,
+    CampaignsModule.forWorker(),
     BullModule.registerQueue({ name: QUEUES.campaign }),
     BullModule.forRoot({
       connection: toRedisConnection(loadEnv().REDIS_URL),
@@ -225,7 +225,91 @@ describe('Campaign sender (Postgres)', () => {
     return campaign;
   }
 
-  it('queues expired cancellation recovery independently of the active campaign', async () => {
+  it('releases a sending campaign reservation when its first claim expires before authorization', async () => {
+    const { id } = await sendingCampaign(1);
+    const repository = app.get(CampaignSendingRepository);
+    const authorize = repository.authorizeSubmission.bind(repository);
+    const gate = vi
+      .spyOn(repository, 'authorizeSubmission')
+      .mockImplementationOnce(async (...args) => {
+        clockNow = new Date(noon.getTime() + 6 * MINUTE);
+        await admin.pool.query(
+          `update contacts set phone = null where id in
+         (select contact_id from campaign_recipients where campaign_id=$1)`,
+          [id],
+        );
+        expect(await sender.sendBatch(storeId, id)).toBeNull();
+        return authorize(...args);
+      });
+    try {
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(await sendAttempts(id)).toEqual([0]);
+      expect(await campaignRow(id)).toMatchObject({ status: 'sent' });
+      expect((await recipients(id)).map(({ status }) => status)).toEqual(['skipped']);
+      expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
+      expect(calls).toHaveLength(0);
+    } finally {
+      gate.mockRestore();
+    }
+  });
+
+  it('releases the reservation when authorization waits past the claim expiry', async () => {
+    const { id } = await sendingCampaign(1);
+    const repository = app.get(CampaignSendingRepository);
+    const authorize = repository.authorizeSubmission.bind(repository);
+    const gate = vi
+      .spyOn(repository, 'authorizeSubmission')
+      .mockImplementationOnce(async (store, recipientId, claimedAt) => {
+        const client = await admin.pool.connect();
+        let waiting: Promise<boolean> | undefined;
+        try {
+          await client.query('begin');
+          await client.query('select id from campaign_recipients where id=$1 for update', [
+            recipientId,
+          ]);
+          const {
+            rows: [lock],
+          } = await client.query(
+            "select pg_backend_pid() as pid, clock_timestamp() + interval '1 second' as expires_at",
+          );
+          waiting = authorize(store, recipientId, claimedAt, lock.expires_at);
+          void waiting.catch(() => undefined);
+          await vi.waitFor(async () => {
+            const {
+              rows: [result],
+            } = await admin.pool.query(
+              'select exists (select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))) as blocked',
+              [lock.pid],
+            );
+            expect(result.blocked).toBe(true);
+          });
+          await client.query("select pg_sleep_until($1::timestamptz + interval '1 millisecond')", [
+            lock.expires_at,
+          ]);
+          await client.query('commit');
+          const authorized = await waiting;
+          await campaigns.cancel(storeId, id, actor);
+          clockNow = new Date(noon.getTime() + 6 * MINUTE);
+          expect(await sender.sendBatch(storeId, id)).toBeNull();
+          expect(authorized).toBe(false);
+          return authorized;
+        } finally {
+          await client.query('rollback');
+          client.release();
+          await waiting?.catch(() => undefined);
+        }
+      });
+    try {
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(calls).toHaveLength(0);
+      expect(await sendAttempts(id)).toEqual([0]);
+      expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
+    } finally {
+      gate.mockRestore();
+    }
+  });
+
+  it('queues one batch per store and recovers expired cancellations before sending', async () => {
     const cancelled = await unknownFirstSend();
     await campaigns.cancel(storeId, cancelled.id, actor);
     const active = await sendingCampaign(1);
@@ -235,22 +319,27 @@ describe('Campaign sender (Postgres)', () => {
     try {
       await sweep.handle({});
       let waiting = await queue.getWaiting();
-      expect(waiting.map(({ data }) => data)).toEqual([{ storeId, lane: 'sending' }]);
+      expect(waiting.map(({ data }) => data)).toEqual([{ storeId }]);
+      const first = waiting[0]!.id;
 
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
       await sweep.handle({});
       waiting = await queue.getWaiting();
-      expect(waiting).toHaveLength(2);
-      expect(waiting.every(({ name }) => name === SEND_CAMPAIGN_BATCH)).toBe(true);
-      expect(waiting.map(({ data }) => data)).toEqual(
-        expect.arrayContaining([
-          { storeId, lane: 'sending' },
-          { storeId, lane: 'cancelled' },
-        ]),
-      );
+      expect(waiting).toHaveLength(1);
+      expect(waiting[0]).toMatchObject({ id: first, name: SEND_CAMPAIGN_BATCH, data: { storeId } });
+      const batch = app.get(SendCampaignBatchJob);
+      expect(await batch.handle({ storeId })).toEqual({ delayUntil: clockNow.getTime() });
+      expect(await settlementRows(cancelled.id)).toEqual([
+        { kind: 'release', quantity_delta: 1 },
+        { kind: 'charge', quantity_delta: -1 },
+      ]);
+      expect((await recipients(active.id)).map(({ status }) => status)).toEqual(['queued']);
+      expect(await batch.handle({ storeId })).toBeUndefined();
+      expect((await recipients(active.id)).map(({ status }) => status)).toEqual(['sent']);
     } finally {
       for (const pending of await queue.getWaiting()) await pending.remove();
-      await campaigns.cancel(storeId, active.id, actor);
+      if ((await campaignRow(active.id)).status === 'sending')
+        await campaigns.cancel(storeId, active.id, actor);
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
       await sender.sendBatch(storeId, cancelled.id);
     }
@@ -264,9 +353,7 @@ describe('Campaign sender (Postgres)', () => {
       new Date(noon.getTime() + MINUTE),
     ]);
     try {
-      await expect(
-        app.get(SendCampaignBatchJob).handle({ storeId, lane: 'sending' }),
-      ).resolves.toBeUndefined();
+      await expect(app.get(SendCampaignBatchJob).handle({ storeId })).resolves.toBeUndefined();
       expect((await recipients(earlier.id)).map(({ status }) => status)).toEqual(['sending']);
       expect((await recipients(later.id)).map(({ status }) => status)).toEqual(['sent']);
       expect(calls.map(({ to }) => to)).toEqual([earlier.phones[0], later.phones[0]]);
@@ -274,6 +361,33 @@ describe('Campaign sender (Postgres)', () => {
       await campaigns.cancel(storeId, earlier.id, actor);
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
       await sender.sendBatch(storeId, earlier.id);
+    }
+  });
+
+  it('sends an approved campaign even when an earlier campaign has no approval time', async () => {
+    const incomplete = await sendingCampaign(1);
+    const ready = await sendingCampaign(1);
+    await admin.pool.query('update campaigns set approved_at=null, started_at=$2 where id=$1', [
+      incomplete.id,
+      new Date(noon.getTime() - MINUTE),
+    ]);
+    try {
+      const job = app.get(SendCampaignBatchJob);
+      expect(await job.handle({ storeId })).toEqual({ delayUntil: clockNow.getTime() });
+      expect(calls.map(({ to }) => to)).toEqual(ready.phones);
+      expect(await campaignRow(ready.id)).toMatchObject({ status: 'sent' });
+      await expect(job.handle({ storeId })).rejects.toMatchObject({
+        code: 'CAMPAIGN_APPROVAL_TIME_MISSING',
+      });
+      expect(await settlementRows(incomplete.id)).toEqual([]);
+    } finally {
+      await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [
+        incomplete.id,
+        noon,
+      ]);
+      await campaigns.cancel(storeId, incomplete.id, actor);
+      if ((await campaignRow(ready.id)).status === 'sending')
+        await campaigns.cancel(storeId, ready.id, actor);
     }
   });
 
@@ -290,9 +404,9 @@ describe('Campaign sender (Postgres)', () => {
         new Date(noon.getTime() + MINUTE),
       ]);
 
-      expect(await app.get(CampaignSendingRepository).firstWork(storeId, noon)).toEqual([
-        { campaignId: legacy.id, status: 'sending' },
-      ]);
+      expect(await app.get(CampaignSendingRepository).nextCampaignId(storeId, noon)).toBe(
+        legacy.id,
+      );
     } finally {
       await campaigns.cancel(storeId, legacy.id, actor);
       await campaigns.cancel(storeId, newer.id, actor);
@@ -300,22 +414,21 @@ describe('Campaign sender (Postgres)', () => {
   });
 
   it.each([false, true])(
-    'releases an unsubmitted claim after fencing or authorization failure (failed: %s)',
+    'releases an unsubmitted claim after expiry or authorization failure (failed: %s)',
     async (failed) => {
       const { id } = await sendingCampaign(1);
       const repository = app.get(CampaignSendingRepository);
       const check = repository.authorizeSubmission.bind(repository);
-      let hasLease = true;
       const current = vi
         .spyOn(repository, 'authorizeSubmission')
         .mockImplementationOnce(async (...args) => {
           if (failed) throw new Error('authorization write unavailable');
           const result = await check(...args);
-          hasLease = false;
+          clockNow = new Date(noon.getTime() + 6 * MINUTE);
           return result;
         });
       try {
-        const batch = sender.sendBatch(storeId, id, () => hasLease);
+        const batch = sender.sendBatch(storeId, id);
         if (failed) await expect(batch).rejects.toThrow('authorization write unavailable');
         else await expect(batch).resolves.toBeNull();
         expect(current).toHaveBeenCalledTimes(1);
@@ -344,16 +457,15 @@ describe('Campaign sender (Postgres)', () => {
     clockNow = new Date(noon.getTime() + 6 * MINUTE);
     const repository = app.get(CampaignSendingRepository);
     const check = repository.authorizeSubmission.bind(repository);
-    let hasLease = true;
     const current = vi
       .spyOn(repository, 'authorizeSubmission')
       .mockImplementationOnce(async (...args) => {
         const result = await check(...args);
-        hasLease = false;
+        clockNow = new Date(clockNow.getTime() + 6 * MINUTE);
         return result;
       });
     try {
-      expect(await sender.sendBatch(storeId, id, () => hasLease)).toBeNull();
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
       expect(calls).toHaveLength(1);
       expect(await readClaim()).toEqual(prior);
       await campaigns.cancel(storeId, id, actor);
@@ -426,7 +538,7 @@ describe('Campaign sender (Postgres)', () => {
       const queue = app.get<Queue>(getQueueToken(QUEUES.campaign));
       await app.get(StartDueCampaignsJob).handle({});
       const waiting = await queue.getWaiting();
-      expect(waiting.map(({ data }) => data)).toContainEqual({ storeId, lane: 'sending' });
+      expect(waiting.map(({ data }) => data)).toContainEqual({ storeId });
       for (const pending of waiting) await pending.remove();
       await expect(sender.sendBatch(storeId, id)).resolves.toBeNull();
       const readPause = async () =>
@@ -445,10 +557,8 @@ describe('Campaign sender (Postgres)', () => {
       expect(await settlementRows(id)).toEqual([]);
       await app.get(StartDueCampaignsJob).handle({});
       const [continuation] = await queue.getWaiting();
-      expect(continuation?.data).toEqual({ storeId, lane: 'sending' });
-      expect(await app.get(CampaignSendingRepository).firstWork(storeId, noon)).toEqual([
-        { campaignId: newerId, status: 'sending' },
-      ]);
+      expect(continuation?.data).toEqual({ storeId });
+      expect(await app.get(CampaignSendingRepository).nextCampaignId(storeId, noon)).toBe(newerId);
       await deliverCredit(previous.entryId);
       expect(await readPause()).toMatchObject({ status: 'paused', pause_reason: 'balance' });
 
@@ -468,7 +578,9 @@ describe('Campaign sender (Postgres)', () => {
       expect(calls).toHaveLength(0);
       expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 2 }]);
 
-      expect(await app.get(SendCampaignBatchJob).handle(continuation!.data)).toBeUndefined();
+      expect(await app.get(SendCampaignBatchJob).handle(continuation!.data)).toEqual({
+        delayUntil: clockNow.getTime(),
+      });
       await continuation!.remove();
       expect(calls.map(({ to }) => to).sort()).toEqual(phones);
       expect((await recipients(newerId)).map(({ status }) => status)).toEqual(['queued']);
@@ -833,7 +945,7 @@ describe('Campaign sender (Postgres)', () => {
       await contacted.promise;
       await campaigns.cancel(storeId, id, actor);
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
-      await app.get(SendCampaignBatchJob).handle({ storeId, lane: 'cancelled' });
+      await app.get(SendCampaignBatchJob).handle({ storeId });
       expect((await recipients(id)).map((row) => row.status)).toEqual(['failed']);
       expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 0, failed: 1 });
 
@@ -928,7 +1040,7 @@ describe('Campaign sender (Postgres)', () => {
       await campaigns.cancel(storeId, id, actor);
       reply.reject(new SmsSendRefused());
       await batch;
-      await app.get(SendCampaignBatchJob).handle({ storeId, lane: 'cancelled' });
+      await app.get(SendCampaignBatchJob).handle({ storeId });
 
       expect(calls).toHaveLength(1);
       expect((await recipients(id)).map((row) => row.status)).toEqual(['failed']);
@@ -1303,12 +1415,12 @@ describe('Campaign sender (Postgres)', () => {
       await campaigns.cancel(storeId, id, actor);
       const settle = app.get(SendCampaignBatchJob);
 
-      await settle.handle({ storeId, lane: 'cancelled' });
+      await sender.sendBatch(storeId, id);
 
       expect(await settlementRows(id)).toEqual([]);
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
-      await settle.handle({ storeId, lane: 'cancelled' });
-      await settle.handle({ storeId, lane: 'cancelled' });
+      await settle.handle({ storeId });
+      await sender.sendBatch(storeId, id);
 
       expect(calls).toHaveLength(1);
       expect(await outcome(id)).toEqual([
@@ -1410,8 +1522,7 @@ describe('Campaign sender (Postgres)', () => {
           });
 
         try {
-          if (state === 'cancelled')
-            await app.get(SendCampaignBatchJob).handle({ storeId, lane: 'cancelled' });
+          if (state === 'cancelled') await app.get(SendCampaignBatchJob).handle({ storeId });
           else expect(await sender.sendBatch(storeId, id)).toBeNull();
 
           expect(lookup).toHaveBeenCalledExactlyOnceWith({

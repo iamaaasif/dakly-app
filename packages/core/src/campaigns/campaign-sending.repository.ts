@@ -79,8 +79,8 @@ export class CampaignSendingRepository {
     });
   }
 
-  // Keep the active lane and the cancellation lane independent of one another.
-  async firstWork(storeId: string, expiredBefore: Date) {
+  // Prefer approved work, then settle ready cancellations before sending.
+  async nextCampaignId(storeId: string, expiredBefore: Date): Promise<string | undefined> {
     const active = sql`${campaigns.status} = 'sending'`;
     const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null`;
     const recipients = sql`select 1 from campaign_recipients r
@@ -90,20 +90,20 @@ export class CampaignSendingRepository {
         (r.status = 'sending' and r.claimed_at < ${expiredBefore.toISOString()}::timestamptz)))
       or not exists (${recipients} and r.status in ('queued', 'sending'))
     )`;
-    return this.database.forStore(storeId, (tx) =>
+    const [next] = await this.database.forStore(storeId, (tx) =>
       tx
-        .selectDistinctOn([campaigns.status], {
-          campaignId: campaigns.id,
-          status: sql<'sending' | 'cancelled'>`${campaigns.status}`,
-        })
+        .select({ id: campaigns.id })
         .from(campaigns)
         .where(and(eq(campaigns.storeId, storeId), or(active, cancelled), ready))
         .orderBy(
-          asc(campaigns.status),
+          asc(sql`${campaigns.approvedAt} is null`),
+          asc(sql`${campaigns.status} <> 'cancelled'`),
           asc(sql`coalesce(${campaigns.startedAt}, ${campaigns.approvedAt})`),
           asc(campaigns.id),
-        ),
+        )
+        .limit(1),
     );
+    return next?.id;
   }
 
   async lockNextRecipient(
@@ -142,26 +142,32 @@ export class CampaignSendingRepository {
     return row as ClaimableRecipient | undefined;
   }
 
-  async authorizeSubmission(storeId: string, id: string, claimedAt: Date) {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
+  async authorizeSubmission(storeId: string, id: string, claimedAt: Date, expiresAt: Date) {
+    const claim = and(
+      eq(campaignRecipients.storeId, storeId),
+      eq(campaignRecipients.id, id),
+      eq(campaignRecipients.status, 'sending'),
+      eq(campaignRecipients.claimedAt, claimedAt),
+      isNull(campaignRecipients.providerMessageId),
+    );
+    return this.database.forStore(storeId, async (tx) => {
+      const [locked] = await tx
+        .select({ id: campaignRecipients.id })
+        .from(campaignRecipients)
+        .where(claim)
+        .for('update');
+      if (!locked) return false;
+      // Sample the database clock after the lock wait, before authorizing the submission.
+      const [row] = await tx
         .update(campaignRecipients)
         .set({
           dispatchStartedAt: claimedAt,
           sendAttempts: sql`${campaignRecipients.sendAttempts} + 1`,
         })
-        .where(
-          and(
-            eq(campaignRecipients.storeId, storeId),
-            eq(campaignRecipients.id, id),
-            eq(campaignRecipients.status, 'sending'),
-            eq(campaignRecipients.claimedAt, claimedAt),
-            isNull(campaignRecipients.providerMessageId),
-          ),
-        )
-        .returning({ id: campaignRecipients.id }),
-    );
-    return row !== undefined;
+        .where(and(claim, sql`clock_timestamp() < ${expiresAt.toISOString()}::timestamptz`))
+        .returning({ id: campaignRecipients.id });
+      return row !== undefined;
+    });
   }
 
   restoreUnsubmitted(

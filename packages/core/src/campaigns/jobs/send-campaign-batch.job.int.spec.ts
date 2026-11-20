@@ -12,14 +12,12 @@ import { ErrorReporter } from '../../platform/logging/error-reporter';
 import { CampaignJobDispatcher } from '../../platform/queue/job-dispatcher';
 import { QUEUES } from '../../platform/queue/queues';
 import { toRedisConnection } from '../../platform/queue/redis-connection';
-import { JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../../platform/time';
-import { CampaignSenderService } from '../campaign-sender.service';
-import { CampaignSweepService } from '../campaign-sweep.service';
+import { CampaignBatchService } from '../campaign-batch.service';
 import { SEND_CAMPAIGN_BATCH, SendCampaignBatchJob } from './send-campaign-batch.job';
 
 async function openQueue(
-  sendBatch: CampaignSenderService['sendBatch'],
-  nextForLane: CampaignSweepService['nextForLane'],
+  sendStoreBatch: CampaignBatchService['sendStoreBatch'],
+  namespace = randomUUID(),
 ) {
   const env = loadEnv();
   class TestModule {}
@@ -28,62 +26,48 @@ async function openQueue(
       DiscoveryModule,
       BullModule.forRoot({
         connection: toRedisConnection(env.REDIS_URL),
-        prefix: `${env.QUEUE_PREFIX}-${randomUUID()}`,
+        prefix: `${env.QUEUE_PREFIX}-${namespace}`,
       }),
       BullModule.registerQueue({ name: QUEUES.campaign }),
     ],
     providers: [
       CampaignJobDispatcher,
       SendCampaignBatchJob,
-      { provide: CampaignSenderService, useValue: { sendBatch } },
-      { provide: CampaignSweepService, useValue: { nextForLane } },
+      { provide: CampaignBatchService, useValue: { sendStoreBatch } },
       { provide: ErrorReporter, useValue: new ErrorReporter(undefined) },
     ],
   })(TestModule);
   const app = await NestFactory.createApplicationContext(TestModule, { logger: false });
   const queue = app.get<Queue>(getQueueToken(QUEUES.campaign));
-  return { app, queue, handler: app.get(SendCampaignBatchJob) };
+  return { app, queue };
 }
 
 describe('Campaign batch dispatch (Valkey)', () => {
   it('keeps the same delayed job and lets another store finish its batches', async () => {
-    const deferred = { storeId: randomUUID(), campaignId: randomUUID() };
-    const chained = { storeId: randomUUID(), campaignId: randomUUID() };
+    const deferred = randomUUID();
+    const chained = randomUUID();
     let chainCalls = 0;
-    const sendBatch = vi.fn(async (storeId: string) => {
-      if (storeId === deferred.storeId) return new Date(Date.now() + 60_000);
-      return ++chainCalls < 3 ? new Date() : null;
+    const sendStoreBatch = vi.fn(async (storeId: string) => {
+      if (storeId === deferred) return { delayUntil: Date.now() + 60_000 };
+      if (++chainCalls < 3) return { delayUntil: Date.now() };
     });
-    const { app, queue } = await openQueue(sendBatch, async (storeId) =>
-      storeId === deferred.storeId ? deferred.campaignId : chained.campaignId,
-    );
+    const { app, queue } = await openQueue(sendStoreBatch);
     try {
-      const opts = { deduplication: { id: deferred.storeId } };
-      const first = await queue.add(
-        SEND_CAMPAIGN_BATCH,
-        { storeId: deferred.storeId, lane: 'sending' },
-        opts,
-      );
+      const opts = { deduplication: { id: deferred } };
+      const first = await queue.add(SEND_CAMPAIGN_BATCH, { storeId: deferred }, opts);
       await vi.waitFor(async () => expect(await first.getState()).toBe('delayed'));
 
-      await queue.add(SEND_CAMPAIGN_BATCH, { storeId: deferred.storeId, lane: 'sending' }, opts);
-      expect(await queue.getDeduplicationJobId(deferred.storeId)).toBe(first.id);
+      await queue.add(SEND_CAMPAIGN_BATCH, { storeId: deferred }, opts);
+      expect(await queue.getDeduplicationJobId(deferred)).toBe(first.id);
       expect((await queue.getJobs(['delayed'])).map(({ id }) => id)).toEqual([first.id]);
 
       const other = await queue.add(
         SEND_CAMPAIGN_BATCH,
-        { storeId: chained.storeId, lane: 'sending' },
-        {
-          deduplication: { id: chained.storeId },
-        },
+        { storeId: chained },
+        { deduplication: { id: chained } },
       );
       await vi.waitFor(async () => expect(await other.getState()).toBe('completed'));
-      expect(sendBatch.mock.calls).toEqual([
-        [deferred.storeId, deferred.campaignId, expect.any(Function)],
-        [chained.storeId, chained.campaignId, expect.any(Function)],
-        [chained.storeId, chained.campaignId, expect.any(Function)],
-        [chained.storeId, chained.campaignId, expect.any(Function)],
-      ]);
+      expect(sendStoreBatch.mock.calls).toEqual([[deferred], [chained], [chained], [chained]]);
       expect(await first.getState()).toBe('delayed');
     } finally {
       try {
@@ -94,108 +78,71 @@ describe('Campaign batch dispatch (Valkey)', () => {
     }
   });
 
-  it('runs one batch per store while other stores continue', async () => {
-    const active = { storeId: randomUUID(), campaignId: randomUUID() };
-    const recovery = { storeId: active.storeId, campaignId: randomUUID() };
-    const other = { storeId: randomUUID(), campaignId: randomUUID() };
+  it('deduplicates a running store across workers while another store can finish', async () => {
+    const active = randomUUID();
+    const other = randomUUID();
     const entered = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<Date>();
-    const sendBatch = vi.fn(async (_storeId: string, campaignId: string) => {
-      if (campaignId !== active.campaignId) return null;
+    const release = Promise.withResolvers<void>();
+    const sendStoreBatch = vi.fn(async (storeId: string) => {
+      if (storeId !== active) return;
       entered.resolve();
-      return release.promise;
+      await release.promise;
     });
-    const { app, handler } = await openQueue(sendBatch, async (storeId, lane) => {
-      if (storeId === other.storeId) return other.campaignId;
-      return lane === 'sending' ? active.campaignId : recovery.campaignId;
-    });
-    const first = handler.handle({ storeId: active.storeId, lane: 'sending' });
+    const namespace = randomUUID();
+    const firstWorker = await openQueue(sendStoreBatch, namespace);
+    const secondWorker = await openQueue(sendStoreBatch, namespace);
+    const { queue } = firstWorker;
     try {
-      await Promise.race([
-        entered.promise,
-        first.then(() => {
-          throw new Error('The active campaign ended before entering its batch');
-        }),
-      ]);
-      const sameStore = await handler.handle({ storeId: recovery.storeId, lane: 'cancelled' });
-      expect(sameStore?.delayUntil).toBeGreaterThan(Date.now());
-      expect(await handler.handle({ storeId: other.storeId, lane: 'sending' })).toBeUndefined();
-      expect(sendBatch.mock.calls).toEqual([
-        [active.storeId, active.campaignId, expect.any(Function)],
-        [other.storeId, other.campaignId, expect.any(Function)],
-      ]);
-
-      const quietHoursEnd = new Date(Date.now() + 60_000);
-      release.resolve(quietHoursEnd);
-      expect(await first).toEqual({ delayUntil: quietHoursEnd.getTime() });
-      expect(
-        await handler.handle({ storeId: recovery.storeId, lane: 'cancelled' }),
-      ).toBeUndefined();
-      expect(sendBatch).toHaveBeenLastCalledWith(
-        recovery.storeId,
-        recovery.campaignId,
-        expect.any(Function),
+      const opts = { deduplication: { id: active } };
+      const first = await queue.add(SEND_CAMPAIGN_BATCH, { storeId: active }, opts);
+      await entered.promise;
+      await secondWorker.queue.add(SEND_CAMPAIGN_BATCH, { storeId: active }, opts);
+      expect(await queue.getDeduplicationJobId(active)).toBe(first.id);
+      const second = await queue.add(
+        SEND_CAMPAIGN_BATCH,
+        { storeId: other },
+        { deduplication: { id: other } },
       );
+      await vi.waitFor(async () => expect(await second.getState()).toBe('completed'));
+      expect(await first.getState()).toBe('active');
+      expect(sendStoreBatch.mock.calls).toEqual([[active], [other]]);
+      release.resolve();
+      await vi.waitFor(async () => expect(await first.getState()).toBe('completed'));
+      expect(await queue.getDeduplicationJobId(active)).toBeNull();
     } finally {
-      release.resolve(new Date());
-      await first.catch(() => undefined);
-      await app.close();
+      release.resolve();
+      try {
+        await queue.obliterate({ force: true });
+      } finally {
+        await Promise.all([firstWorker.app.close(), secondWorker.app.close()]);
+      }
     }
   });
 
-  it('renews the lease while working and fences a batch that loses it', async () => {
-    const payload = { storeId: randomUUID(), lane: 'sending' };
-    const entered = Promise.withResolvers<() => boolean>();
-    const finish = Promise.withResolvers<null>();
-    const { app, queue, handler } = await openQueue(
-      async (_storeId, _campaignId, hasLease) => {
-        entered.resolve(hasLease!);
-        return finish.promise;
-      },
-      async () => randomUUID(),
-    );
-    const client = await queue.client;
-    const key = queue.toKey(`batch-lease:${payload.storeId}`);
-    client.defineCommand('campaignBatchLeaseTtl', {
-      numberOfKeys: 1,
-      lua: "return redis.call('PTTL', KEYS[1])",
-    });
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    const batch = handler.handle(payload);
+  it('retains the same deduplication key through a failed retry and releases it on completion', async () => {
+    const storeId = randomUUID();
+    const sendStoreBatch = vi
+      .fn<CampaignBatchService['sendStoreBatch']>()
+      .mockRejectedValueOnce(new Error('Transient failure'))
+      .mockResolvedValue(undefined);
+    const { app, queue } = await openQueue(sendStoreBatch);
     try {
-      const hasLease = await Promise.race([
-        entered.promise,
-        batch.then(() => {
-          throw new Error('The batch ended before taking its lease');
-        }),
-      ]);
-      const token = await client.get(key);
-      expect(token).toBeTruthy();
-      expect(hasLease()).toBe(true);
-      await client.set(key, token!, { PX: MINUTE_MS });
-      await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
-      await vi.waitFor(async () => {
-        expect(await client.runCommand('campaignBatchLeaseTtl', [key])).toBeGreaterThan(MINUTE_MS);
+      const opts = { deduplication: { id: storeId }, attempts: 2, backoff: 750 };
+      const first = await queue.add(SEND_CAMPAIGN_BATCH, { storeId }, opts);
+      await vi.waitFor(async () => expect(await first.getState()).toBe('delayed'));
+      expect(await queue.getDeduplicationJobId(storeId)).toBe(first.id);
+      await queue.add(SEND_CAMPAIGN_BATCH, { storeId }, opts);
+      await vi.waitFor(async () => expect(await first.getState()).toBe('completed'), {
+        timeout: 2_000,
       });
-      const nearExpiry = performance.now() + 4 * MINUTE_MS + 1000;
-      const time = vi.spyOn(performance, 'now').mockReturnValue(nearExpiry);
-      try {
-        expect(hasLease()).toBe(false);
-      } finally {
-        time.mockRestore();
-      }
-
-      await client.set(key, 'other-worker', { PX: MINUTE_MS });
-      await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
-      await vi.waitFor(() => expect(hasLease()).toBe(false));
-      finish.resolve(null);
-      await batch;
-      expect(await client.get(key)).toBe('other-worker');
+      expect(sendStoreBatch.mock.calls).toEqual([[storeId], [storeId]]);
+      expect(await queue.getDeduplicationJobId(storeId)).toBeNull();
     } finally {
-      finish.resolve(null);
-      await batch.catch(() => undefined);
-      vi.useRealTimers();
-      await app.close();
+      try {
+        await queue.obliterate({ force: true });
+      } finally {
+        await app.close();
+      }
     }
   });
 });
