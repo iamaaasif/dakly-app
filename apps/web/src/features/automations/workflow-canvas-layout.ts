@@ -6,11 +6,11 @@ import {
 
 import { conditionLabel } from './workflow-canvas-labels';
 
-const TRIGGER_WIDTH = 400;
-const STEP_WIDTH = 280;
-const COLUMN_GAP = 48;
+const TRIGGER_WIDTH = 328;
+const STEP_WIDTH = 260;
+const COLUMN_GAP = 40;
 const ROW_GAP = 56;
-const PADDING = 32;
+const PADDING = 16;
 // Cards show one truncated line per row, so heights are fixed and edges can be computed.
 const heights = {
   trigger: 208,

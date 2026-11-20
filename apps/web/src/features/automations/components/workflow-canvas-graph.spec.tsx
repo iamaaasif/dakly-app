@@ -51,7 +51,7 @@ const graph: AutomationGraph = {
 
 describe('WorkflowCanvasGraph', () => {
   it('shows the trigger, every kind of step and a number on each step', () => {
-    render(<WorkflowCanvasGraph graph={graph} layout={layoutWorkflow(graph)} scale={1} />);
+    render(<WorkflowCanvasGraph graph={graph} layout={layoutWorkflow(graph)} />);
     const steps = within(screen.getByRole('list', { name: 'Workflow steps' }));
 
     expect(steps.getByText('Trigger')).toBeTruthy();
@@ -70,11 +70,5 @@ describe('WorkflowCanvasGraph', () => {
     expect(steps.getAllByText('Step')).toHaveLength(5);
     expect(steps.getByText('Tapped the link in step 2: step 4')).toBeTruthy();
     expect(steps.getByText('Else: step 5')).toBeTruthy();
-  });
-
-  it('scales the drawing without changing its content', () => {
-    const layout = layoutWorkflow(graph);
-    const { container } = render(<WorkflowCanvasGraph graph={graph} layout={layout} scale={0.5} />);
-    expect((container.firstChild as HTMLElement).style.width).toBe(`${layout.width / 2}px`);
   });
 });
