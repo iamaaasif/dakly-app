@@ -1,6 +1,6 @@
-import { Check, ImagePlus } from 'lucide-react';
+import { Check, ImagePlus, Upload } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 import type { CreatePostInput } from '@dakly/contracts/social';
@@ -8,61 +8,149 @@ import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 
 import { useProductPhotos } from '../../api/get-product-photos';
+import { useUploadPostPhoto } from '../../api/upload-post-photo';
+import type { usePostPreview } from './use-post-preview';
+import type { UploadedPhotos } from './use-uploaded-photos';
 
 const MAX_PHOTOS = 10;
 
-// Photos come from Products; uploading a new photo for a post waits for a post media upload API.
-export function PostPhotos() {
-  const { watch, setValue } = useFormContext<CreatePostInput>();
-  const chosen = watch('mediaFileIds');
-  const limit = watch('kind') === 'story' ? 1 : MAX_PHOTOS;
+type PostPhotosProps = { preview: Pick<ReturnType<typeof usePostPreview>, 'uploads' | 'networks'> };
+
+// Photos come from Products or from the device; both end up as file ids on the post.
+export function PostPhotos({ preview }: PostPhotosProps) {
+  const { uploads, networks } = preview;
   const [open, setOpen] = useState(false);
-  const products = useProductPhotos(open || chosen.length > 0);
-  const photos = (products.data ?? []).flatMap(({ name, photos: list }) =>
-    list.map((photo) => ({ ...photo, name })),
-  );
-  const toggle = (id: string) =>
-    setValue(
-      'mediaFileIds',
-      chosen.includes(id) ? chosen.filter((item) => item !== id) : [...chosen, id].slice(-limit),
-      { shouldDirty: true },
-    );
-  const shown = photos.filter(({ id }) => open || chosen.includes(id));
+  const choice = usePhotoChoice(uploads, open);
+  const { chosen, limit, photos, upload, products } = choice;
   return (
     <section
       aria-labelledby="photos-heading"
       className="space-y-3 rounded-lg border border-border bg-surface p-4"
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="photos-heading" className="text-sm font-semibold">
             Photos
           </h2>
           <p className="text-xs text-text-muted">
-            {chosen.length} of {limit} chosen from your products
+            {chosen.length} of {limit} chosen
           </p>
         </div>
-        <Button
-          variant="secondary"
-          className="min-h-9 px-3 text-sm"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-        >
-          <ImagePlus aria-hidden="true" size={16} strokeWidth={1.75} /> From products
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            className="min-h-9 px-3 text-sm"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+          >
+            <ImagePlus aria-hidden="true" size={16} strokeWidth={1.75} /> From products
+          </Button>
+          <UploadButton pending={upload.isPending} onFile={choice.handleFile} />
+        </div>
       </div>
-      {products.isError && (
-        <p role="alert" className="text-sm text-danger">
-          {products.error.message}
-        </p>
-      )}
+      <PhotoMessages
+        pending={upload.isPending}
+        error={upload.error?.message ?? products.error?.message}
+        instagramRejects={networks.includes('instagram') && choice.hasNonJpeg}
+      />
       {open && products.data && photos.length === 0 && (
         <p className="text-sm text-text-muted">
           Add photos to a product first, then choose them here.
         </p>
       )}
-      <PhotoGrid photos={shown} chosen={chosen} onToggle={toggle} />
+      <PhotoGrid
+        photos={photos.filter(({ id }) => open || chosen.includes(id))}
+        chosen={chosen}
+        onToggle={choice.toggle}
+      />
     </section>
+  );
+}
+
+function usePhotoChoice(uploads: UploadedPhotos, open: boolean) {
+  const { watch, setValue } = useFormContext<CreatePostInput>();
+  const chosen = watch('mediaFileIds');
+  const limit = watch('kind') === 'story' ? 1 : MAX_PHOTOS;
+  const products = useProductPhotos(open || chosen.length > 0);
+  const upload = useUploadPostPhoto();
+  const choose = (next: string[]) =>
+    setValue('mediaFileIds', next.slice(-limit), { shouldDirty: true });
+  return {
+    chosen,
+    limit,
+    products,
+    upload,
+    photos: [
+      ...(products.data ?? []).flatMap(({ name, photos: list }) =>
+        list.map((photo) => ({ ...photo, name })),
+      ),
+      ...uploads.photos.map(({ id, url }) => ({ id, url, name: 'Uploaded' })),
+    ],
+    hasNonJpeg: uploads.photos.some(
+      ({ id, contentType }) => chosen.includes(id) && contentType !== 'image/jpeg',
+    ),
+    toggle: (id: string) =>
+      choose(chosen.includes(id) ? chosen.filter((item) => item !== id) : [...chosen, id]),
+    handleFile: (file: File) =>
+      upload.mutate(file, {
+        onSuccess: (photo) => {
+          uploads.add(photo);
+          choose([...chosen, photo.id]);
+        },
+      }),
+  };
+}
+
+function UploadButton({ pending, onFile }: { pending: boolean; onFile: (file: File) => void }) {
+  const chooser = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <Button
+        variant="secondary"
+        className="min-h-9 px-3 text-sm"
+        disabled={pending}
+        onClick={() => chooser.current?.click()}
+      >
+        <Upload aria-hidden="true" size={16} strokeWidth={1.75} /> Upload from device
+      </Button>
+      <input
+        ref={chooser}
+        type="file"
+        aria-label="Photo file"
+        className="sr-only"
+        tabIndex={-1}
+        accept="image/jpeg,image/png,image/webp"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) onFile(file);
+          event.target.value = '';
+        }}
+      />
+    </>
+  );
+}
+
+type PhotoMessagesProps = { pending: boolean; error?: string; instagramRejects: boolean };
+
+function PhotoMessages({ pending, error, instagramRejects }: PhotoMessagesProps) {
+  return (
+    <>
+      {pending && (
+        <p role="status" className="text-sm text-text-muted">
+          Uploading photo…
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
+      {instagramRejects && (
+        <p role="status" className="text-sm text-danger">
+          Instagram needs JPEG photos. Upload a JPEG or turn Instagram off for this post.
+        </p>
+      )}
+    </>
   );
 }
 

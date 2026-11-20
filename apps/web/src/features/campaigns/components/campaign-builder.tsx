@@ -9,7 +9,7 @@ import type { z } from 'zod';
 
 import {
   campaignGoals,
-  createCampaignSchema,
+  campaignDetailsSchema,
   type CampaignResponse,
 } from '@dakly/contracts/campaigns';
 import { Badge } from '@dakly/ui/badge';
@@ -29,7 +29,7 @@ import { CampaignPageHeader } from './campaign-page-header';
 import { formatDateTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
-const detailsSchema = createCampaignSchema.pick({ name: true, goal: true });
+const detailsSchema = campaignDetailsSchema;
 type DetailsInput = z.input<typeof detailsSchema>;
 type Details = z.output<typeof detailsSchema>;
 

@@ -1,21 +1,28 @@
-import { Controller, Get, Inject, Query } from '@nestjs/common';
+import { Controller, Get, Inject, Query, Res } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 
 import {
+  analyticsExportQuerySchema,
   analyticsQuerySchema,
   type AnalyticsAutomationsResponse,
   type AnalyticsCampaignsResponse,
   type AnalyticsChannelsResponse,
+  type AnalyticsExportQuery,
   type AnalyticsOverviewResponse,
   type AnalyticsQuery,
   type AnalyticsSocialPostsResponse,
+  type AnalyticsTipResponse,
 } from '@dakly/contracts/analytics';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
+import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { AnalyticsChannelsService } from './analytics-channels.service';
+import { AnalyticsExportService } from './analytics-export.service';
 import { AnalyticsOverviewService } from './analytics-overview.service';
 import { AnalyticsTabsService } from './analytics-tabs.service';
+import { AnalyticsTipService } from './analytics-tip.service';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -23,6 +30,8 @@ export class AnalyticsController {
     @Inject(AnalyticsOverviewService) private readonly overview: AnalyticsOverviewService,
     @Inject(AnalyticsTabsService) private readonly tabs: AnalyticsTabsService,
     @Inject(AnalyticsChannelsService) private readonly channelTabs: AnalyticsChannelsService,
+    @Inject(AnalyticsTipService) private readonly tips: AnalyticsTipService,
+    @Inject(AnalyticsExportService) private readonly exports: AnalyticsExportService,
   ) {}
 
   @Get('overview')
@@ -68,5 +77,30 @@ export class AnalyticsController {
     @Query(new ZodValidationPipe(analyticsQuerySchema)) query: AnalyticsQuery,
   ): Promise<AnalyticsSocialPostsResponse> {
     return this.channelTabs.socialPosts(storeId, query);
+  }
+
+  @Get('tip')
+  @RequirePermission('analytics.view')
+  tip(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(analyticsQuerySchema)) query: AnalyticsQuery,
+  ): Promise<AnalyticsTipResponse> {
+    return this.tips.tip(storeId, query);
+  }
+
+  @Get('export')
+  @RequirePermission('analytics.view')
+  async export(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Query(new ZodValidationPipe(analyticsExportQuerySchema)) query: AnalyticsExportQuery,
+    @Res() reply: FastifyReply,
+  ) {
+    const { filename, body } = await this.exports.export(storeId, userId, query);
+    return reply
+      .header('Cache-Control', 'no-store')
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .type('text/csv; charset=utf-8')
+      .send(body);
   }
 }

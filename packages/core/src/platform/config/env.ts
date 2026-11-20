@@ -29,6 +29,7 @@ const envSchema = z.object({
   AI_WRITER_MODEL: z.string().min(1).default('gpt-6.1-terra'),
   AI_EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-small'),
   AI_MODEL_PRICES: z.string().default('{}'),
+  AI_EVAL_STORE_ID: z.uuid().optional(),
   SMS_DRIVER: z.literal('mailpit').optional(),
   MAILPIT_SMTP_HOST: z.string().min(1).default('127.0.0.1'),
   MAILPIT_SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),

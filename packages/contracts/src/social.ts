@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { productPhotoUploadSchema } from './products';
+
 export const postKinds = ['post', 'story'] as const;
 export const postTargetStatuses = [
   'draft',
@@ -98,6 +100,14 @@ export const postListQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   drafts: z.enum(['mine', 'team']).optional(),
 });
+
+// A photo uploaded for a post has the same type and size limits as a product photo.
+export const postPhotoUploadSchema = productPhotoUploadSchema;
+export const confirmPostPhotoSchema = postPhotoUploadSchema.extend({ fileId: postIdSchema });
+export type PostPhotoUploadInput = z.infer<typeof postPhotoUploadSchema>;
+export type ConfirmPostPhotoInput = z.infer<typeof confirmPostPhotoSchema>;
+export type PostPhotoUploadResponse = { fileId: string; uploadUrl: string };
+export type PostPhotoResponse = { id: string; url: string };
 
 export type CreatePostInput = z.infer<typeof createPostSchema>;
 export type EditPostInput = z.infer<typeof editPostSchema>;
