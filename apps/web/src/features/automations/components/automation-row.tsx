@@ -64,7 +64,16 @@ export function AutomationRow({
           </dd>
         </div>
       </dl>
-      {canEdit && <WorkflowActions workflow={workflow} />}
+      {canEdit ? (
+        <WorkflowActions workflow={workflow} />
+      ) : (
+        <Link
+          href={`/automations/${workflow.id}/canvas`}
+          className={buttonVariants({ variant: 'secondary' })}
+        >
+          View canvas
+        </Link>
+      )}
     </li>
   );
 }
