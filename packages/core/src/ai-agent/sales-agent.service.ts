@@ -1,0 +1,140 @@
+import { Inject, Injectable } from '@nestjs/common';
+
+import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
+import type { handoverReasons } from '@dakly/contracts/chats';
+
+import { AiService } from '../ai/ai.service';
+import { InboxService } from '../messaging/inbox.service';
+import { StoresService } from '../stores/stores.service';
+import { chatReply } from './prompts/chat-reply.v1';
+import {
+  type ToolScope,
+  SalesAgentToolsService,
+  salesAgentLlmTools,
+} from './sales-agent-tools.service';
+
+const MAX_ROUNDS = 4;
+const REPLY_BUDGET_MS = 20_000;
+const HISTORY_LENGTH = 20;
+const CARD_TOOL = 'send_product_card';
+const HAND_OVER_TOOL = 'hand_over';
+const SOURCE_KEYS = ['productId', 'itemId', 'orderNumber'];
+
+type Reason = (typeof handoverReasons)[number];
+type ToolResult = { tool: string; result: object };
+
+export type ComposedReply =
+  | {
+      kind: 'reply';
+      text: string;
+      aiRunId: string;
+      cardTexts: string[];
+      toolResults: object[];
+      sources: { tool: string; refs: string[] }[];
+    }
+  | { kind: 'handover'; reason: Reason }
+  | { kind: 'busy' };
+
+export type ComposeInput = ToolScope & { conversationId: string; customerTexts: string[] };
+
+// Runs the model and the read-only tools. It sends nothing and holds no transaction.
+@Injectable()
+export class SalesAgentService {
+  constructor(
+    @Inject(AiService) private readonly ai: AiService,
+    @Inject(SalesAgentToolsService) private readonly tools: SalesAgentToolsService,
+    @Inject(InboxService) private readonly inbox: InboxService,
+    @Inject(StoresService) private readonly stores: StoresService,
+  ) {}
+
+  async compose(input: ComposeInput): Promise<ComposedReply> {
+    const { storeId } = input;
+    const signal = AbortSignal.timeout(REPLY_BUDGET_MS);
+    const results: ToolResult[] = [];
+    const candidates = await this.productCandidates(input);
+    if (candidates) results.push(candidates);
+    const context = await this.context(input, candidates);
+    let transcript = '';
+    for (let round = 1; round <= MAX_ROUNDS; round += 1) {
+      const attempt = await this.ai.run(storeId, {
+        tier: 'reply',
+        purpose: 'chat_reply',
+        prompt: chatReply,
+        input: context + transcript,
+        output: chatReplyOutputSchema,
+        tools: salesAgentLlmTools,
+        signal,
+      });
+      if (attempt.kind === 'failure')
+        return attempt.code === 'AI_STORE_BUSY'
+          ? { kind: 'busy' }
+          : { kind: 'handover', reason: 'ai_unavailable' };
+      if (attempt.kind === 'output')
+        return {
+          kind: 'reply',
+          text: attempt.output.reply,
+          aiRunId: attempt.aiRunId,
+          cardTexts: cardTexts(results),
+          toolResults: results.map(({ result }) => result),
+          sources: sourcesOf(results),
+        };
+      const answered: { name: string; result: object }[] = [];
+      for (const call of attempt.toolCalls) {
+        const result = await this.tools.run(input, call.name, call.argumentsJson);
+        if (call.name === HAND_OVER_TOOL && 'reason' in result)
+          return { kind: 'handover', reason: result.reason as Reason };
+        results.push({ tool: call.name, result });
+        answered.push({ name: call.name, result });
+      }
+      transcript += `\n<tool_results round="${round}">${JSON.stringify(answered)}</tool_results>`;
+    }
+    return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  // Search the customer's own words first, so the model starts with likely products.
+  private async productCandidates(input: ComposeInput): Promise<ToolResult | undefined> {
+    const query = input.customerTexts.join(' ').slice(0, 100).trim();
+    if (query.length < 3) return undefined;
+    const result = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
+    return { tool: 'search_products', result };
+  }
+
+  // Stable parts first so the provider's prompt cache can reuse them.
+  private async context(input: ComposeInput, candidates: ToolResult | undefined) {
+    const shop = await this.stores.settings(input.storeId);
+    const history = await this.inbox.messages(input.storeId, input.conversationId, {
+      limit: HISTORY_LENGTH,
+    });
+    const conversation = history.items
+      .filter((message) => message.kind !== 'note' && message.body)
+      .reverse()
+      .map((message) => ({
+        from: message.direction === 'in' ? 'customer' : 'shop',
+        text: message.body?.slice(0, 2000),
+      }));
+    return [
+      `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
+      `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
+      `<product_candidates>${JSON.stringify(candidates?.result ?? { products: [] })}</product_candidates>`,
+    ].join('\n');
+  }
+}
+
+const cardTexts = (results: ToolResult[]) =>
+  results.flatMap(({ tool, result }) =>
+    tool === CARD_TOOL && 'cardText' in result ? [String(result.cardText)] : [],
+  );
+
+function sourcesOf(results: ToolResult[]) {
+  return results
+    .map(({ tool, result }) => ({ tool, refs: refsIn(result) }))
+    .filter((s) => s.refs.length);
+}
+
+function refsIn(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(refsIn);
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, item]) =>
+    SOURCE_KEYS.includes(key) ? [String(item)] : refsIn(item),
+  );
+}
