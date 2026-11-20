@@ -18,10 +18,10 @@ import { TeamPagination } from './team-pagination';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
 
-type BuiltInRole = RoleListResponse['builtInRoles'][number];
-type CustomRole = RoleListResponse['items'][number];
+type BuiltInRoleItem = RoleListResponse['builtInRoles'][number];
+type CustomRoleItem = RoleListResponse['items'][number];
 
-function BuiltInRoleCard({ role }: { role: BuiltInRole }) {
+function BuiltInRoleCard({ role }: { role: BuiltInRoleItem }) {
   return (
     <Card className="flex flex-col justify-between space-y-4">
       <div className="space-y-2">
@@ -36,7 +36,7 @@ function BuiltInRoleCard({ role }: { role: BuiltInRole }) {
   );
 }
 
-function CustomRolesList({ roles, canEdit }: { roles: CustomRole[]; canEdit: boolean }) {
+function CustomRolesList({ roles, canEdit }: { roles: CustomRoleItem[]; canEdit: boolean }) {
   if (!roles.length) {
     return <p className="text-sm text-text-muted">No custom roles on this page.</p>;
   }

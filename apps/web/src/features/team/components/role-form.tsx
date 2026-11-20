@@ -16,55 +16,47 @@ import { TeamError } from './team-error';
 import { TeamField } from './team-field';
 import { formError } from '@/lib/form-error';
 
-function initialAreas(customAreas?: CreateRoleInput['permissions']['areas']) {
-  const base: CreateRoleInput['permissions']['areas'] = {};
-  for (const area of permissionAreas) {
-    base[area] = customAreas?.[area] ?? 'none';
-  }
-  return base;
-}
-
-function initialRoleValues(role?: RoleResponse): CreateRoleInput {
-  const perms = role?.permissions;
-  return {
-    name: role ? role.name : '',
-    permissions: {
-      areas: initialAreas(perms?.areas),
-      seeFullPhone: Boolean(perms?.seeFullPhone),
-      exportLists: Boolean(perms?.exportLists),
-      refund: Boolean(perms?.refund),
-    },
-  };
-}
-
 export function RoleForm({ role, onDone }: { role?: RoleResponse; onDone: () => void }) {
+  const perms = role ? role.permissions : undefined;
   const form = useForm<CreateRoleInput>({
     resolver: zodResolver(createRoleSchema),
-    defaultValues: initialRoleValues(role),
+    defaultValues: {
+      name: role ? role.name : '',
+      permissions: {
+        areas: Object.fromEntries(
+          permissionAreas.map((area) => [area, perms ? perms.areas[area] : 'none']),
+        ),
+        seeFullPhone: perms ? perms.seeFullPhone : false,
+        exportLists: perms ? perms.exportLists : false,
+        refund: perms ? perms.refund : false,
+      },
+    },
   });
   const create = useCreateRole();
-  const change = useChangeRole(role?.id ?? '');
-
-  const onSubmit = async (input: CreateRoleInput) => {
-    try {
-      if (role) await change.mutateAsync(input);
-      else await create.mutateAsync(input);
-      onDone();
-    } catch (error) {
-      formError(error, form.setError);
-    }
-  };
+  const change = useChangeRole(role ? role.id : '');
+  const rootError = form.formState.errors.root;
 
   return (
     <FormProvider {...form}>
-      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+      <form
+        className="space-y-4"
+        onSubmit={form.handleSubmit(async (input) => {
+          try {
+            if (role) await change.mutateAsync(input);
+            else await create.mutateAsync(input);
+            onDone();
+          } catch (error) {
+            formError(error, form.setError);
+          }
+        })}
+      >
         <TeamField
           label="Role name"
           field={form.register('name')}
           error={form.formState.errors.name}
         />
         <PermissionFields />
-        <TeamError message={form.formState.errors.root?.message} />
+        <TeamError message={rootError ? rootError.message : undefined} />
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" onClick={onDone}>
             Cancel

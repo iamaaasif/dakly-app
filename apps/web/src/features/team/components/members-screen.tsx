@@ -23,13 +23,19 @@ function MemberSeatsCard({ seats }: { seats: { used: number; limit: number } }) 
           {seats.used} of {seats.limit} seats used
         </span>
       </div>
-      <meter
-        className="h-2 w-full appearance-none rounded-full bg-surface-muted accent-primary [&::-webkit-meter-bar]:rounded-full [&::-webkit-meter-bar]:bg-surface-muted [&::-webkit-meter-optimum-value]:rounded-full [&::-webkit-meter-optimum-value]:bg-action"
-        min={0}
-        max={seats.limit}
-        value={seats.used}
+      <div
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={seats.limit}
+        aria-valuenow={seats.used}
         aria-label="Team seats"
-      />
+        className="h-2 w-full overflow-hidden rounded-full bg-surface-muted"
+      >
+        <div
+          className="h-full rounded-full bg-action"
+          style={{ width: `${Math.min(100, Math.max(0, (seats.used / seats.limit) * 100))}%` }}
+        />
+      </div>
       {seats.used >= seats.limit ? (
         <p role="status" className="text-xs text-warning">
           Your plan’s {seats.limit} team seats are in use. Remove a member or cancel an invitation

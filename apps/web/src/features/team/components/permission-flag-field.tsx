@@ -30,7 +30,7 @@ export function PermissionFlagField({ flag }: { flag: PermissionFlag }) {
           render={({ field }) => (
             <Switch
               id={id}
-              checked={Boolean(field.value)}
+              checked={field.value}
               onCheckedChange={field.onChange}
               aria-invalid={Boolean(error)}
               aria-describedby={error ? `${id}-error` : undefined}
