@@ -3,7 +3,6 @@ import { and, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 
 import type {
-  ContactImportField,
   ContactImportMapping,
   ImportConsentEvidence,
   ImportDuplicateMode,
@@ -27,7 +26,7 @@ export type ImportCounts = {
 
 export type ImportReportLine = {
   rowNumber?: number;
-  field?: ContactImportField | 'sms' | 'whatsapp';
+  field?: string;
   message: string;
 };
 

@@ -1,24 +1,19 @@
 import type { ImportReportLine as ReportLine } from './imports.repository';
 
-export const FIELD_LABELS = {
-  phone: 'Phone',
-  name: 'Name',
-  whatsappPhone: 'WhatsApp number',
-  email: 'Email',
-  address: 'Address',
-  district: 'District',
-  tags: 'Tags',
-  notes: 'Notes',
-  sms: 'SMS',
-  whatsapp: 'WhatsApp',
-} as const satisfies Record<NonNullable<ReportLine['field']>, string>;
-
 // Every cell is quoted, so a message with a comma stays in one column.
-export function reportCsv(lines: ReportLine[], omittedRows: number): string {
+export function reportCsv(
+  lines: ReportLine[],
+  omittedRows: number,
+  labels: Record<string, string>,
+): string {
   const cell = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const sorted = [...lines].sort((a, b) => (a.rowNumber ?? 0) - (b.rowNumber ?? 0));
   const records = sorted.map((line) =>
-    [String(line.rowNumber ?? ''), line.field ? FIELD_LABELS[line.field] : '', line.message]
+    [
+      String(line.rowNumber ?? ''),
+      line.field ? (labels[line.field] ?? line.field) : '',
+      line.message,
+    ]
       .map(cell)
       .join(','),
   );

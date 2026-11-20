@@ -242,6 +242,20 @@ describe('MetaGraphChannelDriver', () => {
     expect(request!.headers.get('authorization')).toBe('Bearer test-page-credential');
   });
 
+  it('unsubscribes the app from a Page with the Page token', async () => {
+    const requests: Request[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      requests.push(new Request(url, init));
+      return Response.json({ success: true });
+    });
+
+    await driver.unsubscribePage('123', 'test-page-credential');
+    const [request] = requests;
+    expect(new URL(request!.url).pathname).toMatch(/\/123\/subscribed_apps$/);
+    expect(request!.method).toBe('DELETE');
+    expect(request!.headers.get('authorization')).toBe('Bearer test-page-credential');
+  });
+
   it('distinguishes an invalid Page token from an app authentication failure', async () => {
     const responses = [
       Response.json({ data: { is_valid: false } }),

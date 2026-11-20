@@ -32,6 +32,10 @@ export class OrderReportingService {
     };
   }
 
+  progress(storeId: string, orderId: string) {
+    return this.orders.progress(storeId, orderId);
+  }
+
   reportingAnchor(storeId: string, orderId: string, timeZone: string) {
     return this.orders.reportingAnchor(storeId, orderId, timeZone);
   }

@@ -161,5 +161,41 @@ export const automationTemplates = {
       },
     },
   },
+  // Runs on every new COD order, and leaves as soon as the order is confirmed or cancelled, so an
+  // order saved as confirmed gets no message. Messenger buttons come with their own task.
+  cod_order_confirmation: {
+    name: 'COD order confirmation',
+    description: 'Ask the customer to confirm or cancel a cash on delivery order with a link.',
+    libraryGoal: 'build_trust',
+    category: 'transactional',
+    needs: ['orders'],
+    graph: {
+      trigger: {
+        key: 'order_placed',
+        filters: [{ field: 'payment_status', statuses: ['cod_pending'] }],
+      },
+      reEntry: { rule: 'every_time' },
+      workflowFilters: [],
+      goal: null,
+      exitConditions: [{ kind: 'order_confirmed' }, { kind: 'order_cancelled' }],
+      firstStepKey: 'ask',
+      steps: {
+        ask: send(
+          'transactional',
+          ['sms'],
+          '{first_name}, আপনার অর্ডার #{order_number} ({order_total}) পেয়েছি। নিশ্চিত বা বাতিল করুন: {confirm_link}',
+          'wait',
+        ),
+        wait: wait(6 * HOUR, 'remind'),
+        remind: send(
+          'transactional',
+          ['sms'],
+          '{first_name}, অর্ডার #{order_number} এখনো নিশ্চিত হয়নি। নিশ্চিত বা বাতিল করুন: {confirm_link}',
+          'end',
+        ),
+        end,
+      },
+    },
+  },
 } satisfies Record<string, AutomationTemplate>;
 export type TemplateKey = keyof typeof automationTemplates;

@@ -3,10 +3,12 @@ import {
   House,
   Layers,
   LogOut,
+  MessageSquare,
   Megaphone,
   Package,
   Plug,
   Puzzle,
+  Send,
   Settings,
   Store,
   Truck,
@@ -107,13 +109,16 @@ function NavigationItem({
   );
 }
 
-// Groups follow the design order. Social auto post joins when their screens exist.
+// Groups follow the design order.
 export function navigationGroups(session: SessionContext): NavigationGroup[] {
   const store = session.currentStore;
   return [
     {
       heading: 'Workspace',
-      links: [{ href: '/dashboard', label: 'Dashboard', icon: House, visible: Boolean(store) }],
+      links: [
+        { href: '/dashboard', label: 'Dashboard', icon: House, visible: Boolean(store) },
+        { href: '/chats', label: 'Chats', icon: MessageSquare, visible: store?.canViewChats },
+      ],
     },
     {
       heading: 'Customers',
@@ -144,6 +149,10 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
           visible: store?.canViewCampaigns,
         },
       ],
+    },
+    {
+      heading: 'Social auto post',
+      links: [{ href: '/social', label: 'Social hub', icon: Send, visible: store?.canViewSocial }],
     },
     ...settingsGroups(store),
   ];
