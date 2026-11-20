@@ -1,4 +1,5 @@
 type SmsUrl = { start: number; end: number; target: string };
+type JsonParameterSpan = { start: number; end: number };
 
 const absoluteHttpUrl = /(?:^|(?<=\s))([[({<"'“‘]*)https?:\/\/\S+/giu;
 const nonEmptyAuthority = /^https?:\/\/[^/?#]/iu;
@@ -90,7 +91,7 @@ function bareUrl(raw: string, prefix: string): string | undefined {
     followingBracket.test(following) && bracketsClosed(raw.slice(0, end), closingRun);
   if (hasAdjacentProse(raw, closingRun, bracketedProse)) return undefined;
   const candidate = trimMessagePunctuation(raw);
-  if (candidate === raw.replace(sentencePunctuation, '') && candidate.at(-1) === closingRun[0]) {
+  if (candidate.at(-1) === closingRun[0] && !raw.slice(candidate.length).startsWith(closingRun)) {
     const encoded = jsonSpans(candidate).some(
       ({ start, end }) => end === candidate.length && candidate[start] === '%',
     );
@@ -140,8 +141,8 @@ function bracketsClosed(text: string, closingRun: string): boolean {
   return true;
 }
 
-function jsonSpans(text: string): { start: number; end: number }[] {
-  const spans: { start: number; end: number }[] = [];
+function jsonSpans(text: string): JsonParameterSpan[] {
+  const spans: JsonParameterSpan[] = [];
   for (const match of text.matchAll(urlParameters)) {
     const raw = match[1] ?? '';
     const decoded = new URLSearchParams(`value=${raw}`).get('value');
@@ -175,10 +176,30 @@ function trimAfterJson(raw: string): string | undefined {
   if (!/[?&#]/u.test(raw)) return undefined;
   let candidate = raw;
   while (candidate) {
-    if (jsonSpans(candidate).some(({ end }) => end === candidate.length)) return candidate;
+    const spans = jsonSpans(candidate);
+    if (spans.some(({ end }) => end === candidate.length)) {
+      return keepUrlClosers(candidate, raw.slice(candidate.length), spans);
+    }
     const last = candidate.at(-1) ?? '';
     if (!openingBracket[last]) break;
     candidate = candidate.slice(0, -1).replace(sentencePunctuation, '');
   }
   return undefined;
+}
+
+function keepUrlClosers(candidate: string, suffix: string, json: JsonParameterSpan[]): string {
+  let outsideJson = '';
+  let start = 0;
+  for (const span of json) {
+    outsideJson += candidate.slice(start, span.start);
+    start = span.end;
+  }
+  outsideJson += candidate.slice(start);
+  let kept = '';
+  for (const close of suffix) {
+    if (bracketsClosed(outsideJson, close)) break;
+    outsideJson += close;
+    kept += close;
+  }
+  return candidate + kept;
 }
