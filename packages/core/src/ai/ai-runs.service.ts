@@ -51,6 +51,11 @@ export class AiRunsService {
     return run?.purpose === 'content' && run.outcome === 'completed';
   }
 
+  // A run is saved as completed when the model answers; later checks can change what came of it.
+  setOutcome(storeId: string, id: string, outcome: AiRun['outcome'], errorCode?: string) {
+    return this.repository.setOutcome(storeId, id, outcome, errorCode);
+  }
+
   async attempt<T>(
     storeId: string,
     request: Attempt<T>,
