@@ -68,6 +68,8 @@ function show(child: ReactNode, canEdit = true) {
       canEditOrders: false,
       canViewCampaigns: false,
       canEditCampaigns: false,
+      canViewSocial: false,
+      canEditSocial: false,
       canViewAutomations: false,
       canEditAutomations: false,
       canViewCustomers: true,
