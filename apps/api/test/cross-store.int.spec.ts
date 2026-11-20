@@ -492,6 +492,25 @@ fixture('GET /products', async () => {
         .items.map((row: { id: string }) => row.id),
     ).toEqual([id]);
 });
+fixture('GET /products/categories', async () => {
+  const { a, b } = await pair();
+  await success(a, 'POST', '/products', 201, {
+    name: 'পাঞ্জাবি',
+    pricePoisha: 125000,
+    category: 'Clothing',
+  });
+  await success(b, 'POST', '/products', 201, {
+    name: 'ঘড়ি',
+    pricePoisha: 50000,
+    category: 'Accessories',
+  });
+  expect((await success(a, 'GET', '/products/categories', 200)).json()).toEqual({
+    items: ['Clothing'],
+  });
+  expect((await success(b, 'GET', '/products/categories', 200)).json()).toEqual({
+    items: ['Accessories'],
+  });
+});
 fixture('GET /products/:productId', async () => {
   const { a, b } = await pair(),
     id = await product(a);
@@ -1485,6 +1504,49 @@ fixture('GET /store', async () => {
   const { a, b } = await pair();
   expect((await success(a, 'GET', '/store', 200)).json().id).toBe(a.id);
   expect((await success(b, 'GET', '/store', 200)).json().id).toBe(b.id);
+});
+fixture('GET /store/attribution', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PATCH', '/store/attribution', 200, { windowDays: 3 });
+  expect((await success(a, 'GET', '/store/attribution', 200)).json()).toMatchObject({
+    windowDays: 3,
+    rebuilding: true,
+  });
+  expect((await success(b, 'GET', '/store/attribution', 200)).json()).toMatchObject({
+    windowDays: 7,
+    rebuilding: false,
+  });
+});
+fixture('PATCH /store/attribution', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PATCH', '/store/attribution', 200, { windowDays: 1 });
+  await success(a, 'PATCH', '/store/attribution', 200, { windowDays: 1 });
+  const audit = await f.admin.pool.query(
+    `select "before", "after" from audit_log
+     where store_id=$1 and action='attribution.window_changed'`,
+    [a.id],
+  );
+  expect(audit.rows).toEqual([{ before: { state: '7' }, after: { state: '1' } }]);
+  const events = await f.admin.pool.query(
+    "select id from outbox_events where store_id=$1 and type='attribution.window_changed'",
+    [a.id],
+  );
+  expect(events.rowCount).toBe(1);
+  const before = await f.row('stores', a.id);
+  await success(b, 'PATCH', '/store/attribution', 200, { windowDays: 3 });
+  expect(await f.row('stores', a.id)).toEqual(before);
+  expect(
+    (await f.request(b.member, 'PATCH', '/store/attribution', { windowDays: 1 })).statusCode,
+  ).toBe(403);
+  await f.admin.pool.query(
+    "update memberships set built_in_role='admin',role_id=null where id=$1",
+    [b.membership],
+  );
+  const denied = await f.request(b.member, 'PATCH', '/store/attribution', { windowDays: 1 });
+  expect(denied.statusCode).toBe(403);
+  expect(denied.json().error.code).toBe('STORE_ATTRIBUTION_SETTING_DENIED');
+  await success(b, 'PATCH', '/store/attribution', 400, { windowDays: 4 });
+  await success(b, 'PATCH', '/store/attribution', 400, { windowDays: 7, storeId: a.id });
 });
 const shopSending = {
   quietHours: { startHour: 22, endHour: 8 },

@@ -50,6 +50,10 @@ import {
   postPublishedEventSchema,
   postScheduledEventSchema,
 } from './social';
+import {
+  attributionRebuildContinuedEventSchema,
+  attributionWindowChangedEventSchema,
+} from './stores';
 import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
@@ -89,6 +93,8 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   orderEditedEventSchema,
   attributionCreatedEventSchema,
   attributionRemovedEventSchema,
+  attributionWindowChangedEventSchema,
+  attributionRebuildContinuedEventSchema,
   postScheduledEventSchema,
   postPublishedEventSchema,
   postFailedEventSchema,

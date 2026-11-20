@@ -37,6 +37,10 @@ export class TeamService {
     return canApproveSends(access);
   }
 
+  canChangeAttributionWindow(access: StoreAccess): boolean {
+    return canDo(access, 'attribution.window.edit');
+  }
+
   canTransferOwnership(access: StoreAccess): boolean {
     return canDo(access, 'ownership.transfer');
   }

@@ -416,4 +416,69 @@ describe('ProductsService with Postgres', () => {
     ]);
     await expect(repository.lockArchiveVariants(f.b, product.id)).resolves.toBeNull();
   });
+
+  it('lists distinct non-empty categories sorted alphabetically, capped at 200, isolated by store', async () => {
+    await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Product A1', category: 'Women' }),
+      actor,
+    );
+    await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Product A2', category: 'Men' }),
+      actor,
+    );
+    await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Product A3', category: 'Accessories' }),
+      actor,
+    );
+    await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Product A4', category: 'Men' }),
+      actor,
+    );
+    await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Product A5', category: null }),
+      actor,
+    );
+    // Archived product whose category should be excluded.
+    await f.connection.pool.query(
+      "insert into products(id, store_id, name, category, status) values(gen_random_uuid(), $1, 'Archived A', 'ArchivedCat', 'archived')",
+      [f.a],
+    );
+
+    // Products in store B.
+    await service.create(
+      f.b,
+      createProductSchema.parse({ name: 'Product B1', category: 'Kids' }),
+      actor,
+    );
+    await service.create(
+      f.b,
+      createProductSchema.parse({ name: 'Product B2', category: 'Footwear' }),
+      actor,
+    );
+
+    const categoriesA = await service.listCategories(f.a);
+    expect(categoriesA).toEqual({ items: ['Accessories', 'Men', 'Women'] });
+
+    const categoriesB = await service.listCategories(f.b);
+    expect(categoriesB).toEqual({ items: ['Footwear', 'Kids'] });
+
+    // Verify capping at 200 items.
+    await f.connection.pool.query(
+      `insert into products(id, store_id, name, category, status)
+       select gen_random_uuid(), $1, 'Bulk ' || i, 'Cat_' || lpad(i::text, 4, '0'), 'active'
+       from generate_series(1, 205) as i`,
+      [f.a],
+    );
+
+    const capped = await service.listCategories(f.a);
+    expect(capped.items).toHaveLength(200);
+    // Ensure alphabetical sorting holds for all returned items.
+    const sorted = [...capped.items].sort((x, y) => x.localeCompare(y));
+    expect(capped.items).toEqual(sorted);
+  });
 });
