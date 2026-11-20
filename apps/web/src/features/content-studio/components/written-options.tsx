@@ -4,6 +4,7 @@ import type { ContentWriteResult } from '@dakly/contracts/content-writing';
 
 import { kindChoices, kindLabel, startIdeas } from '../content-studio-labels';
 import type { GenerateForm, GenerateInput } from './generate-form-types';
+import { ResultCard } from './result-card';
 
 type WrittenOptionsProps = {
   result: ContentWriteResult | undefined;
@@ -19,18 +20,14 @@ export function WrittenOptions({ result, asked, form }: WrittenOptionsProps) {
         <h2 id="options-heading" className="text-lg font-semibold">
           3 options for your {kindLabel(asked.kind)}
         </h2>
-        <p className="text-text-muted">Uses 3 AI credits per set.</p>
+        <p className="text-text-muted">
+          Edit any of them, then use, copy or save it. Uses 3 AI credits per set.
+        </p>
       </div>
       <ul aria-label="Written options" className="space-y-3">
         {result.options.map((option, index) => (
           <li key={`${result.aiRunId}-${index}`}>
-            <article className="space-y-3 rounded-lg border border-border bg-surface p-4 md:p-5">
-              <header className="flex items-center justify-between text-xs text-text-muted">
-                <span className="font-semibold tracking-wide uppercase">Option {index + 1}</span>
-                <span>{option.length} characters</span>
-              </header>
-              <p className="wrap-anywhere whitespace-pre-wrap">{option}</p>
-            </article>
+            <ResultCard number={index + 1} text={option} aiRunId={result.aiRunId} asked={asked} />
           </li>
         ))}
       </ul>

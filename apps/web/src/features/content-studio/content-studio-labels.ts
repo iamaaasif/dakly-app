@@ -112,3 +112,6 @@ export const startIdeas: {
 ];
 
 export const kindLabel = (kind: Kind) => kindChoices.find(({ value }) => value === kind)!.label;
+
+// Only these two can become a social post.
+export const postKinds: Kind[] = ['facebook_post', 'instagram_caption'];
