@@ -18,7 +18,7 @@ async function capture(page: Page, name: string, scrollTo?: Locator) {
     await page.setViewportSize({ width, height });
     await page.mouse.move(width - 1, height - 1);
     if (scrollTo) await scrollTo.scrollIntoViewIfNeeded();
-    else await page.evaluate(() => scrollTo(0, 0));
+    else await page.evaluate(() => window.scrollTo(0, 0));
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth))
       .toBeLessThanOrEqual(0);
