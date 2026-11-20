@@ -197,7 +197,7 @@ async function observe({ storeId }: Shop) {
     [storeId],
   );
   const { rows: runs } = await admin.pool.query(
-    'select tier, purpose, prompt_version from ai_runs where store_id = $1',
+    'select tier, purpose, prompt_version from ai_runs where store_id = $1 order by created_at, id',
     [storeId],
   );
   const { rows: usage } = await admin.pool.query(
