@@ -31,6 +31,8 @@ export type ConfirmationView =
       storeName: string;
       orderNumber: number;
       items: { name: string; quantity: number; totalPoisha: number }[];
+      orderDiscountPoisha: number;
+      deliveryChargePoisha: number;
       totalPoisha: number;
       address: string;
     };
@@ -72,6 +74,8 @@ export class OrderConfirmationService {
         quantity: item.quantity,
         totalPoisha: item.unitPricePoisha * item.quantity - item.lineDiscountPoisha,
       })),
+      orderDiscountPoisha: order.orderDiscountPoisha,
+      deliveryChargePoisha: order.deliveryChargePoisha,
       totalPoisha: order.totalPoisha,
       address: `${order.recipientAddress}, ${order.recipientDistrict}`,
     };

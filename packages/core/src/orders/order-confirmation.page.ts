@@ -2,10 +2,14 @@ import { formatMoney } from '@dakly/contracts/money';
 
 import type { ConfirmationOutcome, ConfirmationView } from './order-confirmation.service';
 
-const STYLE = `body{font-family:system-ui,sans-serif;max-width:28rem;margin:2rem auto;padding:0 1rem;line-height:1.5}
+// This page is served without the web app's stylesheet, so the values below repeat the theme
+// tokens in docs/design/theme.md once: action, on-primary and input-border.
+const STYLE = `:root{--action:#C24F04;--on-primary:#FFFFFF;--input-border:#8F8178}
+body{font-family:system-ui,sans-serif;max-width:28rem;margin:2rem auto;padding:0 1rem;line-height:1.5}
 table{width:100%;border-collapse:collapse}td{padding:.25rem 0;vertical-align:top}td:last-child{text-align:right;white-space:nowrap}
 .total td{border-top:1px solid;font-weight:600}.actions{display:flex;gap:.75rem;margin-top:1.5rem}
-button{flex:1;font-size:1.05rem;padding:.75rem 1rem}`;
+button{flex:1;font-size:1.05rem;padding:.75rem 1rem;border:1px solid var(--input-border);border-radius:.5rem;background:transparent;color:inherit}
+button.primary{background:var(--action);border-color:var(--action);color:var(--on-primary);font-weight:600}`;
 
 const texts = {
   confirmed: ['অর্ডার নিশ্চিত হয়েছে', 'Order confirmed', 'দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।'],
@@ -24,13 +28,20 @@ export function confirmationPage(view: ConfirmationView): string {
   return layout(
     'অর্ডার নিশ্চিত করুন / Confirm your order',
     `<p>${escapeHtml(view.storeName)} · #${view.orderNumber}</p>
-<table>${rows}<tr class="total"><td>মোট / Total</td><td>${formatMoney(view.totalPoisha)}</td></tr></table>
+<table>${rows}${chargeRows(view)}<tr class="total"><td>মোট / Total</td><td>${formatMoney(view.totalPoisha)}</td></tr></table>
 <p>ঠিকানা / Address: ${escapeHtml(view.address)}</p>
 <p>ডেলিভারির সময় টাকা দেবেন। / Pay cash on delivery.</p>
 <form method="post" action="">
-<div class="actions"><button type="submit" formaction="?answer=confirm">নিশ্চিত করুন / Confirm</button>
+<div class="actions"><button class="primary" type="submit" formaction="?answer=confirm">নিশ্চিত করুন / Confirm</button>
 <button type="submit" formaction="?answer=cancel">বাতিল / Cancel</button></div></form>`,
   );
+}
+
+function chargeRows(view: Extract<ConfirmationView, { state: 'open' }>): string {
+  const discount = view.orderDiscountPoisha
+    ? `<tr><td>ছাড় / Discount</td><td>-${formatMoney(view.orderDiscountPoisha)}</td></tr>`
+    : '';
+  return `${discount}<tr><td>ডেলিভারি / Delivery</td><td>${formatMoney(view.deliveryChargePoisha)}</td></tr>`;
 }
 
 export function outcomePage(outcome: ConfirmationOutcome): string {

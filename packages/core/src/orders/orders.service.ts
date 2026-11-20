@@ -32,13 +32,13 @@ import {
   orderStageCounts,
   orderStageHistory,
   productArchiveStages,
+  createdStageWrite,
   recordOrderCreation,
   recordOrderEdit,
   recordOrderStage,
   requireEditableOrder,
   requireStageChange,
   type StageEditor,
-  staffConfirmation,
   stageWrite,
   stagesForOrderTab,
 } from './order-stage';
@@ -130,7 +130,7 @@ export class OrdersService {
         idempotencyKey,
         ...delivery,
         ...totals,
-        ...stageWrite(input.confirm ? staffConfirmation : { to: 'to_confirm' }, now, input.confirm),
+        ...createdStageWrite(input.confirm, now),
         paymentStatus: input.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         possibleDuplicateOfOrderId: duplicate,
         createdAt: now,
@@ -257,7 +257,7 @@ export class OrdersService {
     storeId: string,
     orderId: string,
     change: OrderStageChange,
-    { actor, access, onlyFrom, confirmationMethod }: StageEditor,
+    { actor, access, onlyFrom, confirmationMethod = 'staff' }: StageEditor,
   ): Promise<OrderDetail> {
     return this.transaction.run(storeId, async () => {
       const order = await this.repository.lock(storeId, orderId);
@@ -281,7 +281,7 @@ export class OrdersService {
       );
       await this.repository.updateOrder(storeId, orderId, {
         ...fulfilment,
-        ...stageWrite(change, now, confirmed, confirmationMethod),
+        ...stageWrite(change, now, confirmed && confirmationMethod),
         ...(change.to === 'cancelled' && order.paymentStatus === 'advance_paid'
           ? { paymentStatus: 'refund_due' }
           : {}),

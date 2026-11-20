@@ -106,6 +106,8 @@ describe('order confirmation links (Postgres)', () => {
     expect(view).toMatchObject({
       state: 'open',
       orderNumber: created.number,
+      orderDiscountPoisha: created.orderDiscountPoisha,
+      deliveryChargePoisha: created.deliveryChargePoisha,
       totalPoisha: created.totalPoisha,
       items: [{ name: 'Panjabi - M', quantity: 2, totalPoisha: 250000 }],
     });

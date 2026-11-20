@@ -57,21 +57,25 @@ export function orderStageCounts(rows: { stage: OrderStage; count: number }[]) {
   };
 }
 
+// confirmedBy is the method when this change confirms the order, and false when it does not.
 export function stageWrite(
   change: OrderStageChange,
   now: Date,
-  confirmed: boolean,
-  confirmationMethod: OrderConfirmationMethod = 'staff',
+  confirmedBy: OrderConfirmationMethod | false,
 ): StageWrite {
   return {
     stage: change.to,
     onHoldReason: change.to === 'on_hold' ? change.reason : null,
     followUpOn: change.to === 'on_hold' ? (change.followUpOn ?? null) : null,
     cancelReason: change.to === 'cancelled' ? change.reason : null,
-    ...(confirmed && { confirmedAt: now, confirmationMethod }),
+    ...(confirmedBy && { confirmedAt: now, confirmationMethod: confirmedBy }),
     ...(change.to === 'cancelled' && { cancelledAt: now }),
     updatedAt: now,
   };
+}
+
+export function createdStageWrite(confirm: boolean, now: Date): StageWrite {
+  return stageWrite(confirm ? staffConfirmation : { to: 'to_confirm' }, now, confirm && 'staff');
 }
 
 export function requireStageChange(
