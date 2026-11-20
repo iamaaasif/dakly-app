@@ -21,6 +21,7 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ProductStockService } from '../products/product-stock.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
@@ -59,6 +60,7 @@ export class OrdersService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(ProductStockService) private readonly stock: ProductStockService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ContactsService) private readonly contacts: ContactsService,
@@ -163,7 +165,7 @@ export class OrdersService {
       if (input.items) {
         await moveOrderReservations(
           storeId,
-          this.products,
+          this.stock,
           { orderId, actor },
           { before: previous, after: items },
         );
@@ -268,7 +270,7 @@ export class OrdersService {
       if (change.to === 'cancelled') {
         await moveOrderReservations(
           storeId,
-          this.products,
+          this.stock,
           { orderId, actor, reason: change.reason },
           { before: await this.repository.items(storeId, orderId), after: [] },
         );
@@ -276,7 +278,7 @@ export class OrdersService {
       const fulfilment = await applyOrderFulfilment(
         storeId,
         { order, change, actor, now },
-        { orders: this.repository, products: this.products },
+        { orders: this.repository, stock: this.stock },
       );
       await this.repository.updateOrder(storeId, orderId, {
         ...fulfilment,
@@ -346,7 +348,7 @@ export class OrdersService {
     await this.repository.insert(storeId, order);
     await moveOrderReservations(
       storeId,
-      this.products,
+      this.stock,
       { orderId: id, actor },
       { before: [], after: items },
     );
