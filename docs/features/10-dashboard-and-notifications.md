@@ -265,6 +265,13 @@ How it runs (HOME-4 part 1):
 4. Before the answer is returned, code checks that every figure in it appears in this run's tool results. A failed check, or a figure with no tool call behind it, gives `cannot_answer` and logs a warning with the store id only (no question text in logs); a saved question log waits for HOME-6. One credit is used when the model answers, even when this check then refuses the answer.
 5. Today, yesterday, this month, top products, orders by stage and AI performance wait for reports on `AnalyticsService`.
 
+Web (HOME-4 part 2):
+
+1. The dark Ask Dakly AI button in the top bar (icon only on a phone) opens a panel on the right edge, full width on a phone. The panel is open when the `ask` search parameter is `open`, so a link can open it.
+2. The panel shows the page it is on when it knows the page, three suggestions, the conversation, an input and the line "Dakly AI suggests. You approve before anything is sent." Each answer shows its sources under the text ("From Orders, last 30 days") and the credits left appear under the input after the first answer. The conversation lasts until the shop is switched or the page is reloaded; saved history is HOME-6.
+3. A busy or paused AI shows "Dakly AI is busy. Try again in a minute." and puts the question back in the input. No credits shows that they are used up for the plan period.
+4. Waits on other work: Full view and the Ask Dakly AI page (HOME-6), the Ask box on the Dashboard, suggestions that differ per page, the top-up button (no billing screen yet), feedback buttons, and the action buttons under an answer.
+
 ### Rules
 
 1. A number shown on the dashboard is computed by the same function as on Analytics. Committed source changes reach its summary within five minutes through incremental outbox processing; nightly reconciliation repairs drift. Late returns and corrections restate the original reporting days.
