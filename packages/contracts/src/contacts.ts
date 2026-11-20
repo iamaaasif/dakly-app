@@ -119,6 +119,10 @@ export const contactListQuerySchema = z.strictObject({
   search: z.string().trim().min(1).max(120).optional(),
 });
 
+// The export takes the list's filters and everything they match, so it has no cursor or limit.
+export const contactExportQuerySchema = contactListQuerySchema.omit({ cursor: true, limit: true });
+export const MAX_EXPORT_ROWS = 50_000;
+
 export const matchSuggestionListQuerySchema = z.strictObject({ contactId: z.uuid() });
 
 // A file column the mapping can name; the reader keeps no cells past this.
@@ -196,6 +200,7 @@ export const startImportSchema = z.strictObject({
 
 export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type UpdateContactInput = z.infer<typeof updateContactSchema>;
+export type ContactExportQuery = z.infer<typeof contactExportQuerySchema>;
 export type ContactListQuery = z.infer<typeof contactListQuerySchema>;
 export type ContactImportMapping = z.infer<typeof contactImportMappingSchema>;
 export type ContactImportRow = z.infer<typeof contactImportRowSchema>;

@@ -433,6 +433,34 @@ fixture('GET /contacts', async () => {
     expect(ids).not.toContain(foreign);
   }
 });
+fixture('GET /contacts/export', async () => {
+  const { a, b } = await pair();
+  const phones = { a: phone(), b: phone() };
+  await success(a, 'POST', '/contacts', 201, { name: 'own-a', phone: phones.a });
+  await success(b, 'POST', '/contacts', 201, { name: 'own-b', phone: phones.b });
+  for (const [shop, own, foreign] of [
+    [a, 'own-a', 'own-b'],
+    [b, 'own-b', 'own-a'],
+  ] as const) {
+    const result = await success(shop, 'GET', '/contacts/export', 200);
+    expect(result.headers['content-type']).toContain('spreadsheetml.sheet');
+    expect(result.headers['content-disposition']).toMatch(
+      /^attachment; filename="dakly-customers-\d{4}-\d{2}-\d{2}\.xlsx"$/,
+    );
+    const { readSheet } = await import('read-excel-file/node');
+    const rows = await readSheet(result.rawPayload);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.[0]).toBe(own);
+    expect(JSON.stringify(rows)).not.toContain(foreign);
+    const { rows: audit } = await f.admin.pool.query(
+      "select count(*)::int as count from audit_log where store_id = $1 and action = 'contacts.exported'",
+      [shop.id],
+    );
+    expect(audit[0].count).toBe(1);
+  }
+  expect((await f.request(b.member, 'GET', '/contacts/export')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', '/contacts/export?limit=5')).statusCode).toBe(400);
+});
 async function matchSuggestion(shop: Shop) {
   const [contactId, matchedContactId] = [await contact(shop), await contact(shop)];
   const id = randomUUID();
