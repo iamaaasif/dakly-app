@@ -3,7 +3,7 @@
 |           |                                                                                                          |
 | --------- | -------------------------------------------------------------------------------------------------------- |
 | Release   | 1                                                                                                        |
-| Status    | In progress (CUS-1 contacts, CUS-2 consent, CUS-8 import)                                                |
+| Status    | In progress (CUS-1 contacts, CUS-2 consent)                                                              |
 | Extension | Core                                                                                                     |
 | Code      | `packages/core/src/{contacts,consents,imports,segments}/`, `apps/web/src/features/{customers,segments}/` |
 | Tasks     | CUS-1 to CUS-14                                                                                          |
@@ -110,18 +110,23 @@ The web app has two customer screens.
   returns to the list. The Marketing permission form records an answer for one channel with a
   required note saying how the customer told the shop. Agreed is offered only on WhatsApp and
   SMS; on Messenger and Instagram staff can record only a withdrawal.
-- The import window has five steps, with a progress bar and "Step N of 5" on top. Upload takes
-  a CSV by choosing or dropping it, checks the name, the 10 MB limit, UTF-8 and the 50,000 row
-  limit in the browser, and shows the file name, row count, column count and size. A template
-  download is offered. Continue sends the file straight to storage (`POST /imports`, then the
-  signed PUT). Map fields matches column names to the eight fields by name and lets the owner
-  change each one; Phone is required and one column fills one field at most. Duplicates
-  chooses Update their details (default) or Leave existing customers as they are. Consent
-  takes where customers agreed for WhatsApp and for SMS, each optional, and Start import calls
-  `POST /imports/:importId/start`. Results polls `GET /imports/:importId` every 2 seconds and
-  shows added, updated, skipped and failed counts with a link to the error report CSV. The
-  customer list reloads when the window closes. The prototype's Detect, Validate and Confirm
-  steps are folded into Upload, Duplicates plus Consent, and the Start import button.
+- The import window has six steps, with a progress bar and "Step N of 6" on top. Upload takes
+  a CSV by choosing or dropping it, checks the name, the 10 MB limit, UTF-8 and the 50,000 row limit in
+  the browser, and shows the file name, row count, column count and size. A template download is offered. Continue
+  sends the file straight to storage (`POST /imports`, then the signed PUT). Map fields
+  matches column names to the eight fields by name and lets the owner change each one; Phone
+  is required and one column fills one field at most. Preview shows the first 20 rows as
+  Dakly will read them, read from the file in the browser. Duplicates chooses Update their
+  details (default) or Leave existing customers as they are. Consent takes where customers
+  agreed for WhatsApp and for SMS, each optional, and Start import calls
+  `POST /imports/:importId/start`. Results polls `GET /imports/:importId` every 2 seconds
+  and shows added, updated, skipped and failed counts with a link to the error report CSV.
+  Undo import asks once, then calls `POST /imports/:importId/undo` and shows "Undoing the
+  import" until `undoFinishedAt` is set. The customer list reloads when the window closes.
+  The prototype's Detect, Validate and Confirm steps are folded into Upload, Duplicates plus
+  Consent, and the Start import button. The preview has no Ready, Already in Dakly or Invalid
+  labels, because no route checks rows before the import starts; row problems appear in the
+  report after it.
 - Both screens show the phone as the API sent it: full for members with "See full phone
   numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
 - Not built yet, because no route gives the data: header totals and tab counts, sort, columns
@@ -263,8 +268,7 @@ undo the contacts it added and the consent grants it recorded.
   per store per sweep. Queueing and progress renew `last_progress_at`; concurrent sweeps skip
   claimed work. Recovery has no seven-day cutoff once undo was accepted. Fully undone imports
   are never requeued.
-- Not built yet: the preview of the first 20 rows before start and the Undo import button on
-  the results (the next CUS-8 part), and upload scanning (OPS-4).
+- Not built yet: upload scanning (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII

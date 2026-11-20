@@ -11,7 +11,7 @@ export function isImportFinished(status: ImportStatus) {
   return status === 'done' || status === 'failed' || status === 'undone';
 }
 
-// Poll while the job runs.
+// Poll while the job runs, and while an undo is still removing customers.
 export function useImportProgress(importId: string) {
   const { request, contextTag } = useStoreRequest();
   return useQuery({
@@ -19,8 +19,9 @@ export function useImportProgress(importId: string) {
     queryFn: ({ signal }) => request<ImportResponse>(`/imports/${importId}`, { signal }),
     enabled: Boolean(contextTag),
     refetchInterval: ({ state }) => {
-      const status = state.data?.status;
-      return status && isImportFinished(status) ? false : POLL_MS;
+      const current = state.data;
+      const undoPending = current?.status === 'undone' && current.undoFinishedAt === null;
+      return current && isImportFinished(current.status) && !undoPending ? false : POLL_MS;
     },
   });
 }
