@@ -9,6 +9,7 @@ import { jobLogBindings } from '../platform/logging/job-context';
 import { serializeError } from '../platform/logging/safe-error';
 import { QUEUES } from '../platform/queue/queues';
 import { DAY_MS, JOB_POLL_INTERVAL_MS } from '../platform/time';
+import { CampaignCountsRepository } from './campaign-counts.repository';
 import { CAMPAIGN_CLAIM_MS } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { SEND_CAMPAIGN_BATCH } from './jobs/send-campaign-batch.job';
@@ -27,6 +28,7 @@ export class CampaignSweepService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ValkeyClient) private readonly valkey: ValkeyClient,
     @InjectQueue(QUEUES.campaign) private readonly queue: Queue<{ storeId: string }>,
+    @Inject(CampaignCountsRepository) private readonly counts: CampaignCountsRepository,
   ) {}
 
   async startDue(): Promise<void> {
@@ -42,7 +44,7 @@ export class CampaignSweepService {
     for (const storeId of stores) {
       try {
         await this.repository.startDueInStore(storeId, now);
-        if (await this.repository.nextCampaignId(storeId, before)) batches.push({ storeId });
+        if (await this.hasWork(storeId, before)) batches.push({ storeId });
       } catch (error) {
         this.logger.error({ storeId }, 'Campaign starts failed for store');
         const { jobId } = jobLogBindings();
@@ -66,5 +68,12 @@ export class CampaignSweepService {
     }
     const last = stores.at(-1);
     if (last) await this.valkey.connection.set(STORE_CURSOR, last, 'EX', CURSOR_LIFETIME_SECONDS);
+  }
+
+  private async hasWork(storeId: string, before: Date): Promise<boolean> {
+    return Boolean(
+      (await this.repository.nextCampaignId(storeId, before)) ??
+      (await this.counts.nextPending(storeId)),
+    );
   }
 }

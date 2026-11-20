@@ -677,7 +677,7 @@ describe('Campaign sender (Postgres)', () => {
     },
   );
 
-  it('repairs stored totals in the worker for a campaign finished before rollups existed', async () => {
+  it('repairs an older campaign’s stored totals while a send waits for quiet hours', async () => {
     const { id } = await sendingCampaign(2);
     await admin.pool.query("update campaigns set status='sent', finished_at=$2 where id=$1", [
       id,
@@ -695,14 +695,20 @@ describe('Campaign sender (Postgres)', () => {
     expect(await app.get(CampaignSendingRepository).listDueStores(noon, null, 100)).toContain(
       storeId,
     );
+    const waiting = await sendingCampaign(1);
+    clockNow = new Date(noon.getTime() + 10 * 60 * MINUTE);
     const queue = app.get<Queue>(getQueueToken(QUEUES.campaign));
     await app.get(StartDueCampaignsJob).handle({});
     const jobs = await queue.getWaiting();
     try {
       expect(jobs.map(({ data }) => data)).toContainEqual({ storeId });
-      await app.get(SendCampaignBatchJob).handle({ storeId });
+      expect(await app.get(SendCampaignBatchJob).handle({ storeId })).toEqual({
+        delayUntil: clockNow.getTime() + 30_000,
+      });
+      expect(calls).toHaveLength(0);
     } finally {
       for (const job of jobs) await job.remove();
+      await campaigns.cancel(storeId, waiting.id, actor);
     }
     const counts = { sent: 1, delivered: 1, read: 1, failed: 1, countedAt: expect.any(String) };
     expect((await campaigns.get(storeId, id)).counts).toMatchObject(counts);

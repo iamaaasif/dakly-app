@@ -83,9 +83,6 @@ export class CampaignSendingRepository {
   async nextCampaignId(storeId: string, expiredBefore: Date): Promise<string | undefined> {
     const active = sql`${campaigns.status} = 'sending'`;
     const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null`;
-    const dispatch = or(active, cancelled);
-    const repair = sql`${campaigns.countsAt} is null and ${campaigns.approvedAt} is not null
-      and ${campaigns.status} in ('paused', 'sent', 'cancelled', 'failed')`;
     const recipients = sql`select 1 from campaign_recipients r
       where r.store_id = ${storeId} and r.campaign_id = ${campaigns.id}`;
     const ready = sql`(
@@ -97,10 +94,9 @@ export class CampaignSendingRepository {
       tx
         .select({ id: campaigns.id })
         .from(campaigns)
-        .where(and(eq(campaigns.storeId, storeId), or(and(dispatch, ready), repair)))
+        .where(and(eq(campaigns.storeId, storeId), or(active, cancelled), ready))
         .orderBy(
           asc(sql`${campaigns.approvedAt} is null`),
-          asc(sql`not (${dispatch})`),
           asc(sql`${campaigns.status} <> 'cancelled'`),
           asc(sql`coalesce(${campaigns.startedAt}, ${campaigns.approvedAt})`),
           asc(campaigns.id),

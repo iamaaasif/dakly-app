@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 
 import type { recipientStatuses } from '@dakly/contracts/campaigns';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
@@ -10,6 +10,25 @@ import { recipientsWhere } from './campaigns.repository';
 @Injectable()
 export class CampaignCountsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+
+  async nextPending(storeId: string) {
+    const [next] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.storeId, storeId),
+            sql`${campaigns.countsAt} is null
+          and ${campaigns.approvedAt} is not null
+          and ${campaigns.status} in ('paused', 'sent', 'cancelled', 'failed')`,
+          ),
+        )
+        .orderBy(asc(campaigns.id))
+        .limit(1),
+    );
+    return next?.id;
+  }
 
   async currentTime(storeId: string): Promise<number> {
     const result = await this.database.inTransaction(storeId, (tx) =>

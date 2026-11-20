@@ -129,5 +129,11 @@ describe('campaign sending filters without RLS assistance', () => {
     });
     await f.tenant.forStore(f.a, () => counts.markPending(f.a, campaignA));
     expect(await f.row('campaigns', campaignA)).toMatchObject({ counts_at: null });
+    await f.connection.pool.query('update campaigns set status=$2 where id=$1', [
+      campaignA,
+      'sent',
+    ]);
+    expect(await counts.nextPending(f.b)).toBeUndefined();
+    expect(await counts.nextPending(f.a)).toBe(campaignA);
   });
 });

@@ -31,6 +31,11 @@ export class CampaignCountsService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
   ) {}
 
+  async repairNext(storeId: string): Promise<void> {
+    const id = await this.counts.nextPending(storeId);
+    if (id) await this.refresh(storeId, id, 'batch');
+  }
+
   async refresh(storeId: string, id: string, mode: 'batch' | 'force'): Promise<void> {
     await this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
