@@ -14,11 +14,18 @@ import { SessionDialog as Dialog } from '@/components/session-dialog';
 export function RoleCard({ role, canEdit }: { role: RoleResponse; canEdit: boolean }) {
   const [action, setAction] = useState<'edit' | 'delete' | null>(null);
   const remove = useRemoveRole(role.id);
+  const headingId = `role-heading-${role.id}`;
   return (
-    <Card className="flex flex-col justify-between space-y-4">
+    <Card
+      role="article"
+      aria-labelledby={headingId}
+      className="flex flex-col justify-between space-y-4"
+    >
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="font-semibold break-words text-text">{role.name}</h3>
+          <h3 id={headingId} className="font-semibold break-words text-text">
+            {role.name}
+          </h3>
           <Badge variant="warning">Custom</Badge>
         </div>
         <PermissionSummary permissions={role.permissions} />

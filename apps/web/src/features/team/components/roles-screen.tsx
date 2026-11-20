@@ -22,11 +22,18 @@ type BuiltInRoleItem = RoleListResponse['builtInRoles'][number];
 type CustomRoleItem = RoleListResponse['items'][number];
 
 function BuiltInRoleCard({ role }: { role: BuiltInRoleItem }) {
+  const headingId = `builtin-role-${role.builtInRole}`;
   return (
-    <Card className="flex flex-col justify-between space-y-4">
+    <Card
+      role="article"
+      aria-labelledby={headingId}
+      className="flex flex-col justify-between space-y-4"
+    >
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <h4 className="font-semibold text-text">{roleLabels[role.builtInRole]}</h4>
+          <h4 id={headingId} className="font-semibold text-text">
+            {roleLabels[role.builtInRole]}
+          </h4>
           <Badge variant="neutral">Built-in</Badge>
         </div>
         <p className="text-sm text-text-muted">{builtInRoleDescriptions[role.builtInRole]}</p>
