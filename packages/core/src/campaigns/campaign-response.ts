@@ -11,10 +11,16 @@ export function toCampaignResponse({
   tappedCount,
   failedCount,
   countsAt,
+  approvalCheckedCount,
+  approvalEstimatedTotal,
   ...campaign
 }: Campaign): CampaignResponse {
   return {
     ...campaign,
+    approval:
+      campaign.status === 'approving'
+        ? { checked: approvalCheckedCount, estimatedTotal: approvalEstimatedTotal }
+        : null,
     scheduledFor: campaign.scheduledFor?.toISOString() ?? null,
     startedAt: campaign.startedAt?.toISOString() ?? null,
     finishedAt: campaign.finishedAt?.toISOString() ?? null,

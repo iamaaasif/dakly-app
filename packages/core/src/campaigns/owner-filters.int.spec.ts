@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { CampaignApprovalRepository } from './campaign-approval.repository';
 import { CampaignsRepository } from './campaigns.repository';
 
 const draft = {
@@ -19,6 +20,7 @@ const page = { limit: 100 };
 describe('campaign filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new CampaignsRepository(f.tenant);
+  const approvals = new CampaignApprovalRepository(f.tenant);
   beforeAll(() => f.setup());
   afterAll(() => f.close());
 
@@ -196,5 +198,121 @@ describe('campaign filters without RLS assistance', () => {
       ),
     ).toBeUndefined();
     expect(await f.row('campaigns', a.id)).toEqual(before);
+  });
+
+  it('starts, saves, counts, clears and fails only the selected store’s approvals', async () => {
+    const a = await repository.insert(f.a, { ...draft, createdByUserId: f.userA });
+    const contacts = [randomUUID(), randomUUID(), randomUUID()];
+    for (const id of contacts)
+      await f.connection.pool.query(
+        "insert into contacts(id,store_id,name,source,kind) values($1,$2,'রিনা','manual','customer')",
+        [id, f.a],
+      );
+    const approvedAt = new Date('2026-11-16T05:00:00Z');
+    const later = new Date('2026-11-16T05:01:00Z');
+    const start = {
+      approvedByUserId: f.userA,
+      approvedAt,
+      updatedAt: approvedAt,
+      approvalEstimatedTotal: 3,
+    };
+
+    expect(await approvals.markApproving(f.b, a.id, start)).toBeUndefined();
+    expect(await approvals.markApproving(f.a, a.id, start)).toMatchObject({
+      status: 'approving',
+      approvalEstimatedTotal: 3,
+    });
+    expect(await approvals.markApproving(f.a, a.id, start)).toBeUndefined();
+    await repository.insertRecipients(
+      f.a,
+      a.id,
+      contacts.map((contactId, index) => ({
+        contactId,
+        destinationAddress: `0171000000${index}`,
+        ...(index === 2
+          ? { status: 'skipped', skipReason: 'no_consent' }
+          : { status: 'queued', skipReason: null }),
+      })),
+    );
+
+    const progress = { segmentIndex: 1, contactId: contacts[1]!, checkedCount: 2 };
+    expect(await approvals.findApproval(f.b, { id: a.id, approvedAt: approvedAt })).toBeUndefined();
+    expect(await approvals.findApproval(f.a, { id: a.id, approvedAt: later })).toBeUndefined();
+    expect(await approvals.findApproval(f.a, { id: a.id, approvedAt: approvedAt })).toMatchObject({
+      segmentIndex: 0,
+      contactId: null,
+    });
+    expect(
+      await approvals.saveApprovalProgress(
+        f.b,
+        { id: a.id, approvedAt: approvedAt },
+        progress,
+        later,
+      ),
+    ).toBe(false);
+    expect(
+      await approvals.saveApprovalProgress(f.a, { id: a.id, approvedAt: later }, progress, later),
+    ).toBe(false);
+    expect(
+      await approvals.saveApprovalProgress(
+        f.a,
+        { id: a.id, approvedAt: approvedAt },
+        progress,
+        later,
+      ),
+    ).toBe(true);
+    expect(await approvals.findApproval(f.a, { id: a.id, approvedAt: approvedAt })).toMatchObject({
+      segmentIndex: 1,
+      contactId: contacts[1],
+      approvalCheckedCount: 2,
+    });
+    expect(await approvals.countFrozenRecipients(f.a, a.id)).toEqual({ queued: 2, skipped: 1 });
+    expect(await approvals.countFrozenRecipients(f.b, a.id)).toEqual({ queued: 0, skipped: 0 });
+
+    const before = await f.row('campaigns', a.id);
+    expect(await approvals.removeRecipientsBatch(f.b, a.id, 2)).toBe(0);
+    expect(
+      await approvals.failApproval(
+        f.b,
+        { id: a.id, approvedAt: approvedAt },
+        'CAMPAIGN_NO_RECIPIENTS',
+        later,
+      ),
+    ).toBe(false);
+    expect(await f.row('campaigns', a.id)).toEqual(before);
+    expect(await approvals.removeRecipientsBatch(f.a, a.id, 2)).toBe(2);
+    expect(await approvals.removeRecipientsBatch(f.a, a.id, 2)).toBe(1);
+    expect(await approvals.removeRecipientsBatch(f.a, a.id, 2)).toBe(0);
+
+    expect(
+      await approvals.failApproval(
+        f.a,
+        { id: a.id, approvedAt: later },
+        'CAMPAIGN_NO_RECIPIENTS',
+        later,
+      ),
+    ).toBe(false);
+    expect(
+      await approvals.failApproval(
+        f.a,
+        { id: a.id, approvedAt: approvedAt },
+        'WALLET_BALANCE_TOO_LOW',
+        later,
+      ),
+    ).toBe(true);
+    expect(await repository.find(f.a, a.id)).toMatchObject({
+      status: 'draft',
+      approvalFailureCode: 'WALLET_BALANCE_TOO_LOW',
+      approvalCheckedCount: 0,
+      approvalEstimatedTotal: 0,
+    });
+    expect(
+      await approvals.markApproving(f.a, a.id, { ...start, approvedAt: later, updatedAt: later }),
+    ).toMatchObject({
+      status: 'approving',
+      approvalFailureCode: null,
+    });
+    for (const id of contacts)
+      await f.connection.pool.query('delete from contacts where id=$1', [id]);
   });
 });

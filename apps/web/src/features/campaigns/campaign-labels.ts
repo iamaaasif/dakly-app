@@ -10,6 +10,7 @@ export const campaignChannelLabels: Record<CampaignChannel, string> = {
 export const campaignStatusLabels: Record<CampaignStatus, string> = {
   draft: 'Draft',
   waiting_approval: 'Waiting for approval',
+  approving: 'Approving',
   scheduled: 'Scheduled',
   sending: 'Sending',
   paused: 'Paused',
@@ -21,6 +22,7 @@ export const campaignStatusLabels: Record<CampaignStatus, string> = {
 export const campaignStatusColors: Record<CampaignStatus, BadgeProps['variant']> = {
   draft: 'neutral',
   waiting_approval: 'warning',
+  approving: 'info',
   scheduled: 'warning',
   sending: 'info',
   paused: 'warning',
