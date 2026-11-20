@@ -10,6 +10,7 @@ import { createDatabase } from '@dakly/db/client';
 
 import { ContactsModule } from '../contacts/contacts.module';
 import { ContactsService } from '../contacts/contacts.service';
+import { OrdersModule } from '../orders/orders.module';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { DAY_MS } from '../platform/time';
@@ -80,7 +81,7 @@ describe('AutomationEntryService (Postgres)', () => {
     );
     class TestModule {}
     Module({
-      imports: [DatabaseModule, ContactsModule, SegmentsModule],
+      imports: [DatabaseModule, ContactsModule, OrdersModule, SegmentsModule],
       providers: [
         AutomationEntryService,
         AutomationEntryRepository,
