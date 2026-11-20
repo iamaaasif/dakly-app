@@ -13,11 +13,15 @@ import {
 } from '@nestjs/common';
 
 import {
+  type CampaignCustomersQuery,
+  campaignCustomersQuerySchema,
+  type CampaignCustomersResponse,
   type CampaignEstimateResponse,
   type CampaignListQuery,
   campaignListQuerySchema,
   type CampaignListResponse,
   type CampaignResponse,
+  type CampaignResultsResponse,
   type ChangeCampaignInput,
   changeCampaignSchema,
   type CreateCampaignInput,
@@ -30,11 +34,15 @@ import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { CampaignResultsService } from './campaign-results.service';
 import { CampaignsService } from './campaigns.service';
 
 @Controller('campaigns')
 export class CampaignsController {
-  constructor(@Inject(CampaignsService) private readonly campaigns: CampaignsService) {}
+  constructor(
+    @Inject(CampaignsService) private readonly campaigns: CampaignsService,
+    @Inject(CampaignResultsService) private readonly results: CampaignResultsService,
+  ) {}
 
   @Get()
   @RequirePermission('campaigns.view')
@@ -52,6 +60,25 @@ export class CampaignsController {
     @Param('campaignId', ParseUUIDPipe) campaignId: string,
   ): Promise<CampaignResponse> {
     return this.campaigns.get(storeId, campaignId);
+  }
+
+  @Get(':campaignId/results')
+  @RequirePermission('campaigns.view')
+  campaignResults(
+    @CurrentStore() storeId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResultsResponse> {
+    return this.results.results(storeId, campaignId);
+  }
+
+  @Get(':campaignId/customers')
+  @RequirePermission('campaigns.view')
+  customers(
+    @CurrentStore() storeId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+    @Query(new ZodValidationPipe(campaignCustomersQuerySchema)) query: CampaignCustomersQuery,
+  ): Promise<CampaignCustomersResponse> {
+    return this.results.customers(storeId, campaignId, query);
   }
 
   @Get(':campaignId/estimate')

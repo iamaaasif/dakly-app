@@ -270,7 +270,8 @@ Web (HOME-4 part 2):
 1. The dark Ask Dakly AI button in the top bar (icon only on a phone) opens a panel on the right edge, full width on a phone. The panel is open when the `ask` search parameter is `open`, so a link can open it.
 2. The panel shows the page it is on when it knows the page, up to three suggestions, the first the member may ask from this list: sales today, campaign performance, customers who came back, best selling product, sales this month, yesterday and the last 30 days (each shown only when the role can view that report), the conversation, an input and the line "Dakly AI suggests. You approve before anything is sent." Each answer shows its sources under the text ("From Orders, last 30 days") and the credits left appear under the input after the first answer. The conversation lasts until the shop is switched or the page is reloaded; saved history is HOME-6.
 3. A busy or paused AI shows "Dakly AI is busy. Try again in a minute." and puts the question back in the input. No credits shows that they are used up for the plan period.
-4. Waits on other work: Full view and the Ask Dakly AI page (HOME-6), the Ask box on the Dashboard, suggestions that differ per page, a customer-targeting suggestion (no tool covers it), the top-up button (no billing screen yet), feedback buttons, and the action buttons under an answer.
+4. The Ask box on the Dashboard sits under the greeting, with the same first three suggestions after "Try:". Typing a question and pressing Enter, or tapping a suggestion, opens the panel and sends the question there. The question is kept in the browser tab until the panel takes it; it is never put in the URL. An empty question does nothing.
+5. Waits on other work: Full view and the Ask Dakly AI page (HOME-6), suggestions that differ per page, a customer-targeting suggestion (no tool covers it), the top-up button (no billing screen yet), feedback buttons, and the action buttons under an answer.
 
 ### Rules
 

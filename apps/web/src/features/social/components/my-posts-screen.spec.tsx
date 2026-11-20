@@ -27,6 +27,7 @@ const connection = (overrides: Partial<ChannelConnection>): ChannelConnection =>
   tokenExpiresAt: null,
   connectedAt: '2026-11-01T06:00:00.000Z',
   disconnectedAt: null,
+  isAiLive: false,
   ...overrides,
 });
 const page = connection({});
@@ -65,6 +66,10 @@ const post = (id: string, caption: string, target: Partial<Target>): PostRespons
       externalPostId: null,
       errorCode: null,
       errorMessage: null,
+      reach: null,
+      reactions: null,
+      comments: null,
+      linkTaps: null,
       ...target,
     },
   ],
@@ -99,7 +104,7 @@ afterEach(() => {
   query = 'view=list&date=2026-11-06';
 });
 
-it('tells how many scheduled Instagram posts are blocked by the expired account', async () => {
+it('counts upcoming and published posts and tells how many Instagram posts are blocked', async () => {
   show([
     post('a', 'Weekend sale', {}),
     post('b', 'Reel for Instagram', {
@@ -109,21 +114,42 @@ it('tells how many scheduled Instagram posts are blocked by the expired account'
     post('c', 'Mustard scarves', {
       status: 'published',
       publishedAt: '2026-11-02T14:00:00.000Z',
+      reach: 1200,
     }),
   ]);
-  const banner = await screen.findByRole('region', { name: 'Reconnect @urbantrend.bd' });
+  expect(await screen.findByRole('tab', { name: /Calendar/ })).toHaveProperty(
+    'textContent',
+    'Calendar2',
+  );
+  expect(screen.getByRole('tab', { name: /Published/ }).textContent).toBe('Published1');
+  const banner = screen.getByRole('region', { name: 'Reconnect @urbantrend.bd' });
   expect(within(banner).getByText(/1 scheduled Instagram post won’t publish/)).toBeTruthy();
 });
 
-it('lists the month by day with each post’s state, and moves to the next month in the URL', async () => {
+it('lists the month by day with each post’s state, and filters by account in the URL', async () => {
   show([post('a', 'Weekend sale', {})]);
-  const row = (await screen.findByText('Weekend sale')).closest('li')!;
+  const row = await screen.findByRole('button', { name: /Weekend sale/ });
   expect(row.textContent).toContain('Scheduled');
   expect(row.textContent).toContain('12:30 pm');
   await userEvent.click(screen.getByRole('button', { name: 'Next' }));
   expect(replace).toHaveBeenCalledWith(expect.stringContaining('date=2026-12-01'), {
     scroll: false,
   });
+});
+
+it('shows results for a published post and a prompt when nothing is planned', async () => {
+  query = 'tab=published';
+  show([
+    post('c', 'Mustard scarves', {
+      status: 'published',
+      publishedAt: '2026-11-02T14:00:00.000Z',
+      reach: 1200,
+      reactions: 80,
+    }),
+  ]);
+  const list = await screen.findByRole('region', { name: 'Published posts' });
+  expect(within(list).getByText('1,200')).toBeTruthy();
+  expect(within(list).getAllByText('—')).toHaveLength(2);
 });
 
 it('offers Plan your first post when there are no posts', async () => {
