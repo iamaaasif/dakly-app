@@ -1,4 +1,3 @@
-'use client';
 import { Trash2 } from 'lucide-react';
 import { useFormContext, type UseFormReturn } from 'react-hook-form';
 
@@ -19,7 +18,6 @@ type ProductSizesProps = {
 export function ProductSizes({ onAddOption }: ProductSizesProps) {
   const form = useFormContext<ProductFormValues>();
   const options = form.watch('options') ?? [];
-  const variants = form.watch('variants') ?? [];
   const sizes = options[0]?.name.toLowerCase() === 'size' ? options[0].values : [];
 
   return (
@@ -44,11 +42,7 @@ export function ProductSizes({ onAddOption }: ProductSizesProps) {
           key={index}
           index={index}
           size={size}
-          stock={variants[index]?.initialStock ?? 0}
           onUpdate={(i, name) => updateSizeName(form, i, name)}
-          onStockChange={(i, qty) =>
-            form.setValue(`variants.${i}.initialStock`, qty, { shouldDirty: true })
-          }
           onRemove={(i) => removeSizeRow(form, sizes, i)}
         />
       ))}
@@ -153,20 +147,12 @@ function updateSizeName(form: UseFormReturn<ProductFormValues>, index: number, n
 type ProductSizeRowProps = {
   index: number;
   size: string;
-  stock: number;
   onUpdate: (index: number, name: string) => void;
-  onStockChange: (index: number, quantity: number) => void;
   onRemove: (index: number) => void;
 };
 
-function ProductSizeRow({
-  index,
-  size,
-  stock,
-  onUpdate,
-  onStockChange,
-  onRemove,
-}: ProductSizeRowProps) {
+function ProductSizeRow({ index, size, onUpdate, onRemove }: ProductSizeRowProps) {
+  const form = useFormContext<ProductFormValues>();
   return (
     <div className="flex items-center gap-2">
       <Input
@@ -179,14 +165,10 @@ function ProductSizeRow({
       <Input
         type="number"
         min="0"
-        value={stock === 0 ? '' : stock}
         placeholder="0"
         aria-label={`Stock for size ${size || index + 1}`}
-        onChange={(event) => {
-          const val = Number.parseInt(event.target.value, 10);
-          onStockChange(index, Number.isNaN(val) || val < 0 ? 0 : val);
-        }}
         className="w-20 text-center"
+        {...form.register(`variants.${index}.initialStock`, { valueAsNumber: true })}
       />
       <button
         type="button"

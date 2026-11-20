@@ -117,7 +117,7 @@ describe('Product form', () => {
     await userEvent.clear(screen.getByLabelText('Selling price ৳'));
     await userEvent.type(screen.getByLabelText('Selling price ৳'), '2450.50');
     await userEvent.click(screen.getByRole('button', { name: label }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
     expect(submitted).toMatchObject({ name: 'Cotton Panjabi', pricePoisha: 245050, status });
   });
 
@@ -132,7 +132,7 @@ describe('Product form', () => {
     expect((screen.getByLabelText('Selling price ৳') as HTMLInputElement).value).toBe('2450.50');
     await userEvent.type(screen.getByLabelText('Product code'), '-1');
     await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
     expect(submitted).toMatchObject({
       variants: [{ id: product.variants[0]!.id, sku: 'PAN-M-1', costPoisha: 120075 }],
     });
@@ -270,7 +270,7 @@ describe('Product form', () => {
     expect(requests).toEqual([{ method: 'POST', body: { tone: 'friendly', language: 'bn' } }]);
 
     fireEvent.click(screen.getByRole('button', { name: 'Save product' }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
     expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { description: 'Made with cotton' } });
   });
 
@@ -446,7 +446,7 @@ describe('Product form', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
 
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct, []));
     expect(adjustments).toEqual([
       {
         url: '/api/variants/019c01ea-cf15-7d31-a7f5-d73d66007ae5/stock-adjustments',

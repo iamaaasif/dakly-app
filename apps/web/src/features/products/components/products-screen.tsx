@@ -95,7 +95,7 @@ function AddProductModal({
       <ProductForm
         onSaved={(product, failedSizes) => {
           router.replace(`${listHref}&product=${product.id}`);
-          if (failedSizes && failedSizes.length > 0) {
+          if (failedSizes.length > 0) {
             onStockError(`Could not set initial stock for: ${failedSizes.join(', ')}`);
           }
         }}

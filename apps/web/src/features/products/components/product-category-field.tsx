@@ -14,7 +14,7 @@ export function ProductCategoryField() {
   const id = useId();
   const { data } = useProductCategories();
   const categories = useMemo(() => {
-    const list = (data?.items ?? []).filter((item): item is string => typeof item === 'string');
+    const list = data?.items ?? [];
     if (field.value?.trim() && !list.includes(field.value.trim())) {
       return [...list, field.value.trim()];
     }

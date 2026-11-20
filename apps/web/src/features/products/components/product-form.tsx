@@ -21,7 +21,7 @@ import { takaInputFromPoisha } from '@/lib/format-money';
 
 type ProductFormProps = {
   product?: ProductResponse;
-  onSaved: (product: ProductResponse, failedSizes?: string[]) => void;
+  onSaved: (product: ProductResponse, failedSizes: string[]) => void;
   onCancel?: () => void;
 };
 
@@ -43,7 +43,7 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
       });
     if (product) {
       change.mutate(productChanges(input, dirtyFields), {
-        onSuccess: (saved) => onSaved(saved),
+        onSuccess: (saved) => onSaved(saved, []),
         onError: setError,
       });
       return;
@@ -57,8 +57,7 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
           formVariants: form.getValues('variants'),
           adjustStock: adjustStock.mutateAsync,
         });
-        if (failed.length > 0) onSaved(saved, failed);
-        else onSaved(saved);
+        onSaved(saved, failed);
       },
     });
   });
@@ -95,36 +94,26 @@ type SaveInitialStocksArgs = {
   }) => Promise<unknown>;
 };
 
-function findVariantId(
-  variants: ProductResponse['variants'],
-  optionName: string | undefined,
-  sizeName: string,
-): string | undefined {
-  const match = variants.find((v) =>
-    optionName
-      ? v.optionValues[optionName] === sizeName
-      : Object.values(v.optionValues).includes(sizeName),
-  );
-  return match?.id ?? (variants.length === 1 ? variants[0]?.id : undefined);
-}
-
 async function saveInitialStocks({
   saved,
   input,
   formVariants,
   adjustStock,
 }: SaveInitialStocksArgs): Promise<string[]> {
-  const sizeOptionName = input.options[0]?.name;
+  const failed: string[] = [];
   const adjustments = (formVariants ?? []).flatMap((variant, index) => {
     const quantity = variant.initialStock ?? 0;
     if (quantity <= 0) return [];
     const sizeName = input.options[0]?.values[index] ?? '';
-    const variantId = findVariantId(saved.variants, sizeOptionName, sizeName);
-    if (!variantId) return [];
-    return [{ sizeName: sizeName || `Size ${index + 1}`, variantId, quantity }];
+    const variantId = saved.variants.find((v) => v.optionValues.Size === sizeName)?.id;
+    if (!variantId) {
+      failed.push(sizeName);
+      return [];
+    }
+    return [{ sizeName, variantId, quantity }];
   });
 
-  if (adjustments.length === 0) return [];
+  if (adjustments.length === 0) return failed;
 
   const results = await Promise.allSettled(
     adjustments.map((item) =>
@@ -135,9 +124,13 @@ async function saveInitialStocks({
     ),
   );
 
-  return results.flatMap((result, index) =>
-    result.status === 'rejected' ? [adjustments[index]!.sizeName] : [],
-  );
+  for (const [index, result] of results.entries()) {
+    if (result.status === 'rejected') {
+      failed.push(adjustments[index]!.sizeName);
+    }
+  }
+
+  return failed;
 }
 
 type ProductFormActionsProps = {
