@@ -40,7 +40,7 @@ export function SetupCard() {
           {change.error.message}
         </p>
       )}
-      <ol className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <ol className={cn('grid gap-4 md:grid-cols-2', data.steps.length > 2 && 'xl:grid-cols-3')}>
         {data.steps.map(({ id, done }, index) => (
           <SetupStepCard key={id} id={id} done={done} index={index} isNext={id === nextId} />
         ))}
@@ -102,7 +102,7 @@ function SetupStepCard(props: {
 
 function SetupProgress({ done, total }: { done: number; total: number }) {
   return (
-    <>
+    <div className="flex items-center gap-3">
       <div
         role="progressbar"
         aria-label="Setup progress"
@@ -116,7 +116,7 @@ function SetupProgress({ done, total }: { done: number; total: number }) {
       <span className="text-base font-medium">
         {done} of {total} done
       </span>
-    </>
+    </div>
   );
 }
 

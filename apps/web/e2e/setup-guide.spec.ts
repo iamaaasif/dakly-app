@@ -42,7 +42,10 @@ test('asks how the shop sells, then shows the steps that fit', async ({
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    await page.screenshot({ path: resolve(evidence, `banner-and-card-${width}.png`) });
+    await page.screenshot({
+      path: resolve(evidence, `banner-and-card-${width}.png`),
+      fullPage: width < 800,
+    });
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -57,6 +60,12 @@ test('asks how the shop sells, then shows the steps that fit', async ({
   await expect(card.getByText('0 of 6 done')).toBeVisible();
   await expect(card.getByRole('heading', { name: 'Connect your Facebook Page' })).toBeVisible();
   await expect(card.getByRole('link', { name: 'Connect page' })).toBeVisible();
+  await expect(
+    page.getByText('Dakly is set up for how you sell. Turned on: Sales, Chats, Social Auto Post.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Dismiss' }).click();
   for (const [width, height] of [
     [1440, 900],
     [360, 800],
@@ -65,6 +74,9 @@ test('asks how the shop sells, then shows the steps that fit', async ({
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    await page.screenshot({ path: resolve(evidence, `six-steps-${width}.png`) });
+    await page.screenshot({
+      path: resolve(evidence, `six-steps-${width}.png`),
+      fullPage: width < 800,
+    });
   }
 });
