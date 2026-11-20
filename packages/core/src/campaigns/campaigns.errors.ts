@@ -22,6 +22,10 @@ const CAMPAIGN_ERRORS = {
     status: 409,
     message: 'Wait until this campaign has finished sending',
   },
+  CAMPAIGN_RESEND_NEEDS_READS: {
+    status: 409,
+    message: 'SMS has no read receipts, so there is no one to resend to; send a follow-up instead',
+  },
   CAMPAIGN_RESEND_TOO_EARLY: {
     status: 409,
     message: 'People get 48 hours to read a message before you can resend it',

@@ -29,6 +29,8 @@ const person = {
 };
 const sentId = randomUUID();
 const draftId = randomUUID();
+const smsSentId = randomUUID();
+const pageId = randomUUID();
 let app: INestApplicationContext;
 let sources: CampaignSourceService;
 let campaigns: CampaignsService;
@@ -75,9 +77,19 @@ describe('resend and follow-up drafts (Postgres)', () => {
       [userId],
     );
     await query(
+      `insert into channel_connections(id,store_id,kind,external_account_id,display_name,connected_at)
+       values($1::uuid,$2,'facebook_page',$1::text,'পেজ', now() - interval '30 days')`,
+      [pageId, storeId],
+    );
+    await query(
+      `insert into campaigns(id,store_id,name,channel,channel_connection_id,content,status,finished_at)
+       values($1,$2,'ঈদের অফার','messenger',$3,'{"text":"ঈদে ২০% ছাড়"}','sent',now() - interval '1 hour')`,
+      [sentId, storeId, pageId],
+    );
+    await query(
       `insert into campaigns(id,store_id,name,channel,content,status,finished_at)
-       values($1,$2,'ঈদের অফার','sms','{"text":"ঈদে ২০% ছাড়"}','sent',now() - interval '1 hour')`,
-      [sentId, storeId],
+       values($1,$2,'এসএমএস অফার','sms','{"text":"ঈদে ২০% ছাড়"}','sent',now() - interval '72 hours')`,
+      [smsSentId, storeId],
     );
     await contact(person.unread, 'রিনা', '01710000001');
     await contact(person.read, 'সুমি', '01710000002');
@@ -106,6 +118,7 @@ describe('resend and follow-up drafts (Postgres)', () => {
       await app?.close();
       await query('delete from orders where store_id=$1', [storeId]);
       await query('delete from campaigns where store_id=$1', [storeId]);
+      await query('delete from channel_connections where store_id=$1', [storeId]);
       await query('delete from contacts where store_id=$1', [storeId]);
       await query('delete from stores where id=$1', [storeId]);
       await query('delete from users where id=$1', [userId]);
@@ -128,6 +141,15 @@ describe('resend and follow-up drafts (Postgres)', () => {
     await expect(
       sources.createDraft(randomUUID(), sentId, 'follow_up_unordered', actor),
     ).rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND' });
+  });
+
+  it('refuses a resend of an SMS campaign, which has no read receipts', async () => {
+    await expect(
+      sources.createDraft(storeId, smsSentId, 'resend_unread', actor),
+    ).rejects.toMatchObject({ code: 'CAMPAIGN_RESEND_NEEDS_READS' });
+    expect(
+      await sources.createDraft(storeId, smsSentId, 'follow_up_unordered', actor),
+    ).toMatchObject({ source: { campaignId: smsSentId, outcome: 'follow_up_unordered' } });
   });
 
   it('makes a follow-up draft of people who tapped and did not order', async () => {

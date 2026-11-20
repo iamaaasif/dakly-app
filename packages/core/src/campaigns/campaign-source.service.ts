@@ -38,6 +38,8 @@ export class CampaignSourceService {
     if (!source) throw campaignError('CAMPAIGN_NOT_FOUND');
     if (source.status !== 'sent' || !source.finishedAt)
       throw campaignError('CAMPAIGN_NOT_FINISHED');
+    if (outcome === 'resend_unread' && source.channel === 'sms')
+      throw campaignError('CAMPAIGN_RESEND_NEEDS_READS');
     if (
       outcome === 'resend_unread' &&
       this.clock.now().getTime() < source.finishedAt.getTime() + RESEND_AFTER_MS
