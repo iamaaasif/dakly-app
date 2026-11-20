@@ -6,7 +6,6 @@ import { loadEnv } from '../config/env';
 import { AccountDatabase } from './account-database';
 import { AccountTransaction } from './account-transaction';
 import { DATABASE, DATABASE_CONNECTION } from './database.tokens';
-import { OwnerDatabase } from './owner-database';
 import { StaffDatabase } from './staff-database';
 import { StaffTransaction } from './staff-transaction';
 import { StoreTransaction } from './store-transaction';
@@ -36,7 +35,6 @@ class DatabaseShutdown implements OnApplicationShutdown {
       inject: [DATABASE_CONNECTION],
     },
     DatabaseShutdown,
-    OwnerDatabase,
     TenantDatabase,
     StoreTransaction,
     AccountDatabase,
@@ -45,7 +43,6 @@ class DatabaseShutdown implements OnApplicationShutdown {
     StaffTransaction,
   ],
   exports: [
-    OwnerDatabase,
     StaffDatabase,
     StaffTransaction,
     DATABASE,

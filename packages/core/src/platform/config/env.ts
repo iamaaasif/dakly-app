@@ -7,9 +7,6 @@ import { trustedProxiesSchema } from './trusted-proxies';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.url(),
-  // Only the worker's maintenance job uses it, to archive and drop audit months and purge account
-  // history, which the app role must never be able to delete.
-  DATABASE_ADMIN_URL: z.url().optional(),
   REDIS_URL: redisUrlSchema,
   // Test runs set their own, so a local worker never takes their jobs. BullMQ's default otherwise.
   QUEUE_PREFIX: z.string().min(1).default('bull'),
