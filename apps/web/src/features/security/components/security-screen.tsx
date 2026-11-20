@@ -1,6 +1,8 @@
 'use client';
 import Link from 'next/link';
 
+import { cn } from '@dakly/ui/cn';
+
 import { SecurityContent } from './security-content';
 
 const sections = [
@@ -25,11 +27,12 @@ export function SecurityScreen({ tab, before }: { tab: string; before?: string }
             key={value}
             href={`/security?tab=${value}`}
             aria-current={value === tab ? 'page' : undefined}
-            className={`-mb-px inline-flex min-h-11 items-center border-b-2 px-1 text-sm font-medium ${
+            className={cn(
+              '-mb-px inline-flex min-h-11 items-center border-b-2 px-1 text-sm font-medium',
               value === tab
                 ? 'border-action font-semibold text-text'
-                : 'border-transparent text-text-muted hover:text-text'
-            }`}
+                : 'border-transparent text-text-muted hover:text-text',
+            )}
           >
             {label}
           </Link>

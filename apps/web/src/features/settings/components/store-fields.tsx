@@ -1,174 +1,76 @@
-import { Upload } from 'lucide-react';
-import type { UseFormReturn } from 'react-hook-form';
+import type { FieldError, UseFormReturn } from 'react-hook-form';
 
 import type { ChangeStoreSettingsInput, StoreSettingsResponse } from '@dakly/contracts/stores';
-import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 
 import { FormField } from '@/components/form-field';
 import { initialsOf } from '@/lib/initials';
 
-const fields = [
-  ['name', 'Store name'],
-  ['legalName', 'Legal name'],
-  ['businessType', 'Business type'],
-  ['phone', 'Business mobile number'],
-  ['email', 'Business email'],
-  ['address', 'Address'],
-  ['district', 'District'],
-  ['vatBin', 'VAT / BIN'],
-  ['tradeLicenceNumber', 'Trade licence number'],
-] as const;
+type StoreFieldKey =
+  | 'name'
+  | 'legalName'
+  | 'businessType'
+  | 'phone'
+  | 'email'
+  | 'address'
+  | 'district'
+  | 'vatBin'
+  | 'tradeLicenceNumber';
 
-function StoreLogoHeader({ name }: { name?: string | null }) {
+type FieldDef = {
+  name: StoreFieldKey;
+  label: string;
+  type?: 'text' | 'email' | 'tel';
+  colSpan2?: boolean;
+};
+
+type SectionDef = {
+  title: string;
+  description: string;
+  fields: FieldDef[];
+};
+
+const emptyAsNull = (v: unknown) => (v === '' ? null : v);
+
+const sections: SectionDef[] = [
+  {
+    title: 'Store information',
+    description: 'Shown on messages, invoices and your Dakly workspace.',
+    fields: [
+      { name: 'name', label: 'Store name' },
+      { name: 'legalName', label: 'Legal name' },
+      { name: 'businessType', label: 'Business type' },
+      { name: 'phone', label: 'Business mobile number', type: 'tel' },
+      { name: 'email', label: 'Business email', type: 'email' },
+    ],
+  },
+  {
+    title: 'Address',
+    description: 'Used for delivery messages and printed on invoices.',
+    fields: [
+      { name: 'address', label: 'Address', colSpan2: true },
+      { name: 'district', label: 'District' },
+    ],
+  },
+  {
+    title: 'Tax and registration',
+    description: 'Added to customer receipts and VAT invoices when set.',
+    fields: [
+      { name: 'vatBin', label: 'VAT / BIN' },
+      { name: 'tradeLicenceNumber', label: 'Trade licence number' },
+    ],
+  },
+];
+
+const allFields = sections.flatMap((section) => section.fields);
+
+function StoreLogoHeader({ name }: { name: string }) {
   return (
     <div className="flex items-center gap-4 border-b border-border pb-4">
       <div className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-base font-bold text-text">
-        {initialsOf(name ?? 'UT')}
-      </div>
-      <div className="space-y-1">
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" type="button" disabled className="h-8 min-h-8 text-xs">
-            <Upload className="size-3.5" aria-hidden="true" />
-            Upload logo
-          </Button>
-          <button
-            type="button"
-            disabled
-            className="text-xs font-medium text-danger hover:underline disabled:opacity-50"
-          >
-            Remove
-          </button>
-        </div>
-        <p className="text-xs text-text-muted">Square PNG, at least 256 × 256.</p>
+        {initialsOf(name)}
       </div>
     </div>
-  );
-}
-
-function StoreInfoCard({
-  form,
-  store,
-}: {
-  form: UseFormReturn<ChangeStoreSettingsInput>;
-  store?: StoreSettingsResponse;
-}) {
-  return (
-    <Card className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-text">Store information</h2>
-        <p className="text-xs text-text-muted">
-          Shown on messages, invoices and your Dakly workspace.
-        </p>
-      </div>
-
-      <StoreLogoHeader name={store?.name} />
-
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <FormField
-          label="Store name"
-          field={form.register('name')}
-          error={form.formState.errors.name}
-          type="text"
-        />
-        <FormField
-          label="Legal name"
-          field={form.register('legalName', {
-            setValueAs: (v) => (v === '' ? null : v),
-          })}
-          error={form.formState.errors.legalName}
-          type="text"
-        />
-        <FormField
-          label="Business type"
-          field={form.register('businessType', {
-            setValueAs: (v) => (v === '' ? null : v),
-          })}
-          error={form.formState.errors.businessType}
-          type="text"
-        />
-        <FormField
-          label="Business mobile number"
-          field={form.register('phone', {
-            setValueAs: (v) => (v === '' ? null : v),
-          })}
-          error={form.formState.errors.phone}
-          type="tel"
-        />
-        <FormField
-          label="Business email"
-          field={form.register('email', {
-            setValueAs: (v) => (v === '' ? null : v),
-          })}
-          error={form.formState.errors.email}
-          type="email"
-        />
-      </div>
-    </Card>
-  );
-}
-
-function StoreAddressCard({ form }: { form: UseFormReturn<ChangeStoreSettingsInput> }) {
-  return (
-    <Card className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-text">Address</h2>
-        <p className="text-xs text-text-muted">
-          Used for delivery messages and printed on invoices.
-        </p>
-      </div>
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <FormField
-            label="Address"
-            field={form.register('address', {
-              setValueAs: (v) => (v === '' ? null : v),
-            })}
-            error={form.formState.errors.address}
-            type="text"
-          />
-        </div>
-        <FormField
-          label="District"
-          field={form.register('district', {
-            setValueAs: (v) => (v === '' ? null : v),
-          })}
-          error={form.formState.errors.district}
-          type="text"
-        />
-      </div>
-    </Card>
-  );
-}
-
-function StoreTaxCard({ form }: { form: UseFormReturn<ChangeStoreSettingsInput> }) {
-  return (
-    <Card className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-text">Tax and registration</h2>
-        <p className="text-xs text-text-muted">
-          Added to customer receipts and VAT invoices when set.
-        </p>
-      </div>
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <FormField
-          label="VAT / BIN"
-          field={form.register('vatBin', {
-            setValueAs: (v) => (v === '' ? null : v),
-          })}
-          error={form.formState.errors.vatBin}
-          type="text"
-        />
-        <FormField
-          label="Trade licence number"
-          field={form.register('tradeLicenceNumber', {
-            setValueAs: (v) => (v === '' ? null : v),
-          })}
-          error={form.formState.errors.tradeLicenceNumber}
-          type="text"
-        />
-      </div>
-    </Card>
   );
 }
 
@@ -179,17 +81,40 @@ export function StoreFields({
 }: {
   form: UseFormReturn<ChangeStoreSettingsInput>;
   disabled: boolean;
-  store?: StoreSettingsResponse;
+  store: StoreSettingsResponse;
 }) {
   return (
     <fieldset disabled={disabled} className="space-y-6">
-      <StoreInfoCard form={form} store={store} />
-      <StoreAddressCard form={form} />
-      <StoreTaxCard form={form} />
+      {sections.map((section, index) => (
+        <Card key={section.title} className="space-y-4">
+          <div>
+            <h2 className="text-base font-semibold text-text">{section.title}</h2>
+            <p className="text-xs text-text-muted">{section.description}</p>
+          </div>
+
+          {index === 0 ? <StoreLogoHeader name={store.name} /> : null}
+
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+            {section.fields.map(({ name, label, type = 'text', colSpan2 }) => (
+              <div key={name} className={colSpan2 ? 'sm:col-span-2' : undefined}>
+                <FormField
+                  label={label}
+                  field={form.register(
+                    name,
+                    name === 'name' ? undefined : { setValueAs: emptyAsNull },
+                  )}
+                  error={form.formState.errors[name] as FieldError | undefined}
+                  type={type}
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
     </fieldset>
   );
 }
 
 export function storeDefaults(store: StoreSettingsResponse) {
-  return Object.fromEntries(fields.map(([name]) => [name, store[name]]));
+  return Object.fromEntries(allFields.map(({ name }) => [name, store[name]]));
 }

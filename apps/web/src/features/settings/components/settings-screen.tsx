@@ -24,7 +24,7 @@ export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
   const title = tab === 'store' ? 'Store settings' : 'Extensions';
   const subtitle =
     tab === 'store'
-      ? 'Your store details and how Dakly sends SMS, WhatsApp and email for you.'
+      ? 'Your store details, shown on messages and invoices.'
       : 'Turn store features on and off for your store.';
 
   return (

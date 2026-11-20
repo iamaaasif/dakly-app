@@ -36,7 +36,6 @@ export function ProfileDetails({ profile }: { profile: AccountProfile }) {
           {profile.hasPassword ? 'Password set' : 'No password set'}
         </dd>
       </div>
-      <div className="text-xs text-text-muted sm:col-span-2">Time zone: Asia/Dhaka (GMT+6)</div>
     </dl>
   );
 }
