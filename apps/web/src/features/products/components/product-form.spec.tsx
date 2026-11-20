@@ -8,6 +8,7 @@ import { createProductSchema, type ProductResponse } from '@dakly/contracts/prod
 import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { ProductForm } from './product-form';
+import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
 const product: ProductResponse = {
@@ -44,7 +45,9 @@ function show(initial?: ProductResponse) {
       disconnect() {}
     },
   );
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+  });
   const session: SessionContext = {
     user: { id: 'actor', name: 'Actor' },
     contextTag: 'verified',
@@ -74,6 +77,7 @@ function show(initial?: ProductResponse) {
     },
   };
   client.setQueryData(sessionContextKey, session);
+  client.setQueryData(productsKeys.categories(session.contextTag), { items: [] });
   const onSaved = vi.fn();
   const tree = (current?: ProductResponse) => (
     <QueryClientProvider client={client}>

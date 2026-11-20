@@ -97,6 +97,7 @@ function show(
     },
   };
   client.setQueryData(sessionContextKey, context);
+  client.setQueryData(productsKeys.categories(context.contextTag), { items: ['Cotton'] });
   const content = () => (
     <QueryClientProvider client={client}>
       <ProductsScreen query={query} adjust={adjust} productId={productId} create={create} />
@@ -306,11 +307,12 @@ describe('Products screen', () => {
 
 describe('Product editor navigation', () => {
   it('opens creation from the list and selects the saved product', async () => {
-    vi.stubGlobal('fetch', async (path: string, init: RequestInit) =>
-      init.method === 'POST' || path === `/api/products/${product.id}`
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (path.endsWith('/categories')) return response({ items: ['Cotton'] });
+      return init?.method === 'POST' || path === `/api/products/${product.id}`
         ? response(product)
-        : response({ items: [product], nextCursor: null }),
-    );
+        : response({ items: [product], nextCursor: null });
+    });
     show();
     await screen.findByRole('table');
     await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
@@ -345,6 +347,7 @@ describe('Product editor navigation', () => {
         }
         return response(savedProduct);
       }
+      if (path.endsWith('/categories')) return response({ items: ['Cotton'] });
       return response(
         path === `/api/products/${savedProduct.id}`
           ? savedProduct

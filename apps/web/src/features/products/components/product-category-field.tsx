@@ -1,19 +1,25 @@
 'use client';
-import { useQueryClient } from '@tanstack/react-query';
 import { useId, useMemo, useState } from 'react';
 import { useController } from 'react-hook-form';
 
-import type { ProductFormValues, ProductListResponse } from '@dakly/contracts/products';
+import type { ProductFormValues } from '@dakly/contracts/products';
 import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
-import { productsKeys } from '@/lib/product-query-keys';
+import { useProductCategories } from '../api/get-categories';
 
 export function ProductCategoryField() {
   const { field } = useController<ProductFormValues, 'category'>({ name: 'category' });
   const id = useId();
-  const categories = useStoreCategories(field.value);
+  const { data } = useProductCategories();
+  const categories = useMemo(() => {
+    const list = (data?.items ?? []).filter((item): item is string => typeof item === 'string');
+    if (field.value?.trim() && !list.includes(field.value.trim())) {
+      return [...list, field.value.trim()];
+    }
+    return list;
+  }, [data?.items, field.value]);
 
   const [isNew, setIsNew] = useState(() =>
     Boolean(field.value && !categories.includes(field.value)),
@@ -64,22 +70,6 @@ export function ProductCategoryField() {
       </Select>
     </div>
   );
-}
-
-function useStoreCategories(currentValue?: string | null) {
-  const queryClient = useQueryClient();
-  return useMemo(() => {
-    const cached = queryClient.getQueriesData<ProductListResponse>({
-      queryKey: productsKeys.all,
-    });
-    const list = cached
-      .flatMap(([, data]) => data?.items ?? [])
-      .map((item) => item.category?.trim())
-      .filter((item): item is string => Boolean(item));
-    const set = new Set(list);
-    if (currentValue?.trim()) set.add(currentValue.trim());
-    return Array.from(set);
-  }, [queryClient, currentValue]);
 }
 
 type NewCategoryInputProps = {
