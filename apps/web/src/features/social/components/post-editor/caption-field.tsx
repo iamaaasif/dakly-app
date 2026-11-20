@@ -7,25 +7,12 @@ import { Textarea } from '@dakly/ui/textarea';
 
 import type { SocialAccount } from '../../api/get-social-accounts';
 import { networkNames } from '../../social-labels';
-import type { CaptionSettings } from './caption-settings';
-import { CaptionTools } from './caption-tools';
 
-type CaptionFieldProps = {
-  accounts: SocialAccount[];
-  settings: CaptionSettings;
-  // Called when AI wrote or changed text, so the post needs approval (D7).
-  onAiText: () => void;
-};
-
-export function CaptionField({ accounts, settings, onAiText }: CaptionFieldProps) {
+export function CaptionField({ accounts }: { accounts: SocialAccount[] }) {
   const { watch, setValue } = useFormContext<CreatePostInput>();
   const caption = watch('caption') ?? '';
   const targets = watch('targets');
   const customised = targets.some(({ captionOverride }) => captionOverride !== null);
-  const hasInstagram = targets.some(
-    ({ channelConnectionId }) =>
-      accounts.find(({ id }) => id === channelConnectionId)?.kind === 'instagram',
-  );
   const setCustomised = (on: boolean) =>
     setValue(
       'targets',
@@ -61,16 +48,6 @@ export function CaptionField({ accounts, settings, onAiText }: CaptionFieldProps
           onChange={(event) => setValue('caption', event.target.value, { shouldDirty: true })}
         />
       )}
-      <CaptionTools
-        caption={caption}
-        kind={hasInstagram ? 'instagram_caption' : 'facebook_post'}
-        settings={settings}
-        disabled={customised}
-        onCaption={(text, byAi) => {
-          setValue('caption', text, { shouldDirty: true });
-          if (byAi) onAiText();
-        }}
-      />
     </section>
   );
 }
