@@ -1,17 +1,25 @@
 import { Plus, RefreshCw } from 'lucide-react';
-import Link from 'next/link';
 
 import { Badge } from '@dakly/ui/badge';
-import { buttonVariants } from '@dakly/ui/button';
+import { Button } from '@dakly/ui/button';
 
 import type { SocialAccount } from '../api/get-social-accounts';
 import { accountTypeLabels } from '../social-labels';
 import { NetworkIcon } from './network-icon';
 
-type ConnectedChannelsProps = { accounts: SocialAccount[]; canConnect: boolean };
+type ConnectedChannelsProps = {
+  accounts: SocialAccount[];
+  canConnect: boolean;
+  onConnect: () => void;
+  onReconnect: (account: SocialAccount) => void;
+};
 
-// Connecting happens on Integrations, which owns the Meta sign-in.
-export function ConnectedChannels({ accounts, canConnect }: ConnectedChannelsProps) {
+export function ConnectedChannels({
+  accounts,
+  canConnect,
+  onConnect,
+  onReconnect,
+}: ConnectedChannelsProps) {
   return (
     <section
       aria-labelledby="connected-channels"
@@ -29,32 +37,19 @@ export function ConnectedChannels({ accounts, canConnect }: ConnectedChannelsPro
           </p>
         </div>
         {canConnect && (
-          <Link href="/integrations" className={buttonVariants({ variant: 'secondary' })}>
+          <Button variant="secondary" onClick={onConnect}>
             <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Connect account
-          </Link>
+          </Button>
         )}
       </header>
       <ul className="divide-y divide-border border-t border-border">
         {accounts.map((account) => (
-          <li key={account.id} className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-6">
-            <NetworkIcon kind={account.kind} />
-            <div className="min-w-40 flex-1">
-              <p className="font-semibold break-words">{account.displayName}</p>
-              <p className="text-sm text-text-muted">{accountTypeLabels[account.kind]}</p>
-            </div>
-            {account.status === 'needs_reconnect' ? (
-              <>
-                <Badge variant="danger">Access expired</Badge>
-                {canConnect && (
-                  <Link href="/integrations" className={buttonVariants({ variant: 'secondary' })}>
-                    <RefreshCw aria-hidden="true" size={16} strokeWidth={1.75} /> Reconnect
-                  </Link>
-                )}
-              </>
-            ) : (
-              <Badge variant="success">Connected</Badge>
-            )}
-          </li>
+          <AccountRow
+            key={account.id}
+            account={account}
+            canConnect={canConnect}
+            onReconnect={() => onReconnect(account)}
+          />
         ))}
         <li className="flex items-center gap-3 px-4 py-3 md:px-6">
           <NetworkIcon kind="tiktok" />
@@ -67,5 +62,31 @@ export function ConnectedChannels({ accounts, canConnect }: ConnectedChannelsPro
         </li>
       </ul>
     </section>
+  );
+}
+
+type AccountRowProps = { account: SocialAccount; canConnect: boolean; onReconnect: () => void };
+
+function AccountRow({ account, canConnect, onReconnect }: AccountRowProps) {
+  return (
+    <li className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-6">
+      <NetworkIcon kind={account.kind} />
+      <div className="min-w-40 flex-1">
+        <p className="font-semibold break-words">{account.displayName}</p>
+        <p className="text-sm text-text-muted">{accountTypeLabels[account.kind]}</p>
+      </div>
+      {account.status === 'needs_reconnect' ? (
+        <>
+          <Badge variant="danger">Access expired</Badge>
+          {canConnect && (
+            <Button variant="secondary" onClick={onReconnect}>
+              <RefreshCw aria-hidden="true" size={16} strokeWidth={1.75} /> Reconnect
+            </Button>
+          )}
+        </>
+      ) : (
+        <Badge variant="success">Connected</Badge>
+      )}
+    </li>
   );
 }

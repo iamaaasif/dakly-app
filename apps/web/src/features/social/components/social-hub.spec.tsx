@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 import type { ChannelConnection } from '@dakly/contracts/channels';
 import type { PostResponse } from '@dakly/contracts/social';
@@ -74,6 +75,14 @@ function show({ connections = [page], drafts = [draft({})] } = {}) {
     </QueryClientProvider>,
   );
 }
+beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  };
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    this.removeAttribute('open');
+  };
+});
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -92,9 +101,23 @@ it('lists each account with its status, TikTok as coming soon and a reconnect ba
   expect(within(channels).getByText(/Coming soon/)).toBeTruthy();
   const banner = screen.getByRole('region', { name: 'Reconnect @urbantrend.bd' });
   expect(within(banner).getByText(/expired on Nov 5/)).toBeTruthy();
-  expect(
-    within(banner).getByRole('link', { name: 'Reconnect Instagram' }).getAttribute('href'),
-  ).toBe('/integrations');
+  expect(within(banner).getByRole('button', { name: 'Reconnect Instagram' })).toBeTruthy();
+});
+
+it('opens the connect dialog from Connect account and from Reconnect', async () => {
+  const user = userEvent.setup();
+  show({ connections: [page, instagram] });
+  await user.click(await screen.findByRole('button', { name: 'Connect account' }));
+  const chooser = screen.getByRole('dialog', { name: 'Connect account' });
+  expect(within(chooser).getByText('Coming soon')).toBeTruthy();
+  await user.click(within(chooser).getByRole('radio', { name: /Instagram business account/ }));
+  await user.click(within(chooser).getByRole('button', { name: 'Continue' }));
+  expect(await screen.findByRole('dialog', { name: /Connect/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Continue with Facebook' })).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Back' }));
+  const row = screen.getByText('@urbantrend.bd').closest('li')!;
+  await user.click(within(row).getByRole('button', { name: 'Reconnect' }));
+  expect(await screen.findByRole('dialog', { name: 'Reconnect @urbantrend.bd' })).toBeTruthy();
 });
 
 it('shows a draft with its accounts and warns when it has no caption or photo', async () => {

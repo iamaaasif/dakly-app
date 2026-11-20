@@ -23,3 +23,13 @@ export function usePublishAutomation(id: string) {
     onSuccess: () => client.invalidateQueries({ queryKey: automationKeys.all(contextTag) }),
   });
 }
+
+export function useRenameAutomation(id: string) {
+  const { request, contextTag } = useStoreRequest();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      request(`/automations/${id}`, { method: 'PATCH', body: { name } }),
+    onSuccess: () => client.invalidateQueries({ queryKey: automationKeys.all(contextTag) }),
+  });
+}

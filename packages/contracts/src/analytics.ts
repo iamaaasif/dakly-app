@@ -2,13 +2,7 @@ import { z } from 'zod';
 
 import type { campaignChannels } from './campaigns';
 
-export const analyticsTabs = [
-  'overview',
-  'campaigns',
-  'automations',
-  'channels',
-  'social-posts',
-] as const;
+export const analyticsTabs = ['overview'] as const;
 export type AnalyticsTab = (typeof analyticsTabs)[number];
 
 // ANA-R8: no period over 12 months in release 1.
@@ -19,6 +13,17 @@ export const analyticsQuerySchema = z.strictObject({
     .default('30')
     .transform((value) => periodDays[value]),
 });
+
+// What the page keeps in the URL: the tab, the period and the Compare toggle.
+export const analyticsViewSchema = z.object({
+  tab: z.enum(analyticsTabs).default('overview'),
+  period: analyticsQuerySchema.shape.period,
+  compare: z
+    .enum(['on', 'off'])
+    .default('on')
+    .transform((value) => value === 'on'),
+});
+export type AnalyticsView = z.infer<typeof analyticsViewSchema>;
 
 export type AnalyticsQuery = z.infer<typeof analyticsQuerySchema>;
 
@@ -55,6 +60,8 @@ export type AnalyticsOverviewResponse = {
   // Dakly pays nothing for Messenger, so only a paid channel can have a return per ৳1.
   returnPerTaka: number | null;
   weeklyRevenue: { weekStart: string; byChannel: Partial<Record<AnalyticsChannel, string>> }[];
+  // Total money per week of the previous period, for the dashed line when Compare is on.
+  previousWeeklyRevenuePoisha: string[];
   channels: AnalyticsChannelRow[];
   funnel: {
     sent: AnalyticsFunnelStep;

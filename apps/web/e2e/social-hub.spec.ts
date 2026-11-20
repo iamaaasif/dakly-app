@@ -82,6 +82,17 @@ test('shows accounts, drafts and the reconnect banner', async ({ page, context, 
     await expect(channels.getByText('Access expired')).toBeVisible();
     await expect(page.getByText('Add a caption or photo')).toBeVisible();
     await capture(page, 'hub');
+
+    await page.getByRole('button', { name: 'Connect account' }).click();
+    const chooser = page.getByRole('dialog', { name: 'Connect account' });
+    await expect(chooser.getByText('Coming soon')).toBeVisible();
+    await capture(page, 'connect-account');
+    await chooser.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('button', { name: 'Continue with Facebook' })).toBeVisible();
+    await page.getByRole('button', { name: 'Back' }).click();
+    await channels.getByRole('button', { name: 'Reconnect' }).click();
+    await expect(page.getByRole('dialog', { name: 'Reconnect @urbantrend.bd' })).toBeVisible();
+    await page.getByRole('button', { name: 'Back' }).click();
   } finally {
     await database.pool.query('delete from post_targets where store_id=$1', [storeId]);
     await database.pool.query('delete from posts where store_id=$1', [storeId]);

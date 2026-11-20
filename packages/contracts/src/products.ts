@@ -188,9 +188,11 @@ export const productScreenQuerySchema = productListQuerySchema
     product: z.uuid().optional(),
     productTab: z.enum(productTabValues).optional(),
     create: z.literal('1').optional(),
+    import: z.literal('1').optional(),
   })
   .refine(
-    (query) => [query.adjust, query.product, query.create].filter(Boolean).length <= 1,
+    (query) =>
+      [query.adjust, query.product, query.create, query.import].filter(Boolean).length <= 1,
     'Choose one product action at a time',
   );
 export type ProductOption = z.infer<typeof optionSchema>;

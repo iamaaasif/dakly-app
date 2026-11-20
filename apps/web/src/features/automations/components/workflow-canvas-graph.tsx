@@ -1,18 +1,21 @@
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 
 import type { CanvasLayout } from '../workflow-canvas-layout';
-import { CanvasNodeItem } from './workflow-canvas-nodes';
+import { EdgeAddButtons } from './workflow-add-step';
+import { type CanvasEditing, CanvasNodeItem } from './workflow-canvas-nodes';
 
 export function WorkflowCanvasGraph({
   graph,
   layout,
   scale = 1,
   recentEntries,
+  editing,
 }: {
   graph: AutomationGraph;
   layout: CanvasLayout;
   scale?: number;
   recentEntries?: string;
+  editing?: CanvasEditing;
 }) {
   return (
     <div className="mx-auto" style={{ width: layout.width * scale, height: layout.height * scale }}>
@@ -51,9 +54,11 @@ export function WorkflowCanvasGraph({
               graph={graph}
               layout={layout}
               recentEntries={recentEntries}
+              editing={editing}
             />
           ))}
         </ol>
+        {editing && <EdgeAddButtons layout={layout} editing={editing} />}
       </div>
     </div>
   );
