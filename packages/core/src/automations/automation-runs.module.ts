@@ -18,6 +18,7 @@ import { AutomationBirthdaysService } from './automation-birthdays.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
+import { AutomationOrderTextService } from './automation-order-text.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
 import { AutomationSendRetryService } from './automation-send-retry.service';
@@ -43,6 +44,7 @@ import { AutomationsModule } from './automations.module';
   ],
   providers: [
     AutomationConditionsService,
+    AutomationOrderTextService,
     AutomationRunsRepository,
     AutomationRunsService,
     AutomationEntryRepository,

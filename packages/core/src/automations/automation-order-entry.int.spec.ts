@@ -159,6 +159,11 @@ describe('order triggers (Postgres)', () => {
     await placed(orderId, eventId);
     await placed(orderId, eventId);
     expect(await runs(id)).toBe(1);
+    const started = await admin.pool.query(
+      'select trigger_order_id from automation_runs where automation_id=$1',
+      [id],
+    );
+    expect(started.rows).toEqual([{ trigger_order_id: orderId }]);
   });
 
   it('starts nothing for an order whose buyer was purged', async () => {

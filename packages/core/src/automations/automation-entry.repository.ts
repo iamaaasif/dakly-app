@@ -12,6 +12,7 @@ type NewRun = Pick<
   | 'versionId'
   | 'contactId'
   | 'triggerKey'
+  | 'triggerOrderId'
   | 'currentStepKey'
   | 'enteredAt'
   | 'wakeAt'

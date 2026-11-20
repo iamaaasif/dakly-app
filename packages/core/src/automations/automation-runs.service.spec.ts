@@ -366,6 +366,7 @@ describe('AutomationRunsService', () => {
       sendPolicy as unknown as SendPolicyService,
       stores as unknown as StoresService,
       messaging as unknown as MessagingService,
+      { prepare: async () => undefined } as unknown as AutomationOrderTextService,
       links as unknown as LinksService,
       wallets as unknown as WalletService,
       new AutomationSmsDeliveryService(
