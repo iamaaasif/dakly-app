@@ -452,6 +452,7 @@ describe('SendPolicyService (Postgres)', () => {
         const recipient = await policy.recheckRetryRecipient(storeA, message);
         if (recipient?.decision.action !== 'send') return recipient;
         const check = await policy.prepareMarketingRetryCheck(storeA, {
+          channel: 'sms',
           contactId,
           workflowStepId: stepId,
           settings,

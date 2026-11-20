@@ -36,6 +36,15 @@ type PreparedMetaSend = {
   externalAccountId: string;
 };
 
+// An image and buttons are Messenger only; Instagram text goes out as it was.
+type MetaMessage = Omit<Extract<OutboundMessage, { channel: 'messenger' }>, 'channel'>;
+
+function toOutbound(channel: OutboundMessage['channel'], message: MetaMessage): OutboundMessage {
+  if (channel === 'messenger') return { ...message, channel };
+  const { externalConversationId, text, operationKey, humanAgent } = message;
+  return { channel, externalConversationId, text, operationKey, humanAgent };
+}
+
 @Injectable()
 export class ChannelConnectionsService {
   private readonly logger = new Logger(ChannelConnectionsService.name);
@@ -148,7 +157,7 @@ export class ChannelConnectionsService {
     return { storeId, connectionId, channel, ciphertext, externalAccountId, keyVersion };
   }
 
-  async sendMetaMessage(prepared: PreparedMetaSend, message: Omit<OutboundMessage, 'channel'>) {
+  async sendMetaMessage(prepared: PreparedMetaSend, message: MetaMessage) {
     if (hasDatabaseTransactionScope()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
     if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
     const { storeId, connectionId, channel, ciphertext, externalAccountId, keyVersion } = prepared;
@@ -161,7 +170,7 @@ export class ChannelConnectionsService {
       return await measureVendorCall(this.logger, 'meta_send', 'Meta send measured', () =>
         driver.send(
           { accountExternalId: externalAccountId, accessToken: token.toString() },
-          { ...message, channel },
+          toOutbound(channel, message),
         ),
       );
     } catch (error) {
