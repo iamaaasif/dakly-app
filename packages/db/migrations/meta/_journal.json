@@ -439,15 +439,22 @@
     {
       "idx": 62,
       "version": "7",
-      "when": 1795141756567,
-      "tag": "0062_campaign_result_repair",
+      "when": 1795142819463,
+      "tag": "0062_product_categories_index",
       "breakpoints": true
     },
     {
       "idx": 63,
       "version": "7",
-      "when": 1795145677393,
-      "tag": "0063_campaign_sms_redirect_links",
+      "when": 1795146170109,
+      "tag": "0063_campaign_result_repair",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1795146677936,
+      "tag": "0064_campaign_sms_redirect_links",
       "breakpoints": true
     }
   ]

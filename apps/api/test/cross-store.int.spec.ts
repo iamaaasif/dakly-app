@@ -492,6 +492,25 @@ fixture('GET /products', async () => {
         .items.map((row: { id: string }) => row.id),
     ).toEqual([id]);
 });
+fixture('GET /products/categories', async () => {
+  const { a, b } = await pair();
+  await success(a, 'POST', '/products', 201, {
+    name: 'পাঞ্জাবি',
+    pricePoisha: 125000,
+    category: 'Clothing',
+  });
+  await success(b, 'POST', '/products', 201, {
+    name: 'ঘড়ি',
+    pricePoisha: 50000,
+    category: 'Accessories',
+  });
+  expect((await success(a, 'GET', '/products/categories', 200)).json()).toEqual({
+    items: ['Clothing'],
+  });
+  expect((await success(b, 'GET', '/products/categories', 200)).json()).toEqual({
+    items: ['Accessories'],
+  });
+});
 fixture('GET /products/:productId', async () => {
   const { a, b } = await pair(),
     id = await product(a);

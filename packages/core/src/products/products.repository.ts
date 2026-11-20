@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, getTableName, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableName, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 
 import type {
   CreateProductInput,
@@ -147,6 +147,24 @@ export class ProductsRepository {
         .orderBy(desc(products.id))
         .limit(query.limit + 1),
     );
+  }
+
+  async listCategories(storeId: string): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .selectDistinct({ category: products.category })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            isNotNull(products.category),
+            ne(products.status, 'archived'),
+          ),
+        )
+        .orderBy(asc(products.category))
+        .limit(200),
+    );
+    return rows.map((row) => row.category!);
   }
 
   findVariants(storeId: string, productIds: string[]): Promise<Variant[]> {

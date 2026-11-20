@@ -1,6 +1,6 @@
 {
-  "id": "1cf56d09-e34e-4600-bfa6-00b1f76f4370",
-  "prevId": "4b9e8b44-f043-4b44-b027-646f90a7f36f",
+  "id": "3f4bd03b-1a08-43a2-adda-9aa269e02ebc",
+  "prevId": "06a8a69d-afd8-47ee-9b67-6a068cf8be5c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -7112,12 +7112,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "redirect_link_codes": {
-          "name": "redirect_link_codes",
-          "type": "text[]",
-          "primaryKey": false,
-          "notNull": false
-        },
         "skip_reason": {
           "name": "skip_reason",
           "type": "text",
@@ -7554,12 +7548,6 @@
         "short_link_base": {
           "name": "short_link_base",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "wrapped_sms_approved_at": {
-          "name": "wrapped_sms_approved_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -19066,6 +19054,27 @@
             },
             {
               "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "products_store_category_idx": {
+          "name": "products_store_category_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "category",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
