@@ -45,6 +45,8 @@ import { RunProductImport } from '@dakly/core/imports/jobs/run-product-import.jo
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
 import { MaintenanceModule } from '@dakly/core/maintenance/maintenance.module';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
+import { InboundAttachmentsModule } from '@dakly/core/messaging/inbound-attachments.module';
+import { CopyMessageAttachmentsJob } from '@dakly/core/messaging/jobs/copy-message-attachments.job';
 import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
 import { MessagingModule } from '@dakly/core/messaging/messaging.module';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
@@ -95,6 +97,7 @@ import { JobSchedulers } from './job-schedulers';
     SendSecurityNoticeJob,
     RelayOutboxJob,
     SendMessageJob,
+    CopyMessageAttachmentsJob,
     FailStuckImportsJob,
     RunContactImport,
     RunProductImport,
@@ -142,6 +145,7 @@ import { JobSchedulers } from './job-schedulers';
     PaymentCallbackWorkerModule,
     MetaWebhookMaintenanceModule,
     MessagingModule,
+    InboundAttachmentsModule,
     ChannelTokenHealthModule,
     MetaPageReconciliationModule,
     ConversationReturnsModule,

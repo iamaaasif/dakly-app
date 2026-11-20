@@ -84,6 +84,7 @@ function inbound(
     externalMessageId,
     externalSenderId: 'sender-test',
     content,
+    attachments: [],
     sentAt,
     receivedAt: sentAt,
   };

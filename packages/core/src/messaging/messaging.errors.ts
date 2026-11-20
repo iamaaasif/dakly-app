@@ -14,6 +14,7 @@ const MESSAGING_ERRORS = {
     status: 409,
     message: "The contact's phone changed after this message was decided",
   },
+  ATTACHMENT_COPY_UNAVAILABLE: { status: 503, message: 'The attachment could not be copied yet' },
   MESSAGE_ARCHIVE_INCOMPLETE: {
     status: 500,
     message: 'A message archive object was not stored completely',

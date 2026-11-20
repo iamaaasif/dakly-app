@@ -6,6 +6,7 @@ import { Button } from '@dakly/ui/button';
 
 import type { CanvasLayout } from '../workflow-canvas-layout';
 import { WorkflowCanvasGraph } from './workflow-canvas-graph';
+import type { CanvasEditing } from './workflow-canvas-nodes';
 
 // Below this the text is too small to read on a phone, so a wide flow scrolls sideways instead.
 const READABLE_ZOOM = 0.7;
@@ -34,9 +35,14 @@ function useViewportWidth() {
   return { width, ref };
 }
 
-type Props = { graph: AutomationGraph; layout: CanvasLayout; recentEntries?: string };
+type Props = {
+  graph: AutomationGraph;
+  layout: CanvasLayout;
+  recentEntries?: string;
+  editing?: CanvasEditing;
+};
 
-export function WorkflowCanvasViewport({ graph, layout, recentEntries }: Props) {
+export function WorkflowCanvasViewport({ graph, layout, recentEntries, editing }: Props) {
   const [zoom, setZoom] = useState<number | null>(null);
   const viewport = useViewportWidth();
   const fitted = viewport.width ? Math.min(1, viewport.width / layout.width) : 1;
@@ -55,6 +61,7 @@ export function WorkflowCanvasViewport({ graph, layout, recentEntries }: Props) 
           layout={layout}
           scale={scale}
           recentEntries={recentEntries}
+          editing={editing}
         />
       </div>
       <div className="shadow-sm absolute bottom-4 left-4 flex items-center rounded-lg border border-border bg-surface">

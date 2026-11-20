@@ -41,6 +41,10 @@ export class AnalyticsService {
     return this.readOrderMetric(storeId, period, 'marketing_revenue');
   }
 
+  marketingOrders(storeId: string, period: ReportPeriod) {
+    return this.readOrderMetric(storeId, period, 'marketing_orders');
+  }
+
   async campaignAttribution(storeId: string, ids: string[]) {
     const { current } = await this.periods(storeId, 30);
     return this.attributionBySource(
@@ -74,6 +78,19 @@ export class AnalyticsService {
         },
       ]),
     );
+  }
+
+  async marketingRevenueByChannel(storeId: string, period: ReportPeriod) {
+    const rows = await this.repository.readChannelRevenue(storeId, period);
+    return rows.map(({ day, dimension, value }) => ({
+      day,
+      channel: dimension.slice('channel:'.length),
+      value,
+    }));
+  }
+
+  messagePeople(storeId: string, period: ReportPeriod, timeZone: string) {
+    return this.repository.messagePeople(storeId, { ...period, timeZone });
   }
 
   async sales(storeId: string, period: ReportPeriod) {
