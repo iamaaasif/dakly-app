@@ -228,6 +228,7 @@ The Social hub lists each connected Facebook Page and Instagram account with its
 - Create post also has the AI caption panel (topic, tone, language, 3 options; Shorten, Make friendlier, Translate to Bangla or English), Add hashtags, photos from Products, the Facebook link and the Instagram first comment. Add hashtags builds tags from the caption's own words and uses no AI credits. A caption picked from, or changed by, the AI panel saves the draft as AI-written, so it needs approval (D7).
 - Missing from Create post until a later SOC-5 PR: Upload from device for photos that are not products.
 - An AI-written draft that nobody approved shows Needs your OK (D7).
+- Content Studio (`/content-studio`, tabs in the URL: Create, Library, Brand profile) has no design image, so it is built from the screen table above and the shared components. The Create tab asks for the format, what it is about (with idea chips), an optional product, language and tone, and shows 3 options with Copy, Edit, Save to library and Use in post. Use in post saves the option to the library with its AI run, then opens Create post with that text, so the draft is saved as AI-written (D7). Length, Add my hashtags, End with how to order, AI credits left and Use in campaign are not built: the writing API takes none of them yet.
 
 TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagram "Access expired" disagrees with the campaign builder; status comes from the real connection.
 

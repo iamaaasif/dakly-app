@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Megaphone,
   Package,
+  PenLine,
   Plug,
   Puzzle,
   Send,
@@ -151,10 +152,7 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
         },
       ],
     },
-    {
-      heading: 'Social auto post',
-      links: [{ href: '/social', label: 'Social hub', icon: Send, visible: store?.canViewSocial }],
-    },
+    socialGroup(store),
     {
       heading: 'Intelligence',
       links: [
@@ -168,6 +166,21 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
     },
     ...settingsGroups(store),
   ];
+}
+
+function socialGroup(store: SessionContext['currentStore']): NavigationGroup {
+  return {
+    heading: 'Social auto post',
+    links: [
+      { href: '/social', label: 'Social hub', icon: Send, visible: store?.canViewSocial },
+      {
+        href: '/content-studio',
+        label: 'Content Studio',
+        icon: PenLine,
+        visible: store?.canViewSocial,
+      },
+    ],
+  };
 }
 
 function settingsGroups(store: SessionContext['currentStore']): NavigationGroup[] {
