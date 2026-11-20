@@ -13,6 +13,7 @@ import { useCustomer } from '../api/customer';
 import { channelLabels, customerKindLabels, customerPhone } from '../customer-labels';
 import { ConsentForm } from './consent-form';
 import { CustomerActions } from './customer-actions';
+import { PossibleSamePerson } from './possible-same-person';
 import { formatCalendarDate } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
@@ -119,6 +120,8 @@ function ProfileContent({
           ))}
         </div>
       </Card>
+
+      <PossibleSamePerson contactId={contact.id} canEdit={canEdit} />
 
       <Card className="space-y-3">
         <h2 className="text-md font-semibold">Chat channels</h2>

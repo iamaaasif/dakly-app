@@ -1,3 +1,5 @@
+import { MessageCircle, MessageSquare, MessagesSquare } from 'lucide-react';
+
 import type { AnalyticsChannel } from '@dakly/contracts/analytics';
 
 export const channelLabels: Record<AnalyticsChannel, string> = {
@@ -17,3 +19,9 @@ export const periodChoices = [
   { days: 90, label: '3 months' },
   { days: 365, label: '12 months' },
 ] as const;
+
+export const channelTiles = {
+  whatsapp: { icon: MessageCircle, tile: 'bg-success-soft text-success' },
+  sms: { icon: MessageSquare, tile: 'bg-ai-soft text-ai' },
+  messenger: { icon: MessagesSquare, tile: 'bg-info-soft text-info' },
+} as const;
