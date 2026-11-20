@@ -314,6 +314,8 @@ The model call runs outside the transaction. Before a hand-over, the service che
 
 Agent tools take no store id, contact id or price; those come from the job. Tools: `search_products`, `get_product`, `get_delivery_charge`, `search_knowledge`, `get_my_orders`, `get_order_status`, `draft_order`, `confirm_order`, `create_payment_link`, `send_product_card`, `add_to_restock_list`, `hand_over`.
 
+Each tool is described for the model in `packages/contracts/src/ai-agent-tools.ts` with the words customers use in Bangla, Banglish and English, the unit of every number and the allowed values. Tool results give money in taka, converted from poisha, and stock as a count (null when the shop does not count stock). Product tools return only active products shown in chats. `get_my_orders` and `get_order_status` read only orders whose buyer is the chat's own contact; an order number that belongs to someone else is answered as not found, and no tool looks an order up by phone. `get_delivery_charge` returns up to three areas that start with the typed name. Only when none match, it returns the shop's delivery zones instead, because the area table stops at upazilas and a Dhaka locality has no match of its own. The reply names the place the charge is for. `send_product_card` returns the card text built in code from the product. `hand_over` takes only the reasons the model may choose.
+
 `MessagingService.queueChannelMessage` queues Messenger and Instagram replies and transactional messages. One operation key in a store creates one message and one `message.send_requested` event in the same transaction. The outbox relay queues `SendMessageJob`. The worker checks the selected identity and rereads the deadline after taking the contact lock. Inbox replies require the Chats extension. Only a reply written by a person can use the Human Agent tag in the seven-day window. Marketing sends need the campaign sender's scheduling and frequency accounting.
 
 The worker saves a pending attempt before calling Meta outside the transaction. Acceptance records the provider ID and emits `message.sent`. A known rejection records a failure and emits `message.failed`. An uncertain attempt stays queued with `send_unconfirmed` for reconciliation. A signed Messenger echo from the configured Meta app can confirm an attempt when it matches the stored message ID and recipient. The worker never resends an unconfirmed attempt.
@@ -388,6 +390,14 @@ in-process.
 The inbox routes require the Chats extension. Staff with view access can list conversations by newest activity and read messages by newest creation time. Both lists use cursors. The conversation list can filter by status, responder, channel and assignee. Deleting a contact hides their conversations and messages from the inbox.
 
 Staff with edit access can set status, assign an active member or clear the assignment, take over and hand back to AI. Each change bumps the conversation version and records the names of the changed fields in the audit log. Changing the responder leaves status and assignment alone. An inbound message newer than the previous one reopens a Done or Later conversation and keeps its responder and assignee. If staff change the conversation while the message is being saved, their change wins.
+
+The list shows the contact name on each row. `GET /conversations/counts` returns the tab numbers: all chats, chats that need you, chats the AI is handling and chats set to follow up. The chat list screen (`/chats`) keeps its tab and channel filter in the URL. The card fills the window and the list scrolls inside it. Work that is not built yet, and where it goes:
+
+- CHAT-5 part 1b: search by name or phone through a `q` parameter on the list (phone search follows the CUS-15 exact-match rules and rate limit for members without See full phone numbers), the sort select, and the Assigned to filter through a chats-scoped `GET /conversations/assignees` that lists members who can view chats. The header assign picker in part 4 uses the same list.
+- CHAT-5 part 4: Select with bulk actions, and the header pills.
+- Labels (VIP and the Label button): this doc names Label in the screens and in Edit Chats permission but gives no data model, so labels need an owner decision before a CHAT-5 part 5.
+- Intent tags, "Lead saved" and "Dakly is typing": AI-5 shows them from the AI pipeline.
+- Comments channel: CHAT-6.
 
 Staff can add internal notes to the inbox thread. A note records its author and time, stays inside Dakly, and leaves the customer preview, reply window and unread count as they were.
 

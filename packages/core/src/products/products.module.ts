@@ -4,6 +4,7 @@ import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
+import { ProductImportService } from './product-import.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductPhotosController } from './product-photos.controller';
 import { ProductStockRepository } from './product-stock.repository';
@@ -20,9 +21,10 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductsRepository,
     ProductOrderVariantsRepository,
     ProductsService,
+    ProductImportService,
     ProductStockRepository,
     ProductStockService,
   ],
-  exports: [ProductsService, ProductStockService],
+  exports: [ProductsService, ProductImportService, ProductStockService],
 })
 export class ProductsModule {}

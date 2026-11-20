@@ -201,6 +201,7 @@ export type ContactImportField = keyof ContactImportRow;
 export type CreateImportInput = z.infer<typeof createImportSchema>;
 export type StartImportInput = z.infer<typeof startImportSchema>;
 export type ImportConsentEvidence = z.infer<typeof importConsentEvidenceSchema>;
+export type ImportKind = (typeof importKinds)[number];
 export type ImportStatus = (typeof importStatuses)[number];
 export type ImportDuplicateMode = (typeof importDuplicateModes)[number];
 export type ContactKind = (typeof contactKinds)[number];
