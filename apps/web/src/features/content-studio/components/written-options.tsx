@@ -18,7 +18,7 @@ export function WrittenOptions({ result, asked, form }: WrittenOptionsProps) {
     <section aria-labelledby="options-heading" className="space-y-3">
       <div>
         <h2 id="options-heading" className="text-lg font-semibold">
-          3 options for your {kindLabel(asked.kind).toLowerCase()}
+          3 options for your {kindLabel(asked.kind)}
         </h2>
         <p className="text-text-muted">
           Edit any of them, then use, copy or save it. Uses 3 AI credits per set.

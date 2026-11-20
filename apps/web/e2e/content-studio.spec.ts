@@ -17,7 +17,8 @@ async function capture(page: Page, name: string, scrollTo?: Locator) {
   ] as const) {
     await page.setViewportSize({ width, height });
     await page.mouse.move(width - 1, height - 1);
-    await scrollTo?.scrollIntoViewIfNeeded();
+    if (scrollTo) await scrollTo.scrollIntoViewIfNeeded();
+    else await page.evaluate(() => scrollTo(0, 0));
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth))
       .toBeLessThanOrEqual(0);
@@ -93,7 +94,7 @@ test('writes options, saves one to the library and opens it in Create post', asy
     await page.getByLabel(/Anything else Dakly should know/).fill('New winter kurtis, 15% off');
     await page.getByRole('button', { name: /Write 3 options/ }).click();
     await expect(page.getByRole('article')).toHaveCount(3);
-    await capture(page, 'options', page.getByRole('article').first());
+    await capture(page, 'options');
 
     const first = page.getByRole('article').first();
     await first.getByRole('button', { name: 'Save', exact: true }).click();
