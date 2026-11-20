@@ -1,5 +1,5 @@
 {
-  "id": "4b9e8b44-f043-4b44-b027-646f90a7f36f",
+  "id": "06a8a69d-afd8-47ee-9b67-6a068cf8be5c",
   "prevId": "b654d351-41f6-48b6-98dc-b7b5831791a1",
   "version": "7",
   "dialect": "postgresql",
@@ -7837,28 +7837,6 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'paused' and \"campaigns\".\"pause_reason\" = 'balance'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "campaigns_counts_pending_idx": {
-          "name": "campaigns_counts_pending_idx",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"campaigns\".\"counts_at\" is null and \"campaigns\".\"approved_at\" is not null and \"campaigns\".\"status\" in ('paused', 'sent', 'cancelled', 'failed')",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -19054,6 +19032,27 @@
             },
             {
               "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "products_store_category_idx": {
+          "name": "products_store_category_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "category",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
