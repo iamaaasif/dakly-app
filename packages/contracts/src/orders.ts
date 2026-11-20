@@ -103,6 +103,7 @@ export const orderTabs = [
 ] as const;
 
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
+export type OrderParcelHistory = { parcels: number; returned: number };
 
 export const orderListQuerySchema = z
   .strictObject({
@@ -149,6 +150,11 @@ export type OrderSummary = {
   deliveredOrderDiscountPoisha: number | null;
   createdAt: string;
   returnRisk: OrderReturnRisk;
+  parcelHistory: OrderParcelHistory;
+  courier: (typeof couriers)[number] | null;
+  courierOtherName: string | null;
+  returnedAt: string | null;
+  returnReason: string | null;
 };
 
 export type OrderListItem = OrderSummary & {
@@ -228,14 +234,10 @@ export type OrderDetail = OrderSummary & {
   onHoldReason: (typeof onHoldReasons)[number] | null;
   followUpOn: string | null;
   cancelReason: (typeof cancelReasons)[number] | null;
-  courier: (typeof couriers)[number] | null;
-  courierOtherName: string | null;
   trackingCode: string | null;
   shippedAt: string | null;
   shippedByUserId: string | null;
   deliveredAt: string | null;
-  returnedAt: string | null;
-  returnReason: string | null;
   codCollectedAt: string | null;
   possibleDuplicateOfOrderId: string | null;
   items: OrderItem[];

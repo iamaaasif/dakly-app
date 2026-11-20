@@ -114,3 +114,33 @@ export function formatTimeZone(timeZone: string): string {
   const city = timeZone.split('/').at(-1)?.replaceAll('_', ' ') ?? timeZone;
   return offset ? `${city} time (${offset})` : `${city} time`;
 }
+
+const dhakaDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' });
+
+// The Dhaka calendar day of an instant, as YYYY-MM-DD.
+export function dhakaDayKey(value: string | Date): string {
+  return dhakaDay.format(typeof value === 'string' ? new Date(value) : value);
+}
+
+export function formatMonthYear(month: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${month}-01T00:00:00Z`));
+}
+
+export function formatDayLong(dayKey: string): string {
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'full', timeZone: 'UTC' }).format(
+    new Date(`${dayKey}T00:00:00Z`),
+  );
+}
+
+export function formatDayMonth(dayKey: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${dayKey}T00:00:00Z`));
+}

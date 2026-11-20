@@ -10,6 +10,7 @@ import { campaignListQuerySchema, createCampaignSchema } from '@dakly/contracts/
 import { createDatabase } from '@dakly/db/client';
 
 import { DatabaseModule } from '../platform/database/database.module';
+import { CampaignResultsService } from './campaign-results.service';
 import { CampaignsModule } from './campaigns.module';
 import { CampaignsService } from './campaigns.service';
 
@@ -22,6 +23,7 @@ const userId = randomUUID();
 const actor = { kind: 'user', userId } as const;
 let app: INestApplicationContext;
 let service: CampaignsService;
+let results: CampaignResultsService;
 
 function draft(name: string) {
   return service.create(storeId, createCampaignSchema.parse({ name, channel: 'sms' }), actor);
@@ -39,6 +41,7 @@ describe('CampaignsService drafts (Postgres)', () => {
     );
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(CampaignsService);
+    results = app.get(CampaignResultsService);
   });
 
   afterAll(async () => {
@@ -176,6 +179,29 @@ describe('CampaignsService drafts (Postgres)', () => {
     });
     await expect(
       service.changeDraft(storeId, campaign.id, { name: 'আবার' }, actor),
+    ).rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND' });
+  });
+
+  it('reads results of an unsent campaign, and reports a campaign of another shop missing', async () => {
+    const campaign = await draft('ফলাফল');
+    expect(await results.results(storeId, campaign.id)).toEqual({
+      costPoisha: '0',
+      returnPerTaka: null,
+      attributionWindowDays: expect.any(Number),
+      resultsFinalAt: null,
+      failureReasons: [],
+      smsFallbackCount: 0,
+      optedOutCount: 0,
+    });
+    expect(
+      await results.customers(storeId, campaign.id, { outcome: 'ordered', limit: 25 }),
+    ).toEqual({ items: [], nextCursor: null });
+    const otherStoreId = randomUUID();
+    await expect(results.results(otherStoreId, campaign.id)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_FOUND',
+    });
+    await expect(
+      results.customers(otherStoreId, campaign.id, { outcome: 'failed', limit: 25 }),
     ).rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND' });
   });
 });

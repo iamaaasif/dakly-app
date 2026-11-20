@@ -238,6 +238,13 @@ export function isTriggerAvailable(key: TriggerKey): boolean {
   return readyBeforeChannels || orderTriggerKeys.includes(key);
 }
 
+// SMS and Messenger send (CAMP-7); WhatsApp comes with Q2.
+const sendableChannels: readonly string[] = ['sms', 'messenger'];
+
+export function isChannelSendable(channel: string): boolean {
+  return sendableChannels.includes(channel);
+}
+
 export const actionKinds = [
   'add_tag',
   'remove_tag',

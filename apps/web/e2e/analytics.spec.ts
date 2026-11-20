@@ -16,9 +16,32 @@ async function captureAtBothSizes(page: Page, name: string) {
     [360, 800],
   ] as const) {
     await page.setViewportSize({ width, height });
+    // The tab row scrolls on a phone and puts the open tab in view when the page opens at that width.
+    if (width === 360) {
+      await page.reload();
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const row = document.querySelector('nav[aria-label="Analytics tabs"]');
+            const open = row?.querySelector('[aria-current="page"]');
+            if (!row || !open) return false;
+            const [outer, inner] = [row.getBoundingClientRect(), open.getBoundingClientRect()];
+            return inner.left >= outer.left - 1 && inner.right <= outer.right + 1;
+          }),
+        )
+        .toBe(true);
+    }
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
+    // A full-page capture starts from the top, as the design screenshots do.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // The sidebar is as tall as the window, so the window takes the page's height, or enough for the whole menu, for the capture.
+    if (evidence && width === 1440)
+      await page.setViewportSize({
+        width,
+        height: Math.max(1240, await page.evaluate(() => document.documentElement.scrollHeight)),
+      });
     if (evidence)
       await page.screenshot({ path: resolve(evidence, `${name}-${width}.png`), fullPage: true });
   }
@@ -98,6 +121,8 @@ test('shows the overview from the glossary reports and keeps the period and togg
        union all select $1,day,'marketing_revenue','channel:whatsapp',600000 + (59-age)*7000 from days
        union all select $1,day,'marketing_revenue','channel:sms',300000 + (59-age)*5000 from days
        union all select $1,day,'marketing_orders','',4 + (59-age)/20 from days
+       union all select $1,day,'marketing_orders','channel:whatsapp',3 from days
+       union all select $1,day,'marketing_orders','channel:sms',1 from days
        union all select $1,day,'marketing_revenue','campaign:'||$2,200000 from days where age < 10
        union all select $1,day,'marketing_orders','campaign:'||$2,2 from days where age < 10
        union all select $1,day,'marketing_revenue','campaign:'||$3,150000 from days where age < 10
@@ -106,6 +131,42 @@ test('shows the overview from the glossary reports and keeps the period and togg
        union all select $1,day,'marketing_orders','automation:'||$4,1 from days where age < 10`,
       [shop, sms, whatsapp, welcome],
     );
+    for (const [caption, kind, reach, reactions, age] of [
+      [
+        'Thank you for 18,000 followers. Here’s 10% off with code THANKYOU10, all week.',
+        'facebook_page',
+        6120,
+        540,
+        8,
+      ],
+      [
+        'Our winter kurti collection is here. Soft cotton, warm colours and easy fits for every day.',
+        'instagram',
+        4210,
+        312,
+        5,
+      ],
+    ] as const) {
+      const ids = (
+        await database.pool.query<{ post: string; connection: string }>(
+          'select gen_random_uuid()::text as post, gen_random_uuid()::text as connection',
+        )
+      ).rows[0]!;
+      await database.pool.query('insert into posts(id,store_id,caption) values($1,$2,$3)', [
+        ids.post,
+        shop,
+        caption,
+      ]);
+      await database.pool.query(
+        "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values($1::uuid,$2,$3,$1::text,'Page')",
+        [ids.connection, shop, kind],
+      );
+      await database.pool.query(
+        `insert into post_targets(id,store_id,post_id,channel_connection_id,status,published_at,reach,reactions)
+         values(gen_random_uuid(),$1,$2,$3,'published',now() - make_interval(days => $4::int),$5,$6)`,
+        [shop, ids.post, ids.connection, age, reach, reactions],
+      );
+    }
     await context.addCookies([
       {
         name: 'dakly_session',
@@ -141,6 +202,8 @@ test('shows the overview from the glossary reports and keeps the period and togg
     for (const [tab, ready] of [
       ['campaigns', page.getByRole('link', { name: 'Eid offer' })],
       ['automations', page.getByRole('link', { name: 'Welcome new subscribers' })],
+      ['channels', page.getByRole('heading', { name: 'WhatsApp' })],
+      ['social', page.getByText('Thank you for 18,000 followers.', { exact: false })],
     ] as const) {
       await page.goto(`/analytics?tab=${tab}`);
       await expect(ready).toBeVisible();
@@ -168,6 +231,9 @@ test('shows the overview from the glossary reports and keeps the period and togg
     );
     await database.pool.query('delete from automation_versions where store_id=$1', [shop]);
     await database.pool.query('delete from automations where store_id=$1', [shop]);
+    await database.pool.query('delete from post_targets where store_id=$1', [shop]);
+    await database.pool.query('delete from posts where store_id=$1', [shop]);
+    await database.pool.query('delete from channel_connections where store_id=$1', [shop]);
     await database.pool.query('delete from campaign_recipients where store_id=$1', [shop]);
     await database.pool.query('delete from campaigns where store_id=$1', [shop]);
     await database.pool.query('delete from contacts where store_id=$1', [shop]);
