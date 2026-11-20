@@ -1,5 +1,5 @@
 'use client';
-import { Clock, Plus } from 'lucide-react';
+import { Calendar, CircleCheck, Clock, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -13,6 +13,8 @@ import { buildEntries, type CalendarEntry } from '../post-calendar';
 import { useMyPostsParams } from '../use-my-posts-params';
 import { CalendarPanel } from './calendar-panel';
 import { HubDialogs, type HubDialog } from './hub-dialogs';
+import { PostDetailsDialog } from './post-details-dialog';
+import { PublishedList } from './published-list';
 import { ReconnectBanner } from './reconnect-banner';
 import { SocialHubLoading } from './social-hub-loading';
 import { useSessionContext } from '@/lib/session-context';
@@ -47,6 +49,7 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
   const { data: session } = useSessionContext();
   const url = useMyPostsParams(accounts);
   const [dialog, setDialog] = useState<HubDialog>(null);
+  const [open, setOpen] = useState<CalendarEntry | null>(null);
   const store = session?.currentStore;
   const canEdit = Boolean(store?.canEditSocial);
   const all = buildEntries(posts, accounts, null);
@@ -65,7 +68,8 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
           setDialog({ type: 'connect', kind: account.kind, reconnecting: account })
         }
       />
-      <MyPostsBody accounts={accounts} posts={posts} url={url} canEdit={canEdit} />
+      <MyPostsBody accounts={accounts} posts={posts} url={url} canEdit={canEdit} onOpen={setOpen} />
+      {open && <PostDetailsDialog entry={open} accounts={accounts} onClose={() => setOpen(null)} />}
       <HubDialogs
         dialog={dialog}
         accounts={accounts}
@@ -73,6 +77,43 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
         onNotice={ignoreNotice}
       />
     </main>
+  );
+}
+
+type PostTabsProps = {
+  tab: 'calendar' | 'published';
+  entries: CalendarEntry[];
+  onTab: (tab: 'calendar' | 'published') => void;
+};
+
+function PostTabs({ tab, entries, onTab }: PostTabsProps) {
+  const published = entries.filter(({ status }) => status === 'published').length;
+  const tabs = [
+    { value: 'calendar', label: 'Calendar', icon: Calendar, count: entries.length - published },
+    { value: 'published', label: 'Published', icon: CircleCheck, count: published },
+  ] as const;
+  return (
+    <div role="tablist" aria-label="My posts" className="flex gap-1 border-b border-border">
+      {tabs.map(({ value, label, icon: Icon, count }) => (
+        <button
+          key={value}
+          type="button"
+          role="tab"
+          aria-selected={tab === value}
+          onClick={() => onTab(value)}
+          className={cn(
+            '-mb-px flex min-h-10 items-center gap-2 border-b-2 px-3 text-base focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+            tab === value
+              ? 'border-action font-medium text-text'
+              : 'border-transparent text-text-muted hover:text-text',
+          )}
+        >
+          <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
+          {label}
+          <span className="rounded-full bg-surface-muted px-2 text-xs">{count}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -145,19 +186,37 @@ function ConnectFirst() {
 type BodyProps = MyPostsProps & {
   url: ReturnType<typeof useMyPostsParams>;
   canEdit: boolean;
+  onOpen: (entry: CalendarEntry) => void;
 };
 
-function MyPostsBody({ accounts, posts, url, canEdit }: BodyProps) {
+function MyPostsBody({ accounts, posts, url, canEdit, onOpen }: BodyProps) {
   if (accounts.length === 0) return <ConnectFirst />;
   const all = buildEntries(posts, accounts, null);
   const shown = buildEntries(posts, accounts, url.accountId);
   return (
-    <CalendarPanel
-      {...url}
-      accounts={accounts}
-      entries={shown}
-      hasPosts={all.length > 0}
-      canEdit={canEdit}
-    />
+    <>
+      <PostTabs
+        tab={url.tab}
+        entries={all}
+        onTab={(tab) => url.setParams({ tab: tab === 'calendar' ? null : tab })}
+      />
+      {url.tab === 'published' ? (
+        <PublishedList
+          entries={shown.filter(({ status }) => status === 'published')}
+          sort={url.sort}
+          onSort={(sort) => url.setParams({ sort: sort === 'newest' ? null : sort })}
+          onOpen={onOpen}
+        />
+      ) : (
+        <CalendarPanel
+          {...url}
+          accounts={accounts}
+          entries={shown}
+          hasPosts={all.length > 0}
+          canEdit={canEdit}
+          onOpen={onOpen}
+        />
+      )}
+    </>
   );
 }
