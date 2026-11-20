@@ -36,26 +36,19 @@ describe('order confirmation links (Postgres)', () => {
     ]);
   const tokenOf = (url: string) => url.split('/c/')[1] ?? '';
 
-  it('keeps one row per order for sends at the same moment, and only the sha256 of a long token', async () => {
+  it('gives each message its own long token, and keeps only the sha256 of every one', async () => {
     const urls = await Promise.all([
       service.issueUrl(fixture.a, orderA),
       service.issueUrl(fixture.a, orderA),
-      service.issueUrl(fixture.a, orderA),
     ]);
-    const stored = (await rows(orderA)).rows;
-    expect(stored).toHaveLength(1);
-    const hashes = urls.map((url) => createHash('sha256').update(tokenOf(url)).digest());
-    expect(hashes.some((hash) => hash.equals(stored[0].token_hash))).toBe(true);
-    for (const url of urls) expect(tokenOf(url)).toMatch(/^[\w-]{43}$/u);
-  });
-
-  it('stops the earlier address once a new one is issued', async () => {
-    const first = await service.issueUrl(fixture.a, orderA);
-    const second = await service.issueUrl(fixture.a, orderA);
-    const [{ token_hash: stored }] = (await rows(orderA)).rows;
-    const hashOf = (url: string) => createHash('sha256').update(tokenOf(url)).digest();
-    expect(hashOf(second).equals(stored)).toBe(true);
-    expect(hashOf(first).equals(stored)).toBe(false);
+    const later = await service.issueUrl(fixture.a, orderA);
+    const stored = (await rows(orderA)).rows.map((row) => row.token_hash as Buffer);
+    expect(stored).toHaveLength(3);
+    for (const url of [...urls, later]) {
+      expect(tokenOf(url)).toMatch(/^[\w-]{43}$/u);
+      const hash = createHash('sha256').update(tokenOf(url)).digest();
+      expect(stored.some((row) => row.equals(hash))).toBe(true);
+    }
   });
 
   it('refuses an order that belongs to another store', async () => {

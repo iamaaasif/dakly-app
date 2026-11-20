@@ -323,7 +323,8 @@ export const orderItems = pgTable(
 );
 
 // The link in a confirmation SMS carries a random token. Only its sha256 is kept, so the link
-// cannot be rebuilt or guessed from the database. A new message about the order replaces the token.
+// cannot be rebuilt or guessed from the database. Each issued token is its own row, so a later
+// message about the order does not kill the link in an earlier one.
 export const orderConfirmations = pgTable(
   'order_confirmations',
   {
@@ -342,9 +343,8 @@ export const orderConfirmations = pgTable(
       columns: [table.storeId, table.orderId],
       foreignColumns: [orders.storeId, orders.id] as [AnyPgColumn, AnyPgColumn],
     }).onDelete('cascade'),
-    uniqueIndex('order_confirmations_store_order_key').on(table.storeId, table.orderId),
     uniqueIndex('order_confirmations_token_hash_key').on(table.tokenHash),
-    index('order_confirmations_order_id_idx').on(table.orderId),
+    index('order_confirmations_store_order_idx').on(table.storeId, table.orderId),
   ],
 );
 

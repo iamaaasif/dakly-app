@@ -1,7 +1,6 @@
+import { formatMoney } from '@dakly/contracts/money';
 import type { OrderDetail } from '@dakly/contracts/orders';
 import { cn } from '@dakly/ui/cn';
-
-import { formatMoney } from '@/lib/format-money';
 
 export type OrderItemsProps = { order: OrderDetail };
 

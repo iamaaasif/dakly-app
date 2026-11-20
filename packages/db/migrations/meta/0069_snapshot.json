@@ -1,5 +1,5 @@
 {
-  "id": "746cf406-52b9-469e-8715-8ac6070b3b7f",
+  "id": "f05ada0f-eb6d-426d-acb2-03e6008ea428",
   "prevId": "5c33456e-4b8b-46ab-8d3b-cb505d798216",
   "version": "7",
   "dialect": "postgresql",
@@ -14920,27 +14920,6 @@
         }
       },
       "indexes": {
-        "order_confirmations_store_order_key": {
-          "name": "order_confirmations_store_order_key",
-          "columns": [
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "order_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "order_confirmations_token_hash_key": {
           "name": "order_confirmations_token_hash_key",
           "columns": [
@@ -14956,9 +14935,15 @@
           "method": "btree",
           "with": {}
         },
-        "order_confirmations_order_id_idx": {
-          "name": "order_confirmations_order_id_idx",
+        "order_confirmations_store_order_idx": {
+          "name": "order_confirmations_store_order_idx",
           "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "order_id",
               "isExpression": false,

@@ -17,10 +17,10 @@ export class OrderConfirmationService {
   ) {}
 
   // The token is in the address only; the database keeps its sha256, so a leak cannot rebuild a
-  // link. Issuing again stops the earlier address from working.
+  // link. Every message gets its own token and all of them work while the order is in To confirm.
   async issueUrl(storeId: string, orderId: string): Promise<string> {
     const token = randomBytes(32).toString('base64url');
-    await this.repository.replaceToken(storeId, orderId, hashToken(token));
+    await this.repository.insertToken(storeId, orderId, hashToken(token));
     return confirmUrl(token);
   }
 

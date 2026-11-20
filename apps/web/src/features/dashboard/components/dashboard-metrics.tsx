@@ -1,11 +1,12 @@
 import { Repeat2, ShoppingBag, TrendingDown, TrendingUp, UserRoundPlus } from 'lucide-react';
 
 import type { DashboardResponse } from '@dakly/contracts/dashboard';
+import { formatCount } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
 
-import { formatCount, formatWholeTaka } from '@/lib/format-money';
+import { formatWholeTaka } from '@/lib/format-money';
 
 const metrics = [
   {

@@ -3,8 +3,7 @@ import {
   MAX_IMPORT_FILE_BYTES,
   MAX_IMPORT_ROWS,
 } from '@dakly/contracts/contacts';
-
-import { formatCount } from '@/lib/format-money';
+import { formatCount } from '@dakly/contracts/money';
 
 export const IMPORT_PREVIEW_ROWS = 20;
 

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0069_snapshot.json`: **96 tables, 1298 columns, 396 explicit indexes and 303 foreign keys**.
+Built from `packages/db/migrations/meta/0069_snapshot.json`: **96 tables, 1298 columns, 395 explicit indexes and 303 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -825,7 +825,7 @@ erDiagram
     orders ||..o{ order_items : "store_id, order_id"
     product_variants ||..o{ order_items : "store_id, variant_id"
     stores ||..o{ order_confirmations : "store_id"
-    orders ||..o| order_confirmations : "store_id, order_id"
+    orders ||..o{ order_confirmations : "store_id, order_id"
     stores ||..o{ payment_gateway_credentials : "store_id"
     users |o..o{ payment_gateway_credentials : "connected_by_user_id"
     stores ||..o{ payment_intents : "store_id"

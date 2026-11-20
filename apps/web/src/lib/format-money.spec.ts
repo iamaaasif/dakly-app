@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMoney, formatWholeTaka, takaInputFromPoisha } from './format-money';
+import { formatMoney } from '@dakly/contracts/money';
+
+import { formatWholeTaka, takaInputFromPoisha } from './format-money';
 
 describe('formatMoney', () => {
   it.each([
