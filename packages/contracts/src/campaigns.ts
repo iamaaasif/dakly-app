@@ -108,9 +108,18 @@ export const campaignGoals = [
   'from_scratch',
 ] as const;
 
-// A draft is saved on every builder step, so the text may still be empty. SMS is the only
-// sendable channel until CAMP-7 adds Messenger content.
+// A draft is saved on every builder step, so the text may still be empty.
 export const smsCampaignContentSchema = z.strictObject({ text: z.string().trim().max(1000) });
+// Messenger's button template allows 640 characters of text, 20 per button title and 3 buttons.
+// A button sends a postback; the sender writes its payload (CAMP-7).
+export const messengerCampaignContentSchema = z.strictObject({
+  text: z.string().trim().max(640),
+  imageUrl: z
+    .url({ protocol: /^https$/ })
+    .max(2000)
+    .nullable(),
+  buttons: z.array(z.strictObject({ title: z.string().trim().min(1).max(20) })).max(3),
+});
 const segmentIdsSchema = z
   .array(z.uuid())
   .max(10)
@@ -119,24 +128,47 @@ const segmentIdsSchema = z
 const campaignDraftShape = {
   name: z.string().trim().min(1).max(100),
   goal: z.enum(campaignGoals).nullable(),
-  content: smsCampaignContentSchema,
   includeSegmentIds: segmentIdsSchema,
   excludeSegmentIds: segmentIdsSchema,
   // Null sends on approval.
   scheduledFor: z.iso.datetime().nullable(),
 };
-
-export const createCampaignSchema = z.strictObject({
+const newDraftShape = {
   ...campaignDraftShape,
-  channel: z.literal('sms'),
   goal: campaignDraftShape.goal.default(null),
-  content: campaignDraftShape.content.default({ text: '' }),
   includeSegmentIds: segmentIdsSchema.default([]),
   excludeSegmentIds: segmentIdsSchema.default([]),
   scheduledFor: campaignDraftShape.scheduledFor.default(null),
+};
+
+// The name and goal every builder starts with, before the channel is chosen.
+export const campaignDetailsSchema = z.object({
+  name: newDraftShape.name,
+  goal: newDraftShape.goal,
 });
+
+export const createCampaignSchema = z.discriminatedUnion('channel', [
+  z.strictObject({
+    ...newDraftShape,
+    channel: z.literal('sms'),
+    content: smsCampaignContentSchema.default({ text: '' }),
+  }),
+  z.strictObject({
+    ...newDraftShape,
+    channel: z.literal('messenger'),
+    // The Facebook Page the message goes out from; its identities and windows decide who gets it.
+    channelConnectionId: z.uuid(),
+    content: messengerCampaignContentSchema.default({ text: '', imageUrl: null, buttons: [] }),
+  }),
+]);
+// The content must fit the campaign's channel; the service checks that, as the channel is not
+// part of a change.
 export const changeCampaignSchema = z
-  .strictObject(campaignDraftShape)
+  .strictObject({
+    ...campaignDraftShape,
+    content: z.union([smsCampaignContentSchema, messengerCampaignContentSchema]),
+    channelConnectionId: z.uuid(),
+  })
   .partial()
   .refine(
     (input) => Object.values(input).some((value) => value !== undefined),
@@ -163,6 +195,8 @@ export type CampaignGoal = (typeof campaignGoals)[number];
 export type CampaignStatus = (typeof campaignStatuses)[number];
 export type CampaignApprovalFailureCode = (typeof campaignApprovalFailureCodes)[number];
 export type SmsCampaignContent = z.infer<typeof smsCampaignContentSchema>;
+export type MessengerCampaignContent = z.infer<typeof messengerCampaignContentSchema>;
+export type CampaignContent = SmsCampaignContent | MessengerCampaignContent;
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
 export type ChangeCampaignInput = z.infer<typeof changeCampaignSchema>;
 export type CampaignListQuery = z.infer<typeof campaignListQuerySchema>;
@@ -171,7 +205,9 @@ export type CampaignResponse = {
   name: string;
   goal: CampaignGoal | null;
   channel: CampaignChannel;
-  content: SmsCampaignContent;
+  content: CampaignContent;
+  // The Facebook Page of a Messenger campaign; null for SMS.
+  channelConnectionId: string | null;
   includeSegmentIds: string[];
   excludeSegmentIds: string[];
   scheduledFor: string | null;

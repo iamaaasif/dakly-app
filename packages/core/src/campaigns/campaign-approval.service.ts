@@ -12,7 +12,11 @@ import {
   type ApprovalState,
   CampaignApprovalRepository,
 } from './campaign-approval.repository';
-import { type AudiencePage, CampaignAudienceService } from './campaign-audience.service';
+import {
+  type AudiencePage,
+  audienceDecisionTime,
+  CampaignAudienceService,
+} from './campaign-audience.service';
 import { CampaignSmsService } from './campaign-sms.service';
 import { CampaignsRepository } from './campaigns.repository';
 import { approvalKey } from './campaigns.service';
@@ -63,7 +67,7 @@ export class CampaignApprovalService {
         storeId,
         state,
         { segmentIndex: state.segmentIndex, contactId: state.contactId },
-        state.scheduledFor ?? key.approvedAt,
+        audienceDecisionTime(state, key.approvedAt),
       );
     } catch (error) {
       // A segment deleted after approval started would fail every retry; refuse instead.

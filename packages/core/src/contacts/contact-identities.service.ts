@@ -21,4 +21,8 @@ export class ContactIdentitiesService {
     const identity = await this.identities.findOutboundIdentity(storeId, input);
     return identity?.externalId.startsWith('deleted:') ? undefined : identity;
   }
+
+  findOnConnection(storeId: string, connectionId: string, contactIds: string[]) {
+    return this.identities.findOnConnection(storeId, connectionId, contactIds);
+  }
 }
