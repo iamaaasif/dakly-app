@@ -1,5 +1,6 @@
 import {
   type InstagramContainerState,
+  type MetaPostMetrics,
   type MetaPostingAccount,
   type MetaPublishingDriver,
 } from '../meta-publishing-driver';
@@ -7,6 +8,11 @@ import {
 export class FakeMetaPublishingDriver implements MetaPublishingDriver {
   private sequence = 0;
   private readonly published = new Set<string>();
+  private readonly metrics = new Map<string, MetaPostMetrics>();
+
+  setMetrics(externalPostId: string, metrics: MetaPostMetrics) {
+    this.metrics.set(externalPostId, metrics);
+  }
 
   async uploadFacebookPhotos(_account: MetaPostingAccount, photoUrls: string[]) {
     return photoUrls.map(() => `fake-photo-${++this.sequence}`);
@@ -33,4 +39,10 @@ export class FakeMetaPublishingDriver implements MetaPublishingDriver {
   }
 
   async comment() {}
+
+  async postMetrics(_account: MetaPostingAccount, { externalPostId }: { externalPostId: string }) {
+    return (
+      this.metrics.get(externalPostId) ?? { reach: 120, reactions: 14, comments: 3, shares: 2 }
+    );
+  }
 }
