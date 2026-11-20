@@ -82,7 +82,14 @@ export function CampaignDraftShell({
             saving={saving}
           />
         </form>
-        {sideColumn}
+        {sideColumn && (
+          <div className="min-w-0 space-y-2">
+            <p className="text-sm font-medium text-text-muted">
+              Live preview · {campaignChannelLabels[channel]}
+            </p>
+            {sideColumn}
+          </div>
+        )}
       </div>
     </div>
   );

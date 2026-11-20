@@ -177,6 +177,15 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       .toBe(true);
     await page.setViewportSize({ width: 1440, height: 900 });
 
+    await name.fill('Winter Kurti collection');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(/step=content$/);
+    await page
+      .getByLabel('Message', { exact: true })
+      .fill('Winter Kurti collection is in. Order today and get free delivery in Dhaka.');
+    await expect(page.getByText('Live preview · SMS', { exact: true })).toBeVisible();
+    await capture(page, 'sms-content-step');
+
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
     await expect(page.getByText('Come back this week for our Puja collection.')).toBeVisible();
