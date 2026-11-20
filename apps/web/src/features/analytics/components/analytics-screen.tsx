@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 import type { AnalyticsView } from '@dakly/contracts/analytics';
 import { Checkbox } from '@dakly/ui/checkbox';
@@ -10,18 +11,19 @@ import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { periodChoices } from '../analytics-labels';
+import { useAttributionSettings } from '../api/analytics-attribution';
 import { analyticsHref, useAnalyticsOverview } from '../api/analytics-overview';
-import { AnalyticsAutomationsTab } from './analytics-automations-tab';
-import { AnalyticsCampaignsTab } from './analytics-campaigns-tab';
-import { AnalyticsChannelsTab } from './analytics-channels-tab';
-import { AnalyticsHeadline } from './analytics-headline';
-import { AnalyticsKeyFigures } from './analytics-key-figures';
-import { AnalyticsOverviewTab } from './analytics-overview-tab';
-import { AnalyticsSocialTab } from './analytics-social-tab';
-import { AnalyticsTabs } from './analytics-tabs';
+import { AnalyticsDownloadButton } from './analytics-download-button';
+import { AnalyticsReport } from './analytics-report';
+import { HowDaklyCountsOrders } from './how-dakly-counts-orders';
+import { useSessionContext } from '@/lib/session-context';
 
 export function AnalyticsScreen({ view }: { view: AnalyticsView }) {
   const overview = useAnalyticsOverview(view.period);
+  const attribution = useAttributionSettings();
+  const { data: session } = useSessionContext();
+  const [isCountingOpen, setIsCountingOpen] = useState(false);
+  const isRebuilding = attribution.data?.rebuilding === true;
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-6 md:p-8">
       <AnalyticsHeader view={view} />
@@ -40,20 +42,21 @@ export function AnalyticsScreen({ view }: { view: AnalyticsView }) {
         />
       )}
       {overview.data && (
-        <>
-          <AnalyticsHeadline data={overview.data} view={view} />
-          <AnalyticsKeyFigures data={overview.data} view={view} />
-          <AnalyticsTabs view={view} />
-          {view.tab === 'overview' && <AnalyticsOverviewTab data={overview.data} view={view} />}
-          {view.tab === 'campaigns' && (
-            <AnalyticsCampaignsTab view={view} timeZone={overview.data.timeZone} />
-          )}
-          {view.tab === 'automations' && <AnalyticsAutomationsTab view={view} />}
-          {view.tab === 'channels' && <AnalyticsChannelsTab view={view} />}
-          {view.tab === 'social' && (
-            <AnalyticsSocialTab view={view} timeZone={overview.data.timeZone} />
-          )}
-        </>
+        <AnalyticsReport
+          data={overview.data}
+          view={view}
+          attribution={attribution.data}
+          onOpenCounting={() => setIsCountingOpen(true)}
+        />
+      )}
+      {attribution.data && (
+        <HowDaklyCountsOrders
+          open={isCountingOpen}
+          onClose={() => setIsCountingOpen(false)}
+          windowDays={attribution.data.windowDays}
+          canChange={session?.currentStore?.canChangeAttributionWindow === true}
+          isRebuilding={isRebuilding}
+        />
       )}
     </main>
   );
@@ -63,14 +66,14 @@ function AnalyticsHeader({ view }: { view: AnalyticsView }) {
   const router = useRouter();
   return (
     <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-      <div>
+      <div className="lg:max-w-sm">
         <h1 className="text-xl font-bold md:text-2xl">Analytics</h1>
         <p className="mt-1 text-text-muted">
           How much your marketing earned, and which messages and posts worked best.
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-4">
-        <label className="flex min-h-10 items-center gap-2 font-medium">
+      <div className="flex flex-wrap items-center gap-4 lg:shrink-0 lg:flex-nowrap">
+        <label className="flex min-h-10 items-center gap-2 font-medium whitespace-nowrap">
           <Checkbox
             checked={view.compare}
             onCheckedChange={(checked) =>
@@ -81,7 +84,7 @@ function AnalyticsHeader({ view }: { view: AnalyticsView }) {
         </label>
         <nav
           aria-label="Reporting period"
-          className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-surface-muted p-1"
+          className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-surface-muted p-1 lg:flex-nowrap"
         >
           {periodChoices.map(({ days, label }) => (
             <Link
@@ -97,6 +100,7 @@ function AnalyticsHeader({ view }: { view: AnalyticsView }) {
             </Link>
           ))}
         </nav>
+        <AnalyticsDownloadButton view={view} />
       </div>
     </header>
   );
