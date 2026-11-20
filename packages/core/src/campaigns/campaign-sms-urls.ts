@@ -5,6 +5,7 @@ const nonEmptyAuthority = /^https?:\/\/[^/?#]/iu;
 const unsupportedUrlCharacter = /[<>\\]/u;
 const sentencePunctuation = /[.,!?;:"'’”…।॥]+$/u;
 const trailingWrapperPunctuation = /^[)\]}.,!?;:"'’”…।॥]*$/u;
+const adjacentQuotes = /["'’”][.,!?:;–—-]*["'‘“]/u;
 const closingWrapper: Partial<Record<string, string>> = {
   '<': '>',
   '"': '"',
@@ -60,11 +61,12 @@ function urlCandidate(raw: string, prefix: string): string | undefined {
   }
   const candidate = raw.slice(0, end);
   if (closer === '>') return candidate;
-  if (isAmbiguousDoubleQuote(candidate, closer)) return undefined;
+  if (isAmbiguousQuote(candidate, closer)) return undefined;
   return trimMessagePunctuation(candidate);
 }
 
-function isAmbiguousDoubleQuote(candidate: string, closer: string): boolean {
+function isAmbiguousQuote(candidate: string, closer: string): boolean {
+  if (adjacentQuotes.test(candidate)) return true;
   if (closer === '”' && candidate.includes('“')) return true;
   if (closer !== '"' && closer !== '”') return false;
   const [location] = candidate.split(/[?#]/u, 1);

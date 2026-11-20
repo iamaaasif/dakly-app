@@ -125,9 +125,12 @@ describe('SMS campaign body URLs', () => {
     expect(campaignSmsUrls(text)).toEqual([]);
   });
 
-  it('keeps adjacent quoted prose out of the URL', () => {
-    const text =
-      'Open “https://shop.example.test”—“today”. Or “https://shop.example.test/a”today”.';
+  it.each([
+    'Open “https://shop.example.test”—“today”.',
+    'Open “https://shop.example.test/a”today”.',
+    'Open ‘https://shop.example.test/O’Reilly’—‘today’.',
+    'Open "https://shop.example.test/?item=1"—"today".',
+  ])('keeps adjacent quoted prose out of the URL in %s', (text) => {
     expect(campaignSmsUrls(text)).toEqual([]);
   });
 
