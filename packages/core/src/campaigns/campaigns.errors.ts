@@ -7,10 +7,6 @@ const CAMPAIGN_ERRORS = {
   CAMPAIGN_NOT_DRAFT: { status: 409, message: 'This campaign is no longer a draft' },
   CAMPAIGN_TEXT_EMPTY: { status: 409, message: 'Write the message before approving' },
   CAMPAIGN_SEND_TIME_PASSED: { status: 409, message: 'The send time has passed; choose a new one' },
-  CAMPAIGN_AUDIENCE_TOO_LARGE: {
-    status: 409,
-    message: 'This audience is over 20,000 people; narrow it with a segment',
-  },
   CAMPAIGN_NO_RECIPIENTS: { status: 409, message: 'No one in this audience can get this message' },
   CAMPAIGN_NOT_SCHEDULED: { status: 409, message: 'This campaign is not scheduled' },
   CAMPAIGN_NOT_CANCELLABLE: { status: 409, message: 'This campaign has already finished' },

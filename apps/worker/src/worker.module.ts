@@ -25,6 +25,8 @@ import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-au
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
+import { BuildCampaignAudienceJob } from '@dakly/core/campaigns/jobs/build-campaign-audience.job';
+import { QueueAudienceBuildOnApprovalStarted } from '@dakly/core/campaigns/jobs/queue-audience-build-on-approval-started.job';
 import { RecordCampaignTapJob } from '@dakly/core/campaigns/jobs/record-campaign-tap.job';
 import { ResumeCampaignsOnWalletCredited } from '@dakly/core/campaigns/jobs/resume-campaigns-on-wallet-credited.job';
 import { SendCampaignBatchJob } from '@dakly/core/campaigns/jobs/send-campaign-batch.job';
@@ -96,6 +98,8 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnConsent,
     SweepAutomationBirthdaysJob,
     StartAutomationOnTagAdded,
+    BuildCampaignAudienceJob,
+    QueueAudienceBuildOnApprovalStarted,
     StartDueCampaignsJob,
     SendCampaignBatchJob,
     ResumeCampaignsOnWalletCredited,

@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
 import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
+import { CampaignApprovalService } from '@dakly/core/campaigns/campaign-approval.service';
 import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
@@ -1344,6 +1345,15 @@ for (const method of ['PATCH', 'DELETE'] as const)
     expect(await f.row('campaigns', foreign)).toEqual(before);
   });
 // A draft to one consented Dhaka customer, with the credits to send it.
+// Approval answers at once and a job freezes the audience; this runs the job to its end.
+async function approveCampaign(shop: Shop, id: string, status: number = 200) {
+  const response = await success(shop, 'POST', `/campaigns/${id}/approve`, status);
+  const { rows } = await f.admin.pool.query('select approved_at from campaigns where id=$1', [id]);
+  const key = { id, approvedAt: rows[0].approved_at as Date };
+  while (await app.get(CampaignApprovalService).build(shop.id, key));
+  return response;
+}
+
 async function approvableCampaign(shop: Shop) {
   const contactId = await contact(shop);
   await f.admin.pool.query("update contacts set district='ঢাকা' where id=$1", [contactId]);
@@ -1375,9 +1385,8 @@ fixture('POST /campaigns/:campaignId/approve', async () => {
   const marketer = await f.request(b.member, 'POST', `/campaigns/${own}/approve`);
   expect(marketer.statusCode).toBe(403);
   expect(marketer.json().error.code).toBe('CAMPAIGN_APPROVAL_DENIED');
-  expect((await success(b, 'POST', `/campaigns/${own}/approve`, 200)).json().status).toBe(
-    'sending',
-  );
+  expect((await approveCampaign(b, own)).json().status).toBe('approving');
+  expect((await f.row('campaigns', own)).status).toBe('sending');
   const before = await f.row('campaigns', foreign);
   await hidden(b, 'POST', (id) => `/campaigns/${id}/approve`, foreign);
   expect(await f.row('campaigns', foreign)).toEqual(before);
@@ -1394,7 +1403,7 @@ async function campaignIn(shop: Shop, status: 'scheduled' | 'sending' | 'paused'
     await success(shop, 'PATCH', `/campaigns/${id}`, 200, {
       scheduledFor: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     });
-  await success(shop, 'POST', `/campaigns/${id}/approve`, 200);
+  await approveCampaign(shop, id);
   if (status === 'paused') await success(shop, 'POST', `/campaigns/${id}/pause`, 200);
   return id;
 }

@@ -43,6 +43,12 @@ export class SegmentsService {
     return { count: await this.contacts.countMatching(storeId, rules) };
   }
 
+  // The live size of one segment, so a campaign can size its approval; a missing id is refused.
+  async contactCount(storeId: string, segmentId: string): Promise<number> {
+    const segment = await this.find(storeId, segmentId);
+    return this.contacts.countMatching(storeId, segment.rules);
+  }
+
   async contactIds(
     storeId: string,
     segmentId: string,

@@ -463,6 +463,13 @@
       "when": 1795159401468,
       "tag": "0065_campaign_approval_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795160307601,
+      "tag": "0066_campaign_stalled_approvals",
+      "breakpoints": true
     }
   ]
 }

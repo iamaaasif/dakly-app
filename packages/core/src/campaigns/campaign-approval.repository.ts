@@ -2,8 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import type { CampaignApprovalFailureCode } from '@dakly/contracts/campaigns';
+import type { Database } from '@dakly/db/client';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
+import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import {
   type Campaign,
@@ -27,7 +29,10 @@ export type ApprovalStart = Pick<Campaign, 'updatedAt' | 'approvalEstimatedTotal
 
 @Injectable()
 export class CampaignApprovalRepository {
-  constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+  constructor(
+    @Inject(TenantDatabase) private readonly database: TenantDatabase,
+    @Inject(DATABASE) private readonly global: Database,
+  ) {}
 
   // Guarded on the draft status, so two approvals cannot both start.
   async markApproving(
@@ -60,6 +65,7 @@ export class CampaignApprovalRepository {
           ...campaignColumns,
           segmentIndex: campaigns.approvalSegmentIndex,
           contactId: campaigns.approvalCursor,
+          approvedByUserId: campaigns.approvedByUserId,
         })
         .from(campaigns)
         .where(approvingWhere(storeId, approval)),
@@ -89,6 +95,33 @@ export class CampaignApprovalRepository {
     return rows.length > 0;
   }
 
+  // Records that the approval is being undone, so a retry deletes the rows instead of approving.
+  async markApprovalFailing(
+    storeId: string,
+    approval: ApprovalKey,
+    code: CampaignApprovalFailureCode,
+    now: Date,
+  ): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(campaigns)
+        .set({ approvalFailureCode: code, approvalProgressAt: now })
+        .where(approvingWhere(storeId, approval)),
+    );
+  }
+
+  // Only ids cross RLS: the approval job reads each campaign in its own store.
+  async listStalled(before: Date, limit: number) {
+    const result = await this.global.execute<{ storeId: string; id: string; approvedAt: Date }>(sql`
+      select store_id as "storeId", id, approved_at as "approvedAt"
+      from campaign_stalled_approvals(${before.toISOString()}::timestamptz, ${limit}::integer)
+    `);
+    return result.rows.map(({ approvedAt, ...row }) => ({
+      ...row,
+      approvedAt: new Date(approvedAt),
+    }));
+  }
+
   async countFrozenRecipients(storeId: string, campaignId: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -108,24 +141,30 @@ export class CampaignApprovalRepository {
     return row!;
   }
 
-  // Returns how many rows went, so a caller can repeat until none are left.
+  // Returns how many rows went, so a caller can repeat until none are left. The ids are read
+  // first: one DELETE with a LIMIT subquery makes Postgres rescan it for every row under RLS.
   async removeRecipientsBatch(storeId: string, campaignId: string, limit: number) {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
+    return this.database.forStore(storeId, async (tx) => {
+      const ids = await tx
+        .select({ id: campaignRecipients.id })
+        .from(campaignRecipients)
+        .where(recipientsWhere(storeId, campaignId))
+        .limit(limit);
+      if (!ids.length) return 0;
+      const rows = await tx
         .delete(campaignRecipients)
         .where(
-          inArray(
-            campaignRecipients.id,
-            tx
-              .select({ id: campaignRecipients.id })
-              .from(campaignRecipients)
-              .where(recipientsWhere(storeId, campaignId))
-              .limit(limit),
+          and(
+            recipientsWhere(storeId, campaignId),
+            inArray(
+              campaignRecipients.id,
+              ids.map(({ id }) => id),
+            ),
           ),
         )
-        .returning({ id: campaignRecipients.id }),
-    );
-    return rows.length;
+        .returning({ id: campaignRecipients.id });
+      return rows.length;
+    });
   }
 
   // Back to draft with the reason. The caller has removed the recipients first.
@@ -160,3 +199,7 @@ export class CampaignApprovalRepository {
 function approvingWhere(storeId: string, { id, approvedAt }: ApprovalKey) {
   return and(statusWhere(storeId, id, 'approving'), eq(campaigns.approvedAt, approvedAt));
 }
+
+export type ApprovalState = NonNullable<
+  Awaited<ReturnType<CampaignApprovalRepository['findApproval']>>
+>;

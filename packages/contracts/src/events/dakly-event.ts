@@ -1,7 +1,11 @@
 import { z } from 'zod';
 
 import { attributionOrdersRebuiltEventSchema } from './analytics';
-import { campaignApprovedEventSchema, campaignSentEventSchema } from './campaigns';
+import {
+  campaignApprovalStartedEventSchema,
+  campaignApprovedEventSchema,
+  campaignSentEventSchema,
+} from './campaigns';
 import {
   channelConnectedEventSchema,
   channelDisconnectedEventSchema,
@@ -71,6 +75,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   importStartedEventSchema,
   importUndoRequestedEventSchema,
   knowledgeIndexRequestedEventSchema,
+  campaignApprovalStartedEventSchema,
   campaignApprovedEventSchema,
   campaignSentEventSchema,
   channelConnectedEventSchema,
