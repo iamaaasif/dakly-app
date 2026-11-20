@@ -470,14 +470,17 @@ describe('Import customers', () => {
     expect(screen.queryByText('Step 3 of 6 · Preview')).toBeNull();
   });
 
-  it('exports the customers on the screen and says how many', async () => {
+  it.each([
+    ['2486', '2,486 customers'],
+    ['1', '1 customer'],
+  ])('exports the customers on the screen and says how many (%s)', async (rows, said) => {
     const urls: string[] = [];
     vi.stubGlobal('fetch', async (path: string) => {
       urls.push(path);
       const headers = {
         'x-session-context': 'verified',
         'content-disposition': 'attachment; filename="dakly-customers-2026-11-20.xlsx"',
-        'x-row-count': '2486',
+        'x-row-count': rows,
       };
       return path.startsWith('/api/contacts/export')
         ? new Response('file', { headers })
@@ -491,9 +494,7 @@ describe('Import customers', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Export' }));
     expect(
-      await screen.findByText(
-        'Exporting 2,486 customers to Excel. Check your downloads in a moment.',
-      ),
+      await screen.findByText(`Exporting ${said} to Excel. Check your downloads in a moment.`),
     ).toBeTruthy();
     expect(urls.some((url) => url === '/api/contacts/export?kind=lead&tag=eid')).toBe(true);
   });

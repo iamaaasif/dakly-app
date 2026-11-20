@@ -30,7 +30,7 @@ export function CustomersHeader({ query, canCreate, onAdd }: CustomersHeaderProp
                 exportCustomers.mutate(filters, {
                   onSuccess: (count) =>
                     showToast(
-                      `Exporting ${formatCount(count)} customers to Excel. Check your downloads in a moment.`,
+                      `Exporting ${formatCount(count)} ${count === 1 ? 'customer' : 'customers'} to Excel. Check your downloads in a moment.`,
                     ),
                 })
               }
