@@ -10,6 +10,7 @@ import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
 import { BuyerOrdersRepository } from './buyer-orders.repository';
 import { BuyerOrdersService } from './buyer-orders.service';
+import { ChatOrdersService } from './chat-orders.service';
 import { OrderAttributionRepository } from './order-attribution.repository';
 import { OrderAttributionService } from './order-attribution.service';
 import { OrderCatalogueController } from './order-catalogue.controller';
@@ -43,6 +44,7 @@ import { OrdersService } from './orders.service';
   providers: [
     BuyerOrdersRepository,
     BuyerOrdersService,
+    ChatOrdersService,
     OrdersRepository,
     OrdersService,
     OrderReportingRepository,
@@ -54,6 +56,7 @@ import { OrdersService } from './orders.service';
   ],
   exports: [
     BuyerOrdersService,
+    ChatOrdersService,
     OrdersService,
     OrderReportingService,
     OrderAttributionService,

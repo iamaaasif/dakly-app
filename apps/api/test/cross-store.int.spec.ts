@@ -2366,6 +2366,90 @@ fixture('GET /analytics/automations', () =>
   expectAnalyticsRoute('automations', { isActive: true, orders: 2, revenuePoisha: '20000' }),
 );
 
+fixture('GET /analytics/channels', async () => {
+  const { a, b } = await pair();
+  for (const [shop, count] of [
+    [a, 2],
+    [b, 5],
+  ] as const) {
+    const { current } = await app.get(AnalyticsService).periods(shop.id, 30);
+    const [contact, campaign] = [randomUUID(), randomUUID()];
+    await f.admin.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'গ্রাহক','manual','customer')",
+      [contact, shop.id],
+    );
+    await f.admin.pool.query(
+      "insert into campaigns(id,store_id,name,channel,content) values($1,$2,'অফার','sms','{}')",
+      [campaign, shop.id],
+    );
+    await f.admin.pool.query(
+      `insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at,delivered_at,tapped_at,cost_poisha)
+       values($1,$2,$3,$4,'sent',now(),now(),now(),$5)`,
+      [randomUUID(), shop.id, campaign, contact, count * 100],
+    );
+    await f.admin.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
+       ($1,$2,'marketing_revenue','',$3),($1,$2,'marketing_revenue','channel:sms',$3),
+       ($1,$2,'marketing_orders','channel:sms',$4)`,
+      [shop.id, current.through, count * 10000, count],
+    );
+  }
+  for (const [shop, count] of [
+    [a, 2],
+    [b, 5],
+  ] as const) {
+    const result = await success(shop, 'GET', '/analytics/channels?period=30', 200);
+    expect(
+      result.json().channels.find((row: { channel: string }) => row.channel === 'sms'),
+    ).toMatchObject({
+      revenuePoisha: String(count * 10000),
+      orders: count,
+      sent: 1,
+      costPoisha: String(count * 100),
+      tapPercent: 100,
+    });
+  }
+  expect((await f.request(b.member, 'GET', '/analytics/channels')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', `/analytics/channels?storeId=${b.id}`)).statusCode).toBe(
+    400,
+  );
+});
+
+fixture('GET /analytics/social-posts', async () => {
+  const { a, b } = await pair();
+  for (const [shop, caption, reach] of [
+    [a, 'own-a', 120],
+    [b, 'own-b', 340],
+  ] as const) {
+    const [post, connection] = [randomUUID(), randomUUID()];
+    await f.admin.pool.query(
+      'insert into posts(id,store_id,caption,created_by_user_id) values($1,$2,$3,$4)',
+      [post, shop.id, caption, shop.owner.id],
+    );
+    await f.admin.pool.query(
+      "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values($1::uuid,$2,'facebook_page',$1::text,'Page')",
+      [connection, shop.id],
+    );
+    await f.admin.pool.query(
+      `insert into post_targets(id,store_id,post_id,channel_connection_id,status,published_at,reach)
+       values(gen_random_uuid(),$1,$2,$3,'published',now(),$4)`,
+      [shop.id, post, connection, reach],
+    );
+  }
+  for (const [shop, caption, reach] of [
+    [a, 'own-a', 120],
+    [b, 'own-b', 340],
+  ] as const) {
+    const result = await success(shop, 'GET', '/analytics/social-posts?period=30', 200);
+    expect(result.json().posts).toMatchObject([{ caption, reach, networks: ['facebook'] }]);
+    expect(result.json().totals.reach).toBe(reach);
+  }
+  expect((await f.request(b.member, 'GET', '/analytics/social-posts')).statusCode).toBe(403);
+  expect(
+    (await f.request(a.owner, 'GET', `/analytics/social-posts?storeId=${b.id}`)).statusCode,
+  ).toBe(400);
+});
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),

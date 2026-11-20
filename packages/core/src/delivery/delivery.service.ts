@@ -135,6 +135,14 @@ export class DeliveryService {
     );
   }
 
+  // A typed name is accepted only when it is exact or the only match; a guess would price the wrong zone.
+  async findAreaIdByName(storeId: string, name: string): Promise<number> {
+    const [first, second] = await this.repository.findAreasByName(storeId, name, 2);
+    const isExact = first?.name.toLowerCase() === name.toLowerCase() || first?.nameBn === name;
+    if (!first || (second && !isExact)) throw deliveryError('DELIVERY_AREA_INVALID');
+    return first.id;
+  }
+
   private async assertAreasAvailable(storeId: string, ids: number[], exceptId?: string) {
     if (!ids.length) return;
     const areas = await this.repository.findAreas(storeId, ids);

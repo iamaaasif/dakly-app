@@ -89,6 +89,18 @@ export class AnalyticsService {
     }));
   }
 
+  async marketingOrdersByChannel(storeId: string, period: ReportPeriod) {
+    const rows = await this.repository.readChannelOrders(storeId, period);
+    return rows.map(({ dimension, value }) => ({
+      channel: dimension.slice('channel:'.length),
+      value,
+    }));
+  }
+
+  channelPeople(storeId: string, period: ReportPeriod, timeZone: string) {
+    return this.repository.channelPeople(storeId, { ...period, timeZone });
+  }
+
   messagePeople(storeId: string, period: ReportPeriod, timeZone: string) {
     return this.repository.messagePeople(storeId, { ...period, timeZone });
   }
