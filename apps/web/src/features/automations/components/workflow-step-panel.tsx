@@ -10,11 +10,7 @@ import { Sheet } from '@dakly/ui/sheet';
 import { Textarea } from '@dakly/ui/textarea';
 
 import { channelLabels } from '../automation-labels';
-import { delayUnit, type DelayUnit, minutesPerUnit } from '../workflow-library';
-
-const delayUnits = Object.keys(minutesPerUnit).filter(
-  (item): item is DelayUnit => item in minutesPerUnit,
-);
+import { delayUnit, delayUnits, type DelayUnit, minutesPerUnit } from '../workflow-library';
 
 type Props = {
   step: AutomationStep;

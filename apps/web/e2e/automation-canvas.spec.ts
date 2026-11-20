@@ -148,6 +148,18 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
   }
 });
 
+async function screenshotBoth(page: Page, directory: string | undefined, name: string) {
+  if (!directory) return;
+  for (const [width, height] of [
+    [1440, 900],
+    [360, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.screenshot({ path: resolve(directory, `${name}-${width}.png`) });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+
 test('adds, deletes and saves steps on the canvas', async ({ page, context, baseURL }) => {
   const { headers } = await signIn(context, baseURL!);
   const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
@@ -168,9 +180,14 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await page.getByRole('button', { name: 'Edit step 4' }).click();
     await expect(page).toHaveURL(/step=delay_1/);
     await page.getByLabel('Amount').fill('3');
+    await screenshotBoth(page, evidence, 'panel-wait');
     await page.getByRole('button', { name: 'Done' }).click();
     await expect(page).not.toHaveURL(/step=/);
     await expect(steps.getByText('3 days')).toBeVisible();
+    await page.getByRole('button', { name: 'Edit step 1' }).click();
+    await expect(page.getByLabel('Message')).toBeVisible();
+    await screenshotBoth(page, evidence, 'panel-send');
+    await page.getByRole('button', { name: 'Done' }).click();
     await page.getByRole('button', { name: /Options for step 4/ }).click();
     await expect(page.getByRole('menuitem', { name: 'Move down' })).toBeDisabled();
     await page.getByRole('menuitem', { name: 'Move up' }).click();
