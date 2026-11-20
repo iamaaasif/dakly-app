@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 
 import type {
   MetaAuthorizationAccounts,
@@ -7,7 +7,6 @@ import type {
   MetaSelectionInput,
 } from '@dakly/contracts/channels';
 
-import { integrationsKeys } from './integrations-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
 export function useStartMetaLogin() {
@@ -31,10 +30,8 @@ export function useListMetaAccounts() {
 
 export function useConnectMetaAccounts() {
   const { request } = useStoreRequest();
-  const client = useQueryClient();
   return useMutation({
     mutationFn: (body: MetaSelectionInput) =>
       request<{ ids: string[] }>('/channel-connections/meta', { method: 'POST', body }),
-    onSuccess: () => client.invalidateQueries({ queryKey: integrationsKeys.all }),
   });
 }

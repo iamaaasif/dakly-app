@@ -7,7 +7,7 @@ import type {
 } from '@dakly/contracts/channels';
 import { Button } from '@dakly/ui/button';
 
-import { metaChannels, type MetaKind } from '../channel-labels';
+import { metaChannels, type MetaKind } from './channel-labels';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 
 type MetaAccountChoiceProps = {

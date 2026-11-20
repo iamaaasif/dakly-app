@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 
+import type { MessageAttachment, messageAttachmentKinds } from '@dakly/contracts/chats';
 import { conversations, messages } from '@dakly/db/schema/chats';
 
 import { newId } from '../platform/database/new-id';
@@ -15,7 +16,8 @@ type MessageInput = {
   externalMessageId: string;
   idempotencyKey: string;
   senderIdentityId: string;
-  text: string;
+  text: string | null;
+  attachments: { kind: (typeof messageAttachmentKinds)[number]; sourceUrl: string }[];
   sentAt: Date;
 };
 
@@ -83,7 +85,10 @@ export class InboundMessagingRepository {
           body: input.text,
           direction: 'in',
           authorType: 'customer',
-          kind: 'text',
+          kind: input.text ? 'text' : (input.attachments[0]?.kind ?? 'text'),
+          attachments: input.attachments.length
+            ? input.attachments.map((item): MessageAttachment => ({ ...item, status: 'pending' }))
+            : null,
           status: 'received',
           createdAt: now,
         })

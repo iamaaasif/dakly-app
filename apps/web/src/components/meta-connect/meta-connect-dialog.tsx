@@ -3,10 +3,10 @@ import { Facebook, Loader2 } from 'lucide-react';
 import type { ChannelConnection } from '@dakly/contracts/channels';
 import { Button } from '@dakly/ui/button';
 
-import { useConnectMetaAccounts } from '../api/meta-login';
-import { metaChannels, type MetaKind } from '../channel-labels';
-import { useMetaLogin } from '../hooks/use-meta-login';
+import { metaChannels, type MetaKind } from './channel-labels';
 import { MetaAccountChoice } from './meta-account-choice';
+import { useConnectMetaAccounts } from './meta-login';
+import { useMetaLogin } from './use-meta-login';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 
 type MetaConnectDialogProps = {
