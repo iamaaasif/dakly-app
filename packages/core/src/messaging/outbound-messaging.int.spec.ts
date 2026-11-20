@@ -120,6 +120,7 @@ async function queuedReply(
       externalSenderId: 'sender-fixture',
       externalMessageId: 'inbound-fixture',
       content: 'দাম কত?',
+      attachments: [],
       sentAt: now,
       receivedAt: now,
     }),

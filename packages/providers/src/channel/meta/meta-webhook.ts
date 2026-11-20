@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 
 import { z } from 'zod';
 
-import type { ChannelReceipt, InboundMessage } from '../channel-driver';
+import type { ChannelReceipt, InboundAttachmentKind, InboundMessage } from '../channel-driver';
 
 const deliverySchema = z.looseObject({
   object: z.string().min(1),
@@ -27,7 +27,17 @@ const messagingEvent = z.object({
     is_deleted: z.boolean().optional(),
   }),
 });
-const attachment = z.object({ payload: z.object({ url: z.url({ protocol: /^https$/ }) }) });
+const attachmentKinds = {
+  image: 'image',
+  audio: 'voice',
+  video: 'video',
+  file: 'file',
+} as const satisfies Record<string, InboundAttachmentKind>;
+// Shares, reels and story mentions carry a link to someone else's post, not customer media.
+const attachment = z.object({
+  type: z.enum(['image', 'audio', 'video', 'file']),
+  payload: z.object({ url: z.url({ protocol: /^https$/ }) }),
+});
 const receiptEvent = z.object({
   ...participants,
   timestamp: timestamp.optional(),
@@ -56,19 +66,21 @@ function inboundMessage(channel: MetaMessagingChannel, account: string, event: u
   if (!parsed || parsed.recipient.id !== account || parsed.sender.id === account) return undefined;
   const { sender, timestamp, message } = parsed;
   if (message.is_echo || message.is_self || message.is_deleted) return undefined;
-  const attachmentUrls = message.attachments.flatMap((item) => {
-    const url = attachment.safeParse(item).data?.payload.url;
-    return url ? [url] : [];
+  const attachments = message.attachments.flatMap((item) => {
+    const parsedItem = attachment.safeParse(item).data;
+    return parsedItem
+      ? [{ kind: attachmentKinds[parsedItem.type], url: parsedItem.payload.url }]
+      : [];
   });
-  if (!message.text && attachmentUrls.length === 0) return undefined;
+  if (!message.text && attachments.length === 0) return undefined;
   return {
     channel,
     accountExternalId: account,
     externalConversationId: sender.id,
     externalMessageId: message.mid,
     senderExternalId: sender.id,
-    text: message.text ?? null,
-    attachmentUrls,
+    text: message.text || null,
+    attachments,
     sentAt: new Date(timestamp),
   } satisfies InboundMessage;
 }

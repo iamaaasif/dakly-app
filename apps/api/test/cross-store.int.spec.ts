@@ -2157,6 +2157,62 @@ fixture('GET /dashboard', async () => {
   expect((await f.request(a.owner, 'GET', '/dashboard?period=8')).statusCode).toBe(400);
 });
 
+fixture('GET /analytics/overview', async () => {
+  const { a, b } = await pair();
+  const reports = app.get(AnalyticsService);
+  for (const [shop, count] of [
+    [a, 2],
+    [b, 5],
+  ] as const) {
+    const { current } = await reports.periods(shop.id, 30);
+    const [contact, campaign] = [randomUUID(), randomUUID()];
+    await f.admin.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'গ্রাহক','manual','customer')",
+      [contact, shop.id],
+    );
+    await f.admin.pool.query(
+      "insert into campaigns(id,store_id,name,channel,content) values($1,$2,'অফার','sms','{}')",
+      [campaign, shop.id],
+    );
+    await f.admin.pool.query(
+      `insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at,delivered_at,cost_poisha)
+       values($1,$2,$3,$4,'sent',now(),now(),$5)`,
+      [randomUUID(), shop.id, campaign, contact, count * 100],
+    );
+    await f.admin.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
+       ($1,$2,'marketing_revenue','',$3),($1,$2,'marketing_revenue','channel:sms',$3),
+       ($1,$2,'marketing_orders','',$4)`,
+      [shop.id, current.through, count * 10000, count],
+    );
+  }
+  for (const [shop, count] of [
+    [a, 2],
+    [b, 5],
+  ] as const) {
+    const result = await success(shop, 'GET', '/analytics/overview?period=30', 200);
+    expect(result.json()).toMatchObject({
+      marketing: {
+        revenue: { currentPoisha: String(count * 10000) },
+        orders: { current: count },
+      },
+      messages: { sent: { current: 1 }, cost: { currentPoisha: String(count * 100) } },
+      funnel: { sent: { count: 1 }, ordered: { count } },
+      channels: [
+        { channel: 'whatsapp', sent: 0 },
+        { channel: 'sms', sent: 1 },
+        { channel: 'messenger' },
+      ],
+    });
+    expect(result.json().weeklyRevenue.at(-1).byChannel).toEqual({ sms: String(count * 10000) });
+  }
+  expect((await f.request(b.member, 'GET', '/analytics/overview')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', `/analytics/overview?storeId=${b.id}`)).statusCode).toBe(
+    400,
+  );
+  expect((await f.request(a.owner, 'GET', '/analytics/overview?period=7')).statusCode).toBe(400);
+});
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),

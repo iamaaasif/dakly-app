@@ -1,5 +1,5 @@
 {
-  "id": "783333e4-3a9a-40d1-a32c-721f5ab0d442",
+  "id": "0f9a9f7d-af5a-4434-90e6-755e9cbd7520",
   "prevId": "c88ee438-a1e8-4327-9e6e-0ac3d26fc3ff",
   "version": "7",
   "dialect": "postgresql",
@@ -3017,7 +3017,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -4479,6 +4479,27 @@
             },
             {
               "expression": "contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sent_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "automation_run_steps_store_sent_at_idx": {
+          "name": "automation_run_steps_store_sent_at_idx",
+          "columns": [
+            {
+              "expression": "store_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7278,6 +7299,27 @@
             },
             {
               "expression": "contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "sent_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaign_recipients_store_sent_at_idx": {
+          "name": "campaign_recipients_store_sent_at_idx",
+          "columns": [
+            {
+              "expression": "store_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
