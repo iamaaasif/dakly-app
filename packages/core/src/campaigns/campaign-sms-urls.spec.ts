@@ -101,10 +101,11 @@ describe('SMS campaign body URLs', () => {
   );
 
   it.each([
-    { prefix: '"', suffix: '".' },
-    { prefix: '("', suffix: '").' },
-  ])('keeps JSON quotes and brackets in a URL wrapped with $prefix', ({ prefix, suffix }) => {
-    const target = 'https://shop.example.test/search?filter={"tags":["new"]}';
+    { prefix: '"', value: '{"tags":["new"]}', suffix: '".' },
+    { prefix: '("', value: '{"tags":["new"]}', suffix: '").' },
+    { prefix: '("', value: '["red","blue"]', suffix: '").' },
+  ])('keeps JSON quotes and brackets in a URL with $value', ({ prefix, value, suffix }) => {
+    const target = `https://shop.example.test/search?filter=${value}`;
     const text = `Open ${prefix}${target}${suffix}`;
     const urls = campaignSmsUrls(text);
 
@@ -162,6 +163,8 @@ describe('SMS campaign body URLs', () => {
     'Open ("https://shop.example.test/?item=1"—"today").',
     'Open [(‘"https://shop.example.test/?item=1"—"today"’)].',
     'Open "https://shop.example.test/?item=1"—("today").',
+    'Open (https://shop.example.test/?q=left[)—(today).',
+    'Open (["https://shop.example.test/?item=1"]—"today").',
   ])('keeps adjacent quoted prose out of the URL in %s', (text) => {
     expect(campaignSmsUrls(text)).toEqual([]);
   });

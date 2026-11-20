@@ -75,17 +75,7 @@ function urlCandidate(raw: string, prefix: string): string | undefined {
 }
 
 function isAmbiguousQuote(candidate: string, prefix: string, closer: string): boolean {
-  const quotedProse = (following: string) =>
-    followingQuote.test(following) || followingBracketedQuote.test(following);
-  if (hasAdjacentProse(candidate, closer, quotedProse)) return true;
-  if (
-    prefix.length > 1 &&
-    hasAdjacentProse(candidate, matchingClosers(prefix), (following) =>
-      followingNestedQuote.test(following),
-    )
-  ) {
-    return true;
-  }
+  if (hasQuotedProse(candidate, prefix)) return true;
   if (closer === '”' && candidate.includes('“')) return true;
   if (closer !== '"' && closer !== '”') return false;
   const [location] = candidate.split(/[?#]/u, 1);
@@ -94,10 +84,25 @@ function isAmbiguousQuote(candidate: string, prefix: string, closer: string): bo
 
 function bareUrl(raw: string, prefix: string): string | undefined {
   if (!prefix) return trimMessagePunctuation(raw);
+  const closingRun = matchingClosers(prefix);
   const bracketedProse = (following: string, end: number) =>
-    followingBracket.test(following) && bracketsBalanced(raw.slice(0, end));
-  if (hasAdjacentProse(raw, matchingClosers(prefix), bracketedProse)) return undefined;
+    followingBracket.test(following) && bracketsClosed(raw.slice(0, end), closingRun);
+  if (hasAdjacentProse(raw, closingRun, bracketedProse)) return undefined;
   return trimMessagePunctuation(raw);
+}
+
+function hasQuotedProse(candidate: string, prefix: string): boolean {
+  const brackets = bracketSpans(candidate);
+  const closers = matchingClosers(prefix);
+  for (let count = 1; count <= closers.length; count += 1) {
+    const follows = (following: string, end: number) => {
+      if (brackets.some(({ start, close }) => start < end && end < close)) return false;
+      if (count > 1) return followingNestedQuote.test(following);
+      return followingQuote.test(following) || followingBracketedQuote.test(following);
+    };
+    if (hasAdjacentProse(candidate, closers.slice(0, count), follows)) return true;
+  }
+  return false;
 }
 
 function matchingClosers(prefix: string): string {
@@ -112,16 +117,34 @@ function hasAdjacentProse(
   closingRun: string,
   follows: (following: string, end: number) => boolean,
 ): boolean {
+  if (!closingRun) return false;
   for (let end = text.indexOf(closingRun); end >= 0; end = text.indexOf(closingRun, end + 1)) {
     if (follows(text.slice(end + closingRun.length), end)) return true;
   }
   return false;
 }
 
-function bracketsBalanced(text: string): boolean {
-  return Object.entries(openingBracket).every(
-    ([close, open]) => text.split(open).length === text.split(close).length,
-  );
+function bracketsClosed(text: string, closingRun: string): boolean {
+  for (const close of closingRun) {
+    const open = openingBracket[close];
+    if (open && text.split(open).length > text.split(close).length) return false;
+  }
+  return true;
+}
+
+function bracketSpans(text: string): { start: number; close: number }[] {
+  const spans: { start: number; close: number }[] = [];
+  for (const [closer, opener] of Object.entries(openingBracket)) {
+    const starts: number[] = [];
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+      if (character === opener) starts.push(index);
+      if (character !== closer) continue;
+      const start = starts.pop();
+      if (start !== undefined) spans.push({ start, close: index });
+    }
+  }
+  return spans;
 }
 
 function trimMessagePunctuation(raw: string): string {
