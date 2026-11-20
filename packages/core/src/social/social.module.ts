@@ -7,6 +7,8 @@ import { FileStorageModule } from '../platform/file-storage/file-storage.module'
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
+import { PostMediaController } from './post-media.controller';
+import { PostMediaService } from './post-media.service';
 import { PostingSlotsController } from './posting-slots.controller';
 import { PostingSlotsService } from './posting-slots.service';
 import { SocialController } from './social.controller';
@@ -23,7 +25,7 @@ import { SocialService } from './social.service';
     StoresModule,
     TeamModule,
   ],
-  controllers: [PostingSlotsController, SocialController],
-  providers: [PostingSlotsService, SocialService, SocialRepository],
+  controllers: [PostingSlotsController, PostMediaController, SocialController],
+  providers: [PostingSlotsService, PostMediaService, SocialService, SocialRepository],
 })
 export class SocialModule {}

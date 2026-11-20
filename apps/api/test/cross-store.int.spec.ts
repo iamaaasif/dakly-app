@@ -3314,6 +3314,59 @@ fixture('DELETE /products/:productId/photos/:fileId', async () => {
   expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
 });
 
+async function uploadedPostPhoto(shop: Shop) {
+  const issued = (await success(shop, 'POST', '/post-media/upload-url', 200, photoInput)).json();
+  const response = await fetch(issued.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': photoInput.contentType },
+    body: new Uint8Array([137, 80, 78, 71]),
+  });
+  expect(response.status).toBe(200);
+  return { ...photoInput, fileId: issued.fileId as string };
+}
+
+fixture('POST /post-media/upload-url', async () => {
+  const { b } = await pair();
+  const issued = (await success(b, 'POST', '/post-media/upload-url', 200, photoInput)).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/post_media/${issued.fileId}`,
+  );
+  expect(await f.row('files', issued.fileId)).toBeUndefined();
+  expect((await f.request(b.member, 'POST', '/post-media/upload-url', photoInput)).statusCode).toBe(
+    403,
+  );
+  expect(
+    (
+      await f.request(b.owner, 'POST', '/post-media/upload-url', {
+        ...photoInput,
+        sizeBytes: 5242881,
+      })
+    ).statusCode,
+  ).toBe(400);
+});
+
+fixture('POST /post-media/confirm', async () => {
+  const { a, b } = await pair();
+  const foreign = await uploadedPostPhoto(a);
+  const own = await uploadedPostPhoto(b);
+  await success(a, 'POST', '/post-media/confirm', 201, foreign);
+  const confirmed = (await success(b, 'POST', '/post-media/confirm', 201, own)).json();
+  expect(confirmed.id).toBe(own.fileId);
+  expect(await f.row('files', own.fileId)).toMatchObject({
+    store_id: b.id,
+    purpose: 'post_media',
+    status: 'ready',
+  });
+  const download = await fetch(confirmed.url);
+  expect(download.status).toBe(200);
+  // The other shop's object lives under its own prefix, so this shop cannot claim it.
+  const before = await f.row('files', foreign.fileId);
+  const stolen = await f.request(b.owner, 'POST', '/post-media/confirm', foreign);
+  expect(stolen.statusCode, stolen.body).toBe(400);
+  expect(stolen.json().error.code).toBe('POST_MEDIA_UPLOAD_INVALID');
+  expect(await f.row('files', foreign.fileId)).toEqual(before);
+});
+
 const brandProfile = {
   voice: 'Warm',
   audience: 'Parents',

@@ -99,6 +99,27 @@ test('writes a caption with AI and queues the post', async ({ page, context, bas
     await expect(page.getByRole('complementary', { name: 'Preview' })).toContainText('#winter');
     await capture(page, 'caption-written', page.getByRole('region', { name: 'Caption' }));
 
+    const photo = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 240;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = 'darkorange';
+      context.fillRect(0, 0, 240, 240);
+      return canvas.toDataURL('image/jpeg').split(',')[1]!;
+    });
+    await page.getByLabel('Photo file').setInputFiles({
+      name: 'kurti.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.from(photo, 'base64'),
+    });
+    await expect(page.getByRole('button', { name: 'Uploaded photo' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByText('1 of 10 chosen')).toBeVisible();
+    await expect(page.getByRole('complementary', { name: 'Preview' }).locator('img')).toBeVisible();
+    await capture(page, 'photo-uploaded', page.getByRole('region', { name: 'Photos' }));
+
     await page.getByRole('radio', { name: /Pick date and time/ }).check();
     await page.getByLabel('Scheduled time').fill('2027-03-01T10:00');
     await page.getByRole('button', { name: 'Schedule', exact: true }).click();
@@ -108,6 +129,11 @@ test('writes a caption with AI and queues the post', async ({ page, context, bas
       [storeId],
     );
     expect(scheduled.rows).toEqual([{ is_ai_written: true, status: 'scheduled' }]);
+    const media = await database.pool.query<{ purpose: string; status: string }>(
+      'select f.purpose, f.status from posts p join files f on f.id = any(p.media_file_ids) where p.store_id=$1',
+      [storeId],
+    );
+    expect(media.rows).toEqual([{ purpose: 'post_media', status: 'ready' }]);
 
     await page.goto('/social/posts/new');
     await page.getByRole('textbox', { name: 'Caption', exact: true }).fill('Typed by a person');
@@ -121,6 +147,9 @@ test('writes a caption with AI and queues the post', async ({ page, context, bas
   } finally {
     await database.pool.query('delete from post_targets where store_id=$1', [storeId]);
     await database.pool.query('delete from posts where store_id=$1', [storeId]);
+    await database.pool.query("delete from files where store_id=$1 and purpose='post_media'", [
+      storeId,
+    ]);
     await database.pool.query('delete from channel_connections where store_id=$1', [storeId]);
     await database.pool.end();
   }
