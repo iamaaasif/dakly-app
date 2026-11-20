@@ -7,6 +7,7 @@ export type FileStorageDriver = {
   deleteObject(key: string): Promise<void>;
   readBytes(key: string, maxBytes: number): Promise<StoredFile>;
   writeText(key: string, body: string, contentType: string): Promise<void>;
+  writeBytes(key: string, body: Uint8Array, contentType: string): Promise<void>;
 };
 
 export type StoredFile =
