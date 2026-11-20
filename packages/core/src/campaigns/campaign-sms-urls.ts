@@ -91,14 +91,13 @@ function bareUrl(raw: string, prefix: string): string | undefined {
     followingBracket.test(following) && bracketsClosed(raw.slice(0, end), closingRun);
   if (hasAdjacentProse(raw, closingRun, bracketedProse)) return undefined;
   const candidate = trimMessagePunctuation(raw, closingRun);
+  const last = candidate.at(-1);
   if (
-    candidate.at(-1) === closingRun[0] &&
+    last &&
+    closingRun.includes(last) &&
     withoutOuterClosers(raw.slice(candidate.length), closingRun) === undefined
   ) {
-    const encoded = jsonSpans(candidate).some(
-      ({ start, end }) => end === candidate.length && candidate[start] === '%',
-    );
-    if (encoded) return undefined;
+    return undefined;
   }
   return candidate;
 }

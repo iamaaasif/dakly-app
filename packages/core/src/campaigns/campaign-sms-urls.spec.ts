@@ -211,6 +211,12 @@ describe('SMS campaign body URLs', () => {
     expect(campaignSmsUrls(text)).toEqual([]);
   });
 
+  it('leaves a closer untouched when it can belong to the URL or message', () => {
+    const text = 'Open (https://shop.example.test/?label=(sale&filter=[]&view=grid).';
+    expect(campaignSmsUrls(text)).toEqual([]);
+    expect(replaceCampaignSmsUrls(text, campaignSmsUrls(text), () => '/short')).toBe(text);
+  });
+
   it('keeps every surrounding bracket when a URL is nested in angle brackets', () => {
     const text = 'Open <<https://shop.example.test/offer>>.';
     const urls = campaignSmsUrls(text);
