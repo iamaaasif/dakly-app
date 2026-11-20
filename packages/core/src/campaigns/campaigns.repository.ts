@@ -403,11 +403,11 @@ export class CampaignsRepository {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ count: number }>(sql`
         with removed as (
-          delete from campaign_recipients where ctid in (
+          delete from campaign_recipients where ctid = any(array(
             select r.ctid from campaign_recipients r
             join campaigns c on c.store_id = r.store_id and c.id = r.campaign_id
             where r.store_id = ${storeId} and c.finished_at < now() - interval '372 days'
-            limit ${limit} for update of r skip locked)
+            limit ${limit} for update of r skip locked))
           returning 1)
         select count(*)::int as count from removed`),
     );

@@ -317,11 +317,11 @@ export class AutomationRunsRepository {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ count: number }>(sql`
         with removed as (
-          delete from automation_run_steps where ctid in (
+          delete from automation_run_steps where ctid = any(array(
             select s.ctid from automation_run_steps s
             join automation_runs r on r.store_id = s.store_id and r.id = s.run_id
             where s.store_id = ${storeId} and r.finished_at < now() - interval '372 days'
-            limit ${limit} for update of s skip locked)
+            limit ${limit} for update of s skip locked))
           returning 1)
         select count(*)::int as count from removed`),
     );

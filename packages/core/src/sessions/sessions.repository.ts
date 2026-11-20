@@ -204,8 +204,8 @@ export class SessionsRepository {
   async purgeExpiredBatch(limit: number): Promise<boolean> {
     const { rows } = await this.database.execute<{ count: number }>(sql`
       with removed as (
-        delete from sessions where ctid in (
-          select ctid from sessions where expires_at < now() limit ${limit} for update skip locked)
+        delete from sessions where ctid = any(array(
+          select ctid from sessions where expires_at < now() limit ${limit} for update skip locked))
         returning 1)
       select count(*)::int as count from removed`);
     return rows[0]?.count === limit;
