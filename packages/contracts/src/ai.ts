@@ -13,6 +13,7 @@ export const aiRunPurposes = [
   'teach',
   'embedding',
   'contact_memory',
+  'grade_test',
 ] as const;
 export const aiRunOutcomes = [
   'completed',

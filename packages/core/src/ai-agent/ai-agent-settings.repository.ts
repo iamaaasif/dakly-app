@@ -29,6 +29,33 @@ export class AiAgentSettingsRepository {
     return settings && { ...settings, testers: testersSchema.parse(settings.testers) };
   }
 
+  async testers(storeId: string): Promise<string[]> {
+    const [settings] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ testers: aiAgentSettings.testers })
+        .from(aiAgentSettings)
+        .where(eq(aiAgentSettings.storeId, storeId)),
+    );
+    return testersSchema.parse(settings?.testers ?? []);
+  }
+
+  async saveTesters(storeId: string, userId: string, contactIds: string[], now: Date) {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(aiAgentSettings)
+        .values({ storeId, testers: contactIds, updatedByUserId: userId, updatedAt: now })
+        .onConflictDoUpdate({
+          target: aiAgentSettings.storeId,
+          set: {
+            testers: contactIds,
+            version: sql`${aiAgentSettings.version} + 1`,
+            updatedByUserId: userId,
+            updatedAt: now,
+          },
+        }),
+    );
+  }
+
   async practice(storeId: string) {
     const [settings] = await this.database.forStore(storeId, (tx) =>
       tx

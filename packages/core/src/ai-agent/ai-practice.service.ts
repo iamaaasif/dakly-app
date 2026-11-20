@@ -14,6 +14,7 @@ import { AiService } from '../ai/ai.service';
 import { KnowledgeSearchService } from '../ai/knowledge-search.service';
 import { AuditService } from '../audit/audit.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -40,6 +41,7 @@ export class AiPracticeService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(KnowledgeSearchService) private readonly knowledge: KnowledgeSearchService,
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -53,6 +55,31 @@ export class AiPracticeService {
   async saveTestQuestions(storeId: string, userId: string, questions: TestQuestion[]) {
     await this.settings.saveTestQuestions(storeId, userId, questions, this.clock.now());
     return { questions };
+  }
+
+  async testers(storeId: string) {
+    return { contactIds: await this.settings.testers(storeId) };
+  }
+
+  async saveTesters(storeId: string, userId: string, contactIds: string[]) {
+    const unique = [...new Set(contactIds)];
+    for (const id of unique)
+      if (!(await this.contacts.findRecipient(storeId, id)))
+        throw practiceError('PRACTICE_TESTER_NOT_FOUND');
+    const before = await this.settings.testers(storeId);
+    await this.transaction.run(storeId, async () => {
+      await this.settings.saveTesters(storeId, userId, unique, this.clock.now());
+      await this.audit.record(storeId, {
+        actor: { kind: 'user', userId },
+        action: 'ai_agent.testers_changed',
+        entityType: 'ai_agent_settings',
+        // The settings row is one per store, so the store id names it.
+        entityId: storeId,
+        before: { ids: before },
+        after: { ids: unique },
+      });
+    });
+    return { contactIds: unique };
   }
 
   async ask(storeId: string, question: string): Promise<TestAnswerResponse> {
@@ -127,7 +154,7 @@ export class AiPracticeService {
     // Wording differs between Bangla, Banglish and English, so a model judges the meaning.
     const grade = await this.ai.run(storeId, {
       tier: 'fast',
-      purpose: 'classify',
+      purpose: 'grade_test',
       prompt: gradeTestAnswer,
       input: JSON.stringify({
         question: test.question,

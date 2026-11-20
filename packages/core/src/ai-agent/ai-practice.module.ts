@@ -4,6 +4,7 @@ import { AiModule } from '../ai/ai.module';
 import { KnowledgeSearchModule } from '../ai/knowledge-search.module';
 import { AuditModule } from '../audit/audit.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
+import { ContactsModule } from '../contacts/contacts.module';
 import { ClockModule } from '../platform/clock.module';
 import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
@@ -17,6 +18,7 @@ import { SalesAgentModule } from './sales-agent.module';
     AiModule,
     AuditModule,
     ClockModule,
+    ContactsModule,
     KnowledgeSearchModule,
     MetaAuthorizationModule,
     ProductsModule,

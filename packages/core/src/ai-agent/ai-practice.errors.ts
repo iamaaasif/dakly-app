@@ -1,6 +1,7 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const AI_PRACTICE_ERRORS = {
+  PRACTICE_TESTER_NOT_FOUND: { status: 404, message: 'A tester is not a contact of this store' },
   PRACTICE_AI_BUSY: { status: 503, message: 'The store has three AI calls in progress' },
   GO_LIVE_NEEDS_KNOWLEDGE: { status: 409, message: 'Add something to Knowledge before going live' },
   GO_LIVE_NEEDS_PRODUCTS: {

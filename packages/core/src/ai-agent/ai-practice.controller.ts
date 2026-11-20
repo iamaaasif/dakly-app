@@ -12,9 +12,12 @@ import {
 
 import {
   askTestSchema,
+  saveTestersSchema,
   saveTestQuestionsSchema,
   type AskTestInput,
+  type SaveTestersInput,
   type SaveTestQuestionsInput,
+  type TestersResponse,
   type TestAnswerResponse,
   type TestQuestionsResponse,
 } from '@dakly/contracts/ai-practice';
@@ -43,6 +46,22 @@ export class AiPracticeController {
     @Body(new ZodValidationPipe(saveTestQuestionsSchema)) input: SaveTestQuestionsInput,
   ): Promise<TestQuestionsResponse> {
     return this.practice.saveTestQuestions(storeId, userId, input.questions);
+  }
+
+  @Get('testers')
+  @RequirePermission('storeSettings.view')
+  testers(@CurrentStore() storeId: string): Promise<TestersResponse> {
+    return this.practice.testers(storeId);
+  }
+
+  @Put('testers')
+  @RequirePermission('storeSettings.edit')
+  saveTesters(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Body(new ZodValidationPipe(saveTestersSchema)) input: SaveTestersInput,
+  ): Promise<TestersResponse> {
+    return this.practice.saveTesters(storeId, userId, input.contactIds);
   }
 
   @Post('test')

@@ -149,6 +149,15 @@ async function sideEffects(storeId: string) {
   };
 }
 
+async function contact(storeId: string) {
+  const id = randomUUID();
+  await admin.pool.query(
+    "insert into contacts (id, store_id, name, phone, kind, source) values ($1, $2, 'Tester', $3, 'customer', 'manual')",
+    [id, storeId, `017${randomInt(10000000, 99999999)}`],
+  );
+  return id;
+}
+
 const isLive = async (connectionId: string) =>
   (
     await admin.pool.query<{ is_ai_live: boolean }>(
@@ -259,4 +268,32 @@ it('cannot take another store’s channel live', async () => {
     code: 'CHANNEL_CONNECTION_NOT_FOUND',
   });
   expect(await isLive(theirs.connectionId)).toBe(false);
+});
+
+it('saves testers that are this store’s contacts and audits the change', async () => {
+  const active = await shop();
+  const tester = await contact(active.storeId);
+  await practice.saveTesters(active.storeId, active.userId, [tester, tester]);
+  expect(await practice.testers(active.storeId)).toEqual({ contactIds: [tester] });
+  const { rows } = await admin.pool.query(
+    'select action, before, after from audit_log where store_id = $1',
+    [active.storeId],
+  );
+  expect(rows).toEqual([
+    {
+      action: 'ai_agent.testers_changed',
+      before: { ids: [] },
+      after: { ids: [tester] },
+    },
+  ]);
+});
+
+it('refuses a tester from another store', async () => {
+  const mine = await shop();
+  const theirs = await shop();
+  const stranger = await contact(theirs.storeId);
+  await expect(practice.saveTesters(mine.storeId, mine.userId, [stranger])).rejects.toMatchObject({
+    code: 'PRACTICE_TESTER_NOT_FOUND',
+  });
+  expect(await practice.testers(mine.storeId)).toEqual({ contactIds: [] });
 });
