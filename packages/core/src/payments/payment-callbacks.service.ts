@@ -11,6 +11,7 @@ import { Clock } from '../platform/clock';
 import { hashToken } from '../platform/crypto/token-hash';
 import { AppError } from '../platform/errors/app-error';
 import { QUEUES } from '../platform/queue/queues';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { PROCESS_PAYMENT_CALLBACK } from './jobs/process-payment-callback.job';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
 import { PAYMENT_DRIVERS } from './payment-drivers';
@@ -63,17 +64,34 @@ export class PaymentCallbacksService {
       },
       this.clock.now(),
     );
-    if (receipt)
-      await this.queue.add(
-        PROCESS_PAYMENT_CALLBACK,
-        { webhookEventId: receipt.id },
-        {
-          jobId: receipt.id,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 2000 },
-          removeOnComplete: true,
-          removeOnFail: true,
-        },
-      );
+    if (receipt) await this.enqueue(receipt.id);
+  }
+
+  async recoverPending() {
+    const now = this.clock.now();
+    const before = new Date(now.getTime() - MINUTE_MS);
+    const expiredBefore = now.getTime() - 7 * DAY_MS;
+    let page = await this.repository.listReceivedBefore(before);
+    while (page.length) {
+      for (const { id, receivedAt } of page) {
+        if (receivedAt.getTime() < expiredBefore) await this.repository.finish(id, 'failed', now);
+        else await this.enqueue(id);
+      }
+      page = await this.repository.listReceivedBefore(before, page.at(-1)?.id);
+    }
+  }
+
+  private async enqueue(webhookEventId: string) {
+    await this.queue.add(
+      PROCESS_PAYMENT_CALLBACK,
+      { webhookEventId },
+      {
+        jobId: webhookEventId,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
   }
 }

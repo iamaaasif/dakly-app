@@ -122,6 +122,11 @@ const groups = [
     boundary: 'public tracked link and SMS opt-out page; the store comes from the link code',
     routes: ['GET /l/:code', 'GET /l/s/:code', 'POST /l/s/:code'],
   },
+  {
+    evidence: 'orders/order-confirmation.int.spec.ts',
+    boundary: 'public order confirm page; the store comes from the hashed token, never the request',
+    routes: ['GET /l/c/:token', 'POST /l/c/:token'],
+  },
 ];
 export const isolationBoundaries = new Map(
   groups.flatMap(({ routes, ...reason }) => routes.map((route) => [route, reason] as const)),

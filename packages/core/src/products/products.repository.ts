@@ -5,12 +5,10 @@ import type {
   CreateProductInput,
   ProductListQuery,
   ProductOption,
-  StockMovementKind,
   ConfirmProductPhotoInput,
 } from '@dakly/contracts/products';
-import { MAX_STOCK_QUANTITY } from '@dakly/contracts/products';
 import { files } from '@dakly/db/schema/platform';
-import { products, productVariants, stockMovements } from '@dakly/db/schema/products';
+import { products, productVariants } from '@dakly/db/schema/products';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -73,22 +71,15 @@ export type Variant = CreateProductInput['variants'][number] & {
   onHand: number;
   reserved: number;
 };
+export type SkuMatch = {
+  id: string;
+  productId: string;
+  sku: string;
+  isArchived: boolean;
+};
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
   position: number;
-};
-
-type StockDelta = { onHandDelta: number; reservedDelta: number };
-type StockMovementWrite = {
-  variantId: string;
-  kind: StockMovementKind;
-  quantity: number;
-  onHandAfter: number;
-  reservedAfter: number;
-  orderId: string | null;
-  reason: string | null;
-  actorUserId: string | null;
-  createdAt: Date;
 };
 
 @Injectable()
@@ -147,6 +138,51 @@ export class ProductsRepository {
         .orderBy(desc(products.id))
         .limit(query.limit + 1),
     );
+  }
+
+  // The AI agent may only offer active products the shop shows in chats.
+  searchForChat(storeId: string, text: string, limit: number): Promise<CatalogueProduct[]> {
+    const pattern = `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            eq(products.status, 'active'),
+            eq(products.isVisibleInChats, true),
+            sql`(${products.name} ilike ${pattern} or exists (select 1 from unnest(${products.aliases}) alias where alias ilike ${pattern}))`,
+          ),
+        )
+        .orderBy(desc(products.id))
+        .limit(limit),
+    );
+  }
+
+  async findForChat(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            eq(products.id, id),
+            eq(products.status, 'active'),
+            eq(products.isVisibleInChats, true),
+          ),
+        ),
+    );
+    return rows[0];
   }
 
   async listCategories(storeId: string): Promise<string[]> {
@@ -272,53 +308,39 @@ export class ProductsRepository {
     }
   }
 
-  async findStockVariant(
-    storeId: string,
-    variantId: string,
-  ): Promise<{ isStockTracked: boolean } | undefined> {
-    const rows = await this.database.forStore(storeId, (tx) =>
+  // The SKU is unique per store across archived variants too, so an archived match is reported.
+  findVariantsBySku(storeId: string, skus: string[]): Promise<SkuMatch[]> {
+    return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ isStockTracked: products.isStockTracked })
+        .select({
+          id: productVariants.id,
+          productId: productVariants.productId,
+          sku: sql<string>`${productVariants.sku}`,
+          isArchived: sql<boolean>`${productVariants.status} = 'archived' or ${products.status} = 'archived'`,
+        })
         .from(productVariants)
         .innerJoin(products, eq(products.id, productVariants.productId))
         .where(
           and(
             eq(productVariants.storeId, storeId),
             eq(products.storeId, storeId),
-            eq(productVariants.id, variantId),
+            inArray(productVariants.sku, skus),
           ),
         ),
     );
-    return rows[0];
   }
 
-  async changeStock(
+  async updateVariantPrices(
     storeId: string,
     variantId: string,
-    change: StockDelta,
+    change: { priceOverridePoisha?: number; costPoisha?: number },
     now: Date,
-  ): Promise<{ onHand: number; reserved: number } | undefined> {
-    const onHand = sql`${productVariants.onHand}::bigint + ${change.onHandDelta}`;
-    const reserved = sql`${productVariants.reserved}::bigint + ${change.reservedDelta}`;
-    const rows = await this.database.forStore(storeId, (tx) =>
+  ): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
       tx
         .update(productVariants)
-        .set({ onHand, reserved, updatedAt: now })
-        .where(
-          and(
-            eq(productVariants.storeId, storeId),
-            eq(productVariants.id, variantId),
-            sql`${onHand} >= ${reserved} and ${reserved} >= 0 and ${onHand} <= ${MAX_STOCK_QUANTITY} and ${reserved} <= ${MAX_STOCK_QUANTITY}`,
-          ),
-        )
-        .returning({ onHand: productVariants.onHand, reserved: productVariants.reserved }),
-    );
-    return rows[0];
-  }
-
-  async insertStockMovement(storeId: string, movement: StockMovementWrite): Promise<void> {
-    await this.database.forStore(storeId, (tx) =>
-      tx.insert(stockMovements).values({ storeId, ...movement }),
+        .set({ ...change, updatedAt: now })
+        .where(and(eq(productVariants.storeId, storeId), eq(productVariants.id, variantId))),
     );
   }
 

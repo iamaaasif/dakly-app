@@ -19,7 +19,6 @@ import type {
   ConfirmProductPhotoInput,
   ReorderProductPhotosInput,
   ProductReadiness,
-  StockMovementKind,
 } from '@dakly/contracts/products';
 import { MAX_PRODUCT_PHOTOS } from '@dakly/contracts/products';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
@@ -41,17 +40,6 @@ import {
 } from './products.repository';
 
 type Actor = AuditEntry['actor'];
-type StockReference = { actor: Actor } & (
-  { orderId: string; reason?: string } | { reason: string; orderId?: string }
-);
-
-type StockMovementInput = { kind: StockMovementKind; quantity: number; reference: StockReference };
-type UpdatedStock = {
-  onHand: number;
-  reserved: number;
-  onHandDelta: number;
-  reservedDelta: number;
-};
 
 @Injectable()
 export class ProductsService {
@@ -134,6 +122,16 @@ export class ProductsService {
     return orderCatalogueProduct(product);
   }
 
+  async searchForChat(storeId: string, text: string, limit: number): Promise<ChatProduct[]> {
+    return (await this.repository.searchForChat(storeId, text, limit)).map(chatProduct);
+  }
+
+  async getForChat(storeId: string, id: string): Promise<ChatProduct> {
+    const product = await this.repository.findForChat(storeId, id);
+    if (!product) throw productError('PRODUCT_NOT_FOUND');
+    return chatProduct(product);
+  }
+
   remove(storeId: string, id: string, _actor: Actor): Promise<void> {
     return this.transaction.run(storeId, async () => {
       if (!(await this.repository.archive(storeId, id, this.clock.now())))
@@ -164,70 +162,6 @@ export class ProductsService {
       variantId,
       available: onHand - reserved,
     }));
-  }
-
-  moveStock(storeId: string, variantId: string, input: StockMovementInput): Promise<void> {
-    return this.transaction.run(storeId, async () => {
-      const variant = await this.repository.findStockVariant(storeId, variantId);
-      if (!variant) throw productError('PRODUCT_VARIANT_NOT_FOUND');
-      const { kind, quantity } = input;
-      // Order movements follow the tracking flag saved on the order item.
-      if (!variant.isStockTracked && !input.reference.orderId) return;
-      if (quantity === 0 || (quantity < 0 && kind !== 'adjust' && kind !== 'import'))
-        throw productError('STOCK_QUANTITY_INVALID');
-      const change = {
-        reserve: { onHandDelta: 0, reservedDelta: quantity },
-        release: { onHandDelta: 0, reservedDelta: -quantity },
-        ship: { onHandDelta: -quantity, reservedDelta: -quantity },
-        return: { onHandDelta: quantity, reservedDelta: 0 },
-        adjust: { onHandDelta: quantity, reservedDelta: 0 },
-        import: { onHandDelta: quantity, reservedDelta: 0 },
-      }[kind];
-      const now = this.clock.now();
-      const updated = await this.repository.changeStock(storeId, variantId, change, now);
-      if (!updated) throw productError('STOCK_NOT_AVAILABLE');
-      await this.recordStockMovement(
-        storeId,
-        { ...input, variantId },
-        { ...change, ...updated },
-        now,
-      );
-    });
-  }
-
-  private async recordStockMovement(
-    storeId: string,
-    movement: StockMovementInput & { variantId: string },
-    stock: UpdatedStock,
-    now: Date,
-  ) {
-    const { variantId, kind, quantity, reference } = movement;
-    await this.repository.insertStockMovement(storeId, {
-      variantId,
-      kind,
-      quantity: stock.onHandDelta || quantity,
-      onHandAfter: stock.onHand,
-      reservedAfter: stock.reserved,
-      orderId: reference.orderId ?? null,
-      reason: reference.reason ?? null,
-      actorUserId: reference.actor.kind === 'user' ? reference.actor.userId : null,
-      createdAt: now,
-    });
-    await this.outbox.publish({
-      type: 'stock.changed',
-      storeId,
-      occurredAt: now.toISOString(),
-      payload: { variantId, kind },
-    });
-    const available = stock.onHand - stock.reserved;
-    const before = available - stock.onHandDelta + stock.reservedDelta;
-    if (before <= 0 && available > 0)
-      await this.outbox.publish({
-        type: 'variant.restocked',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: { variantId },
-      });
   }
 
   async requestPhotoUpload(
@@ -377,6 +311,16 @@ export class ProductsService {
       payload: { productId },
     });
   }
+}
+
+export type ChatProduct = OrderCatalogueProduct & Pick<ProductResponse, 'description' | 'category'>;
+
+function chatProduct(product: CatalogueProduct): ChatProduct {
+  return {
+    ...orderCatalogueProduct(product),
+    description: product.description,
+    category: product.category,
+  };
 }
 
 function orderCatalogueProduct(product: CatalogueProduct): OrderCatalogueProduct {

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0067_snapshot.json`: **95 tables, 1290 columns, 393 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0075_snapshot.json`: **97 tables, 1305 columns, 400 explicit indexes and 304 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -382,6 +382,7 @@ erDiagram
     bd_areas |o..o{ bd_areas : "parent_id"
     stores ||..o{ channel_connections : "store_id"
     users |o..o{ channel_connections : "connected_by_user_id"
+    stores ||..o{ meta_page_subscriptions : "store_id"
     stores ||..o{ sms_sender_ids : "store_id"
     files |o..o{ sms_sender_ids : "trade_licence_file_id"
     files |o..o{ sms_sender_ids : "nid_file_id"
@@ -474,6 +475,7 @@ erDiagram
         uuid store_id FK "NOT NULL; uuid"
         text kind "NOT NULL; text"
         text external_account_id "NOT NULL; text"
+        text linked_page_external_id "NULL; text"
         text display_name "NOT NULL; text"
         bytea access_token_ciphertext "NULL; bytea"
         smallint key_version "NULL; smallint"
@@ -488,6 +490,14 @@ erDiagram
         timestamp_with_time_zone disconnected_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    meta_page_subscriptions {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text page_external_id "NOT NULL; text"
+        bytea access_token_ciphertext "NOT NULL; bytea"
+        smallint key_version "NOT NULL; smallint"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     sms_sender_ids {
         uuid id PK "NOT NULL; uuid"
@@ -824,6 +834,8 @@ erDiagram
     product_variants ||..o{ order_items : "variant_id"
     orders ||..o{ order_items : "store_id, order_id"
     product_variants ||..o{ order_items : "store_id, variant_id"
+    stores ||..o{ order_confirmations : "store_id"
+    orders ||..o{ order_confirmations : "store_id, order_id"
     stores ||..o{ payment_gateway_credentials : "store_id"
     users |o..o{ payment_gateway_credentials : "connected_by_user_id"
     stores ||..o{ payment_intents : "store_id"
@@ -1020,6 +1032,14 @@ erDiagram
         boolean is_stock_tracked "NOT NULL; boolean"
         boolean is_oversell_allowed "NOT NULL; boolean"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    order_confirmations {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid order_id FK "NOT NULL; uuid"
+        bytea token_hash UK "NOT NULL; bytea"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone used_at "NULL; timestamp with time zone"
     }
     payment_gateway_credentials {
         uuid id PK "NOT NULL; uuid"
@@ -1281,6 +1301,7 @@ erDiagram
     automations ||..o{ automation_runs : "automation_id"
     automation_versions ||..o{ automation_runs : "version_id"
     contacts ||..o{ automation_runs : "contact_id"
+    orders |o..o{ automation_runs : "trigger_order_id"
     automations ||..o{ automation_runs : "store_id, automation_id"
     automation_versions ||..o{ automation_runs : "store_id, version_id"
     contacts ||..o{ automation_runs : "store_id, contact_id"
@@ -1511,6 +1532,7 @@ erDiagram
         uuid version_id FK "NOT NULL; uuid"
         uuid contact_id FK "NOT NULL; uuid"
         text trigger_key "NOT NULL; text"
+        uuid trigger_order_id FK "NULL; uuid"
         text current_step_key "NOT NULL; text"
         text status "NOT NULL; text"
         text exit_reason "NULL; text"
@@ -1533,6 +1555,7 @@ erDiagram
         text channel "NULL; text"
         text category "NULL; text"
         text opt_out_url "NULL; text"
+        text rendered_text "NULL; text"
         text destination_hash "NULL; text"
         timestamp_with_time_zone first_tried_at "NULL; timestamp with time zone"
         text skip_reason "NULL; text"
@@ -1908,6 +1931,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `automation_runs_automation_id_automations_id_fk`                    | `automation_runs(automation_id)`                          | `automations(id)`                           | no action |
 | `automation_runs_version_id_automation_versions_id_fk`               | `automation_runs(version_id)`                             | `automation_versions(id)`                   | no action |
 | `automation_runs_contact_id_contacts_id_fk`                          | `automation_runs(contact_id)`                             | `contacts(id)`                              | cascade   |
+| `automation_runs_trigger_order_id_orders_id_fk`                      | `automation_runs(trigger_order_id)`                       | `orders(id)`                                | set null  |
 | `automation_runs_automation_id_store_fk`                             | `automation_runs(store_id, automation_id)`                | `automations(store_id, id)`                 | no action |
 | `automation_runs_version_id_store_fk`                                | `automation_runs(store_id, version_id)`                   | `automation_versions(store_id, id)`         | no action |
 | `automation_runs_contact_id_store_fk`                                | `automation_runs(store_id, contact_id)`                   | `contacts(store_id, id)`                    | cascade   |
@@ -1964,6 +1988,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `whatsapp_templates_channel_connection_id_store_fk`                  | `whatsapp_templates(store_id, channel_connection_id)`     | `channel_connections(store_id, id)`         | no action |
 | `channel_connections_store_id_stores_id_fk`                          | `channel_connections(store_id)`                           | `stores(id)`                                | no action |
 | `channel_connections_connected_by_user_id_users_id_fk`               | `channel_connections(connected_by_user_id)`               | `users(id)`                                 | no action |
+| `meta_page_subscriptions_store_id_stores_id_fk`                      | `meta_page_subscriptions(store_id)`                       | `stores(id)`                                | no action |
 | `sms_sender_ids_store_id_stores_id_fk`                               | `sms_sender_ids(store_id)`                                | `stores(id)`                                | no action |
 | `sms_sender_ids_trade_licence_file_id_files_id_fk`                   | `sms_sender_ids(trade_licence_file_id)`                   | `files(id)`                                 | no action |
 | `sms_sender_ids_nid_file_id_files_id_fk`                             | `sms_sender_ids(nid_file_id)`                             | `files(id)`                                 | no action |
@@ -2056,6 +2081,8 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `discount_codes_contact_id_contacts_id_fk`                           | `discount_codes(contact_id)`                              | `contacts(id)`                              | set null  |
 | `discount_codes_created_by_user_id_users_id_fk`                      | `discount_codes(created_by_user_id)`                      | `users(id)`                                 | no action |
 | `discount_codes_contact_id_store_fk`                                 | `discount_codes(store_id, contact_id)`                    | `contacts(store_id, id)`                    | no action |
+| `order_confirmations_store_id_stores_id_fk`                          | `order_confirmations(store_id)`                           | `stores(id)`                                | no action |
+| `order_confirmations_order_id_store_fk`                              | `order_confirmations(store_id, order_id)`                 | `orders(store_id, id)`                      | cascade   |
 | `order_items_store_id_stores_id_fk`                                  | `order_items(store_id)`                                   | `stores(id)`                                | no action |
 | `order_items_order_id_orders_id_fk`                                  | `order_items(order_id)`                                   | `orders(id)`                                | cascade   |
 | `order_items_variant_id_product_variants_id_fk`                      | `order_items(variant_id)`                                 | `product_variants(id)`                      | no action |

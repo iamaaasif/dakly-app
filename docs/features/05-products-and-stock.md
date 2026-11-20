@@ -93,7 +93,7 @@ Captured from the prototype on 13 Nov 2026 by opening each button, tab and dialo
 
 ![Add product](../design/screenshots/products-and-stock/add-product.webp)
 
-**Import products**
+**Import products** (differs: this capture shows the Integrations page, not an import dialog)
 
 ![Import products](../design/screenshots/products-and-stock/import.webp)
 
@@ -121,11 +121,26 @@ In the saved product editor, choose a tone and language to write three descripti
 
 List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
+### Missing design: import products
+
+The prototype capture for this screen shows the Integrations page, so there is no product import design to match. The import dialog follows the customer import dialog (CUS-8) element by element: step bar, file drop area, column mapping, preview, duplicate choice and result counts. Evidence: `docs/design/evidence/prod-5-import/`.
+
+The Import from a CSV button sits beside Add product for members who can edit products, and opens the dialog at `/products?import=1`. Steps: Upload, Map fields, Preview, Duplicates, Results.
+
+- Mapping: Product name and Price are required. Category, description, status, SKU, cost and on hand are optional. Up to three option columns (such as Size or Colour) are named in the dialog; columns called Size, Color or Colour are suggested.
+- Duplicates: update or skip, by SKU. The step says a stock count in the file replaces the shop's count and is recorded in the stock history, and that a product imported without a count is not tracked for stock.
+- Results: added, updated, skipped and failed counts and the error report. There is no Undo (see the import rules above).
+
 ### How it works
 
 1. A product has 0 to 3 option types (Size, Colour, Fabric) and one or more variants. A product with no options has one default variant, so an order always points at a variant.
 2. Stock lives on the variant: on hand and reserved. Available = on hand − reserved.
-3. Stock changes only through `ProductsService.moveStock(storeId, variantId, { kind, quantity, reference })`. It runs one guarded `UPDATE ... WHERE on_hand - reserved >= quantity` and writes a `stock_movements` row in the same transaction. Zero rows updated throws `STOCK_NOT_AVAILABLE`.
+3. Stock changes through `ProductStockService.moveStock`. A movement takes a quantity,
+   or an absolute on-hand count for an import. An import calculates the signed
+   change from the locked variant count. The update guards the resulting stock
+   and reservations. It writes a `stock_movements` row in the same transaction
+   when stock or reservations change. A count that would put on-hand stock below
+   reserved stock throws `STOCK_NOT_AVAILABLE`.
 4. Movement kinds: `reserve`, `release`, `ship`, `return`, `adjust`, `import`.
 5. Products with stock tracking off skip all of this and never block an order.
 6. Readiness labels are computed, not stored. Running low is any tracked variant at or under the store threshold (default 3).
@@ -227,7 +242,13 @@ Emits `product.updated`, `stock.changed`, `variant.restocked`.
 
 `products` (options as JSON; 512-dimension text and photo embeddings with the model that built them), `product_variants` (on hand and reserved; `price_override_poisha` is empty when the size sells at the product price, so a size's price is its override or else the product's `price_poisha`, and 0 means Needs a price), `stock_movements` (append-only), `restock_requests`, `files` for photos. Full design: [docs/data](../data/README.md).
 
-Product CSV imports use `imports.kind = products_csv` with the same mapping, preview, counts and downloadable error report as customer imports. Reconciliation uses a store-scoped SKU or a supplied external identity; rows without a stable key are new products and the importer must persist the import row result before retry. Duplicate mode applies to matching rows, and stock changes write ledger entries once per import row. A failed or repeated batch must not apply an absolute stock count twice over later stock movements.
+Product CSV imports use `imports.kind = products_csv` with the same mapping, preview, counts and downloadable error report as customer imports. The customer import repository filters every read and write on `kind = customers_csv`, so a product import never shows in the customer import report, undo or recovery. Reconciliation uses a store-scoped SKU or a supplied external identity; rows without a stable key are new products and the importer must persist the import row result before retry. Duplicate mode applies to matching rows, and stock changes write ledger entries once per import row. A failed or repeated batch must not apply an absolute stock count twice over later stock movements.
+
+File format: one row per variant. Rows with the same product name (ignoring case) form one product, and the first valid row sets its name, category, description, status and price. A later row with a different non-blank category, description or status is a row error. A later row with a different price keeps the product price and stores its own as that variant's price override; a blank price means the same as the product. The mapping names up to three option columns (for example Size) and every row must fill each one. A product with no option columns has exactly one row. A repeated SKU or a repeated option combination in the file is a row error on the later row. Price and cost are taka with at most two decimals and are stored as integer poisha. Status is `active` or `hidden`, case-insensitive, default active. A blank on-hand cell leaves stock alone, and a product that does not track stock ignores the column. A SKU that matches a variant already in the shop updates that variant in `update` mode (price override and cost when the file gives them, then the on-hand count) and is skipped in `skip` mode. In `update` mode a product price above 0 is also written to the matched product, and a blank or repeated price leaves an existing price override as it is. A SKU that matches an archived variant or product is a row error, and so are rows of one file product whose SKUs belong to different products in the shop. New products track stock only when the mapping has an on-hand column, so a catalogue imported without counts is not shown as out of stock. When some rows of a product match existing SKUs and others do not, the rows with a new SKU are row errors, because adding a size belongs in the product editor. Each batch is written in the same transaction that saves the import's progress, so a retried batch never applies a count twice.
+
+The API is `POST /product-imports` (upload link), `POST /product-imports/:id/start` with the mapping and duplicate mode, and `GET /product-imports/:id`; upload and start need `products.edit` and the status read needs `products.view`. Starting queues `product_import.started`, which runs `run-product-import`. The stuck-import sweep covers product imports too. Upload and size limits are the customer import's: 10 MB, 50,000 rows and 20 files an hour per kind.
+
+Product imports have no undo in release 1. Undoing would reverse stock movements that orders may already depend on, so the report and the stock ledger show what changed instead, and the report screen has no Undo control.
 
 Variant external identity is `(store_id, external_source, external_account_id, external_ref)`. Source names the provider; account is its stable shop/account ID, never a display name. All three external fields are supplied together or all are null. Provider synchronization remains planned work.
 

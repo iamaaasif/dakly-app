@@ -1,6 +1,11 @@
 import { createHash, createHmac } from 'node:crypto';
 
-import type { FileObjectMetadata, FileStorageDriver, StoredFile } from '../file-storage-driver';
+import type {
+  FileObjectMetadata,
+  FileStorageDriver,
+  ObjectPage,
+  StoredFile,
+} from '../file-storage-driver';
 
 export type S3Configuration = {
   endpoint: string;
@@ -23,6 +28,7 @@ type PresignRequest = {
   signedAt: Date;
   expiresInSeconds: number;
   upload?: FileObjectMetadata;
+  query?: [string, string][];
 };
 
 // Plain S3 with path-style URLs, so the same driver serves Cloudflare R2 and the local stand-in.
@@ -86,7 +92,11 @@ export class S3FileStorageDriver implements FileStorageDriver {
   }
 
   async writeText(key: string, body: string, contentType: string): Promise<void> {
-    const content = { sizeBytes: Buffer.byteLength(body), contentType };
+    await this.writeBytes(key, Buffer.from(body), contentType);
+  }
+
+  async writeBytes(key: string, body: Uint8Array, contentType: string): Promise<void> {
+    const content = { sizeBytes: body.byteLength, contentType };
     const response = await fetch(this.createUploadUrl(key, REQUEST_SECONDS, content), {
       method: 'PUT',
       body,
@@ -94,6 +104,28 @@ export class S3FileStorageDriver implements FileStorageDriver {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!response.ok) throw new Error(`File storage write failed with ${response.status}`);
+  }
+
+  async listObjects(prefix: string, token?: string): Promise<ObjectPage> {
+    const query: [string, string][] = [
+      ['list-type', '2'],
+      ['prefix', prefix],
+    ];
+    if (token) query.push(['continuation-token', token]);
+    const { endpoint, bucket, ...credentials } = this.configuration;
+    const url = new URL(endpoint);
+    url.pathname = `/${encodePath(bucket)}/`;
+    const signed = presignS3Url({
+      ...credentials,
+      method: 'GET',
+      url,
+      signedAt: this.clock.now(),
+      expiresInSeconds: REQUEST_SECONDS,
+      query,
+    });
+    const response = await fetch(signed, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    if (!response.ok) throw new Error(`File storage list failed with ${response.status}`);
+    return parseObjectPage(await response.text());
   }
 
   async deleteObject(key: string): Promise<void> {
@@ -144,7 +176,10 @@ export function presignS3Url(request: PresignRequest): URL {
     ['X-Amz-Date', amzDate],
     ['X-Amz-Expires', String(request.expiresInSeconds)],
     ['X-Amz-SignedHeaders', signedHeaders],
+    ...(request.query ?? []),
   ];
+  // The signature covers the query in sorted order of the parameter names.
+  parameters.sort(([first], [second]) => (first < second ? -1 : 1));
   const query = parameters.map(([name, value]) => `${name}=${encodeRfc3986(value)}`).join('&');
   const canonicalRequest = [
     request.method,
@@ -168,6 +203,25 @@ export function presignS3Url(request: PresignRequest): URL {
   const url = new URL(request.url);
   url.search = `${query}&X-Amz-Signature=${signature}`;
   return url;
+}
+
+function parseObjectPage(xml: string): ObjectPage {
+  const objects = [...xml.matchAll(/<Contents>([\s\S]*?)<\/Contents>/g)].map(([, body]) => ({
+    key: unescapeXml(/<Key>([\s\S]*?)<\/Key>/.exec(body!)?.[1] ?? ''),
+    lastModified: new Date(/<LastModified>([\s\S]*?)<\/LastModified>/.exec(body!)?.[1] ?? ''),
+  }));
+  const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
+  const next = /<NextContinuationToken>([\s\S]*?)<\/NextContinuationToken>/.exec(xml)?.[1];
+  return { objects, nextToken: truncated && next ? unescapeXml(next) : null };
+}
+
+function unescapeXml(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
 }
 
 function encodePath(path: string): string {

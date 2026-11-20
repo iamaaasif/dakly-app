@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                                                            |
 | Extension | Core                                                                                                                                   |
 | Code      | `packages/core/src/channels/`, `packages/providers/src/channel/{messenger,instagram,whatsapp}/`, `apps/web/src/features/integrations/` |
-| Tasks     | CHN-1 to CHN-6                                                                                                                         |
+| Tasks     | CHN-1 to CHN-6, CHN-8                                                                                                                  |
 
 ## Purpose
 
@@ -119,6 +119,12 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 
 ![Integrations](../design/screenshots/integrations.webp)
 
+CHN-5 builds the Messaging and social part of this screen at `/integrations`: a Messenger card and an Instagram card that list the connected accounts with Connect, Reconnect and Disconnect, a WhatsApp card that reads "Waiting for setup", and an SMS sender card that shows the latest request from `GET /sms-sender-ids`. The sections for Shopify, WooCommerce and POS are left out: nothing sits behind them in release 1 (D6, D21).
+
+Connect opens the Facebook window from the URL that `POST /channel-connections/meta/start` returns. Facebook sends the window back to `/integrations/meta`, which hands the code and state to the Integrations tab and closes. The tab lists the accounts, the shop ticks the ones to connect, and `POST /channel-connections/meta` saves them. Reconnect runs the same flow for an account in `needs_reconnect` or whose access ends within 7 days, with that account ticked. Disconnect asks for confirmation first and keeps all chats. Members without `storeSettings.edit` see the cards without buttons. Development and browser tests set `META_CHANNEL_DRIVER=fake` and `META_OAUTH_REDIRECT_URI` to this page.
+
+Left out until their tasks land: the SMS sender request form, test SMS and document uploads (CHN-7), WhatsApp connect (CHN-3), and the expiry banner on Chats and Social (their screens).
+
 The prototype's WhatsApp connect is a one-click stub. The real flow is Meta Embedded Signup, which is not designed yet. POS cards show demo partners; release 1 is CSV only (D6).
 
 ### How it works
@@ -149,7 +155,13 @@ Enable `message_deliveries`, `message_reads` and `message_echoes` for the Page o
 
 For Instagram messaging, add `instagram_manage_messages` to the Facebook Login configuration so the Page token carries that permission. Turn on **Allow Access to Messages** under **Connected Tools** in the Instagram account's message controls, then reconnect the staging account to grant the updated permission. [Meta Instagram Messaging setup](https://developers.facebook.com/documentation/business-messaging/instagram-messaging/get-started)
 
-A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. CHN-8 finds and unsubscribes Pages in this state before live intake.
+A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. `POST /channel-connections/meta` saves the Page token encrypted in `meta_page_subscriptions` before it calls Meta, and deletes that record in the same transaction that saves the connections. A record that is still there therefore means Dakly subscribed the Page and no connection backs it.
+
+An Instagram connection stores the Page it messages through in `linked_page_external_id`, set when the shop picks the account. Instagram messages reach Dakly through that Page's subscription, so the Page stays subscribed while a Messenger connection or a linked Instagram connection for it is live.
+
+Disconnecting a Messenger or Instagram connection moves its Page token into `meta_page_subscriptions` in the disconnect transaction, then runs the same check as the daily job at once. The disconnect succeeds even when Meta fails.
+
+Every day, `reconcile-meta-page-subscriptions` goes through records older than one hour, so a selection still in progress is left alone. For each record it checks, across all stores through `meta_page_is_connected`, whether a Messenger connection or a linked Instagram connection that is not disconnected exists for the Page. If one does, it deletes the record and leaves the Page subscribed. If none does, it calls Meta to unsubscribe the Page, outside any transaction, and deletes the record once Meta accepts. A Meta error leaves the record for the next run. If Meta rejects the token and the record is older than 30 days, the shop most likely removed the app or lost the Page, so the record is deleted with one warning. Other errors keep retrying daily.
 
 Every minute, the worker checks Meta deliveries received more than one minute ago that still need processing. If a delivery’s Valkey job is missing, the worker queues it again with the same row id as its job id. If the final processing attempt fails, the worker marks the delivery as failed and keeps its payload until the daily purge.
 

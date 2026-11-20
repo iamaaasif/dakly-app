@@ -22,6 +22,7 @@ import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignApprovalRepository } from './campaign-approval.repository';
 import { CampaignAudienceService } from './campaign-audience.service';
+import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
 import { toCampaignResponse } from './campaign-response';
 import { CampaignSmsService } from './campaign-sms.service';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
@@ -57,10 +58,14 @@ const NOT_YET_APPROVED: CampaignStatus[] = ['draft', 'waiting_approval', 'approv
 // CAMP-R7: a scheduled campaign can be edited until 5 minutes before it sends.
 const LAST_CHANGE_BEFORE_SEND_MS = 5 * 60 * 1000;
 
+const PURGE_BATCH = 5000;
+
 @Injectable()
 export class CampaignsService {
   constructor(
     @Inject(CampaignsRepository) private readonly repository: CampaignsRepository,
+    @Inject(CampaignMessageTotalsRepository)
+    private readonly messageTotalsRepository: CampaignMessageTotalsRepository,
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(CampaignAudienceService) private readonly audience: CampaignAudienceService,
     @Inject(CampaignApprovalRepository) private readonly approvals: CampaignApprovalRepository,
@@ -85,6 +90,10 @@ export class CampaignsService {
     );
     const items = page.map((item) => ({ ...item, attribution: results[item.id] }));
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+  }
+
+  messageTotals(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.messageTotalsRepository.messageTotals(storeId, range);
   }
 
   attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
@@ -342,6 +351,10 @@ export class CampaignsService {
   private async refusal(storeId: string, campaignId: string, code: CampaignErrorCode) {
     await this.find(storeId, campaignId);
     return campaignError(code);
+  }
+
+  async purgeExpiredRecipients(storeId: string): Promise<void> {
+    while (await this.repository.purgeExpiredRecipientsBatch(storeId, PURGE_BATCH));
   }
 }
 

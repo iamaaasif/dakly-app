@@ -135,13 +135,13 @@ export class MetaWebhookRoutingService {
   }
 
   private routeMessage(storeId: string, message: InboundMessage, receivedAt: Date) {
-    if (!message.text) return 'unsupported_attachment';
     return this.messaging.receiveInboundMessage(storeId, {
       kind: connectionKind[message.channel],
       externalAccountId: message.accountExternalId,
       externalSenderId: message.senderExternalId,
       externalMessageId: message.externalMessageId,
       content: message.text,
+      attachments: message.attachments.map(({ kind, url }) => ({ kind, sourceUrl: url })),
       sentAt: message.sentAt,
       receivedAt,
     });

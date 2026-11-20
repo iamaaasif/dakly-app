@@ -28,6 +28,7 @@ import { recipientSkipReasons } from '@dakly/contracts/campaigns';
 import { users } from './auth';
 import { createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { contacts } from './contacts';
+import { orders } from './orders';
 import { stores } from './stores';
 
 // A workflow (D23). The draft graph is edited freely; Publish copies it into an immutable version.
@@ -142,6 +143,8 @@ export const automationRuns = pgTable(
       .references(() => contacts.id, { onDelete: 'cascade' }),
     // The event that started it (for example the order id), so a twice-delivered event runs once.
     triggerKey: text('trigger_key').notNull(),
+    // Set when an order started the run, so its messages can name the order.
+    triggerOrderId: uuid('trigger_order_id').references(() => orders.id, { onDelete: 'set null' }),
     currentStepKey: text('current_step_key').notNull(),
     status: text('status', { enum: automationRunStatuses }).notNull().default('waiting'),
     exitReason: text('exit_reason', { enum: automationExitReasons }),
@@ -230,6 +233,8 @@ export const automationRunSteps = pgTable(
     category: text('category', { enum: sendCategories }),
     // The opt-out link a marketing SMS ends with, so a retry sends the same text.
     optOutUrl: text('opt_out_url'),
+    // The text with order fields filled in, so a retry sends the same words and SMS parts.
+    renderedText: text('rendered_text'),
     // Used to match the original SMS destination without retaining a copy of the phone.
     destinationHash: text('destination_hash'),
     // The retry deadline uses the first submission; the cap uses the latest dispatch.
@@ -261,6 +266,8 @@ export const automationRunSteps = pgTable(
       table.contactId,
       table.sentAt,
     ),
+    // Analytics reads the sends of a period.
+    index('automation_run_steps_store_sent_at_idx').on(table.storeId, table.sentAt),
     // Global, for SMS delivery reports that carry only the provider's message id.
     index('automation_run_steps_provider_message_idx')
       .on(table.providerMessageId)

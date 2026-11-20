@@ -41,14 +41,16 @@ describe('Worker job schedulers', () => {
     ]);
   });
 
-  it('registers post recovery on the sync queue every minute under a fixed id', async () => {
+  it('registers post recovery every minute and the metrics sweep every hour under fixed ids', async () => {
     const sync = recordingQueue();
     const publishing = new SocialPublishingModule(sync.queue);
     await publishing.onApplicationBootstrap();
     await publishing.onApplicationBootstrap();
     expect(sync.schedulers).toEqual([
       scheduler('recover-post-targets', 60000),
+      scheduler('queue-post-metrics-refreshes', 3600000),
       scheduler('recover-post-targets', 60000),
+      scheduler('queue-post-metrics-refreshes', 3600000),
     ]);
   });
 
@@ -56,12 +58,14 @@ describe('Worker job schedulers', () => {
     const transactional = recordingQueue();
     const bulk = recordingQueue();
     const sync = recordingQueue();
+    const payments = recordingQueue();
     const workflow = recordingQueue();
     const campaign = recordingQueue();
     const schedulers = new JobSchedulers(
       transactional.queue,
       bulk.queue,
       sync.queue,
+      payments.queue,
       workflow.queue,
       campaign.queue,
     );
@@ -82,13 +86,23 @@ describe('Worker job schedulers', () => {
       scheduler('sweep-automation-birthdays', { pattern: '0 * * * *', tz: 'UTC' }),
       scheduler('sweep-analytics', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('purge-webhook-events', { pattern: '0 0 * * *', tz: 'UTC' }),
+      scheduler('run-maintenance', { pattern: '0 19 * * *', tz: 'UTC' }),
       ...bulkIntervals,
     ]);
     expect(sync.schedulers).toEqual([
       scheduler('queue-channel-token-checks', 86400000),
+      scheduler('reconcile-meta-page-subscriptions', 86400000),
       scheduler('queue-conversation-returns', 60000),
       scheduler('queue-channel-token-checks', 86400000),
+      scheduler('reconcile-meta-page-subscriptions', 86400000),
       scheduler('queue-conversation-returns', 60000),
+    ]);
+    expect(payments.schedulers).toEqual([
+      scheduler('recover-payment-callbacks', 60000),
+      scheduler('sweep-payment-checks'),
+      scheduler('sweep-payment-settlements', { pattern: '0 0 * * *', tz: 'Asia/Dhaka' }),
+      scheduler('recover-payment-callbacks', 60000),
+      scheduler('sweep-payment-checks'),
     ]);
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),

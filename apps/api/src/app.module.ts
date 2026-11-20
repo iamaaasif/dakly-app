@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AdminModule } from '@dakly/core/admin/admin.module';
 import { KnowledgeModule } from '@dakly/core/ai/knowledge/knowledge.module';
+import { AnalyticsOverviewModule } from '@dakly/core/analytics/analytics-overview.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
 import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
@@ -40,6 +41,7 @@ import { HealthController } from './health.controller';
     SessionsModule,
     ContactsModule,
     ContentModule,
+    AnalyticsOverviewModule,
     DashboardModule,
     MetaWebhooksModule,
     MetaAuthorizationModule,

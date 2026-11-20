@@ -1,4 +1,5 @@
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
+import { formatCount, formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 
 import {
@@ -10,7 +11,6 @@ import {
 import { CampaignFunnel } from './campaign-funnel';
 import { CampaignPageHeader } from './campaign-page-header';
 import { formatDateTime } from '@/lib/format-date';
-import { formatCount, formatMoney } from '@/lib/format-money';
 
 export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
   const { counts, channel } = campaign;

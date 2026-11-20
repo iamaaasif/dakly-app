@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import type { AutomationListItem } from '@dakly/contracts/automations';
+import { formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 import { Button, buttonVariants } from '@dakly/ui/button';
 import { Dialog } from '@dakly/ui/dialog';
@@ -17,7 +18,6 @@ import {
 
 import { useChangeAutomationStatus, useDuplicateAutomation } from '../api/automation-actions';
 import { channelLabels, statusLabels, triggerLabels } from '../automation-labels';
-import { formatMoney } from '@/lib/format-money';
 
 export function AutomationRow({
   workflow,
@@ -64,7 +64,16 @@ export function AutomationRow({
           </dd>
         </div>
       </dl>
-      {canEdit && <WorkflowActions workflow={workflow} />}
+      {canEdit ? (
+        <WorkflowActions workflow={workflow} />
+      ) : (
+        <Link
+          href={`/automations/${workflow.id}/canvas`}
+          className={buttonVariants({ variant: 'secondary' })}
+        >
+          View canvas
+        </Link>
+      )}
     </li>
   );
 }

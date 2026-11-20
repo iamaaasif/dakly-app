@@ -34,6 +34,8 @@ type Stream = { userId: string; deliver: (notificationId: string) => void; close
 export class NotificationStreamService implements BeforeApplicationShutdown, OnApplicationShutdown {
   private readonly logger = new Logger(NotificationStreamService.name);
   private readonly streams = new Map<string, Set<Stream>>();
+  // Every stream joining a store waits for the store's subscribe, so none reports ready early.
+  private readonly subscribing = new Map<string, Promise<unknown>>();
   private subscriber?: Redis;
 
   constructor(
@@ -55,10 +57,16 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
       let isClosed = false;
       let work = Promise.resolve();
       // One step at a time, so replayed rows go out before live ones and a row goes out once.
-      const enqueue = (step: () => Promise<void>) => {
+      const enqueue = (stepName: string, step: () => Promise<void>) => {
         work = work
           .then(() => (isClosed ? undefined : step()))
-          .catch((error: unknown) => subscriber.error(error));
+          .catch((error: unknown) => {
+            // Name and step only: the error message can carry ids or row data.
+            this.logger.error(
+              `Notification stream failed at ${stepName}: ${error instanceof Error ? error.name : 'unknown error'}`,
+            );
+            subscriber.error(error);
+          });
       };
       const send = (notification?: NotificationResponse) => {
         if (!notification || sent.has(notification.id)) return;
@@ -70,17 +78,22 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
       const stream: Stream = {
         userId,
         deliver: (id) =>
-          enqueue(async () => send(await this.notifications.findForUser(storeId, userId, id))),
+          enqueue('live delivery', async () =>
+            send(await this.notifications.findForUser(storeId, userId, id)),
+          ),
         close: () => subscriber.complete(),
       };
-      enqueue(() => this.join(storeId, stream));
+      enqueue('subscribe', () => this.join(storeId, stream));
       if (lastEventId)
-        enqueue(async () =>
+        enqueue('replay', async () =>
           (await this.notifications.listCreatedAfter(storeId, userId, lastEventId)).forEach(send),
         );
+      // Tells the client, and the tests, that the stream is subscribed and replayed, since the
+      // HTTP headers go out before Valkey confirms the subscription.
+      enqueue('ready', async () => subscriber.next({ comment: 'ready' }));
       const heartbeat = setInterval(
         () =>
-          enqueue(async () => {
+          enqueue('heartbeat', async () => {
             if (await this.isAllowed(session)) subscriber.next({ comment: 'heartbeat' });
             else subscriber.complete();
           }),
@@ -108,23 +121,29 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
     const streams = this.streams.get(storeId);
     if (streams) {
       streams.add(stream);
+      await this.subscribing.get(storeId);
       return;
     }
     this.streams.set(storeId, new Set([stream]));
-    await this.connection().subscribe(CHANNEL_PREFIX + storeId);
+    const subscribing = this.connection().subscribe(CHANNEL_PREFIX + storeId);
+    this.subscribing.set(storeId, subscribing);
+    await subscribing;
   }
 
   private leave(storeId: string, stream: Stream) {
     const streams = this.streams.get(storeId);
     if (!streams?.delete(stream) || streams.size) return;
     this.streams.delete(storeId);
+    this.subscribing.delete(storeId);
     // A dropped connection forgets its channels anyway; nothing waits for this answer.
     void this.subscriber?.unsubscribe(CHANNEL_PREFIX + storeId).catch(() => undefined);
   }
 
   private connection(): Redis {
     if (this.subscriber) return this.subscriber;
-    const subscriber = this.valkey.connection.duplicate();
+    // The ready check sends INFO, which a connection already in subscribe mode rejects. A subscribe
+    // that lands before the check finishes then fails the stream and resets the connection.
+    const subscriber = this.valkey.connection.duplicate({ enableReadyCheck: false });
     subscriber.on('error', () => this.logger.error('Valkey subscriber connection failed'));
     subscriber.on('message', (channel: string, message: string) => {
       const ids = liveNotificationSchema.safeParse(message.split(' '));

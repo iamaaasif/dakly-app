@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
+import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
 import { ErrorReportingModule } from '../platform/logging/error-reporting.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
@@ -17,6 +18,7 @@ import { AutomationBirthdaysService } from './automation-birthdays.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
+import { AutomationOrderTextService } from './automation-order-text.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
 import { AutomationRunsService } from './automation-runs.service';
 import { AutomationSendRetryService } from './automation-send-retry.service';
@@ -34,6 +36,7 @@ import { AutomationsModule } from './automations.module';
     OutboxModule,
     LinksModule,
     MessagingModule,
+    OrdersModule,
     SegmentsModule,
     SendingModule,
     StoresModule,
@@ -41,6 +44,7 @@ import { AutomationsModule } from './automations.module';
   ],
   providers: [
     AutomationConditionsService,
+    AutomationOrderTextService,
     AutomationRunsRepository,
     AutomationRunsService,
     AutomationEntryRepository,

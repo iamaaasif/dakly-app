@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
 import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
 import { CampaignApprovalService } from '@dakly/core/campaigns/campaign-approval.service';
-import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
+import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-channel-driver';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
@@ -1052,6 +1052,58 @@ fixture('GET /imports/:importId', async () => {
   });
   await hidden(b, 'GET', (value) => `/imports/${value}`, id);
 });
+async function productImport(shop: Shop) {
+  const result = await success(shop, 'POST', '/product-imports', 201, { sizeBytes: 120 });
+  expect(result.json().uploadUrl).toContain(`/imports/${shop.id}/`);
+  return result.json().importId as string;
+}
+const startProductImport = {
+  mapping: { name: 0, price: 1 },
+  duplicateMode: 'update',
+};
+fixture('POST /product-imports', async () => {
+  const { a, b } = await pair(),
+    id = await productImport(a),
+    before = await f.row('imports', id);
+  const own = await productImport(b);
+  expect((await f.row('imports', own)).store_id).toBe(b.id);
+  expect(await f.row('imports', id)).toEqual(before);
+});
+fixture('POST /product-imports/:importId/start', async () => {
+  const { a, b } = await pair(),
+    own = await productImport(a),
+    foreign = await productImport(a),
+    customers = await customerImport(a);
+  const started = await success(
+    a,
+    'POST',
+    `/product-imports/${own}/start`,
+    202,
+    startProductImport,
+  );
+  expect(started.json()).toMatchObject({ id: own, status: 'importing' });
+  const before = await f.row('imports', foreign);
+  // Another store's import and this store's customer import are both out of reach.
+  for (const id of [foreign, customers])
+    await hidden(
+      id === foreign ? b : a,
+      'POST',
+      (value) => `/product-imports/${value}/start`,
+      id,
+      () => startProductImport,
+    );
+  expect(await f.row('imports', foreign)).toEqual(before);
+});
+fixture('GET /product-imports/:importId', async () => {
+  const { a, b } = await pair(),
+    id = await productImport(a);
+  expect((await success(a, 'GET', `/product-imports/${id}`, 200)).json()).toMatchObject({
+    id,
+    status: 'uploaded',
+  });
+  await hidden(b, 'GET', (value) => `/product-imports/${value}`, id);
+  await hidden(a, 'GET', (value) => `/product-imports/${value}`, await customerImport(a));
+});
 const dhaka = {
   match: 'all',
   conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
@@ -1235,6 +1287,7 @@ fixture('GET /automations/:automationId/trigger-preview', async () => {
   ] as const) {
     const response = await success(shop, 'GET', path(id), 200);
     expect(response.json().items.map((item: { id: string }) => item.id)).toEqual(ids);
+    expect(response.json().lastSevenDays).toEqual({ people: 1, atLeast: false });
   }
   await hidden(b, 'GET', path, aId);
 });
@@ -1991,6 +2044,62 @@ fixture('GET /dashboard', async () => {
   expect((await f.request(a.owner, 'GET', '/dashboard?period=8')).statusCode).toBe(400);
 });
 
+fixture('GET /analytics/overview', async () => {
+  const { a, b } = await pair();
+  const reports = app.get(AnalyticsService);
+  for (const [shop, count] of [
+    [a, 2],
+    [b, 5],
+  ] as const) {
+    const { current } = await reports.periods(shop.id, 30);
+    const [contact, campaign] = [randomUUID(), randomUUID()];
+    await f.admin.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'গ্রাহক','manual','customer')",
+      [contact, shop.id],
+    );
+    await f.admin.pool.query(
+      "insert into campaigns(id,store_id,name,channel,content) values($1,$2,'অফার','sms','{}')",
+      [campaign, shop.id],
+    );
+    await f.admin.pool.query(
+      `insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at,delivered_at,cost_poisha)
+       values($1,$2,$3,$4,'sent',now(),now(),$5)`,
+      [randomUUID(), shop.id, campaign, contact, count * 100],
+    );
+    await f.admin.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value) values
+       ($1,$2,'marketing_revenue','',$3),($1,$2,'marketing_revenue','channel:sms',$3),
+       ($1,$2,'marketing_orders','',$4)`,
+      [shop.id, current.through, count * 10000, count],
+    );
+  }
+  for (const [shop, count] of [
+    [a, 2],
+    [b, 5],
+  ] as const) {
+    const result = await success(shop, 'GET', '/analytics/overview?period=30', 200);
+    expect(result.json()).toMatchObject({
+      marketing: {
+        revenue: { currentPoisha: String(count * 10000) },
+        orders: { current: count },
+      },
+      messages: { sent: { current: 1 }, cost: { currentPoisha: String(count * 100) } },
+      funnel: { sent: { count: 1 }, ordered: { count } },
+      channels: [
+        { channel: 'whatsapp', sent: 0 },
+        { channel: 'sms', sent: 1 },
+        { channel: 'messenger' },
+      ],
+    });
+    expect(result.json().weeklyRevenue.at(-1).byChannel).toEqual({ sms: String(count * 10000) });
+  }
+  expect((await f.request(b.member, 'GET', '/analytics/overview')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', `/analytics/overview?storeId=${b.id}`)).statusCode).toBe(
+    400,
+  );
+  expect((await f.request(a.owner, 'GET', '/analytics/overview?period=7')).statusCode).toBe(400);
+});
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),
@@ -2105,11 +2214,22 @@ async function expectRetryAfterSubscriptionFailure(shop: Shop) {
     });
     expect(response.statusCode).toBe(500);
     expect(subscriptionPending).toBe(false);
+    // Meta may have accepted the Page before the failure, so the reconciliation keeps a record.
+    expect(await pendingSubscriptions(shop)).toEqual([pageSelection.externalAccountId]);
   } finally {
     release();
     subscription.mockRestore();
   }
   await success(shop, 'POST', metaConnect, 201, { selectionId, accounts: [pageSelection] });
+  expect(await pendingSubscriptions(shop)).toEqual([]);
+}
+
+async function pendingSubscriptions(shop: Shop) {
+  const { rows } = await f.admin.pool.query<{ page_external_id: string }>(
+    'select page_external_id from meta_page_subscriptions where store_id=$1 order by 1',
+    [shop.id],
+  );
+  return rows.map((row) => row.page_external_id);
 }
 
 async function expectGrantConsumedAfterCacheFailure(shop: Shop) {
@@ -2182,8 +2302,17 @@ fixture('POST /channel-connections/meta', async () => {
   );
   const { ids } = connected.json();
   expect(ids).toHaveLength(2);
+  expect(await pendingSubscriptions(a)).toEqual([]);
   await expectSavedMetaCredential(a, ids[0], 'facebook_page');
   await expectSavedMetaCredential(a, ids[1], 'instagram');
+  const linked = await f.admin.pool.query(
+    'select kind, linked_page_external_id from channel_connections where id = any($1::uuid[]) order by kind',
+    [ids],
+  );
+  expect(linked.rows).toEqual([
+    { kind: 'facebook_page', linked_page_external_id: null },
+    { kind: 'instagram', linked_page_external_id: pageSelection.externalAccountId },
+  ]);
   expect((await f.request(a.owner, 'POST', metaConnect, input)).statusCode).toBe(404);
 
   await rejectMetaConflict(b, [pageSelection]);
@@ -2499,6 +2628,21 @@ async function enableChats(shop: Shop) {
   await success(shop, 'PATCH', '/store/extensions', 200, { extensions: ['chats'] });
 }
 
+fixture('GET /conversations/counts', async () => {
+  const { a, b } = await pair();
+  await seedConversation(a);
+  await seedConversation(a);
+  await seedConversation(b);
+  expect((await f.request(b.owner, 'GET', '/conversations/counts')).statusCode).toBe(403);
+  await enableChats(b);
+  expect((await success(b, 'GET', '/conversations/counts', 200)).json()).toEqual({
+    all: 1,
+    needsYou: 0,
+    aiHandling: 1,
+    followUp: 0,
+  });
+});
+
 fixture('GET /conversations', async () => {
   const { a, b } = await pair();
   await seedConversation(a);
@@ -2797,18 +2941,9 @@ fixture('GET /events/stream', async () => {
       return { shop, abort, read };
     }),
   );
-  // Nest can send headers while Valkey is still subscribing. Give both streams one deadline.
-  await vi.waitFor(
-    async () => {
-      for (const shop of [a, b]) {
-        const reply = await app
-          .get(ValkeyClient)
-          .connection.pubsub('NUMSUB', `notifications:${shop.id}`);
-        expect((reply as [string, number])[1]).toBe(1);
-      }
-    },
-    { timeout: 2_000 },
-  );
+  // Nest sends headers while Valkey is still subscribing; the server sends this comment once joined.
+  for (const { read } of streams)
+    await vi.waitFor(() => expect(read.text).toContain(': ready'), { timeout: 2_000 });
   const ids = new Map<string, string>();
   for (const shop of [a, b]) {
     ids.set(shop.id, await notification(shop));

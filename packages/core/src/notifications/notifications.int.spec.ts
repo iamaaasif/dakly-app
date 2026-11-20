@@ -10,11 +10,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createDatabase } from '@dakly/db/client';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { AccountTransaction } from '../platform/database/account-transaction';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SessionsService } from '../sessions/sessions.service';
+import { TeamService } from '../team/team.service';
 import { StreamNotificationOnCreated } from './jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from './jobs/wake-snoozed-notifications.job';
 import { NotificationStreamService, STREAM_HEARTBEAT_MS } from './notification-stream.service';
@@ -151,7 +153,8 @@ async function openStream(viewer: Member, storeId: string, lastEventId?: string)
       text += chunk.value;
     isEnded = true;
   })().catch(() => (isEnded = true));
-  await until(async () => (await subscribers(storeId)) > 0);
+  // The server sends this comment once this stream has joined its channel.
+  await until(() => text.includes(': ready'));
   return {
     ids: () => [...text.matchAll(/^id: (.+)$/gm)].map((match) => match[1]),
     text: () => text,
@@ -359,6 +362,17 @@ describe('NotificationsService and its routes', () => {
     expect(ownerB.ids()).toEqual([]);
   });
 
+  it('reports ready on every stream of a store opened at the same moment, so none misses a live row', async () => {
+    const a = await shop();
+    const [owner, agent] = await Promise.all([
+      openStream(a.owner, a.id),
+      openStream(a.agent, a.id),
+    ]);
+    await service.notify(a.id, handedOver());
+    await relay(a.id);
+    await until(() => owner.ids().length === 1 && agent.ids().length === 1);
+  });
+
   it('sends the rows created while disconnected once each, then live ones', async () => {
     const a = await shop();
     await service.notify(a.id, handedOver());
@@ -436,5 +450,42 @@ describe('NotificationsService and its routes', () => {
     expect(await subscribers(a.id)).toBe(1);
     second.close();
     await until(async () => (await subscribers(a.id)) === 0);
+  });
+
+  // The first stream of a process opens the subscriber connection, and a subscribe that lands
+  // before the connection finishes its ready check used to fail the stream.
+  it('reports ready on the first stream of a freshly started process', async () => {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const fresh = new NotificationStreamService(
+        app.get(ValkeyClient),
+        app.get(NotificationsService),
+        app.get(SessionsService),
+        app.get(TeamService),
+        app.get(AccountTransaction),
+      );
+      const results = await Promise.all(
+        [randomUUID(), randomUUID()].map(async (storeId, position) => {
+          // Staggers the second subscribe across the window in which the connection is open
+          // but not yet ready.
+          await setTimeout(position * attempt);
+          const messages: unknown[] = [];
+          const failures: unknown[] = [];
+          const subscription = fresh
+            .open({ storeId, userId: randomUUID(), sessionId: randomUUID() })
+            .subscribe({
+              next: (message) => messages.push(message),
+              error: (error) => failures.push(error),
+            });
+          await until(() => messages.length > 0 || failures.length > 0);
+          subscription.unsubscribe();
+          return { messages, failures };
+        }),
+      );
+      fresh.onApplicationShutdown();
+      for (const { messages, failures } of results) {
+        expect(failures).toEqual([]);
+        expect(messages).toEqual([{ comment: 'ready' }]);
+      }
+    }
   });
 });

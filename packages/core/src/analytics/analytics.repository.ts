@@ -34,6 +34,15 @@ export class AnalyticsRepository {
     );
   }
 
+  readChannelRevenue(storeId: string, period: ReportPeriod) {
+    return this.readMetrics(
+      storeId,
+      period,
+      ['marketing_revenue'],
+      sql`${storeDailyMetrics.dimension} like 'channel:%'`,
+    );
+  }
+
   private readMetrics(
     storeId: string,
     period: ReportPeriod,
@@ -76,6 +85,31 @@ export class AnalyticsRepository {
       `),
     );
     return rows;
+  }
+
+  // People, not messages: one person who tapped a campaign and a workflow link counts once.
+  async messagePeople(
+    storeId: string,
+    { from, through, timeZone }: ReportPeriod & { timeZone: string },
+  ) {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ delivered: number; tapped: number }>(sql`
+        select (count(distinct contact_id) filter (where delivered))::int as delivered,
+          (count(distinct contact_id) filter (where tapped))::int as tapped
+        from (
+          select contact_id, coalesce(delivered_at, read_at) is not null as delivered,
+            tapped_at is not null as tapped, sent_at
+          from campaign_recipients where store_id = ${storeId}
+          union all
+          select contact_id, coalesce(delivered_at, read_at) is not null,
+            tapped_at is not null, sent_at
+          from automation_run_steps
+          where store_id = ${storeId} and kind = 'send' and category = 'marketing'
+        ) sends
+        where sent_at >= (${from}::date)::timestamp at time zone ${timeZone}
+          and sent_at < (${through}::date + 1)::timestamp at time zone ${timeZone}`),
+    );
+    return rows[0] ?? { delivered: 0, tapped: 0 };
   }
 
   async readLifecycle(storeId: string, period: ReportPeriod) {
@@ -143,7 +177,7 @@ export class AnalyticsRepository {
         with expired as (
           select ctid from store_daily_metrics
           where store_id = ${storeId} and day < ${reportBefore}::date
-            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle', 'marketing_orders', 'marketing_revenue')
+            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle', 'marketing_orders', 'marketing_revenue', 'ai_runs', 'ai_cost_micro_usd', 'ai_input_tokens', 'ai_output_tokens')
           order by day, metric, dimension limit ${limit} for update
         ), removed as (
           delete from store_daily_metrics as metrics using expired
@@ -216,6 +250,30 @@ export class AnalyticsRepository {
           setWhere: sql`${eq(storeDailyMetrics.storeId, storeId)}
           and ${storeDailyMetrics.value} is distinct from excluded.value`,
         }),
+    );
+  }
+
+  // Dhaka has no daylight saving, so a Dhaka day is always the same 24 UTC hours.
+  async rollUpAiRunDay(storeId: string, day: string) {
+    await this.database.forStore(storeId, (tx) =>
+      tx.execute(sql`
+        insert into store_daily_metrics (store_id, day, metric, dimension, value)
+        select ${storeId}::uuid, ${day}::date, m.metric, sums.purpose, m.value::bigint
+        from (
+          select purpose, count(*) as runs, sum(cost_micro_usd) as cost,
+            sum(input_tokens) as input, sum(output_tokens) as output
+          from ai_runs
+          where store_id = ${storeId}
+            and created_at >= (${day}::date::timestamp at time zone 'Asia/Dhaka')
+            and created_at < ((${day}::date + 1)::timestamp at time zone 'Asia/Dhaka')
+          group by purpose
+        ) sums
+        cross join lateral (values
+          ('ai_runs', sums.runs), ('ai_cost_micro_usd', sums.cost),
+          ('ai_input_tokens', sums.input), ('ai_output_tokens', sums.output)
+        ) as m(metric, value)
+        on conflict (store_id, day, metric, dimension) do update set value = excluded.value,
+          updated_at = now()`),
     );
   }
 }

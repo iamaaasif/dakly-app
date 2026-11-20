@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { type INestApplicationContext, Module } from '@nestjs/common';
@@ -317,6 +317,8 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await admin.pool.query('delete from automations where store_id=$1', [storeId]);
       await admin.pool.query('delete from wallet_ledger where store_id=$1', [storeId]);
       await admin.pool.query('delete from tracked_links where store_id=$1', [storeId]);
+      await admin.pool.query('delete from order_confirmations where store_id=$1', [storeId]);
+      await admin.pool.query('delete from orders where store_id=$1', [storeId]);
       await admin.pool.query('delete from contacts where store_id=$1', [storeId]);
       await admin.pool.query('delete from stores where id=$1', [storeId]);
       await admin.pool.query('delete from staff_users where id=$1', [staffUserId]);
@@ -1008,6 +1010,68 @@ describe('Workflow runner (Postgres and Valkey)', () => {
         { kind: 'charge', delta: -parts },
       ]);
       expect((await run(runId!)).current_step_key).toBe('end');
+    });
+
+    it('fills the order fields and the confirm link, and a retry sends the same words', async () => {
+      const runner = await worker();
+      const contact = await customer(true, runner);
+      const orderId = randomUUID();
+      await admin.pool.query(
+        `insert into orders(id,store_id,number,buyer_contact_id,source,created_by_type,stage,recipient_name,
+           recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,delivery_charge_poisha,cod_amount_poisha)
+         values($1,$2,1042,$3,'manual','user','to_confirm','রহিম','01811000001','Mirpur','Dhaka',120000,6000,126000)`,
+        [orderId, storeId, contact],
+      );
+      const step = {
+        ...send('transactional'),
+        message: {
+          text: 'অর্ডার {order_number}: {order_total}। নিশ্চিত করুন: {confirm_link}',
+          buttons: [],
+        },
+      } as const;
+      const {
+        runIds: [runId],
+      } = await dueRuns(step, 1, 'active', contact);
+      await admin.pool.query('update automation_runs set trigger_order_id=$1 where id=$2', [
+        orderId,
+        runId,
+      ]);
+      vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
+        await sms.send(message);
+        throw new Error('socket hang up');
+      });
+
+      await runDueStep(runner, runId!);
+      const [started] = (
+        await admin.pool.query(
+          "select rendered_text from automation_run_steps where run_id=$1 and kind='send'",
+          [runId],
+        )
+      ).rows;
+      const confirmation = await admin.pool.query(
+        'select order_id,token_hash from order_confirmations where store_id=$1',
+        [storeId],
+      );
+      const token = started.rendered_text.match(/\/c\/([\w-]{43})$/u)?.[1] ?? '';
+      const text = `অর্ডার 1042: ৳1,260। নিশ্চিত করুন: ${loadEnv().SHORT_LINK_BASE_URL}/c/${token}`;
+      // Only the sha256 of the token is kept.
+      expect(confirmation.rows).toEqual([
+        { order_id: orderId, token_hash: createHash('sha256').update(token).digest() },
+      ]);
+      expect(started.rendered_text).toBe(text);
+
+      // The order is edited while the retry waits; the words and the SMS parts stay as reserved.
+      await admin.pool.query('update orders set items_subtotal_poisha=999900 where id=$1', [
+        orderId,
+      ]);
+      await wakeNow(runId!);
+      await runDueStep(runner, runId!);
+      expect(vi.mocked(MailpitSmsDriver.prototype.send).mock.lastCall?.[0].text).toBe(text);
+      expect(sentFor(runId!)).toHaveLength(1);
+      expect(await ledgerFor(runId!)).toContainEqual({
+        kind: 'reserve',
+        delta: -countSmsParts(text),
+      });
     });
 
     it('sends once after a crash between the claim and its job', async () => {

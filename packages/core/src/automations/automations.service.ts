@@ -12,7 +12,7 @@ import {
   type CreateAutomationInput,
   MAX_AUTOMATIONS_PER_STORE,
 } from '@dakly/contracts/automations';
-import { isTriggerReadyBeforeChannels } from '@dakly/contracts/automations/catalogue';
+import { isTriggerAvailable } from '@dakly/contracts/automations/catalogue';
 import {
   type AutomationGraph,
   type AutomationStep,
@@ -75,6 +75,10 @@ export class AutomationsService {
     @Inject(WalletService) private readonly wallets: WalletService,
     @Inject(AnalyticsService) private readonly reports: AnalyticsService,
   ) {}
+
+  messageTotals(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.repository.messageTotals(storeId, range);
+  }
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
     const since = new Date(this.clock.now().getTime() - 30 * DAY_MS);
@@ -302,7 +306,7 @@ function balancePauseNotice(name: string) {
 // the store can use today.
 function checkPublishable(graph: AutomationGraph) {
   checkRunnable(graph);
-  if (!isTriggerReadyBeforeChannels(graph.trigger.key))
+  if (!isTriggerAvailable(graph.trigger.key))
     throw automationError('AUTOMATION_TRIGGER_UNAVAILABLE', [
       { path: 'trigger.key', message: `${graph.trigger.key} is not available yet` },
     ]);

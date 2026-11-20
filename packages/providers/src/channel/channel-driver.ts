@@ -4,6 +4,10 @@
 
 export type ChannelKind = 'messenger' | 'instagram' | 'whatsapp';
 
+export type InboundAttachmentKind = 'image' | 'voice' | 'video' | 'file';
+
+export type InboundAttachment = { kind: InboundAttachmentKind; url: string };
+
 export type InboundMessage = {
   channel: ChannelKind;
   accountExternalId: string;
@@ -11,7 +15,7 @@ export type InboundMessage = {
   externalMessageId: string;
   senderExternalId: string;
   text: string | null;
-  attachmentUrls: string[];
+  attachments: InboundAttachment[];
   sentAt: Date;
 };
 
@@ -50,6 +54,12 @@ export type OutboundMessage = {
   { channel: 'instagram' } | { channel: 'messenger'; imageUrl?: string; buttons?: OutboundButton[] }
 );
 
+// An expired link is a final answer; an outage is not, so the driver throws for that.
+export type MediaDownload =
+  | { kind: 'downloaded'; bytes: Uint8Array; contentType: string }
+  | { kind: 'expired' }
+  | { kind: 'too_large' };
+
 export type SendResult = {
   externalMessageId: string;
   // Set when Meta refused the image and the text still went out.
@@ -63,6 +73,7 @@ export type ChannelDriver = {
   parseReceipts(payload: unknown): ChannelReceipt[];
   parsePostbacks(payload: unknown): InboundPostback[];
   send(credentials: ChannelCredentials, message: OutboundMessage): Promise<SendResult>;
+  downloadMedia(accessToken: string, url: string, maxBytes: number): Promise<MediaDownload>;
 };
 
 export type ChannelCredentials = {
@@ -82,6 +93,7 @@ export type MetaAuthorizationDriver = {
   exchangeAuthorizationCode(code: string): Promise<string>;
   listAccounts(userToken: string): Promise<MetaPage[]>;
   subscribePage(pageId: string, accessToken: string): Promise<void>;
+  unsubscribePage(pageId: string, accessToken: string): Promise<void>;
 };
 
 export type MetaTokenHealthDriver = {

@@ -6,11 +6,11 @@ import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
-import { ProductsService } from './products.service';
+import { ProductStockService } from './product-stock.service';
 
 @Controller('variants')
 export class StockAdjustmentsController {
-  constructor(@Inject(ProductsService) private readonly service: ProductsService) {}
+  constructor(@Inject(ProductStockService) private readonly stock: ProductStockService) {}
 
   @Post(':variantId/stock-adjustments')
   @RequirePermission('products.edit')
@@ -21,7 +21,7 @@ export class StockAdjustmentsController {
     @Param('variantId', ParseUUIDPipe) variantId: string,
     @Body(new ZodValidationPipe(stockAdjustmentSchema)) input: StockAdjustmentInput,
   ): Promise<void> {
-    return this.service.moveStock(storeId, variantId, {
+    return this.stock.moveStock(storeId, variantId, {
       kind: 'adjust',
       quantity: input.quantity,
       reference: {

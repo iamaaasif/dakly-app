@@ -188,6 +188,11 @@ export class LinksService {
       .update(JSON.stringify([storeId, visitor.ip, visitor.userAgent ?? '']))
       .digest();
   }
+
+  // The maintenance job calls this for every store and finished Dhaka day; a rerun gives the same rows.
+  async rollUpVisitDay(storeId: string, day: string) {
+    await this.repository.rollUpVisitDay(storeId, day);
+  }
 }
 
 function newCode(): string {

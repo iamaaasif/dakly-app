@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
 import { ImportsService } from '../imports.service';
+import { ProductImportsService } from '../product-imports.service';
 
 export const FAIL_STUCK_IMPORTS = 'fail-stuck-imports';
 
@@ -11,10 +12,14 @@ export const FAIL_STUCK_IMPORTS = 'fail-stuck-imports';
 const payload = z.strictObject({});
 @HandlesJob({ queue: QUEUES.bulk, name: FAIL_STUCK_IMPORTS })
 export class FailStuckImportsJob implements JobHandler {
-  constructor(@Inject(ImportsService) private readonly importsService: ImportsService) {}
+  constructor(
+    @Inject(ImportsService) private readonly importsService: ImportsService,
+    @Inject(ProductImportsService) private readonly productImports: ProductImportsService,
+  ) {}
 
   async handle(data: unknown) {
     payload.parse(data);
     await this.importsService.sweepStuckImports();
+    await this.productImports.sweepStuckImports();
   }
 }

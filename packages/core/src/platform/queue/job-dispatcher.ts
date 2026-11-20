@@ -17,6 +17,8 @@ const BULK_JOBS_AT_ONCE = 1;
 const WORKFLOW_JOBS_AT_ONCE = 5;
 // One job at a time per worker. Campaign jobs still tolerate overlap between workers.
 const CAMPAIGN_JOBS_AT_ONCE = 1;
+// A payment check is a vendor call, so it gets the same limit as transactional jobs.
+const PAYMENT_JOBS_AT_ONCE = 5;
 const concurrency = {
   inbound: TRANSACTIONAL_JOBS_AT_ONCE,
   'ai-reply': AI_REPLY_JOBS_AT_ONCE,
@@ -26,6 +28,7 @@ const concurrency = {
   bulk: BULK_JOBS_AT_ONCE,
   workflow: WORKFLOW_JOBS_AT_ONCE,
   campaign: CAMPAIGN_JOBS_AT_ONCE,
+  payments: PAYMENT_JOBS_AT_ONCE,
 } satisfies Record<QueueName, number>;
 
 // BullMQ gives every job on a queue to that queue's one worker, so the worker routes by job name.
@@ -165,5 +168,15 @@ export class OutboundJobDispatcher extends JobDispatcher {
     @Inject(ErrorReporter) reporter: ErrorReporter,
   ) {
     super(QUEUES.outbound, discovery, reporter);
+  }
+}
+
+@Processor(QUEUES.payments, { concurrency: concurrency.payments, autorun: false })
+export class PaymentsJobDispatcher extends JobDispatcher {
+  constructor(
+    @Inject(DiscoveryService) discovery: DiscoveryService,
+    @Inject(ErrorReporter) reporter: ErrorReporter,
+  ) {
+    super(QUEUES.payments, discovery, reporter);
   }
 }

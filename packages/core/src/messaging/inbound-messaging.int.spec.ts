@@ -84,6 +84,7 @@ function inbound(
     externalMessageId,
     externalSenderId: 'sender-test',
     content,
+    attachments: [],
     sentAt,
     receivedAt: sentAt,
   };
@@ -245,6 +246,51 @@ it('reopens a conversation when its timer fires while the inbound message is bei
     [storeId],
   );
   expect(rows).toEqual([{ status: 'open', responder: 'ai', ai_resumes_at: null }]);
+});
+
+it('counts the inbox tabs for one shop and shows the contact name in the list', async () => {
+  const storeId = await store();
+  const otherStore = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  await service.receiveInboundMessage(storeId, inbound(connectionId, 'one'));
+  await service.receiveInboundMessage(storeId, {
+    ...inbound(connectionId, 'two'),
+    externalSenderId: 'sender-two',
+  });
+  await service.receiveInboundMessage(storeId, {
+    ...inbound(connectionId, 'three'),
+    externalSenderId: 'sender-three',
+  });
+  await admin.pool.query("update stores set extensions = array['chats'] where id = any($1)", [
+    [storeId, otherStore],
+  ]);
+  await admin.pool.query(
+    `update conversations set status = case id when (select id from conversations where store_id = $1 order by id limit 1) then 'needs_you' else status end
+     where store_id = $1`,
+    [storeId],
+  );
+  await admin.pool.query(
+    `update conversations set status = 'later', responder = 'human'
+     where id = (select id from conversations where store_id = $1 and status = 'open' order by id limit 1)`,
+    [storeId],
+  );
+  const inbox = app.get(InboxService);
+  expect(await inbox.counts(storeId)).toEqual({
+    all: 3,
+    needsYou: 1,
+    aiHandling: 2,
+    followUp: 1,
+  });
+  expect(await inbox.counts(otherStore)).toEqual({
+    all: 0,
+    needsYou: 0,
+    aiHandling: 0,
+    followUp: 0,
+  });
+  await admin.pool.query("update contacts set name = 'Sadia Islam' where store_id = $1", [storeId]);
+  const { items } = await inbox.list(storeId, { limit: 10 });
+  expect(items.map((item) => item.contactName)).toEqual(Array(3).fill('Sadia Islam'));
 });
 
 it('preserves two Page identities for one contact and keeps the newest inbound window', async () => {

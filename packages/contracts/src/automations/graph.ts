@@ -3,7 +3,13 @@ import { z } from 'zod';
 import { campaignChannels } from '../campaigns';
 import { consentChannels, consentSources, lifecycleStages } from '../contacts';
 import { orderPaymentStatuses } from '../orders';
-import { automationTriggers, triggerFilterFields, triggerKeys } from './catalogue';
+import {
+  automationTriggers,
+  orderTriggerKeys,
+  triggerFilterFields,
+  triggerKeys,
+} from './catalogue';
+import { usesOrderFields } from './text';
 
 // Limits from feature 09.
 export const MAX_WORKFLOW_STEPS = 50;
@@ -299,12 +305,21 @@ function checkPaths({ firstStepKey, steps }: GraphShape, context: Context) {
   }
 }
 
+function checkOrderFields({ trigger, steps }: GraphShape, context: Context) {
+  if (orderTriggerKeys.includes(trigger.key)) return;
+  for (const [key, step] of Object.entries(steps)) {
+    if (step.kind === 'send' && usesOrderFields(step.message.text))
+      addIssue(context, ['steps', key], 'Order fields need a trigger that starts from an order');
+  }
+}
+
 // The format templates in code and the canvas both produce (A5). Every path ends at an exit.
 export const automationGraphSchema = graphShapeSchema.superRefine((graph, context) => {
   if (Object.keys(graph.steps).length > MAX_WORKFLOW_STEPS) {
     addIssue(context, ['steps'], 'A workflow has at most 50 steps');
   }
   checkTriggerFilters(graph.trigger, context);
+  checkOrderFields(graph, context);
   checkReferences(graph, context);
   checkPaths(graph, context);
 });

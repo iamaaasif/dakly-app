@@ -5,4 +5,9 @@ export const PAYMENT_ERRORS = {
   PAYMENT_CALLBACK_INVALID: { status: 400, message: 'Payment callback body is required' },
   PAYMENT_CALLBACK_TOO_LARGE: { status: 413, message: 'Payment callback is too large' },
   PAYMENT_CALLBACK_RATE_LIMITED: { status: 429, message: 'Too many payment callbacks' },
+  PAYMENT_INSIDE_TRANSACTION: {
+    status: 500,
+    message: 'Payment gateway requires a separate transaction',
+  },
+  PAYMENT_GATEWAY_UNAVAILABLE: { status: 503, message: 'Payment gateway is unavailable' },
 } as const;

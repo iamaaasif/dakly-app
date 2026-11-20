@@ -178,6 +178,7 @@ describe('automation filters without RLS assistance', () => {
       firstTriedAt: null,
       latestDispatchAt: claimedAt,
       optOutUrl: null,
+      renderedText: null,
       destinationHash: null,
       providerMessageId: null,
     });
@@ -193,6 +194,7 @@ describe('automation filters without RLS assistance', () => {
       firstTriedAt: null,
       latestDispatchAt: null,
       optOutUrl: null,
+      renderedText: null,
       destinationHash: null,
       providerMessageId: null,
     });

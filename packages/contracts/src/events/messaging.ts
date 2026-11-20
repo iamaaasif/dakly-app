@@ -40,6 +40,14 @@ export const messagePostbackReceivedEventSchema = z.strictObject({
   }),
 });
 
+// Saved with the message in the same transaction, so the media copy is never lost.
+export const messageAttachmentsRequestedEventSchema = z.strictObject({
+  type: z.literal('message.attachments_requested'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: messagePayloadSchema.pick({ messageId: true }),
+});
+
 export const conversationHandedOverEventSchema = z.strictObject({
   type: z.literal('conversation.handed_over'),
   storeId: z.uuid(),

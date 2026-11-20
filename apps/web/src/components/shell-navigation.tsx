@@ -1,11 +1,15 @@
 'use client';
 import {
+  ChartLine,
   House,
   Layers,
   LogOut,
+  MessageSquare,
   Megaphone,
   Package,
+  Plug,
   Puzzle,
+  Send,
   Settings,
   Store,
   Truck,
@@ -106,13 +110,16 @@ function NavigationItem({
   );
 }
 
-// Groups follow the design order. Social auto post joins when their screens exist.
+// Groups follow the design order.
 export function navigationGroups(session: SessionContext): NavigationGroup[] {
   const store = session.currentStore;
   return [
     {
       heading: 'Workspace',
-      links: [{ href: '/dashboard', label: 'Dashboard', icon: House, visible: Boolean(store) }],
+      links: [
+        { href: '/dashboard', label: 'Dashboard', icon: House, visible: Boolean(store) },
+        { href: '/chats', label: 'Chats', icon: MessageSquare, visible: store?.canViewChats },
+      ],
     },
     {
       heading: 'Customers',
@@ -141,6 +148,21 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
           label: 'Campaigns',
           icon: Megaphone,
           visible: store?.canViewCampaigns,
+        },
+      ],
+    },
+    {
+      heading: 'Social auto post',
+      links: [{ href: '/social', label: 'Social hub', icon: Send, visible: store?.canViewSocial }],
+    },
+    {
+      heading: 'Intelligence',
+      links: [
+        {
+          href: '/analytics',
+          label: 'Analytics',
+          icon: ChartLine,
+          visible: store?.canViewAnalytics,
         },
       ],
     },
@@ -174,6 +196,12 @@ function settingsGroups(store: SessionContext['currentStore']): NavigationGroup[
           href: '/settings?tab=extensions',
           label: 'Extensions',
           icon: Puzzle,
+          visible: store?.canViewStoreSettings,
+        },
+        {
+          href: '/integrations',
+          label: 'Integrations',
+          icon: Plug,
           visible: store?.canViewStoreSettings,
         },
       ],

@@ -4,20 +4,24 @@ import { useState } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 
 import { type StartImportInput, startImportSchema } from '@dakly/contracts/contacts';
-import { cn } from '@dakly/ui/cn';
 
 import { customersKeys } from '../api/customers-keys';
 import { useStartImport } from '../api/start-import';
 import { dropUnmappedFields, guessImportMapping } from '../import-fields';
-import type { ImportFileSummary } from '../import-file';
 import { ImportConsentStep } from './import-consent-step';
 import { ImportDuplicatesStep } from './import-duplicates-step';
 import { ImportMappingStep } from './import-mapping-step';
 import { ImportPreviewStep } from './import-preview-step';
 import { ImportResultStep } from './import-result-step';
-import { ImportUploadStep } from './import-upload-step';
+import { ImportStepHeader } from '@/components/import-step-header';
+import { ImportUploadStep } from '@/components/import-upload-step';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
+import type { ImportFileSummary } from '@/lib/import-file';
 
+const customerTemplate = {
+  filename: 'dakly-customers-template.csv',
+  csv: 'Name,Phone,WhatsApp number,Email,Address,District,Tags,Notes\r\nRahima Akter,01712345678,,rahima@example.com,"House 4, Road 2",Dhaka,eid,\r\n',
+};
 const steps = ['Upload', 'Map fields', 'Preview', 'Duplicates', 'Consent', 'Results'] as const;
 
 type ImportCustomersDialogProps = { onClose: () => void };
@@ -46,9 +50,13 @@ export function ImportCustomersDialog({ onClose }: ImportCustomersDialogProps) {
 
   return (
     <Dialog open title="Import customers" onClose={close} className="max-w-3xl">
-      <ImportStepHeader step={step} />
+      <ImportStepHeader steps={steps} step={step} />
       {upload === undefined ? (
         <ImportUploadStep
+          path="/imports"
+          rowName="customers"
+          fileLabel="Customer file"
+          template={customerTemplate}
           onUploaded={(uploaded) => {
             form.reset({
               ...form.getValues(),
@@ -105,22 +113,4 @@ function ImportSteps({ step, upload, back, next, restart, onDone }: ImportStepsP
       </form>
     );
   return <ImportResultStep importId={upload.importId} onDone={onDone} />;
-}
-
-function ImportStepHeader({ step }: { step: number }) {
-  return (
-    <>
-      <p className="text-sm text-text-muted">
-        Step {step + 1} of {steps.length} · {steps[step]}
-      </p>
-      <ol aria-hidden="true" className="my-4 grid grid-cols-6 gap-1">
-        {steps.map((name, index) => (
-          <li
-            key={name}
-            className={cn('h-1 rounded-full', index <= step ? 'bg-action' : 'bg-surface-muted')}
-          />
-        ))}
-      </ol>
-    </>
-  );
 }

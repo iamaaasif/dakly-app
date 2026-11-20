@@ -29,7 +29,7 @@ describe('Meta webhook messages', () => {
         externalMessageId: 'mid.10004',
         senderExternalId: '10003',
         text: 'ডেলিভারি চার্জ কত?',
-        attachmentUrls: [],
+        attachments: [],
         sentAt: new Date(timestamp),
       },
       expect.objectContaining({ externalMessageId: 'mid.10005', text: 'ধন্যবাদ' }),
@@ -65,9 +65,27 @@ describe('Meta webhook messages', () => {
         channel: 'instagram',
         externalMessageId: 'mid.attachment',
         text: null,
-        attachmentUrls: ['https://cdn.example.test/image'],
+        attachments: [{ kind: 'image', url: 'https://cdn.example.test/image' }],
       }),
     ]);
+  });
+
+  it('maps audio to a voice note and skips shares and locations', () => {
+    const attachments = [
+      { type: 'audio', payload: { url: 'https://cdn.example.test/voice' } },
+      { type: 'share', payload: { url: 'https://cdn.example.test/post' } },
+      { type: 'location', payload: { coordinates: { lat: 23.8, long: 90.4 } } },
+    ];
+    const [parsed] = parseMetaWebhook({
+      object: 'page',
+      entry: [
+        {
+          id: '10001',
+          messaging: [{ ...message, message: { mid: 'mid.voice', attachments } }],
+        },
+      ],
+    });
+    expect(parsed?.attachments).toEqual([{ kind: 'voice', url: 'https://cdn.example.test/voice' }]);
   });
 
   it('returns no inbound message for Page changes, receipts or other webhook objects', () => {

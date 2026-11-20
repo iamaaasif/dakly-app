@@ -1,22 +1,4 @@
-const WHOLE_NUMBER_FORMAT = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
-
-export function formatCount(value: number | bigint): string {
-  return WHOLE_NUMBER_FORMAT.format(value);
-}
-
-export function formatMoney(amountPoisha: number | bigint): string {
-  if (typeof amountPoisha === 'number' && !Number.isSafeInteger(amountPoisha)) {
-    throw new RangeError('Money must be a safe integer in poisha');
-  }
-
-  const amount = BigInt(amountPoisha);
-  const magnitude = amount < 0n ? -amount : amount;
-  const wholeTaka = formatCount(magnitude / 100n);
-  const poisha = magnitude % 100n;
-  const fraction = poisha === 0n ? '' : `.${poisha.toString().padStart(2, '0')}`;
-  const sign = amount < 0n ? '-' : '';
-  return `${sign}৳${wholeTaka}${fraction}`;
-}
+import { formatMoney } from '@dakly/contracts/money';
 
 export function formatWholeTaka(amountPoisha: bigint): string {
   const halfTaka = amountPoisha < 0n ? -50n : 50n;
@@ -27,4 +9,12 @@ export function takaInputFromPoisha(value: number | null) {
   if (value === null) return '';
   const amount = BigInt(value);
   return `${amount / 100n}.${(amount % 100n).toString().padStart(2, '0')}`;
+}
+
+export function formatCompactTaka(amountPoisha: bigint): string {
+  const taka = Number(amountPoisha / 100n);
+  if (taka >= 10_000_000) return `৳${(taka / 10_000_000).toFixed(1)}Cr`;
+  if (taka >= 100_000) return `৳${(taka / 100_000).toFixed(1)}L`;
+  if (taka >= 1_000) return `৳${(taka / 1_000).toFixed(1)}K`;
+  return `৳${taka}`;
 }

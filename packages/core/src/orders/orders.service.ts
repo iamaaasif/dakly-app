@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import {
-  orderStageTransitions,
   type CodCollectedInput,
   type CreateOrderInput,
   type EditOrderInput,
@@ -21,6 +20,7 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ProductStockService } from '../products/product-stock.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
@@ -32,11 +32,13 @@ import {
   orderStageCounts,
   orderStageHistory,
   productArchiveStages,
+  createdStageWrite,
   recordOrderCreation,
   recordOrderEdit,
   recordOrderStage,
   requireEditableOrder,
-  staffConfirmation,
+  requireStageChange,
+  type StageEditor,
   stageWrite,
   stagesForOrderTab,
 } from './order-stage';
@@ -45,7 +47,6 @@ import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
-type StageEditor = { actor: AuditEntry['actor']; access: Access };
 type CreateEditor = {
   actor: Extract<AuditEntry['actor'], { kind: 'user' }>;
   access: Access;
@@ -59,6 +60,7 @@ export class OrdersService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(ProductStockService) private readonly stock: ProductStockService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ContactsService) private readonly contacts: ContactsService,
@@ -128,7 +130,7 @@ export class OrdersService {
         idempotencyKey,
         ...delivery,
         ...totals,
-        ...stageWrite(input.confirm ? staffConfirmation : { to: 'to_confirm' }, now, input.confirm),
+        ...createdStageWrite(input.confirm, now),
         paymentStatus: input.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         possibleDuplicateOfOrderId: duplicate,
         createdAt: now,
@@ -163,7 +165,7 @@ export class OrdersService {
       if (input.items) {
         await moveOrderReservations(
           storeId,
-          this.products,
+          this.stock,
           { orderId, actor },
           { before: previous, after: items },
         );
@@ -255,20 +257,19 @@ export class OrdersService {
     storeId: string,
     orderId: string,
     change: OrderStageChange,
-    { actor, access }: StageEditor,
+    { actor, access, onlyFrom, confirmationMethod = 'staff' }: StageEditor,
   ): Promise<OrderDetail> {
     return this.transaction.run(storeId, async () => {
       const order = await this.repository.lock(storeId, orderId);
       if (!order) throw orderError('ORDER_NOT_FOUND');
-      if (!orderStageTransitions[order.stage].includes(change.to) || isSyncedOrder(order.source))
-        throw orderError('ORDER_STAGE_NOT_ALLOWED');
+      requireStageChange(order, change.to, onlyFrom);
 
       const now = this.clock.now();
       const confirmed = change.to === 'to_pack' && !order.confirmedAt;
       if (change.to === 'cancelled') {
         await moveOrderReservations(
           storeId,
-          this.products,
+          this.stock,
           { orderId, actor, reason: change.reason },
           { before: await this.repository.items(storeId, orderId), after: [] },
         );
@@ -276,11 +277,11 @@ export class OrdersService {
       const fulfilment = await applyOrderFulfilment(
         storeId,
         { order, change, actor, now },
-        { orders: this.repository, products: this.products },
+        { orders: this.repository, stock: this.stock },
       );
       await this.repository.updateOrder(storeId, orderId, {
         ...fulfilment,
-        ...stageWrite(change, now, confirmed),
+        ...stageWrite(change, now, confirmed && confirmationMethod),
         ...(change.to === 'cancelled' && order.paymentStatus === 'advance_paid'
           ? { paymentStatus: 'refund_due' }
           : {}),
@@ -346,7 +347,7 @@ export class OrdersService {
     await this.repository.insert(storeId, order);
     await moveOrderReservations(
       storeId,
-      this.products,
+      this.stock,
       { orderId: id, actor },
       { before: [], after: items },
     );

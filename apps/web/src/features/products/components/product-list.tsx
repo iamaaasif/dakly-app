@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { formatMoney } from '@dakly/contracts/money';
 import type { ProductListQuery, ProductResponse } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
@@ -10,7 +11,6 @@ import { productsSearch } from '../api/products';
 import { firstVariantProfitPercent, productPriceRange } from '../product-prices';
 import { ProductReadiness } from './product-readiness';
 import { ProductThumbnail } from './product-thumbnail';
-import { formatMoney } from '@/lib/format-money';
 
 type ProductListProps = {
   products: ProductResponse[];

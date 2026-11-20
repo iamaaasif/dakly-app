@@ -42,6 +42,8 @@ const movesFrom: Record<StatusChange, NotificationStatus[]> = {
   snoozed: ['new', 'seen', 'snoozed'],
 };
 
+const PURGE_BATCH = 5000;
+
 @Injectable()
 export class NotificationsService {
   constructor(
@@ -140,6 +142,11 @@ export class NotificationsService {
     const current = await this.repository.findForUser(storeId, userId, notificationId);
     if (!current) throw notificationError('NOTIFICATION_NOT_FOUND');
     if (to === 'snoozed' && current.status === 'done') throw notificationError('NOTIFICATION_DONE');
+  }
+
+  // Notifications are kept 90 days. The daily maintenance job calls this for each store.
+  async purgeExpired(storeId: string): Promise<void> {
+    while (await this.repository.purgeExpiredBatch(storeId, PURGE_BATCH));
   }
 }
 

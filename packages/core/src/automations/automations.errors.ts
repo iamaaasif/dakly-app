@@ -39,6 +39,10 @@ const AUTOMATION_ERRORS = {
     status: 409,
     message: 'Review before sending is not available yet',
   },
+  AUTOMATION_ORDER_MISSING: {
+    status: 409,
+    message: 'The order that started this workflow run is gone',
+  },
   AUTOMATION_SPLIT_TOO_SOON: {
     status: 409,
     message: 'Wait at least 2 hours before a split on taps or replies',
