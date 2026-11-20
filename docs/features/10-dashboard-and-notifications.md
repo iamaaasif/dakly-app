@@ -260,10 +260,17 @@ Ask Dakly AI
 How it runs (HOME-4 part 1):
 
 1. `POST /assistant/messages` takes `{ question, history }` (up to 6 earlier turns of the open panel; nothing is stored until HOME-6) and answers `{ kind: 'answer', text, sources, creditsLeft }` or `{ kind: 'cannot_answer', text }`. Any member may ask. Without credits it answers `ASK_CREDITS_UNAVAILABLE` (409) before calling the model; when AI is paused, busy or fails it answers `ASK_UNAVAILABLE` (503).
-2. The tools are `get_sales` (orders, sales, average order value), `get_marketing_results` (money and orders from Dakly messages) and `get_customers` (new, came back, lifecycle stages). Each takes one `window` (`last_7_days`, `last_30_days` or `last_90_days`) and returns the window and the one before it, with percent change. They read `AnalyticsService` only. A member is offered a tool only when their role can view its area: Orders, Analytics or Customers.
+2. The tools are `get_sales` (orders, sales, average order value), `get_marketing_results` (money and orders from Dakly messages), `get_customers` (new, came back, lifecycle stages) and `get_top_products` (up to 5 products by items sold, with their sales). Each takes one `window` (`last_7_days`, `last_30_days` or `last_90_days`) and returns the window and the one before it, with percent change; the product list covers the window only. `get_sales_today`, `get_sales_yesterday` and `get_sales_this_month` take no argument and give the same sales figures for that calendar period in the shop's time zone, against yesterday, the day before and the same days of last month. Product sales count items after discount, without delivery, and leave out cancelled orders. They read `AnalyticsService` only. A member is offered a tool only when their role can view its area: Orders, Analytics or Customers.
 3. The model runs up to 4 rounds of tool calls on the `reply` tier. The question and earlier turns go in labelled untrusted blocks.
 4. Before the answer is returned, code checks that every figure in it appears in this run's tool results. A failed check, or a figure with no tool call behind it, gives `cannot_answer` and logs a warning with the store id only (no question text in logs); a saved question log waits for HOME-6. One credit is used when the model answers, even when this check then refuses the answer.
-5. Today, yesterday, this month, top products, orders by stage and AI performance wait for reports on `AnalyticsService`.
+5. Orders by stage and AI performance wait for reports on `AnalyticsService`.
+
+Web (HOME-4 part 2):
+
+1. The dark Ask Dakly AI button in the top bar (icon only on a phone) opens a panel on the right edge, full width on a phone. The panel is open when the `ask` search parameter is `open`, so a link can open it.
+2. The panel shows the page it is on when it knows the page, up to three suggestions, the first the member may ask from this list: sales today, campaign performance, customers who came back, best selling product, sales this month, yesterday and the last 30 days (each shown only when the role can view that report), the conversation, an input and the line "Dakly AI suggests. You approve before anything is sent." Each answer shows its sources under the text ("From Orders, last 30 days") and the credits left appear under the input after the first answer. The conversation lasts until the shop is switched or the page is reloaded; saved history is HOME-6.
+3. A busy or paused AI shows "Dakly AI is busy. Try again in a minute." and puts the question back in the input. No credits shows that they are used up for the plan period.
+4. Waits on other work: Full view and the Ask Dakly AI page (HOME-6), the Ask box on the Dashboard, suggestions that differ per page, a customer-targeting suggestion (no tool covers it), the top-up button (no billing screen yet), feedback buttons, and the action buttons under an answer.
 
 ### Rules
 

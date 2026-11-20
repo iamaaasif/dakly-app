@@ -230,6 +230,7 @@ export class IsolationFixture {
       'imports',
       'knowledge_items',
       'ai_agent_settings',
+      'ai_rule_changes',
       'files',
       'sms_sender_ids',
       'saved_replies',

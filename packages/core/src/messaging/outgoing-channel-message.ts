@@ -5,7 +5,7 @@ export type OutgoingChannelMessage = {
   contactId: string;
   connectionId: string;
   identityId: string;
-  category: Extract<SendCategory, 'staff_reply' | 'transactional'>;
+  category: Extract<SendCategory, 'staff_reply' | 'transactional' | 'marketing'>;
   content: string;
   operationKey: string;
   // Which tool results the AI reply came from, saved on the message for staff review.

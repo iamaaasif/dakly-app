@@ -29,6 +29,10 @@ describe('Analytics reports', () => {
 
   afterAll(async () => {
     await app?.close();
+    for (const table of ['orders', 'product_variants', 'products'])
+      await fixture.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
+        [fixture.a, fixture.b],
+      ]);
     await fixture.connection.pool.query(
       'delete from store_daily_metrics where store_id=any($1::uuid[])',
       [[fixture.a, fixture.b]],
@@ -142,6 +146,85 @@ describe('Analytics reports', () => {
       new: 3,
       regulars: 2,
       bought_once: 0,
+    });
+  });
+
+  it('chooses today, yesterday and month-to-date against the period before', async () => {
+    expect(await reports.calendarPeriods(fixture.a, 'today')).toMatchObject({
+      timeZone: 'Asia/Dhaka',
+      current: { from: '2026-11-08', through: '2026-11-08' },
+      previous: { from: '2026-11-07', through: '2026-11-07' },
+    });
+    expect(await reports.calendarPeriods(fixture.a, 'yesterday')).toMatchObject({
+      current: { from: '2026-11-07', through: '2026-11-07' },
+      previous: { from: '2026-11-06', through: '2026-11-06' },
+    });
+    expect(await reports.calendarPeriods(fixture.a, 'this_month')).toMatchObject({
+      current: { from: '2026-11-01', through: '2026-11-08' },
+      previous: { from: '2026-10-01', through: '2026-10-08' },
+    });
+  });
+
+  describe('top products', () => {
+    async function sell(
+      storeId: string,
+      productName: string,
+      lines: { createdAt: string; quantity: number; stage?: string }[],
+    ) {
+      const productId = randomUUID();
+      const variantId = randomUUID();
+      const { pool } = fixture.connection;
+      await pool.query(
+        'insert into products(id,store_id,name,is_stock_tracked) values($1,$2,$3,false)',
+        [productId, storeId, productName],
+      );
+      await pool.query(
+        "insert into product_variants(id,store_id,product_id,title) values($1,$2,$3,'M')",
+        [variantId, storeId, productId],
+      );
+      for (const { createdAt, quantity, stage = 'to_confirm' } of lines) {
+        const orderId = randomUUID();
+        await pool.query(
+          `insert into orders(id,store_id,number,source,created_by_type,recipient_name,recipient_phone,
+             recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha,created_at,stage,
+             cancel_reason)
+           values ($1,$2,$3,'manual','user','রিনা','01710000005','Mirpur','Dhaka',1,1,$4,$5,
+             case when $5 = 'cancelled' then 'not_confirmed' end)`,
+          [orderId, storeId, Math.floor(Math.random() * 1e9), createdAt, stage],
+        );
+        await pool.query(
+          `insert into order_items(id,store_id,order_id,variant_id,product_name,variant_title,quantity,
+             unit_price_poisha,line_discount_poisha,is_stock_tracked)
+           values ($1,$2,$3,$4,$5,'M',$6,50000,10000,false)`,
+          [randomUUID(), storeId, orderId, variantId, productName, quantity],
+        );
+      }
+    }
+
+    it('ranks products by items sold, leaves out cancelled orders and other shops', async () => {
+      await sell(fixture.a, 'পাঞ্জাবি', [
+        { createdAt: '2026-11-05T06:00:00Z', quantity: 2 },
+        { createdAt: '2026-11-06T06:00:00Z', quantity: 1 },
+      ]);
+      await sell(fixture.a, 'শাড়ি', [
+        { createdAt: '2026-11-06T06:00:00Z', quantity: 2 },
+        { createdAt: '2026-11-06T07:00:00Z', quantity: 9, stage: 'cancelled' },
+        // Outside the period, so it does not count.
+        { createdAt: '2026-10-01T06:00:00Z', quantity: 20 },
+      ]);
+      await sell(fixture.b, 'অন্য দোকানের পণ্য', [
+        { createdAt: '2026-11-06T06:00:00Z', quantity: 50 },
+      ]);
+      expect(await reports.topProducts(fixture.a, period, 5)).toEqual([
+        { name: 'পাঞ্জাবি', units: 3, salesPoisha: 3n * 50000n - 2n * 10000n },
+        { name: 'শাড়ি', units: 2, salesPoisha: 2n * 50000n - 10000n },
+      ]);
+      expect((await reports.topProducts(fixture.a, period, 1)).map(({ name }) => name)).toEqual([
+        'পাঞ্জাবি',
+      ]);
+      expect((await reports.topProducts(fixture.b, period, 5)).map(({ name }) => name)).toEqual([
+        'অন্য দোকানের পণ্য',
+      ]);
     });
   });
 });

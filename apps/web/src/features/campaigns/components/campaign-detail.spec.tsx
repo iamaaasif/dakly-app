@@ -18,6 +18,7 @@ const base: CampaignResponse = {
   goal: 'win_back',
   channel: 'sms',
   content: { text: 'Come back this week for our Puja collection.' },
+  channelConnectionId: null,
   includeSegmentIds: [],
   excludeSegmentIds: [],
   scheduledFor: null,

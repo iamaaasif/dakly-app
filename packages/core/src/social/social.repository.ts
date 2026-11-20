@@ -15,7 +15,11 @@ import {
   sql,
 } from 'drizzle-orm';
 
-import type { CreatePostInput, PostListQuery } from '@dakly/contracts/social';
+import type {
+  ConfirmPostPhotoInput,
+  CreatePostInput,
+  PostListQuery,
+} from '@dakly/contracts/social';
 import { files } from '@dakly/db/schema/platform';
 import { posts, postTargets } from '@dakly/db/schema/social';
 
@@ -176,6 +180,21 @@ export class SocialRepository {
           ),
         ),
     );
+  }
+
+  async insertPostMedia(
+    storeId: string,
+    input: ConfirmPostPhotoInput & { objectKey: string; uploadedByUserId: string; createdAt: Date },
+  ) {
+    const { fileId, ...file } = input;
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(files)
+        .values({ ...file, id: fileId, storeId, purpose: 'post_media', status: 'ready' })
+        .onConflictDoNothing()
+        .returning({ id: files.id, objectKey: files.objectKey }),
+    );
+    return rows[0];
   }
 
   async findPublishTarget(storeId: string, input: { postTargetId: string; scheduledFor: string }) {

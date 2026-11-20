@@ -4,6 +4,7 @@ import type { PostResponse } from '@dakly/contracts/social';
 
 import type { SocialAccount } from './api/get-social-accounts';
 import {
+  attentionReason,
   buildEntries,
   canMove,
   monthWeeks,
@@ -120,4 +121,19 @@ it('moves a post to another day at the same Dhaka time, and only while it is wai
   );
   const [failed] = buildEntries([post([{ status: 'failed' }])], [facebook], null);
   expect([canMove(late!), canMove(sent!), canMove(failed!)]).toEqual([true, false, false]);
+});
+
+it('says why a scheduled target needs attention', () => {
+  const expired = { ...instagram, displayName: 'Rina Boutique' } as SocialAccount;
+  const [scheduled] = post([{ channelConnectionId: 'ig' }]).targets;
+  const reconnect = attentionReason(post([{ channelConnectionId: 'ig' }]), expired, scheduled!);
+  expect(reconnect).toContain('Rina Boutique');
+  expect(reconnect).toContain('Reconnect Instagram');
+
+  const active = { ...instagram, status: 'active' } as SocialAccount;
+  const noPhoto = post([{ channelConnectionId: 'ig' }], []);
+  expect(attentionReason(noPhoto, active, noPhoto.targets[0]!)).toContain('needs a photo or video');
+
+  const fine = post([{}]);
+  expect(attentionReason(fine, facebook, fine.targets[0]!)).toBeNull();
 });

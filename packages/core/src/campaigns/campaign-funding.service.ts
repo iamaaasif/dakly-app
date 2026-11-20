@@ -42,14 +42,19 @@ export class CampaignFundingService {
       const cancelled = campaign.status === 'cancelled';
       const canSettle = cancelled
         ? campaign.settlementPendingAt
-        : campaign.status === 'sending' && campaign.shortLinkBase;
+        : campaign.status === 'sending' && isFunded(campaign);
       if (!canSettle) {
         if (!campaign.countsAt) await this.counts.refresh(storeId, id, 'batch');
         return;
       }
       const settled = await this.service.settleReservation(
         storeId,
-        { id, approvedAt: campaign.approvedAt, cancelledAt: cancelled ? now : undefined },
+        {
+          id,
+          channel: campaign.channel,
+          approvedAt: campaign.approvedAt,
+          cancelledAt: cancelled ? now : undefined,
+        },
         ACTOR,
       );
       if (cancelled) return this.counts.refresh(storeId, id, 'force');
@@ -164,4 +169,10 @@ function needsFunding(campaign: LockedCampaign, source: Source): boolean {
     campaign.balancePauseRevision !== null &&
     campaign.balancePauseRevision < source.topUpRevision
   );
+}
+
+// An SMS campaign can send once its credits are reserved and it has its short-link base. A
+// Messenger campaign holds no credits.
+export function isFunded(campaign: Pick<LockedCampaign, 'channel' | 'shortLinkBase'>): boolean {
+  return campaign.channel !== 'sms' || !!campaign.shortLinkBase;
 }

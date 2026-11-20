@@ -50,11 +50,25 @@ export class ChannelConnectionsRepository {
   async aiState(storeId: string, id: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ status: channelConnections.status, isAiLive: channelConnections.isAiLive })
+        .select({
+          kind: channelConnections.kind,
+          status: channelConnections.status,
+          isAiLive: channelConnections.isAiLive,
+        })
         .from(channelConnections)
         .where(and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, id))),
     );
     return row;
+  }
+
+  async kindOf(storeId: string, id: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ kind: channelConnections.kind })
+        .from(channelConnections)
+        .where(and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, id))),
+    );
+    return row?.kind;
   }
 
   async setAiLive(storeId: string, id: string, now: Date): Promise<void> {
