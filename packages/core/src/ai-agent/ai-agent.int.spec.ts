@@ -61,6 +61,9 @@ afterAll(async () => {
     await queue?.obliterate();
     await app?.close();
     for (const table of [
+      'product_variants',
+      'products',
+      'delivery_zones',
       'notifications',
       'outbox_events',
       'audit_log',
@@ -346,17 +349,30 @@ it('stops before classifying when AI is off, the window closes, consent is withd
   }
 });
 
-it('stops after a routine classification', async () => {
+it('answers after a routine classification', async () => {
   const active = await shop();
   const message = await receive(active, 'Hello');
-  script(classification);
+  scriptSequence(
+    { ...classified, output: classification },
+    replyText('Assalamu alaikum, ki lagbe?'),
+  );
   await agent.reply(active.storeId, message.conversation_id, message.id);
   expect(await observe(active)).toMatchObject({
     conversations: [{ status: 'open', responder: 'ai', handover_reason: null }],
-    replies: [],
-    notices: [],
-    usage: [],
-    runs: [{ tier: 'fast', purpose: 'classify' }],
+    replies: [
+      {
+        body: 'Assalamu alaikum, ki lagbe?',
+        author_type: 'ai',
+        recipient_identity_id: message.sender_identity_id,
+      },
+    ],
+    // The one-unit plan reaches its 80 and 100 percent usage thresholds.
+    notices: [{ type: 'usage.threshold_reached' }, { type: 'usage.threshold_reached' }],
+    usage: [{ id: expect.any(String) }],
+    runs: [
+      { tier: 'fast', purpose: 'classify' },
+      { tier: 'reply', purpose: 'chat_reply' },
+    ],
   });
 });
 
@@ -387,4 +403,193 @@ it('delays classification while the store has three model calls running', async 
     finish.resolve();
     await Promise.all(running);
   }
+});
+
+const usage = { inputTokens: 5, cachedInputTokens: 0, outputTokens: 5 };
+const toolCalls = (...calls: [string, object][]): LlmResult => ({
+  kind: 'tool_calls',
+  toolCalls: calls.map(([name, args], index) => ({
+    id: `call-${index}`,
+    name,
+    argumentsJson: JSON.stringify(args),
+  })),
+  usage,
+  responseId: 'fake-tools',
+  model: 'gpt-6.1-terra',
+});
+const replyText = (reply: string): LlmResult => ({
+  kind: 'output',
+  output: { reply },
+  usage,
+  responseId: 'fake-reply',
+  model: 'gpt-6.1-terra',
+});
+const classified: LlmResult = {
+  kind: 'output',
+  output: { ...classification, intent: 'price' },
+  usage,
+  responseId: 'fake-classification',
+  model: 'gpt-6-luna',
+};
+
+function scriptSequence(...responses: LlmResult[]) {
+  const driver = new FakeLlmDriver(responses);
+  const inputs: string[] = [];
+  vi.spyOn(FakeLlmDriver.prototype, 'respond').mockImplementation(async (request) => {
+    inputs.push(request.input);
+    return fakeRespond.call(driver, request);
+  });
+  return inputs;
+}
+
+async function sellingShop(allowance = 1) {
+  const active = await shop(allowance);
+  await admin.pool.query("update stores set phone = '01712345678' where id = $1", [active.storeId]);
+  const productId = randomUUID();
+  await admin.pool.query(
+    "insert into products (id, store_id, name, price_poisha) values ($1, $2, 'কটন পাঞ্জাবি', 120000)",
+    [productId, active.storeId],
+  );
+  await admin.pool.query(
+    "insert into product_variants (id, store_id, product_id, title, on_hand, reserved, is_default) values (gen_random_uuid(), $1, $2, 'Default', 10, 2, true)",
+    [active.storeId, productId],
+  );
+  await admin.pool.query(
+    "insert into delivery_zones (id, store_id, name, charge_poisha, bd_area_ids, is_default) values (gen_random_uuid(), $1, 'Inside Dhaka', 6000, '{301}', false), (gen_random_uuid(), $1, 'Outside Dhaka', 12000, '{}', true)",
+    [active.storeId],
+  );
+  return { ...active, productId };
+}
+
+async function sent({ storeId }: Shop) {
+  const { rows } = await admin.pool.query(
+    "select body, author_type, ai_run_id, ai_sources from messages where store_id = $1 and direction = 'out' order by created_at, id",
+    [storeId],
+  );
+  return rows;
+}
+
+it('answers price and delivery from tool results, saves the run and sources, and spends one unit', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'price koto? Mirpur e delivery charge koto?');
+  const inputs = scriptSequence(
+    classified,
+    toolCalls(
+      ['search_products', { query: 'পাঞ্জাবি' }],
+      ['get_delivery_charge', { area: 'Dhaka' }],
+    ),
+    replyText('পাঞ্জাবির দাম ৳1,200 (8 pcs stock e ache). Dhaka city te delivery ৳60.'),
+  );
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+
+  const replies = await sent(active);
+  expect(replies).toEqual([
+    {
+      body: 'পাঞ্জাবির দাম ৳1,200 (8 pcs stock e ache). Dhaka city te delivery ৳60.',
+      author_type: 'ai',
+      ai_run_id: expect.any(String),
+      ai_sources: [{ tool: 'search_products', refs: [active.productId] }],
+    },
+  ]);
+  expect(inputs[2]).toContain('<tool_results round="1">');
+  expect(inputs[1]).toContain('<conversation untrusted="true">');
+  expect(await observe(active)).toMatchObject({
+    conversations: [{ status: 'open', responder: 'ai', handover_reason: null }],
+    runs: [
+      { purpose: 'classify' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v1' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v1' },
+    ],
+    usage: [{ id: expect.any(String) }],
+  });
+});
+
+it('hands over instead of sending a price no tool returned', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'price koto?');
+  scriptSequence(
+    classified,
+    toolCalls(['search_products', { query: 'পাঞ্জাবি' }]),
+    replyText('দাম ৳999 only'),
+  );
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+  expect((await sent(active)).map((row) => row.author_type)).toEqual(['system']);
+  expect(await observe(active)).toMatchObject({
+    conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'out_of_scope' }],
+    usage: [],
+  });
+});
+
+it('sends a product card before the reply', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'panjabi dekhan');
+  scriptSequence(
+    classified,
+    toolCalls(['send_product_card', { productId: active.productId }]),
+    replyText('Eta dekhun, ৳1,200.'),
+  );
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+  expect((await sent(active)).map((row) => row.body)).toEqual([
+    'কটন পাঞ্জাবি\nDefault: ৳1,200',
+    'Eta dekhun, ৳1,200.',
+  ]);
+});
+
+it('hands over when the model calls hand_over', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'amar order ta ferot dite chai');
+  scriptSequence(classified, toolCalls(['hand_over', { reason: 'refund' }]));
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+  expect(await observe(active)).toMatchObject({
+    conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'refund' }],
+    usage: [],
+  });
+});
+
+it('hands over when the model keeps calling tools past four rounds', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'price koto?');
+  scriptSequence(classified, ...Array.from({ length: 4 }, () => toolCalls(['get_my_orders', {}])));
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+  expect(await observe(active)).toMatchObject({
+    conversations: [{ status: 'needs_you', handover_reason: 'out_of_scope' }],
+  });
+});
+
+it('sends nothing when staff take over while the model is working', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'price koto?');
+  const driver = new FakeLlmDriver([classified, replyText('Ji bolun')]);
+  let calls = 0;
+  vi.spyOn(FakeLlmDriver.prototype, 'respond').mockImplementation(async (request) => {
+    calls += 1;
+    if (calls === 2)
+      await app
+        .get(InboxService)
+        .setResponder(
+          active.storeId,
+          message.conversation_id,
+          { kind: 'user', userId: active.owner },
+          { responder: 'human' },
+        );
+    return fakeRespond.call(driver, request);
+  });
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+  expect(await sent(active)).toEqual([]);
+  expect(await observe(active)).toMatchObject({ usage: [] });
+});
+
+it('sends once when the job is retried and finishes a paid window after the allowance is used', async () => {
+  const active = await sellingShop();
+  const first = await receive(active, 'price koto?');
+  scriptSequence(classified, replyText('Ji bolun'), classified, replyText('Ji bolun'));
+  await agent.reply(active.storeId, first.conversation_id, first.id);
+  await agent.reply(active.storeId, first.conversation_id, first.id);
+  expect(await sent(active)).toHaveLength(1);
+
+  const second = await receive(active, 'ar ekta kotha');
+  scriptSequence(classified, replyText('Bolun'));
+  await agent.reply(active.storeId, second.conversation_id, second.id);
+  expect((await sent(active)).map((row) => row.author_type)).toEqual(['ai', 'ai']);
+  expect(await observe(active)).toMatchObject({ usage: [{ id: expect.any(String) }] });
 });

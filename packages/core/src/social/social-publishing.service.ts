@@ -20,6 +20,7 @@ import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
+import { publishedSchedule } from './next-metrics-at';
 import { validateInstagramPhotos, validateInstagramPost } from './post-content';
 import { publishError, socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
@@ -69,11 +70,10 @@ export class SocialPublishingService {
       if (!(failure instanceof AppError)) throw failure;
       error = failure;
     }
-    const errorCode = error && error.code;
-    if (target.errorCode === errorCode) return;
+    if (target.errorCode === (error && error.code)) return;
     await this.recordTarget(storeId, target, {
       action: 'post.preflight_checked',
-      errorCode,
+      errorCode: error && error.code,
       errorMessage: error && error.message,
     });
   }
@@ -136,7 +136,7 @@ export class SocialPublishingService {
       const saved = await this.recordTarget(storeId, target, {
         action: 'post.publish_confirmed',
         externalPostId: externalId,
-        publishedAt: this.clock.now(),
+        ...publishedSchedule(this.clock.now()),
         errorCode,
         errorMessage: errorCode ? socialError(errorCode).message : null,
       });

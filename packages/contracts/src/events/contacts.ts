@@ -64,6 +64,13 @@ export const importStartedEventSchema = z.strictObject({
   payload: z.strictObject({ importId: z.uuid() }),
 });
 
+export const productImportStartedEventSchema = z.strictObject({
+  type: z.literal('product_import.started'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ importId: z.uuid() }),
+});
+
 export const importUndoRequestedEventSchema = z.strictObject({
   type: z.literal('import.undo_requested'),
   storeId: z.uuid(),

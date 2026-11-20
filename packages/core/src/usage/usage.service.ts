@@ -32,6 +32,10 @@ export class UsageService {
     return used + quantity <= allowance;
   }
 
+  async isConsumed(storeId: string, unit: UsageUnit, reference: string): Promise<boolean> {
+    return (await this.repository.findByReference(storeId, unit, reference)) !== undefined;
+  }
+
   consume(storeId: string, { unit, quantity, reference }: ConsumeUsageInput): Promise<UsageEvent> {
     return this.transaction.run(storeId, async () => {
       await this.repository.lockUnit(storeId, unit);

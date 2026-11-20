@@ -5,7 +5,6 @@ import { AnalyticsReportsModule } from '../analytics/analytics-reports.module';
 import { AutomationRunsModule } from '../automations/automation-runs.module';
 import { CampaignsModule } from '../campaigns/campaigns.module';
 import { LinksModule } from '../links/links.module';
-import { MessageArchiveModule } from '../messaging/message-archive.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
@@ -31,7 +30,6 @@ import { RetentionPurgeService } from './retention-purge.service';
     CampaignsModule,
     FileStorageModule,
     LinksModule,
-    MessageArchiveModule,
     NotificationsModule,
     OutboxModule,
     SessionsModule,
