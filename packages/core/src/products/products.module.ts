@@ -20,8 +20,9 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductsRepository,
     ProductOrderVariantsRepository,
     ProductsService,
+    ProductStockRepository,
     ProductStockService,
   ],
-  exports: [ProductsService, ProductStockRepository, ProductStockService],
+  exports: [ProductsService, ProductStockService],
 })
 export class ProductsModule {}
