@@ -65,6 +65,7 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
             this.logger.error(
               `Notification stream failed at ${stepName}: ${error instanceof Error ? `${error.name} ${error.message}` : 'unknown error'}`,
             );
+            console.error('STREAMDIAG', stepName, error);
             subscriber.error(error);
           });
       };
