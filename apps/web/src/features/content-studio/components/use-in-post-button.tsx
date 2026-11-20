@@ -1,4 +1,4 @@
-import { Send } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import type { CreateContentPieceInput } from '@dakly/contracts/content';
@@ -13,6 +13,7 @@ export function UseInPostButton({ piece }: { piece: CreateContentPieceInput }) {
   return (
     <>
       <Button
+        className="ml-auto"
         loading={save.isPending}
         disabled={!piece.body.trim()}
         onClick={() =>
@@ -21,7 +22,7 @@ export function UseInPostButton({ piece }: { piece: CreateContentPieceInput }) {
           })
         }
       >
-        <Send aria-hidden="true" size={14} strokeWidth={1.75} /> Use in post
+        Schedule post <ChevronRight aria-hidden="true" size={14} strokeWidth={1.75} />
       </Button>
       {save.error && (
         <p role="alert" className="basis-full text-sm text-danger">

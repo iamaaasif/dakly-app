@@ -6,7 +6,7 @@ import { CreateTab } from './create-tab';
 
 export function ContentStudioScreen({ tab }: { tab: ContentStudioTab }) {
   return (
-    <main className="mx-auto max-w-5xl space-y-6 p-4 md:p-8">
+    <main className="space-y-6 p-4 md:p-8">
       <header>
         <h1 className="text-xl font-bold md:text-2xl">AI Content Studio</h1>
         <p className="mt-1 text-text-muted">

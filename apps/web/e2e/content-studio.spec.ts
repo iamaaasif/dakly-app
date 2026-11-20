@@ -88,16 +88,17 @@ test('writes options, saves one to the library and opens it in Create post', asy
     await page.goto('/content-studio');
     await expect(page.getByRole('heading', { name: 'AI Content Studio', level: 1 })).toBeVisible();
     await capture(page, 'create');
+    await capture(page, 'create-style', page.getByRole('button', { name: /Write 3 options/ }));
 
-    await page.getByLabel('What’s it about?').fill('New winter kurtis, 15% off');
+    await page.getByLabel(/Anything else Dakly should know/).fill('New winter kurtis, 15% off');
     await page.getByRole('button', { name: /Write 3 options/ }).click();
     await expect(page.getByRole('article')).toHaveCount(3);
     await capture(page, 'options', page.getByRole('article').first());
 
     const first = page.getByRole('article').first();
-    await first.getByRole('button', { name: 'Save to library' }).click();
-    await expect(first.getByRole('button', { name: 'Saved to library' })).toBeVisible();
-    await first.getByRole('button', { name: 'Use in post' }).click();
+    await first.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(first.getByRole('button', { name: 'Saved' })).toBeVisible();
+    await first.getByRole('button', { name: 'Schedule post' }).click();
     await expect(page).toHaveURL(/\/social\/posts\/new\?piece=/);
     await expect(page.getByRole('textbox', { name: 'Caption', exact: true })).toHaveValue(
       /New winter kurtis/,
