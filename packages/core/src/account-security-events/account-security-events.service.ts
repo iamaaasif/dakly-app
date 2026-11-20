@@ -7,6 +7,8 @@ import type {
 
 import { AccountSecurityEventsRepository } from './account-security-events.repository';
 
+const PURGE_BATCH = 1000;
+
 @Injectable()
 export class AccountSecurityEventsService {
   constructor(
@@ -34,5 +36,10 @@ export class AccountSecurityEventsService {
 
   list(userId: string, page: AccountSecurityHistory) {
     return this.repository.list(userId, page);
+  }
+
+  // Account history is kept two years. The daily maintenance job calls this until nothing is left.
+  async purgeExpired(): Promise<void> {
+    while ((await this.repository.purgeExpiredBatch(PURGE_BATCH)) === PURGE_BATCH);
   }
 }

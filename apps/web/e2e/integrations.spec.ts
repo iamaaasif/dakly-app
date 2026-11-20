@@ -28,7 +28,7 @@ async function capture(page: Page, name: string) {
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 
-test('lists a connected Page and disconnects it after confirmation', async ({
+test('connects a Page and an Instagram account with the fake Meta driver, reconnects and disconnects', async ({
   page,
   context,
   baseURL,
@@ -57,22 +57,59 @@ test('lists a connected Page and disconnects it after confirmation', async ({
     ).toBeVisible();
     await capture(page, 'empty');
 
-    await database.pool.query(
-      "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values(gen_random_uuid(),$1,'facebook_page','1001001',$2)",
-      [storeId, 'রিনার দোকান'],
-    );
-    await page.reload();
+    await page.getByRole('button', { name: 'Connect Facebook Page' }).click();
+    await expect(page.getByRole('dialog', { name: 'Connect Facebook Page' })).toBeVisible();
+    await capture(page, 'connect-intro');
+
+    // Hold the account list so the waiting state can be photographed.
+    let release!: () => void;
+    const held = new Promise<void>((resolveHeld) => (release = resolveHeld));
+    await page.route('**/api/channel-connections/meta/accounts', async (route) => {
+      await held;
+      await route.continue();
+    });
+    await page.getByRole('button', { name: 'Continue with Facebook' }).click();
+    await expect(page.getByRole('dialog', { name: 'Waiting for Facebook…' })).toBeVisible();
+    await capture(page, 'waiting');
+    release();
+
+    const choose = page.getByRole('dialog', { name: 'Choose Pages' });
+    await expect(choose).toBeVisible();
+    await expect(choose.getByText('করিমের দোকান')).toBeVisible();
+    await capture(page, 'choose-pages');
+    await choose.getByLabel('রিনার দোকান').check();
+    await choose.getByRole('button', { name: 'Connect' }).click();
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Facebook Page connected.' }),
+    ).toBeVisible();
     const messenger = page.getByRole('region', { name: 'Messenger' });
+    await expect(messenger.getByText('রিনার দোকান')).toBeVisible();
     await expect(messenger.getByText('Connected', { exact: true })).toBeVisible();
-    await capture(page, 'connected');
+    await capture(page, 'connected-page');
+
+    await page.getByRole('button', { name: 'Connect Instagram' }).click();
+    await page.getByRole('button', { name: 'Continue with Facebook' }).click();
+    const accounts = page.getByRole('dialog', { name: 'Choose Instagram accounts' });
+    await expect(accounts.getByText('rinas_shop')).toBeVisible();
+    await accounts.getByLabel('rinas_shop').check();
+    await accounts.getByRole('button', { name: 'Connect' }).click();
+    const instagram = page.getByRole('region', { name: 'Instagram' });
+    await expect(instagram.getByText('rinas_shop')).toBeVisible();
+    await expect(page.getByText('2 connected')).toBeVisible();
 
     await database.pool.query(
-      "update channel_connections set status='needs_reconnect' where store_id=$1",
+      "update channel_connections set status='needs_reconnect' where store_id=$1 and kind='facebook_page'",
       [storeId],
     );
     await page.reload();
     await expect(messenger.getByText('Needs reconnect')).toBeVisible();
     await capture(page, 'needs-reconnect');
+    await messenger.getByRole('button', { name: 'Reconnect' }).click();
+    await page.getByRole('button', { name: 'Continue with Facebook' }).click();
+    const again = page.getByRole('dialog', { name: 'Choose Pages' });
+    await expect(again.getByLabel('রিনার দোকান')).toBeChecked();
+    await again.getByRole('button', { name: 'Connect' }).click();
+    await expect(messenger.getByText('Connected', { exact: true })).toBeVisible();
 
     await messenger.getByRole('button', { name: 'Disconnect' }).click();
     const confirm = page.getByRole('dialog', { name: 'Disconnect রিনার দোকান?' });

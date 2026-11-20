@@ -110,6 +110,22 @@ describe('S3FileStorageDriver (SeaweedFS)', () => {
     await expect(driver.deleteObject(key)).resolves.toBeUndefined();
   });
 
+  it('lists the keys under a prefix with their modification times', async () => {
+    const driver = driverAt(new Date());
+    const prefix = `stores/${randomUUID()}/products/`;
+    const keys = [`${prefix}${randomUUID()}`, `${prefix}${randomUUID()}`];
+    for (const key of keys) await driver.writeText(key, 'x', 'text/plain');
+    await driver.writeText(`stores/${randomUUID()}/products/${randomUUID()}`, 'x', 'text/plain');
+
+    const page = await driver.listObjects(prefix);
+
+    expect(page.nextToken).toBeNull();
+    expect(page.objects.map(({ key }) => key).sort()).toEqual(keys.sort());
+    expect(Math.abs(Date.now() - page.objects[0]!.lastModified.getTime())).toBeLessThan(60_000);
+    for (const key of keys) await driver.deleteObject(key);
+    expect((await driver.listObjects(prefix)).objects).toEqual([]);
+  });
+
   it('writes text the server makes and reads it back with its content type', async () => {
     const driver = driverAt(new Date());
     const key = `imports/${randomUUID()}/${randomUUID()}.csv`;

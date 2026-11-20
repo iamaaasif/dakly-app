@@ -92,7 +92,7 @@ export class ImportsService {
     const importId = newId();
     const upload = this.newFile(storeId, input.sizeBytes, 'pending');
     const userId = actor.kind === 'user' ? actor.userId : null;
-    await this.repository.createCustomerImport(storeId, importId, upload, userId);
+    await this.repository.create(storeId, importId, upload, userId);
     const content = { sizeBytes: input.sizeBytes, contentType: CSV };
     return {
       importId,
