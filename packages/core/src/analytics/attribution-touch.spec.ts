@@ -30,13 +30,17 @@ describe('selectAttributionTouch', () => {
     expect(selectAttributionTouch([workflowTap], orderAt, 3)).toBeUndefined();
   });
 
-  it('credits a later workflow tap in the same minute', () => {
+  it('credits the later tap', () => {
     const later = { ...workflowTap, eligibleAt: new Date('2026-11-17T06:00:01Z') };
     expect(selectAttributionTouch([campaignTap, later], orderAt, 7)).toEqual(later);
   });
 
-  it('prefers the campaign only when the tap time is tied', () => {
-    const tied = { ...campaignTap, id: workflowTap.id, sourceType: 'automation' as const };
-    expect(selectAttributionTouch([tied, campaignTap], orderAt, 7)).toEqual(campaignTap);
+  it('uses the later visit ID when taps have the same time', () => {
+    const tied = {
+      ...workflowTap,
+      id: '019c01ea-cf15-7d31-a7f5-d73d66007adc',
+      eligibleAt: campaignTap.eligibleAt,
+    };
+    expect(selectAttributionTouch([campaignTap, tied], orderAt, 7)).toEqual(tied);
   });
 });
