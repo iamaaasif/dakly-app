@@ -576,6 +576,19 @@ describe('CampaignsService', () => {
     expect(repository.rows.get(campaign.id)?.status).toBe('draft');
   });
 
+  it.each([
+    ['messenger', 24 * 3_600_000, 'CAMPAIGN_SCHEDULE_TOO_LATE'],
+    ['messenger', 22 * 3_600_000, undefined],
+    ['sms', 24 * 3_600_000, undefined],
+  ] as const)('checks a %s send time %i ms ahead', async (channel, ahead, code) => {
+    const { campaign } = audienceDraft(2);
+    campaign.channel = channel;
+    campaign.scheduledFor = new Date(now.getTime() + ahead);
+
+    if (code) await expect(approve(campaign.id)).rejects.toMatchObject({ code });
+    else await expect(approve(campaign.id)).resolves.toBeDefined();
+  });
+
   it('estimates no parts or credits for an empty message', async () => {
     const { campaign } = audienceDraft(2);
     campaign.content = { text: '' };
