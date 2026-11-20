@@ -1,4 +1,4 @@
-import type { FieldError, UseFormReturn } from 'react-hook-form';
+import type { UseFormReturn } from 'react-hook-form';
 
 import type { ChangeStoreSettingsInput, StoreSettingsResponse } from '@dakly/contracts/stores';
 import { Card } from '@dakly/ui/card';
@@ -6,33 +6,22 @@ import { Card } from '@dakly/ui/card';
 import { FormField } from '@/components/form-field';
 import { initialsOf } from '@/lib/initials';
 
-type StoreFieldKey =
-  | 'name'
-  | 'legalName'
-  | 'businessType'
-  | 'phone'
-  | 'email'
-  | 'address'
-  | 'district'
-  | 'vatBin'
-  | 'tradeLicenceNumber';
-
-type FieldDef = {
-  name: StoreFieldKey;
+type StoreField = {
+  name: Exclude<keyof ChangeStoreSettingsInput, 'sending' | 'stock'>;
   label: string;
   type?: 'text' | 'email' | 'tel';
-  colSpan2?: boolean;
+  wide?: boolean;
 };
 
-type SectionDef = {
+type StoreSection = {
   title: string;
   description: string;
-  fields: FieldDef[];
+  fields: StoreField[];
 };
 
-const emptyAsNull = (v: unknown) => (v === '' ? null : v);
+const emptyAsNull = (value: unknown) => (value === '' ? null : value);
 
-const sections: SectionDef[] = [
+const sections: StoreSection[] = [
   {
     title: 'Store information',
     description: 'Shown on messages, invoices and your Dakly workspace.',
@@ -48,7 +37,7 @@ const sections: SectionDef[] = [
     title: 'Address',
     description: 'Used for delivery messages and printed on invoices.',
     fields: [
-      { name: 'address', label: 'Address', colSpan2: true },
+      { name: 'address', label: 'Address', wide: true },
       { name: 'district', label: 'District' },
     ],
   },
@@ -95,15 +84,15 @@ export function StoreFields({
           {index === 0 ? <StoreLogoHeader name={store.name} /> : null}
 
           <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-            {section.fields.map(({ name, label, type = 'text', colSpan2 }) => (
-              <div key={name} className={colSpan2 ? 'sm:col-span-2' : undefined}>
+            {section.fields.map(({ name, label, type = 'text', wide }) => (
+              <div key={name} className={wide ? 'sm:col-span-2' : undefined}>
                 <FormField
                   label={label}
                   field={form.register(
                     name,
                     name === 'name' ? undefined : { setValueAs: emptyAsNull },
                   )}
-                  error={form.formState.errors[name] as FieldError | undefined}
+                  error={form.formState.errors[name]}
                   type={type}
                 />
               </div>

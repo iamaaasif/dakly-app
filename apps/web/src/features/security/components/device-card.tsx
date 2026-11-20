@@ -14,7 +14,7 @@ export function DeviceCard({
   onSelect: (device: DeviceSession) => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+    <li className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-text-muted">
           <Laptop className="size-5" aria-hidden="true" />
@@ -41,6 +41,6 @@ export function DeviceCard({
           Sign out device
         </Button>
       ) : null}
-    </div>
+    </li>
   );
 }

@@ -33,12 +33,15 @@ export function DevicesPanel({ before }: { before?: string }) {
 
       {devices.data.items.length === 0 ? (
         <p className="text-text-muted">No active devices on this page.</p>
-      ) : null}
-      <Card className="divide-y divide-border overflow-hidden p-0">
-        {devices.data.items.map((device) => (
-          <DeviceCard key={device.id} device={device} onSelect={setSelected} />
-        ))}
-      </Card>
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <ul aria-label="Devices" className="divide-y divide-border">
+            {devices.data.items.map((device) => (
+              <DeviceCard key={device.id} device={device} onSelect={setSelected} />
+            ))}
+          </ul>
+        </Card>
+      )}
       {devices.data.nextCursor ? (
         <Link
           className="inline-flex min-h-10 items-center text-action underline"

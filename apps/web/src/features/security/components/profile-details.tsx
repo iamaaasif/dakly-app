@@ -15,9 +15,9 @@ export function ProfileDetails({ profile }: { profile: AccountProfile }) {
           <span>Email</span>
           {profile.isEmailVerified ? (
             <Badge variant="success">Verified</Badge>
-          ) : (
+          ) : profile.email ? (
             <Badge variant="neutral">Not verified</Badge>
-          )}
+          ) : null}
         </dt>
         <dd className="mt-1 font-medium text-text">{profile.email ?? 'No email added'}</dd>
       </div>
