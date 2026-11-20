@@ -214,6 +214,11 @@ test('shows scheduled and published posts on a calendar', async ({ page, context
     await capture(page, 'post-details');
     await details.getByRole('button', { name: 'Close', exact: true }).click();
 
+    await page.getByRole('button', { name: /Leather sandals/ }).click();
+    await expect(details.getByText(/Reconnect Instagram or this post won’t publish/)).toBeVisible();
+    await capture(page, 'post-details-attention');
+    await details.getByRole('button', { name: 'Close', exact: true }).click();
+
     await page.getByRole('tab', { name: /Published/ }).click();
     await expect(page.getByText('18,240')).toBeVisible();
     await capture(page, 'published');

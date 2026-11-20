@@ -27,6 +27,20 @@ function isBlocked(
   );
 }
 
+// Says why a scheduled target will not go out, using the same test as the calendar status.
+export function attentionReason(
+  post: PostResponse,
+  account: SocialAccount | undefined,
+  target: PostResponse['targets'][number],
+) {
+  if (!account || !isBlocked(post, account, target)) return null;
+  if (account.status === 'needs_reconnect') {
+    const label = account.kind === 'instagram' ? 'Instagram' : 'Facebook';
+    return `Access to ${account.displayName} expired. Reconnect ${label} or this post won’t publish.`;
+  }
+  return 'Instagram needs a photo or video. Add one or this post won’t publish.';
+}
+
 function statusOf(targets: PostResponse['targets'], blocked: boolean): CalendarStatus {
   if (targets.some(({ status }) => status === 'failed')) return 'failed';
   if (blocked) return 'needs_attention';

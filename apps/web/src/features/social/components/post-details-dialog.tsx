@@ -5,7 +5,7 @@ import { Button } from '@dakly/ui/button';
 import { Dialog } from '@dakly/ui/dialog';
 
 import type { SocialAccount } from '../api/get-social-accounts';
-import { statusLabels, type CalendarEntry } from '../post-calendar';
+import { attentionReason, statusLabels, type CalendarEntry } from '../post-calendar';
 import { postTitle } from './post-chip';
 import { formatShortDateTime } from '@/lib/format-date';
 
@@ -63,6 +63,7 @@ export function PostDetailsDialog({ entry, accounts, onClose }: PostDetailsDialo
       <ul className="mt-4 divide-y divide-border rounded-md border border-border">
         {post.targets.map((target) => {
           const account = accounts.find(({ id }) => id === target.channelConnectionId);
+          const reason = attentionReason(post, account, target);
           const time = target.publishedAt ?? target.scheduledFor;
           return (
             <li key={target.id} className="space-y-1 p-3">
@@ -71,6 +72,7 @@ export function PostDetailsDialog({ entry, accounts, onClose }: PostDetailsDialo
                 <Badge variant={targetVariants[target.status]}>{targetLabels[target.status]}</Badge>
               </p>
               {time && <p className="text-sm text-text-muted">{formatShortDateTime(time)}</p>}
+              {reason && <p className="text-sm text-warning">{reason}</p>}
               {target.errorMessage && <p className="text-sm text-danger">{target.errorMessage}</p>}
             </li>
           );

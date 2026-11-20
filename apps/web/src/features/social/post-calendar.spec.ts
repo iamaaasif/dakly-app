@@ -3,7 +3,14 @@ import { expect, it } from 'vitest';
 import type { PostResponse } from '@dakly/contracts/social';
 
 import type { SocialAccount } from './api/get-social-accounts';
-import { buildEntries, monthWeeks, shiftMonth, sortPublished, weekOf } from './post-calendar';
+import {
+  attentionReason,
+  buildEntries,
+  monthWeeks,
+  shiftMonth,
+  sortPublished,
+  weekOf,
+} from './post-calendar';
 
 const facebook = { id: 'fb', kind: 'facebook_page', status: 'active' } as SocialAccount;
 const instagram = { id: 'ig', kind: 'instagram', status: 'needs_reconnect' } as SocialAccount;
@@ -95,4 +102,19 @@ it('sorts published posts by newest, reach or reactions, with unmeasured posts l
   expect(ids('newest')).toEqual(['new', 'mid', 'old']);
   expect(ids('reach')).toEqual(['old', 'mid', 'new']);
   expect(ids('reactions')).toEqual(['mid', 'old', 'new']);
+});
+
+it('says why a scheduled target needs attention', () => {
+  const expired = { ...instagram, displayName: 'Rina Boutique' } as SocialAccount;
+  const [scheduled] = post([{ channelConnectionId: 'ig' }]).targets;
+  const reconnect = attentionReason(post([{ channelConnectionId: 'ig' }]), expired, scheduled!);
+  expect(reconnect).toContain('Rina Boutique');
+  expect(reconnect).toContain('Reconnect Instagram');
+
+  const active = { ...instagram, status: 'active' } as SocialAccount;
+  const noPhoto = post([{ channelConnectionId: 'ig' }], []);
+  expect(attentionReason(noPhoto, active, noPhoto.targets[0]!)).toContain('needs a photo or video');
+
+  const fine = post([{}]);
+  expect(attentionReason(fine, facebook, fine.targets[0]!)).toBeNull();
 });
