@@ -13,6 +13,7 @@ import { SmsModule } from '../sms/sms.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { CampaignCompletionService } from './campaign-completion.service';
 import { CampaignCountsRepository } from './campaign-counts.repository';
 import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
@@ -41,6 +42,7 @@ import { CampaignsService } from './campaigns.service';
   ],
   controllers: [CampaignsController],
   providers: [
+    CampaignCompletionService,
     CampaignCountsRepository,
     CampaignCountsService,
     CampaignsRepository,

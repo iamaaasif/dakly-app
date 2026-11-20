@@ -11,11 +11,12 @@ import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService, type SkipReason } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
 import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
+import { CampaignCompletionService, canProcess } from './campaign-completion.service';
 import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSendingRepository, type ClaimableRecipient } from './campaign-sending.repository';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
-import { CampaignsService, marketingSmsText } from './campaigns.service';
+import { marketingSmsText } from './campaigns.service';
 
 const BATCH_SIZE = 200;
 export const CAMPAIGN_CLAIM_MS = 5 * MINUTE_MS;
@@ -52,7 +53,7 @@ export class CampaignSenderService {
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(SmsService) private readonly sms: SmsService,
     @Inject(LinksService) private readonly links: LinksService,
-    @Inject(CampaignsService) private readonly service: CampaignsService,
+    @Inject(CampaignCompletionService) private readonly completion: CampaignCompletionService,
     @Inject(CampaignFundingService) private readonly funding: CampaignFundingService,
     @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -70,9 +71,12 @@ export class CampaignSenderService {
     for (let position = 0; position < BATCH_SIZE; position++) {
       const claim = await this.claimNext(storeId, campaignId, hasLease);
       if (claim.kind === 'send') await this.deliver(storeId, claim, hasLease);
-      if (!hasLease()) return null;
+      if (!hasLease()) {
+        await this.counts.refresh(storeId, campaignId, 'batch');
+        return null;
+      }
       if (claim.kind === 'stop') {
-        await this.finish(storeId, campaignId, processed);
+        await this.completion.finish(storeId, campaignId, processed);
         return null;
       }
       if (claim.kind === 'defer') {
@@ -395,46 +399,4 @@ export class CampaignSenderService {
       return false;
     });
   }
-
-  private async finish(storeId: string, id: string, processed: boolean) {
-    await this.transaction.run(storeId, async () => {
-      const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
-      if (!campaign?.approvedAt) return;
-      const now = this.clock.now();
-      if (!canProcess(campaign)) {
-        if (processed) await this.counts.refresh(storeId, id, 'batch');
-        return;
-      }
-      const cancelledAt = campaign.status === 'cancelled' ? now : undefined;
-      const settled = await this.service.settleReservation(
-        storeId,
-        { id, approvedAt: campaign.approvedAt, cancelledAt },
-        ACTOR,
-      );
-      if (!settled || cancelledAt) {
-        await this.counts.refresh(storeId, id, cancelledAt ? 'force' : 'batch');
-        return;
-      }
-      await this.campaigns.changeStatus(
-        storeId,
-        id,
-        { status: 'sending' },
-        { status: 'sent', finishedAt: now, updatedAt: now },
-      );
-      await this.counts.refresh(storeId, id, 'force');
-      await this.outbox.publish({
-        type: 'campaign.sent',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: { campaignId: id },
-      });
-    });
-  }
-}
-
-function canProcess(campaign: LockedCampaign): boolean {
-  return (
-    (campaign.status === 'sending' && campaign.shortLinkBase !== null) ||
-    (campaign.status === 'cancelled' && campaign.settlementPendingAt !== null)
-  );
 }
