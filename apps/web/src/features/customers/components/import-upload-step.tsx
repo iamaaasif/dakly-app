@@ -2,6 +2,7 @@ import { Upload } from 'lucide-react';
 import { useState, type DragEvent } from 'react';
 
 import { ApiError } from '@dakly/ui/api-client';
+import { cn } from '@dakly/ui/cn';
 
 import { useUploadImport } from '../api/upload-import';
 import { checkImportFile, readImportFile, type ImportFileSummary } from '../import-file';
@@ -89,7 +90,10 @@ function ImportDropzone({ onFile }: { onFile: (file: File | undefined) => void }
       }}
       onDragLeave={() => setDragging(false)}
       onDrop={drop}
-      className={`flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-input-border px-4 py-8 text-center focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus ${dragging ? 'bg-primary-soft' : 'bg-surface'}`}
+      className={cn(
+        'flex cursor-pointer flex-col items-center gap-2 rounded-lg border border-dashed border-input-border px-4 py-8 text-center focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus',
+        dragging ? 'bg-primary-soft' : 'bg-surface',
+      )}
     >
       <Upload aria-hidden="true" size={20} strokeWidth={1.75} className="text-action" />
       <span className="font-semibold">Choose a file or drag it here</span>

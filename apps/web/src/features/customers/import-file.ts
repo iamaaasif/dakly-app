@@ -1,8 +1,12 @@
-import { MAX_IMPORT_COLUMNS, MAX_IMPORT_FILE_BYTES } from '@dakly/contracts/contacts';
+import {
+  MAX_IMPORT_COLUMNS,
+  MAX_IMPORT_FILE_BYTES,
+  MAX_IMPORT_ROWS,
+} from '@dakly/contracts/contacts';
+
+import { formatCount } from '@/lib/format-money';
 
 export const IMPORT_PREVIEW_ROWS = 20;
-// The same limit the import job enforces, so a file that would fail is stopped before upload.
-const MAX_ROWS = 50_000;
 
 export type ImportFileSummary = { header: string[]; rows: string[][]; rowCount: number };
 
@@ -37,7 +41,8 @@ export function readImportFile(bytes: ArrayBuffer): ImportFileSummary | string {
       if (preview.rows.length < IMPORT_PREVIEW_ROWS) preview.rows.push(cells);
     }
     if (preview.rowCount === 0) return 'This file has no customers under its column names.';
-    if (preview.rowCount > MAX_ROWS) return 'A file can have at most 50,000 customers.';
+    if (preview.rowCount > MAX_IMPORT_ROWS)
+      return `A file can have at most ${formatCount(MAX_IMPORT_ROWS)} customers.`;
     return preview;
   } catch {
     return 'This file could not be read as CSV. Look for a stray quote mark.';

@@ -431,4 +431,12 @@ describe('Import customers', () => {
     expect(await screen.findByText('Undoing the import.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Undo import' })).toBeNull();
   });
+
+  it('keeps waiting while the import has not started its job yet', async () => {
+    const statuses = ['uploaded', 'mapped', 'done'];
+    respond(() => ({ body: done(statuses.shift() ?? 'done') }));
+    show(<ImportResultStep importId={importId} onDone={() => undefined} />);
+    expect(await screen.findByText(/Importing customers/)).toBeTruthy();
+    expect(await screen.findByText('Import finished.', {}, { timeout: 6000 })).toBeTruthy();
+  });
 });

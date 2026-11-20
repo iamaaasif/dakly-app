@@ -4,7 +4,7 @@ import type { ImportResponse } from '@dakly/contracts/contacts';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
-import { useImportProgress } from '../api/import-progress';
+import { isImportFinished, useImportProgress } from '../api/import-progress';
 import { useUndoImport } from '../api/undo-import';
 
 type ImportResultStepProps = { importId: string; onDone: () => void };
@@ -20,7 +20,7 @@ export function ImportResultStep({ importId, onDone }: ImportResultStepProps) {
       />
     );
   const current = progress.data;
-  if (!current || current.status === 'importing' || current.status === 'uploaded')
+  if (!current || !isImportFinished(current.status))
     return (
       <p role="status" aria-busy="true">
         Importing customers. Keep this window open to see the result.
