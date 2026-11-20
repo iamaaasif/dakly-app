@@ -130,9 +130,7 @@ function niceStep(value: bigint): bigint {
   return BigInt(unit * magnitude) * 100n;
 }
 
-type Scale = (value: bigint) => number;
-
-function Axis({ ticks, y }: { ticks: bigint[]; y: Scale }) {
+function Axis({ ticks, y }: { ticks: bigint[]; y: (value: bigint) => number }) {
   return (
     <>
       {ticks.map((tick) => (
@@ -167,7 +165,7 @@ function WeekBars({
   count: number;
   shown: AnalyticsChannel[];
   slot: number;
-  y: Scale;
+  y: (value: bigint) => number;
 }) {
   let floor = 0n;
   return (
@@ -187,7 +185,7 @@ function WeekBars({
           />
         );
       })}
-      {(index % Math.ceil(count / 8) === 0 || count <= 8) && (
+      {index % Math.ceil(count / 8) === 0 && (
         <text
           x={LEFT + slot * (index + 0.5)}
           y={HEIGHT - 6}

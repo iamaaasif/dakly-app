@@ -20,12 +20,11 @@ export function AnalyticsChange({
 }) {
   const change = describeChange(total, previous, minimum);
   const variant = lowerIsBetter ? flipped[change.variant] : change.variant;
-  const text = change.text;
   const Trend = total < previous ? TrendingDown : TrendingUp;
   return (
     <Badge variant={variant} className="w-fit gap-1 rounded-full px-2.5 py-1 tabular-nums">
       {variant !== 'neutral' && <Trend aria-hidden="true" size={14} strokeWidth={1.75} />}
-      {text}
+      {change.text}
     </Badge>
   );
 }

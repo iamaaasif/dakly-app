@@ -18,7 +18,6 @@ export function RevenueSparkline({ points }: { points: string[] }) {
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
-        strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
     </svg>
