@@ -12,11 +12,12 @@ import type { ImportFileSummary } from '../import-file';
 import { ImportConsentStep } from './import-consent-step';
 import { ImportDuplicatesStep } from './import-duplicates-step';
 import { ImportMappingStep } from './import-mapping-step';
+import { ImportPreviewStep } from './import-preview-step';
 import { ImportResultStep } from './import-result-step';
 import { ImportUploadStep } from './import-upload-step';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 
-const steps = ['Upload', 'Map fields', 'Duplicates', 'Consent', 'Results'] as const;
+const steps = ['Upload', 'Map fields', 'Preview', 'Duplicates', 'Consent', 'Results'] as const;
 
 type ImportCustomersDialogProps = { onClose: () => void };
 
@@ -89,8 +90,9 @@ function ImportSteps({ step, upload, back, next, restart, onDone }: ImportStepsP
   const start = useStartImport(upload.importId);
   if (step === 1)
     return <ImportMappingStep header={upload.preview.header} onBack={restart} onNext={next} />;
-  if (step === 2) return <ImportDuplicatesStep onBack={back} onNext={next} />;
-  if (step === 3)
+  if (step === 2) return <ImportPreviewStep preview={upload.preview} onBack={back} onNext={next} />;
+  if (step === 3) return <ImportDuplicatesStep onBack={back} onNext={next} />;
+  if (step === 4)
     return (
       <form onSubmit={handleSubmit((input) => start.mutate(input, { onSuccess: next }))}>
         <ImportConsentStep
@@ -110,7 +112,7 @@ function ImportStepHeader({ step }: { step: number }) {
       <p className="text-sm text-text-muted">
         Step {step + 1} of {steps.length} · {steps[step]}
       </p>
-      <ol aria-hidden="true" className="my-4 grid grid-cols-5 gap-1">
+      <ol aria-hidden="true" className="my-4 grid grid-cols-6 gap-1">
         {steps.map((name, index) => (
           <li
             key={name}

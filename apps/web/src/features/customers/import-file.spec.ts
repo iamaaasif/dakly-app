@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { dropUnmappedFields, guessImportMapping } from './import-fields';
-import { readImportFile } from './import-file';
+import { IMPORT_PREVIEW_ROWS, readImportFile } from './import-file';
 
 const bytes = (text: string) => new TextEncoder().encode(text).buffer;
 
@@ -12,14 +12,19 @@ describe('readImportFile', () => {
     );
     expect(result).toEqual({
       header: ['Name', 'Phone'],
+      rows: [
+        ['Uddin, Karim', '01812345678'],
+        ['Say "hi"\nthere', '01712345678'],
+      ],
       rowCount: 2,
     });
   });
 
-  it('counts the customer rows and skips blank lines', () => {
+  it('skips blank lines and keeps only the first rows for the preview', () => {
     const lines = Array.from({ length: 30 }, (_, index) => `Rahima,0171234${1000 + index}`);
     const result = readImportFile(bytes(['Name,Phone', '', ...lines, ',', ''].join('\n')));
     expect(result).toMatchObject({ rowCount: 30 });
+    expect(typeof result === 'object' && result.rows).toHaveLength(IMPORT_PREVIEW_ROWS);
   });
 
   it('refuses a file with a quote that never closes', () => {

@@ -1,9 +1,10 @@
 import { MAX_IMPORT_COLUMNS, MAX_IMPORT_FILE_BYTES } from '@dakly/contracts/contacts';
 
+export const IMPORT_PREVIEW_ROWS = 20;
 // The same limit the import job enforces, so a file that would fail is stopped before upload.
 const MAX_ROWS = 50_000;
 
-export type ImportFileSummary = { header: string[]; rowCount: number };
+export type ImportFileSummary = { header: string[]; rows: string[][]; rowCount: number };
 
 // Returns a message for the shop owner when the file cannot be imported.
 export function checkImportFile(file: File): string | undefined {
@@ -25,20 +26,25 @@ export function readImportFile(bytes: ArrayBuffer): ImportFileSummary | string {
     const records = csvRecords(text.startsWith('\uFEFF') ? text.slice(1) : text);
     const header = records.next().value;
     if (!header) return 'This file has no column names in its first row.';
-    const summary: ImportFileSummary = {
+    const preview: ImportFileSummary = {
       header: header.slice(0, MAX_IMPORT_COLUMNS),
+      rows: [],
       rowCount: 0,
     };
-    for (const cells of records) if (cells.some((cell) => cell.trim())) summary.rowCount += 1;
-    if (summary.rowCount === 0) return 'This file has no customers under its column names.';
-    if (summary.rowCount > MAX_ROWS) return 'A file can have at most 50,000 customers.';
-    return summary;
+    for (const cells of records) {
+      if (cells.every((cell) => !cell.trim())) continue;
+      preview.rowCount += 1;
+      if (preview.rows.length < IMPORT_PREVIEW_ROWS) preview.rows.push(cells);
+    }
+    if (preview.rowCount === 0) return 'This file has no customers under its column names.';
+    if (preview.rowCount > MAX_ROWS) return 'A file can have at most 50,000 customers.';
+    return preview;
   } catch {
     return 'This file could not be read as CSV. Look for a stray quote mark.';
   }
 }
 
-// Enough of RFC 4180 to count rows: quoted cells may hold commas, line breaks and doubled quotes.
+// Enough of RFC 4180 for a preview: quoted cells may hold commas, line breaks and doubled quotes.
 // The import job reads the file again and reports any row it cannot use.
 function* csvRecords(text: string): Generator<string[]> {
   const token = /("(?:[^"]|"")*"|[^",\r\n]*)(,|\r\n|\n|\r|$)/y;

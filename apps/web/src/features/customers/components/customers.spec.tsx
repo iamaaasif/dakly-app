@@ -14,6 +14,7 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { CustomerProfile } from './customer-profile';
 import { CustomersScreen } from './customers-screen';
+import { ImportResultStep } from './import-result-step';
 import { sessionContextKey } from '@/lib/session-context';
 
 const push = vi.fn();
@@ -363,6 +364,8 @@ describe('Import customers', () => {
     expect(((await screen.findByLabelText('Phone')) as HTMLSelectElement).value).toBe('1');
     expect((screen.getByLabelText(/Name/) as HTMLSelectElement).value).toBe('0');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(screen.getByText('Karim, Uddin')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.click(screen.getByRole('radio', { name: /Leave existing customers/ }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.type(screen.getByLabelText(/WhatsApp: where/), 'Shopify checkout');
@@ -395,7 +398,7 @@ describe('Import customers', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('Choose the column that has phone numbers')).toBeTruthy();
-    expect(screen.queryByText('Step 3 of 5 · Duplicates')).toBeNull();
+    expect(screen.queryByText('Step 3 of 6 · Preview')).toBeNull();
   });
 
   it('refuses a file that is not CSV before uploading it', async () => {
@@ -407,5 +410,25 @@ describe('Import customers', () => {
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
     expect((await screen.findByRole('alert')).textContent).toContain('Only CSV files');
     expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
+  });
+
+  it('undoes a finished import after the owner confirms', async () => {
+    let undone = false;
+    respond((path) => {
+      if (path.endsWith('/undo')) {
+        undone = true;
+        return { status: 202, body: done('undone') };
+      }
+      return {
+        body: undone ? done('undone', { undoFinishedAt: '2026-11-20T10:00:00Z' }) : done('done'),
+      };
+    });
+    show(<ImportResultStep importId={importId} onDone={() => undefined} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Undo import' }));
+    expect(sent.some((request) => request.path.endsWith('/undo'))).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Yes, undo the import' }));
+    expect(await screen.findByText('Undoing the import.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Undo import' })).toBeNull();
   });
 });
