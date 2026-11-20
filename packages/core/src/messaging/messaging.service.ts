@@ -281,6 +281,26 @@ export class MessagingService {
     return { providerMessageId, parts, credits: parts };
   }
 
+  // Who a Messenger campaign can reach on one Page: a contact's id on that Page is Page-scoped, so
+  // the identity and the last message come from the selected connection only.
+  async pageAudience(storeId: string, connectionId: string, contactIds: string[]) {
+    const [identities, conversations] = await Promise.all([
+      this.identities.findOnConnection(storeId, connectionId, contactIds),
+      this.inbound.findLastInbound(storeId, connectionId, contactIds),
+    ]);
+    const lastInboundAt = new Map(conversations.map((row) => [row.contactId, row.lastInboundAt]));
+    return new Map(
+      identities.map(({ id, contactId, externalId }) => [
+        contactId,
+        {
+          identityId: id,
+          address: externalId,
+          lastInboundAt: lastInboundAt.get(contactId) ?? null,
+        },
+      ]),
+    );
+  }
+
   queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
     return this.transaction.run(storeId, async () => {
       const conversation = await this.outbound.findConversation(storeId, input);

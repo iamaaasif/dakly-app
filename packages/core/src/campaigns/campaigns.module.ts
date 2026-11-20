@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module, type DynamicModule } from '@nestjs/common';
 
 import { AnalyticsReportsModule } from '../analytics/analytics-reports.module';
+import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -41,6 +42,7 @@ import { CampaignsService } from './campaigns.service';
     ClockModule,
     LinksModule,
     MessagingModule,
+    MetaAuthorizationModule,
     NotificationsModule,
     ErrorReportingModule,
     OutboxModule,

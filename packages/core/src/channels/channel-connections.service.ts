@@ -82,6 +82,13 @@ export class ChannelConnectionsService {
     if (state.status !== 'active') throw connectionError('CHANNEL_NOT_CONNECTED');
   }
 
+  // A Messenger campaign goes out from one connected Facebook Page.
+  async requireFacebookPage(storeId: string, id: string): Promise<void> {
+    await this.requireActive(storeId, id);
+    if ((await this.repository.aiState(storeId, id))?.kind !== 'facebook_page')
+      throw connectionError('CHANNEL_CONNECTION_NOT_FOUND');
+  }
+
   // The caller checks the store's tests first; this only moves the channel out of practice.
   async goLive(storeId: string, id: string): Promise<void> {
     await this.requireActive(storeId, id);
