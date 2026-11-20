@@ -40,6 +40,7 @@ import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-rep
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
+import { RunProductImport } from '@dakly/core/imports/jobs/run-product-import.job';
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
 import { MaintenanceModule } from '@dakly/core/maintenance/maintenance.module';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
@@ -95,6 +96,7 @@ import { JobSchedulers } from './job-schedulers';
     SendMessageJob,
     FailStuckImportsJob,
     RunContactImport,
+    RunProductImport,
     UndoContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
