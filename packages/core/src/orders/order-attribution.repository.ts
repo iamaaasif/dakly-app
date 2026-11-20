@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, lte, sql } from 'drizzle-orm';
 
 import type { attributionSourceTypes } from '@dakly/contracts/orders';
 import { orders } from '@dakly/db/schema/orders';
@@ -29,6 +29,35 @@ const clearedAttribution = {
 @Injectable()
 export class OrderAttributionRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
+
+  rebuildPage(
+    storeId: string,
+    range: {
+      startedAt: string;
+      timeZone: string;
+      after: { id: string; at: string } | null;
+      limit: number;
+    },
+  ) {
+    const { startedAt, timeZone, after, limit } = range;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: orders.id, at: sql<string>`${orders.createdAt}::text` })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            lte(orders.createdAt, new Date(startedAt)),
+            sql`${orders.createdAt} >= ((${startedAt}::timestamptz at time zone ${timeZone})::date - 364)::timestamp at time zone ${timeZone}`,
+            (after &&
+              sql`(${orders.createdAt}, ${orders.id}) > (${after.at}::timestamptz, ${after.id}::uuid)`) ||
+              undefined,
+          ),
+        )
+        .orderBy(asc(orders.createdAt), asc(orders.id))
+        .limit(limit),
+    );
+  }
 
   async lock(storeId: string, orderId: string) {
     const [order] = await this.database.forStore(storeId, (tx) =>

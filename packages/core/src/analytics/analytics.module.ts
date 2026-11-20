@@ -13,8 +13,11 @@ import { StoresModule } from '../stores/stores.module';
 import { AnalyticsReconciliationService } from './analytics-reconciliation.service';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsRepository } from './analytics.repository';
+import { AttributionRebuildService } from './attribution-rebuild.service';
 import { AttributeOrderCreated } from './jobs/attribute-order-created.job';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
+import { OnAttributionWindowChanged } from './jobs/on-attribution-window-changed.job';
+import { RebuildAttributionJob } from './jobs/rebuild-attribution.job';
 import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { ScheduleLifecycleOnStatsRepaired } from './jobs/schedule-lifecycle-on-stats-repaired.job';
@@ -42,6 +45,9 @@ import { OrderAttributionEngine } from './order-attribution-engine.service';
     AnalyticsRepository,
     AnalyticsSummariesService,
     AttributeOrderCreated,
+    AttributionRebuildService,
+    OnAttributionWindowChanged,
+    RebuildAttributionJob,
     BuildOrderSummaryJob,
     OrderAttributionEngine,
     ReconcileAnalyticsJob,

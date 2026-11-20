@@ -1,7 +1,10 @@
 import { Body, Controller, Get, Inject, Patch } from '@nestjs/common';
 
 import {
+  changeAttributionWindowSchema,
   changeStoreSettingsSchema,
+  type AttributionSettingsResponse,
+  type ChangeAttributionWindowInput,
   changeStoreExtensionsSchema,
   type ChangeStoreSettingsInput,
   type ChangeStoreExtensionsInput,
@@ -35,6 +38,27 @@ export class StoreSettingsController {
     @Body(new ZodValidationPipe(changeStoreSettingsSchema)) input: ChangeStoreSettingsInput,
   ): Promise<StoreSettingsResponse> {
     return this.stores.changeSettings(storeId, input, { userId, access });
+  }
+
+  @Get('attribution')
+  @RequirePermission('analytics.view')
+  attribution(@CurrentStore() storeId: string): Promise<AttributionSettingsResponse> {
+    return this.stores.attributionSettings(storeId);
+  }
+
+  @Patch('attribution')
+  @RequirePermission('analytics.edit')
+  changeAttribution(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Body(new ZodValidationPipe(changeAttributionWindowSchema))
+    { windowDays }: ChangeAttributionWindowInput,
+  ): Promise<AttributionSettingsResponse> {
+    return this.stores.changeAttributionWindow(storeId, windowDays, {
+      userId,
+      role: access.role,
+    });
   }
 
   @Patch('extensions')

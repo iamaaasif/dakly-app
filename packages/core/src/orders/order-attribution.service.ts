@@ -18,6 +18,10 @@ export class OrderAttributionService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
+  rebuildPage(storeId: string, range: Parameters<OrderAttributionRepository['rebuildPage']>[1]) {
+    return this.repository.rebuildPage(storeId, range);
+  }
+
   record(
     storeId: string,
     orderId: string,

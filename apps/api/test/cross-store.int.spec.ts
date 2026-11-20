@@ -1486,6 +1486,37 @@ fixture('GET /store', async () => {
   expect((await success(a, 'GET', '/store', 200)).json().id).toBe(a.id);
   expect((await success(b, 'GET', '/store', 200)).json().id).toBe(b.id);
 });
+fixture('GET /store/attribution', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PATCH', '/store/attribution', 200, { windowDays: 3 });
+  expect((await success(a, 'GET', '/store/attribution', 200)).json()).toMatchObject({
+    windowDays: 3,
+    rebuilding: true,
+  });
+  expect((await success(b, 'GET', '/store/attribution', 200)).json()).toMatchObject({
+    windowDays: 7,
+    rebuilding: false,
+  });
+});
+fixture('PATCH /store/attribution', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PATCH', '/store/attribution', 200, { windowDays: 1 });
+  const before = await f.row('stores', a.id);
+  await success(b, 'PATCH', '/store/attribution', 200, { windowDays: 3 });
+  expect(await f.row('stores', a.id)).toEqual(before);
+  expect(
+    (await f.request(b.member, 'PATCH', '/store/attribution', { windowDays: 1 })).statusCode,
+  ).toBe(403);
+  await f.admin.pool.query(
+    "update memberships set built_in_role='admin',role_id=null where id=$1",
+    [b.membership],
+  );
+  const denied = await f.request(b.member, 'PATCH', '/store/attribution', { windowDays: 1 });
+  expect(denied.statusCode).toBe(403);
+  expect(denied.json().error.code).toBe('STORE_ATTRIBUTION_SETTING_DENIED');
+  await success(b, 'PATCH', '/store/attribution', 400, { windowDays: 4 });
+  await success(b, 'PATCH', '/store/attribution', 400, { windowDays: 7, storeId: a.id });
+});
 const shopSending = {
   quietHours: { startHour: 22, endHour: 8 },
   frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
