@@ -134,6 +134,51 @@ export class ProductsRepository {
     );
   }
 
+  // The AI agent may only offer active products the shop shows in chats.
+  searchForChat(storeId: string, text: string, limit: number): Promise<CatalogueProduct[]> {
+    const pattern = `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            eq(products.status, 'active'),
+            eq(products.isVisibleInChats, true),
+            sql`(${products.name} ilike ${pattern} or exists (select 1 from unnest(${products.aliases}) alias where alias ilike ${pattern}))`,
+          ),
+        )
+        .orderBy(desc(products.id))
+        .limit(limit),
+    );
+  }
+
+  async findForChat(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            eq(products.id, id),
+            eq(products.status, 'active'),
+            eq(products.isVisibleInChats, true),
+          ),
+        ),
+    );
+    return rows[0];
+  }
+
   async listCategories(storeId: string): Promise<string[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx

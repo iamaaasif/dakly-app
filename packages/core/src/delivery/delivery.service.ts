@@ -121,6 +121,20 @@ export class DeliveryService {
     return { deliveryZoneId: zone.id, chargePoisha: zone.chargePoisha, district: district.name };
   }
 
+  async calculateChargesByAreaName(
+    storeId: string,
+    name: string,
+    limit: number,
+  ): Promise<(DeliveryChargeResponse & { area: string })[]> {
+    const areas = await this.repository.findAreasByName(storeId, name, limit);
+    return Promise.all(
+      areas.map(async ({ id, name: area }) => ({
+        area,
+        ...(await this.calculateDeliveryCharge(storeId, id)),
+      })),
+    );
+  }
+
   private async assertAreasAvailable(storeId: string, ids: number[], exceptId?: string) {
     if (!ids.length) return;
     const areas = await this.repository.findAreas(storeId, ids);
