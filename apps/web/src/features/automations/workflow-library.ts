@@ -1,4 +1,4 @@
-import { isTriggerReadyBeforeChannels } from '@dakly/contracts/automations/catalogue';
+import { isTriggerAvailable } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { automationTemplates, type TemplateKey } from '@dakly/contracts/automations/templates';
 
@@ -55,7 +55,7 @@ export const workflowTemplates = (Object.keys(automationTemplates) as TemplateKe
     ...template,
     key,
     channels,
-    available: isTriggerReadyBeforeChannels(template.graph.trigger.key),
+    available: isTriggerAvailable(template.graph.trigger.key),
   };
 });
 

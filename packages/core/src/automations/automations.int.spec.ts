@@ -161,8 +161,8 @@ describe('AutomationsService (Postgres)', () => {
       'AUTOMATION_TRIGGER_UNAVAILABLE',
     ],
     [
-      'a trigger that needs Orders',
-      { ...welcome, trigger: { key: 'order_placed', filters: [] } },
+      'a trigger that needs payments',
+      { ...welcome, trigger: { key: 'order_paid', filters: [] } },
       'AUTOMATION_TRIGGER_UNAVAILABLE',
     ],
     [
