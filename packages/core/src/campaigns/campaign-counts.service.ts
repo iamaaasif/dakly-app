@@ -19,7 +19,7 @@ type Acceptance = {
   providerMessageId: string;
   credits: number;
   sentAt: Date;
-  requireSavedReceipt?: boolean;
+  requireSavedReceipt: boolean;
 };
 
 @Injectable()
