@@ -366,7 +366,7 @@ When no queued or claimed recipient remains, the sender settles the reservation,
 
 ### Results counts (CAMP-3)
 
-Campaign detail and list responses include `startedAt`, `finishedAt` and `counts`. The count object carries the approved recipient count, skipped, sent, delivered, read, tapped, failed and the latest count time. Sent includes delivered and read, and delivered includes read. The worker refreshes progress after batches at most every 10 seconds. It refreshes when a campaign pauses, cancels, finishes, defers for quiet hours, or receives a late acceptance after cancellation. Counts use the store's own recipients. The existing permission to view campaigns also covers the counts. A redirect event for a campaign records its first tap per recipient. SMS opt-out links do not count as redirects. Vendor delivery receipts require the ACC-14 provider connection.
+Campaign detail and list responses include `startedAt`, `finishedAt` and `counts`. The count object carries the approved recipient count, skipped, sent, delivered, read, tapped, failed and the latest count time. Sent includes delivered and read, and delivered includes read. The worker refreshes progress after batches at most every 10 seconds. It refreshes when a campaign pauses, cancels, finishes, defers for quiet hours, or receives a late acceptance after cancellation or completion. Counts use the store's own recipients. The existing permission to view campaigns also covers the counts. A redirect event for a campaign records its first tap per recipient. SMS opt-out links do not count as redirects. Drain predecessor outbox relays before deploying the tap subscriber. Vendor delivery receipts require the ACC-14 provider connection.
 
 ### Frozen destinations and final send checks
 
