@@ -15,7 +15,13 @@ import { productsSearch } from '../api/products';
 import { readinessLabels } from '../product-labels';
 
 const searchSchema = productListQuerySchema.pick({ search: true });
-const readinessFilters = [undefined, 'running_low', 'needs_price'] as const;
+const readinessFilters = [
+  undefined,
+  'running_low',
+  'needs_price',
+  'needs_photo',
+  'hidden',
+] as const;
 
 type ProductFiltersProps = { query: ProductListQuery };
 
@@ -35,7 +41,6 @@ export function ProductFilters({ query }: ProductFiltersProps) {
           )}
         >
           <SearchField />
-          <FilterSelects />
           <Button type="submit" variant="secondary" className="sr-only">
             Search
           </Button>
@@ -63,45 +68,13 @@ function SearchField() {
         <Input
           id="product-search"
           type="search"
-          placeholder="Search name or code"
+          placeholder="Search by name"
           className="pl-9"
           {...form.register('search', {
             setValueAs: (value: string) => value.trim() || undefined,
           })}
         />
       </div>
-    </>
-  );
-}
-
-function FilterSelects() {
-  return (
-    <>
-      <Label htmlFor="product-category" className="sr-only">
-        Category
-      </Label>
-      <select
-        id="product-category"
-        aria-label="Category"
-        defaultValue=""
-        className="h-10 rounded-md border border-input-border bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-      >
-        <option value="">All categories</option>
-      </select>
-      <Label htmlFor="product-sort" className="sr-only">
-        Sort
-      </Label>
-      <select
-        id="product-sort"
-        aria-label="Sort"
-        defaultValue="best_selling"
-        className="h-10 rounded-md border border-input-border bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-      >
-        <option value="best_selling">Best selling</option>
-        <option value="newest">Newest</option>
-        <option value="price_asc">Price: Low to high</option>
-        <option value="price_desc">Price: High to low</option>
-      </select>
     </>
   );
 }

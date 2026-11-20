@@ -1,8 +1,10 @@
 import type { ProductResponse } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
 
+import { readinessLabels } from '../product-labels';
+
 type ProductReadinessProps = {
-  product: Pick<ProductResponse, 'readiness'> & Partial<Pick<ProductResponse, 'status'>>;
+  product: Pick<ProductResponse, 'readiness'>;
 };
 
 function getProductStatus(product: ProductReadinessProps['product']): {
@@ -10,13 +12,13 @@ function getProductStatus(product: ProductReadinessProps['product']): {
   variant: 'danger' | 'warning' | 'neutral' | 'success';
 } {
   if (product.readiness.includes('needs_price')) {
-    return { label: 'Needs a price', variant: 'danger' };
+    return { label: readinessLabels.needs_price, variant: 'danger' };
   }
-  if (product.status === 'hidden' || product.readiness.includes('hidden')) {
-    return { label: 'Hidden', variant: 'neutral' };
+  if (product.readiness.includes('hidden')) {
+    return { label: readinessLabels.hidden, variant: 'neutral' };
   }
   if (product.readiness.includes('running_low')) {
-    return { label: 'Running low', variant: 'warning' };
+    return { label: readinessLabels.running_low, variant: 'warning' };
   }
   return { label: 'Selling', variant: 'success' };
 }

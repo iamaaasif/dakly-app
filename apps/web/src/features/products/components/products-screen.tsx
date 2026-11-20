@@ -1,5 +1,4 @@
 'use client';
-import { ArrowDownToLine } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -33,11 +32,20 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
   return (
     <StorePage permission="canViewProducts">
       <main className="space-y-6 p-6 md:p-8">
-        <ProductsHeader
-          canEdit={canEdit}
-          onOpenImport={() => router.push(`${listHref}&import=1`)}
-          onOpenCreate={() => router.push(`${listHref}&create=1`)}
-        />
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
+            <p className="mt-1 text-sm text-text-muted">
+              What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take
+              orders and fill your order link.
+            </p>
+          </div>
+          {canEdit ? (
+            <Button onClick={() => router.push(`${listHref}&create=1`)}>
+              <span aria-hidden="true">+ </span>Add product
+            </Button>
+          ) : null}
+        </header>
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
           <ProductFilters key={`${query.search}|${query.readiness}`} query={query} />
           <ProductResults
@@ -71,37 +79,6 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
         />
       </main>
     </StorePage>
-  );
-}
-
-type ProductsHeaderProps = {
-  canEdit?: boolean;
-  onOpenImport: () => void;
-  onOpenCreate: () => void;
-};
-
-function ProductsHeader({ canEdit, onOpenImport, onOpenCreate }: ProductsHeaderProps) {
-  return (
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take orders
-          and fill your order link.
-        </p>
-      </div>
-      {canEdit ? (
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" className="hidden" hidden onClick={onOpenImport}>
-            <ArrowDownToLine aria-hidden="true" size={16} />
-            Import
-          </Button>
-          <Button onClick={onOpenCreate}>
-            <span aria-hidden="true">+ </span>Add product
-          </Button>
-        </div>
-      ) : null}
-    </header>
   );
 }
 

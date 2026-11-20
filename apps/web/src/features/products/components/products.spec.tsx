@@ -422,7 +422,7 @@ describe('Product editor navigation', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it('shows profit percentage, size chips, waiting to confirm and restock button', async () => {
+  it('shows profit percentage, size chips, and restock button', async () => {
     const itemWithProfit: ProductResponse = {
       ...product,
       variants: [
@@ -441,7 +441,6 @@ describe('Product editor navigation', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByText('Men · UT-PJ-01')).toBeTruthy();
     expect(within(table).getByText('40% profit')).toBeTruthy();
-    expect(within(table).getByText('3 waiting to confirm')).toBeTruthy();
     expect(
       within(table).getByRole('button', { name: `Restock ${itemWithProfit.name}` }),
     ).toBeTruthy();
@@ -469,25 +468,18 @@ describe('Product editor navigation', () => {
     expect(within(table).getByText('Needs a price')).toBeTruthy();
   });
 
-  it('renders inline toolbar with category select, sort select and readiness chips', async () => {
+  it('renders inline toolbar with search input and all readiness chips', async () => {
     vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
     show({ limit: 50 });
     await screen.findByRole('table');
-    expect(screen.getByRole('combobox', { name: 'Category' })).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'Sort' })).toBeTruthy();
+    expect(screen.getByRole('searchbox', { name: 'Search products' })).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search by name')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'All' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Running low' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Needs a price' })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: 'Needs a photo' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Hidden' })).toBeNull();
-  });
-
-  it('renders an Import button that is hidden', async () => {
-    vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
-    show({ limit: 50 });
-    await screen.findByRole('table');
-    const importBtn = screen.getByText('Import').closest('button');
-    expect(importBtn?.hasAttribute('hidden')).toBe(true);
-    expect(importBtn?.className).toContain('hidden');
+    expect(screen.getByRole('link', { name: 'Needs a photo' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Hidden' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Category' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Sort' })).toBeNull();
   });
 });

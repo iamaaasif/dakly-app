@@ -66,7 +66,7 @@ test('saves unfinished products, edits variants without losing stock and manages
       .toBeGreaterThan(0);
     await expect(
       page.getByRole('button', { name: `Adjust stock for ${name}, Default` }),
-    ).toHaveText('Default: 3');
+    ).toHaveText('Default 3');
     await productLink.click();
   }
   try {
