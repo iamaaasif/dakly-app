@@ -5,7 +5,11 @@ import type { ContactSource } from '@dakly/contracts/contacts';
 import { contacts } from '@dakly/db/schema/contacts';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { cursorCondition, matchingConditions, type MatchFilter } from './contact-filters.repository';
+import {
+  cursorCondition,
+  matchingConditions,
+  type MatchFilter,
+} from './contact-filters.repository';
 import type { Contact } from './contacts.repository';
 
 export type ExportedContact = Contact & {
