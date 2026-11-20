@@ -23,6 +23,23 @@ type ChannelMessage = {
 };
 type DispatchRow = Awaited<ReturnType<OutboundMessagingRepository['findForDispatch']>> &
   Pick<ChannelMessage, 'channel'>;
+export type CampaignMessageContent = {
+  imageUrl?: string;
+  buttons?: { title: string; payload: string }[];
+};
+// A refused image does not stop the text, so a sent message can still report it.
+export type CampaignSendResult =
+  | { status: 'sent'; externalMessageId: string; imageRejected?: true }
+  | { status: 'failed'; errorCode: string }
+  | { status: 'unconfirmed' };
+
+type PendingDispatch = ChannelMessage & {
+  body: string;
+  externalId: string;
+  humanAgent: boolean;
+  credential: Awaited<ReturnType<ChannelConnectionsService['prepareMetaSend']>>;
+};
+
 type DispatchIntent = DispatchRow &
   Pick<OutgoingChannelMessage, 'identityId' | 'category'> & { body: string };
 
@@ -54,23 +71,44 @@ export class ChannelDispatchService {
   async sendQueuedMessage(storeId: string, messageId: string): Promise<void> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
     const pending = await this.prepareChannelDispatch(storeId, messageId);
-    if (!pending) return;
+    if (pending) await this.submit(storeId, pending, {});
+  }
+
+  // A campaign recipient's message was checked by the campaign's own claim just before this, so
+  // the gate does not run again; the rest of the transport is the same as for a chat reply.
+  async sendCampaignMessage(
+    storeId: string,
+    messageId: string,
+    content: CampaignMessageContent,
+  ): Promise<CampaignSendResult> {
+    if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
+    const pending = await this.prepareCampaignDispatch(storeId, messageId);
+    // Nothing was prepared: the message was already attempted, so its outcome is not known here.
+    return pending ? this.submit(storeId, pending, content) : { status: 'unconfirmed' };
+  }
+
+  private async submit(
+    storeId: string,
+    pending: PendingDispatch,
+    content: CampaignMessageContent,
+  ): Promise<CampaignSendResult> {
     let sent;
     try {
       sent = await this.connections.sendMetaMessage(pending.credential, {
         externalConversationId: pending.externalId,
         text: pending.body,
-        operationKey: messageId,
+        operationKey: pending.id,
         humanAgent: pending.humanAgent,
+        ...content,
       });
     } catch (error) {
       if (error instanceof AppError && error.code === 'DECRYPTION_FAILED')
-        return this.recordChannelOutcome(storeId, pending, 'connection_unavailable', 'attempted');
+        return this.failed(storeId, pending, 'connection_unavailable');
       if (!(error instanceof MetaRequestError)) throw error;
       if (error.code === 'auth_error' || error.code === 'rejected')
-        await this.recordChannelOutcome(storeId, pending, error.code, 'attempted');
+        return this.failed(storeId, pending, error.code);
       // Without acceptance or rejection, the stored attempt stays pending for reconciliation.
-      return;
+      return { status: 'unconfirmed' };
     }
     await this.recordChannelOutcome(
       storeId,
@@ -78,6 +116,37 @@ export class ChannelDispatchService {
       { ...sent, sentAt: this.clock.now(), preview: pending.body.slice(0, 160) },
       'attempted',
     );
+    return { status: 'sent', ...sent };
+  }
+
+  private async failed(storeId: string, pending: PendingDispatch, errorCode: string) {
+    await this.recordChannelOutcome(storeId, pending, errorCode, 'attempted');
+    return { status: 'failed', errorCode } as const;
+  }
+
+  private prepareCampaignDispatch(storeId: string, messageId: string) {
+    return this.transaction.runLocked(storeId, async () => {
+      const row = await this.outbound.findForDispatch(storeId, messageId);
+      if (!row || row.channel === 'whatsapp') return;
+      const { identityId, body, channel } = row;
+      if (!identityId || body === null) return;
+      const message = { ...row, channel };
+      const identity = await this.identities.findOutboundIdentity(storeId, {
+        ...message,
+        identityId,
+      });
+      if (!identity) return this.recordChannelOutcome(storeId, message, 'no_address');
+      let credential;
+      try {
+        credential = await this.connections.prepareMetaSend(storeId, row.connectionId, channel);
+      } catch (error) {
+        if (error instanceof AppError && error.code === 'CHANNEL_NOT_CONNECTED')
+          return this.recordChannelOutcome(storeId, message, 'channel_not_connected');
+        throw error;
+      }
+      if (!(await this.outbound.markAttempt(storeId, messageId))) return;
+      return { ...message, body, externalId: identity.externalId, humanAgent: false, credential };
+    });
   }
 
   private prepareChannelDispatch(storeId: string, messageId: string) {

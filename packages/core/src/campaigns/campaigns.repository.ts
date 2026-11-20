@@ -64,7 +64,8 @@ export type FrozenRecipient = {
   | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
 );
 export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
-  shortLinkBase: string;
+  // SMS only: Messenger has no short links.
+  shortLinkBase: string | null;
   startedAt: Date | null;
   estimatedCostPoisha: number;
   recipientsCount: number;
