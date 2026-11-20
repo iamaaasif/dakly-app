@@ -102,18 +102,22 @@ function QuestionRow({ form, index, disabled, failed, onRemove }: QuestionRowPro
           ) : null}
         </span>
       </legend>
-      <Input
-        aria-label={`Question ${index + 1}`}
-        placeholder="Customer asks, e.g. Kurti M size koto?"
-        aria-invalid={Boolean(errors?.question)}
-        {...form.register(`questions.${index}.question`)}
-      />
-      <Input
-        aria-label={`Expected answer ${index + 1}`}
-        placeholder="Right answer, e.g. ৳1,850, M is in stock"
-        aria-invalid={Boolean(errors?.expectedAnswer)}
-        {...form.register(`questions.${index}.expectedAnswer`)}
-      />
+      <label className="block space-y-1 text-sm">
+        <span className="text-text-muted">Customer asks</span>
+        <Input
+          placeholder="e.g. Kurti M size koto?"
+          aria-invalid={Boolean(errors?.question)}
+          {...form.register(`questions.${index}.question`)}
+        />
+      </label>
+      <label className="block space-y-1 text-sm">
+        <span className="text-text-muted">Dakly should answer</span>
+        <Input
+          placeholder="e.g. ৳1,850, M is in stock"
+          aria-invalid={Boolean(errors?.expectedAnswer)}
+          {...form.register(`questions.${index}.expectedAnswer`)}
+        />
+      </label>
       {failed ? (
         <p role="alert" className="text-sm text-danger">
           Dakly did not give this answer in the last check.

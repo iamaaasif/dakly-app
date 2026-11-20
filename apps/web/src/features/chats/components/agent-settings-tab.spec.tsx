@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -11,6 +11,7 @@ import {
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { ToastProvider } from '@dakly/ui/toast';
 
+import { aiAgentKeys } from '../api/ai-agent-keys';
 import { AgentSettingsTab } from './agent-settings-tab';
 import { sessionContextKey } from '@/lib/session-context';
 
@@ -42,13 +43,14 @@ function show(canEdit = true) {
     contextTag: 'verified',
     hasMemberships: true,
   } as SessionContext);
-  return render(<AgentSettingsTab canEdit={canEdit} />, {
+  const view = render(<AgentSettingsTab canEdit={canEdit} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={client}>
         <ToastProvider>{children}</ToastProvider>
       </QueryClientProvider>
     ),
   });
+  return { ...view, client };
 }
 
 afterEach(() => {
@@ -58,6 +60,22 @@ afterEach(() => {
 });
 
 describe('AI agent settings tab', () => {
+  it('keeps unsaved edits when the saved version moves because test questions changed', async () => {
+    respond(() => Response.json(saved, { headers }));
+    const { client } = show();
+    fireEvent.click(await screen.findByRole('switch', { name: /Take orders/ }));
+    act(() => {
+      client.setQueryData(aiAgentKeys.settings('verified'), { ...saved, version: 4 });
+    });
+    await waitFor(() => expect(screen.getByRole('switch', { name: /Take orders/ })).toBeTruthy());
+    expect(screen.getByRole('switch', { name: /Take orders/ }).getAttribute('aria-checked')).toBe(
+      'false',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(requests.some((request) => request.method === 'PUT')).toBe(true));
+    expect(JSON.parse(requests.find((request) => request.method === 'PUT')!.body!).version).toBe(4);
+  });
+
   it('shows the saved switches and keeps Save off until something changes', async () => {
     respond(() => Response.json(saved, { headers }));
     show();

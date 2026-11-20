@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
 import {
@@ -29,13 +30,11 @@ export function AgentSettingsTab({ canEdit }: { canEdit: boolean }) {
   if (settings.isPending) return <Skeleton className="h-96 w-full" />;
   if (settings.isError)
     return <QueryError message={settings.error.message} onRetry={() => void settings.refetch()} />;
-  // Keyed by version so a reload after a stale save resets the form to the saved values.
   return (
     <SettingsForm
-      key={settings.data.version}
       saved={settings.data}
       canEdit={canEdit}
-      onReload={() => void settings.refetch()}
+      onReload={async () => (await settings.refetch()).data}
     />
   );
 }
@@ -43,7 +42,7 @@ export function AgentSettingsTab({ canEdit }: { canEdit: boolean }) {
 type SettingsFormProps = {
   saved: AgentSettingsResponse;
   canEdit: boolean;
-  onReload: () => void;
+  onReload: () => Promise<AgentSettingsResponse | undefined>;
 };
 
 function SettingsForm({ saved, canEdit, onReload }: SettingsFormProps) {
@@ -51,6 +50,14 @@ function SettingsForm({ saved, canEdit, onReload }: SettingsFormProps) {
     resolver: zodResolver(saveAgentSettingsSchema),
     defaultValues: formValues(saved),
   });
+  // Testers and test questions also bump the version; keep what the user has typed but not saved.
+  useEffect(() => {
+    const typed = form.getValues();
+    const dirtyKeys = Object.keys(form.formState.dirtyFields) as (keyof SaveAgentSettingsInput)[];
+    form.reset(formValues(saved), { keepDirtyValues: true });
+    // reset with keepDirtyValues keeps the values but clears the dirty flag, which would disable Save.
+    for (const key of dirtyKeys) form.setValue(key, typed[key], { shouldDirty: true });
+  }, [form, saved]);
   const save = useSaveAgentSettings();
   const showToast = useToast();
   const submit = form.handleSubmit(async (values) => {
@@ -80,7 +87,13 @@ function SettingsForm({ saved, canEdit, onReload }: SettingsFormProps) {
           <p className="text-text-muted">You can view these settings.</p>
         )}
         {form.formState.errors.root ? (
-          <Button variant="secondary" onClick={onReload}>
+          <Button
+            variant="secondary"
+            onClick={async () => {
+              const latest = await onReload();
+              if (latest) form.reset(formValues(latest));
+            }}
+          >
             Load latest settings
           </Button>
         ) : null}

@@ -94,7 +94,9 @@ describe('Go live panel', () => {
     expect(await screen.findByText('Practice')).toBeTruthy();
     expect(screen.getByText(/Hand-over rules saved/).textContent).toContain('done');
     expect(screen.getByText(/3 test questions saved/).textContent).toContain('done');
-    expect((screen.getByLabelText('Question 2') as HTMLInputElement).value).toBe('Delivery koto?');
+    expect((screen.getAllByLabelText('Customer asks')[1] as HTMLInputElement).value).toBe(
+      'Delivery koto?',
+    );
   });
 
   it('keeps the person informed while the long request runs, then shows the channel live', async () => {
@@ -152,7 +154,7 @@ describe('Go live panel', () => {
   it('saves the edited questions', async () => {
     stubApi();
     show();
-    fireEvent.change(await screen.findByLabelText('Question 1'), {
+    fireEvent.change((await screen.findAllByLabelText('Customer asks'))[0]!, {
       target: { value: 'Price koto?' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save test questions' }));
