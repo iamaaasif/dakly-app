@@ -16,6 +16,7 @@ import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -25,6 +26,8 @@ import { StoresService } from '../stores/stores.service';
 import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { classifyChat } from './prompts/classify-chat.v1';
+import { checkReplyFacts } from './reply-fact-check';
+import { type ComposedReply, SalesAgentService } from './sales-agent.service';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 const HOLDING_REPLY = 'একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।';
@@ -46,6 +49,7 @@ export class AiAgentService {
   constructor(
     @Inject(AiAgentSettingsRepository) private readonly settings: AiAgentSettingsRepository,
     @Inject(AiService) private readonly ai: AiService,
+    @Inject(SalesAgentService) private readonly sales: SalesAgentService,
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
@@ -95,11 +99,35 @@ export class AiAgentService {
       await this.schedule(storeId, conversationId, turn.latest.id);
       return;
     }
-    const reason = (await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
-      ? await this.classify(storeId, burstText(turn, debounceSeconds * 1000))
-      : 'allowance_used';
-    if (reason === 'busy') return { delayUntil: this.clock.now().getTime() + 1000 };
-    if (reason) await this.handOver(storeId, conversationId, candidate, reason);
+    const texts = burstText(turn, debounceSeconds * 1000);
+    // A window that already holds a unit finishes even when the allowance is used up.
+    const reference = await this.windowReference(storeId, turn.contactId);
+    const hasRoom =
+      (await this.usage.isConsumed(storeId, 'ai_conversation', reference)) ||
+      (await this.usage.hasAllowance(storeId, 'ai_conversation', 1));
+    const reason = hasRoom ? await this.classify(storeId, texts) : 'allowance_used';
+    if (reason === 'busy') return this.retryLater();
+    if (reason) return this.handOver(storeId, conversationId, candidate, reason);
+    const composed = await this.sales.compose({
+      storeId,
+      conversationId,
+      contactId: turn.contactId,
+      customerTexts: texts,
+    });
+    if (composed.kind === 'busy') return this.retryLater();
+    if (composed.kind === 'handover')
+      return this.handOver(storeId, conversationId, candidate, composed.reason);
+    const shop = await this.stores.settings(storeId);
+    const checked = checkReplyFacts(composed.text, composed.toolResults, {
+      phone: shop.phone,
+      linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
+    });
+    if (!checked.isSafe) return this.handOver(storeId, conversationId, candidate, 'out_of_scope');
+    return this.send(storeId, conversationId, candidate, composed);
+  }
+
+  private retryLater() {
+    return { delayUntil: this.clock.now().getTime() + 1000 };
   }
 
   private async eligibleTurn(
@@ -148,21 +176,8 @@ export class AiAgentService {
     reason: Reason,
   ) {
     await this.transaction.runLocked(storeId, async () => {
-      try {
-        await this.contacts.lockForConsent(storeId, [before.target.contactId]);
-      } catch (error) {
-        if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return;
-        throw error;
-      }
-      const current = await this.eligibleTurn(storeId, conversationId, true);
-      if (
-        !current ||
-        current.target.contactId !== before.target.contactId ||
-        current.turn.version !== before.turn.version ||
-        current.turn.inbound.length !== before.turn.inbound.length ||
-        current.turn.inbound.some(({ id }, index) => id !== before.turn.inbound[index]?.id)
-      )
-        return;
+      const current = await this.lockCurrent(storeId, conversationId, before);
+      if (!current) return;
       const change = await this.inbox.handOver(storeId, conversationId, reason);
       if (!change) return;
       await this.outbox.publish({
@@ -186,6 +201,70 @@ export class AiAgentService {
         title: 'A conversation needs your reply',
       });
     });
+  }
+
+  // Sends the product cards, then the reply, and spends one AI conversation unit with them.
+  private async send(
+    storeId: string,
+    conversationId: string,
+    before: EligibleTurn,
+    composed: Extract<ComposedReply, { kind: 'reply' }>,
+  ) {
+    const { aiRunId, cardTexts, sources, text } = composed;
+    try {
+      await this.transaction.runLocked(storeId, async () => {
+        const current = await this.lockCurrent(storeId, conversationId, before);
+        if (!current) return;
+        const latestId = current.turn.latest.id;
+        const send = (content: string, key: string, aiSources?: typeof sources) =>
+          this.messaging.queueChannelMessage(storeId, {
+            ...current.target,
+            category: 'staff_reply',
+            actor: { kind: 'ai', aiRunId },
+            content,
+            operationKey: `ai-reply:${latestId}:${key}`,
+            aiSources,
+          });
+        for (const [index, card] of cardTexts.entries()) await send(card, `card-${index}`);
+        await send(text, 'reply', sources);
+        // After queuing, so the window starts at the earliest saved AI reply.
+        await this.usage.consume(storeId, {
+          unit: 'ai_conversation',
+          quantity: 1,
+          reference: await this.windowReference(storeId, current.target.contactId),
+        });
+      });
+    } catch (error) {
+      if (!(error instanceof AppError)) throw error;
+      // A retried job finds its reply already saved under the same operation key.
+      if (error.code === 'USAGE_ALLOWANCE_EXCEEDED')
+        return this.handOver(storeId, conversationId, before, 'allowance_used');
+      if (error.code !== 'MESSAGE_OPERATION_CONFLICT') throw error;
+    }
+  }
+
+  // One unit covers every AI reply to a contact in the 24 hours after the first.
+  private async windowReference(storeId: string, contactId: string) {
+    const start = (await this.inbox.firstAiReplyInDay(storeId, contactId)) ?? this.clock.now();
+    return `ai-window:${contactId}:${start.toISOString()}`;
+  }
+
+  // Returns the turn only when nothing changed since the model started.
+  private async lockCurrent(storeId: string, conversationId: string, before: EligibleTurn) {
+    try {
+      await this.contacts.lockForConsent(storeId, [before.target.contactId]);
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return undefined;
+      throw error;
+    }
+    const current = await this.eligibleTurn(storeId, conversationId, true);
+    const unchanged =
+      current &&
+      current.target.contactId === before.target.contactId &&
+      current.turn.version === before.turn.version &&
+      current.turn.inbound.length === before.turn.inbound.length &&
+      current.turn.inbound.every(({ id }, index) => id === before.turn.inbound[index]?.id);
+    return unchanged ? current : undefined;
   }
 }
 

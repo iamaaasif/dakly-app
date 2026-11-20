@@ -16,7 +16,7 @@ import { AuditService } from '../audit/audit.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { MINUTE_MS } from '../platform/time';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { InboxRepository } from './inbox.repository';
@@ -154,6 +154,15 @@ export class InboxService {
   async aiReplyTurn(storeId: string, id: string, lock = false) {
     const turn = await this.repository.aiReplyTurn(storeId, id, lock);
     return turn?.windowExpiresAt && turn.windowExpiresAt > this.clock.now() ? turn : undefined;
+  }
+
+  // The earliest AI reply to this contact in the last 24 hours, on any channel.
+  firstAiReplyInDay(storeId: string, contactId: string) {
+    return this.repository.firstAiReplySince(
+      storeId,
+      contactId,
+      new Date(this.clock.now().getTime() - DAY_MS),
+    );
   }
 
   async handOver(storeId: string, id: string, reason: (typeof handoverReasons)[number]) {
