@@ -485,7 +485,9 @@ describe('Session boundary over Fastify and Postgres', () => {
       for (const level of ['none', 'view', 'edit'] as const) {
         await admin.db
           .update(roles)
-          .set({ permissions: { products: level, campaigns: level, social: level } })
+          .set({
+            permissions: { products: level, campaigns: level, social: level, analytics: level },
+          })
           .where(eq(roles.id, role!.id));
         const context = (
           await app.inject({ url: '/me/context', headers: { cookie: cookie() } })
