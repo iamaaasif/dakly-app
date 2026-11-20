@@ -546,6 +546,66 @@ describe('Meta webhook intake', () => {
     }
   });
 
+  it('turns a signed button tap into a postback event for the store', async () => {
+    const storeId = randomUUID();
+    const account = randomUUID();
+    const eventTime = Date.now() - 30_000;
+    const sender = { id: 'customer-postback-fixture' };
+    const handler = app.get(ProcessWebhookEventJob);
+    async function process(data: Record<string, unknown>) {
+      const body = JSON.stringify({ object: 'page', entry: [{ id: account, messaging: [data] }] });
+      expect((await post(body)).statusCode).toBe(200);
+      const [received] = await stored(body);
+      await handler.handle({ webhookEventId: received!.id }, true);
+      return (await stored(body))[0]!;
+    }
+    await admin.pool.query('insert into stores (id, name) values ($1, $2)', [storeId, 'Tap shop']);
+    try {
+      await admin.pool.query(
+        `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
+         values ($1::uuid, $2, 'facebook_page', $1::text, 'Taps', $3)`,
+        [account, storeId, new Date(eventTime - 120_000)],
+      );
+      const tap = {
+        sender,
+        recipient: { id: account },
+        timestamp: eventTime,
+        postback: { title: 'হ্যাঁ', payload: 'order-confirm:v1:abc', mid: 'm_tap' },
+      };
+      expect((await process(tap)).status).toBe('ignored');
+      await process({
+        sender,
+        recipient: { id: account },
+        timestamp: eventTime - 1000,
+        message: { mid: 'mid.tap-inbound', text: 'অর্ডার করতে চাই' },
+      });
+      expect((await process({ ...tap, timestamp: eventTime + 1 })).status).toBe('processed');
+      const events = await admin.pool.query(
+        "select payload from outbox_events where store_id = $1 and type = 'message.postback_received'",
+        [storeId],
+      );
+      expect(events.rows).toEqual([
+        {
+          payload: expect.objectContaining({
+            channel: 'messenger',
+            postback: 'order-confirm:v1:abc',
+          }),
+        },
+      ]);
+    } finally {
+      for (const table of [
+        'outbox_events',
+        'messages',
+        'conversations',
+        'contact_identities',
+        'contacts',
+        'channel_connections',
+      ])
+        await admin.pool.query(`delete from ${table} where store_id = $1`, [storeId]);
+      await admin.pool.query('delete from stores where id = $1', [storeId]);
+    }
+  });
+
   it('rejects a signature for different bytes and logs the rejection without the payload', async () => {
     const payload = delivery('instagram');
     const log = vi.spyOn(Logger.prototype, 'warn');

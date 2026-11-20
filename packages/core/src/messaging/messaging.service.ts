@@ -33,6 +33,14 @@ export type InboundMessageInput = {
   receivedAt: Date;
 };
 
+export type PostbackInput = Omit<
+  InboundMessageInput,
+  'externalMessageId' | 'content' | 'attachments' | 'kind'
+> & {
+  kind: 'facebook_page' | 'instagram';
+  payload: string;
+};
+
 const attachmentPreviews = {
   image: 'Photo',
   voice: 'Voice message',
@@ -41,7 +49,12 @@ const attachmentPreviews = {
 } as const;
 
 type ReceiveOutcome =
-  'stored' | 'duplicate' | 'unknown_account' | 'stale_delivery' | 'invalid_timestamp';
+  | 'stored'
+  | 'duplicate'
+  | 'unknown_account'
+  | 'unknown_contact'
+  | 'stale_delivery'
+  | 'invalid_timestamp';
 
 export type OutgoingMessage = {
   channel: 'sms';
@@ -93,6 +106,57 @@ export class MessagingService {
       const idempotencyKey = `inbound:${hashToken(JSON.stringify(externalIdentity)).toString('hex')}`;
       if (!(await this.inbound.claimMessageKey(storeId, idempotencyKey))) return 'duplicate';
       return this.storeInbound(storeId, input, { ...connection, idempotencyKey });
+    });
+  }
+
+  // A tap is not a message: it is not stored and does not reopen the chat, but Meta counts it as
+  // the customer acting, so it moves the 24-hour window. Meta can redeliver it, so a consumer
+  // must tolerate a repeated event.
+  receivePostback(storeId: string, input: PostbackInput): Promise<ReceiveOutcome> {
+    return this.transaction.run(storeId, async () => {
+      const connection = await this.connections.findInbound(storeId, input);
+      if (!connection) return 'unknown_account';
+      if (
+        input.receivedAt < connection.connectedAt ||
+        input.sentAt.getTime() <= connection.connectedAt.getTime() + MINUTE_MS
+      )
+        return 'stale_delivery';
+      const channel = input.kind === 'facebook_page' ? 'messenger' : 'instagram';
+      // A button reaches only people the shop already wrote to, so the contact and chat exist.
+      const identity = await this.identities.findActiveChannelIdentity(storeId, {
+        channel,
+        connectionId: connection.id,
+        externalId: input.externalSenderId,
+      });
+      const conversation =
+        identity &&
+        (await this.outbound.findConversation(storeId, {
+          channel,
+          connectionId: connection.id,
+          contactId: identity.contactId,
+        }));
+      if (!identity || !conversation) return 'unknown_contact';
+      await this.inbound.recordTap(
+        storeId,
+        {
+          conversationId: conversation.id,
+          at: input.sentAt,
+          expiry: new Date(input.sentAt.getTime() + DAY_MS),
+        },
+        this.clock.now(),
+      );
+      await this.outbox.publish({
+        type: 'message.postback_received',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: {
+          conversationId: conversation.id,
+          contactId: identity.contactId,
+          channel,
+          postback: input.payload,
+        },
+      });
+      return 'stored';
     });
   }
 
