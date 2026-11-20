@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { createHash, createHmac, randomBytes, randomUUID, randomInt } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -23,7 +23,7 @@ import { SmsService } from '@dakly/core/sms/sms.service';
 
 import { AppModule } from '../src/app.module';
 import { isolationBoundaries } from './isolation-boundaries';
-import { type Actor, IsolationFixture, type Shop } from './isolation-fixture';
+import { type Actor, IsolationFixture, type Shop, uniquePhone } from './isolation-fixture';
 import { IsolationInventory } from './isolation-inventory';
 import { captureRequestLogs } from './request-log-sink';
 
@@ -33,7 +33,7 @@ const permissions = {
   exportLists: false,
   refund: false,
 };
-const phone = () => `018${randomInt(10000000, 99999999)}`;
+const phone = () => uniquePhone('018');
 const fixtures = new Map<string, () => Promise<void>>();
 let app: NestFastifyApplication, f: IsolationFixture;
 const inventory = new IsolationInventory();
@@ -1632,6 +1632,20 @@ fixture('GET /campaigns/:campaignId/estimate', async () => {
   const estimate = (await success(a, 'GET', `/campaigns/${id}/estimate`, 200)).json();
   expect(estimate).toMatchObject({ audienceCount: 1, recipientsCount: 1, smsCredits: 1 });
   await hidden(b, 'GET', (value) => `/campaigns/${value}/estimate`, id);
+});
+fixture('GET /campaigns/:campaignId/results', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  const results = (await success(a, 'GET', `/campaigns/${id}/results`, 200)).json();
+  expect(results).toMatchObject({ costPoisha: '0', returnPerTaka: null, failureReasons: [] });
+  await hidden(b, 'GET', (value) => `/campaigns/${value}/results`, id);
+});
+fixture('GET /campaigns/:campaignId/customers', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  const customers = await success(a, 'GET', `/campaigns/${id}/customers?outcome=failed`, 200);
+  expect(customers.json()).toEqual({ items: [], nextCursor: null });
+  await hidden(b, 'GET', (value) => `/campaigns/${value}/customers?outcome=failed`, id);
 });
 fixture('POST /campaigns/:campaignId/approve', async () => {
   const { a, b } = await pair(),
