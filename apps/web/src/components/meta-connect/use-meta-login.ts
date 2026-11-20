@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 
 import type { MetaAuthorizationAccounts } from '@dakly/contracts/channels';
 
-import { useListMetaAccounts, useStartMetaLogin } from '../api/meta-login';
-import { readMetaLoginMessage } from '../meta-login-message';
+import { useListMetaAccounts, useStartMetaLogin } from './meta-login';
+import { readMetaLoginMessage } from './meta-login-message';
 
 export type MetaLoginStep = 'intro' | 'waiting' | 'choose';
 
