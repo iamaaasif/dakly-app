@@ -136,10 +136,7 @@ describe('OrderAttributionService', () => {
       attributed_window_days: 3,
       attributed_amount_poisha: 120000,
     });
-    expect((await events(orderId)).map(({ type }) => type)).toEqual([
-      'attribution.created',
-      'attribution.created',
-    ]);
+    expect((await events(orderId)).map(({ type }) => type)).toEqual(['attribution.created']);
   });
 
   it('leaves a foreign order untouched and clears a cancelled order only once', async () => {

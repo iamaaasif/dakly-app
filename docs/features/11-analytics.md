@@ -65,7 +65,7 @@ Answer two questions for the owner: "How much did my marketing earn?" and "What 
 7. If the owner changes the window, attribution is recalculated for the last 365 days in a background job (under 10 minutes for 100,000 orders) and a banner says "Recalculating with the new 3-day window".
 8. Test messages, messages to team members and messages that failed to send never create touches.
 
-Edge cases: an order placed by phone with a different number than the one messaged is not linked (no fuzzy matching in release 1). Two touches in the same minute: the tapped one wins over the read one; if still tied, the campaign wins over the automation. A chat started from a Click-to-Messenger ad is not a Dakly touch (ads are out of scope) unless the customer taps a Dakly link.
+Edge cases: an order placed by phone with a different number than the one messaged is not linked (no fuzzy matching in release 1). For message receipts in the same minute, a tap wins over a read. Two taps with the same exact time are ordered by visit ID. If two other touches are still tied, a campaign wins over a workflow. A chat started from a Click-to-Messenger ad is not a Dakly touch (ads are out of scope) unless the customer taps a Dakly link.
 
 #### Best cards
 
@@ -230,7 +230,7 @@ Order subscribers run on the sync queue. Pending order changes for the same stor
 
 The attribution record is kept on the order. It stores the winning evidence ID and eligibility time, source, channel, item amount after discount in poisha, and the window used. Recording credit leaves the staff order editor revision unchanged. Cancelling an attributed order clears the record and publishes a removal event in the same transaction. The same order and evidence can be recorded again without adding another attribution event.
 
-- Enabled: exact campaign and workflow redirect taps tied to the buyer. The touch must follow a send accepted by the provider. For campaign SMS, the saved destination must also match the buyer's own number. CAMP-3 and workflow senders currently create opt-out links. They need to start wrapping message URLs before their messages produce redirect taps.
+- Enabled: exact campaign and workflow redirect taps tied to the buyer. The touch must follow a send accepted by the provider. For campaign SMS, the saved destination must also match the buyer's own number. Workflow SMS clears the destination hash after sending, so the tap identifies the buyer by contact ID. The latest tap wins, with the visit ID breaking exact ties. CAMP-3 and workflow senders currently create opt-out links. They need to start wrapping message URLs before their messages produce redirect taps.
 - Campaign and workflow delivery and read evidence waits on CAMP-3 results and ACC-14 delivery receipts.
 - Post taps and chat referrals wait on buyer linkage in SOC-3 and CHAT-1.
 
@@ -238,7 +238,7 @@ The order-created subscriber uses the buyer's contact. For self-delivery the ord
 
 The Owner changes the window through `PATCH /store/attribution` with 1, 3 or 7 days. A change records the old and new window in the audit log and starts a rebuild. `GET /store/attribution` shows the current window, whether the rebuild is running and how many orders it has processed. The banner and window control are part of ANA-3.
 
-The bulk worker covers the latest 365 shop-local dates up to the time of the change. It selects evidence before locking orders. It commits up to 25 orders and the cursor together. A job handles up to 500 orders before saving its next outbox event with the final cursor of that job. A newer window replaces the old job's progress. A retry resumes from the last committed cursor, and a rebuild keeps the captured amount when it selects the same touch. It reads the exact tap records across the full lookback horizon.
+The bulk worker covers the latest 365 shop-local dates up to the time of the change. It selects evidence before locking orders. It commits up to 25 orders and the cursor together. A job handles up to 500 orders before saving its next outbox event with the final cursor of that job. A newer window replaces the old job's progress. A retry resumes from the last committed cursor. If an order changes during selection, the worker rereads that page. A rebuild keeps the captured amount when it selects the same touch. Report refreshes are requested per page in the reports slice. It reads the exact tap records across the full lookback horizon.
 
 The marketing rollups store order counts and revenue for the shop and each campaign or workflow. A full return keeps one attributed order and has no revenue. A partial return subtracts the returned item value after discounts from the captured amount. Cancellation and reassignment also refresh the old source bucket. The Dashboard, workflow list and campaign results read these same rollups. The Dashboard uses the selected period and Analytics view permission. Workflows show the last 30 shop-local dates. Campaign results show figures within the two-year summary retention.
 

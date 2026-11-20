@@ -29,6 +29,7 @@ import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
+import { OrderAttributionEngine } from './order-attribution-engine.service';
 
 class TestModule {}
 Module({
@@ -314,7 +315,20 @@ describe('Daily order summaries', () => {
     await rebuild.runPage(fixture.a, stale, null);
     expect((await stores.attributionRebuild(fixture.a)).rebuild?.id).toBe(current);
     expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: null });
-    await rebuild.runPage(fixture.a, current, null);
+    const engine = app.get(OrderAttributionEngine);
+    const select = engine.select.bind(engine);
+    const changeDuringSelection = vi
+      .spyOn(engine, 'select')
+      .mockImplementationOnce(async (...args) => {
+        const reference = await select(...args);
+        await db.query('update orders set is_recipient_buyer=false where id=$1', [inRange]);
+        return reference;
+      });
+    try {
+      await rebuild.runPage(fixture.a, current, null);
+    } finally {
+      changeDuringSelection.mockRestore();
+    }
     await rebuild.runPage(fixture.a, current, null);
     expect(await stores.attributionSettings(fixture.a)).toEqual({
       windowDays: 7,

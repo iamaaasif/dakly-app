@@ -19,8 +19,6 @@ export function selectAttributionTouch(
     .filter(({ eligibleAt }) => eligibleAt.getTime() >= start && eligibleAt.getTime() <= end)
     .sort(
       (left, right) =>
-        right.eligibleAt.getTime() - left.eligibleAt.getTime() ||
-        Number(right.sourceType === 'campaign') - Number(left.sourceType === 'campaign') ||
-        right.id.localeCompare(left.id),
+        right.eligibleAt.getTime() - left.eligibleAt.getTime() || right.id.localeCompare(left.id),
     )[0];
 }
