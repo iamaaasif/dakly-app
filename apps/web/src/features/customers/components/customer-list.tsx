@@ -10,17 +10,7 @@ import { initialsOf } from '@/lib/initials';
 
 type CustomerListProps = { customers: ContactResponse[] };
 
-const headers = [
-  { label: 'Customer' },
-  { label: 'Phone' },
-  { label: 'WhatsApp' },
-  { label: 'Email' },
-  { label: 'Location' },
-  { label: 'Type' },
-  { label: 'Orders', right: true },
-  { label: 'Spent', right: true },
-  { label: 'Last purchase' },
-] as const;
+const headers = [{ label: 'Customer' }, { label: 'Phone' }, { label: 'Type' }] as const;
 
 export function CustomerList({ customers }: CustomerListProps) {
   return (
@@ -64,7 +54,7 @@ function CustomerTable({ customers }: CustomerListProps) {
             {headers.map((h) => (
               <TableHead
                 key={h.label}
-                className={`text-xs font-semibold tracking-wider text-text-muted uppercase ${'right' in h ? 'text-right' : ''}`}
+                className="text-xs font-semibold tracking-wider text-text-muted uppercase"
               >
                 {h.label}
               </TableHead>
@@ -97,17 +87,11 @@ function CustomerTableRow({ customer }: { customer: ContactResponse }) {
         </div>
       </TableCell>
       <TableCell className="text-sm tabular-nums">{customerPhone(customer)}</TableCell>
-      <TableCell className="text-sm text-text-muted tabular-nums">—</TableCell>
-      <TableCell className="text-sm text-text-muted">No email</TableCell>
-      <TableCell className="text-sm text-text-muted">—</TableCell>
       <TableCell>
         <Badge variant={customer.kind === 'customer' ? 'neutral' : 'info'}>
           {customerKindLabels[customer.kind]}
         </Badge>
       </TableCell>
-      <TableCell className="text-right text-sm text-text-muted tabular-nums">—</TableCell>
-      <TableCell className="text-right text-sm text-text-muted tabular-nums">—</TableCell>
-      <TableCell className="text-sm text-text-muted">—</TableCell>
     </TableRow>
   );
 }
