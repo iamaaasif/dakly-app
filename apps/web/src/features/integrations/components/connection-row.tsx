@@ -63,11 +63,6 @@ function rowNote(connection: ChannelConnection, expiring: boolean, now: Date) {
   if (connection.status === 'needs_reconnect')
     return 'Facebook no longer accepts this connection. Messages are paused until you reconnect.';
   if (expiring && connection.tokenExpiresAt)
-    return `Facebook access ends ${when(connection.tokenExpiresAt, today)}. Reconnect to keep messages coming in.`;
-  return `Connected ${when(connection.connectedAt, today)}`;
-}
-
-function when(value: string, today: string) {
-  const date = formatDate(value, today);
-  return date === 'Today' || date === 'Yesterday' ? date.toLowerCase() : `on ${date}`;
+    return `Facebook access ends: ${formatDate(connection.tokenExpiresAt, today)}. Reconnect to keep messages coming in.`;
+  return `Connected: ${formatDate(connection.connectedAt, today)}`;
 }

@@ -106,6 +106,7 @@ function ChannelDialog({ kind, dialog, connections, onClose, onNotice }: Channel
     return (
       <DisconnectDialog
         connection={dialog.of}
+        account={metaChannels[kind].account}
         onClose={onClose}
         onDisconnected={() => {
           onClose();
