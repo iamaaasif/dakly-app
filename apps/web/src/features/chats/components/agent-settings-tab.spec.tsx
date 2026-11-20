@@ -91,7 +91,7 @@ describe('AI agent settings tab', () => {
     show();
     fireEvent.click(await screen.findByRole('radio', { name: 'English' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect((await screen.findByRole('alert')).textContent).toContain('your edits were not saved');
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Load latest settings' })).toBeTruthy(),
     );

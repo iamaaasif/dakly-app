@@ -6,6 +6,7 @@ import {
   type AgentSettingsResponse,
   type SaveAgentSettingsInput,
 } from '@dakly/contracts/ai-agent-settings';
+import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
@@ -14,6 +15,10 @@ import { useToast } from '@dakly/ui/toast';
 import { useAgentSettings, useSaveAgentSettings } from '../api/agent-settings';
 import { AgentSettingsFields } from './agent-settings-fields';
 import { formError } from '@/lib/form-error';
+
+// Settings, testers and test questions share one version, so any of them can make a save stale.
+const staleMessage =
+  'These settings were changed somewhere else since you opened them, so your edits were not saved. Load the latest settings and make your change again.';
 
 function formValues({ handoverRulesSaved: _saved, ...values }: AgentSettingsResponse) {
   return values;
@@ -54,6 +59,8 @@ function SettingsForm({ saved, canEdit, onReload }: SettingsFormProps) {
       showToast('AI agent settings saved.');
     } catch (error) {
       formError(error, form.setError);
+      if (error instanceof ApiError && error.code === 'AI_AGENT_SETTINGS_CHANGED')
+        form.setError('root', { message: staleMessage });
     }
   });
   return (
