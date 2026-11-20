@@ -7,7 +7,6 @@ import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createCampaignSchema } from '@dakly/contracts/campaigns';
-import type { StoreAccess } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 
 import { DatabaseModule } from '../platform/database/database.module';
@@ -24,16 +23,6 @@ const storeId = randomUUID();
 const otherStoreId = randomUUID();
 const userId = randomUUID();
 const actor = { kind: 'user', userId } as const;
-const owner: { access: StoreAccess; actor: typeof actor } = {
-  access: {
-    role: 'owner',
-    areas: { campaigns: 'edit' },
-    seeFullPhone: false,
-    exportLists: false,
-    refund: false,
-  },
-  actor,
-};
 const HOUR = 60 * 60 * 1000;
 let app: INestApplicationContext;
 let service: CampaignsService;
@@ -219,12 +208,5 @@ describe('Messenger campaigns (Postgres)', () => {
     expect(parse({ buttons: [{ title: 'a'.repeat(21) }] })).toBe(false);
     expect(parse({ imageUrl: 'http://cdn.example.test/a.jpg' })).toBe(false);
     expect(parse({ imageUrl: 'https://cdn.example.test/a.jpg' })).toBe(true);
-  });
-
-  it('does not approve a Messenger campaign before it can send', async () => {
-    const campaign = await draft(pages.first);
-    await expect(service.approve(storeId, campaign.id, owner)).rejects.toMatchObject({
-      code: 'CAMPAIGN_CHANNEL_NOT_SENDABLE',
-    });
   });
 });

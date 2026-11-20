@@ -79,7 +79,7 @@ export function PostEditor({ accounts, initial, onSubmit, ...frame }: PostEditor
               }}
             />
             <CaptionField accounts={accounts} settings={settings} onAiText={markAi} />
-            <PostPhotos />
+            <PostPhotos preview={preview} />
             <PostDetails hasInstagram={preview.networks.includes('instagram')} />
             <PostWhenField
               choice={when.choice}
