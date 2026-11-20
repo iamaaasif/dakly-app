@@ -5,12 +5,10 @@ import { Badge } from '@dakly/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import { customerKindLabels, customerPhone } from '../customer-labels';
-import { CustomerBadges } from './customer-badges';
+import { CustomerTags } from './customer-badges';
 import { initialsOf } from '@/lib/initials';
 
 type CustomerListProps = { customers: ContactResponse[] };
-
-const headers = [{ label: 'Customer' }, { label: 'Phone' }, { label: 'Type' }] as const;
 
 export function CustomerList({ customers }: CustomerListProps) {
   return (
@@ -28,7 +26,7 @@ function CustomerMobileList({ customers }: CustomerListProps) {
         <li key={customer.id} className="space-y-2 rounded-lg border border-border bg-surface p-4">
           <div className="flex items-center gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-muted text-xs font-semibold text-text-muted">
-              {initialsOf(customer.name ?? 'Customer')}
+              {initialsOf(customer.name ?? 'No name')}
             </span>
             <div className="min-w-0 flex-1">
               <CustomerLink customer={customer} />
@@ -38,7 +36,7 @@ function CustomerMobileList({ customers }: CustomerListProps) {
               {customerKindLabels[customer.kind]}
             </Badge>
           </div>
-          <CustomerBadges customer={customer} />
+          <CustomerTags tags={customer.tags} />
         </li>
       ))}
     </ul>
@@ -51,14 +49,15 @@ function CustomerTable({ customers }: CustomerListProps) {
       <Table>
         <TableHeader>
           <TableRow className="bg-surface-muted/50 hover:bg-surface-muted/50">
-            {headers.map((h) => (
-              <TableHead
-                key={h.label}
-                className="text-xs font-semibold tracking-wider text-text-muted uppercase"
-              >
-                {h.label}
-              </TableHead>
-            ))}
+            <TableHead className="text-xs font-semibold tracking-wider text-text-muted uppercase">
+              Customer
+            </TableHead>
+            <TableHead className="text-xs font-semibold tracking-wider text-text-muted uppercase">
+              Phone
+            </TableHead>
+            <TableHead className="text-xs font-semibold tracking-wider text-text-muted uppercase">
+              Type
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -82,7 +81,7 @@ function CustomerTableRow({ customer }: { customer: ContactResponse }) {
           </span>
           <div className="min-w-0">
             <CustomerLink customer={customer} />
-            <CustomerBadges customer={customer} />
+            <CustomerTags tags={customer.tags} />
           </div>
         </div>
       </TableCell>

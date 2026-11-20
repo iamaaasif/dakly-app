@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 import type { ContactDetailResponse, ContactResponse } from '@dakly/contracts/contacts';
 import { ApiError } from '@dakly/ui/api-client';
+import { Badge } from '@dakly/ui/badge';
 import { Card } from '@dakly/ui/card';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
@@ -12,8 +13,7 @@ import { useCustomer } from '../api/customer';
 import { channelLabels, customerKindLabels, customerPhone } from '../customer-labels';
 import { ConsentForm } from './consent-form';
 import { CustomerActions } from './customer-actions';
-import { CustomerBadges } from './customer-badges';
-import { formatDateTime } from '@/lib/format-date';
+import { formatCalendarDate } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -22,6 +22,7 @@ type CustomerProfileProps = { contactId: string };
 export function CustomerProfile({ contactId }: CustomerProfileProps) {
   const customer = useCustomer(contactId);
   const { data: context } = useSessionContext();
+  const timeZone = (context?.currentStore as { timeZone?: string })?.timeZone ?? 'Asia/Dhaka';
   return (
     <main className="space-y-6 p-4 md:p-8">
       <Link
@@ -33,6 +34,7 @@ export function CustomerProfile({ contactId }: CustomerProfileProps) {
       <ProfileBody
         customer={customer}
         canEdit={Boolean(context?.currentStore?.canCreateCustomer)}
+        timeZone={timeZone}
       />
     </main>
   );
@@ -41,9 +43,11 @@ export function CustomerProfile({ contactId }: CustomerProfileProps) {
 function ProfileBody({
   customer,
   canEdit,
+  timeZone,
 }: {
   customer: ReturnType<typeof useCustomer>;
   canEdit: boolean;
+  timeZone: string;
 }) {
   if (customer.error instanceof ApiError && customer.error.code === 'CONTACT_NOT_FOUND')
     return <p>This customer was deleted or is not in this shop.</p>;
@@ -68,8 +72,8 @@ function ProfileBody({
     <div className="space-y-6">
       <ProfileHeader contact={contact} canEdit={canEdit} />
       <div className="grid gap-6 lg:grid-cols-3">
-        <ProfileContent contact={contact} canEdit={canEdit} />
-        <ProfileSidebar contact={contact} />
+        <ProfileContent contact={contact} canEdit={canEdit} timeZone={timeZone} />
+        <ProfileSegmentsCard contact={contact} />
       </div>
     </div>
   );
@@ -83,12 +87,14 @@ function ProfileHeader({ contact, canEdit }: { contact: ContactDetailResponse; c
           aria-hidden="true"
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-soft text-lg font-semibold text-action"
         >
-          {initialsOf(contact.name ?? 'Customer')}
+          {initialsOf(contact.name ?? 'No name')}
         </div>
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold">{contact.name ?? 'No name'}</h1>
-            <CustomerBadges customer={contact} />
+            <Badge variant={contact.kind === 'customer' ? 'neutral' : 'info'}>
+              {customerKindLabels[contact.kind]}
+            </Badge>
           </div>
           <p className="text-sm text-text-muted tabular-nums">{customerPhone(contact)}</p>
         </div>
@@ -101,15 +107,17 @@ function ProfileHeader({ contact, canEdit }: { contact: ContactDetailResponse; c
 function ProfileContent({
   contact,
   canEdit,
+  timeZone,
 }: {
   contact: ContactDetailResponse;
   canEdit: boolean;
+  timeZone: string;
 }) {
   return (
     <div className="space-y-6 lg:col-span-2">
       <Card className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {customerDetails(contact).map(({ label, value }) => (
+          {customerDetails(contact, timeZone).map(({ label, value }) => (
             <div key={label}>
               <p className="text-xs text-text-muted">{label}</p>
               <p className="font-medium tabular-nums">{value}</p>
@@ -140,14 +148,6 @@ function ProfileContent({
   );
 }
 
-function ProfileSidebar({ contact }: { contact: ContactResponse }) {
-  return (
-    <div className="space-y-6">
-      <ProfileSegmentsCard contact={contact} />
-    </div>
-  );
-}
-
 function ProfileSegmentsCard({ contact }: { contact: ContactResponse }) {
   return (
     <Card className="space-y-3">
@@ -155,12 +155,9 @@ function ProfileSegmentsCard({ contact }: { contact: ContactResponse }) {
       {contact.tags.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {contact.tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full border border-action/30 bg-primary-soft px-2.5 py-0.5 text-xs text-action"
-            >
+            <Badge key={tag} variant="info">
               {tag}
-            </span>
+            </Badge>
           ))}
         </div>
       ) : (
@@ -170,9 +167,9 @@ function ProfileSegmentsCard({ contact }: { contact: ContactResponse }) {
   );
 }
 
-function customerDetails(contact: ContactResponse) {
+function customerDetails(contact: ContactResponse, timeZone: string) {
   return [
     { label: 'Customer type', value: customerKindLabels[contact.kind] },
-    { label: 'Customer since', value: formatDateTime(contact.createdAt) },
+    { label: 'Customer since', value: formatCalendarDate(contact.createdAt, timeZone) },
   ];
 }

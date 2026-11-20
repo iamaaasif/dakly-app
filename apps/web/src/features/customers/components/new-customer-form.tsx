@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 
 import { type CreateContactInput, createContactSchema } from '@dakly/contracts/contacts';
-import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 
 import { useCreateCustomer } from '../api/create-customer';
@@ -12,7 +11,7 @@ import { isPhoneTaken } from '../customer-errors';
 import { NewCustomerFields } from './new-customer-fields';
 
 type NewCustomerFormProps = {
-  onDone?: () => void;
+  onDone: (success?: boolean) => void;
 };
 
 export function NewCustomerForm({ onDone }: NewCustomerFormProps) {
@@ -25,7 +24,7 @@ export function NewCustomerForm({ onDone }: NewCustomerFormProps) {
     createCustomer.mutate(input, {
       onSuccess: () => {
         reset();
-        onDone?.();
+        onDone(true);
       },
       onError: (error) => {
         if (isPhoneTaken(error)) setError('phone', { message: error.message });
@@ -42,20 +41,13 @@ export function NewCustomerForm({ onDone }: NewCustomerFormProps) {
         </p>
       )}
       <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
-        {onDone ? (
-          <Button type="button" variant="secondary" onClick={onDone}>
-            Cancel
-          </Button>
-        ) : null}
+        <Button type="button" variant="secondary" onClick={() => onDone(false)}>
+          Cancel
+        </Button>
         <Button type="submit" loading={createCustomer.isPending}>
           Add customer
         </Button>
       </div>
-      {createCustomer.isSuccess && (
-        <p role="status">
-          <Badge variant="success">Customer added</Badge>
-        </p>
-      )}
     </form>
   );
 }

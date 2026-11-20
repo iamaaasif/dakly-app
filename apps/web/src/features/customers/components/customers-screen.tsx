@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import type { ContactListQuery } from '@dakly/contracts/contacts';
 import { ApiError } from '@dakly/ui/api-client';
+import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
@@ -20,6 +21,7 @@ type CustomersScreenProps = { query: ContactListQuery };
 
 export function CustomersScreen({ query }: CustomersScreenProps) {
   const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
   const customers = useCustomers(query);
   const { data: context } = useSessionContext();
   const canCreate = Boolean(context?.currentStore?.canCreateCustomer);
@@ -32,17 +34,19 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold">All customers</h1>
-        </div>
+        <h1 className="text-xl font-bold">All customers</h1>
         {canCreate ? (
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setAdding(true)} className="gap-2">
-              <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add customers
-            </Button>
-          </div>
+          <Button onClick={() => setAdding(true)} className="gap-2">
+            <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add customers
+          </Button>
         ) : null}
       </div>
+
+      {added ? (
+        <p role="status">
+          <Badge variant="success">Customer added</Badge>
+        </p>
+      ) : null}
 
       <CustomerFilters
         key={`${query.kind}|${query.search}|${query.tag}`}
@@ -53,7 +57,12 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
 
       {adding ? (
         <Dialog open title="Add customer" onClose={() => setAdding(false)}>
-          <NewCustomerForm onDone={() => setAdding(false)} />
+          <NewCustomerForm
+            onDone={(success) => {
+              setAdding(false);
+              if (success) setAdded(true);
+            }}
+          />
         </Dialog>
       ) : null}
     </main>
@@ -75,6 +84,7 @@ function CustomerResults({ query, customers, hideError }: CustomerResultsProps) 
         retryLabel="Retry customers"
       />
     );
+  if (hideError) return null;
   if (customers.isPending || !customers.data)
     return (
       <div aria-busy="true" className="space-y-3">
