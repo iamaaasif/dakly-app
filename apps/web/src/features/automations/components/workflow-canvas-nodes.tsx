@@ -146,7 +146,7 @@ export function CanvasNodeItem({
   const { step, number } = node;
   return (
     <li
-      className={cn('absolute list-none', number === null && 'pointer-events-none')}
+      className={cn('absolute list-none', step?.kind === 'exit' && 'pointer-events-none')}
       style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
     >
       {step ? stepBody(step) : <TriggerCard graph={graph} layout={layout} />}

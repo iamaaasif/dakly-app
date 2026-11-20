@@ -137,4 +137,23 @@ describe('layoutWorkflow', () => {
       }
     }
   });
+
+  it('draws two paths to the same step as one labelled line', () => {
+    const graph: AutomationGraph = {
+      ...base,
+      firstStepKey: 'dice',
+      steps: {
+        dice: {
+          kind: 'random_split',
+          paths: [
+            { percent: 50, next: 'end' },
+            { percent: 50, next: 'end' },
+          ],
+        },
+        end: { kind: 'exit' },
+      },
+    };
+    const { edges } = layoutWorkflow(graph);
+    expect(edges.map(({ label }) => label)).toEqual([undefined, '50% + 50%']);
+  });
 });

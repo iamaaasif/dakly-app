@@ -211,17 +211,30 @@ function placeRows(lanes: string[][], graph: AutomationGraph, stepNumber: (key: 
   return { nodes, spots, width: contentWidth + PADDING * 2, height: y - ROW_GAP + PADDING };
 }
 
+// Two paths to the same step share one line and one label.
+function mergeParallel(links: Link[]) {
+  const merged = new Map<string, Link>();
+  for (const link of links) {
+    const key = `${link.from}:${link.to}`;
+    const first = merged.get(key);
+    const label = [first?.label, link.label].filter(Boolean).join(' + ') || undefined;
+    merged.set(key, { ...link, label });
+  }
+  return [...merged.values()];
+}
+
 export function layoutWorkflow(graph: AutomationGraph): CanvasLayout {
   const order = readingOrder(graph);
   const numbered = order.filter((key) => graph.steps[key]!.kind !== 'exit');
   const stepNumber = (key: string) => numbered.indexOf(key) + 1;
   const rows = new Map([[TRIGGER_KEY, 0], ...rowOfEachStep(order, graph.steps)]);
-  const links: Link[] = [{ from: TRIGGER_KEY, to: graph.firstStepKey }];
+  const paths: Link[] = [{ from: TRIGGER_KEY, to: graph.firstStepKey }];
   for (const key of order) {
     const step = graph.steps[key]!;
     const labels = branchLabels(step, stepNumber);
-    nextStepKeys(step).forEach((to, index) => links.push({ from: key, to, label: labels[index] }));
+    nextStepKeys(step).forEach((to, index) => paths.push({ from: key, to, label: labels[index] }));
   }
+  const links = mergeParallel(paths);
   const routes = links.map((link, index) => routeOf(link, index, rows));
   const lanes = arrangeRows(routes, rows);
 
