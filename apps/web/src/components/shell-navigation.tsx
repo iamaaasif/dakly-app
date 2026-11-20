@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Megaphone,
   Package,
+  PenLine,
   Plug,
   Puzzle,
   Send,
@@ -175,6 +176,7 @@ function socialGroup(store: SessionContext['currentStore']): NavigationGroup {
     links: [
       { href: '/social', label: 'Social hub', icon: Send, visible },
       { href: '/social/posts', label: 'My posts', icon: CalendarDays, visible },
+      { href: '/content-studio', label: 'Content Studio', icon: PenLine, visible },
     ],
   };
 }
