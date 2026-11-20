@@ -360,6 +360,17 @@ describe('NotificationsService and its routes', () => {
     expect(ownerB.ids()).toEqual([]);
   });
 
+  it('reports ready on every stream of a store opened at the same moment, so none misses a live row', async () => {
+    const a = await shop();
+    const [owner, agent] = await Promise.all([
+      openStream(a.owner, a.id),
+      openStream(a.agent, a.id),
+    ]);
+    await service.notify(a.id, handedOver());
+    await relay(a.id);
+    await until(() => owner.ids().length === 1 && agent.ids().length === 1);
+  });
+
   it('sends the rows created while disconnected once each, then live ones', async () => {
     const a = await shop();
     await service.notify(a.id, handedOver());
