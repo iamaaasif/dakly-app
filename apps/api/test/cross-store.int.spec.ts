@@ -1029,6 +1029,43 @@ const testQuestions = [
   { question: 'delivery koto?', expectedAnswer: 'ঢাকায় ৬০ টাকা' },
   { question: 'M size ache?', expectedAnswer: 'হ্যাঁ, আছে' },
 ];
+const settingsBody = (version: number, replyLanguage: 'bn' | 'en') => ({
+  version,
+  isAutoReplyOn: true,
+  replyLanguage,
+  abilities: {
+    answerQuestions: true,
+    showProducts: true,
+    takeOrders: false,
+    confirmOrders: true,
+    courierUpdates: true,
+    askForReview: true,
+    answerComments: true,
+    followUp: 'hot',
+  },
+  handoverRules: { damagedOrWrong: true, refundsAndExchanges: true, specialRequests: false },
+  returnToAiMinutes: 60,
+  extraRules: null,
+});
+fixture('PUT /ai-agent/settings', async () => {
+  const { a, b } = await pair();
+  const url = '/ai-agent/settings';
+  await success(a, 'PUT', url, 200, settingsBody(0, 'bn'));
+  const before = await agentSettings(a);
+  expect((await f.request(b.member, 'PUT', url, settingsBody(0, 'en'))).statusCode).toBe(403);
+  await success(b, 'PUT', url, 200, settingsBody(0, 'en'));
+  expect(await agentSettings(a)).toEqual(before);
+  expect((await agentSettings(b)).reply_language).toBe('en');
+});
+fixture('GET /ai-agent/settings', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/ai-agent/settings', 200, settingsBody(0, 'bn'));
+  expect((await success(a, 'GET', '/ai-agent/settings', 200)).json().replyLanguage).toBe('bn');
+  expect((await success(b, 'GET', '/ai-agent/settings', 200)).json()).toMatchObject({
+    version: 0,
+    isAutoReplyOn: false,
+  });
+});
 fixture('PUT /ai-agent/test-questions', async () => {
   const { a, b } = await pair();
   const url = '/ai-agent/test-questions';

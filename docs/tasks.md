@@ -166,7 +166,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | AI-5 | Sales agent tools and the fact check before sending                     | Done        | AI-4, ORD-3          | #284, #292, #303, #321 | Parts 1 to 4 merged: tools, agent loop and fact check, return timers, order tools                                      |
 | AI-6 | Practice mode, test questions, Go live                                  | Done        | AI-5                 | #306                   | Practice per channel; tests graded by a model; hand-over rules save waits on the AI settings task                      |
 | AI-7 | Golden-set eval runner and nightly job                                  | In progress | AI-5                 | #337                   | Runner, scoring and nightly job on a starter set. The 200 beta chats and the re-run after a knowledge change are left. |
-| AI-8 | Web: AI agent settings, knowledge, test tab                             | Todo        | AI-6                 |                        |                                                                                                                        |
+| AI-8 | Web: AI agent settings, knowledge, test tab                             | In progress | AI-6                 | #326                   | Part 1 settings API. Then the drawer with Settings, Knowledge, Test and Feedback, each its own PR.                     |
 
 ## Later release: couriers and COD
 
