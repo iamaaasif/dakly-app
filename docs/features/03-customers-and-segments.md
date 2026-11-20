@@ -281,6 +281,25 @@ undo the contacts it added and the consent grants it recorded.
   are never requeued.
 - Not built yet: upload scanning (OPS-4).
 
+Customer export (CUS-16, CUS-R3): `GET /contacts/export` returns the customers the list filters
+match (`kind`, `tag`, `search`, no page or limit) as an Excel (.xlsx) file named
+`dakly-customers-<date>.xlsx`.
+
+- It needs View Customers and the Download customer lists switch (`exportLists`); without the
+  switch it fails with `CONTACT_EXPORT_NOT_ALLOWED` (403). Members without See full phone numbers
+  get a file with no Phone and no WhatsApp number column, because a masked number is no use in a
+  file. A phone search still counts against their hourly phone lookup limit.
+- Columns are Name, Phone, WhatsApp number, Email, Address, District, Tags, Type, Source and
+  Added, so a file can be imported again. Every cell is text, so a phone keeps its leading zero
+  and a name starting with `=` is not read as a formula.
+- The service reads the matches in pages of 1,000, newest first, and refuses a store whose
+  filter matches more than 50,000 customers with `CONTACT_EXPORT_TOO_LARGE` (422): narrow the
+  filters. A background export for larger lists is not built.
+- Every download writes the audit event `contacts.exported` with the number of rows, and the
+  response is `Cache-Control: no-store`.
+- Not built yet: the Export button and its "Exporting N customers to Excel" message on the
+  customers screen. The screen needs the member's `exportLists` flag in the session context first.
+
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
 `01XXXXXXXXX` format before API or form validation finishes.

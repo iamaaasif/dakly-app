@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   and,
-  arrayContains,
   arrayOverlaps,
   asc,
   count,
@@ -9,10 +8,8 @@ import {
   eq,
   exists,
   gt,
-  ilike,
   inArray,
   isNull,
-  like,
   ne,
   not,
   or,
@@ -35,8 +32,8 @@ import { contactConsentCurrent } from '@dakly/db/schema/consents';
 import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
 import { isConstraintViolation } from '../platform/database/error-code';
-import { escapeLike } from '../platform/database/escape-like';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { cursorCondition, matchingConditions } from './contact-filters.repository';
 
 export type Contact = {
   id: string;
@@ -152,21 +149,7 @@ export class ContactsRepository {
       tx
         .select(contactColumns)
         .from(contacts)
-        .where(
-          and(
-            eq(contacts.storeId, storeId),
-            isNull(contacts.deletedAt),
-            filter.kind ? eq(contacts.kind, filter.kind) : undefined,
-            filter.tag ? arrayContains(contacts.tags, [filter.tag]) : undefined,
-            filter.name ? ilike(contacts.name, `%${escapeLike(filter.name)}%`) : undefined,
-            filter.phone ? eq(contacts.phone, filter.phone) : undefined,
-            filter.phonePrefix ? like(contacts.phone, `${filter.phonePrefix}%`) : undefined,
-            filter.cursor
-              ? sql`(${contacts.createdAt}, ${contacts.id}) <
-              (select created_at, id from contacts where store_id = ${storeId} and id = ${filter.cursor})`
-              : undefined,
-          ),
-        )
+        .where(and(...matchingConditions(storeId, filter), cursorCondition(storeId, filter.cursor)))
         .orderBy(desc(contacts.createdAt), desc(contacts.id))
         .limit(filter.limit + 1),
     );

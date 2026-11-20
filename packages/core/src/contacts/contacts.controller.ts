@@ -10,15 +10,19 @@ import {
   Patch,
   Post,
   Query,
+  Res,
 } from '@nestjs/common';
+import type { FastifyReply } from 'fastify';
 
 import {
   type ContactDetailResponse,
+  type ContactExportQuery,
   type ContactListQuery,
   type ContactListResponse,
   type ContactResponse,
   type CreateContactInput,
   type UpdateContactInput,
+  contactExportQuerySchema,
   contactListQuerySchema,
   createContactSchema,
   updateContactSchema,
@@ -30,11 +34,15 @@ import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { ContactExportService } from './contact-export.service';
 import { ContactsService } from './contacts.service';
 
 @Controller('contacts')
 export class ContactsController {
-  constructor(@Inject(ContactsService) private readonly contactsService: ContactsService) {}
+  constructor(
+    @Inject(ContactsService) private readonly contactsService: ContactsService,
+    @Inject(ContactExportService) private readonly exports: ContactExportService,
+  ) {}
 
   @Post()
   @RequirePermission('customers.edit')
@@ -56,6 +64,27 @@ export class ContactsController {
     @Query(new ZodValidationPipe(contactListQuerySchema)) query: ContactListQuery,
   ): Promise<ContactListResponse> {
     return this.contactsService.list(storeId, query, access, { kind: 'user', userId });
+  }
+
+  // Declared before `:contactId`, which would otherwise take "export" for an id.
+  @Get('export')
+  @RequirePermission('customers.view')
+  async export(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Query(new ZodValidationPipe(contactExportQuerySchema)) query: ContactExportQuery,
+    @Res() reply: FastifyReply,
+  ) {
+    const { filename, type, body } = await this.exports.export(storeId, query, access, {
+      kind: 'user',
+      userId,
+    });
+    return reply
+      .header('Cache-Control', 'no-store')
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .type(type)
+      .send(body);
   }
 
   @Get(':contactId')
