@@ -1,12 +1,12 @@
 import { Minus, Plus } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { Button } from '@dakly/ui/button';
 
 import type { CanvasLayout } from '../workflow-canvas-layout';
 import { WorkflowCanvasGraph } from './workflow-canvas-graph';
-import type { CanvasEditing } from './workflow-canvas-nodes';
+import type { CanvasEditing, StepStats } from './workflow-canvas-nodes';
 
 // Below this the text is too small to read on a phone, so a wide flow scrolls sideways instead.
 const READABLE_ZOOM = 0.7;
@@ -40,9 +40,62 @@ type Props = {
   layout: CanvasLayout;
   recentEntries?: string;
   editing?: CanvasEditing;
+  stats?: StepStats;
+  // Sits at the end of the zoom controls.
+  extraControl?: ReactNode;
 };
 
-export function WorkflowCanvasViewport({ graph, layout, recentEntries, editing }: Props) {
+type ZoomProps = {
+  scale: number;
+  onChange: (zoom: number) => void;
+  onFit: () => void;
+  extra?: ReactNode;
+};
+
+function ZoomControls({ scale, onChange, onFit, extra }: ZoomProps) {
+  return (
+    <div className="shadow-sm absolute bottom-4 left-4 flex items-center overflow-hidden rounded-lg border border-border bg-surface">
+      <Button
+        variant="secondary"
+        className="rounded-r-none border-0"
+        aria-label="Zoom out"
+        disabled={scale <= MIN_ZOOM}
+        onClick={() => onChange(scale - ZOOM_STEP)}
+      >
+        <Minus size={14} aria-hidden="true" />
+      </Button>
+      <span role="status" className="w-14 text-center text-sm tabular-nums">
+        {Math.round(scale * 100)}%
+      </span>
+      <Button
+        variant="secondary"
+        className="rounded-none border-0"
+        aria-label="Zoom in"
+        disabled={scale >= MAX_ZOOM}
+        onClick={() => onChange(scale + ZOOM_STEP)}
+      >
+        <Plus size={14} aria-hidden="true" />
+      </Button>
+      <Button
+        variant="secondary"
+        className="rounded-none border-0 border-l border-border whitespace-nowrap"
+        onClick={onFit}
+      >
+        Fit<span className="max-sm:sr-only"> to screen</span>
+      </Button>
+      {extra}
+    </div>
+  );
+}
+
+export function WorkflowCanvasViewport({
+  graph,
+  layout,
+  recentEntries,
+  editing,
+  stats,
+  extraControl,
+}: Props) {
   const [zoom, setZoom] = useState<number | null>(null);
   const viewport = useViewportWidth();
   const fitted = viewport.width ? Math.min(1, viewport.width / layout.width) : 1;
@@ -62,38 +115,15 @@ export function WorkflowCanvasViewport({ graph, layout, recentEntries, editing }
           scale={scale}
           recentEntries={recentEntries}
           editing={editing}
+          stats={stats}
         />
       </div>
-      <div className="shadow-sm absolute bottom-4 left-4 flex items-center rounded-lg border border-border bg-surface">
-        <Button
-          variant="secondary"
-          className="rounded-r-none border-0"
-          aria-label="Zoom out"
-          disabled={scale <= MIN_ZOOM}
-          onClick={() => change(scale - ZOOM_STEP)}
-        >
-          <Minus size={14} aria-hidden="true" />
-        </Button>
-        <span role="status" className="w-14 text-center text-sm tabular-nums">
-          {Math.round(scale * 100)}%
-        </span>
-        <Button
-          variant="secondary"
-          className="rounded-none border-0"
-          aria-label="Zoom in"
-          disabled={scale >= MAX_ZOOM}
-          onClick={() => change(scale + ZOOM_STEP)}
-        >
-          <Plus size={14} aria-hidden="true" />
-        </Button>
-        <Button
-          variant="secondary"
-          className="rounded-l-none border-0 border-l border-border"
-          onClick={() => setZoom(Math.max(MIN_ZOOM, fitted))}
-        >
-          Fit to screen
-        </Button>
-      </div>
+      <ZoomControls
+        scale={scale}
+        onChange={change}
+        onFit={() => setZoom(Math.max(MIN_ZOOM, fitted))}
+        extra={extraControl}
+      />
     </>
   );
 }
