@@ -19,12 +19,14 @@ export class CampaignBatchService {
     if (!campaignId) return;
     const next = await this.sender.sendBatch(storeId, campaignId);
     const now = this.clock.now().getTime();
-    // Check for cancellation recovery during a long send delay.
+    // Wake at least every poll interval so this store can settle a cancellation
+    // while the next send waits.
     if (next) return { delayUntil: Math.min(next.getTime(), now + JOB_POLL_INTERVAL_MS) };
     const remaining = await this.repository.nextCampaignId(
       storeId,
       new Date(now - CAMPAIGN_CLAIM_MS),
     );
+    // The next sweep can retry the same campaign without spinning on a stopped claim.
     if (remaining && remaining !== campaignId) return { delayUntil: now };
   }
 }

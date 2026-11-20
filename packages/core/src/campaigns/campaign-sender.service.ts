@@ -62,7 +62,7 @@ export class CampaignSenderService {
     const deadline = performance.now() + MINUTE_MS / 4;
     for (let position = 0; position < BATCH_SIZE; position++) {
       const claim = await this.claimNext(storeId, campaignId);
-      if (claim.kind === 'send' && (await this.deliver(storeId, claim)) === false) return null;
+      if (claim.kind === 'send' && !(await this.deliver(storeId, claim))) return null;
       if (claim.kind === 'stop') {
         await this.finish(storeId, campaignId);
         return null;
@@ -282,7 +282,7 @@ export class CampaignSenderService {
     );
   }
 
-  private async deliver(storeId: string, submission: Submission) {
+  private async deliver(storeId: string, submission: Submission): Promise<boolean> {
     const { recipient, destination, body, claimedAt, sender } = submission;
     const { id: recipientId, contactId } = recipient;
     const expiresAt = new Date(claimedAt.getTime() + CAMPAIGN_CLAIM_MS);
@@ -316,11 +316,11 @@ export class CampaignSenderService {
       if (!(error instanceof AppError)) throw error;
       if (recipient.status === 'sending') {
         await this.failUnknown(storeId, { id: recipientId, claimedAt }, countSmsParts(body));
-        return;
+        return true;
       }
       const retry = await this.recordRefusal(storeId, submission);
       if (retry && error.code === 'SMS_SEND_REFUSED') throw error;
-      return;
+      return true;
     }
     const { providerMessageId, credits } = receipt;
     const claim = { status: 'sending', claimedAt } as const;
@@ -341,6 +341,7 @@ export class CampaignSenderService {
         failedAt: null,
       },
     );
+    return true;
   }
 
   private async recordRefusal(storeId: string, submission: Submission, unsubmitted = false) {
