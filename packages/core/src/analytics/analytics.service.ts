@@ -91,6 +91,14 @@ export class AnalyticsService {
     return returnPerTaka(revenuePoisha, costPoisha);
   }
 
+  attributedBuyerIds(
+    storeId: string,
+    source: { type: 'campaign' | 'automation'; id: string },
+    contactIds: string[],
+  ) {
+    return contactIds.length ? this.repository.attributedBuyerIds(storeId, source, contactIds) : [];
+  }
+
   attributedOrders(
     storeId: string,
     source: { type: 'campaign' | 'automation'; id: string },
