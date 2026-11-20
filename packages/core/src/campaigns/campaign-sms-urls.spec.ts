@@ -80,6 +80,11 @@ describe('SMS campaign body URLs', () => {
       target: 'https://shop.example.test/search?q=a"b',
       body: 'Visit "/short".',
     },
+    {
+      text: 'Visit "https://shop.example.test/search?q=O\'\'Reilly".',
+      target: "https://shop.example.test/search?q=O''Reilly",
+      body: 'Visit "/short".',
+    },
   ])(
     'keeps internal quote characters and any surrounding quotes in $text',
     ({ text, target, body }) => {
