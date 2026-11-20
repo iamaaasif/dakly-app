@@ -24,6 +24,7 @@
     "./dropdown-menu": "./src/dropdown-menu.tsx",
     "./table": "./src/table.tsx",
     "./select": "./src/select.tsx",
+    "./switch": "./src/switch.tsx",
     "./toast": "./src/toast.tsx"
   },
   "scripts": {

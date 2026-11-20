@@ -46,7 +46,6 @@ test('saves unfinished products, edits variants without losing stock and manages
       await dialog.evaluate((element) => {
         element.scrollTop = 0;
       });
-      await dialog.getByRole('button', { name: /Close/ }).first().focus();
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -184,7 +183,7 @@ test('saves unfinished products, edits variants without losing stock and manages
     await expect(page.getByRole('img', { name: `${name} photo 1` })).toBeVisible();
 
     await page.getByRole('button', { name: 'Edit product', exact: true }).click();
-    await page.getByLabel('Selling price (Taka)', { exact: true }).fill('2450.50');
+    await page.getByLabel('Selling price ৳', { exact: true }).fill('2450.50');
     await page.getByLabel('Description', { exact: true }).fill('Cotton fabric with a regular fit.');
     await page.getByLabel('Other names', { exact: true }).fill('স্কার্ফ\nScarf');
     await page.getByRole('button', { name: 'Add option', exact: true }).click();

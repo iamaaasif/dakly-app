@@ -47,12 +47,11 @@ function ProductDetails({ product }: ProductDetailsProps) {
       <ProductDetailHeader product={product} />
       <ProductPhotos product={product} />
       {editing && canEdit ? (
-        <>
-          <ProductForm product={product} onSaved={() => setEditing(false)} />
-          <Button variant="secondary" onClick={() => setEditing(false)}>
-            Cancel editing
-          </Button>
-        </>
+        <ProductForm
+          product={product}
+          onSaved={() => setEditing(false)}
+          onCancel={() => setEditing(false)}
+        />
       ) : (
         <>
           <ProductOverview product={product} />
