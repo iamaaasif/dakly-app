@@ -17,6 +17,7 @@ const sent: CampaignResponse = {
   channelConnectionId: null,
   includeSegmentIds: [],
   excludeSegmentIds: [],
+  source: null,
   scheduledFor: null,
   status: 'sent',
   approval: null,

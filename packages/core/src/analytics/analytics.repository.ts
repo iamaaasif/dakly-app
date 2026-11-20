@@ -27,6 +27,29 @@ export class AnalyticsRepository {
     );
   }
 
+  // Which of these buyers have a live order credited to the source.
+  async attributedBuyerIds(
+    storeId: string,
+    source: { type: 'campaign' | 'automation'; id: string },
+    contactIds: string[],
+  ): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .selectDistinct({ contactId: orders.buyerContactId })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.attributedSourceType, source.type),
+            eq(orders.attributedSourceId, source.id),
+            ne(orders.stage, 'cancelled'),
+            inArray(orders.buyerContactId, contactIds),
+          ),
+        ),
+    );
+    return rows.flatMap(({ contactId }) => (contactId ? [contactId] : []));
+  }
+
   // Live orders credited to one source, one row per order, for the people behind a source's revenue.
   attributedOrders(
     storeId: string,
