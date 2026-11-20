@@ -83,12 +83,13 @@ export class CampaignSendingRepository {
   async firstWork(storeId: string, expiredBefore: Date) {
     const active = sql`${campaigns.status} = 'sending'`;
     const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null`;
-    const ready = sql`not exists (
-        select 1 from campaign_recipients r
-        where r.store_id = ${storeId} and r.campaign_id = ${campaigns.id}
-          and r.status in ('queued', 'sending')
-        having bool_and(r.status = 'sending' and coalesce(r.claimed_at >= ${expiredBefore.toISOString()}::timestamptz, true))
-      )`;
+    const recipients = sql`select 1 from campaign_recipients r
+      where r.store_id = ${storeId} and r.campaign_id = ${campaigns.id}`;
+    const ready = sql`(
+      exists (${recipients} and (r.status = 'queued' or
+        (r.status = 'sending' and r.claimed_at < ${expiredBefore.toISOString()}::timestamptz)))
+      or not exists (${recipients} and r.status in ('queued', 'sending'))
+    )`;
     return this.database.forStore(storeId, (tx) =>
       tx
         .selectDistinctOn([campaigns.status], {

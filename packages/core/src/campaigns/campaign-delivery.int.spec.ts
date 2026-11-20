@@ -300,7 +300,7 @@ describe('Campaign sender (Postgres)', () => {
   });
 
   it.each([false, true])(
-    'releases an unsubmitted claim after losing its lease (authorization failed: %s)',
+    'releases an unsubmitted claim after fencing or authorization failure (failed: %s)',
     async (failed) => {
       const { id } = await sendingCampaign(1);
       const repository = app.get(CampaignSendingRepository);
@@ -309,16 +309,15 @@ describe('Campaign sender (Postgres)', () => {
       const current = vi
         .spyOn(repository, 'authorizeSubmission')
         .mockImplementationOnce(async (...args) => {
-          if (failed) {
-            hasLease = false;
-            throw new Error('authorization write unavailable');
-          }
+          if (failed) throw new Error('authorization write unavailable');
           const result = await check(...args);
           hasLease = false;
           return result;
         });
       try {
-        expect(await sender.sendBatch(storeId, id, () => hasLease)).toBeNull();
+        const batch = sender.sendBatch(storeId, id, () => hasLease);
+        if (failed) await expect(batch).rejects.toThrow('authorization write unavailable');
+        else await expect(batch).resolves.toBeNull();
         expect(current).toHaveBeenCalledTimes(1);
         expect(calls).toHaveLength(0);
         expect(await settlementRows(id)).toEqual([]);

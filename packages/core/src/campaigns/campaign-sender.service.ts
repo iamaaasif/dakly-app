@@ -312,7 +312,10 @@ export class CampaignSenderService {
       canSubmit() &&
       (await this.repository
         .authorizeSubmission(storeId, recipientId, claimedAt)
-        .catch(() => false));
+        .catch(async (error: unknown) => {
+          await this.recordRefusal(storeId, submission, true);
+          throw error;
+        }));
     if (!authorized || !canSubmit()) {
       await this.recordRefusal(storeId, submission, true);
       return;
