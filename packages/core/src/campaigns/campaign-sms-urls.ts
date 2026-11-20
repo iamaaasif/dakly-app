@@ -73,7 +73,7 @@ function urlCandidate(raw: string, prefix: string): string | undefined {
   const candidate = raw.slice(0, end);
   if (closer === '>') return candidate;
   if (isAmbiguousQuote(candidate, prefix, closer)) return undefined;
-  return trimMessagePunctuation(candidate);
+  return trimMessagePunctuation(candidate, '');
 }
 
 function isAmbiguousQuote(candidate: string, prefix: string, closer: string): boolean {
@@ -85,13 +85,16 @@ function isAmbiguousQuote(candidate: string, prefix: string, closer: string): bo
 }
 
 function bareUrl(raw: string, prefix: string): string | undefined {
-  if (!prefix) return trimMessagePunctuation(raw);
+  if (!prefix) return trimMessagePunctuation(raw, '');
   const closingRun = matchingClosers(prefix);
   const bracketedProse = (following: string, end: number) =>
     followingBracket.test(following) && bracketsClosed(raw.slice(0, end), closingRun);
   if (hasAdjacentProse(raw, closingRun, bracketedProse)) return undefined;
-  const candidate = trimMessagePunctuation(raw);
-  if (candidate.at(-1) === closingRun[0] && !raw.slice(candidate.length).startsWith(closingRun)) {
+  const candidate = trimMessagePunctuation(raw, closingRun);
+  if (
+    candidate.at(-1) === closingRun[0] &&
+    withoutOuterClosers(raw.slice(candidate.length), closingRun) === undefined
+  ) {
     const encoded = jsonSpans(candidate).some(
       ({ start, end }) => end === candidate.length && candidate[start] === '%',
     );
@@ -158,10 +161,10 @@ function jsonSpans(text: string): JsonParameterSpan[] {
   return spans;
 }
 
-function trimMessagePunctuation(raw: string): string {
+function trimMessagePunctuation(raw: string, outerClosers: string): string {
   let candidate = raw.replace(sentencePunctuation, '');
   if (openingBracket[candidate.at(-1) ?? '']) {
-    const jsonUrl = trimAfterJson(candidate);
+    const jsonUrl = trimAfterJson(candidate, outerClosers);
     if (jsonUrl) return jsonUrl;
   }
   for (let last = candidate.at(-1); last; last = candidate.at(-1)) {
@@ -172,19 +175,30 @@ function trimMessagePunctuation(raw: string): string {
   return candidate;
 }
 
-function trimAfterJson(raw: string): string | undefined {
+function trimAfterJson(raw: string, outerClosers: string): string | undefined {
   if (!/[?&#]/u.test(raw)) return undefined;
   let candidate = raw;
   while (candidate) {
     const spans = jsonSpans(candidate);
     if (spans.some(({ end }) => end === candidate.length)) {
-      return keepUrlClosers(candidate, raw.slice(candidate.length), spans);
+      const suffix = raw.slice(candidate.length);
+      return keepUrlClosers(candidate, withoutOuterClosers(suffix, outerClosers) ?? suffix, spans);
     }
     const last = candidate.at(-1) ?? '';
     if (!openingBracket[last]) break;
     candidate = candidate.slice(0, -1).replace(sentencePunctuation, '');
   }
   return undefined;
+}
+
+function withoutOuterClosers(suffix: string, closers: string): string | undefined {
+  let end = suffix.length;
+  for (let index = closers.length - 1; index >= 0; index -= 1) {
+    end = suffix.slice(0, end).replace(sentencePunctuation, '').length;
+    if (suffix[end - 1] !== closers[index]) return undefined;
+    end -= 1;
+  }
+  return suffix.slice(0, end);
 }
 
 function keepUrlClosers(candidate: string, suffix: string, json: JsonParameterSpan[]): string {

@@ -188,9 +188,13 @@ describe('SMS campaign body URLs', () => {
     { prefix: '[', target: 'https://shop.example.test/search?q=%5B]', suffix: '].' },
     { prefix: '[[', target: 'https://shop.example.test/search?q=%5B]', suffix: ']].' },
     { prefix: '([', target: 'https://shop.example.test/search?q=%5B]', suffix: ']).' },
+    { prefix: '[', target: 'https://shop.example.test/search?q=%5B]', suffix: '.].' },
+    { prefix: '([', target: 'https://shop.example.test/search?q=%5B]', suffix: '].).' },
     { prefix: '', target: 'https://shop.example.test/a(foo?q=[])', suffix: '.' },
     { prefix: '(', target: 'https://shop.example.test/a(foo?q=[])', suffix: ').' },
     { prefix: '(', target: 'https://shop.example.test/?a=["("]&b=[1]', suffix: ').' },
+    { prefix: '(', target: 'https://shop.example.test/?label=(sale&filter=[]', suffix: ').' },
+    { prefix: '([', target: 'https://shop.example.test/?label=[new&filter=[]', suffix: ']).' },
   ])('keeps balanced URL brackets with the outer $prefix wrapper', ({ prefix, target, suffix }) => {
     const text = `Open ${prefix}${target}${suffix}`;
     const urls = campaignSmsUrls(text);
