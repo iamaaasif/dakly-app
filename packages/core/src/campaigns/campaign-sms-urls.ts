@@ -9,7 +9,7 @@ const followingQuote = /^[.,!?:;–—…।॥-]*["'‘“]/u;
 const followingNestedQuote = /^[.,!?:;–—…।॥-]*[[({]*["'‘“]/u;
 const followingBracketedQuote = /^[.,!?;–—…।॥-]+[[({]+["'‘“]/u;
 const followingBracket = /^[.,!?;–—…।॥-]+[[({]/u;
-const jsonValueStart = /[?&#][^?&#=]+=(?=[{[])/gu;
+const urlParameters = /[?&#][^&#=]+=([^&#]*)/gu;
 const closingWrapper: Partial<Record<string, string>> = {
   '<': '>',
   '"': '"',
@@ -97,7 +97,7 @@ function hasQuotedProse(candidate: string, prefix: string): boolean {
   const closers = matchingClosers(prefix);
   for (let count = 1; count <= closers.length; count += 1) {
     const follows = (following: string, end: number) => {
-      if (json.some(({ start, close }) => start < end && end < close)) return false;
+      if (json.some((span) => span.start < end && end + count < span.end)) return false;
       if (count > 1) return followingNestedQuote.test(following);
       return followingQuote.test(following) || followingBracketedQuote.test(following);
     };
@@ -133,38 +133,21 @@ function bracketsClosed(text: string, closingRun: string): boolean {
   return true;
 }
 
-function jsonSpans(text: string): { start: number; close: number }[] {
-  const spans: { start: number; close: number }[] = [];
-  for (const match of text.matchAll(jsonValueStart)) {
-    const start = match.index + match[0].length;
-    const close = jsonValueEnd(text, start);
-    if (close === undefined) continue;
+function jsonSpans(text: string): { start: number; end: number }[] {
+  const spans: { start: number; end: number }[] = [];
+  for (const match of text.matchAll(urlParameters)) {
+    const raw = match[1] ?? '';
+    const decoded = new URLSearchParams(`value=${raw}`).get('value');
+    if (!decoded || (decoded[0] !== '[' && decoded[0] !== '{')) continue;
     try {
-      JSON.parse(text.slice(start, close + 1));
-      spans.push({ start, close });
+      JSON.parse(decoded);
+      const end = match.index + match[0].length;
+      spans.push({ start: end - raw.length, end });
     } catch {
-      // A bracket in an ordinary URL or in adjacent prose is not a JSON value.
+      // Only a complete JSON value can contain an internal wrapper.
     }
   }
   return spans;
-}
-
-function jsonValueEnd(text: string, start: number): number | undefined {
-  let depth = 0;
-  let quoted = false;
-  for (let index = start; index < text.length; index += 1) {
-    const character = text[index];
-    if (character === '"') quoted = !quoted;
-    if (quoted) {
-      if (character === '\\') index += 1;
-      continue;
-    }
-    if (character === '[' || character === '{') depth += 1;
-    if (character !== ']' && character !== '}') continue;
-    depth -= 1;
-    if (depth === 0) return index;
-  }
-  return undefined;
 }
 
 function trimMessagePunctuation(raw: string): string {

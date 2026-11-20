@@ -105,6 +105,7 @@ describe('SMS campaign body URLs', () => {
     { prefix: '("', value: '{"tags":["new"]}', suffix: '").' },
     { prefix: '("', value: '["red","blue"]', suffix: '").' },
     { prefix: '(["', value: '[["]]"],"blue"]&view=grid', suffix: '"]).' },
+    { prefix: '"', value: '[%22red","blue"]', suffix: '".' },
   ])('keeps JSON quotes and brackets in a URL with $value', ({ prefix, value, suffix }) => {
     const target = `https://shop.example.test/search?filter=${value}`;
     const text = `Open ${prefix}${target}${suffix}`;
@@ -168,6 +169,7 @@ describe('SMS campaign body URLs', () => {
     'Open (["https://shop.example.test/?item=1"]—"today").',
     'Open ("https://shop.example.test/?q=[sale")—("today]").',
     'Open "https://shop.example.test/?q=[sale"—"today]".',
+    'Open ["https://shop.example.test/?q=["sale]"]—["today"].',
   ])('keeps adjacent quoted prose out of the URL in %s', (text) => {
     expect(campaignSmsUrls(text)).toEqual([]);
   });
