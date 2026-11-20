@@ -261,11 +261,11 @@ export type CampaignCustomersResponse = {
   items: CampaignCustomerResponse[];
   nextCursor: string | null;
 };
-// Money is integer poisha as strings. returnPerTakaPoisha is the poisha earned for each ৳1 spent
-// (100 poisha), so ৳2.35 is 235; it is null while nothing has been spent.
+// Money is integer poisha as strings. returnPerTaka is whole ৳ earned per ৳1 spent, rounded as the
+// Analytics pages do, and null while nothing has been spent.
 export type CampaignResultsResponse = {
   costPoisha: string;
-  returnPerTakaPoisha: string | null;
+  returnPerTaka: number | null;
   // The shop's attribution window; orders placed until it ends can still count.
   attributionWindowDays: number;
   // Null until the campaign has finished sending.

@@ -186,7 +186,7 @@ describe('CampaignsService drafts (Postgres)', () => {
     const campaign = await draft('ফলাফল');
     expect(await results.results(storeId, campaign.id)).toEqual({
       costPoisha: '0',
-      returnPerTakaPoisha: null,
+      returnPerTaka: null,
       attributionWindowDays: expect.any(Number),
       resultsFinalAt: null,
       failureReasons: [],

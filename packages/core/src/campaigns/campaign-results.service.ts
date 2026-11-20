@@ -7,11 +7,10 @@ import type {
 } from '@dakly/contracts/campaigns';
 
 import { AnalyticsService } from '../analytics/analytics.service';
+import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { CampaignResultsRepository } from './campaign-results.repository';
 import { campaignError } from './campaigns.errors';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Report numbers come from here and from the analytics service; the browser only formats them.
 @Injectable()
@@ -34,7 +33,7 @@ export class CampaignResultsService {
       ]);
     return {
       costPoisha: String(summary.costPoisha),
-      returnPerTakaPoisha: returnPerTaka(
+      returnPerTaka: this.reports.returnPerTaka(
         BigInt(attribution[campaignId]?.revenuePoisha ?? 0),
         BigInt(summary.costPoisha),
       ),
@@ -88,11 +87,6 @@ export class CampaignResultsService {
     if (!summary) throw campaignError('CAMPAIGN_NOT_FOUND');
     return summary;
   }
-}
-
-// 100 poisha is ৳1, so revenue per poisha spent times 100 is the poisha earned per ৳1.
-export function returnPerTaka(revenuePoisha: bigint, costPoisha: bigint): string | null {
-  return costPoisha > 0n ? ((revenuePoisha * 100n) / costPoisha).toString() : null;
 }
 
 // Each query reads one row past the limit to know whether another page exists.
