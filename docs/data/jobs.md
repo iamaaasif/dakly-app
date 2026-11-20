@@ -71,7 +71,7 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 | `wallet.credited`           | Verified SMS top-up            | `storeId`, `entryId` in the typed event | Resumes affordable balance-paused campaigns. Pages by campaign id after verifying the credit entry and its wallet revision.                                |
 | sweep `start-due-campaigns` | Every minute                   | none                                    | `campaign_send_work_stores` finds eligible stores. Start up to 100 due campaigns per store and enqueue sending and cancelled-claim recovery independently. |
 
-One campaign batch can execute per store. The send and cancellation lanes queue independently and share a Valkey lease during execution. A completed or deferred batch releases the lease. If a worker stops mid-batch, the lease expires after five minutes.
+One campaign batch can execute per store. The send and cancellation lanes queue independently and share a Valkey lease during execution. A running worker renews its lease every 30 seconds and checks ownership before claims and provider calls. Completion or deferral releases the lease. If a worker stops, its lease expires five minutes after the last renewal.
 
 ## workflow
 

@@ -14,6 +14,12 @@ export const SEND_CAMPAIGN_BATCH = 'send-campaign-batch';
 
 const LEASE_MS = 5 * MINUTE_MS;
 const acquire = `return redis.call('SET', KEYS[1], ARGV[1], 'PX', ARGV[2], 'NX')`;
+const renew = `
+  if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('PEXPIRE', KEYS[1], ARGV[2])
+  end
+  return 0
+`;
 const release = `
   if redis.call('GET', KEYS[1]) == ARGV[1] then
     return redis.call('DEL', KEYS[1])
@@ -35,6 +41,7 @@ export class SendCampaignBatchJob implements JobHandler, OnModuleInit {
   async onModuleInit() {
     const client = await this.queue.client;
     client.defineCommand('claimCampaignBatch', { numberOfKeys: 1, lua: acquire });
+    client.defineCommand('renewCampaignBatch', { numberOfKeys: 1, lua: renew });
     client.defineCommand('releaseCampaignBatch', { numberOfKeys: 1, lua: release });
   }
 
@@ -43,12 +50,29 @@ export class SendCampaignBatchJob implements JobHandler, OnModuleInit {
     const client = await this.queue.client;
     const key = this.queue.toKey(`batch-lease:${storeId}`);
     const token = randomUUID();
+    let expiresAt = performance.now() + LEASE_MS;
     if (!(await client.runCommand('claimCampaignBatch', [key, token, LEASE_MS])))
       return { delayUntil: Date.now() + JOB_POLL_INTERVAL_MS };
+    const heartbeat = setInterval(() => {
+      const renewedUntil = performance.now() + LEASE_MS;
+      void client.runCommand('renewCampaignBatch', [key, token, LEASE_MS]).then(
+        (renewed) => {
+          expiresAt = renewed && expiresAt ? renewedUntil : 0;
+        },
+        () => {
+          expiresAt = 0;
+        },
+      );
+    }, JOB_POLL_INTERVAL_MS);
     try {
-      const next = await this.sender.sendBatch(storeId, campaignId);
+      const next = await this.sender.sendBatch(
+        storeId,
+        campaignId,
+        () => performance.now() < expiresAt,
+      );
       if (next) return { delayUntil: next.getTime() };
     } finally {
+      clearInterval(heartbeat);
       await client.runCommand('releaseCampaignBatch', [key, token]).catch(() => {
         this.logger.warn('Could not release a campaign batch lease');
       });

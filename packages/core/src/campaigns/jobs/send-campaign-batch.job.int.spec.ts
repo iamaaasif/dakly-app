@@ -12,6 +12,7 @@ import { ErrorReporter } from '../../platform/logging/error-reporter';
 import { CampaignJobDispatcher } from '../../platform/queue/job-dispatcher';
 import { QUEUES } from '../../platform/queue/queues';
 import { toRedisConnection } from '../../platform/queue/redis-connection';
+import { JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../../platform/time';
 import { CampaignSenderService } from '../campaign-sender.service';
 import { SEND_CAMPAIGN_BATCH, SendCampaignBatchJob } from './send-campaign-batch.job';
 
@@ -63,10 +64,10 @@ describe('Campaign batch dispatch (Valkey)', () => {
       });
       await vi.waitFor(async () => expect(await other.getState()).toBe('completed'));
       expect(sendBatch.mock.calls).toEqual([
-        [deferred.storeId, deferred.campaignId],
-        [chained.storeId, chained.campaignId],
-        [chained.storeId, chained.campaignId],
-        [chained.storeId, chained.campaignId],
+        [deferred.storeId, deferred.campaignId, expect.any(Function)],
+        [chained.storeId, chained.campaignId, expect.any(Function)],
+        [chained.storeId, chained.campaignId, expect.any(Function)],
+        [chained.storeId, chained.campaignId, expect.any(Function)],
       ]);
       expect(await first.getState()).toBe('delayed');
     } finally {
@@ -102,18 +103,68 @@ describe('Campaign batch dispatch (Valkey)', () => {
       expect(sameStore?.delayUntil).toBeGreaterThan(Date.now());
       expect(await handler.handle(other)).toBeUndefined();
       expect(sendBatch.mock.calls).toEqual([
-        [active.storeId, active.campaignId],
-        [other.storeId, other.campaignId],
+        [active.storeId, active.campaignId, expect.any(Function)],
+        [other.storeId, other.campaignId, expect.any(Function)],
       ]);
 
       const quietHoursEnd = new Date(Date.now() + 60_000);
       release.resolve(quietHoursEnd);
       expect(await first).toEqual({ delayUntil: quietHoursEnd.getTime() });
       expect(await handler.handle(recovery)).toBeUndefined();
-      expect(sendBatch).toHaveBeenLastCalledWith(recovery.storeId, recovery.campaignId);
+      expect(sendBatch).toHaveBeenLastCalledWith(
+        recovery.storeId,
+        recovery.campaignId,
+        expect.any(Function),
+      );
     } finally {
       release.resolve(new Date());
       await first.catch(() => undefined);
+      await app.close();
+    }
+  });
+
+  it('renews the lease while working and fences a batch that loses it', async () => {
+    const payload = { storeId: randomUUID(), campaignId: randomUUID() };
+    const entered = Promise.withResolvers<() => boolean>();
+    const finish = Promise.withResolvers<null>();
+    const { app, queue, handler } = await openQueue(async (_storeId, _campaignId, hasLease) => {
+      entered.resolve(hasLease!);
+      return finish.promise;
+    });
+    const client = await queue.client;
+    const key = queue.toKey(`batch-lease:${payload.storeId}`);
+    client.defineCommand('campaignBatchLeaseTtl', {
+      numberOfKeys: 1,
+      lua: "return redis.call('PTTL', KEYS[1])",
+    });
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const batch = handler.handle(payload);
+    try {
+      const hasLease = await Promise.race([
+        entered.promise,
+        batch.then(() => {
+          throw new Error('The batch ended before taking its lease');
+        }),
+      ]);
+      const token = await client.get(key);
+      expect(token).toBeTruthy();
+      expect(hasLease()).toBe(true);
+      await client.set(key, token!, { PX: MINUTE_MS });
+      await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+      await vi.waitFor(async () => {
+        expect(await client.runCommand('campaignBatchLeaseTtl', [key])).toBeGreaterThan(MINUTE_MS);
+      });
+
+      await client.set(key, 'other-worker', { PX: MINUTE_MS });
+      await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
+      await vi.waitFor(() => expect(hasLease()).toBe(false));
+      finish.resolve(null);
+      await batch;
+      expect(await client.get(key)).toBe('other-worker');
+    } finally {
+      finish.resolve(null);
+      await batch.catch(() => undefined);
+      vi.useRealTimers();
       await app.close();
     }
   });
