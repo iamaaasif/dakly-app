@@ -16,10 +16,10 @@ import { SWEEP_CONTACT_STATS } from '@dakly/core/contacts/jobs/sweep-contact-sta
 import { FAIL_STUCK_IMPORTS } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { QUEUE_CONVERSATION_RETURNS } from '@dakly/core/messaging/jobs/queue-conversation-returns.job';
 import { WAKE_SNOOZED_NOTIFICATIONS } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
-import { loadEnv } from '@dakly/core/platform/config/env';
 import { RECOVER_PAYMENT_CALLBACKS } from '@dakly/core/payments/jobs/recover-payment-callbacks.job';
 import { SWEEP_PAYMENT_CHECKS } from '@dakly/core/payments/jobs/sweep-payment-checks.job';
 import { SWEEP_PAYMENT_SETTLEMENTS } from '@dakly/core/payments/jobs/sweep-payment-settlements.job';
+import { loadEnv } from '@dakly/core/platform/config/env';
 import {
   RELAY_OUTBOX,
   RELAY_OUTBOX_INTERVAL_MS,
