@@ -9,6 +9,7 @@ import {
   attributionWindowSchema,
   type AttributionSettingsResponse,
   type AttributionWindow,
+  type SetupProfile,
   type StoreResponse,
   type ChangeStoreSettingsInput,
   type ChangeStoreExtensionsInput,
@@ -217,6 +218,50 @@ export class StoresService {
       if (!store) throw storeError('STORE_NOT_FOUND');
       await this.recordChange(storeId, actor.userId, 'store.extensions_changed', ['extensions']);
       return toSettingsResponse(store);
+    });
+  }
+
+  async setupProfile(storeId: string): Promise<SetupProfile> {
+    const profile = await this.repository.setupProfile(storeId);
+    if (!profile) throw storeError('STORE_NOT_FOUND');
+    return profile;
+  }
+
+  changeHowYouSell(
+    storeId: string,
+    howYouSell: SetupProfile['howYouSell'],
+    actor: { userId: string; access: StoreAccess },
+  ): Promise<{ profile: SetupProfile; turnedOn: string[] }> {
+    if (!this.team.canChangeExtensions(actor.access)) throw storeError('STORE_SETUP_DENIED');
+    return this.transaction.run(storeId, async () => {
+      const before = await this.repository.setupProfile(storeId);
+      if (!before) throw storeError('STORE_NOT_FOUND');
+      // Changing the answers only adds extensions; turning one off stays a choice on Extensions.
+      const turnedOn = onboardingExtensions(howYouSell).filter(
+        (extension) => !before.extensions.includes(extension),
+      );
+      const profile = await this.repository.changeHowYouSell(
+        storeId,
+        howYouSell,
+        [...before.extensions, ...turnedOn],
+        this.clock.now(),
+      );
+      if (!profile) throw storeError('STORE_NOT_FOUND');
+      await this.recordChange(storeId, actor.userId, 'store.how_you_sell_changed', ['howYouSell']);
+      return { profile, turnedOn };
+    });
+  }
+
+  hideSetupGuide(
+    storeId: string,
+    actor: { userId: string; access: StoreAccess },
+  ): Promise<SetupProfile> {
+    if (!this.team.canChangeExtensions(actor.access)) throw storeError('STORE_SETUP_DENIED');
+    return this.transaction.run(storeId, async () => {
+      const profile = await this.repository.hideSetupGuide(storeId, this.clock.now());
+      if (!profile) throw storeError('STORE_NOT_FOUND');
+      await this.recordChange(storeId, actor.userId, 'store.setup_guide_hidden', ['setupGuide']);
+      return profile;
     });
   }
 
