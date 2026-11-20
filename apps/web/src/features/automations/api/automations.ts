@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import {
   type AutomationDetailResponse,
   type AutomationListResponse,
+  type AutomationTriggerPreview,
   MAX_AUTOMATIONS_PER_STORE,
 } from '@dakly/contracts/automations';
 
@@ -31,5 +32,15 @@ export function useAutomation(id: string) {
     queryKey: [...automationKeys.all(contextTag), id],
     queryFn: ({ signal }) => request<AutomationDetailResponse>(`/automations/${id}`, { signal }),
     enabled: Boolean(contextTag),
+  });
+}
+
+export function useTriggerPreview(id: string, enabled: boolean) {
+  const { request, contextTag } = useStoreRequest();
+  return useQuery({
+    queryKey: [...automationKeys.all(contextTag), id, 'trigger-preview'],
+    queryFn: ({ signal }) =>
+      request<AutomationTriggerPreview>(`/automations/${id}/trigger-preview`, { signal }),
+    enabled: Boolean(contextTag) && enabled,
   });
 }

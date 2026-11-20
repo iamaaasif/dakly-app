@@ -19,6 +19,7 @@ import { UsageModule } from '../usage/usage.module';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { AiAgentService } from './ai-agent.service';
 import { ReplyToCustomerJob } from './jobs/reply-to-customer.job';
+import { RestartReturnOnStaffReply } from './jobs/restart-return-on-staff-reply.job';
 import { ScheduleAiReplyOnMessage } from './jobs/schedule-ai-reply-on-message.job';
 import { SalesAgentToolsService } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
@@ -45,6 +46,7 @@ import { SalesAgentService } from './sales-agent.service';
     AiAgentSettingsRepository,
     AiAgentService,
     ReplyToCustomerJob,
+    RestartReturnOnStaffReply,
     SalesAgentService,
     SalesAgentToolsService,
     ScheduleAiReplyOnMessage,

@@ -13,7 +13,10 @@ import { ImportDuplicatesStep } from './import-duplicates-step';
 import { ImportMappingStep } from './import-mapping-step';
 import { ImportPreviewStep } from './import-preview-step';
 import { ImportResultStep } from './import-result-step';
+<<<<<<< HEAD
 import { ImportStepHeader } from '@/components/import-step-header';
+=======
+>>>>>>> origin/main
 import { ImportUploadStep } from '@/components/import-upload-step';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 import type { ImportFileSummary } from '@/lib/import-file';

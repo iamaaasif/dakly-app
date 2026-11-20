@@ -108,7 +108,9 @@ function stepBody(step: AutomationStep) {
   }
 }
 
-function TriggerCard({ graph, layout }: { graph: AutomationGraph; layout: CanvasLayout }) {
+type TriggerCardProps = { graph: AutomationGraph; layout: CanvasLayout; recentEntries?: string };
+
+function TriggerCard({ graph, layout, recentEntries }: TriggerCardProps) {
   return (
     <div className="shadow-sm h-full space-y-2 rounded-lg border border-border bg-surface p-4">
       <div className="flex items-start gap-3">
@@ -121,7 +123,10 @@ function TriggerCard({ graph, layout }: { graph: AutomationGraph; layout: Canvas
         </div>
       </div>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 border-t border-border pt-2 text-sm">
-        {triggerRows(graph, layout.stepNumber).map(([name, value]) => (
+        {[
+          ...triggerRows(graph, layout.stepNumber),
+          ...(recentEntries ? [['Last 7 days', recentEntries]] : []),
+        ].map(([name, value]) => (
           <div key={name} className="col-span-2 grid grid-cols-subgrid">
             <dt className="text-text-muted">{name}</dt>
             <dd className="truncate" title={value}>
@@ -138,18 +143,19 @@ export function CanvasNodeItem({
   node,
   graph,
   layout,
-}: {
-  node: CanvasNode;
-  graph: AutomationGraph;
-  layout: CanvasLayout;
-}): ReactNode {
+  recentEntries,
+}: TriggerCardProps & { node: CanvasNode }): ReactNode {
   const { step, number } = node;
   return (
     <li
       className={cn('absolute list-none', step?.kind === 'exit' && 'pointer-events-none')}
       style={{ left: node.x, top: node.y, width: node.width, height: node.height }}
     >
-      {step ? stepBody(step) : <TriggerCard graph={graph} layout={layout} />}
+      {step ? (
+        stepBody(step)
+      ) : (
+        <TriggerCard graph={graph} layout={layout} recentEntries={recentEntries} />
+      )}
       {node.branches.length > 0 && (
         <ul className="sr-only">
           {node.branches.map((branch, index) => (
