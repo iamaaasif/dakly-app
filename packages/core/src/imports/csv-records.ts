@@ -1,4 +1,4 @@
-import { MAX_IMPORT_COLUMNS } from '@dakly/contracts/contacts';
+import { MAX_IMPORT_COLUMNS, MAX_IMPORT_ROWS } from '@dakly/contracts/contacts';
 
 import { importError } from './imports.errors';
 
@@ -92,4 +92,18 @@ function decodeQuotedCell(text: string, start: number, end: number, escaped: num
     if (value === 34) index += 1;
   }
   return bytes.toString('utf16le');
+}
+
+// Blank records are dropped as they are read and the count stops at the row limit, so a file of
+// empty lines never builds a list of empty rows.
+export function readCsvLines(file: string) {
+  const records = csvRecords(file);
+  const header = records.next().value?.cells ?? [];
+  const lines: { rowNumber: number; cells: string[] }[] = [];
+  for (const { rowNumber, cells, hasContent } of records) {
+    if (!hasContent) continue;
+    if (lines.length === MAX_IMPORT_ROWS) throw importError('IMPORT_FILE_TOO_MANY_ROWS');
+    lines.push({ rowNumber, cells });
+  }
+  return { header, lines };
 }
