@@ -1,13 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { AuditEntry } from '@dakly/contracts/audit';
-
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { OrderAttributionRepository, type AttributionWrite } from './order-attribution.repository';
 
-export type OrderAttributionReference = Omit<AttributionWrite, 'amountPoisha'>;
+type OrderAttribution = NonNullable<Awaited<ReturnType<OrderAttributionRepository['find']>>>;
+type BuyerSnapshot = Pick<
+  OrderAttribution,
+  'buyerContactId' | 'recipientPhone' | 'isRecipientBuyer'
+>;
+type Selection = Omit<AttributionWrite, 'amountPoisha'> & { buyer: BuyerSnapshot };
 
 @Injectable()
 export class OrderAttributionService {
@@ -18,63 +21,47 @@ export class OrderAttributionService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  record(
-    storeId: string,
-    orderId: string,
-    reference: AttributionSelection | null,
-    _actor: AuditEntry['actor'],
-  ) {
-    return this.transaction.run(storeId, async () => {
-      const order = await this.repository.lock(storeId, orderId);
-      if (!order) return;
-      const next = await selectForOrder(order, reference);
-      if (next === undefined) return;
-      const same = sameTouch(order, next);
-      if (next ? same && order.windowDays === next.windowDays : !order.sourceType) return;
+  find(storeId: string, orderId: string) {
+    return this.repository.find(storeId, orderId);
+  }
 
-      const currentAmount = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
-      const amountPoisha = same ? (order.amountPoisha ?? currentAmount) : currentAmount;
-      await this.repository.save(storeId, orderId, next && { ...next, amountPoisha });
-      const occurredAt = this.clock.now().toISOString();
-      await this.outbox.publish(
-        next
-          ? {
-              type: 'attribution.created',
-              storeId,
-              occurredAt,
-              payload: { orderId, sourceType: next.sourceType, sourceId: next.sourceId },
-            }
-          : { type: 'attribution.removed', storeId, occurredAt, payload: { orderId } },
-      );
+  record(storeId: string, orderId: string, selection: Selection) {
+    return this.transaction.run(storeId, async () => {
+      const order = await this.repository.find(storeId, orderId, 'no key update');
+      if (!order || order.stage === 'cancelled' || !order.buyerContactId || order.sourceType)
+        return;
+      const { buyer, ...reference } = selection;
+      if (!sameBuyer(order, buyer)) return;
+      const amountPoisha = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
+      await this.repository.save(storeId, orderId, { ...reference, amountPoisha });
+      await this.outbox.publish({
+        type: 'attribution.created',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { orderId, sourceType: reference.sourceType, sourceId: reference.sourceId },
+      });
+    });
+  }
+
+  clear(storeId: string, orderId: string) {
+    return this.transaction.run(storeId, async () => {
+      const order = await this.repository.find(storeId, orderId, 'no key update');
+      if (!order?.sourceType) return;
+      await this.repository.save(storeId, orderId, null);
+      await this.outbox.publish({
+        type: 'attribution.removed',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { orderId },
+      });
     });
   }
 }
 
-type OrderAttribution = NonNullable<Awaited<ReturnType<OrderAttributionRepository['lock']>>>;
-
-type AttributionSelection = (
-  order: Pick<OrderAttribution, 'recipientPhone' | 'isRecipientBuyer' | 'createdAt'> & {
-    buyerContactId: string;
-    isAttributed: boolean;
-  },
-) => Promise<OrderAttributionReference | null | undefined>;
-
-function selectForOrder(order: OrderAttribution, select: AttributionSelection | null) {
-  if (order.stage === 'cancelled' || !order.buyerContactId || !select) return null;
-  return select({
-    ...order,
-    buyerContactId: order.buyerContactId,
-    isAttributed: order.sourceType !== null,
-  });
-}
-
-function sameTouch(order: OrderAttribution, reference: OrderAttributionReference | null) {
+function sameBuyer(order: BuyerSnapshot, buyer: BuyerSnapshot) {
   return (
-    reference !== null &&
-    order.sourceType === reference.sourceType &&
-    order.sourceId === reference.sourceId &&
-    order.channel === reference.channel &&
-    order.touchId === reference.touchId &&
-    order.touchAt?.getTime() === reference.touchAt.getTime()
+    order.buyerContactId === buyer.buyerContactId &&
+    order.isRecipientBuyer === buyer.isRecipientBuyer &&
+    (!order.isRecipientBuyer || order.recipientPhone === buyer.recipientPhone)
   );
 }

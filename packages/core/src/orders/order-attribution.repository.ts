@@ -30,29 +30,23 @@ const clearedAttribution = {
 export class OrderAttributionRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async lock(storeId: string, orderId: string) {
-    const [order] = await this.database.forStore(storeId, (tx) =>
-      tx
+  async find(storeId: string, orderId: string, lock?: 'no key update') {
+    const [order] = await this.database.forStore(storeId, (tx) => {
+      const query = tx
         .select({
           buyerContactId: orders.buyerContactId,
           stage: orders.stage,
           recipientPhone: orders.recipientPhone,
           isRecipientBuyer: orders.isRecipientBuyer,
           createdAt: orders.createdAt,
-          amountPoisha: orders.attributedAmountPoisha,
           itemsSubtotalPoisha: orders.itemsSubtotalPoisha,
           orderDiscountPoisha: orders.orderDiscountPoisha,
           sourceType: orders.attributedSourceType,
-          sourceId: orders.attributedSourceId,
-          channel: orders.attributedChannel,
-          touchId: orders.attributedTouchId,
-          touchAt: orders.attributedTouchAt,
-          windowDays: orders.attributedWindowDays,
         })
         .from(orders)
-        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)))
-        .for('no key update'),
-    );
+        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)));
+      return lock ? query.for(lock) : query;
+    });
     return order;
   }
 

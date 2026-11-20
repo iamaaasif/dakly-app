@@ -20,39 +20,34 @@ export class OrderAttributionEngine {
     @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
-  attribute(storeId: string, orderId: string) {
-    return this.orders.record(
-      storeId,
-      orderId,
-      async (order) => {
-        // A replay keeps the live decision even if the buyer edited their phone since.
-        if (order.isAttributed) return undefined;
-        const [buyer] = await this.contacts.findRecipients(storeId, [order.buyerContactId]);
-        if (!buyer?.phone || buyer.kind !== 'customer' || buyer.isBlocked) return null;
-        if (order.isRecipientBuyer && order.recipientPhone !== buyer.phone) return null;
-        const windowDays = await this.stores.attributionWindowDays(storeId);
-        const selected = selectAttributionTouch(
-          await this.taps(
-            storeId,
-            { id: buyer.id, phone: buyer.phone },
-            order.createdAt,
-            windowDays,
-          ),
-          order.createdAt,
-          windowDays,
-        );
-        if (!selected) return null;
-        return {
-          sourceType: selected.sourceType,
-          sourceId: selected.sourceId,
-          channel: selected.channel,
-          touchId: selected.id,
-          touchAt: selected.eligibleAt,
-          windowDays,
-        };
-      },
-      { kind: 'system' },
+  async attribute(storeId: string, orderId: string) {
+    const order = await this.orders.find(storeId, orderId);
+    if (!order?.buyerContactId || order.stage === 'cancelled' || order.sourceType) return;
+    const buyer = await this.buyer(storeId, order.buyerContactId);
+    if (!buyer) return;
+    if (order.isRecipientBuyer && order.recipientPhone !== buyer.phone) return;
+    const windowDays = await this.stores.attributionWindowDays(storeId);
+    const selected = selectAttributionTouch(
+      await this.taps(storeId, buyer, order.createdAt, windowDays),
+      order.createdAt,
+      windowDays,
     );
+    if (!selected) return;
+    await this.orders.record(storeId, orderId, {
+      sourceType: selected.sourceType,
+      sourceId: selected.sourceId,
+      channel: selected.channel,
+      touchId: selected.id,
+      touchAt: selected.eligibleAt,
+      windowDays,
+      buyer: order,
+    });
+  }
+
+  private async buyer(storeId: string, contactId: string) {
+    const [buyer] = await this.contacts.findRecipients(storeId, [contactId]);
+    if (!buyer?.phone || buyer.kind !== 'customer' || buyer.isBlocked) return;
+    return { id: buyer.id, phone: buyer.phone };
   }
 
   private async taps(
@@ -86,7 +81,6 @@ export class OrderAttributionEngine {
         {
           id,
           eligibleAt,
-          kind: 'tap',
           sourceType,
           sourceId: source.sourceId,
           channel: source.channel,

@@ -10,7 +10,6 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { OrderAttributionRepository } from './order-attribution.repository';
 import { OrderAttributionService } from './order-attribution.service';
 
-const actor = { kind: 'system' } as const;
 const orderAt = new Date('2026-11-19T06:00:00Z');
 const attribution = {
   touchId: randomUUID(),
@@ -79,9 +78,10 @@ describe('OrderAttributionService', () => {
 
   it('records the selected touch once without changing the editable order revision', async () => {
     const orderId = await order(fixture.a);
+    const selection = { ...attribution, buyer: (await service.find(fixture.a, orderId))! };
     await Promise.all([
-      service.record(fixture.a, orderId, async () => attribution, actor),
-      service.record(fixture.a, orderId, async () => attribution, actor),
+      service.record(fixture.a, orderId, selection),
+      service.record(fixture.a, orderId, selection),
     ]);
     expect(await fixture.row('orders', orderId)).toMatchObject({
       attributed_touch_id: attribution.touchId,
@@ -101,38 +101,40 @@ describe('OrderAttributionService', () => {
     ]);
   });
 
-  it('keeps the captured amount when a new window selects the same touch', async () => {
-    const orderId = await order(fixture.a);
-    await service.record(fixture.a, orderId, async () => attribution, actor);
-    await fixture.connection.pool.query(
-      'update orders set items_subtotal_poisha=100000 where id=$1',
-      [orderId],
-    );
-    await service.record(
-      fixture.a,
-      orderId,
-      async () => ({ ...attribution, windowDays: 3 }),
-      actor,
-    );
-    expect(await fixture.row('orders', orderId)).toMatchObject({
-      attributed_touch_id: attribution.touchId,
-      attributed_window_days: 3,
-      attributed_amount_poisha: 120000,
-    });
-  });
+  it.each([
+    { isRecipientBuyer: true, expected: null },
+    { isRecipientBuyer: false, expected: attribution.touchId },
+  ])(
+    'checks an edited delivery phone only on self-delivery ($isRecipientBuyer)',
+    async ({ isRecipientBuyer, expected }) => {
+      const orderId = await order(fixture.a);
+      const db = fixture.connection.pool;
+      await db.query('update orders set is_recipient_buyer=$2 where id=$1', [
+        orderId,
+        isRecipientBuyer,
+      ]);
+      const buyer = (await service.find(fixture.a, orderId))!;
+      await db.query("update orders set recipient_phone='01710000006' where id=$1", [orderId]);
+      await service.record(fixture.a, orderId, { ...attribution, buyer });
+      expect(await fixture.row('orders', orderId)).toMatchObject({ attributed_touch_id: expected });
+    },
+  );
 
   it('leaves a foreign order untouched and clears a cancelled order only once', async () => {
     const orderId = await order(fixture.b);
-    await service.record(fixture.a, orderId, async () => attribution, actor);
+    const selection = { ...attribution, buyer: (await service.find(fixture.b, orderId))! };
+    await service.record(fixture.a, orderId, selection);
     expect(await fixture.row('orders', orderId)).toMatchObject({ attributed_touch_id: null });
     expect(await events(orderId)).toEqual([]);
-    await service.record(fixture.b, orderId, async () => attribution, actor);
+    await service.record(fixture.b, orderId, selection);
     await fixture.connection.pool.query(
       "update orders set stage='cancelled',cancel_reason='test' where id=$1",
       [orderId],
     );
-    await service.record(fixture.b, orderId, async () => attribution, actor);
-    await service.record(fixture.b, orderId, null, actor);
+    await service.record(fixture.b, orderId, selection);
+    await service.clear(fixture.b, orderId);
+    await service.record(fixture.b, orderId, selection);
+    await service.clear(fixture.b, orderId);
     expect(await fixture.row('orders', orderId)).toMatchObject({
       attributed_touch_id: null,
       attributed_amount_poisha: null,

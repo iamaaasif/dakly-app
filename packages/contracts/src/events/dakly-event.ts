@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-import { attributionCreatedEventSchema, attributionRemovedEventSchema } from './analytics';
 import { campaignApprovedEventSchema } from './campaigns';
 import {
   channelConnectedEventSchema,
@@ -33,6 +32,8 @@ import {
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
 import {
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
