@@ -420,7 +420,7 @@ describe('Import customers', () => {
     show(<CustomersScreen query={allCustomers} />);
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Add customers' }));
-    await user.click(screen.getByRole('button', { name: /Import from a CSV/ }));
+    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), file);
     expect((await screen.findByRole('status')).textContent).toContain('2 rows · 2 columns');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -453,7 +453,7 @@ describe('Import customers', () => {
     show(<CustomersScreen query={allCustomers} />);
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Add customers' }));
-    await user.click(screen.getByRole('button', { name: /Import from a CSV/ }));
+    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(
       screen.getByLabelText('Customer file'),
       new File(['Who,Number\r\nRahima,01712345678\r\n'], 'list.csv', { type: 'text/csv' }),
@@ -465,14 +465,25 @@ describe('Import customers', () => {
     expect(screen.queryByText('Step 3 of 6 · Preview')).toBeNull();
   });
 
-  it('refuses a file that is not CSV before uploading it', async () => {
+  it('refuses a file that is not Excel or CSV before uploading it', async () => {
     respond(() => ({ body: { items: [], nextCursor: null } }));
     show(<CustomersScreen query={allCustomers} />);
     const user = userEvent.setup({ applyAccept: false });
     await user.click(screen.getByRole('button', { name: 'Add customers' }));
-    await user.click(screen.getByRole('button', { name: /Import from a CSV/ }));
+    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
+    await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.pdf'));
+    expect((await screen.findByRole('alert')).textContent).toContain('Only Excel (.xlsx) or CSV');
+    expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
+  });
+
+  it('refuses an .xlsx file that is not a spreadsheet', async () => {
+    respond(() => ({ body: { items: [], nextCursor: null } }));
+    show(<CustomersScreen query={allCustomers} />);
+    const user = userEvent.setup({ applyAccept: false });
+    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
-    expect((await screen.findByRole('alert')).textContent).toContain('Only CSV files');
+    expect((await screen.findByRole('alert')).textContent).toContain('could not be read');
     expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
   });
 
