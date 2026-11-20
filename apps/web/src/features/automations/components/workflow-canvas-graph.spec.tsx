@@ -82,8 +82,8 @@ describe('WorkflowCanvasGraph', () => {
 
   it('shows what happened at each step, with zero for steps nobody reached', () => {
     const stats = {
-      message: { reached: 1200, sent: 1100, delivered: 1000, read: 0, tapped: 90 },
-      pause: { reached: 1300, sent: 0, delivered: 0, read: 0, tapped: 0 },
+      message: { reached: 1200, sent: 1100, tapped: 90 },
+      pause: { reached: 1300, sent: 0, tapped: 0 },
     };
     render(<WorkflowCanvasGraph graph={graph} layout={layoutWorkflow(graph)} stats={stats} />);
     const steps = within(screen.getByRole('list', { name: 'Workflow steps' }));

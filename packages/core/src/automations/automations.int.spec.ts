@@ -437,8 +437,8 @@ describe('AutomationsService (Postgres)', () => {
 
     expect(await service.stepStats(storeA, automation.id)).toEqual({
       steps: {
-        welcome: { reached: 2, sent: 2, delivered: 2, read: 0, tapped: 1 },
-        wait: { reached: 1, sent: 0, delivered: 0, read: 0, tapped: 0 },
+        welcome: { reached: 2, sent: 2, tapped: 1 },
+        wait: { reached: 1, sent: 0, tapped: 0 },
       },
     });
   });

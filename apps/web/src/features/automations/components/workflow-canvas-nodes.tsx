@@ -162,7 +162,7 @@ function StepMenu({
 
 export type StepStats = AutomationStepStats['steps'];
 
-const noStats = { reached: 0, sent: 0, delivered: 0, read: 0, tapped: 0 };
+const noStats = { reached: 0, sent: 0, tapped: 0 };
 
 // Sends show what happened to the message; every other step shows how many people got there.
 function StatsChip({

@@ -60,10 +60,7 @@ export type AutomationTriggerPreview = {
 
 // Counts of people per step, over every version. Steps nobody reached are left out.
 export type AutomationStepStats = {
-  steps: Record<
-    string,
-    { reached: number; sent: number; delivered: number; read: number; tapped: number }
-  >;
+  steps: Record<string, { reached: number; sent: number; tapped: number }>;
 };
 
 export const automationListQuerySchema = z.strictObject({

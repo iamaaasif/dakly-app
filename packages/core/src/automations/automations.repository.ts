@@ -140,8 +140,6 @@ export class AutomationsRepository {
           stepKey: automationRunSteps.stepKey,
           reached: countDistinct(automationRunSteps.runId),
           sent: count(automationRunSteps.sentAt),
-          delivered: count(automationRunSteps.deliveredAt),
-          read: count(automationRunSteps.readAt),
           tapped: count(automationRunSteps.tappedAt),
         })
         .from(automationRunSteps)
