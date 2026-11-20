@@ -4,6 +4,7 @@ import type { Queue } from 'bullmq';
 
 import { STAFF_ALERT_RELAY } from '@dakly/core/admin/jobs/staff-alert-relay.job';
 import { STAFF_AUDIT_MAINTENANCE } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
+import { RUN_GOLDEN_EVAL } from '@dakly/core/ai-eval/jobs/run-golden-eval.job';
 import { SWEEP_ANALYTICS } from '@dakly/core/analytics/jobs/sweep-analytics.job';
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SWEEP_AUTOMATION_BIRTHDAYS } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
@@ -75,6 +76,7 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       }),
       scheduleJob(this.bulk, SWEEP_ANALYTICS, { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduleJob(this.bulk, PURGE_WEBHOOK_EVENTS, { pattern: '0 0 * * *', tz: 'UTC' }),
+      scheduleJob(this.bulk, RUN_GOLDEN_EVAL, { pattern: '0 20 * * *', tz: 'UTC' }),
       // 19:00 UTC is 01:00 in Dhaka, after the Dhaka day the rollups need has finished.
       scheduleJob(this.bulk, RUN_MAINTENANCE, { pattern: '0 19 * * *', tz: 'UTC' }),
     ]);
