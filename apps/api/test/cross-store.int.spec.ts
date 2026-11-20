@@ -2821,6 +2821,31 @@ fixture('POST /posts/:postId/schedule', async () => {
   expect(await f.row('posts', foreign)).toEqual(before);
 });
 
+fixture('POST /posts/:postId/reschedule', async () => {
+  const { a, b } = await pair();
+  const own = await aiPostDraft(a);
+  const foreign = await aiPostDraft(b);
+  await success(a, 'POST', `/posts/${own}/schedule`, 200, {
+    scheduledFor: '2099-11-20T20:30:00+06:00',
+  });
+  const moved = await success(a, 'POST', `/posts/${own}/reschedule`, 200, {
+    scheduledFor: '2099-11-21T20:30:00+06:00',
+  });
+  expect(moved.json().targets[0]).toMatchObject({
+    status: 'scheduled',
+    scheduledFor: '2099-11-21T14:30:00.000Z',
+  });
+  const before = await f.row('posts', foreign);
+  await hidden(
+    a,
+    'POST',
+    (id) => `/posts/${id}/reschedule`,
+    foreign,
+    () => ({ scheduledFor: '2099-11-22T20:30:00+06:00' }),
+  );
+  expect(await f.row('posts', foreign)).toEqual(before);
+});
+
 fixture('GET /posts/queue-slots', async () => {
   const { a, b } = await pair();
   const own = await seedChannel(b);
