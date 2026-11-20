@@ -231,12 +231,13 @@ Campaign detail and list responses include the send start, finish and stored rec
 
 ## Dashboard, notifications and assistant (10)
 
-| Route                                                                                             | Permission                                               |
-| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `GET /dashboard`                                                                                  | any member; cards follow the member's areas              |
-| `GET /notifications`, `PATCH /notifications/:notificationId`, `POST /notifications/mark-all-seen` | any member, own rows only                                |
-| `POST /push-subscriptions`, `DELETE /push-subscriptions/:pushSubscriptionId`                      | any member                                               |
-| `GET /assistant/threads`, `GET /assistant/threads/:threadId`, `POST /assistant/messages`          | `analytics`; answers only from areas the member can view |
+| Route                                                                                             | Permission                                              |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `GET /dashboard`                                                                                  | any member; cards follow the member's areas             |
+| `GET /notifications`, `PATCH /notifications/:notificationId`, `POST /notifications/mark-all-seen` | any member, own rows only                               |
+| `POST /push-subscriptions`, `DELETE /push-subscriptions/:pushSubscriptionId`                      | any member                                              |
+| `POST /assistant/messages`                                                                        | any member; answers only from areas the member can view |
+| `GET /assistant/threads`, `GET /assistant/threads/:threadId`                                      | `analytics` (HOME-6)                                    |
 
 ## Analytics (11)
 

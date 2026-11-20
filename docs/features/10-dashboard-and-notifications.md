@@ -257,6 +257,14 @@ Ask Dakly AI
 4. Drafts (a post, a campaign) open in their editor and need approval like any other AI-written content (D7).
 5. Counts against `ai_ask`.
 
+How it runs (HOME-4 part 1):
+
+1. `POST /assistant/messages` takes `{ question, history }` (up to 6 earlier turns of the open panel; nothing is stored until HOME-6) and answers `{ kind: 'answer', text, sources, creditsLeft }` or `{ kind: 'cannot_answer', text }`. Any member may ask. Without credits it answers `ASK_CREDITS_UNAVAILABLE` (409) before calling the model; when AI is paused, busy or fails it answers `ASK_UNAVAILABLE` (503).
+2. The tools are `get_sales` (orders, sales, average order value), `get_marketing_results` (money and orders from Dakly messages) and `get_customers` (new, came back, lifecycle stages). Each takes one `window` (`last_7_days`, `last_30_days` or `last_90_days`) and returns the window and the one before it, with percent change. They read `AnalyticsService` only. A member is offered a tool only when their role can view its area: Orders, Analytics or Customers.
+3. The model runs up to 4 rounds of tool calls on the `reply` tier. The question and earlier turns go in labelled untrusted blocks.
+4. Before the answer is returned, code checks that every figure in it appears in this run's tool results. A failed check, or a figure with no tool call behind it, gives `cannot_answer` and logs a warning with the store id only (no question text in logs); a saved question log waits for HOME-6. One credit is used when the model answers, even when this check then refuses the answer.
+5. Today, yesterday, this month, top products, orders by stage and AI performance wait for reports on `AnalyticsService`.
+
 ### Rules
 
 1. A number shown on the dashboard is computed by the same function as on Analytics. Committed source changes reach its summary within five minutes through incremental outbox processing; nightly reconciliation repairs drift. Late returns and corrections restate the original reporting days.
