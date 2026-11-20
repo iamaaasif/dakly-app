@@ -71,9 +71,9 @@ export class PaymentsService {
   redirected(storeId: string, intentId: string, gatewayPaymentId: string) {
     return this.transaction.run(storeId, async () => {
       const intent = await this.lockIntent(storeId, intentId);
-      if (intent.status !== 'created') return false;
+      if (intent.status !== 'created') return;
       const now = this.clock.now();
-      if (intent.expiresAt <= now || intent.voidedAt) return false;
+      if (intent.expiresAt <= now || intent.voidedAt) return;
       await this.transition(
         storeId,
         intent,
@@ -84,7 +84,6 @@ export class PaymentsService {
         },
         { now, kind: 'redirected' },
       );
-      return true;
     });
   }
 
@@ -134,19 +133,19 @@ export class PaymentsService {
     });
   }
 
-  applyStatus(storeId: string, intentId: string, result: PaymentStatus, checkedAt?: Date) {
+  applyStatus(storeId: string, intentId: string, result: PaymentStatus, checkedAt: Date) {
     return this.transaction.run(storeId, async () => {
       const intent = await this.lockIntent(storeId, intentId);
       const now = this.clock.now();
-      const isCurrentCheck = checkedAt?.getTime() === intent.nextCheckAt?.getTime();
+      const isCurrentCheck = checkedAt.getTime() === intent.nextCheckAt?.getTime();
       const verified = this.matchPayment(intent, result);
-      if (checkedAt && !isCurrentCheck && !verified) return;
+      if (!isCurrentCheck && !verified) return;
       const change = verified
         ? this.paidChange(intent, verified, now)
         : this.unpaidChange(intent, result, now);
       if (change) {
         await this.transition(storeId, intent, change, { now, verified });
-      } else if (checkedAt && isCurrentCheck) {
+      } else if (isCurrentCheck) {
         await this.advanceCheck(storeId, intent, now);
       }
     });

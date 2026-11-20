@@ -23,27 +23,6 @@ export class PaymentGatewayService {
     @Inject(PAYMENT_DRIVERS) private readonly drivers: readonly PaymentDriver[],
   ) {}
 
-  async checkout(storeId: string, intentId: string, callbackUrl: string) {
-    const intent = await this.repository.find(storeId, intentId);
-    if (!intent)
-      throw new AppError('PAYMENT_INTENT_NOT_FOUND', PAYMENT_ERRORS.PAYMENT_INTENT_NOT_FOUND);
-    if (intent.status !== 'created' || intent.voidedAt || intent.expiresAt <= this.clock.now())
-      throw new AppError('PAYMENT_CHECKOUT_CLOSED', PAYMENT_ERRORS.PAYMENT_CHECKOUT_CLOSED);
-    const result = await this.withMerchant(storeId, intent, (driver, merchant) =>
-      driver.createPayment(
-        {
-          amountPoisha: intent.amountPoisha,
-          orderReference: intent.merchantReference,
-          callbackUrl,
-        },
-        merchant,
-      ),
-    );
-    if (!(await this.payments.redirected(storeId, intentId, result.gatewayPaymentId)))
-      throw new AppError('PAYMENT_CHECKOUT_CLOSED', PAYMENT_ERRORS.PAYMENT_CHECKOUT_CLOSED);
-    return result.redirectUrl;
-  }
-
   async verify(storeId: string, intentId: string) {
     const intent = await this.repository.find(storeId, intentId);
     if (!intent?.nextCheckAt || intent.nextCheckAt > this.clock.now()) return;

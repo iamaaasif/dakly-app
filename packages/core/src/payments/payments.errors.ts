@@ -9,6 +9,5 @@ export const PAYMENT_ERRORS = {
     status: 500,
     message: 'Payment gateway requires a separate transaction',
   },
-  PAYMENT_CHECKOUT_CLOSED: { status: 409, message: 'Payment checkout is closed' },
   PAYMENT_GATEWAY_UNAVAILABLE: { status: 503, message: 'Payment gateway is unavailable' },
 } as const;

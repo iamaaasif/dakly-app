@@ -17,7 +17,7 @@ import {
 } from '@dakly/db/schema/payments';
 import { outboxEvents, webhookEvents } from '@dakly/db/schema/platform';
 import { stores } from '@dakly/db/schema/stores';
-import type { PaymentDriver } from '@dakly/providers/payment/payment-driver';
+import type { PaymentDriver, PaymentStatus } from '@dakly/providers/payment/payment-driver';
 
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { RateLimiter } from '../platform/cache/rate-limiter';
@@ -165,6 +165,11 @@ async function pendingIntent() {
   return intent;
 }
 
+async function applyCurrent(storeId: string, intentId: string, result: PaymentStatus) {
+  const intent = await repository.find(storeId, intentId);
+  await payments.applyStatus(storeId, intentId, result, intent?.nextCheckAt ?? now);
+}
+
 function paid(merchantReference: string, amountPoisha = 12000) {
   return {
     status: 'paid',
@@ -256,8 +261,8 @@ describe('Payment intents (Postgres)', () => {
       .where(and(eq(paymentEvents.paymentIntentId, intent.id), eq(paymentEvents.kind, 'callback')));
     expect(rows).toHaveLength(1);
     expect(await repository.find(storeA, intent.id)).toMatchObject({ status: 'pending' });
-    await payments.applyStatus(storeA, intent.id, paid(intent.merchantReference));
-    await payments.applyStatus(storeA, intent.id, paid(intent.merchantReference));
+    await applyCurrent(storeA, intent.id, paid(intent.merchantReference));
+    await applyCurrent(storeA, intent.id, paid(intent.merchantReference));
     expect(await repository.find(storeA, intent.id)).toMatchObject({ status: 'succeeded' });
     const changes = await admin.db
       .select()
@@ -321,7 +326,7 @@ describe('Payment intents (Postgres)', () => {
 
   it('refuses a verified payment with a different amount', async () => {
     const intent = await pendingIntent();
-    await payments.applyStatus(storeA, intent.id, paid(intent.merchantReference, 13000));
+    await applyCurrent(storeA, intent.id, paid(intent.merchantReference, 13000));
     expect(await repository.find(storeA, intent.id)).toMatchObject({
       status: 'needs_review',
       reviewReason: 'amount_mismatch',
@@ -336,7 +341,7 @@ describe('Payment intents (Postgres)', () => {
       .set({ expiresAt: now })
       .where(eq(paymentIntents.id, intent.id));
     await payments.expire(storeA, intent.id);
-    await payments.applyStatus(storeA, intent.id, paid(intent.merchantReference));
+    await applyCurrent(storeA, intent.id, paid(intent.merchantReference));
     expect(await repository.find(storeA, intent.id)).toMatchObject({
       status: 'needs_review',
       reviewReason: 'late_success',
@@ -348,14 +353,13 @@ describe('Payment intents (Postgres)', () => {
     const intent = await pendingIntent();
     expect(await repository.find(storeB, intent.id)).toBeUndefined();
     await expect(
-      payments.applyStatus(storeB, intent.id, paid(intent.merchantReference)),
+      payments.applyStatus(storeB, intent.id, paid(intent.merchantReference), now),
     ).rejects.toMatchObject({ code: 'PAYMENT_INTENT_NOT_FOUND' });
     expect(await repository.find(storeA, intent.id)).toMatchObject({ status: 'pending' });
   });
 
   it('verifies a due attempt when no callback arrived', async () => {
-    const intent = await createIntent();
-    await gateway.checkout(storeA, intent.id, 'https://app.example/payment-return');
+    const intent = await pendingIntent();
     const originalClock = clock.now;
     clock.now = () => new Date('2026-11-19T03:01:00.000Z');
     try {
@@ -495,30 +499,36 @@ describe('Payment intents (Postgres)', () => {
       code: 'PAYMENT_CREDENTIAL_UNAVAILABLE',
     });
     const intent = await payments.create(storeA, input);
+    await payments.redirected(storeA, intent.id, intent.merchantReference);
     const shopGateway = new PaymentGatewayService(payments, repository, clock, encryption, [
       {
         ...driver,
-        async createPayment(checkout, merchant) {
+        async getStatus(gatewayPaymentId, merchant) {
           if (
             merchant.flow !== 'shop' ||
             merchant.mode !== 'sandbox' ||
             merchant.credentials.toString() !== 'first-shop-merchant'
           )
             throw new Error('Wrong merchant account');
-          return driver.createPayment(checkout, merchant);
+          return driver.getStatus(gatewayPaymentId, merchant);
         },
       },
     ]);
-    await expect(
-      shopGateway.checkout(storeA, intent.id, 'https://app.example/payment-return'),
-    ).resolves.toBe('https://checkout.example');
+    const originalClock = clock.now;
+    clock.now = () => new Date('2026-11-19T03:01:00.000Z');
+    try {
+      await shopGateway.verify(storeA, intent.id);
+    } finally {
+      clock.now = originalClock;
+    }
+    expect(await repository.find(storeA, intent.id)).toMatchObject({ status: 'succeeded' });
   });
 
   it('settles only a matching billing line and leaves mismatches for review', async () => {
     const matched = await pendingIntent();
     const unmatched = await pendingIntent();
-    await payments.applyStatus(storeA, matched.id, paid(matched.merchantReference));
-    await payments.applyStatus(storeA, unmatched.id, paid(unmatched.merchantReference));
+    await applyCurrent(storeA, matched.id, paid(matched.merchantReference));
+    await applyCurrent(storeA, unmatched.id, paid(unmatched.merchantReference));
     await admin.db.insert(gatewaySettlementLines).values([
       {
         gateway: 'bkash',
