@@ -114,7 +114,7 @@ atomically and retain business data when an extension is disabled.
 | `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory`                      | View with `customers.view`; edit and clear with `customers.edit` |
 | `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                                                 | `customers`                                                      |
 | `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                         | `customers`                                                      |
-| `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                                       | `customers`                                                      |
+| `GET /contact-match-suggestions?contactId=`, `POST /contact-match-suggestions/:suggestionId/dismiss`                            | `customers`                                                      |
 | `POST /contacts/:contactId/consents`                                                                                            | `customers`                                                      |
 | `POST /imports`, `POST /imports/:importId/start`, `POST /imports/:importId/undo` (within 7 days, 202), `GET /imports/:importId` | `customers`                                                      |
 | `POST /contacts/exports`                                                                                                        | `customers` + "Download customer lists"                          |
@@ -231,12 +231,13 @@ Campaign detail and list responses include the send start, finish and stored rec
 
 ## Dashboard, notifications and assistant (10)
 
-| Route                                                                                             | Permission                                               |
-| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `GET /dashboard`                                                                                  | any member; cards follow the member's areas              |
-| `GET /notifications`, `PATCH /notifications/:notificationId`, `POST /notifications/mark-all-seen` | any member, own rows only                                |
-| `POST /push-subscriptions`, `DELETE /push-subscriptions/:pushSubscriptionId`                      | any member                                               |
-| `GET /assistant/threads`, `GET /assistant/threads/:threadId`, `POST /assistant/messages`          | `analytics`; answers only from areas the member can view |
+| Route                                                                                             | Permission                                              |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `GET /dashboard`                                                                                  | any member; cards follow the member's areas             |
+| `GET /notifications`, `PATCH /notifications/:notificationId`, `POST /notifications/mark-all-seen` | any member, own rows only                               |
+| `POST /push-subscriptions`, `DELETE /push-subscriptions/:pushSubscriptionId`                      | any member                                              |
+| `POST /assistant/messages`                                                                        | any member; answers only from areas the member can view |
+| `GET /assistant/threads`, `GET /assistant/threads/:threadId`                                      | `analytics` (HOME-6)                                    |
 
 ## Analytics (11)
 

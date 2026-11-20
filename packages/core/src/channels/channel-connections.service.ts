@@ -94,7 +94,7 @@ export class ChannelConnectionsService {
   // A Messenger campaign goes out from one connected Facebook Page.
   async requireFacebookPage(storeId: string, id: string): Promise<void> {
     await this.requireActive(storeId, id);
-    if ((await this.repository.aiState(storeId, id))?.kind !== 'facebook_page')
+    if ((await this.repository.kindOf(storeId, id)) !== 'facebook_page')
       throw connectionError('CHANNEL_CONNECTION_NOT_FOUND');
   }
 

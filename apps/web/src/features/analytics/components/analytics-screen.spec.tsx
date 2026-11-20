@@ -4,7 +4,12 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { AnalyticsOverviewResponse, AnalyticsView } from '@dakly/contracts/analytics';
+import type {
+  AnalyticsAutomationRow,
+  AnalyticsCampaignRow,
+  AnalyticsOverviewResponse,
+  AnalyticsView,
+} from '@dakly/contracts/analytics';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { AnalyticsScreen } from './analytics-screen';
@@ -53,7 +58,12 @@ const overview: AnalyticsOverviewResponse = {
     },
     { channel: 'messenger', sent: 0, deliveredPercent: null, costPoisha: '0', revenuePoisha: '0' },
   ],
-  best: { campaign: null, channel: null, mostMoneyChannel: null, automation: null },
+  best: {
+    campaign: { id: 'c1', name: 'Puja winback', revenuePoisha: '11240000', returnPerTaka: 204 },
+    channel: { channel: 'sms', returnPerTaka: 94 },
+    mostMoneyChannel: { channel: 'whatsapp', revenuePoisha: '34575000' },
+    automation: null,
+  },
   funnel: {
     sent: { count: 9182, percentOfPrevious: null },
     delivered: { count: 9026, percentOfPrevious: 98.3 },
@@ -63,10 +73,59 @@ const overview: AnalyticsOverviewResponse = {
   },
 };
 
+const campaigns: AnalyticsCampaignRow[] = [
+  {
+    id: 'c1',
+    name: 'Puja winback',
+    channel: 'sms',
+    startedAt: '2026-11-10T06:00:00.000Z',
+    sent: 850,
+    delivered: 800,
+    tapPercent: 15.1,
+    orders: 38,
+    revenuePoisha: '11240000',
+    returnPerTaka: 204,
+  },
+  {
+    id: 'c2',
+    name: 'New Kurti collection',
+    channel: 'whatsapp',
+    startedAt: '2026-11-01T06:00:00.000Z',
+    sent: 1240,
+    delivered: 1200,
+    tapPercent: 21.6,
+    orders: 61,
+    revenuePoisha: '18690000',
+    returnPerTaka: 159,
+  },
+];
+
+const automations: AnalyticsAutomationRow[] = [
+  {
+    id: 'a1',
+    name: 'Welcome new subscribers',
+    channels: ['whatsapp'],
+    isActive: true,
+    entered: 12642,
+    sent: 12000,
+    orders: 861,
+    revenuePoisha: '67410000',
+    orderedPercent: 6.8,
+    returnPerTaka: 120,
+  },
+];
+
 function show(view: Partial<AnalyticsView> = {}) {
-  vi.stubGlobal('fetch', async () =>
-    Response.json(overview, { headers: { 'x-session-context': 'verified' } }),
-  );
+  vi.stubGlobal('fetch', async (url: string) => {
+    const bodies = {
+      '/analytics/campaigns': { current: overview.current, campaigns },
+      '/analytics/automations': { current: overview.current, automations },
+    };
+    const path = new URL(url, 'http://localhost').pathname.replace(/^.*(?=\/analytics)/, '');
+    return Response.json(bodies[path as keyof typeof bodies] ?? overview, {
+      headers: { 'x-session-context': 'verified' },
+    });
+  });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
     user: { id: 'member', name: 'Member' },
@@ -76,7 +135,17 @@ function show(view: Partial<AnalyticsView> = {}) {
   } as unknown as SessionContext);
   render(
     <QueryClientProvider client={client}>
-      <AnalyticsScreen view={{ tab: 'overview', period: 30, compare: true, ...view }} />
+      <AnalyticsScreen
+        view={{
+          tab: 'overview',
+          period: 30,
+          compare: true,
+          sort: 'earned',
+          channel: 'all',
+          search: '',
+          ...view,
+        }}
+      />
     </QueryClientProvider>,
   );
 }
@@ -123,5 +192,57 @@ describe('Analytics screen', () => {
     expect(chip.getAttribute('aria-pressed')).toBe('true');
     await userEvent.click(chip);
     expect(chip.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('shows the Best cards, with a second line when another channel earned more money', async () => {
+    show();
+    const cards = await screen.findByRole('region', { name: 'What worked best' });
+    expect(within(cards).getByText('Puja winback')).toBeTruthy();
+    expect(within(cards).getByText('৳204 back for every ৳1')).toBeTruthy();
+    expect(within(cards).getByText('৳94 per ৳1')).toBeTruthy();
+    expect(within(cards).getByText(/WhatsApp earned the most money: ৳3,45,750/)).toBeTruthy();
+    expect(within(cards).getByText(/Turn on an automation/)).toBeTruthy();
+  });
+
+  it('lists campaigns by money earned and opens a campaign from its row', async () => {
+    show({ tab: 'campaigns' });
+    const table = await screen.findByRole('table', { name: 'Campaigns' });
+    const names = within(table)
+      .getAllByRole('link')
+      .map((link) => link.textContent)
+      .filter((text) => text?.includes('Puja') || text?.includes('Kurti'));
+    expect(names).toEqual(['New Kurti collection', 'Puja winback']);
+    expect(within(table).getByRole('link', { name: 'Puja winback' }).getAttribute('href')).toBe(
+      '/campaigns/c1',
+    );
+    expect(within(table).getByText('৳204')).toBeTruthy();
+    expect(screen.getByText('2 campaigns · ৳2,99,300 earned')).toBeTruthy();
+  });
+
+  it('filters campaigns by the search and channel in the URL', async () => {
+    show({ tab: 'campaigns', search: 'puja', channel: 'sms' });
+    const table = await screen.findByRole('table', { name: 'Campaigns' });
+    expect(within(table).queryByText('New Kurti collection')).toBeNull();
+    expect(within(table).getByText('Puja winback')).toBeTruthy();
+    expect(screen.getByText('1 campaign · ৳1,12,400 earned')).toBeTruthy();
+  });
+
+  it('keeps the sort in the URL', async () => {
+    show({ tab: 'campaigns' });
+    const table = await screen.findByRole('table', { name: 'Campaigns' });
+    expect(within(table).getByRole('link', { name: 'Sort by Orders' }).getAttribute('href')).toBe(
+      '/analytics?tab=campaigns&period=30&sort=orders',
+    );
+  });
+
+  it('shows what each automation earned and how many customers ordered', async () => {
+    show({ tab: 'automations' });
+    const list = await screen.findByRole('list', { name: 'Automations' });
+    expect(within(list).getByText('Welcome new subscribers')).toBeTruthy();
+    expect(
+      within(list).getByText('WhatsApp · 12,642 customers went through it · 6.8% ordered'),
+    ).toBeTruthy();
+    expect(within(list).getByText('861 orders')).toBeTruthy();
+    expect(screen.getByText('Earned on autopilot')).toBeTruthy();
   });
 });

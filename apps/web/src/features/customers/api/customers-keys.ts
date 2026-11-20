@@ -9,3 +9,9 @@ export const customersKeys = {
   import: (tag: string | undefined, importId: string) =>
     ['customers', tag, 'import', importId] as const,
 };
+
+export const matchSuggestionsKeys = {
+  all: ['contact-match-suggestions'] as const,
+  forContact: (tag: string | undefined, contactId: string) =>
+    ['contact-match-suggestions', tag, contactId] as const,
+};

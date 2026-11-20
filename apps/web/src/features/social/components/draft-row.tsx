@@ -1,4 +1,5 @@
 import { Copy, Image as ImageIcon, Trash2, TriangleAlert } from 'lucide-react';
+import Image from 'next/image';
 
 import type { PostResponse } from '@dakly/contracts/social';
 import { Badge } from '@dakly/ui/badge';
@@ -18,6 +19,28 @@ type DraftRowProps = {
   onDelete: () => void;
 };
 
+function DraftThumbnail({ photo }: { photo: PostResponse['photos'][number] | undefined }) {
+  if (photo)
+    return (
+      <Image
+        src={photo.url}
+        alt=""
+        width={64}
+        height={64}
+        unoptimized
+        className="size-16 shrink-0 rounded-md object-cover"
+      />
+    );
+  return (
+    <span
+      aria-hidden="true"
+      className="grid size-16 shrink-0 place-items-center rounded-md bg-surface-muted text-text-subtle"
+    >
+      <ImageIcon size={20} strokeWidth={1.75} />
+    </span>
+  );
+}
+
 export function DraftRow({
   draft,
   accounts,
@@ -29,12 +52,7 @@ export function DraftRow({
   const label = draft.caption?.trim().slice(0, 40) || 'no caption';
   return (
     <li className="flex flex-wrap items-center gap-3 px-4 py-3 md:px-6">
-      <span
-        aria-hidden="true"
-        className="grid size-16 shrink-0 place-items-center rounded-md bg-surface-muted text-text-subtle"
-      >
-        <ImageIcon size={20} strokeWidth={1.75} />
-      </span>
+      <DraftThumbnail photo={draft.photos[0]} />
       <DraftSummary draft={draft} accounts={accounts} />
       {canEdit && (
         <div className="flex gap-1">

@@ -11,6 +11,8 @@ import { Skeleton } from '@dakly/ui/skeleton';
 
 import { periodChoices } from '../analytics-labels';
 import { analyticsHref, useAnalyticsOverview } from '../api/analytics-overview';
+import { AnalyticsAutomationsTab } from './analytics-automations-tab';
+import { AnalyticsCampaignsTab } from './analytics-campaigns-tab';
 import { AnalyticsHeadline } from './analytics-headline';
 import { AnalyticsKeyFigures } from './analytics-key-figures';
 import { AnalyticsOverviewTab } from './analytics-overview-tab';
@@ -40,7 +42,11 @@ export function AnalyticsScreen({ view }: { view: AnalyticsView }) {
           <AnalyticsHeadline data={overview.data} view={view} />
           <AnalyticsKeyFigures data={overview.data} view={view} />
           <AnalyticsTabs view={view} />
-          <AnalyticsOverviewTab data={overview.data} view={view} />
+          {view.tab === 'overview' && <AnalyticsOverviewTab data={overview.data} view={view} />}
+          {view.tab === 'campaigns' && (
+            <AnalyticsCampaignsTab view={view} timeZone={overview.data.timeZone} />
+          )}
+          {view.tab === 'automations' && <AnalyticsAutomationsTab view={view} />}
         </>
       )}
     </main>
