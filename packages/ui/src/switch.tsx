@@ -3,19 +3,21 @@
 export type SwitchProps = {
   id?: string;
   checked?: boolean;
+  disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 };
 
-export function Switch({ id, checked = false, onCheckedChange }: SwitchProps) {
+export function Switch({ id, checked = false, disabled, onCheckedChange }: SwitchProps) {
   return (
     <button
       id={id}
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
-        checked ? 'bg-primary' : 'border-border bg-surface-muted'
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? 'border-transparent bg-primary' : 'border-input-border bg-surface-muted'
       }`}
     >
       <span

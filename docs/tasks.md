@@ -157,16 +157,16 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M7. AI layer
 
-| ID   | Task                                                                    | Status      | Depends              | PR                     | Notes                                                                                                                  |
-| ---- | ----------------------------------------------------------------------- | ----------- | -------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | Done        |                      | #137                   | Q8                                                                                                                     |
-| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | Done        | AI-1, PAY-1          | #140                   | Q15                                                                                                                    |
-| AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Done        | AI-2                 | #143, #146, #147       | PDF and plain text files. Items and uploads, indexing, then search. Images and website links are for later tasks.      |
-| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Done        | AI-2, CHAT-2, CHAT-3 | #216, #223             | Exclude internal notes (`kind = 'note'`) from model context and all customer-facing messages.                          |
-| AI-5 | Sales agent tools and the fact check before sending                     | Done        | AI-4, ORD-3          | #284, #292, #303, #321 | Parts 1 to 4 merged: tools, agent loop and fact check, return timers, order tools                                      |
-| AI-6 | Practice mode, test questions, Go live                                  | Done        | AI-5                 | #306                   | Practice per channel; tests graded by a model; hand-over rules save waits on the AI settings task                      |
-| AI-7 | Golden-set eval runner and nightly job                                  | In progress | AI-5                 | #337                   | Runner, scoring and nightly job on a starter set. The 200 beta chats and the re-run after a knowledge change are left. |
-| AI-8 | Web: AI agent settings, knowledge, test tab                             | In progress | AI-6                 | #326                   | Part 1 settings API. Then the drawer with Settings, Knowledge, Test and Feedback, each its own PR.                     |
+| ID   | Task                                                                    | Status      | Depends              | PR                     | Notes                                                                                                                      |
+| ---- | ----------------------------------------------------------------------- | ----------- | -------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | Done        |                      | #137                   | Q8                                                                                                                         |
+| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | Done        | AI-1, PAY-1          | #140                   | Q15                                                                                                                        |
+| AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Done        | AI-2                 | #143, #146, #147       | PDF and plain text files. Items and uploads, indexing, then search. Images and website links are for later tasks.          |
+| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Done        | AI-2, CHAT-2, CHAT-3 | #216, #223             | Exclude internal notes (`kind = 'note'`) from model context and all customer-facing messages.                              |
+| AI-5 | Sales agent tools and the fact check before sending                     | Done        | AI-4, ORD-3          | #284, #292, #303, #321 | Parts 1 to 4 merged: tools, agent loop and fact check, return timers, order tools                                          |
+| AI-6 | Practice mode, test questions, Go live                                  | Done        | AI-5                 | #306                   | Practice per channel; tests graded by a model; hand-over rules save waits on the AI settings task                          |
+| AI-7 | Golden-set eval runner and nightly job                                  | In progress | AI-5                 | #337                   | Runner, scoring and nightly job on a starter set. The 200 beta chats and the re-run after a knowledge change are left.     |
+| AI-8 | Web: AI agent settings, knowledge, test tab                             | In progress | AI-6                 | #326, #334             | Part 1 settings API (merged). Part 2 drawer and Settings tab. Then Go live, Knowledge, Test and Feedback, each its own PR. |
 
 ## Later release: couriers and COD
 
@@ -200,13 +200,13 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M11. Analytics and insights
 
-| ID     | Task                                               | Status      | Depends       | PR                           | Notes                                                                                               |
-| ------ | -------------------------------------------------- | ----------- | ------------- | ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| ANA-1  | Glossary report functions and daily summary tables | Done        | ORD-3, CUS-3  | #194, #207, #210             | Daily summaries, report reads and nightly reconciliation merged.                                    |
-| ANA-2  | Attribution of orders to messages and posts        | Done        | ANA-1, CAMP-3 | #226, #243, #244             | Tracked taps, window rebuild and shared reports merged.                                             |
-| ANA-3  | Web: Analytics tabs                                | In progress | ANA-2         | #287, #310, #315, #318, #322 | Part 2 adds the Campaigns and Automations reads and tabs; the AI tip waits on part 3                |
-| HOME-3 | Web: Dashboard cards                               | Done        | ANA-1         | #211                         |                                                                                                     |
-| HOME-4 | Ask Dakly AI with read-only report tools           | Done        | ANA-1, AI-2   | #314, #331                   | API with report tools and the panel merged. Full view, saved history and answer buttons are HOME-6. |
+| ID     | Task                                               | Status      | Depends       | PR                                 | Notes                                                                                               |
+| ------ | -------------------------------------------------- | ----------- | ------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------- |
+| ANA-1  | Glossary report functions and daily summary tables | Done        | ORD-3, CUS-3  | #194, #207, #210                   | Daily summaries, report reads and nightly reconciliation merged.                                    |
+| ANA-2  | Attribution of orders to messages and posts        | Done        | ANA-1, CAMP-3 | #226, #243, #244                   | Tracked taps, window rebuild and shared reports merged.                                             |
+| ANA-3  | Web: Analytics tabs                                | In progress | ANA-2         | #287, #310, #315, #318, #322, #338 | Part 2 adds the Campaigns and Automations reads and tabs; the AI tip waits on part 3                |
+| HOME-3 | Web: Dashboard cards                               | Done        | ANA-1         | #211                               |                                                                                                     |
+| HOME-4 | Ask Dakly AI with read-only report tools           | Done        | ANA-1, AI-2   | #314, #331                         | API with report tools and the panel merged. Full view, saved history and answer buttons are HOME-6. |
 
 ## M12. Admin panel
 

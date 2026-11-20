@@ -241,10 +241,10 @@ Campaign detail and list responses include the send start, finish and stored rec
 
 ## Analytics (11)
 
-| Route                                                                                                 | Permission  |
-| ----------------------------------------------------------------------------------------------------- | ----------- |
-| `GET /analytics/overview`, `GET /analytics/sales`, `GET /analytics/chats`, `GET /analytics/marketing` | `analytics` |
-| `POST /analytics/exports`                                                                             | `analytics` |
+| Route                                                                                                                                                                                        | Permission  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `GET /analytics/overview`, `GET /analytics/campaigns`, `GET /analytics/automations`, `GET /analytics/channels`, `GET /analytics/social-posts`, `GET /analytics/tip`, `GET /analytics/export` | `analytics` |
+| `GET /analytics/sales`, `GET /analytics/chats`, `GET /analytics/marketing` (later tabs)                                                                                                      | `analytics` |
 
 ## Admin app (12)
 

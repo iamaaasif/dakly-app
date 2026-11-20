@@ -2450,6 +2450,59 @@ fixture('GET /analytics/social-posts', async () => {
   ).toBe(400);
 });
 
+fixture('GET /analytics/tip', async () => {
+  const { a, b } = await pair();
+  for (const shop of [a, b])
+    expect((await success(shop, 'GET', '/analytics/tip?period=30', 200)).json()).toEqual({
+      tip: null,
+    });
+  expect((await f.request(b.member, 'GET', '/analytics/tip')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', `/analytics/tip?storeId=${b.id}`)).statusCode).toBe(400);
+});
+
+fixture('GET /analytics/export', async () => {
+  const { a, b } = await pair();
+  for (const [shop, caption] of [
+    [a, 'own-a'],
+    [b, 'own-b'],
+  ] as const) {
+    const [post, connection] = [randomUUID(), randomUUID()];
+    await f.admin.pool.query(
+      'insert into posts(id,store_id,caption,created_by_user_id) values($1,$2,$3,$4)',
+      [post, shop.id, caption, shop.owner.id],
+    );
+    await f.admin.pool.query(
+      "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values($1::uuid,$2,'facebook_page',$1::text,'Page')",
+      [connection, shop.id],
+    );
+    await f.admin.pool.query(
+      `insert into post_targets(id,store_id,post_id,channel_connection_id,status,published_at,reach)
+       values(gen_random_uuid(),$1,$2,$3,'published',now(),10)`,
+      [shop.id, post, connection],
+    );
+  }
+  for (const [shop, own, foreign] of [
+    [a, 'own-a', 'own-b'],
+    [b, 'own-b', 'own-a'],
+  ] as const) {
+    const result = await success(shop, 'GET', '/analytics/export?tab=social&period=30', 200);
+    expect(result.headers['content-type']).toContain('text/csv');
+    expect(result.headers['content-disposition']).toMatch(
+      /^attachment; filename="dakly-analytics-social-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv"$/,
+    );
+    expect(result.body.startsWith('\uFEFF"Post ID","Caption"')).toBe(true);
+    expect(result.body).toContain(own);
+    expect(result.body).not.toContain(foreign);
+    const { rows } = await f.admin.pool.query(
+      "select count(*)::int as count from audit_log where store_id = $1 and action = 'analytics.exported'",
+      [shop.id],
+    );
+    expect(rows[0].count).toBe(1);
+  }
+  expect((await f.request(b.member, 'GET', '/analytics/export?tab=social')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', '/analytics/export')).statusCode).toBe(400);
+});
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),
