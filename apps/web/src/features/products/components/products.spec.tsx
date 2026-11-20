@@ -378,7 +378,8 @@ describe('Product editor navigation', () => {
     );
     show({ limit: 50 }, { edit: false, productId: product.id });
     const dialog = await screen.findByRole('dialog', { name: product.name });
-    expect(within(dialog).getAllByText('৳2,450')[0]).toBeTruthy();
+    const header = within(dialog).getByTestId('product-detail-header');
+    expect(within(header).getByText('৳2,450')).toBeTruthy();
     expect(within(dialog).queryByRole('button', { name: 'Edit product' })).toBeNull();
     expect(within(dialog).queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(within(dialog).queryByLabelText('Add photo')).toBeNull();
@@ -398,7 +399,8 @@ describe('Product editor navigation', () => {
     );
     show({ limit: 50 }, { productId: product.id, edit: false });
     const dialog = await screen.findByRole('dialog', { name: product.name });
-    expect(within(dialog).getAllByText('৳450.25')[0]).toBeTruthy();
+    const header = within(dialog).getByTestId('product-detail-header');
+    expect(within(header).getByText('৳450.25')).toBeTruthy();
   });
 
   it('retries a failed selected product without losing its address', async () => {
@@ -499,20 +501,19 @@ describe('Product editor navigation', () => {
     expect(within(dialog).getByText(product.name)).toBeTruthy();
     expect(within(dialog).getByText(product.category!)).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: 'Edit product' })).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeTruthy();
     expect(within(dialog).getByText('Running low')).toBeTruthy();
 
     expect(within(dialog).getByRole('tab', { name: 'Overview' })).toBeTruthy();
     expect(within(dialog).getByRole('tab', { name: 'Stock' })).toBeTruthy();
-    expect(within(dialog).getByRole('tab', { name: 'Sales' })).toBeTruthy();
-    expect(within(dialog).getByRole('tab', { name: 'Customers' })).toBeTruthy();
+    expect(within(dialog).queryByRole('tab', { name: 'Sales' })).toBeNull();
+    expect(within(dialog).queryByRole('tab', { name: 'Customers' })).toBeNull();
     expect(within(dialog).getByText('Description')).toBeTruthy();
     expect(within(dialog).getByText('Selling price')).toBeTruthy();
     expect(within(dialog).getByText('Your cost')).toBeTruthy();
     expect(within(dialog).getByText('Profit each')).toBeTruthy();
     expect(within(dialog).getByText('In stock')).toBeTruthy();
-    expect(within(dialog).getByText('Low stock alert')).toBeTruthy();
-    expect(within(dialog).getByText('At 2 or fewer')).toBeTruthy();
+    expect(within(dialog).queryByText('Low stock alert')).toBeNull();
 
     await userEvent.click(within(dialog).getByRole('tab', { name: 'Stock' }));
     expect(within(dialog).getByText(/available · 2 reserved · 5 on hand/)).toBeTruthy();
@@ -521,7 +522,7 @@ describe('Product editor navigation', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Hide product' }));
     expect(sentStatus).toBe('hidden');
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
     expect(
       new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('product'),
     ).toBeNull();
