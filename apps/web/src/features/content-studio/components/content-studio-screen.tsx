@@ -1,6 +1,7 @@
 'use client';
 
 import type { ContentStudioView } from '../content-studio-view';
+import { BrandProfileTab } from './brand-profile-tab';
 import { ContentStudioTabs } from './content-studio-tabs';
 import { CreateTab } from './create-tab';
 import { LibraryTab } from './library-tab';
@@ -18,6 +19,7 @@ export function ContentStudioScreen({ view }: { view: ContentStudioView }) {
       <ContentStudioTabs tab={view.tab} />
       {view.tab === 'create' && <CreateTab />}
       {view.tab === 'library' && <LibraryTab view={view} />}
+      {view.tab === 'brand' && <BrandProfileTab />}
     </main>
   );
 }
