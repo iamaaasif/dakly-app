@@ -223,7 +223,8 @@ The Social hub lists each connected Facebook Page and Instagram account with its
 - Follower counts and Notify me wait for SOC-7 (followers are not stored and nothing records TikTok interest). Draft rows show the first photo as a thumbnail; post responses carry `photos` (id and a 15 minute download link for each ready photo, in post order; a photo that is not ready is left out).
 - Instagram shows its single brand pink (`--color-instagram`) in place of the gradient.
 - Posting schedule edits one account's weekly slots at a time (an account picker shows when there are several), because slots are stored per connection. Use recommended times waits for follower-activity data and moves to SOC-7.
-- Duplicate copies the draft with its accounts and captions; Delete asks first. Create post and Edit arrive in a later SOC-5 part.
+- Duplicate copies the draft with its accounts and captions; Delete asks first. Edit arrives in a later SOC-5 part.
+- Create post (`/social/posts/new`) uses the shared post editor in `features/social/components/post-editor/`, which Content Studio reuses for Use in post. Differences from the design: photos come from Products only, because there is no upload API for post photos yet; Add hashtags builds tags from the caption's own words and uses no AI credits; the preview shows "Next open slot" or the chosen time instead of a sample date; Instagram accounts whose access expired show Access expired and cannot be selected. Add to queue, Pick date and time and Publish now sit in a When card, and the header button follows the choice. Captions picked from, or changed by, the AI panel save the draft as AI-written, so it needs approval (D7).
 - An AI-written draft that nobody approved shows Needs your OK (D7).
 
 TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagram "Access expired" disagrees with the campaign builder; status comes from the real connection.
