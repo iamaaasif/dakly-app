@@ -19,6 +19,8 @@ type SendWindow = {
   contactIds: string[];
   after: Date;
   until: Date;
+  dispatch?: boolean;
+  excludeCampaignRecipientId?: string;
   excludeWorkflowStepId?: string;
   includeCommittedFuture?: boolean;
 };
@@ -46,8 +48,8 @@ export class SendingRepository {
     const window = { storeId, contactIds, ...range };
     return this.database.forStore(storeId, async (tx) => {
       const sends = [...(await campaignSends(tx, window)), ...(await workflowSends(tx, window))];
-      // A recipient still in sending is a send happening now. Workflow steps always have a
-      // channel and send time here; the where clause filters the nulls.
+      // Live checks reserve a slot for unresolved campaign claims. Audience estimates
+      // count those claims in the window in which they occurred.
       return sends.map((send) => ({
         contactId: send.contactId,
         channel: send.channel as MarketingSend['channel'],
@@ -58,12 +60,26 @@ export class SendingRepository {
 }
 
 function campaignSends(tx: Transaction, window: SendWindow) {
-  const { storeId, contactIds, after, until, includeCommittedFuture } = window;
+  const { storeId, contactIds, after, until } = window;
+  const { dispatch, excludeCampaignRecipientId, includeCommittedFuture } = window;
+  const live = dispatch || includeCommittedFuture;
+  const pending = eq(campaignRecipients.status, 'sending');
+  const liveClaim = live ? pending : undefined;
+  const uncertain = and(
+    eq(campaignRecipients.status, 'failed'),
+    eq(campaignRecipients.errorCode, 'outcome_unknown'),
+  );
+  const claimed = or(uncertain, live ? undefined : pending);
+  const dispatchStartedAt = sql<Date>`coalesce(${campaignRecipients.dispatchStartedAt}, ${campaignRecipients.claimedAt})`;
+  const acceptedAt = sql<Date>`greatest(${campaignRecipients.sentAt}, ${campaignRecipients.dispatchStartedAt})`;
   return tx
     .select({
       contactId: campaignRecipients.contactId,
       channel: campaigns.channel,
-      sentAt: campaignRecipients.sentAt,
+      sentAt: sql<Date | null>`case when ${liveClaim ?? sql`false`} then null
+          when ${claimed} then ${dispatchStartedAt} else ${acceptedAt} end`.mapWith(
+        campaignRecipients.sentAt,
+      ),
     })
     .from(campaignRecipients)
     .innerJoin(
@@ -77,12 +93,20 @@ function campaignSends(tx: Transaction, window: SendWindow) {
       and(
         eq(campaignRecipients.storeId, storeId),
         inArray(campaignRecipients.contactId, contactIds),
+        excludeCampaignRecipientId
+          ? ne(campaignRecipients.id, excludeCampaignRecipientId)
+          : undefined,
         or(
-          eq(campaignRecipients.status, 'sending'),
+          liveClaim,
+          and(
+            claimed,
+            gt(dispatchStartedAt, after),
+            includeCommittedFuture ? undefined : lte(dispatchStartedAt, until),
+          ),
           and(
             inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
-            gt(campaignRecipients.sentAt, after),
-            includeCommittedFuture ? undefined : lte(campaignRecipients.sentAt, until),
+            gt(acceptedAt, after),
+            includeCommittedFuture ? undefined : lte(acceptedAt, until),
           ),
         ),
         eq(campaigns.category, 'marketing'),

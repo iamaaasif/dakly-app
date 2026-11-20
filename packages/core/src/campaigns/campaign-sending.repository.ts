@@ -1,14 +1,41 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 
 import type { Database } from '@dakly/db/client';
-import { campaigns } from '@dakly/db/schema/campaigns';
+import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { type Campaign, recipientsWhere } from './campaigns.repository';
+
+export type ClaimableRecipient = {
+  id: string;
+  contactId: string;
+  destinationAddress: string | null;
+  providerMessageId: string | null;
+  dispatchStartedAt: Date | null;
+  optOutLinkCode: string | null;
+  sendAttempts: number;
+} & ({ status: 'queued'; claimedAt: Date | null } | { status: 'sending'; claimedAt: Date });
+type RecipientRow = typeof campaignRecipients.$inferSelect;
+type RecipientStatus = RecipientRow['status'];
+type RecipientChange = Pick<RecipientRow, 'status'> &
+  Partial<
+    Omit<
+      RecipientRow,
+      | 'id'
+      | 'storeId'
+      | 'campaignId'
+      | 'contactId'
+      | 'contactIdentityId'
+      | 'destinationAddress'
+      | 'createdAt'
+    >
+  >;
 
 const CAMPAIGNS_PER_STORE = 100;
 
+// The sender's reads and writes: the sweeps, the recipient claims and the settlement.
 @Injectable()
 export class CampaignSendingRepository {
   constructor(
@@ -19,7 +46,7 @@ export class CampaignSendingRepository {
   // Only the due store IDs cross RLS. The update below runs in the tenant transaction.
   async listDueStores(asOf: Date, after: string | null, limit: number): Promise<string[]> {
     const result = await this.global.execute<{ storeId: string }>(sql`
-      select store_id as "storeId" from campaign_due_stores(${asOf.toISOString()}::timestamptz,
+      select store_id as "storeId" from campaign_send_work_stores(${asOf.toISOString()}::timestamptz,
         ${after}::uuid, ${limit}::integer)
     `);
     return result.rows.map(({ storeId }) => storeId);
@@ -50,5 +77,105 @@ export class CampaignSendingRepository {
         .set({ status: 'sending', startedAt: now, updatedAt: now })
         .where(and(eligible, inArray(campaigns.id, tx.select({ id: due.id }).from(due))));
     });
+  }
+
+  async lockNextRecipient(
+    storeId: string,
+    campaign: Pick<Campaign, 'id' | 'status'>,
+    claimedBefore: Date,
+  ): Promise<ClaimableRecipient | undefined> {
+    const expired = and(
+      eq(campaignRecipients.status, 'sending'),
+      lt(campaignRecipients.claimedAt, claimedBefore),
+    );
+    const eligible =
+      campaign.status === 'sending'
+        ? or(expired, eq(campaignRecipients.status, 'queued'))
+        : expired;
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
+      tx
+        .select({
+          id: campaignRecipients.id,
+          contactId: campaignRecipients.contactId,
+          destinationAddress: campaignRecipients.destinationAddress,
+          providerMessageId: campaignRecipients.providerMessageId,
+          claimedAt: campaignRecipients.claimedAt,
+          dispatchStartedAt: campaignRecipients.dispatchStartedAt,
+          optOutLinkCode: campaignRecipients.optOutLinkCode,
+          status: sql<ClaimableRecipient['status']>`${campaignRecipients.status}`,
+          sendAttempts: campaignRecipients.sendAttempts,
+        })
+        .from(campaignRecipients)
+        .where(and(recipientsWhere(storeId, campaign.id), eligible))
+        .orderBy(asc(campaignRecipients.id))
+        .limit(1)
+        .for('update', { skipLocked: true }),
+    );
+    // The expiry predicate excludes null claim times from sending rows.
+    return row as ClaimableRecipient | undefined;
+  }
+
+  async isCurrentClaim(storeId: string, id: string, claimedAt: Date) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: campaignRecipients.id })
+        .from(campaignRecipients)
+        .where(
+          and(
+            eq(campaignRecipients.storeId, storeId),
+            eq(campaignRecipients.id, id),
+            eq(campaignRecipients.status, 'sending'),
+            eq(campaignRecipients.claimedAt, claimedAt),
+            isNull(campaignRecipients.providerMessageId),
+          ),
+        ),
+    );
+    return row !== undefined;
+  }
+
+  // Guarded on the status, and on the claim when one is given, so a stale worker cannot overwrite
+  // a newer claim.
+  async changeRecipient(
+    storeId: string,
+    id: string,
+    from: {
+      status: RecipientStatus;
+      claimedAt?: Date;
+      uncertainReceipt?: string | null;
+      providerMessageId?: string;
+    },
+    change: RecipientChange,
+  ): Promise<boolean> {
+    const { status, claimedAt, uncertainReceipt } = from;
+    const { status: currentStatus, errorCode, providerMessageId } = campaignRecipients;
+    const sameStatus = eq(currentStatus, status);
+    const unknown = and(eq(currentStatus, 'failed'), eq(errorCode, 'outcome_unknown'));
+    // A late provider acceptance can replace an unknown outcome for the same receipt.
+    const guardedStatus =
+      uncertainReceipt !== undefined
+        ? and(
+            or(sameStatus, unknown),
+            or(
+              isNull(providerMessageId),
+              uncertainReceipt ? eq(providerMessageId, uncertainReceipt) : undefined,
+            ),
+          )
+        : sameStatus;
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(campaignRecipients)
+        .set(change)
+        .where(
+          and(
+            eq(campaignRecipients.storeId, storeId),
+            eq(campaignRecipients.id, id),
+            guardedStatus,
+            from.providerMessageId ? eq(providerMessageId, from.providerMessageId) : undefined,
+            claimedAt ? eq(campaignRecipients.claimedAt, claimedAt) : undefined,
+          ),
+        )
+        .returning({ id: campaignRecipients.id }),
+    );
+    return row !== undefined;
   }
 }
