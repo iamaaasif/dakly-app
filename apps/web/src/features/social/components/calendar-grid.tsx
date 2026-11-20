@@ -86,6 +86,8 @@ function DayCell({
       role="gridcell"
       onDragOver={onMove && ((event) => event.preventDefault())}
       onDrop={(event) => {
+        // Firefox otherwise opens the dropped text as a page.
+        if (onMove) event.preventDefault();
         const dropped = entries.find(
           ({ post }) => post.id === event.dataTransfer.getData('text/plain'),
         );
