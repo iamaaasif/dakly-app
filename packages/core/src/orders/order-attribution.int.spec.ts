@@ -80,8 +80,8 @@ describe('OrderAttributionService', () => {
   it('records the selected touch once without changing the editable order revision', async () => {
     const orderId = await order(fixture.a);
     await Promise.all([
-      service.record(fixture.a, orderId, attribution, actor),
-      service.record(fixture.a, orderId, attribution, actor),
+      service.record(fixture.a, orderId, async () => attribution, actor),
+      service.record(fixture.a, orderId, async () => attribution, actor),
     ]);
     expect(await fixture.row('orders', orderId)).toMatchObject({
       attributed_touch_id: attribution.touchId,
@@ -101,17 +101,37 @@ describe('OrderAttributionService', () => {
     ]);
   });
 
+  it('keeps the captured amount when a new window selects the same touch', async () => {
+    const orderId = await order(fixture.a);
+    await service.record(fixture.a, orderId, async () => attribution, actor);
+    await fixture.connection.pool.query(
+      'update orders set items_subtotal_poisha=100000 where id=$1',
+      [orderId],
+    );
+    await service.record(
+      fixture.a,
+      orderId,
+      async () => ({ ...attribution, windowDays: 3 }),
+      actor,
+    );
+    expect(await fixture.row('orders', orderId)).toMatchObject({
+      attributed_touch_id: attribution.touchId,
+      attributed_window_days: 3,
+      attributed_amount_poisha: 120000,
+    });
+  });
+
   it('leaves a foreign order untouched and clears a cancelled order only once', async () => {
     const orderId = await order(fixture.b);
-    await service.record(fixture.a, orderId, attribution, actor);
+    await service.record(fixture.a, orderId, async () => attribution, actor);
     expect(await fixture.row('orders', orderId)).toMatchObject({ attributed_touch_id: null });
     expect(await events(orderId)).toEqual([]);
-    await service.record(fixture.b, orderId, attribution, actor);
+    await service.record(fixture.b, orderId, async () => attribution, actor);
     await fixture.connection.pool.query(
       "update orders set stage='cancelled',cancel_reason='test' where id=$1",
       [orderId],
     );
-    await service.record(fixture.b, orderId, attribution, actor);
+    await service.record(fixture.b, orderId, async () => attribution, actor);
     await service.record(fixture.b, orderId, null, actor);
     expect(await fixture.row('orders', orderId)).toMatchObject({
       attributed_touch_id: null,

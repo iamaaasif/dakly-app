@@ -21,16 +21,19 @@ export class OrderAttributionService {
   record(
     storeId: string,
     orderId: string,
-    reference: OrderAttributionReference | null,
+    reference: AttributionSelection | null,
     _actor: AuditEntry['actor'],
   ) {
     return this.transaction.run(storeId, async () => {
       const order = await this.repository.lock(storeId, orderId);
       if (!order) return;
-      const next = order.stage === 'cancelled' || !order.buyerContactId ? null : reference;
-      if (next ? sameTouch(order, next) : !order.sourceType) return;
+      const next = await selectForOrder(order, reference);
+      if (next === undefined) return;
+      const same = sameTouch(order, next);
+      if (next ? same && order.windowDays === next.windowDays : !order.sourceType) return;
 
-      const amountPoisha = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
+      const currentAmount = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
+      const amountPoisha = same ? (order.amountPoisha ?? currentAmount) : currentAmount;
       await this.repository.save(storeId, orderId, next && { ...next, amountPoisha });
       const occurredAt = this.clock.now().toISOString();
       await this.outbox.publish(
@@ -49,13 +52,29 @@ export class OrderAttributionService {
 
 type OrderAttribution = NonNullable<Awaited<ReturnType<OrderAttributionRepository['lock']>>>;
 
-function sameTouch(order: OrderAttribution, reference: OrderAttributionReference) {
+type AttributionSelection = (
+  order: Pick<OrderAttribution, 'recipientPhone' | 'isRecipientBuyer' | 'createdAt'> & {
+    buyerContactId: string;
+    isAttributed: boolean;
+  },
+) => Promise<OrderAttributionReference | null | undefined>;
+
+function selectForOrder(order: OrderAttribution, select: AttributionSelection | null) {
+  if (order.stage === 'cancelled' || !order.buyerContactId || !select) return null;
+  return select({
+    ...order,
+    buyerContactId: order.buyerContactId,
+    isAttributed: order.sourceType !== null,
+  });
+}
+
+function sameTouch(order: OrderAttribution, reference: OrderAttributionReference | null) {
   return (
+    reference !== null &&
     order.sourceType === reference.sourceType &&
     order.sourceId === reference.sourceId &&
     order.channel === reference.channel &&
     order.touchId === reference.touchId &&
-    order.touchAt?.getTime() === reference.touchAt.getTime() &&
-    order.windowDays === reference.windowDays
+    order.touchAt?.getTime() === reference.touchAt.getTime()
   );
 }

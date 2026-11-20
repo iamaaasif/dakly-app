@@ -36,6 +36,6 @@ import { OrdersService } from './orders.service';
     OrderAttributionRepository,
     OrderAttributionService,
   ],
-  exports: [OrdersService, OrderReportingService],
+  exports: [OrdersService, OrderReportingService, OrderAttributionService],
 })
 export class OrdersModule {}

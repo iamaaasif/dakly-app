@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { ContactsService } from '../contacts/contacts.service';
+import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -16,6 +17,7 @@ import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
+import { AttributeOrderCreated } from './jobs/attribute-order-created.job';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
@@ -58,7 +60,13 @@ describe('Daily order summaries', () => {
 
   afterAll(async () => {
     await app?.close();
-    for (const table of ['orders', 'store_daily_metrics', 'outbox_events']) {
+    for (const table of [
+      'orders',
+      'tracked_links',
+      'campaigns',
+      'store_daily_metrics',
+      'outbox_events',
+    ]) {
       await fixture.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         [fixture.a, fixture.b],
       ]);
@@ -97,6 +105,149 @@ describe('Daily order summaries', () => {
     await app.get(BuildOrderSummaryJob).handle(job?.data);
     await job?.remove();
   }
+
+  it('attributes only the buyer’s eligible tap before the order and records it once', async () => {
+    const buyer = randomUUID();
+    const campaign = randomUUID();
+    const db = fixture.connection.pool;
+    await db.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Buyer','01710000005','manual','customer')",
+      [buyer, fixture.a],
+    );
+    await db.query(
+      "insert into campaigns(id,store_id,name,channel,content) values($1,$2,'Sale','sms','{}')",
+      [campaign, fixture.a],
+    );
+    await db.query(
+      `insert into campaign_recipients(store_id,campaign_id,contact_id,destination_address,status,sent_at,id)
+       values($1,$2,$3,'01710000005','sent','2026-11-17T06:00:00Z',$4)`,
+      [fixture.a, campaign, buyer, randomUUID()],
+    );
+    const links = app.get(LinksService);
+    const [link] = await links.create(
+      fixture.a,
+      [
+        {
+          kind: 'redirect',
+          targetUrl: 'https://example.test',
+          sourceType: 'campaign',
+          sourceId: campaign,
+          contactId: buyer,
+        },
+      ],
+      { kind: 'system' },
+    );
+    const clock = vi.mocked(app.get(Clock).now);
+    clock.mockReturnValueOnce(new Date('2026-11-18T06:00:00Z'));
+    await links.redirect(link.code, { ip: '2001:db8::11', userAgent: undefined });
+    clock.mockReturnValueOnce(new Date('2026-11-20T06:00:00Z'));
+    await links.redirect(link.code, { ip: '2001:db8::12', userAgent: undefined });
+    const {
+      rows: [beforeOrder],
+    } = await db.query(
+      'select id from tracked_link_visits where tracked_link_id=$1 order by occurred_at limit 1',
+      [link.id],
+    );
+    const id = await order(fixture.a, now.toISOString(), buyer);
+    const conflict = await order(fixture.a, now.toISOString(), buyer);
+    const gift = await order(fixture.a, now.toISOString(), buyer);
+    await db.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Recipient','01710000007','manual','customer')",
+      [randomUUID(), fixture.a],
+    );
+    await db.query(
+      "update orders set recipient_phone='01710000007',is_recipient_buyer=(id=$2) where id in ($1,$2)",
+      [gift, conflict],
+    );
+    const worker = app.get(AttributeOrderCreated);
+    await worker.handle({ ...event(fixture.b, id), type: 'order.created' });
+    expect(await fixture.row('orders', id)).toMatchObject({ attributed_touch_id: null });
+    for (const orderId of [id, conflict, gift]) {
+      await worker.handle({ ...event(fixture.a, orderId), type: 'order.created' });
+    }
+    expect(await fixture.row('orders', conflict)).toMatchObject({ attributed_touch_id: null });
+    for (const orderId of [id, gift]) {
+      expect(await fixture.row('orders', orderId)).toMatchObject({
+        attributed_touch_id: beforeOrder.id,
+        attributed_source_id: campaign,
+        attributed_channel: 'sms',
+        attributed_amount_poisha: 125000,
+        attributed_window_days: 7,
+      });
+    }
+    await db.query("update contacts set phone='01710000008' where id=$1", [buyer]);
+    await worker.handle({ ...event(fixture.a, id), type: 'order.created' });
+    expect(await fixture.row('orders', id)).toMatchObject({ attributed_touch_id: beforeOrder.id });
+    const differentDestination = await order(fixture.a, now.toISOString(), buyer);
+    await db.query("update orders set recipient_phone='01710000008' where id=$1", [
+      differentDestination,
+    ]);
+    await worker.handle({ ...event(fixture.a, differentDestination), type: 'order.created' });
+    expect(await fixture.row('orders', differentDestination)).toMatchObject({
+      attributed_touch_id: null,
+    });
+    const result = await db.query(
+      "select 1 from outbox_events where type='attribution.created' and payload->>'orderId'=$1",
+      [id],
+    );
+    expect(result.rowCount).toBe(1);
+  });
+
+  it('credits the workflow behind a tapped send step and excludes failed sends', async () => {
+    const [buyer, workflow, version, run, sent, failed] = Array.from({ length: 6 }, () =>
+      randomUUID(),
+    );
+    const db = fixture.connection.pool;
+    await db.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Buyer','01710000006','manual','customer')",
+      [buyer, fixture.a],
+    );
+    await db.query(
+      "insert into automations(id,store_id,name,trigger_type,draft_graph) values($1,$2,'Flow','manual','{}')",
+      [workflow, fixture.a],
+    );
+    await db.query(
+      "insert into automation_versions(id,store_id,automation_id,version,graph) values($1,$2,$3,1,'{}')",
+      [version, fixture.a, workflow],
+    );
+    await db.query(
+      `insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,wake_at)
+       values($1,$2,$3,$4,$5,'manual','offer','2026-11-20T06:00:00Z')`,
+      [run, fixture.a, workflow, version, buyer],
+    );
+    await db.query(
+      `insert into automation_run_steps
+         (id,store_id,run_id,contact_id,step_key,kind,outcome,channel,category,sent_at)
+       values ($1,$3,$4,$5,'offer','send','sent','sms','marketing','2026-11-17T06:00:00Z'),
+              ($2,$3,$4,$5,'retry','send','failed','sms','marketing','2026-11-17T06:00:00Z')`,
+      [sent, failed, fixture.a, run, buyer],
+    );
+    const [eligibleVisit, failedVisit] = Array.from({ length: 2 }, () => randomUUID());
+    for (const [step, visit, at] of [
+      [sent, eligibleVisit, '2026-11-18T06:00:00Z'],
+      [failed, failedVisit, '2026-11-19T05:00:00Z'],
+    ] as const) {
+      const link = randomUUID();
+      await db.query(
+        `insert into tracked_links(id,store_id,code,source_type,source_id,contact_id,target_url)
+         values($1,$2,$3,'automation',$4,$5,'https://example.test')`,
+        [link, fixture.a, link, step, buyer],
+      );
+      await db.query(
+        'insert into tracked_link_visits(id,store_id,tracked_link_id,event_key,occurred_at) values ($1,$2,$3,$4,$5)',
+        [visit, fixture.a, link, visit, at],
+      );
+    }
+    const id = await order(fixture.a, now.toISOString(), buyer);
+    await db.query("update orders set recipient_phone='01710000006' where id=$1", [id]);
+    await app.get(AttributeOrderCreated).handle({ ...event(fixture.a, id), type: 'order.created' });
+    expect(await fixture.row('orders', id)).toMatchObject({
+      attributed_touch_id: eligibleVisit,
+      attributed_source_type: 'automation',
+      attributed_source_id: workflow,
+      attributed_channel: 'sms',
+    });
+  });
 
   it('removes buyer activity for exactly the contacts deleted in the selected store', async () => {
     const manual = randomUUID();

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
 import type {
   CampaignChannel,
@@ -116,6 +116,35 @@ export class CampaignsRepository {
         .limit(query.limit + 1),
     );
     return rows;
+  }
+
+  attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: campaigns.id,
+          sourceId: campaigns.id,
+          channel: campaigns.channel,
+          sentAt: campaignRecipients.sentAt,
+        })
+        .from(campaignRecipients)
+        .innerJoin(
+          campaigns,
+          and(eq(campaigns.storeId, storeId), eq(campaigns.id, campaignRecipients.campaignId)),
+        )
+        .where(
+          and(
+            eq(campaignRecipients.storeId, storeId),
+            eq(campaignRecipients.contactId, buyer.id),
+            inArray(campaignRecipients.campaignId, ids),
+            inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
+            or(
+              ne(campaigns.channel, 'sms'),
+              eq(campaignRecipients.destinationAddress, buyer.phone),
+            ),
+          ),
+        ),
+    );
   }
 
   async find(storeId: string, id: string): Promise<Campaign | undefined> {

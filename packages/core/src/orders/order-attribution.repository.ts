@@ -36,6 +36,10 @@ export class OrderAttributionRepository {
         .select({
           buyerContactId: orders.buyerContactId,
           stage: orders.stage,
+          recipientPhone: orders.recipientPhone,
+          isRecipientBuyer: orders.isRecipientBuyer,
+          createdAt: orders.createdAt,
+          amountPoisha: orders.attributedAmountPoisha,
           itemsSubtotalPoisha: orders.itemsSubtotalPoisha,
           orderDiscountPoisha: orders.orderDiscountPoisha,
           sourceType: orders.attributedSourceType,

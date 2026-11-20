@@ -97,6 +97,13 @@ export class StoresRepository {
     return store?.status;
   }
 
+  async attributionWindowDays(storeId: string) {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select({ days: stores.attributionWindowDays }).from(stores).where(eq(stores.id, storeId)),
+    );
+    return row?.days;
+  }
+
   async timeZone(storeId: string): Promise<string | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx.select({ timeZone: stores.timeZone }).from(stores).where(eq(stores.id, storeId)).limit(1),

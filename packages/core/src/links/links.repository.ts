@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from 'drizzle-orm';
 
 import type { TrackedLinkKind, TrackedLinkSourceType } from '@dakly/contracts/campaigns';
 import type { Database } from '@dakly/db/client';
@@ -58,6 +58,43 @@ export class LinksRepository {
         .returning({ id: trackedLinks.id }),
     );
     return rows.map((row) => row.id);
+  }
+
+  attributionTaps(storeId: string, contactId: string, from: Date, through: Date) {
+    return this.tenant.forStore(storeId, (tx) => {
+      const latestVisit = tx
+        .select({ id: trackedLinkVisits.id, eligibleAt: trackedLinkVisits.occurredAt })
+        .from(trackedLinkVisits)
+        .where(
+          and(
+            eq(trackedLinkVisits.storeId, storeId),
+            eq(trackedLinkVisits.trackedLinkId, trackedLinks.id),
+            gte(trackedLinkVisits.occurredAt, from),
+            lte(trackedLinkVisits.occurredAt, through),
+          ),
+        )
+        .orderBy(desc(trackedLinkVisits.occurredAt), desc(trackedLinkVisits.id))
+        .limit(1)
+        .as('latest_visit');
+      return tx
+        .select({
+          id: latestVisit.id,
+          eligibleAt: latestVisit.eligibleAt,
+          sourceType: trackedLinks.sourceType,
+          sourceId: trackedLinks.sourceId,
+        })
+        .from(trackedLinks)
+        .innerJoinLateral(latestVisit, sql`true`)
+        .where(
+          and(
+            eq(trackedLinks.storeId, storeId),
+            eq(trackedLinks.contactId, contactId),
+            eq(trackedLinks.kind, 'redirect'),
+            isNotNull(trackedLinks.sourceId),
+            inArray(trackedLinks.sourceType, ['campaign', 'automation']),
+          ),
+        );
+    });
   }
 
   async recordRedirectTap(
