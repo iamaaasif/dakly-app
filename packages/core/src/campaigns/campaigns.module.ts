@@ -55,7 +55,6 @@ import { CampaignsService } from './campaigns.service';
     CampaignFundingService,
     CampaignSenderService,
     CampaignSweepService,
-    CampaignsService,
   ],
 })
 export class CampaignsModule {}

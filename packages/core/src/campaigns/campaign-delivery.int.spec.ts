@@ -414,6 +414,29 @@ describe('Campaign sender (Postgres)', () => {
     expect(events).toHaveLength(1);
   });
 
+  it.each(['sent', 'cancelled'] as const)(
+    'caps a %s campaign’s charge at the reserved credits',
+    async (status) => {
+      const before = await wallets.balance(storeId, 'sms_credits');
+      const { id } = await sendingCampaign(1);
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 1);
+      await admin.pool.query(
+        "update campaign_recipients set status='sent', sent_at=$2, sms_credits=2 where campaign_id=$1",
+        [id, noon],
+      );
+
+      if (status === 'cancelled') await campaigns.cancel(storeId, id, actor);
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+
+      expect(await campaignRow(id)).toMatchObject({ status, finished_at: noon });
+      expect(await settlementRows(id)).toEqual([
+        { kind: 'release', quantity_delta: 1 },
+        { kind: 'charge', quantity_delta: -1 },
+      ]);
+      expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 1);
+    },
+  );
+
   it('counts a real redirect callback once per campaign recipient', async () => {
     const { id } = await sendingCampaign(1);
     await sender.sendBatch(storeId, id);
