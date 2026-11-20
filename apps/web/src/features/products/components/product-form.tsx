@@ -101,11 +101,12 @@ async function saveInitialStocks({
   adjustStock,
 }: SaveInitialStocksArgs): Promise<string[]> {
   const failed: string[] = [];
+  const sizeOption = input.options[0]?.name ?? '';
   const adjustments = (formVariants ?? []).flatMap((variant, index) => {
     const quantity = variant.initialStock ?? 0;
     if (quantity <= 0) return [];
     const sizeName = input.options[0]?.values[index] ?? '';
-    const variantId = saved.variants.find((v) => v.optionValues.Size === sizeName)?.id;
+    const variantId = saved.variants.find((v) => v.optionValues[sizeOption] === sizeName)?.id;
     if (!variantId) {
       failed.push(sizeName);
       return [];

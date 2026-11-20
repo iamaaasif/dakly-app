@@ -168,7 +168,9 @@ function ProductSizeRow({ index, size, onUpdate, onRemove }: ProductSizeRowProps
         placeholder="0"
         aria-label={`Stock for size ${size || index + 1}`}
         className="w-20 text-center"
-        {...form.register(`variants.${index}.initialStock`, { valueAsNumber: true })}
+        {...form.register(`variants.${index}.initialStock`, {
+          setValueAs: (value: string) => (value === '' ? 0 : Number(value)),
+        })}
       />
       <button
         type="button"
