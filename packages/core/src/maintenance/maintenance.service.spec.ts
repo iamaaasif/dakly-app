@@ -1,35 +1,48 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import type { AuditArchiveService } from './audit-archive.service';
+import type { FilePurgeService } from './file-purge.service';
 import type { MaintenanceRollupsService } from './maintenance-rollups.service';
 import { MaintenanceService } from './maintenance.service';
 
-describe('MaintenanceService', () => {
-  const archive = {
-    archiveExpiredMonths: vi.fn().mockResolvedValue(undefined),
-  } as unknown as AuditArchiveService;
+function build(rollUp: () => Promise<void>) {
+  const done = () => vi.fn().mockResolvedValue(undefined);
+  const parts = {
+    rollups: {
+      ensurePartitions: done(),
+      rollUpFinishedDays: vi.fn(rollUp),
+      dropExpiredPartitions: done(),
+    },
+    archive: { archiveExpiredMonths: done() },
+    files: { purgeExpiredFiles: done(), purgeOrphanProductObjects: done() },
+    accountEvents: { purgeExpired: done() },
+  };
+  const service = new MaintenanceService(
+    parts.rollups as unknown as MaintenanceRollupsService,
+    parts.archive as unknown as AuditArchiveService,
+    parts.files as unknown as FilePurgeService,
+    parts.accountEvents as unknown as AccountSecurityEventsService,
+  );
+  return { service, ...parts };
+}
 
-  it('runs the later steps after a failed one, then reports the failure', async () => {
-    const rollups = {
-      ensurePartitions: vi.fn().mockResolvedValue(undefined),
-      rollUpFinishedDays: vi.fn().mockRejectedValue(new Error('store scan failed')),
-      dropExpiredPartitions: vi.fn().mockResolvedValue(0),
-    };
-    const service = new MaintenanceService(
-      rollups as unknown as MaintenanceRollupsService,
-      archive,
+describe('MaintenanceService', () => {
+  it('runs every later step after a failed one, then reports the failure', async () => {
+    const { service, rollups, archive, files, accountEvents } = build(() =>
+      Promise.reject(new Error('store scan failed')),
     );
 
     await expect(service.run()).rejects.toMatchObject({ code: 'MAINTENANCE_STEPS_FAILED' });
+
     expect(rollups.dropExpiredPartitions).toHaveBeenCalledOnce();
+    expect(archive.archiveExpiredMonths).toHaveBeenCalledOnce();
+    expect(files.purgeExpiredFiles).toHaveBeenCalledOnce();
+    expect(files.purgeOrphanProductObjects).toHaveBeenCalledOnce();
+    expect(accountEvents.purgeExpired).toHaveBeenCalledOnce();
   });
 
   it('finishes quietly when every step works', async () => {
-    const rollups = {
-      ensurePartitions: vi.fn().mockResolvedValue(undefined),
-      rollUpFinishedDays: vi.fn().mockResolvedValue(undefined),
-      dropExpiredPartitions: vi.fn().mockResolvedValue(0),
-    };
-    await new MaintenanceService(rollups as unknown as MaintenanceRollupsService, archive).run();
+    await build(() => Promise.resolve()).service.run();
   });
 });
