@@ -88,14 +88,18 @@ export class SalesAgentToolsService {
   private async getDeliveryCharge({ storeId }: ToolScope, raw: unknown) {
     const { area } = getDeliveryChargeTool.input.parse(raw);
     const found = await this.delivery.calculateChargesByAreaName(storeId, area, AREA_LIMIT);
+    if (found.length)
+      return {
+        places: found.map((place) => ({
+          area: place.area,
+          district: place.district,
+          chargeTaka: taka(place.chargePoisha),
+        })),
+      };
     // The area table stops at upazilas, so a Dhaka locality has no match; the zones let the model reason from the city.
     const zones = await this.delivery.listZones(storeId, { limit: ZONE_LIMIT });
     return {
-      places: found.map((place) => ({
-        area: place.area,
-        district: place.district,
-        chargeTaka: taka(place.chargePoisha),
-      })),
+      places: [],
       zones: zones.items.map((zone) => ({
         name: zone.name,
         chargeTaka: taka(zone.chargePoisha),

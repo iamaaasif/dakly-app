@@ -40,7 +40,7 @@ export const getProductTool = {
 export const getDeliveryChargeTool = {
   name: 'get_delivery_charge',
   description:
-    'Delivery charge to an area, thana, district or city. Use it for any delivery cost question. Give the place name the customer wrote; up to 3 matching places come back, plus the shop’s delivery zones with their charges. A locality inside a city has no match of its own: use the zone of its city, and ask the customer when you cannot tell.',
+    'Delivery charge to an area, thana, district or city. Use it for any delivery cost question. Give the place name the customer wrote; up to 3 matching places come back with their charge. When no place matches, the shop’s delivery zones come back instead: use the zone of the locality’s city, and ask the customer when you cannot tell. Your reply names the place the charge is for, such as “Delivery to Dhaka city is ৳60”, so the customer can correct a wrong guess.',
   aliases: [
     'ডেলিভারি চার্জ',
     'ডেলিভারি খরচ',

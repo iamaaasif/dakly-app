@@ -174,7 +174,7 @@ it('hides a hidden product and another shop product from get_product', async () 
     });
 });
 
-it('gives the charge for a named place and the shop zones for any place', async () => {
+it('gives the charge for a matched place with no zones, and the zones for an unmatched locality', async () => {
   const storeId = await shop();
   const buyer = await contact(storeId);
   await admin.pool.query(
@@ -187,7 +187,6 @@ it('gives the charge for a named place and the shop zones for any place', async 
   ]);
   expect(await run(storeId, buyer, 'get_delivery_charge', { area: 'Dhaka' })).toEqual({
     places: [{ area: 'Dhaka', district: 'Dhaka', chargeTaka: 60 }],
-    zones,
   });
   expect(await run(storeId, buyer, 'get_delivery_charge', { area: 'Nowhereville' })).toEqual({
     places: [],
