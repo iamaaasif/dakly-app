@@ -3,11 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
-import { CampaignsRepository } from './campaigns.repository';
+import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
 
 describe('campaign message totals', () => {
   const f = new OwnerIsolationFixture();
-  const repository = new CampaignsRepository(f.tenant);
+  const repository = new CampaignMessageTotalsRepository(f.tenant);
   const range = { from: '2026-11-10', through: '2026-11-10', timeZone: 'Asia/Dhaka' };
 
   async function recipient(store: string, campaign: string, contact: string, values: string) {

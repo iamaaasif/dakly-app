@@ -10,8 +10,8 @@ import { campaignChannels } from '@dakly/contracts/campaigns';
 
 import { AutomationsService } from '../automations/automations.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
-import { AnalyticsService } from './analytics.service';
 import { DAY_MS } from '../platform/time';
+import { AnalyticsService } from './analytics.service';
 import { shiftReportDay } from './report-period';
 
 type Totals = { sent: number; delivered: number; read: number; tapped: number; cost: bigint };
