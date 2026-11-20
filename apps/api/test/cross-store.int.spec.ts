@@ -984,6 +984,119 @@ for (const method of ['PATCH', 'DELETE'] as const)
     await hidden(b, method, url, foreign, body ? () => body : undefined);
     expect(await f.row('knowledge_items', foreign)).toEqual(before);
   });
+async function agentSettings(shop: Shop) {
+  return (
+    await f.admin.pool.query(
+      'select to_jsonb(t) as row from ai_agent_settings t where store_id = $1',
+      [shop.id],
+    )
+  ).rows[0]?.row;
+}
+const testQuestions = [
+  { question: 'price koto?', expectedAnswer: '১২০০ টাকা' },
+  { question: 'delivery koto?', expectedAnswer: 'ঢাকায় ৬০ টাকা' },
+  { question: 'M size ache?', expectedAnswer: 'হ্যাঁ, আছে' },
+];
+fixture('PUT /ai-agent/test-questions', async () => {
+  const { a, b } = await pair();
+  const url = '/ai-agent/test-questions';
+  await success(a, 'PUT', url, 200, { questions: testQuestions });
+  const before = await agentSettings(a);
+  expect((await f.request(b.member, 'PUT', url, { questions: testQuestions })).statusCode).toBe(
+    403,
+  );
+  await success(b, 'PUT', url, 200, { questions: testQuestions.slice(0, 1) });
+  expect(await agentSettings(a)).toEqual(before);
+  expect((await agentSettings(b)).test_questions).toHaveLength(1);
+});
+fixture('GET /ai-agent/test-questions', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/ai-agent/test-questions', 200, { questions: testQuestions });
+  expect((await success(a, 'GET', '/ai-agent/test-questions', 200)).json().questions).toEqual(
+    testQuestions,
+  );
+  expect((await success(b, 'GET', '/ai-agent/test-questions', 200)).json().questions).toEqual([]);
+});
+fixture('PUT /ai-agent/testers', async () => {
+  const { a, b } = await pair();
+  const foreign = await contact(a);
+  const own = await contact(b);
+  await hidden(
+    b,
+    'PUT',
+    () => '/ai-agent/testers',
+    foreign,
+    (id) => ({ contactIds: [id] }),
+  );
+  expect(await agentSettings(b)).toBeUndefined();
+  expect(
+    (await f.request(b.member, 'PUT', '/ai-agent/testers', { contactIds: [own] })).statusCode,
+  ).toBe(403);
+  await success(b, 'PUT', '/ai-agent/testers', 200, { contactIds: [own] });
+  expect((await agentSettings(b)).testers).toEqual([own]);
+  expect(await agentSettings(a)).toBeUndefined();
+});
+fixture('GET /ai-agent/testers', async () => {
+  const { a, b } = await pair();
+  const own = await contact(a);
+  await success(a, 'PUT', '/ai-agent/testers', 200, { contactIds: [own] });
+  expect((await success(a, 'GET', '/ai-agent/testers', 200)).json().contactIds).toEqual([own]);
+  expect((await success(b, 'GET', '/ai-agent/testers', 200)).json().contactIds).toEqual([]);
+});
+fixture('POST /ai-agent/test', async () => {
+  const { a, b } = await pair();
+  const url = '/ai-agent/test';
+  expect((await f.request(b.member, 'POST', url, { question: 'price koto?' })).statusCode).toBe(
+    403,
+  );
+  const driver = app.get<{ respond(request: { model: string }): Promise<object> }>(LLM_DRIVER);
+  const usage = { inputTokens: 5, cachedInputTokens: 0, outputTokens: 5 };
+  const respond = vi
+    .spyOn(driver, 'respond')
+    .mockResolvedValueOnce({
+      kind: 'output',
+      output: {
+        intent: 'greeting',
+        language: 'banglish',
+        sentiment: 'neutral',
+        asksForPerson: false,
+        confidence: 'high',
+        handover: null,
+      },
+      model: 'fake',
+      responseId: randomUUID(),
+      usage,
+    })
+    .mockResolvedValueOnce({
+      kind: 'output',
+      output: { reply: 'Ji bolun' },
+      model: 'fake',
+      responseId: randomUUID(),
+      usage,
+    });
+  expect((await success(a, 'POST', url, 200, { question: 'hello' })).json()).toEqual({
+    kind: 'reply',
+    text: 'Ji bolun',
+  });
+  respond.mockRestore();
+  for (const shop of [a, b])
+    expect(
+      await f.admin.pool.query('select 1 from messages where store_id = $1', [shop.id]),
+    ).toMatchObject({
+      rowCount: 0,
+    });
+});
+fixture('POST /ai-agent/channel-connections/:channelConnectionId/go-live', async () => {
+  const { a, b } = await pair();
+  const foreign = await seedChannel(a);
+  const before = await f.row('channel_connections', foreign);
+  await hidden(b, 'POST', (id) => `/ai-agent/channel-connections/${id}/go-live`, foreign);
+  expect(await f.row('channel_connections', foreign)).toEqual(before);
+  const own = await seedChannel(b);
+  expect(
+    (await f.request(b.member, 'POST', `/ai-agent/channel-connections/${own}/go-live`)).statusCode,
+  ).toBe(403);
+});
 fixture('POST /contacts/:contactId/consents', async () => {
   const { a, b } = await pair(),
     id = await contact(a);

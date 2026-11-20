@@ -10,6 +10,10 @@ export class KnowledgeSearchService {
     @Inject(AiService) private readonly ai: AiService,
   ) {}
 
+  hasActiveItem(storeId: string) {
+    return this.repository.hasActive(storeId);
+  }
+
   async search(storeId: string, query: string, limit: number): Promise<KnowledgeHit[]> {
     const {
       embeddings: [embedding],

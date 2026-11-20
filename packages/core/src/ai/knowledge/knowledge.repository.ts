@@ -34,6 +34,17 @@ export type KnowledgeHit = { itemId: string; content: string };
 export class KnowledgeRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
+  async hasActive(storeId: string): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: knowledgeItems.id })
+        .from(knowledgeItems)
+        .where(and(eq(knowledgeItems.storeId, storeId), eq(knowledgeItems.status, 'active')))
+        .limit(1),
+    );
+    return rows.length > 0;
+  }
+
   async create(
     storeId: string,
     userId: string,

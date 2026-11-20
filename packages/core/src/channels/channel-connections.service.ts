@@ -71,6 +71,23 @@ export class ChannelConnectionsService {
     };
   }
 
+  async isAiLive(storeId: string, id: string) {
+    return (await this.repository.aiState(storeId, id))?.isAiLive ?? false;
+  }
+
+  async requireActive(storeId: string, id: string): Promise<void> {
+    const state = await this.repository.aiState(storeId, id);
+    if (!state || state.status === 'disconnected')
+      throw connectionError('CHANNEL_CONNECTION_NOT_FOUND');
+    if (state.status !== 'active') throw connectionError('CHANNEL_NOT_CONNECTED');
+  }
+
+  // The caller checks the store's tests first; this only moves the channel out of practice.
+  async goLive(storeId: string, id: string): Promise<void> {
+    await this.requireActive(storeId, id);
+    await this.repository.setAiLive(storeId, id, this.clock.now());
+  }
+
   async postingConnections(storeId: string, ids: string[]) {
     if (!ids.length) return [];
     const rows = await this.repository.findPostingConnections(storeId, ids);
