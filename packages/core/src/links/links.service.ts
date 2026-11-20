@@ -73,6 +73,10 @@ export class LinksService {
     return rows.map((row) => ({ id: row.id, code: row.code, url: linkUrl(row.kind, row.code) }));
   }
 
+  attributionTaps(storeId: string, contactId: string, from: Date, through: Date) {
+    return this.repository.attributionTaps(storeId, contactId, from, through);
+  }
+
   // A sender that kept the code builds the same address again.
   optOutUrl(code: string, base = this.shortLinkBase()): string {
     return linkUrl('sms_opt_out', code, base);

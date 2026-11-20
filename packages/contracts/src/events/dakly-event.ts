@@ -32,6 +32,8 @@ import {
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
 import {
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
@@ -85,6 +87,8 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
   orderEditedEventSchema,
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
   postScheduledEventSchema,
   postPublishedEventSchema,
   postFailedEventSchema,

@@ -23,6 +23,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
+import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
 import { moveOrderReservations } from './order-reservations';
 import { returnRisk } from './order-risk';
@@ -63,6 +64,7 @@ export class OrdersService {
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(OrderAttributionService) private readonly attribution: OrderAttributionService,
   ) {}
 
   archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
@@ -283,6 +285,7 @@ export class OrdersService {
           ? { paymentStatus: 'refund_due' }
           : {}),
       });
+      if (change.to === 'cancelled') await this.attribution.clear(storeId, orderId);
       await recordOrderStage(
         storeId,
         orderId,
