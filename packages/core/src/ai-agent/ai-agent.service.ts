@@ -2,13 +2,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
-import {
-  type ChatClassification,
-  chatClassificationSchema,
-} from '@dakly/contracts/chat-classification';
+import { chatClassificationSchema } from '@dakly/contracts/chat-classification';
 import type { handoverReasons } from '@dakly/contracts/chats';
 
 import { AiService } from '../ai/ai.service';
+import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ConsentService } from '../consents/consent.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { ContactsService } from '../contacts/contacts.service';
@@ -25,6 +23,7 @@ import { MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
+import { handoverReason } from './handover-reason';
 import { classifyChat } from './prompts/classify-chat.v1';
 import { checkReplyFacts } from './reply-fact-check';
 import { type ComposedReply, SalesAgentService } from './sales-agent.service';
@@ -54,6 +53,7 @@ export class AiAgentService {
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
+    @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
     @Inject(ConsentService) private readonly consent: ConsentService,
     @Inject(UsageService) private readonly usage: UsageService,
     @Inject(StoresService) private readonly stores: StoresService,
@@ -140,13 +140,29 @@ export class AiAgentService {
     const turn = await this.inbox.aiReplyTurn(storeId, id, lock);
     if (!turn || turn.channel === 'whatsapp') return;
     const { contactId, channel, connectionId, latest } = turn;
-    const contact = await this.contacts.findRecipient(storeId, contactId);
-    if (!contact || contact.kind === 'not_customer' || contact.isBlocked) return;
-    const consent = await this.consent.current(storeId, [contactId], channel);
-    if (consent.some(({ status }) => status === 'withdrawn')) return;
+    if (!(await this.isAnswerable(storeId, turn, settings.testers))) return;
+    if (!(await this.mayContact(storeId, contactId, channel))) return;
     const target = { contactId, channel, connectionId, identityId: latest.senderIdentityId };
     if (!(await this.identities.findOutboundIdentity(storeId, target))) return;
     return { turn, target, debounceSeconds: settings.debounceSeconds };
+  }
+
+  private async mayContact(
+    storeId: string,
+    contactId: string,
+    channel: EligibleTurn['target']['channel'],
+  ) {
+    const contact = await this.contacts.findRecipient(storeId, contactId);
+    if (!contact || contact.kind === 'not_customer' || contact.isBlocked) return false;
+    const consent = await this.consent.current(storeId, [contactId], channel);
+    return !consent.some(({ status }) => status === 'withdrawn');
+  }
+
+  // A channel in practice answers only the shop's testers, never other customers.
+  private async isAnswerable(storeId: string, turn: Turn, testers: string[]) {
+    return (
+      testers.includes(turn.contactId) || (await this.channels.isAiLive(storeId, turn.connectionId))
+    );
   }
 
   private async enabledSettings(storeId: string) {
@@ -280,26 +296,3 @@ function burstText(turn: Turn, delay: number) {
   }
   return texts.reverse();
 }
-
-export function handoverReason(texts: string[], result: ChatClassification): Reason | null {
-  if (result.asksForPerson) return 'asked_for_person';
-  const text = texts.join('\n').normalize('NFKC').toLowerCase();
-  const rule = handoverRules.find(
-    ({ intent, pattern }) => intent === result.intent || pattern.test(text),
-  );
-  if (rule) return rule.reason;
-  if (result.handover) return result.handover;
-  if (result.sentiment === 'angry') return 'angry';
-  return result.confidence === 'low' || result.intent === 'special_request' ? 'out_of_scope' : null;
-}
-
-const handoverRules: { intent?: ChatClassification['intent']; pattern: RegExp; reason: Reason }[] =
-  [
-    { intent: 'exchange', pattern: /\b(refund|exchange|ferot)\b|ফেরত|বদল/u, reason: 'refund' },
-    {
-      intent: 'complaint',
-      pattern: /\b(damaged|fake|chera|broken)\b|নকল|ছেঁড়া/u,
-      reason: 'complaint',
-    },
-    { pattern: /\b(discount|chhar)\b|ছাড়/u, reason: 'discount' },
-  ];

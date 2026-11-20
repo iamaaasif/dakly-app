@@ -47,6 +47,25 @@ export class ChannelConnectionsRepository {
     @Inject(DATABASE) private readonly globalDatabase: Database,
   ) {}
 
+  async aiState(storeId: string, id: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ status: channelConnections.status, isAiLive: channelConnections.isAiLive })
+        .from(channelConnections)
+        .where(and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, id))),
+    );
+    return row;
+  }
+
+  async setAiLive(storeId: string, id: string, now: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(channelConnections)
+        .set({ isAiLive: true, updatedAt: now })
+        .where(and(eq(channelConnections.storeId, storeId), eq(channelConnections.id, id))),
+    );
+  }
+
   list(storeId: string, { cursor, limit }: ChannelConnectionListQuery) {
     return this.database.forStore(storeId, (tx) =>
       tx

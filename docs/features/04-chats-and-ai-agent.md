@@ -328,7 +328,13 @@ The outbound message schema keeps the chosen recipient identity and the category
 
 Hand-over: sets `needs_you` and `human`, records the reason (asked for a person, complaint, refund, discount, angry, out of scope, ready to buy, other), sends the holding reply once, notifies the assignee or Owner. Unclaimed after 10 minutes in working hours, the chat goes back to the AI. After a person's last message the AI returns after the return timer (default 30 minutes).
 
-Practice mode: each new channel starts with AI not live. The AI answers only the Test tab and the tester list. Go live runs the store's test questions (at least 3) and switches on only if all pass.
+Practice mode: each new channel starts with AI not live (`channel_connections.is_ai_live`). A customer chat gets an AI reply, or an AI hand-over holding reply, only when the store's auto-reply switch is on and either the channel is live or the customer's contact is on the store's tester list (`ai_agent_settings.testers`, contact ids). Nothing is drafted for staff to approve. A channel connected after the shop went live starts in practice and needs its own Go live.
+
+Test questions are `{question, expectedAnswer}` pairs saved on the store (`PUT /ai-agent/test-questions`, up to 5). `POST /ai-agent/test` answers one question the way the live agent would, with the same classification, hand-over rules, tools and fact check, without a conversation. It saves no message, queues nothing and uses no AI conversation unit. The order tools find nothing because the question has no contact.
+
+`POST /ai-agent/channel-connections/:id/go-live` refuses, with the code of the first failed check, until the channel is active, Knowledge has an active item, a product is shown in chats, hand-over rules are saved and there are at least 3 test questions. It then runs every test question one after another. A question passes when the agent gives a reply and not a hand-over, the reply passes the fact check, and a fast-tier grader call says it agrees with the expected answer in meaning. The grader judges meaning because Bangla, Banglish and English write prices and places in many forms. If any question fails, the response is `GO_LIVE_TESTS_FAILED` with the failed positions and the channel stays in practice. When all pass, the channel goes live and an audit entry `channel_connection.ai_went_live` records the user.
+
+Waits on other tasks: saving the tester list and hand-over rules with undo history (AI settings save), the screens (AI-8), the batch test on the last 50 real chats (not in the rules) and re-running the tests after a knowledge change (AI-7).
 
 Comments: classified as question, positive, negative or spam. If "Answer post comments" is on, the AI posts a short public reply and one private reply with price. Spam is hidden; negative goes to Needs you. Nothing with a price, phone or address is posted publicly.
 

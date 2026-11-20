@@ -102,7 +102,7 @@ async function member(storeId: string, role: 'owner' | 'admin') {
   return userId;
 }
 
-async function shop(allowance = 1, autoReply = true) {
+async function shop(allowance = 1, autoReply = true, isLive = true) {
   const storeId = randomUUID();
   const connectionId = randomUUID();
   const planId = randomUUID();
@@ -125,8 +125,8 @@ async function shop(allowance = 1, autoReply = true) {
     [storeId, planId],
   );
   await admin.pool.query(
-    "insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at) values ($1::uuid, $2, 'facebook_page', $1::text, 'AI reply test', now() - interval '2 days')",
-    [connectionId, storeId],
+    "insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at, is_ai_live) values ($1::uuid, $2, 'facebook_page', $1::text, 'AI reply test', now() - interval '2 days', $3)",
+    [connectionId, storeId, isLive],
   );
   return { storeId, connectionId, owner: await member(storeId, 'owner') };
 }
@@ -592,4 +592,27 @@ it('sends once when the job is retried and finishes a paid window after the allo
   await agent.reply(active.storeId, second.conversation_id, second.id);
   expect((await sent(active)).map((row) => row.author_type)).toEqual(['ai', 'ai']);
   expect(await observe(active)).toMatchObject({ usage: [{ id: expect.any(String) }] });
+});
+
+it('answers nobody but testers while the channel is in practice', async () => {
+  const practice = await shop(1, true, false);
+  const stranger = await receive(practice, 'Hello', 'stranger');
+  const tester = await receive(practice, 'Hello', 'tester');
+  const { rows } = await admin.pool.query<{ contact_id: string }>(
+    'select contact_id from conversations where store_id = $1 and id = $2',
+    [practice.storeId, tester.conversation_id],
+  );
+  await admin.pool.query('update ai_agent_settings set testers = $2 where store_id = $1', [
+    practice.storeId,
+    JSON.stringify([rows[0]!.contact_id]),
+  ]);
+
+  await agent.reply(practice.storeId, stranger.conversation_id, stranger.id);
+  expect(await observe(practice)).toMatchObject({ replies: [], notices: [], runs: [], usage: [] });
+
+  scriptSequence({ ...classified, output: classification }, replyText('Ji bolun'));
+  await agent.reply(practice.storeId, tester.conversation_id, tester.id);
+  expect((await observe(practice)).replies).toMatchObject([
+    { body: 'Ji bolun', author_type: 'ai' },
+  ]);
 });
