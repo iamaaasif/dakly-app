@@ -16,6 +16,11 @@ const errors = {
   POST_NO_SLOTS: { status: 409, message: 'Set a posting slot for this account' },
   POST_SLOT_TAKEN: { status: 409, message: 'An account already has a post at this time' },
   POST_MEDIA_NOT_FOUND: { status: 404, message: 'Photo not found' },
+  POST_MEDIA_UPLOAD_INVALID: {
+    status: 400,
+    message: 'The photo did not upload correctly. Choose it again.',
+  },
+  POST_MEDIA_ALREADY_ADDED: { status: 409, message: 'This photo was already added' },
   POST_DRAFT_REQUIRED: { status: 409, message: 'Only drafts can be changed' },
   POST_INSTAGRAM_PHOTO_FORMAT: { status: 400, message: 'Use JPEG photos for Instagram' },
   POST_STORE_INACTIVE: { status: 409, message: 'This store cannot publish posts' },

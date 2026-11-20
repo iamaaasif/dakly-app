@@ -28,7 +28,11 @@ export type SendRequest = {
 export type SendDecision =
   { action: 'send' } | { action: 'defer'; until: Date } | { action: 'skip'; reason: SkipReason };
 
-export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
+// A window closes at a different time for each contact, so an audience brings them by contact.
+export type AudienceRequest = Omit<SendRequest, 'contactId'> & {
+  contactIds: string[];
+  windowClosesAtOf?: ReadonlyMap<string, Date>;
+};
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
 type CapReadOptions = {
@@ -145,9 +149,11 @@ export class SendPolicyService {
       contactId,
       workflowStepId,
       campaignRecipientId,
+      channel,
       settings: { quietHours, timeZone, frequencyCap },
     }: {
       contactId: string;
+      channel: SendRequest['channel'];
       workflowStepId?: string;
       campaignRecipientId?: string;
       settings: StoreSendingSettings;
@@ -165,7 +171,7 @@ export class SendPolicyService {
       if (until) return { decision: { action: 'defer', until }, at };
       const weekStart = new Date(at.getTime() - WEEK_MS);
       const counted = sends.filter((send) => send.sentAt > weekStart);
-      const reached = capReached(counted, { channel: 'sms', at }, frequencyCap);
+      const reached = capReached(counted, { channel, at }, frequencyCap);
       return { decision: reached ? skip('frequency_cap') : SEND, at };
     };
   }
@@ -178,7 +184,14 @@ export class SendPolicyService {
 
   private async evaluateAudience(
     storeId: string,
-    { contactIds, channel, category, at, windowClosesAt }: AudienceRequest & SendWindow,
+    {
+      contactIds,
+      channel,
+      category,
+      at,
+      windowClosesAt,
+      windowClosesAtOf,
+    }: AudienceRequest & SendWindow,
     capRead?: CapReadOptions,
   ): Promise<AudienceDecision[]> {
     const contacts = new Map(
@@ -195,9 +208,14 @@ export class SendPolicyService {
     const limits = isMarketing
       ? await this.audienceLimits(storeId, { contactIds, channel, at }, capRead)
       : undefined;
-    const request = { channel, category, at, windowClosesAt };
     return contactIds.map((contactId) => {
       const contact = contacts.get(contactId);
+      const request = {
+        channel,
+        category,
+        at,
+        windowClosesAt: windowClosesAtOf?.get(contactId) ?? windowClosesAt,
+      };
       const reason = recipientSkip(contact, consentOf.get(contactId), request);
       const decision = reason ? skip(reason) : (limits?.(contactId) ?? SEND);
       return { contactId, phone: contact?.phone ?? null, decision };

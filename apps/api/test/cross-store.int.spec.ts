@@ -1029,6 +1029,43 @@ const testQuestions = [
   { question: 'delivery koto?', expectedAnswer: 'ঢাকায় ৬০ টাকা' },
   { question: 'M size ache?', expectedAnswer: 'হ্যাঁ, আছে' },
 ];
+const settingsBody = (version: number, replyLanguage: 'bn' | 'en') => ({
+  version,
+  isAutoReplyOn: true,
+  replyLanguage,
+  abilities: {
+    answerQuestions: true,
+    showProducts: true,
+    takeOrders: false,
+    confirmOrders: true,
+    courierUpdates: true,
+    askForReview: true,
+    answerComments: true,
+    followUp: 'hot',
+  },
+  handoverRules: { damagedOrWrong: true, refundsAndExchanges: true, specialRequests: false },
+  returnToAiMinutes: 60,
+  extraRules: null,
+});
+fixture('PUT /ai-agent/settings', async () => {
+  const { a, b } = await pair();
+  const url = '/ai-agent/settings';
+  await success(a, 'PUT', url, 200, settingsBody(0, 'bn'));
+  const before = await agentSettings(a);
+  expect((await f.request(b.member, 'PUT', url, settingsBody(0, 'en'))).statusCode).toBe(403);
+  await success(b, 'PUT', url, 200, settingsBody(0, 'en'));
+  expect(await agentSettings(a)).toEqual(before);
+  expect((await agentSettings(b)).reply_language).toBe('en');
+});
+fixture('GET /ai-agent/settings', async () => {
+  const { a, b } = await pair();
+  await success(a, 'PUT', '/ai-agent/settings', 200, settingsBody(0, 'bn'));
+  expect((await success(a, 'GET', '/ai-agent/settings', 200)).json().replyLanguage).toBe('bn');
+  expect((await success(b, 'GET', '/ai-agent/settings', 200)).json()).toMatchObject({
+    version: 0,
+    isAutoReplyOn: false,
+  });
+});
 fixture('PUT /ai-agent/test-questions', async () => {
   const { a, b } = await pair();
   const url = '/ai-agent/test-questions';
@@ -2413,6 +2450,59 @@ fixture('GET /analytics/social-posts', async () => {
   ).toBe(400);
 });
 
+fixture('GET /analytics/tip', async () => {
+  const { a, b } = await pair();
+  for (const shop of [a, b])
+    expect((await success(shop, 'GET', '/analytics/tip?period=30', 200)).json()).toEqual({
+      tip: null,
+    });
+  expect((await f.request(b.member, 'GET', '/analytics/tip')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', `/analytics/tip?storeId=${b.id}`)).statusCode).toBe(400);
+});
+
+fixture('GET /analytics/export', async () => {
+  const { a, b } = await pair();
+  for (const [shop, caption] of [
+    [a, 'own-a'],
+    [b, 'own-b'],
+  ] as const) {
+    const [post, connection] = [randomUUID(), randomUUID()];
+    await f.admin.pool.query(
+      'insert into posts(id,store_id,caption,created_by_user_id) values($1,$2,$3,$4)',
+      [post, shop.id, caption, shop.owner.id],
+    );
+    await f.admin.pool.query(
+      "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values($1::uuid,$2,'facebook_page',$1::text,'Page')",
+      [connection, shop.id],
+    );
+    await f.admin.pool.query(
+      `insert into post_targets(id,store_id,post_id,channel_connection_id,status,published_at,reach)
+       values(gen_random_uuid(),$1,$2,$3,'published',now(),10)`,
+      [shop.id, post, connection],
+    );
+  }
+  for (const [shop, own, foreign] of [
+    [a, 'own-a', 'own-b'],
+    [b, 'own-b', 'own-a'],
+  ] as const) {
+    const result = await success(shop, 'GET', '/analytics/export?tab=social&period=30', 200);
+    expect(result.headers['content-type']).toContain('text/csv');
+    expect(result.headers['content-disposition']).toMatch(
+      /^attachment; filename="dakly-analytics-social-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv"$/,
+    );
+    expect(result.body.startsWith('\uFEFF"Post ID","Caption"')).toBe(true);
+    expect(result.body).toContain(own);
+    expect(result.body).not.toContain(foreign);
+    const { rows } = await f.admin.pool.query(
+      "select count(*)::int as count from audit_log where store_id = $1 and action = 'analytics.exported'",
+      [shop.id],
+    );
+    expect(rows[0].count).toBe(1);
+  }
+  expect((await f.request(b.member, 'GET', '/analytics/export?tab=social')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', '/analytics/export')).statusCode).toBe(400);
+});
+
 fixture('GET /notifications', async () => {
   const { a, b } = await pair(),
     aId = await notification(a),
@@ -3396,6 +3486,59 @@ fixture('DELETE /products/:productId/photos/:fileId', async () => {
   );
   await hidden(b, 'DELETE', (id) => `/products/${own}/photos/${id}`, foreignPhoto.fileId);
   expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
+});
+
+async function uploadedPostPhoto(shop: Shop) {
+  const issued = (await success(shop, 'POST', '/post-media/upload-url', 200, photoInput)).json();
+  const response = await fetch(issued.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': photoInput.contentType },
+    body: new Uint8Array([137, 80, 78, 71]),
+  });
+  expect(response.status).toBe(200);
+  return { ...photoInput, fileId: issued.fileId as string };
+}
+
+fixture('POST /post-media/upload-url', async () => {
+  const { b } = await pair();
+  const issued = (await success(b, 'POST', '/post-media/upload-url', 200, photoInput)).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/post_media/${issued.fileId}`,
+  );
+  expect(await f.row('files', issued.fileId)).toBeUndefined();
+  expect((await f.request(b.member, 'POST', '/post-media/upload-url', photoInput)).statusCode).toBe(
+    403,
+  );
+  expect(
+    (
+      await f.request(b.owner, 'POST', '/post-media/upload-url', {
+        ...photoInput,
+        sizeBytes: 5242881,
+      })
+    ).statusCode,
+  ).toBe(400);
+});
+
+fixture('POST /post-media/confirm', async () => {
+  const { a, b } = await pair();
+  const foreign = await uploadedPostPhoto(a);
+  const own = await uploadedPostPhoto(b);
+  await success(a, 'POST', '/post-media/confirm', 201, foreign);
+  const confirmed = (await success(b, 'POST', '/post-media/confirm', 201, own)).json();
+  expect(confirmed.id).toBe(own.fileId);
+  expect(await f.row('files', own.fileId)).toMatchObject({
+    store_id: b.id,
+    purpose: 'post_media',
+    status: 'ready',
+  });
+  const download = await fetch(confirmed.url);
+  expect(download.status).toBe(200);
+  // The other shop's object lives under its own prefix, so this shop cannot claim it.
+  const before = await f.row('files', foreign.fileId);
+  const stolen = await f.request(b.owner, 'POST', '/post-media/confirm', foreign);
+  expect(stolen.statusCode, stolen.body).toBe(400);
+  expect(stolen.json().error.code).toBe('POST_MEDIA_UPLOAD_INVALID');
+  expect(await f.row('files', foreign.fileId)).toEqual(before);
 });
 
 const brandProfile = {

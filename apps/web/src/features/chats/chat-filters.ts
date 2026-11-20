@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { chatChannels } from '@dakly/contracts/channels';
 import type { ConversationListQuery } from '@dakly/contracts/chats';
 
+import { agentTabs } from './agent-tabs';
+
 export const chatTabs = ['all', 'needs-you', 'ai-handling', 'follow-up'] as const;
 
 export const chatTabLabels: Record<(typeof chatTabs)[number], string> = {
@@ -21,6 +23,8 @@ export const chatChannelLabels: Record<(typeof chatChannels)[number], string> = 
 export const chatScreenQuerySchema = z.strictObject({
   tab: z.enum(chatTabs).default('all'),
   channel: z.enum(chatChannels).optional(),
+  // The open AI agent drawer tab; absent when the drawer is closed.
+  agent: z.enum(agentTabs).optional(),
 });
 
 export type ChatScreenQuery = z.infer<typeof chatScreenQuerySchema>;
@@ -43,6 +47,7 @@ export function chatsHref(query: Partial<ChatScreenQuery>) {
   const params = new URLSearchParams();
   if (query.tab && query.tab !== 'all') params.set('tab', query.tab);
   if (query.channel) params.set('channel', query.channel);
+  if (query.agent) params.set('agent', query.agent);
   const search = params.toString();
   return search ? `/chats?${search}` : '/chats';
 }

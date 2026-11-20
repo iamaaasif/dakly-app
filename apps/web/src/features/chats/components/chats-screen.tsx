@@ -1,17 +1,33 @@
 'use client';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
-import type { ChatScreenQuery } from '../chat-filters';
+import { buttonVariants } from '@dakly/ui/button';
+
+import { chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { AiAgentDrawer } from './ai-agent-drawer';
 import { ChatList } from './chat-list';
 
 export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
+  const router = useRouter();
+  const withoutAgent = { ...query, agent: undefined };
   return (
     <main className="flex h-[calc(100dvh-9.25rem)] min-h-[32rem] flex-col gap-4 p-4 md:h-[calc(100dvh-4.25rem)] md:p-8">
-      <header className="shrink-0">
-        <h1 className="text-xl font-bold">Chats</h1>
-        <p className="text-base text-text-muted">
-          Messenger, WhatsApp and Instagram in one place. Turn each chat into an order.
-        </p>
+      <header className="flex shrink-0 flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Chats</h1>
+          <p className="text-base text-text-muted">
+            Messenger, WhatsApp and Instagram in one place. Turn each chat into an order.
+          </p>
+        </div>
+        <Link
+          href={chatsHref({ ...query, agent: 'settings' })}
+          className={buttonVariants({ variant: 'secondary' })}
+        >
+          <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />
+          AI agent
+        </Link>
       </header>
       <div className="grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-surface lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
         <ChatList query={query} />
@@ -23,6 +39,11 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
           <p>Choose a chat to read it.</p>
         </section>
       </div>
+      <AiAgentDrawer
+        tab={query.agent}
+        onTabChange={(agent) => router.push(chatsHref({ ...query, agent }))}
+        onClose={() => router.push(chatsHref(withoutAgent))}
+      />
     </main>
   );
 }

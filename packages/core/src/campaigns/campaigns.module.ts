@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module, type DynamicModule } from '@nestjs/common';
 
 import { AnalyticsReportsModule } from '../analytics/analytics-reports.module';
+import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -26,6 +27,8 @@ import { CampaignCountsRepository } from './campaign-counts.repository';
 import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
+import { CampaignMessengerSender } from './campaign-messenger-sender.service';
+import { CampaignReceiptReconciler } from './campaign-receipt-reconciler.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignSmsService } from './campaign-sms.service';
@@ -41,6 +44,7 @@ import { CampaignsService } from './campaigns.service';
     ClockModule,
     LinksModule,
     MessagingModule,
+    MetaAuthorizationModule,
     NotificationsModule,
     ErrorReportingModule,
     OutboxModule,
@@ -64,6 +68,8 @@ import { CampaignsService } from './campaigns.service';
     CampaignSendingRepository,
     CampaignSmsService,
     CampaignsService,
+    CampaignMessengerSender,
+    CampaignReceiptReconciler,
     CampaignSenderService,
     CampaignFundingService,
   ],
