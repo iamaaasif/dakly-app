@@ -57,10 +57,16 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
       let isClosed = false;
       let work = Promise.resolve();
       // One step at a time, so replayed rows go out before live ones and a row goes out once.
-      const enqueue = (step: () => Promise<void>) => {
+      const enqueue = (stepName: string, step: () => Promise<void>) => {
         work = work
           .then(() => (isClosed ? undefined : step()))
-          .catch((error: unknown) => subscriber.error(error));
+          .catch((error: unknown) => {
+            // Name and step only: the error message can carry ids or row data.
+            this.logger.error(
+              `Notification stream failed at ${stepName}: ${error instanceof Error ? `${error.name} ${error.message}` : 'unknown error'}`,
+            );
+            subscriber.error(error);
+          });
       };
       const send = (notification?: NotificationResponse) => {
         if (!notification || sent.has(notification.id)) return;
@@ -72,20 +78,22 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
       const stream: Stream = {
         userId,
         deliver: (id) =>
-          enqueue(async () => send(await this.notifications.findForUser(storeId, userId, id))),
+          enqueue('live delivery', async () =>
+            send(await this.notifications.findForUser(storeId, userId, id)),
+          ),
         close: () => subscriber.complete(),
       };
-      enqueue(() => this.join(storeId, stream));
+      enqueue('subscribe', () => this.join(storeId, stream));
       if (lastEventId)
-        enqueue(async () =>
+        enqueue('replay', async () =>
           (await this.notifications.listCreatedAfter(storeId, userId, lastEventId)).forEach(send),
         );
       // Tells the client, and the tests, that the stream is subscribed and replayed, since the
       // HTTP headers go out before Valkey confirms the subscription.
-      enqueue(async () => subscriber.next({ comment: 'ready' }));
+      enqueue('ready', async () => subscriber.next({ comment: 'ready' }));
       const heartbeat = setInterval(
         () =>
-          enqueue(async () => {
+          enqueue('heartbeat', async () => {
             if (await this.isAllowed(session)) subscriber.next({ comment: 'heartbeat' });
             else subscriber.complete();
           }),
