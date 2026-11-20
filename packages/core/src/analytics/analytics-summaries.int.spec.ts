@@ -868,6 +868,9 @@ describe('Daily order summaries', () => {
     expect(await reports.marketingRevenueByChannel(fixture.a, period)).toEqual([
       { day, channel: 'sms', value: 120000n },
     ]);
+    expect(await reports.marketingOrdersByChannel(fixture.a, period)).toEqual([
+      { channel: 'sms', value: 1n },
+    ]);
     await db.query(
       `update orders set stage='partially_delivered',delivered_items_subtotal_poisha=60000,
        delivered_order_discount_poisha=0 where id=$1`,

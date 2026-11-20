@@ -43,6 +43,10 @@ afterAll(async () => {
   try {
     await app?.close();
     for (const table of [
+      'contact_match_suggestions',
+      'stock_movements',
+      'outbox_events',
+      'audit_log',
       'ai_runs',
       'knowledge_chunks',
       'knowledge_items',
@@ -52,6 +56,7 @@ afterAll(async () => {
       'product_variants',
       'products',
       'contacts',
+      'store_counters',
     ])
       await admin.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [storeIds]);
     await admin.pool.query('delete from stores where id = any($1::uuid[])', [storeIds]);
@@ -67,6 +72,7 @@ async function shop() {
     "insert into stores (id, name, extensions) values ($1, 'Tool test', '{chats}')",
     [storeId],
   );
+  await admin.pool.query('insert into store_counters (store_id) values ($1)', [storeId]);
   return storeId;
 }
 
@@ -125,6 +131,38 @@ async function order(storeId: string, contactId: string, number: number) {
 const run = (storeId: string, contactId: string, name: string, args: object) =>
   tools.run({ storeId, contactId }, name, JSON.stringify(args));
 
+const runInChat = (storeId: string, contactId: string, name: string, args: object) =>
+  tools.run(
+    { storeId, contactId, chat: { conversationId: randomUUID(), channel: 'messenger' } },
+    name,
+    JSON.stringify(args),
+  );
+
+async function orderShop() {
+  const storeId = await shop();
+  await admin.pool.query(
+    "insert into delivery_zones (id, store_id, name, charge_poisha, bd_area_ids, is_default) values (gen_random_uuid(), $1, 'Inside Dhaka', 6000, '{301}', true)",
+    [storeId],
+  );
+  const productId = await product(storeId, { name: 'পাঞ্জাবি' });
+  const {
+    rows: [variant],
+  } = await admin.pool.query<{ id: string }>(
+    'select id from product_variants where store_id = $1 and product_id = $2',
+    [storeId, productId],
+  );
+  return { storeId, variantId: variant!.id };
+}
+
+const draft = (variantId: string, fields: object = {}) => ({
+  items: [{ variantId, quantity: 2 }],
+  recipientName: 'রিনা',
+  phone: '01712345678',
+  address: 'মিরপুর ১০, রোড ৩',
+  area: 'Dhaka',
+  ...fields,
+});
+
 it('lists every tool for the model with its words and units in the description', () => {
   expect(salesAgentLlmTools.map((tool) => tool.name)).toEqual([
     'search_products',
@@ -134,6 +172,8 @@ it('lists every tool for the model with its words and units in the description',
     'get_my_orders',
     'get_order_status',
     'send_product_card',
+    'draft_order',
+    'confirm_order',
     'hand_over',
   ]);
   const search = salesAgentLlmTools[0]!;
@@ -254,5 +294,114 @@ it('answers a bad call with a result the model can act on', async () => {
   expect(await run(storeId, buyer, 'hand_over', { reason: 'refund' })).toEqual({
     handedOver: true,
     reason: 'refund',
+  });
+});
+
+it('takes an order in a chat, prices it in code and waits for the customer to say yes', async () => {
+  const { storeId, variantId } = await orderShop();
+  const buyer = await contact(storeId);
+  const scope = {
+    storeId,
+    contactId: buyer,
+    chat: { conversationId: randomUUID(), channel: 'instagram' as const },
+  };
+  const args = JSON.stringify(draft(variantId));
+
+  const drafted = await tools.run(scope, 'draft_order', args);
+  expect(drafted).toMatchObject({
+    stage: 'to_confirm',
+    items: [{ product: 'পাঞ্জাবি', quantity: 2, unitPriceTaka: 1200 }],
+    deliveryChargeTaka: 60,
+    totalTaka: 2460,
+  });
+  // The same details in the same chat return the order already made.
+  expect(await tools.run(scope, 'draft_order', args)).toEqual(drafted);
+  const { rows } = await admin.pool.query(
+    'select source, created_by_type, buyer_contact_id from orders where store_id = $1',
+    [storeId],
+  );
+  expect(rows).toEqual([{ source: 'instagram', created_by_type: 'ai', buyer_contact_id: buyer }]);
+
+  const { orderNumber } = drafted as { orderNumber: number };
+  expect(await run(storeId, buyer, 'confirm_order', { orderNumber })).toEqual({
+    orderNumber,
+    stage: 'to_pack',
+  });
+  const {
+    rows: [confirmed],
+  } = await admin.pool.query(
+    'select confirmation_method from orders where store_id = $1 and number = $2',
+    [storeId, orderNumber],
+  );
+  expect(confirmed).toEqual({ confirmation_method: 'chat_reply' });
+  // Answering yes twice does not move the order again.
+  expect(await run(storeId, buyer, 'confirm_order', { orderNumber })).toEqual({
+    error: 'ORDER_STAGE_NOT_ALLOWED',
+  });
+});
+
+it('saves the own phone on the buyer and shows staff a possible match when another contact holds it', async () => {
+  const { storeId, variantId } = await orderShop();
+  const rina = await contact(storeId);
+  const holder = await contact(storeId);
+  await admin.pool.query('update contacts set phone = $2 where id = $1', [holder, '01712345678']);
+  await admin.pool.query('update contacts set phone = null where id = $1', [rina]);
+  expect(await runInChat(storeId, rina, 'draft_order', draft(variantId))).toHaveProperty(
+    'orderNumber',
+  );
+  const { rows } = await admin.pool.query(
+    'select contact_id, matched_contact_id from contact_match_suggestions where store_id = $1',
+    [storeId],
+  );
+  expect(rows).toEqual([{ contact_id: rina, matched_contact_id: holder }]);
+  const {
+    rows: [buyer],
+  } = await admin.pool.query('select phone from contacts where id = $1', [rina]);
+  expect(buyer).toEqual({ phone: null });
+});
+
+it('answers a draft that cannot be made with a result the model can act on', async () => {
+  const { storeId, variantId } = await orderShop();
+  const buyer = await contact(storeId);
+  expect(await run(storeId, buyer, 'draft_order', draft(variantId))).toEqual({
+    error: 'NOT_IN_A_CHAT',
+  });
+  expect(
+    await runInChat(storeId, buyer, 'draft_order', draft(variantId, { area: 'Nowhereville' })),
+  ).toEqual({
+    error: 'DELIVERY_AREA_INVALID',
+  });
+  expect(
+    await runInChat(storeId, buyer, 'draft_order', draft(variantId, { phone: '12345' })),
+  ).toEqual({
+    error: 'INVALID_ARGUMENTS',
+  });
+  const { rows } = await admin.pool.query('select 1 from orders where store_id = $1', [storeId]);
+  expect(rows).toEqual([]);
+});
+
+it('does not confirm another customer order or an order of a customer who must pay in advance', async () => {
+  const { storeId, variantId } = await orderShop();
+  const rina = await contact(storeId);
+  const karim = await contact(storeId);
+  const { orderNumber } = (await runInChat(storeId, rina, 'draft_order', draft(variantId))) as {
+    orderNumber: number;
+  };
+  expect(await run(storeId, karim, 'confirm_order', { orderNumber })).toEqual({
+    error: 'ORDER_NOT_FOUND',
+  });
+  // Three earlier parcels to the same phone, two returned, make the delivery phone high risk.
+  for (const [offset, stage] of [
+    [1, 'returned'],
+    [2, 'returned'],
+    [3, 'delivered'],
+  ] as const)
+    await admin.pool.query(
+      `insert into orders (id, store_id, number, buyer_contact_id, source, created_by_type, recipient_name, recipient_phone, recipient_address, recipient_district, stage, items_subtotal_poisha, delivery_charge_poisha, cod_amount_poisha)
+       values (gen_random_uuid(), $1, $2, $3, 'manual', 'user', 'রিনা', '01712345678', 'মিরপুর', 'Dhaka', $4, 100, 0, 100)`,
+      [storeId, 900 + offset, rina, stage],
+    );
+  expect(await run(storeId, rina, 'confirm_order', { orderNumber })).toEqual({
+    error: 'ORDER_ADVANCE_REQUIRED',
   });
 });
