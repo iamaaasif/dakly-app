@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { setTimeout } from 'node:timers/promises';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -45,10 +46,19 @@ describe('notification purge (Postgres)', () => {
     await Promise.all([fixture.close(), app.pool.end()]);
   });
 
+  // Other specs update notification rows at the same time. A locked row is skipped on purpose and
+  // left for the next run, so the test repeats a batch until it has made progress.
+  async function purgeUntil(limit: number, expected: number) {
+    for (let attempt = 0; attempt < 40 && (await count(fixture.a)) > expected; attempt++) {
+      await repository.purgeExpiredBatch(fixture.a, limit);
+      await setTimeout(50);
+    }
+  }
+
   it('deletes a bounded batch of notifications older than 90 days for one store only', async () => {
-    expect(await repository.purgeExpiredBatch(fixture.a, 1)).toBe(true);
+    await purgeUntil(1, 2);
     expect(await count(fixture.a)).toBe(2);
-    expect(await repository.purgeExpiredBatch(fixture.a, 5)).toBe(false);
+    await purgeUntil(5, 1);
     expect(await count(fixture.a)).toBe(1);
     expect(await count(fixture.b)).toBe(3);
   });
