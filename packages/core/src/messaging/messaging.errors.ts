@@ -14,6 +14,14 @@ const MESSAGING_ERRORS = {
     status: 409,
     message: "The contact's phone changed after this message was decided",
   },
+  MESSAGE_ARCHIVE_INCOMPLETE: {
+    status: 500,
+    message: 'A message archive object was not stored completely',
+  },
+  MESSAGE_ARCHIVE_COUNT_CHANGED: {
+    status: 500,
+    message: 'A conversation month changed while it was archived',
+  },
   // A provider call inside a store transaction would hold its connection and locks.
   MESSAGING_INSIDE_TRANSACTION: { status: 500, message: 'Something went wrong' },
 } as const satisfies ErrorCatalog;
