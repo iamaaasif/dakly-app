@@ -12,7 +12,7 @@ import {
   type ApprovalState,
   CampaignApprovalRepository,
 } from './campaign-approval.repository';
-import { CampaignAudienceService } from './campaign-audience.service';
+import { type AudiencePage, CampaignAudienceService } from './campaign-audience.service';
 import { CampaignSmsService } from './campaign-sms.service';
 import { CampaignsRepository } from './campaigns.repository';
 import { approvalKey } from './campaigns.service';
@@ -57,25 +57,20 @@ export class CampaignApprovalService {
   }
 
   private async addPage(storeId: string, key: ApprovalKey, state: ApprovalState): Promise<Step> {
-    const page = await this.audience
-      .page(
+    let page: AudiencePage;
+    try {
+      page = await this.audience.page(
         storeId,
         state,
         { segmentIndex: state.segmentIndex, contactId: state.contactId },
         state.scheduledFor ?? key.approvedAt,
-      )
-      .catch(async (error: unknown) => {
-        // A segment deleted after approval started would fail every retry; refuse instead.
-        if (!(error instanceof AppError) || error.code !== 'SEGMENT_NOT_FOUND') throw error;
-        await this.approvals.markApprovalFailing(
-          storeId,
-          key,
-          'SEGMENT_NOT_FOUND',
-          this.clock.now(),
-        );
-        return null;
-      });
-    if (!page) return 'more';
+      );
+    } catch (error) {
+      // A segment deleted after approval started would fail every retry; refuse instead.
+      if (!(error instanceof AppError) || error.code !== 'SEGMENT_NOT_FOUND') throw error;
+      await this.approvals.markApprovalFailing(storeId, key, 'SEGMENT_NOT_FOUND', this.clock.now());
+      return 'more';
+    }
     await this.transaction.run(storeId, async () => {
       const saved = await this.approvals.saveApprovalProgress(
         storeId,
@@ -91,11 +86,13 @@ export class CampaignApprovalService {
 
   // Reserves only here, once the final counts are known, so a refusal has nothing to release.
   private async finish(storeId: string, key: ApprovalKey, state: ApprovalState): Promise<Step> {
-    const failure = await this.approveFrozen(storeId, key, state).catch((error: unknown) => {
-      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW')
-        return error.code as CampaignApprovalFailureCode;
-      throw error;
-    });
+    let failure: CampaignApprovalFailureCode | null;
+    try {
+      failure = await this.approveFrozen(storeId, key, state);
+    } catch (error) {
+      if (!(error instanceof AppError) || error.code !== 'WALLET_BALANCE_TOO_LOW') throw error;
+      failure = 'WALLET_BALANCE_TOO_LOW';
+    }
     if (!failure) return 'done';
     await this.approvals.markApprovalFailing(storeId, key, failure, this.clock.now());
     return 'more';

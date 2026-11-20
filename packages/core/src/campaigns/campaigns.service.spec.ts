@@ -327,6 +327,7 @@ describe('CampaignsService', () => {
         contactIds.filter((contactId) => members.get(segmentId)?.includes(contactId)),
       contactCount: async (_storeId: string, segmentId: string) =>
         members.get(segmentId)?.length ?? 0,
+      assertExists: async () => undefined,
     };
     const sendPolicy = {
       checkAudience: async (_storeId: string, request: AudienceRequest) =>

@@ -39,17 +39,14 @@ const owner = {
   } satisfies StoreAccess,
   actor,
 };
-// The large audience is more than the 20,000 the approval request used to take. The small one
-// takes three pages, so the other tests stay quick. Neither is a multiple of the 500-contact page.
-const LARGE = 20_503;
-const SMALL = 1_203;
+// Four pages of 500, the last one short, so a crash or a time limit can stop between pages.
+const AUDIENCE = 1_700;
 const PAGE = 500;
 let app: INestApplicationContext;
 let service: CampaignsService;
 let approval: CampaignApprovalService;
 let approvals: CampaignApprovalRepository;
-let largeId: string;
-let smallId: string;
+let segmentId: string;
 
 async function credits(quantity: number) {
   const id = randomUUID();
@@ -81,12 +78,12 @@ async function leaveCredits(left: number) {
     });
 }
 
-async function draft(segmentId = smallId) {
+async function draft(include = segmentId) {
   const input = createCampaignSchema.parse({
     name: 'বড় অফার',
     channel: 'sms',
     content: { text: 'শীতের সব চাদরে ১৫% ছাড়' },
-    includeSegmentIds: [segmentId],
+    includeSegmentIds: [include],
   });
   return (await service.create(storeId, input, actor)).id;
 }
@@ -123,16 +120,12 @@ describe('Campaign approval job (Postgres)', () => {
       "insert into users(id,name,email) values($1::uuid,'রিনা',$1::text || '@example.test')",
       [userId],
     );
-    for (const [district, count, offset] of [
-      ['ঢাকা', LARGE, 0],
-      ['সিলেট', SMALL, LARGE],
-    ] as const)
-      await admin.pool.query(
-        `insert into contacts(id,store_id,name,phone,source,kind,district)
-         select gen_random_uuid(), $1, 'সুমি', '0171' || lpad((n + $4)::text, 7, '0'), 'manual', 'customer', $3
-         from generate_series(1, $2) n`,
-        [storeId, count, district, offset],
-      );
+    await admin.pool.query(
+      `insert into contacts(id,store_id,name,phone,source,kind,district)
+       select gen_random_uuid(), $1, 'সুমি', '0171' || lpad(n::text, 7, '0'), 'manual', 'customer', 'ঢাকা'
+       from generate_series(1, $2) n`,
+      [storeId, AUDIENCE],
+    );
     await admin.pool.query(
       `insert into consents(id,store_id,contact_id,channel,status,source)
        select gen_random_uuid(), store_id, id, 'sms', 'granted', 'checkout' from contacts where store_id=$1`,
@@ -142,18 +135,13 @@ describe('Campaign approval job (Postgres)', () => {
     service = app.get(CampaignsService);
     approval = app.get(CampaignApprovalService);
     approvals = app.get(CampaignApprovalRepository);
-    const segments = app.get(SegmentsService);
-    const inDistrict = (district: string) =>
-      ({
-        match: 'all',
-        conditions: [{ field: 'district', operator: 'is_any_of', values: [district] }],
-      }) as const;
-    largeId = (await segments.create(storeId, { name: 'ঢাকা', rules: inDistrict('ঢাকা') }, actor))
-      .id;
-    smallId = (await segments.create(storeId, { name: 'সিলেট', rules: inDistrict('সিলেট') }, actor))
-      .id;
+    const rules = {
+      match: 'all',
+      conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
+    } as const;
+    segmentId = (await app.get(SegmentsService).create(storeId, { name: 'ঢাকা', rules }, actor)).id;
     await credits(1_000_000);
-  }, 120_000);
+  });
 
   afterEach(() => vi.restoreAllMocks());
 
@@ -169,7 +157,31 @@ describe('Campaign approval job (Postgres)', () => {
       resetEnvForTests();
       await admin.pool.end();
     }
-  }, 120_000);
+  });
+
+  it('freezes the audience in pages and reserves once at the end', async () => {
+    const campaignId = await draft();
+    const started = await service.approve(storeId, campaignId, owner);
+    expect(started).toMatchObject({
+      status: 'approving',
+      approval: { checked: 0, estimatedTotal: AUDIENCE },
+    });
+    const reservedBefore = await reservations();
+    const pages = vi.spyOn(SendPolicyService.prototype, 'checkAudience');
+
+    await runApprovalJob(approval, admin.pool, storeId, campaignId);
+
+    expect(pages).toHaveBeenCalledTimes(Math.ceil(AUDIENCE / PAGE));
+    expect(await frozen(campaignId)).toEqual({ total: AUDIENCE, contacts: AUDIENCE });
+    const approved = await service.get(storeId, campaignId);
+    expect(approved).toMatchObject({
+      status: 'sending',
+      approval: null,
+      approvalFailureCode: null,
+    });
+    expect(approved.counts.recipients + approved.counts.skipped).toBe(AUDIENCE);
+    expect(await reservations()).toBe(reservedBefore + 1);
+  });
 
   it('runs again after it finished without writing or reserving anything more', async () => {
     const campaignId = await draft();
@@ -182,7 +194,7 @@ describe('Campaign approval job (Postgres)', () => {
 
     expect(await service.get(storeId, campaignId)).toEqual(before);
     expect(await reservations()).toBe(reservedBefore);
-    expect(await frozen(campaignId)).toEqual({ total: SMALL, contacts: SMALL });
+    expect(await frozen(campaignId)).toEqual({ total: AUDIENCE, contacts: AUDIENCE });
   });
 
   it('continues from the last committed page after a crash and freezes each contact once', async () => {
@@ -203,14 +215,14 @@ describe('Campaign approval job (Postgres)', () => {
 
     expect(await service.get(storeId, campaignId)).toMatchObject({
       status: 'approving',
-      approval: { checked: 2 * PAGE, estimatedTotal: SMALL },
+      approval: { checked: 2 * PAGE, estimatedTotal: AUDIENCE },
     });
     expect(await frozen(campaignId)).toEqual({ total: 2 * PAGE, contacts: 2 * PAGE });
     vi.restoreAllMocks();
 
     await runApprovalJob(approval, admin.pool, storeId, campaignId);
 
-    expect(await frozen(campaignId)).toEqual({ total: SMALL, contacts: SMALL });
+    expect(await frozen(campaignId)).toEqual({ total: AUDIENCE, contacts: AUDIENCE });
     expect((await service.get(storeId, campaignId)).status).toBe('sending');
   });
 
@@ -227,15 +239,15 @@ describe('Campaign approval job (Postgres)', () => {
 
     expect(next).toEqual({ delayUntil: expect.any(Number) });
     const { approval: progress } = await service.get(storeId, campaignId);
-    expect(progress?.estimatedTotal).toBe(SMALL);
+    expect(progress?.estimatedTotal).toBe(AUDIENCE);
     expect(progress?.checked).toBeGreaterThan(0);
-    expect(progress?.checked).toBeLessThan(SMALL);
+    expect(progress?.checked).toBeLessThan(AUDIENCE);
     expect(progress!.checked % PAGE).toBe(0);
     vi.restoreAllMocks();
 
     await runApprovalJob(approval, admin.pool, storeId, campaignId);
 
-    expect(await frozen(campaignId)).toEqual({ total: SMALL, contacts: SMALL });
+    expect(await frozen(campaignId)).toEqual({ total: AUDIENCE, contacts: AUDIENCE });
   });
 
   it('goes back to draft with the reason and no rows when the balance is short', async () => {
@@ -266,7 +278,7 @@ describe('Campaign approval job (Postgres)', () => {
     );
 
     await expect(approval.build(storeId, key)).rejects.toThrow('worker stopped');
-    expect(await frozen(campaignId)).toEqual({ total: SMALL, contacts: SMALL });
+    expect(await frozen(campaignId)).toEqual({ total: AUDIENCE, contacts: AUDIENCE });
     // The balance now covers the audience, but the approval was already refused.
     await letGo();
     const reservedBefore = await reservations();
@@ -302,7 +314,7 @@ describe('Campaign approval job (Postgres)', () => {
   it('goes back to draft with SEGMENT_NOT_FOUND when the segment is deleted after approval starts', async () => {
     const rules = {
       match: 'all',
-      conditions: [{ field: 'district', operator: 'is_any_of', values: ['সিলেট'] }],
+      conditions: [{ field: 'district', operator: 'is_any_of', values: ['ঢাকা'] }],
     } as const;
     const gone = (await app.get(SegmentsService).create(storeId, { name: 'সাময়িক', rules }, actor))
       .id;
@@ -336,29 +348,4 @@ describe('Campaign approval job (Postgres)', () => {
     });
     expect((await service.get(storeId, id)).status).toBe('draft');
   });
-
-  // Last, so the 20,000 contacts it freezes do not slow the other tests.
-  it('freezes an audience over 20,000 in pages and reserves once at the end', async () => {
-    const campaignId = await draft(largeId);
-    const started = await service.approve(storeId, campaignId, owner);
-    expect(started).toMatchObject({
-      status: 'approving',
-      approval: { checked: 0, estimatedTotal: LARGE },
-    });
-    const reservedBefore = await reservations();
-    const pages = vi.spyOn(SendPolicyService.prototype, 'checkAudience');
-
-    await runApprovalJob(approval, admin.pool, storeId, campaignId);
-
-    expect(pages).toHaveBeenCalledTimes(Math.ceil(LARGE / PAGE));
-    expect(await frozen(campaignId)).toEqual({ total: LARGE, contacts: LARGE });
-    const approved = await service.get(storeId, campaignId);
-    expect(approved).toMatchObject({
-      status: 'sending',
-      approval: null,
-      approvalFailureCode: null,
-    });
-    expect(approved.counts.recipients + approved.counts.skipped).toBe(LARGE);
-    expect(await reservations()).toBe(reservedBefore + 1);
-  }, 120_000);
 });

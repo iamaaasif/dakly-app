@@ -304,14 +304,14 @@ export class CampaignsService {
     throw await this.refusal(storeId, campaignId, refused);
   }
 
-  // The upper bound shown as progress: segments can overlap and exclusions apply. Counting also
-  // refuses a segment id that does not exist.
+  // The upper bound shown as progress: segments can overlap and exclusions apply. A segment id
+  // that does not exist is refused here.
   private async segmentSize(storeId: string, campaign: Campaign): Promise<number> {
     let total = 0;
     for (const segmentId of campaign.includeSegmentIds)
       total += await this.segments.contactCount(storeId, segmentId);
     for (const segmentId of campaign.excludeSegmentIds)
-      await this.segments.contactCount(storeId, segmentId);
+      await this.segments.assertExists(storeId, segmentId);
     return total;
   }
 

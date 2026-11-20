@@ -43,6 +43,11 @@ export class SegmentsService {
     return { count: await this.contacts.countMatching(storeId, rules) };
   }
 
+  // Refuses a segment id that does not exist, without counting its contacts.
+  async assertExists(storeId: string, segmentId: string): Promise<void> {
+    await this.find(storeId, segmentId);
+  }
+
   // The live size of one segment, so a campaign can size its approval; a missing id is refused.
   async contactCount(storeId: string, segmentId: string): Promise<number> {
     const segment = await this.find(storeId, segmentId);
