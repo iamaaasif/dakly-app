@@ -58,6 +58,7 @@ export class ImportsService {
       { repository, transaction, outbox, clock, storage, limiter },
       {
         name: 'customer-import',
+        startedEvent: 'import.started',
         batchSize: BATCH_ROWS,
         fieldLabels: FIELD_LABELS,
         readFile: (text, found) => {

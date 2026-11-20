@@ -52,7 +52,10 @@ export class OutboundMessagingRepository {
 
   async queue(
     storeId: string,
-    input: Pick<OutgoingChannelMessage, 'actor' | 'content' | 'identityId' | 'category'> & {
+    input: Pick<
+      OutgoingChannelMessage,
+      'actor' | 'content' | 'identityId' | 'category' | 'aiSources'
+    > & {
       conversationId: string;
       idempotencyKey: string;
     },
@@ -74,6 +77,7 @@ export class OutboundMessagingRepository {
           authorType: actor.kind,
           authorUserId,
           aiRunId,
+          aiSources: input.aiSources,
           direction: 'out',
           kind: 'text',
           status: 'queued',
