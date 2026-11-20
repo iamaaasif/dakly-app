@@ -10,7 +10,12 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 import { CampaignBuilder } from './campaign-builder';
 import { sessionContextKey } from '@/lib/session-context';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+const navigation = vi.hoisted(() => ({ push: vi.fn(), step: 'content' }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn(), push: navigation.push }),
+  usePathname: () => '/campaigns/draft',
+  useSearchParams: () => new URLSearchParams({ step: navigation.step }),
+}));
 
 const pageId = '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e72';
 const draft: CampaignResponse = {
@@ -91,6 +96,8 @@ function show() {
 }
 
 afterEach(() => {
+  navigation.step = 'content';
+  navigation.push.mockClear();
   cleanup();
   vi.unstubAllGlobals();
 });
@@ -126,5 +133,26 @@ describe('Messenger draft', () => {
     await user.click(screen.getByRole('button', { name: 'Save draft' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(patches).toHaveLength(0);
+  });
+
+  it('saves the chosen goal and moves to the Content step on Continue', async () => {
+    navigation.step = 'goal';
+    const patches = show();
+    const user = userEvent.setup();
+    await user.click(await screen.findByLabelText('Win back customers'));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() =>
+      expect(navigation.push).toHaveBeenCalledWith('/campaigns/draft?step=content'),
+    );
+    expect(patches).toEqual([{ goal: 'win_back' }]);
+  });
+
+  it('marks the current step and links back from Content', async () => {
+    show();
+    const current = await screen.findByRole('link', { current: 'step' });
+    expect(current.textContent).toBe('2. Content');
+    expect(screen.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe(
+      '/campaigns/draft?step=goal',
+    );
   });
 });
