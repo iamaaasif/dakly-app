@@ -19,13 +19,29 @@ async function captureAtBothSizes(page: Page, name: string) {
     // The tab row scrolls on a phone and puts the open tab in view when the page opens at that width.
     if (width === 360) {
       await page.reload();
-      await expect(
-        page.getByRole('navigation', { name: 'Analytics tabs' }).locator('[aria-current="page"]'),
-      ).toBeInViewport();
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const row = document.querySelector('nav[aria-label="Analytics tabs"]');
+            const open = row?.querySelector('[aria-current="page"]');
+            if (!row || !open) return false;
+            const [outer, inner] = [row.getBoundingClientRect(), open.getBoundingClientRect()];
+            return inner.left >= outer.left - 1 && inner.right <= outer.right + 1;
+          }),
+        )
+        .toBe(true);
     }
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
+    // A full-page capture starts from the top, as the design screenshots do.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // The sidebar is as tall as the window, so the window takes the page's height for the capture.
+    if (evidence && width === 1440)
+      await page.setViewportSize({
+        width,
+        height: await page.evaluate(() => document.documentElement.scrollHeight),
+      });
     if (evidence)
       await page.screenshot({ path: resolve(evidence, `${name}-${width}.png`), fullPage: true });
   }
