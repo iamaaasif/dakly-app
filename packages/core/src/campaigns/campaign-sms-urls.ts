@@ -95,7 +95,8 @@ function bareUrl(raw: string, prefix: string): string | undefined {
   if (
     last &&
     closingRun.includes(last) &&
-    withoutOuterClosers(raw.slice(candidate.length), closingRun) === undefined
+    withoutOuterClosers(raw.slice(candidate.length), closingRun) === undefined &&
+    URL.canParse(candidate.slice(0, -1))
   ) {
     return undefined;
   }
