@@ -357,7 +357,7 @@ Production rejects the fake driver. Selecting `LLM_DRIVER=openai` requires
 ### Golden-set eval
 
 `GoldenEvalService` runs golden cases through a responder and scores them: any amount in a reply that the case does not allow is a wrong price (must be 0), and a case that expects a hand-over must be handed over with the same reason (at least 90%). Unneeded hand-overs are reported but do not fail the run.
-The live responder asks the real practice pipeline of the shop in `AI_EVAL_STORE_ID`, which holds the catalog the cases assume. The nightly `run-golden-eval` job (20:00 UTC) does this and fails, so error reporting fires, when the thresholds are missed. It does nothing when the variable is unset.
+The live responder asks the real practice pipeline of the shop in `AI_EVAL_STORE_ID`, which holds the catalog the cases assume. The nightly `run-golden-eval` job (20:00 UTC) calls `GoldenEvalService.runNightly()`. When the thresholds are missed it logs the report and sends a Slack staff notice, and it returns normally, because a thrown job is retried and would run the whole eval again. Only real errors throw. It does nothing when the variable is unset.
 CI replays saved outcomes and makes no network call. The starter set is in `ai-eval/golden-set.sample.ts`; the 200 beta chats replace it at M7.
 
 ### Shared AI service
