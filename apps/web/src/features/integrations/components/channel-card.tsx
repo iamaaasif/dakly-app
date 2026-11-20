@@ -2,12 +2,19 @@ import { Instagram, MessageCircle, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ChannelConnection } from '@dakly/contracts/channels';
+import { Button } from '@dakly/ui/button';
 
 import { metaChannels, type MetaKind } from '../channel-labels';
 import { ConnectionRow } from './connection-row';
 import { DisconnectDialog } from './disconnect-dialog';
+import { MetaConnectDialog } from './meta-connect-dialog';
 
 const icons: Record<MetaKind, LucideIcon> = { facebook_page: MessageCircle, instagram: Instagram };
+
+type DialogState =
+  | { type: 'connect'; reconnecting?: ChannelConnection }
+  | { type: 'disconnect'; of: ChannelConnection }
+  | null;
 
 type ChannelCardProps = {
   kind: MetaKind;
@@ -16,9 +23,8 @@ type ChannelCardProps = {
   onNotice: (message: string) => void;
 };
 
-// Connecting and reconnecting come with the next part of CHN-5.
 export function ChannelCard({ kind, connections, canEdit, onNotice }: ChannelCardProps) {
-  const [disconnecting, setDisconnecting] = useState<ChannelConnection | null>(null);
+  const [dialog, setDialog] = useState<DialogState>(null);
   const channel = metaChannels[kind];
   const mine = connections.filter(
     (connection) => connection.kind === kind && connection.status !== 'disconnected',
@@ -37,6 +43,14 @@ export function ChannelCard({ kind, connections, canEdit, onNotice }: ChannelCar
           <h3 className="text-lg font-semibold">{channel.name}</h3>
           <p className="text-sm text-text-muted">{channel.description}</p>
         </div>
+        {canEdit ? (
+          <Button
+            variant={mine.length ? 'secondary' : 'primary'}
+            onClick={() => setDialog({ type: 'connect' })}
+          >
+            {mine.length ? `Add ${channel.account}` : channel.connect}
+          </Button>
+        ) : null}
       </div>
       {mine.length ? (
         <ul className="mt-4 divide-y divide-border border-t border-border">
@@ -45,21 +59,59 @@ export function ChannelCard({ kind, connections, canEdit, onNotice }: ChannelCar
               key={connection.id}
               connection={connection}
               canEdit={canEdit}
-              onDisconnect={() => setDisconnecting(connection)}
+              onReconnect={() => setDialog({ type: 'connect', reconnecting: connection })}
+              onDisconnect={() => setDialog({ type: 'disconnect', of: connection })}
             />
           ))}
         </ul>
       ) : null}
-      {disconnecting ? (
-        <DisconnectDialog
-          connection={disconnecting}
-          onClose={() => setDisconnecting(null)}
-          onDisconnected={() => {
-            setDisconnecting(null);
-            onNotice(`${disconnecting.displayName} disconnected.`);
-          }}
-        />
-      ) : null}
+      <ChannelDialog
+        kind={kind}
+        dialog={dialog}
+        connections={connections}
+        onClose={() => setDialog(null)}
+        onNotice={onNotice}
+      />
     </section>
   );
+}
+
+type ChannelDialogProps = {
+  kind: MetaKind;
+  dialog: DialogState;
+  connections: ChannelConnection[];
+  onClose: () => void;
+  onNotice: (message: string) => void;
+};
+
+function ChannelDialog({ kind, dialog, connections, onClose, onNotice }: ChannelDialogProps) {
+  if (dialog?.type === 'connect')
+    return (
+      <MetaConnectDialog
+        kind={kind}
+        reconnecting={dialog.reconnecting}
+        connections={connections}
+        onClose={onClose}
+        onConnected={(count) => {
+          onClose();
+          onNotice(
+            count === 1
+              ? `${metaChannels[kind].account} connected.`
+              : `${count} accounts connected.`,
+          );
+        }}
+      />
+    );
+  if (dialog?.type === 'disconnect')
+    return (
+      <DisconnectDialog
+        connection={dialog.of}
+        onClose={onClose}
+        onDisconnected={() => {
+          onClose();
+          onNotice(`${dialog.of.displayName} disconnected.`);
+        }}
+      />
+    );
+  return null;
 }
