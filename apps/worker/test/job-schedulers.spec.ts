@@ -2,7 +2,10 @@ import 'reflect-metadata';
 import type { Queue } from 'bullmq';
 import { describe, expect, it } from 'vitest';
 
+import { SocialPublishingModule } from '@dakly/core/social/social-publishing.module';
+
 import { JobSchedulers } from '../src/job-schedulers';
+import { WorkerModule } from '../src/worker.module';
 
 function recordingQueue() {
   const schedulers: unknown[][] = [];
@@ -31,18 +34,38 @@ const scheduler = (name: string, schedule: number | { pattern: string; tz: strin
 ];
 
 describe('Worker job schedulers', () => {
+  it('registers social publishing jobs only when Meta is configured', () => {
+    expect(WorkerModule.register(undefined).imports).toEqual([]);
+    expect(WorkerModule.register('fake').imports).toEqual([
+      expect.objectContaining({ module: SocialPublishingModule }),
+    ]);
+  });
+
+  it('registers post recovery on the sync queue every minute under a fixed id', async () => {
+    const sync = recordingQueue();
+    const publishing = new SocialPublishingModule(sync.queue);
+    await publishing.onApplicationBootstrap();
+    await publishing.onApplicationBootstrap();
+    expect(sync.schedulers).toEqual([
+      scheduler('recover-post-targets', 60000),
+      scheduler('recover-post-targets', 60000),
+    ]);
+  });
+
   it('registers each scheduled job on its queue at its interval under a fixed id', async () => {
     const transactional = recordingQueue();
     const bulk = recordingQueue();
     const sync = recordingQueue();
     const payments = recordingQueue();
     const workflow = recordingQueue();
+    const campaign = recordingQueue();
     const schedulers = new JobSchedulers(
       transactional.queue,
       bulk.queue,
       sync.queue,
       payments.queue,
       workflow.queue,
+      campaign.queue,
     );
     await schedulers.onApplicationBootstrap();
     await schedulers.onApplicationBootstrap();
@@ -79,6 +102,10 @@ describe('Worker job schedulers', () => {
     expect(workflow.schedulers).toEqual([
       scheduler('wake-due-runs', 60000),
       scheduler('wake-due-runs', 60000),
+    ]);
+    expect(campaign.schedulers).toEqual([
+      scheduler('start-due-campaigns', 60000),
+      scheduler('start-due-campaigns', 60000),
     ]);
   });
 });

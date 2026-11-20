@@ -5,70 +5,97 @@ import type { ProductFormValues } from '@dakly/contracts/products';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 
+import { ProductCategoryField } from './product-category-field';
+import { ProductDescriptionField } from './product-description-field';
 import { ProductInputField } from './product-input-field';
 import { ProductLinesField } from './product-lines-field';
+import { ProductTrackStock } from './product-track-stock';
 
-const flags = [
-  ['isStockTracked', 'Track stock'],
+const extraFlags = [
   ['isVisibleInChats', 'Show in chat replies'],
   ['isVisibleInOrderLink', 'Show in the order link'],
 ] as const;
-type ProductFieldsProps = { mode: 'create' | 'edit' };
-export function ProductFields({ mode }: ProductFieldsProps) {
+type ProductFieldsProps = { productId?: string };
+export function ProductFields({ productId }: ProductFieldsProps) {
   const form = useFormContext<ProductFormValues>();
-  const visibleFlags = flags.filter(([name]) => mode === 'edit' || name === 'isStockTracked');
   const simple = !form.watch('options')?.length && form.watch('variants')?.length === 1;
+  const showSkuAndCost = !productId || simple;
   return (
     <>
-      <ProductInputField name="name" label="Name" />
-      <div className="grid gap-4 md:grid-cols-2">
-        <ProductInputField name="category" label="Category" />
-        {simple ? <ProductInputField name="variants.0.sku" label="Product code" /> : null}
+      <ProductInputField
+        name="name"
+        label="Name"
+        placeholder="e.g. Cotton Panjabi"
+        autoFocus={!productId}
+      />
+      <div className="grid gap-3 md:grid-cols-2">
+        <ProductCategoryField />
+        {showSkuAndCost ? (
+          <ProductInputField
+            name="variants.0.sku"
+            label="Product code"
+            placeholder="e.g. UT-PJ-01"
+            optional
+          />
+        ) : null}
       </div>
-      <div className="grid gap-4 md:grid-cols-3">
-        <ProductInputField name="pricePoisha" label="Selling price (Taka)" />
-        <ProductInputField name="compareAtPricePoisha" label="Old price (Taka)" />
-        {simple ? (
-          <ProductInputField name="variants.0.costPoisha" label="Your cost (Taka)" />
+      <div className="grid gap-3 md:grid-cols-3">
+        <ProductInputField name="pricePoisha" label="Selling price ৳" />
+        <ProductInputField name="compareAtPricePoisha" label="Old price ৳" placeholder="Optional" />
+        {showSkuAndCost ? (
+          <ProductInputField
+            name="variants.0.costPoisha"
+            label="Your cost ৳"
+            placeholder="Optional"
+          />
         ) : null}
       </div>
       {simple ? <DefaultOverride /> : null}
-      <ProductLinesField name="description" label="Description" />
-      {mode === 'edit' ? (
+      <ProductDescriptionField productId={productId} />
+      {productId ? (
         <ProductLinesField name="aliases" label="Other names" hint="One name per line." />
       ) : null}
-      <div className="space-y-4">
-        {visibleFlags.map(([name, label]) => (
-          <FormField key={name} name={name} label={label}>
-            {(control) => (
-              <Controller
-                control={form.control}
-                name={name}
-                render={({ field }) => (
-                  <Checkbox
-                    {...control}
-                    checked={field.value}
-                    onCheckedChange={(value) => field.onChange(value === true)}
-                    onBlur={field.onBlur}
-                    ref={field.ref}
-                  />
-                )}
-              />
-            )}
-          </FormField>
-        ))}
-      </div>
+      <ProductTrackStock />
+      {productId ? <ExtraFlags /> : null}
     </>
+  );
+}
+
+function ExtraFlags() {
+  const form = useFormContext<ProductFormValues>();
+  return (
+    <div className="space-y-3">
+      {extraFlags.map(([name, label]) => (
+        <FormField key={name} name={name} label={label}>
+          {(control) => (
+            <Controller
+              control={form.control}
+              name={name}
+              render={({ field }) => (
+                <Checkbox
+                  {...control}
+                  checked={field.value}
+                  onCheckedChange={(value) => field.onChange(value === true)}
+                  onBlur={field.onBlur}
+                  ref={field.ref}
+                />
+              )}
+            />
+          )}
+        </FormField>
+      ))}
+    </div>
   );
 }
 
 function DefaultOverride() {
   const { getValues } = useFormContext<ProductFormValues>();
   const [visible] = useState(() => Boolean(getValues('variants.0.priceOverridePoisha')));
-  return visible ? (
+  if (!visible) return null;
+  return (
     <ProductInputField
       name="variants.0.priceOverridePoisha"
       label="Default price override (Taka)"
     />
-  ) : null;
+  );
 }

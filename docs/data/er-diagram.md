@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0056_snapshot.json`: **95 tables, 1271 columns, 388 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0067_snapshot.json`: **95 tables, 1290 columns, 393 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -993,7 +993,10 @@ erDiagram
         text attributed_source_type "NULL; text"
         uuid attributed_source_id "NULL; uuid"
         text attributed_channel "NULL; text"
+        uuid attributed_touch_id "NULL; uuid"
         timestamp_with_time_zone attributed_touch_at "NULL; timestamp with time zone"
+        bigint attributed_amount_poisha "NULL; bigint"
+        smallint attributed_window_days "NULL; smallint"
         uuid possible_duplicate_of_order_id FK "NULL; uuid"
         text note "NULL; text"
         text external_ref "NULL; text"
@@ -1385,12 +1388,22 @@ erDiagram
         uuid__ exclude_segment_ids "NOT NULL; uuid[]"
         text status "NOT NULL; text"
         text pause_reason "NULL; text"
+        integer balance_pause_revision "NULL; integer"
         boolean is_ai_written "NOT NULL; boolean"
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
+        integer approval_segment_index "NOT NULL; integer"
+        uuid approval_cursor "NULL; uuid"
+        integer approval_checked_count "NOT NULL; integer"
+        integer approval_estimated_total "NOT NULL; integer"
+        timestamp_with_time_zone approval_progress_at "NULL; timestamp with time zone"
+        text approval_failure_code "NULL; text"
+        text short_link_base "NULL; text"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone settlement_pending_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone settled_at "NULL; timestamp with time zone"
         bigint estimated_cost_poisha "NULL; bigint"
         bigint reserved_poisha "NOT NULL; bigint"
         bigint actual_cost_poisha "NOT NULL; bigint"
@@ -1414,6 +1427,10 @@ erDiagram
         uuid contact_identity_id FK "NULL; uuid"
         text destination_address "NULL; text"
         text status "NOT NULL; text"
+        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone dispatch_started_at "NULL; timestamp with time zone"
+        text opt_out_link_code "NULL; text"
+        text__ redirect_link_codes "NULL; text[]"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
         bigint cost_poisha "NULL; bigint"
@@ -1423,6 +1440,8 @@ erDiagram
         timestamp_with_time_zone read_at "NULL; timestamp with time zone"
         timestamp_with_time_zone tapped_at "NULL; timestamp with time zone"
         timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
+        integer sms_credits "NULL; integer"
+        integer send_attempts "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     tracked_links {

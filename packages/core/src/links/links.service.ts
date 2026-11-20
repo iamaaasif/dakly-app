@@ -73,9 +73,30 @@ export class LinksService {
     return rows.map((row) => ({ id: row.id, code: row.code, url: linkUrl(row.kind, row.code) }));
   }
 
+  attributionTaps(storeId: string, orders: Parameters<LinksRepository['attributionTaps']>[1]) {
+    return orders.length ? this.repository.attributionTaps(storeId, orders) : [];
+  }
+
   // A sender that kept the code builds the same address again.
-  optOutUrl(code: string): string {
-    return linkUrl('sms_opt_out', code);
+  optOutUrl(code: string, base = this.shortLinkBase()): string {
+    return linkUrl('sms_opt_out', code, base);
+  }
+
+  redirectUrl(code: string, base = this.shortLinkBase()): string {
+    return linkUrl('redirect', code, base);
+  }
+
+  shortLinkBase(): string {
+    return loadEnv().SHORT_LINK_BASE_URL;
+  }
+
+  // An opt-out address as long as a real one, so an estimate counts the characters it adds.
+  sampleOptOutUrl(base = this.shortLinkBase()): string {
+    return linkUrl('sms_opt_out', '0'.repeat(TRACKED_LINK_CODE_LENGTH), base);
+  }
+
+  sampleRedirectUrl(base = this.shortLinkBase()): string {
+    return this.redirectUrl('0'.repeat(TRACKED_LINK_CODE_LENGTH), base);
   }
 
   // D31: a visit keeps only an HMAC of the address and browser, never either value.
@@ -176,7 +197,10 @@ function newCode(): string {
   ).join('');
 }
 
-function linkUrl(kind: NewTrackedLink['kind'], code: string): string {
-  const base = loadEnv().SHORT_LINK_BASE_URL;
+function linkUrl(
+  kind: NewTrackedLink['kind'],
+  code: string,
+  base = loadEnv().SHORT_LINK_BASE_URL,
+): string {
   return kind === 'redirect' ? `${base}/${code}` : `${base}/s/${code}`;
 }

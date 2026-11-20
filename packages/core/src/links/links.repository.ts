@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from 'drizzle-orm';
 
 import type { TrackedLinkKind, TrackedLinkSourceType } from '@dakly/contracts/campaigns';
 import type { Database } from '@dakly/db/client';
@@ -58,6 +58,51 @@ export class LinksRepository {
         .returning({ id: trackedLinks.id }),
     );
     return rows.map((row) => row.id);
+  }
+
+  attributionTaps(
+    storeId: string,
+    orders: { orderId: string; contactId: string; fromAt: Date; throughAt: Date }[],
+  ) {
+    return this.tenant.forStore(storeId, (tx) => {
+      const requests = sql`jsonb_to_recordset(${JSON.stringify(orders)}::jsonb) as request(
+        "orderId" uuid, "contactId" uuid, "fromAt" timestamptz, "throughAt" timestamptz
+      )`;
+      const latestVisit = tx
+        .select({ id: trackedLinkVisits.id, eligibleAt: trackedLinkVisits.occurredAt })
+        .from(trackedLinkVisits)
+        .where(
+          and(
+            eq(trackedLinkVisits.storeId, storeId),
+            eq(trackedLinkVisits.trackedLinkId, trackedLinks.id),
+            gte(trackedLinkVisits.occurredAt, sql`request."fromAt"`),
+            lte(trackedLinkVisits.occurredAt, sql`request."throughAt"`),
+          ),
+        )
+        .orderBy(desc(trackedLinkVisits.occurredAt), desc(trackedLinkVisits.id))
+        .limit(1)
+        .as('latest_visit');
+      return tx
+        .select({
+          orderId: sql<string>`request."orderId"`,
+          contactId: sql<string>`request."contactId"`,
+          id: latestVisit.id,
+          eligibleAt: latestVisit.eligibleAt,
+          sourceType: trackedLinks.sourceType,
+          sourceId: trackedLinks.sourceId,
+        })
+        .from(requests)
+        .innerJoin(trackedLinks, eq(trackedLinks.contactId, sql`request."contactId"`))
+        .innerJoinLateral(latestVisit, sql`true`)
+        .where(
+          and(
+            eq(trackedLinks.storeId, storeId),
+            eq(trackedLinks.kind, 'redirect'),
+            isNotNull(trackedLinks.sourceId),
+            inArray(trackedLinks.sourceType, ['campaign', 'automation']),
+          ),
+        );
+    });
   }
 
   async recordRedirectTap(

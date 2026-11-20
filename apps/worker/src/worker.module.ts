@@ -1,5 +1,5 @@
 import { BullModule } from '@nestjs/bullmq';
-import { Module } from '@nestjs/common';
+import { Module, type DynamicModule } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
 
 import { StaffAlertDeliveryJob } from '@dakly/core/admin/jobs/staff-alert-delivery.job';
@@ -25,6 +25,11 @@ import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-au
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
+import { BuildCampaignAudienceJob } from '@dakly/core/campaigns/jobs/build-campaign-audience.job';
+import { QueueAudienceBuildOnApprovalStarted } from '@dakly/core/campaigns/jobs/queue-audience-build-on-approval-started.job';
+import { RecordCampaignTapJob } from '@dakly/core/campaigns/jobs/record-campaign-tap.job';
+import { ResumeCampaignsOnWalletCredited } from '@dakly/core/campaigns/jobs/resume-campaigns-on-wallet-credited.job';
+import { SendCampaignBatchJob } from '@dakly/core/campaigns/jobs/send-campaign-batch.job';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
 import { MetaWebhookMaintenanceModule } from '@dakly/core/channels/meta-webhook-maintenance.module';
@@ -43,7 +48,7 @@ import { NotificationsModule } from '@dakly/core/notifications/notifications.mod
 import { PaymentJobsModule } from '@dakly/core/payments/payment-jobs.module';
 import { PaymentCallbackWorkerModule } from '@dakly/core/payments/payments.module';
 import { ClockModule } from '@dakly/core/platform/clock.module';
-import { loadEnv } from '@dakly/core/platform/config/env';
+import { loadEnv, type Env } from '@dakly/core/platform/config/env';
 import { DatabaseModule } from '@dakly/core/platform/database/database.module';
 import { ErrorReportingModule } from '@dakly/core/platform/logging/error-reporting.module';
 import { LoggingModule } from '@dakly/core/platform/logging/logging.module';
@@ -62,6 +67,7 @@ import {
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
+import { SocialPublishingModule } from '@dakly/core/social/social-publishing.module';
 
 import { JobSchedulers } from './job-schedulers';
 
@@ -95,7 +101,12 @@ import { JobSchedulers } from './job-schedulers';
     StartAutomationOnConsent,
     SweepAutomationBirthdaysJob,
     StartAutomationOnTagAdded,
+    BuildCampaignAudienceJob,
+    QueueAudienceBuildOnApprovalStarted,
     StartDueCampaignsJob,
+    SendCampaignBatchJob,
+    ResumeCampaignsOnWalletCredited,
+    RecordCampaignTapJob,
     ContinueAutomationRunJob,
     ResumeWorkflowsOnWalletCredited,
     JobSchedulers,
@@ -127,7 +138,7 @@ import { JobSchedulers } from './job-schedulers';
     ConversationReturnsModule,
     AutomationRunsModule,
     AutomationsModule,
-    CampaignsModule,
+    CampaignsModule.forWorker(),
     ClockModule,
     ImportsModule,
     ContactStatsRepairModule,
@@ -143,4 +154,11 @@ import { JobSchedulers } from './job-schedulers';
     }),
   ],
 })
-export class WorkerModule {}
+export class WorkerModule {
+  static register(driver: NonNullable<Env['metaChannel']>['driver'] | undefined): DynamicModule {
+    return {
+      module: WorkerModule,
+      imports: driver ? [SocialPublishingModule.forDriver(driver)] : [],
+    };
+  }
+}

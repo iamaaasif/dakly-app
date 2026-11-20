@@ -4,7 +4,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { ProductListQuery, ProductResponse } from '@dakly/contracts/products';
+import type { ProductListQuery, ProductResponse, ProductTab } from '@dakly/contracts/products';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { ProductsScreen } from './products-screen';
@@ -56,8 +56,16 @@ function show(
     view = true,
     adjust,
     productId,
+    productTab,
     create,
-  }: { edit?: boolean; view?: boolean; adjust?: string; productId?: string; create?: '1' } = {},
+  }: {
+    edit?: boolean;
+    view?: boolean;
+    adjust?: string;
+    productId?: string;
+    productTab?: ProductTab;
+    create?: '1';
+  } = {},
 ) {
   vi.stubGlobal(
     'ResizeObserver',
@@ -97,9 +105,16 @@ function show(
     },
   };
   client.setQueryData(sessionContextKey, context);
+  client.setQueryData(productsKeys.categories(context.contextTag), { items: ['Cotton'] });
   const content = () => (
     <QueryClientProvider client={client}>
-      <ProductsScreen query={query} adjust={adjust} productId={productId} create={create} />
+      <ProductsScreen
+        query={query}
+        adjust={adjust}
+        productId={productId}
+        productTab={productTab}
+        create={create}
+      />
     </QueryClientProvider>
   );
   const rendered = render(content());
@@ -107,6 +122,7 @@ function show(
     const parameters = new URL(href, 'http://localhost').searchParams;
     adjust = parameters.get('adjust') ?? undefined;
     productId = parameters.get('product') ?? undefined;
+    productTab = (parameters.get('productTab') as ProductTab) ?? undefined;
     create = parameters.get('create') === '1' ? '1' : undefined;
     rendered.rerender(content());
   });
@@ -138,9 +154,9 @@ describe('Products screen', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByText('৳2,450')).toBeTruthy();
     expect(within(table).getByText('৳2,950').tagName).toBe('DEL');
-    expect(within(table).getByText('Default: 3')).toBeTruthy();
-    expect(within(table).getByText('Needs a photo')).toBeTruthy();
+    expect(within(table).getByText('Default 3')).toBeTruthy();
     expect(within(table).getByText('Running low')).toBeTruthy();
+    expect(within(table).queryByText('Needs a photo')).toBeNull();
     expect(screen.queryByRole('button', { name: /Adjust stock/ })).toBeNull();
     expect(screen.queryByText(/asked|Best seller|Stock value/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Import|AI/ })).toBeNull();
@@ -193,11 +209,9 @@ describe('Products screen', () => {
     expect(allQuery.get('cursor')).toBeNull();
     expect(allQuery.get('search')).toBe('Cotton');
     await userEvent.clear(screen.getByRole('searchbox', { name: 'Search products' }));
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'ab');
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'ab{enter}');
     expect(push).not.toHaveBeenCalled();
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'c');
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search products' }), 'c{enter}');
     const searchQuery = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
     expect(searchQuery.get('search')).toBe('abc');
     expect(searchQuery.get('readiness')).toBe('running_low');
@@ -279,7 +293,7 @@ describe('Products screen', () => {
     await userEvent.type(within(dialog).getByLabelText('Change in stock'), '2');
     await userEvent.type(within(dialog).getByLabelText('Reason'), 'Counted new delivery');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save stock' }));
-    expect(await within(screen.getByRole('table')).findByText('Default: 5')).toBeTruthy();
+    expect(await within(screen.getByRole('table')).findByText('Default 5')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
   it('keeps rejected adjustments and their error visible', async () => {
@@ -306,11 +320,12 @@ describe('Products screen', () => {
 
 describe('Product editor navigation', () => {
   it('opens creation from the list and selects the saved product', async () => {
-    vi.stubGlobal('fetch', async (path: string, init: RequestInit) =>
-      init.method === 'POST' || path === `/api/products/${product.id}`
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (path.endsWith('/categories')) return response({ items: ['Cotton'] });
+      return init?.method === 'POST' || path === `/api/products/${product.id}`
         ? response(product)
-        : response({ items: [product], nextCursor: null }),
-    );
+        : response({ items: [product], nextCursor: null });
+    });
     show();
     await screen.findByRole('table');
     await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
@@ -323,6 +338,53 @@ describe('Product editor navigation', () => {
     ).toBe(product.id);
   });
 
+  it('shows an alert when initial stock adjustment fails and clears it on sheet close', async () => {
+    const savedProduct = {
+      ...product,
+      options: [{ name: 'Size', values: ['L'] }],
+      variants: [
+        {
+          ...product.variants[0]!,
+          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+          optionValues: { Size: 'L' },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (path.includes('/stock-adjustments')) {
+          return Response.json(
+            { error: { message: 'Stock adjustment failed' } },
+            { status: 500, headers: { 'x-session-context': 'verified' } },
+          );
+        }
+        return response(savedProduct);
+      }
+      if (path.endsWith('/categories')) return response({ items: ['Cotton'] });
+      return response(
+        path === `/api/products/${savedProduct.id}`
+          ? savedProduct
+          : { items: [savedProduct], nextCursor: null },
+      );
+    });
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add size' }));
+    await userEvent.type(within(dialog).getByLabelText('Size 1'), 'L');
+    await userEvent.type(within(dialog).getByLabelText('Stock for size L'), '3');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save as hidden' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Could not set initial stock for: L',
+    );
+    const sheet = await screen.findByRole('dialog', { name: savedProduct.name });
+    await userEvent.click(within(sheet).getByRole('button', { name: /Close/ }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('shows a saved product to viewers without edit or upload controls', async () => {
     vi.stubGlobal('fetch', async (path: string) =>
       response(
@@ -331,8 +393,10 @@ describe('Product editor navigation', () => {
     );
     show({ limit: 50 }, { edit: false, productId: product.id });
     const dialog = await screen.findByRole('dialog', { name: product.name });
-    expect(within(dialog).getByText('৳2,450')).toBeTruthy();
+    const header = within(dialog).getByRole('banner');
+    expect(within(header).getByText('৳2,450')).toBeTruthy();
     expect(within(dialog).queryByRole('button', { name: 'Edit product' })).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(within(dialog).queryByLabelText('Add photo')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add product' })).toBeNull();
   });
@@ -350,7 +414,8 @@ describe('Product editor navigation', () => {
     );
     show({ limit: 50 }, { productId: product.id, edit: false });
     const dialog = await screen.findByRole('dialog', { name: product.name });
-    expect(within(dialog).getByText('৳450.25')).toBeTruthy();
+    const header = within(dialog).getByRole('banner');
+    expect(within(header).getByText('৳450.25')).toBeTruthy();
   });
 
   it('retries a failed selected product without losing its address', async () => {
@@ -371,5 +436,116 @@ describe('Product editor navigation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry product' }));
     expect(await screen.findByRole('dialog', { name: product.name })).toBeTruthy();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('shows profit percentage, size chips, and restock button', async () => {
+    const itemWithProfit: ProductResponse = {
+      ...product,
+      variants: [
+        {
+          ...product.variants[0]!,
+          sku: 'UT-PJ-01',
+          pricePoisha: 200000,
+          costPoisha: 120000,
+          reserved: 3,
+          available: 2,
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', async () => response({ items: [itemWithProfit], nextCursor: null }));
+    show({ limit: 50 });
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Men · UT-PJ-01')).toBeTruthy();
+    expect(within(table).getByText('40% profit')).toBeTruthy();
+    expect(
+      within(table).getByRole('button', { name: `Restock ${itemWithProfit.name}` }),
+    ).toBeTruthy();
+  });
+
+  it('shows Selling status when product is active and not running low, and Needs a price when price is 0', async () => {
+    const sellingItem: ProductResponse = {
+      ...product,
+      id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+      name: 'Selling Shirt',
+      readiness: [],
+    };
+    const noPriceItem: ProductResponse = {
+      ...product,
+      id: '019c01ea-cf15-7d31-a7f5-d73d66007ae6',
+      name: 'No Price Shoes',
+      readiness: ['needs_price'],
+    };
+    vi.stubGlobal('fetch', async () =>
+      response({ items: [sellingItem, noPriceItem], nextCursor: null }),
+    );
+    show({ limit: 50 });
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('Selling')).toBeTruthy();
+    expect(within(table).getByText('Needs a price')).toBeTruthy();
+  });
+
+  it('renders inline toolbar with search input and all readiness chips', async () => {
+    vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
+    show({ limit: 50 });
+    await screen.findByRole('table');
+    expect(screen.getByRole('searchbox', { name: 'Search products' })).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search by name')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'All' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Running low' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Needs a price' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Needs a photo' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Hidden' })).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Category' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Sort' })).toBeNull();
+  });
+
+  it('renders product detail sheet with header controls, tabs, overview tiles and bottom actions', async () => {
+    let sentStatus = '';
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        sentStatus = JSON.parse(String(init.body)).status;
+        return response({ ...product, status: sentStatus });
+      }
+      return response(
+        path === `/api/products/${product.id}` ? product : { items: [product], nextCursor: null },
+      );
+    });
+    show({ limit: 50 }, { edit: true, productId: product.id });
+    const dialog = await screen.findByRole('dialog', { name: product.name });
+
+    expect(within(dialog).getByText(product.name)).toBeTruthy();
+    expect(within(dialog).getByText(product.category!)).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Edit product' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeTruthy();
+    expect(within(dialog).getByText('Running low')).toBeTruthy();
+
+    expect(within(dialog).getByRole('tab', { name: 'Overview' })).toBeTruthy();
+    expect(within(dialog).getByRole('tab', { name: 'Stock' })).toBeTruthy();
+    expect(within(dialog).queryByRole('tab', { name: 'Sales' })).toBeNull();
+    expect(within(dialog).queryByRole('tab', { name: 'Customers' })).toBeNull();
+    expect(within(dialog).getByText('Description')).toBeTruthy();
+    expect(within(dialog).getByText('Selling price')).toBeTruthy();
+    expect(within(dialog).getByText('Your cost')).toBeTruthy();
+    expect(within(dialog).getByText('Profit each')).toBeTruthy();
+    expect(within(dialog).getByText('In stock')).toBeTruthy();
+    expect(within(dialog).queryByText('Low stock alert')).toBeNull();
+
+    await userEvent.click(within(dialog).getByRole('tab', { name: 'Stock' }));
+    expect(
+      new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('productTab'),
+    ).toBe('stock');
+    expect(within(dialog).getByText(/available · 2 reserved · 5 on hand/)).toBeTruthy();
+
+    await userEvent.click(within(dialog).getByRole('tab', { name: 'Overview' }));
+    expect(
+      new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('productTab'),
+    ).toBeNull();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hide product' }));
+    expect(sentStatus).toBe('hidden');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
+    const closedUrl = new URL(push.mock.calls.at(-1)![0], 'http://localhost');
+    expect(closedUrl.searchParams.get('product')).toBeNull();
+    expect(closedUrl.searchParams.get('productTab')).toBeNull();
   });
 });

@@ -1,41 +1,77 @@
 'use client';
+import { Plus } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 
 import type { ContactListQuery } from '@dakly/contracts/contacts';
 import { ApiError } from '@dakly/ui/api-client';
+import { Badge } from '@dakly/ui/badge';
+import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { customersSearch, useCustomers } from '../api/customers';
+import { AddCustomersChooser } from './add-customers-chooser';
 import { CustomerFilters } from './customer-filters';
 import { CustomerList } from './customer-list';
+import { ImportCustomersDialog } from './import-customers-dialog';
 import { NewCustomerForm } from './new-customer-form';
-import { StorePage } from '@/components/store-page';
+import { SessionDialog as Dialog } from '@/components/session-dialog';
+import { useSessionContext } from '@/lib/session-context';
 
 type CustomersScreenProps = { query: ContactListQuery };
 
 export function CustomersScreen({ query }: CustomersScreenProps) {
+  const [adding, setAdding] = useState<'choose' | 'manual' | 'import' | null>(null);
+  const [added, setAdded] = useState(false);
   const customers = useCustomers(query);
+  const { data: context } = useSessionContext();
+  const canCreate = Boolean(context?.currentStore?.canCreateCustomer);
+
   const searchError =
     customers.error instanceof ApiError && customers.error.code === 'CONTACT_SEARCH_TOO_SHORT'
       ? customers.error.message
       : undefined;
+
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-4 md:p-8">
-      <h1 className="text-xl font-bold">All customers</h1>
-      <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
-        <section aria-label="Customer list" className="space-y-4 lg:col-span-2">
-          <CustomerFilters
-            key={`${query.kind}|${query.search}|${query.tag}`}
-            query={query}
-            searchError={searchError}
-          />
-          <CustomerResults query={query} customers={customers} hideError={Boolean(searchError)} />
-        </section>
-        <StorePage permission="canCreateCustomer">
-          <NewCustomerForm />
-        </StorePage>
+    <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-xl font-bold">All customers</h1>
+        {canCreate ? (
+          <Button onClick={() => setAdding('choose')} className="gap-2">
+            <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add customers
+          </Button>
+        ) : null}
       </div>
+
+      {added ? (
+        <p role="status">
+          <Badge variant="success">Customer added</Badge>
+        </p>
+      ) : null}
+
+      <CustomerFilters
+        key={`${query.kind}|${query.search}|${query.tag}`}
+        query={query}
+        searchError={searchError}
+      />
+      <CustomerResults query={query} customers={customers} hideError={Boolean(searchError)} />
+
+      {adding === 'choose' ? (
+        <AddCustomersChooser onChoose={setAdding} onClose={() => setAdding(null)} />
+      ) : null}
+      {adding === 'manual' ? (
+        <Dialog open title="Add customer" onClose={() => setAdding(null)}>
+          <NewCustomerForm
+            onAdded={() => {
+              setAdding(null);
+              setAdded(true);
+            }}
+            onCancel={() => setAdding(null)}
+          />
+        </Dialog>
+      ) : null}
+      {adding === 'import' ? <ImportCustomersDialog onClose={() => setAdding(null)} /> : null}
     </main>
   );
 }
@@ -47,16 +83,16 @@ type CustomerResultsProps = {
 };
 
 function CustomerResults({ query, customers, hideError }: CustomerResultsProps) {
-  if (customers.error)
-    return hideError ? null : (
+  if (customers.error && !hideError)
+    return (
       <QueryError
         message={customers.error.message}
         onRetry={() => void customers.refetch()}
         retryLabel="Retry customers"
       />
     );
-  // Not a status region: the add form's confirmation is the page's only status message.
-  if (customers.isPending)
+  if (hideError) return null;
+  if (customers.isPending || !customers.data)
     return (
       <div aria-busy="true" className="space-y-3">
         <p className="sr-only">Loading customers</p>

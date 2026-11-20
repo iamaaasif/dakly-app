@@ -22,8 +22,15 @@ import {
   type CreateContentPieceInput,
   type UpdateContentPieceInput,
 } from '@dakly/contracts/content';
+import {
+  contentWriteRequestSchema,
+  type ContentWriteInput,
+  type ContentWriteResult,
+} from '@dakly/contracts/content-writing';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
+import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
@@ -59,6 +66,17 @@ export class ContentPiecesController {
     @Body(new ZodValidationPipe(createContentPieceSchema)) input: CreateContentPieceInput,
   ): Promise<ContentPiece> {
     return this.content.createPiece(storeId, { kind: 'user', userId }, input);
+  }
+
+  @Post('generate')
+  @HttpCode(200)
+  @RequirePermission('social.edit')
+  write(
+    @CurrentStore() storeId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Body(new ZodValidationPipe(contentWriteRequestSchema)) input: ContentWriteInput,
+  ): Promise<ContentWriteResult> {
+    return this.content.write(storeId, access, input);
   }
 
   @Patch(':contentPieceId')

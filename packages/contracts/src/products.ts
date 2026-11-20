@@ -135,7 +135,7 @@ export const productFormSchema = z
       .transform((values) => values.filter((value) => value.trim()))
       .pipe(createProductSchema.shape.aliases.unwrap())
       .default([]),
-    pricePoisha: takaInput.default(0),
+    pricePoisha: z.union([z.literal('').transform(() => 0), takaInput]).default(0),
     compareAtPricePoisha: optionalTakaInput.default(null),
     variants: z
       .array(
@@ -144,6 +144,7 @@ export const productFormSchema = z
           sku: optionalTextInput.pipe(editVariantSchema.shape.sku.unwrap()).default(null),
           priceOverridePoisha: optionalTakaInput.pipe(money.positive().nullable()).default(null),
           costPoisha: optionalTakaInput.default(null),
+          initialStock: z.number().int().min(0).default(0),
         }),
       )
       .max(100)
@@ -152,7 +153,7 @@ export const productFormSchema = z
   // Positions keep selections attached while option names are being edited.
   .transform((input) => ({
     ...input,
-    variants: input.variants.map((variant) => ({
+    variants: input.variants.map(({ initialStock: _stock, ...variant }) => ({
       ...variant,
       optionValues: Object.fromEntries(
         input.options.flatMap(({ name }, index) => {
@@ -178,10 +179,14 @@ export const productListQuerySchema = z.strictObject({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
+export const productTabValues = ['overview', 'stock'] as const;
+export type ProductTab = (typeof productTabValues)[number];
+
 export const productScreenQuerySchema = productListQuerySchema
   .extend({
     adjust: z.uuid().optional(),
     product: z.uuid().optional(),
+    productTab: z.enum(productTabValues).optional(),
     create: z.literal('1').optional(),
   })
   .refine(
@@ -208,6 +213,8 @@ export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
   updatedAt: string;
 };
 export type ProductListResponse = { items: ProductResponse[]; nextCursor: string | null };
+
+export type ProductCategoriesResponse = { items: string[] };
 
 export type StockMovementKind = (typeof stockMovementKinds)[number];
 export const MAX_STOCK_QUANTITY = 2147483647;

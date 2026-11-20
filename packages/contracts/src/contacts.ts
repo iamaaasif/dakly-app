@@ -170,8 +170,9 @@ export const contactImportRowSchema = z.object({
   notes: optionalCell(z.string().max(2000)),
 });
 
-// Feature 03: a customer file is at most 10 MB.
+// Feature 03: a customer file is at most 10 MB and 50,000 rows.
 export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_IMPORT_ROWS = 50_000;
 
 export const createImportSchema = z.strictObject({
   sizeBytes: z.int().min(1).max(MAX_IMPORT_FILE_BYTES),

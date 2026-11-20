@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 
 import type {
+  CampaignApprovalFailureCode,
   CampaignChannel,
   CampaignGoal,
   CampaignListQuery,
@@ -25,6 +26,19 @@ export type Campaign = {
   excludeSegmentIds: string[];
   scheduledFor: Date | null;
   status: CampaignStatus;
+  approvalCheckedCount: number;
+  approvalEstimatedTotal: number;
+  approvalFailureCode: CampaignApprovalFailureCode | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  recipientsCount: number;
+  skippedCount: number;
+  sentCount: number;
+  deliveredCount: number;
+  readCount: number;
+  tappedCount: number;
+  failedCount: number;
+  countsAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -41,8 +55,7 @@ export type FrozenRecipient = {
   | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
 );
 export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
-  approvedByUserId: string | null;
-  approvedAt: Date;
+  shortLinkBase: string;
   startedAt: Date | null;
   estimatedCostPoisha: number;
   recipientsCount: number;
@@ -57,15 +70,20 @@ export type CampaignStatusGuard = { status: CampaignStatus; pauseReason?: Campai
 // A state change; returning to draft also clears the approval.
 export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   pauseReason?: CampaignPauseReason | null;
+  balancePauseRevision?: number | null;
   finishedAt?: Date;
+  startedAt?: Date;
+  settlementPendingAt?: Date | null;
+  countsAt?: null;
   approvedByUserId?: null;
   approvedAt?: null;
+  shortLinkBase?: string | null;
   estimatedCostPoisha?: null;
   recipientsCount?: 0;
   skippedCount?: 0;
 };
 
-const campaignColumns = {
+export const campaignColumns = {
   id: campaigns.id,
   name: campaigns.name,
   goal: campaigns.goal,
@@ -75,6 +93,19 @@ const campaignColumns = {
   excludeSegmentIds: campaigns.excludeSegmentIds,
   scheduledFor: campaigns.scheduledFor,
   status: campaigns.status,
+  approvalCheckedCount: campaigns.approvalCheckedCount,
+  approvalEstimatedTotal: campaigns.approvalEstimatedTotal,
+  approvalFailureCode: campaigns.approvalFailureCode,
+  startedAt: campaigns.startedAt,
+  finishedAt: campaigns.finishedAt,
+  recipientsCount: campaigns.recipientsCount,
+  skippedCount: campaigns.skippedCount,
+  sentCount: campaigns.sentCount,
+  deliveredCount: campaigns.deliveredCount,
+  readCount: campaigns.readCount,
+  tappedCount: campaigns.tappedCount,
+  failedCount: campaigns.failedCount,
+  countsAt: campaigns.countsAt,
   createdAt: campaigns.createdAt,
   updatedAt: campaigns.updatedAt,
 };
@@ -113,6 +144,35 @@ export class CampaignsRepository {
         .limit(query.limit + 1),
     );
     return rows;
+  }
+
+  attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: campaigns.id,
+          sourceId: campaigns.id,
+          channel: campaigns.channel,
+          sentAt: campaignRecipients.sentAt,
+        })
+        .from(campaignRecipients)
+        .innerJoin(
+          campaigns,
+          and(eq(campaigns.storeId, storeId), eq(campaigns.id, campaignRecipients.campaignId)),
+        )
+        .where(
+          and(
+            eq(campaignRecipients.storeId, storeId),
+            eq(campaignRecipients.contactId, buyer.id),
+            inArray(campaignRecipients.campaignId, ids),
+            inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
+            or(
+              ne(campaigns.channel, 'sms'),
+              eq(campaignRecipients.destinationAddress, buyer.phone),
+            ),
+          ),
+        ),
+    );
   }
 
   async find(storeId: string, id: string): Promise<Campaign | undefined> {
@@ -186,10 +246,15 @@ export class CampaignsRepository {
     await this.database.forStore(storeId, (tx) =>
       tx
         .insert(campaignRecipients)
-        .values(recipients.map((recipient) => ({ storeId, campaignId, ...recipient }))),
+        .values(recipients.map((recipient) => ({ storeId, campaignId, ...recipient })))
+        // The approval job repeats a page after a crash; the first row for a contact stands.
+        .onConflictDoNothing({
+          target: [campaignRecipients.campaignId, campaignRecipients.contactId],
+        }),
     );
   }
 
+  // The approval job calls this once the audience is frozen and the credits are reserved.
   async markApproved(
     storeId: string,
     id: string,
@@ -199,14 +264,13 @@ export class CampaignsRepository {
       tx
         .update(campaigns)
         .set(approval)
-        .where(statusWhere(storeId, id, 'draft'))
+        .where(statusWhere(storeId, id, 'approving'))
         .returning(campaignColumns),
     );
     return row;
   }
 
-  // Holds a scheduled campaign while it goes back to draft or is cancelled, so the sweep that
-  // starts due campaigns (CAMP-3) waits for the change.
+  // Holds a scheduled campaign while it goes back to draft, so the due sweep skips it.
   async lockScheduled(
     storeId: string,
     id: string,
@@ -219,6 +283,43 @@ export class CampaignsRepository {
         .for('update'),
     );
     return row;
+  }
+
+  async lockCampaign(storeId: string, id: string, mode: 'share' | 'update') {
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
+      tx
+        .select({
+          ...campaignColumns,
+          approvedAt: campaigns.approvedAt,
+          shortLinkBase: campaigns.shortLinkBase,
+          settlementPendingAt: campaigns.settlementPendingAt,
+          balancePauseRevision: campaigns.balancePauseRevision,
+          pauseReason: campaigns.pauseReason,
+        })
+        .from(campaigns)
+        .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, id)))
+        .for(mode),
+    );
+    return row;
+  }
+
+  async listBalancePaused(storeId: string, topUpRevision: number, after: string | null) {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: campaigns.id })
+        .from(campaigns)
+        .where(
+          and(
+            eq(campaigns.storeId, storeId),
+            sql`${campaigns.status} = 'paused' and ${campaigns.pauseReason} = 'balance'`,
+            lt(campaigns.balancePauseRevision, topUpRevision),
+            after ? gt(campaigns.id, after) : undefined,
+          ),
+        )
+        .orderBy(asc(campaigns.id))
+        .limit(100),
+    );
+    return rows.map(({ id }) => id);
   }
 
   // Guarded on the state the change starts from, so a campaign moved meanwhile is left alone.
@@ -258,6 +359,35 @@ export class CampaignsRepository {
     );
   }
 
+  async settlementTotals(storeId: string, campaignId: string) {
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
+      tx
+        .select({
+          unsettled:
+            sql<number>`count(*) filter (where ${campaignRecipients.status} in ('queued', 'sending'))`.mapWith(
+              Number,
+            ),
+          chargedCredits: sql<number>`coalesce(sum(${campaignRecipients.smsCredits}), 0)`.mapWith(
+            Number,
+          ),
+        })
+        .from(campaignRecipients)
+        .where(recipientsWhere(storeId, campaignId)),
+    );
+    return row!;
+  }
+
+  async markSettled(storeId: string, campaignId: string, settledAt: Date) {
+    const [row] = await this.database.inTransaction(storeId, (tx) =>
+      tx
+        .update(campaigns)
+        .set({ settledAt, settlementPendingAt: null, updatedAt: sql`${campaigns.updatedAt}` })
+        .where(and(statusWhere(storeId, campaignId, 'cancelled'), isNull(campaigns.settledAt)))
+        .returning({ id: campaigns.id }),
+    );
+    return row !== undefined;
+  }
+
   async removeDraft(storeId: string, id: string): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
@@ -269,11 +399,13 @@ export class CampaignsRepository {
   }
 }
 
-function statusWhere(storeId: string, id: string, status: CampaignStatus) {
+export type LockedCampaign = NonNullable<Awaited<ReturnType<CampaignsRepository['lockCampaign']>>>;
+
+export function statusWhere(storeId: string, id: string, status: CampaignStatus) {
   return and(eq(campaigns.storeId, storeId), eq(campaigns.id, id), eq(campaigns.status, status));
 }
 
-function recipientsWhere(storeId: string, campaignId: string) {
+export function recipientsWhere(storeId: string, campaignId: string) {
   return and(
     eq(campaignRecipients.storeId, storeId),
     eq(campaignRecipients.campaignId, campaignId),

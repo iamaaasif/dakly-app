@@ -8,6 +8,7 @@ import { createProductSchema, type ProductResponse } from '@dakly/contracts/prod
 import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { ProductForm } from './product-form';
+import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
 const product: ProductResponse = {
@@ -44,7 +45,9 @@ function show(initial?: ProductResponse) {
       disconnect() {}
     },
   );
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+  });
   const session: SessionContext = {
     user: { id: 'actor', name: 'Actor' },
     contextTag: 'verified',
@@ -74,6 +77,7 @@ function show(initial?: ProductResponse) {
     },
   };
   client.setQueryData(sessionContextKey, session);
+  client.setQueryData(productsKeys.categories(session.contextTag), { items: [] });
   const onSaved = vi.fn();
   const tree = (current?: ProductResponse) => (
     <QueryClientProvider client={client}>
@@ -110,10 +114,10 @@ describe('Product form', () => {
     });
     const { onSaved } = show();
     await userEvent.type(screen.getByLabelText('Name'), 'Cotton Panjabi');
-    await userEvent.clear(screen.getByLabelText('Selling price (Taka)'));
-    await userEvent.type(screen.getByLabelText('Selling price (Taka)'), '2450.50');
+    await userEvent.clear(screen.getByLabelText('Selling price ৳'));
+    await userEvent.type(screen.getByLabelText('Selling price ৳'), '2450.50');
     await userEvent.click(screen.getByRole('button', { name: label }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
     expect(submitted).toMatchObject({ name: 'Cotton Panjabi', pricePoisha: 245050, status });
   });
 
@@ -125,12 +129,10 @@ describe('Product form', () => {
       return Response.json(product, { headers: { 'x-session-context': 'verified' } });
     });
     const { onSaved } = show(product);
-    expect((screen.getByLabelText('Selling price (Taka)') as HTMLInputElement).value).toBe(
-      '2450.50',
-    );
+    expect((screen.getByLabelText('Selling price ৳') as HTMLInputElement).value).toBe('2450.50');
     await userEvent.type(screen.getByLabelText('Product code'), '-1');
     await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
     expect(submitted).toMatchObject({
       variants: [{ id: product.variants[0]!.id, sku: 'PAN-M-1', costPoisha: 120075 }],
     });
@@ -246,6 +248,61 @@ describe('Product form', () => {
     });
   });
 
+  it('picks a generated description without saving the product', async () => {
+    const requests: { method: string | undefined; body: unknown }[] = [];
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      requests.push({ method: init.method, body: JSON.parse(String(init.body)) });
+      const result =
+        init.method === 'POST'
+          ? { options: ['Made with cotton', 'Cotton for everyday wear', 'A cotton panjabi'] }
+          : product;
+      return Response.json(result, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(product);
+    fireEvent.click(screen.getByRole('button', { name: 'Write with AI' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Bangla' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Write 3 options' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Made with cotton' }));
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Description').value).toBe(
+      'Made with cotton',
+    );
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(requests).toEqual([{ method: 'POST', body: { tone: 'friendly', language: 'bn' } }]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
+    expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { description: 'Made with cotton' } });
+  });
+
+  it('keeps a writing request pending when the panel is closed and reopened', async () => {
+    let finish!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    vi.stubGlobal('fetch', () => response);
+    show(product);
+    const toggle = screen.getByRole('button', { name: 'Write with AI' });
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: 'Write 3 options' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', { name: 'Write 3 options' }).disabled,
+      ).toBe(true),
+    );
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: 'Write 3 options' }).disabled,
+    ).toBe(true);
+    finish(
+      Response.json(
+        { options: ['Made with cotton', 'Cotton for everyday wear', 'A cotton panjabi'] },
+        { headers: { 'x-session-context': 'verified' } },
+      ),
+    );
+    await screen.findByRole('button', { name: 'Made with cotton' });
+  });
+
   it('saves a description without overwriting later visibility or variant changes', async () => {
     let submitted: unknown;
     vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
@@ -284,7 +341,7 @@ describe('Product form', () => {
 
   it('shows one selling price for a saved simple product without an override', () => {
     show(product);
-    expect(screen.getByLabelText('Selling price (Taka)')).toBeTruthy();
+    expect(screen.getByLabelText('Selling price ৳')).toBeTruthy();
     expect(screen.queryByLabelText('Default price override (Taka)')).toBeNull();
   });
 
@@ -348,6 +405,126 @@ describe('Product form', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
     expect((await screen.findByRole('alert')).textContent).toContain('distinct variants');
     expect(submitted).toBe(false);
+  });
+
+  it('adjusts stock only for retained sizes after deleting a size row', async () => {
+    const savedProduct: ProductResponse = {
+      ...product,
+      options: [{ name: 'Size', values: ['L'] }],
+      variants: [
+        {
+          ...product.variants[0]!,
+          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+          optionValues: { Size: 'L' },
+        },
+      ],
+    };
+    const adjustments: unknown[] = [];
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (url.includes('/stock-adjustments')) {
+          adjustments.push({ url, body: JSON.parse(String(init.body)) });
+          return Response.json({ id: 'adj-1' }, { headers: { 'x-session-context': 'verified' } });
+        }
+        return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+      }
+      return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+    });
+
+    const { onSaved } = show();
+    await userEvent.type(screen.getByLabelText('Name'), 'T-Shirt');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add size' }));
+    await userEvent.type(screen.getByLabelText('Size 1'), 'M');
+    await userEvent.type(screen.getByLabelText('Stock for size M'), '5');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add size' }));
+    await userEvent.type(screen.getByLabelText('Size 2'), 'L');
+    await userEvent.type(screen.getByLabelText('Stock for size L'), '3');
+
+    await userEvent.click(screen.getByLabelText('Delete size M'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct, []));
+    expect(adjustments).toEqual([
+      {
+        url: '/api/variants/019c01ea-cf15-7d31-a7f5-d73d66007ae5/stock-adjustments',
+        body: { quantity: 3, reason: 'Initial stock' },
+      },
+    ]);
+  });
+
+  it('reports failed initial stock adjustments with the failed size names', async () => {
+    const savedProduct: ProductResponse = {
+      ...product,
+      options: [{ name: 'Size', values: ['L'] }],
+      variants: [
+        {
+          ...product.variants[0]!,
+          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+          optionValues: { Size: 'L' },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (url.includes('/stock-adjustments')) {
+          return Response.json(
+            { error: { message: 'Stock adjustment failed' } },
+            { status: 500, headers: { 'x-session-context': 'verified' } },
+          );
+        }
+        return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+      }
+      return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+    });
+
+    const { onSaved } = show();
+    await userEvent.type(screen.getByLabelText('Name'), 'T-Shirt');
+    await userEvent.click(screen.getByRole('button', { name: 'Add size' }));
+    await userEvent.type(screen.getByLabelText('Size 1'), 'L');
+    await userEvent.type(screen.getByLabelText('Stock for size L'), '3');
+    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct, ['L']));
+  });
+
+  it('saves with no stock adjustment when stock box is cleared', async () => {
+    const savedProduct: ProductResponse = {
+      ...product,
+      options: [{ name: 'Size', values: ['M'] }],
+      variants: [
+        {
+          ...product.variants[0]!,
+          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+          optionValues: { Size: 'M' },
+        },
+      ],
+    };
+    const adjustments: Array<{ url: string; body: unknown }> = [];
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (url.includes('/stock-adjustments')) {
+          adjustments.push({ url, body: JSON.parse(init.body as string) });
+          return Response.json({}, { status: 201, headers: { 'x-session-context': 'verified' } });
+        }
+        return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+      }
+      return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+    });
+
+    const { onSaved } = show();
+    await userEvent.type(screen.getByLabelText('Name'), 'T-Shirt');
+    await userEvent.click(screen.getByRole('button', { name: 'Add size' }));
+    await userEvent.type(screen.getByLabelText('Size 1'), 'M');
+    const stockInput = screen.getByLabelText('Stock for size M');
+    await userEvent.type(stockInput, '5');
+    await userEvent.clear(stockInput);
+    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct, []));
+    expect(adjustments).toEqual([]);
   });
 
   it('keeps unsaved values through refresh and a rejected save', async () => {

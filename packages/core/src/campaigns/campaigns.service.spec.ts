@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CampaignStatus } from '@dakly/contracts/campaigns';
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { AnalyticsService } from '../analytics/analytics.service';
+import type { LinksService } from '../links/links.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
@@ -20,6 +22,15 @@ import type { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import type { WalletService } from '../wallets/wallet.service';
 import type {
+  ApprovalKey,
+  ApprovalProgress,
+  ApprovalStart,
+  CampaignApprovalRepository,
+} from './campaign-approval.repository';
+import { CampaignApprovalService } from './campaign-approval.service';
+import { CampaignAudienceService } from './campaign-audience.service';
+import { CampaignSmsService } from './campaign-sms.service';
+import type {
   Campaign,
   CampaignApproval,
   CampaignsRepository,
@@ -27,7 +38,7 @@ import type {
   CampaignStatusGuard,
   FrozenRecipient,
 } from './campaigns.repository';
-import { CampaignsService, MAX_CAMPAIGN_AUDIENCE } from './campaigns.service';
+import { CampaignsService } from './campaigns.service';
 
 const STORE_ID = '7f1d3a52-4c55-4a8e-9a43-2a1f0c7d9b10';
 const actor = { kind: 'user', userId: 'c5a0f0e4-0b55-4b7e-8d0e-6f3c3b7f1e21' } as const;
@@ -38,7 +49,13 @@ const now = new Date('2026-11-16T05:00:00Z');
 class FakeCampaignsRepository {
   readonly rows = new Map<
     string,
-    Campaign & Pick<CampaignStatusChange, 'pauseReason' | 'finishedAt'>
+    Campaign &
+      Pick<CampaignStatusChange, 'pauseReason'> & {
+        approvedAt?: Date | null;
+        approvedByUserId?: string | null;
+        segmentIndex?: number;
+        contactId?: string | null;
+      }
   >();
 
   add(
@@ -46,7 +63,7 @@ class FakeCampaignsRepository {
     id = randomUUID(),
     pauseReason?: CampaignStatusChange['pauseReason'],
   ): Campaign {
-    const row = {
+    const row: Campaign & Pick<CampaignStatusChange, 'pauseReason'> = {
       id,
       name: 'ঈদের অফার',
       goal: 'seasonal',
@@ -56,6 +73,19 @@ class FakeCampaignsRepository {
       excludeSegmentIds: [],
       scheduledFor: null,
       status,
+      approvalCheckedCount: 0,
+      approvalEstimatedTotal: 0,
+      approvalFailureCode: null,
+      startedAt: null,
+      finishedAt: null,
+      recipientsCount: 0,
+      skippedCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      readCount: 0,
+      tappedCount: 0,
+      failedCount: 0,
+      countsAt: null,
       createdAt: now,
       updatedAt: now,
       pauseReason,
@@ -97,13 +127,25 @@ class FakeCampaignsRepository {
     return row?.status === 'draft' ? row : undefined;
   }
 
+  // As in the repository, the first row for a contact stands.
   async insertRecipients(_storeId: string, campaignId: string, recipients: FrozenRecipient[]) {
-    this.recipients.push(...recipients.map((recipient) => ({ ...recipient, campaignId })));
+    const frozen = new Set(
+      this.recipients.filter((row) => row.campaignId === campaignId).map((row) => row.contactId),
+    );
+    for (const recipient of recipients)
+      if (!frozen.has(recipient.contactId)) {
+        frozen.add(recipient.contactId);
+        this.recipients.push({ ...recipient, campaignId });
+      }
   }
 
   async lockScheduled(_storeId: string, id: string) {
     const row = this.rows.get(id);
     return row?.status === 'scheduled' ? (row as Campaign & { approvedAt: Date }) : undefined;
+  }
+
+  async lockCampaign(_storeId: string, id: string) {
+    return this.rows.get(id);
   }
 
   async changeStatus(
@@ -130,12 +172,110 @@ class FakeCampaignsRepository {
         Object.assign(recipient, { status: 'cancelled' });
   }
 
+  async settlementTotals(_storeId: string, campaignId: string) {
+    return {
+      unsettled: this.recipients.filter(
+        (row) => row.campaignId === campaignId && row.status === 'queued',
+      ).length,
+      chargedCredits: 0,
+    };
+  }
+
+  async markSettled() {
+    return true;
+  }
+
   async markApproved(_storeId: string, id: string, approval: CampaignApproval) {
     const row = this.rows.get(id);
-    if (row?.status !== 'draft') return undefined;
+    if (row?.status !== 'approving') return undefined;
     const changed = { ...row, ...approval };
     this.rows.set(id, changed);
     return changed;
+  }
+}
+
+// The approval job's writes, on the same in-memory campaigns, guarded as the repository's are.
+class FakeApprovalRepository {
+  constructor(private readonly campaigns: FakeCampaignsRepository) {}
+
+  private approving({ id, approvedAt }: ApprovalKey) {
+    const row = this.campaigns.rows.get(id);
+    return row?.status === 'approving' && row.approvedAt?.getTime() === approvedAt.getTime()
+      ? row
+      : undefined;
+  }
+
+  async markApproving(_storeId: string, id: string, start: ApprovalStart) {
+    const row = this.campaigns.rows.get(id);
+    if (row?.status !== 'draft') return undefined;
+    const changed = {
+      ...row,
+      ...start,
+      status: 'approving' as const,
+      segmentIndex: 0,
+      contactId: null,
+      approvalCheckedCount: 0,
+      approvalFailureCode: null,
+    };
+    this.campaigns.rows.set(id, changed);
+    return changed;
+  }
+
+  async findApproval(_storeId: string, approval: ApprovalKey) {
+    const row = this.approving(approval);
+    return (
+      row && {
+        ...row,
+        segmentIndex: row.segmentIndex ?? 0,
+        contactId: row.contactId ?? null,
+        approvedByUserId: row.approvedByUserId ?? null,
+      }
+    );
+  }
+
+  async saveApprovalProgress(_storeId: string, approval: ApprovalKey, progress: ApprovalProgress) {
+    const row = this.approving(approval);
+    if (!row) return false;
+    Object.assign(row, {
+      segmentIndex: progress.segmentIndex,
+      contactId: progress.contactId,
+      approvalCheckedCount: progress.checkedCount,
+    });
+    return true;
+  }
+
+  async markApprovalFailing(_storeId: string, approval: ApprovalKey, code: never) {
+    const row = this.approving(approval);
+    if (row) row.approvalFailureCode = code;
+  }
+
+  async countFrozenRecipients(_storeId: string, campaignId: string) {
+    const rows = this.campaigns.recipients.filter((row) => row.campaignId === campaignId);
+    return {
+      queued: rows.filter((row) => row.status === 'queued').length,
+      skipped: rows.filter((row) => row.status === 'skipped').length,
+    };
+  }
+
+  async removeRecipientsBatch(_storeId: string, campaignId: string, limit: number) {
+    const gone = this.campaigns.recipients
+      .filter((row) => row.campaignId === campaignId)
+      .slice(0, limit);
+    this.campaigns.recipients = this.campaigns.recipients.filter((row) => !gone.includes(row));
+    return gone.length;
+  }
+
+  async failApproval(_storeId: string, approval: ApprovalKey, code: never) {
+    const row = this.approving(approval);
+    if (!row) return false;
+    Object.assign(row, {
+      status: 'draft',
+      approvedAt: null,
+      approvalCheckedCount: 0,
+      approvalEstimatedTotal: 0,
+      approvalFailureCode: code,
+    });
+    return true;
   }
 }
 
@@ -152,6 +292,7 @@ const admin = access('admin');
 describe('CampaignsService', () => {
   let repository: FakeCampaignsRepository;
   let service: CampaignsService;
+  let approvals: CampaignApprovalService;
   // Segment members and the send gate's answer for each contact; a contact with no answer sends.
   let members: Map<string, string[]>;
   let decisions: Map<string, SendDecision>;
@@ -182,6 +323,11 @@ describe('CampaignsService', () => {
         const start = page.cursor ? ids.indexOf(page.cursor) + 1 : 0;
         return ids.slice(start, start + page.limit);
       },
+      matchingContactIds: async (_storeId: string, segmentId: string, contactIds: string[]) =>
+        contactIds.filter((contactId) => members.get(segmentId)?.includes(contactId)),
+      contactCount: async (_storeId: string, segmentId: string) =>
+        members.get(segmentId)?.length ?? 0,
+      assertExists: async () => undefined,
     };
     const sendPolicy = {
       checkAudience: async (_storeId: string, request: AudienceRequest) =>
@@ -212,6 +358,11 @@ describe('CampaignsService', () => {
         const reservation = reservations.get(key);
         return reservation && { entryId: reservation.entryId, balanceQuantity: balance };
       },
+      reservationFor: async (_storeId: string, _wallet: string, key: string) => {
+        const reservation = reservations.get(key);
+        if (!reservation) throw new Error('Test reservation not found');
+        return { entryId: reservation.entryId, quantity: reservation.quantity };
+      },
       release: async (_storeId: string, input: { reservationId: string }) => {
         const reservation = [...reservations.values()].find(
           (entry) => entry.entryId === input.reservationId,
@@ -224,21 +375,56 @@ describe('CampaignsService', () => {
       },
     };
     const stores = { sendingSettings: async () => ({ onlyOwnersAndAdminsApprove }) };
+    const approvalRepository = new FakeApprovalRepository(repository);
+    const transaction = {
+      run: (_storeId: string, work: () => Promise<unknown>) => work(),
+    } as StoreTransaction;
+    const outbox = {
+      publish: async (event: DaklyEvent) => void events.push(event),
+    } as unknown as OutboxService;
+    const sms = new CampaignSmsService({
+      shortLinkBase: () => 'http://localhost:4000/l',
+      sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000',
+      sampleRedirectUrl: () => 'http://localhost:4000/l/00000000',
+    } as LinksService);
+    const clock = { now: () => clockNow } as Clock;
+    const audience = new CampaignAudienceService(
+      segments as unknown as SegmentsService,
+      sendPolicy as unknown as SendPolicyService,
+    );
+    approvals = new CampaignApprovalService(
+      approvalRepository as unknown as CampaignApprovalRepository,
+      repository as unknown as CampaignsRepository,
+      audience,
+      sms,
+      wallets as unknown as WalletService,
+      outbox,
+      transaction,
+      clock,
+    );
     service = new CampaignsService(
       repository as unknown as CampaignsRepository,
       segments as unknown as SegmentsService,
-      sendPolicy as unknown as SendPolicyService,
+      audience,
+      approvalRepository as unknown as CampaignApprovalRepository,
       wallets as unknown as WalletService,
       stores as unknown as StoresService,
       new TeamService(undefined as never),
-      { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
-      { publish: async (event: DaklyEvent) => void events.push(event) } as unknown as OutboxService,
-      { now: () => clockNow } as Clock,
+      transaction,
+      outbox,
+      sms,
+      clock,
+      { campaignAttribution: async () => ({}) } as unknown as AnalyticsService,
     );
   });
 
-  function approve(campaignId: string, access: StoreAccess = admin) {
-    return service.approve(STORE_ID, campaignId, { access, actor });
+  // The request, then the job to its end: the batch loop yields when its time is up.
+  async function approve(campaignId: string, access: StoreAccess = admin) {
+    const started = await service.approve(STORE_ID, campaignId, { access, actor });
+    expect(started.status).toBe('approving');
+    const key = { id: campaignId, approvedAt: repository.rows.get(campaignId)!.approvedAt! };
+    while (await approvals.build(STORE_ID, key));
+    return service.get(STORE_ID, campaignId);
   }
 
   // A draft to everyone in one segment but the second, with a two-part English message.
@@ -297,6 +483,17 @@ describe('CampaignsService', () => {
     expect(repository.rows.has(campaign.id)).toBe(true);
   });
 
+  it('counts the opt-out link, so 150 characters that fit one part take two', async () => {
+    const { campaign } = audienceDraft(3);
+    campaign.content = { text: 'a'.repeat(150) };
+
+    expect(await service.estimate(STORE_ID, campaign.id)).toMatchObject({
+      recipientsCount: 2,
+      smsParts: 2,
+      smsCredits: 4,
+    });
+  });
+
   it('estimates the audience across pages, minus exclusions and skips, in credits', async () => {
     const { campaign, ids } = audienceDraft(1203);
     decisions.set(ids[2]!, { action: 'skip', reason: 'no_consent' });
@@ -305,6 +502,7 @@ describe('CampaignsService', () => {
     decisions.set(ids[5]!, { action: 'defer', until: now });
 
     expect(await service.estimate(STORE_ID, campaign.id)).toEqual({
+      isComplete: true,
       audienceCount: 1202,
       skippedByReason: { no_consent: 2, frequency_cap: 1 },
       recipientsCount: 1199,
@@ -352,6 +550,10 @@ describe('CampaignsService', () => {
       destinationAddress: '01712345678',
     });
     expect(events).toEqual([
+      expect.objectContaining({
+        type: 'campaign.approval_started',
+        payload: { campaignId: campaign.id, approvedAt: now.toISOString() },
+      }),
       expect.objectContaining({
         type: 'campaign.approved',
         payload: { campaignId: campaign.id, status: 'sending' },
@@ -420,13 +622,46 @@ describe('CampaignsService', () => {
     expect(reserved).toEqual([]);
   });
 
-  it('refuses an approval the balance cannot cover', async () => {
+  it('returns the draft with the reason when the balance cannot cover the approval', async () => {
     const { campaign } = audienceDraft(3);
     balance = 3;
 
-    await expect(approve(campaign.id)).rejects.toMatchObject({ code: 'WALLET_BALANCE_TOO_LOW' });
-    expect(repository.rows.get(campaign.id)?.status).toBe('draft');
-    expect(events).toEqual([]);
+    const draft = await approve(campaign.id);
+
+    expect(draft).toMatchObject({
+      status: 'draft',
+      approval: null,
+      approvalFailureCode: 'WALLET_BALANCE_TOO_LOW',
+    });
+    expect(repository.recipients).toEqual([]);
+    expect(reserved).toEqual([]);
+    expect(events.map(({ type }) => type)).toEqual(['campaign.approval_started']);
+  });
+
+  it('returns the draft with the reason when no one in the audience can get the message', async () => {
+    const { campaign, ids } = audienceDraft(3);
+    for (const id of ids) decisions.set(id, { action: 'skip', reason: 'no_consent' });
+
+    expect(await approve(campaign.id)).toMatchObject({
+      status: 'draft',
+      approvalFailureCode: 'CAMPAIGN_NO_RECIPIENTS',
+    });
+    expect(repository.recipients).toEqual([]);
+  });
+
+  it('returns the draft with the reason when the send time passes while the job runs', async () => {
+    const { campaign } = audienceDraft(2);
+    campaign.scheduledFor = new Date(now.getTime() + 60_000);
+    await service.approve(STORE_ID, campaign.id, { access: admin, actor });
+    clockNow = new Date(now.getTime() + 2 * 60_000);
+
+    await approvals.build(STORE_ID, { id: campaign.id, approvedAt: now });
+
+    expect(repository.rows.get(campaign.id)).toMatchObject({
+      status: 'draft',
+      approvalFailureCode: 'CAMPAIGN_SEND_TIME_PASSED',
+    });
+    expect(reserved).toEqual([]);
   });
 
   it('refuses a second approval', async () => {
@@ -447,22 +682,19 @@ describe('CampaignsService', () => {
     return campaign;
   }
 
-  it.each(['unschedule', 'cancel'] as const)(
-    'refuses to %s 4 minutes before the send and keeps the credits reserved',
-    async (change) => {
-      const campaign = await scheduled(4);
+  it('refuses to unschedule 4 minutes before the send and keeps the credits reserved', async () => {
+    const campaign = await scheduled(4);
 
-      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
-        code: 'CAMPAIGN_CHANGE_TOO_LATE',
-        status: 409,
-      });
-      expect(repository.rows.get(campaign.id)?.status).toBe('scheduled');
-      expect(balance).toBe(998);
-      expect(repository.recipients).toHaveLength(2);
-    },
-  );
+    await expect(service.unschedule(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_CHANGE_TOO_LATE',
+      status: 409,
+    });
+    expect(repository.rows.get(campaign.id)?.status).toBe('scheduled');
+    expect(balance).toBe(998);
+    expect(repository.recipients).toHaveLength(2);
+  });
 
-  it.each([6, 5])(
+  it.each([6, 5, 4])(
     'cancels %i minutes before the send, cancels the queued recipients and releases the credits',
     async (beforeSend) => {
       const campaign = await scheduled(beforeSend);
@@ -498,18 +730,42 @@ describe('CampaignsService', () => {
     expect(repository.recipients).toHaveLength(2);
   });
 
-  it.each(['unschedule', 'cancel'] as const)(
-    'refuses to %s a campaign that is not scheduled',
-    async (change) => {
-      const campaign = repository.add('sending');
+  it('keeps the reservation when the cancellation settlement is already stamped', async () => {
+    const campaign = await scheduled(6);
+    const stamp = vi.spyOn(repository, 'markSettled').mockResolvedValue(false);
 
-      await expect(service[change](STORE_ID, campaign.id, actor)).rejects.toMatchObject({
-        code: 'CAMPAIGN_NOT_SCHEDULED',
+    await expect(service.cancel(STORE_ID, campaign.id, actor)).resolves.toMatchObject({
+      status: 'cancelled',
+    });
+    expect(stamp).toHaveBeenCalledOnce();
+    expect(balance).toBe(998);
+  });
+
+  it('refuses to unschedule a campaign that is already sending', async () => {
+    const campaign = repository.add('sending');
+
+    await expect(service.unschedule(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_SCHEDULED',
+    });
+    await expect(service.unschedule(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_FOUND',
+    });
+    expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+  });
+
+  it.each(['cancelled', 'sent', 'failed'] as const)(
+    'refuses to cancel a %s campaign',
+    async (status) => {
+      const campaign = repository.add(status);
+
+      await expect(service.cancel(STORE_ID, campaign.id, actor)).rejects.toMatchObject({
+        code: 'CAMPAIGN_NOT_CANCELLABLE',
+        status: 409,
       });
-      await expect(service[change](STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
+      await expect(service.cancel(STORE_ID, randomUUID(), actor)).rejects.toMatchObject({
         code: 'CAMPAIGN_NOT_FOUND',
       });
-      expect(repository.rows.get(campaign.id)?.status).toBe('sending');
+      expect(repository.rows.get(campaign.id)?.status).toBe(status);
     },
   );
 
@@ -564,30 +820,38 @@ describe('CampaignsService', () => {
     },
   );
 
-  it('refuses an estimate and an approval for an audience over the cap, before freezing', async () => {
-    // One of the ids is excluded, so the audience is one over the cap.
-    const { campaign, ids } = audienceDraft(MAX_CAMPAIGN_AUDIENCE + 2);
-    decisions.set(ids[0]!, { action: 'skip', reason: 'no_consent' });
-
-    await expect(service.estimate(STORE_ID, campaign.id)).rejects.toMatchObject({
-      code: 'CAMPAIGN_AUDIENCE_TOO_LARGE',
-      status: 409,
-    });
-    await expect(approve(campaign.id)).rejects.toMatchObject({
-      code: 'CAMPAIGN_AUDIENCE_TOO_LARGE',
-    });
-    expect(repository.recipients).toEqual([]);
-    expect(reserved).toEqual([]);
-    expect(repository.rows.get(campaign.id)?.status).toBe('draft');
-  });
-
-  it('allows an audience of exactly the cap, counted before skips', async () => {
-    const { campaign, ids } = audienceDraft(MAX_CAMPAIGN_AUDIENCE + 1);
+  it('stops the estimate at 20,000 contacts and says it is not complete', async () => {
+    // One of the ids is excluded, so 19,999 are checked from the first 20,000 read.
+    const { campaign, ids } = audienceDraft(20_002);
     decisions.set(ids[0]!, { action: 'skip', reason: 'no_consent' });
 
     expect(await service.estimate(STORE_ID, campaign.id)).toMatchObject({
-      audienceCount: MAX_CAMPAIGN_AUDIENCE,
-      recipientsCount: MAX_CAMPAIGN_AUDIENCE - 1,
+      isComplete: false,
+      audienceCount: 19_999,
+      recipientsCount: 19_998,
     });
+  });
+
+  it('reports an estimate as complete when the whole audience was read', async () => {
+    const { campaign } = audienceDraft(3);
+
+    expect(await service.estimate(STORE_ID, campaign.id)).toMatchObject({
+      isComplete: true,
+      audienceCount: 2,
+    });
+  });
+
+  it('approves an audience over 20,000 with every contact frozen', async () => {
+    const { campaign, ids } = audienceDraft(20_002);
+    decisions.set(ids[0]!, { action: 'skip', reason: 'no_consent' });
+    balance = 100_000;
+
+    const approved = await approve(campaign.id);
+
+    expect(approved).toMatchObject({
+      status: 'sending',
+      counts: { recipients: 20_000, skipped: 1 },
+    });
+    expect(repository.recipients).toHaveLength(20_001);
   });
 });

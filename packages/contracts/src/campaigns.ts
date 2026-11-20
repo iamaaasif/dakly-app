@@ -9,12 +9,21 @@ export const messageCategories = ['marketing', 'utility', 'authentication'] as c
 export const campaignStatuses = [
   'draft',
   'waiting_approval',
+  'approving',
   'scheduled',
   'sending',
   'paused',
   'sent',
   'cancelled',
   'failed',
+] as const;
+// The refusals an approval can end with once its job has started; each is an error code of the
+// campaigns feature.
+export const campaignApprovalFailureCodes = [
+  'WALLET_BALANCE_TOO_LOW',
+  'CAMPAIGN_NO_RECIPIENTS',
+  'CAMPAIGN_SEND_TIME_PASSED',
+  'SEGMENT_NOT_FOUND',
 ] as const;
 export const campaignPauseReasons = [
   'manual',
@@ -152,6 +161,7 @@ export const campaignListQuerySchema = z
 export type CampaignChannel = (typeof campaignChannels)[number];
 export type CampaignGoal = (typeof campaignGoals)[number];
 export type CampaignStatus = (typeof campaignStatuses)[number];
+export type CampaignApprovalFailureCode = (typeof campaignApprovalFailureCodes)[number];
 export type SmsCampaignContent = z.infer<typeof smsCampaignContentSchema>;
 export type CreateCampaignInput = z.infer<typeof createCampaignSchema>;
 export type ChangeCampaignInput = z.infer<typeof changeCampaignSchema>;
@@ -166,12 +176,34 @@ export type CampaignResponse = {
   excludeSegmentIds: string[];
   scheduledFor: string | null;
   status: CampaignStatus;
+  // Set while the status is approving. The total is an upper bound: segments can overlap and
+  // exclusions apply, so it can be higher than the final recipient count.
+  approval: { checked: number; estimatedTotal: number } | null;
+  approvalFailureCode: CampaignApprovalFailureCode | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  counts: CampaignCounts;
+  attribution?: { orders: string; revenuePoisha: string };
   createdAt: string;
   updatedAt: string;
 };
+// Sent includes delivered and read. Delivered includes read.
+export type CampaignCounts = {
+  recipients: number;
+  skipped: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  tapped: number;
+  failed: number;
+  countedAt: string | null;
+};
 export type CampaignListResponse = { items: CampaignResponse[]; nextCursor: string | null };
 // SMS is counted in credits, one per part, and has no poisha rate yet, so costPoisha is 0.
+// The estimate reads at most 20,000 contacts; isComplete is false when the audience is larger, so
+// the counts are a floor. Approval checks the whole audience.
 export type CampaignEstimateResponse = {
+  isComplete: boolean;
   audienceCount: number;
   skippedByReason: Partial<Record<(typeof recipientSkipReasons)[number], number>>;
   recipientsCount: number;

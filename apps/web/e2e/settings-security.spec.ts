@@ -165,18 +165,23 @@ async function verifyEmail(page: Page, { fixture, seen }: { fixture: Fixture; se
 
 async function devices(page: Page) {
   await page.goto('/security?tab=devices');
-  await expect(page.getByText('Chrome on Linux · Current device')).toBeVisible();
+  const chrome = page
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: 'Chrome on Linux', exact: true }) });
+  await expect(chrome).toBeVisible();
+  await expect(chrome.getByText('This device')).toBeVisible();
   await pictures(page, 'security-devices');
   const device = page
-    .getByRole('heading', { name: 'Firefox on Windows', exact: true })
-    .locator('..');
+    .getByRole('listitem')
+    .filter({ has: page.getByRole('heading', { name: 'Firefox on Windows', exact: true }) });
   await device.getByRole('button', { name: 'Sign out device', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm sign out' }).click();
   await expect(page.getByText('Firefox on Windows', { exact: true })).toBeHidden();
   await page.getByRole('button', { name: 'Sign out other devices' }).click();
   await page.getByRole('button', { name: 'Confirm sign out' }).click();
   await expect(page.getByText('Safari on macOS', { exact: true })).toBeHidden();
-  await expect(page.getByText('Chrome on Linux · Current device')).toBeVisible();
+  await expect(chrome).toBeVisible();
+  await expect(chrome.getByText('This device')).toBeVisible();
 }
 
 async function totp(page: Page, fixture: Fixture) {
@@ -279,10 +284,14 @@ async function deleteTeamRole(page: Page) {
   await page.getByLabel('Role name').fill('Disposable settings role');
   await page.getByRole('button', { name: 'Save role', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
-  const role = page.getByRole('heading', { name: 'Disposable settings role', exact: true });
-  await role.locator('..').getByRole('button', { name: 'Delete role', exact: true }).click();
+  await page
+    .getByRole('article', { name: 'Disposable settings role', exact: true })
+    .getByRole('button', { name: 'Delete role', exact: true })
+    .click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete role', exact: true }).click();
-  await expect(role).toBeHidden();
+  await expect(
+    page.getByRole('heading', { name: 'Disposable settings role', exact: true }),
+  ).toBeHidden();
 }
 
 async function privateLayout(page: Page, submit: string) {

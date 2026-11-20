@@ -9,24 +9,37 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { ContactsService } from '../contacts/contacts.service';
+import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
+import { StoresService } from '../stores/stores.service';
+import { AnalyticsReportsModule } from './analytics-reports.module';
 import { AnalyticsSummariesService } from './analytics-summaries.service';
 import { AnalyticsModule } from './analytics.module';
+import { AnalyticsService } from './analytics.service';
+import { AttributionRebuildService } from './attribution-rebuild.service';
+import { AttributeOrderCreated } from './jobs/attribute-order-created.job';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
+import { ContinueAttributionRebuild } from './jobs/continue-attribution-rebuild.job';
+import { OnAttributionWindowChanged } from './jobs/on-attribution-window-changed.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
+import { SummarizeAttributionCreated } from './jobs/summarize-attribution-created.job';
+import { SummarizeAttributionRebuilt } from './jobs/summarize-attribution-rebuilt.job';
+import { SummarizeAttributionRemoved } from './jobs/summarize-attribution-removed.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
+import { OrderAttributionEngine } from './order-attribution-engine.service';
 
 class TestModule {}
 Module({
   imports: [
     DatabaseModule,
     AnalyticsModule,
+    AnalyticsReportsModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();
@@ -45,6 +58,13 @@ describe('Daily order summaries', () => {
   let queue: Queue;
   const now = new Date('2026-11-19T06:00:00Z');
   let number = 1000;
+  const ownerAccess = {
+    role: 'owner',
+    areas: {},
+    seeFullPhone: true,
+    exportLists: true,
+    refund: true,
+  } as const;
 
   beforeAll(async () => {
     await fixture.setup();
@@ -58,7 +78,13 @@ describe('Daily order summaries', () => {
 
   afterAll(async () => {
     await app?.close();
-    for (const table of ['orders', 'store_daily_metrics', 'outbox_events']) {
+    for (const table of [
+      'orders',
+      'tracked_links',
+      'campaigns',
+      'store_daily_metrics',
+      'outbox_events',
+    ]) {
       await fixture.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         [fixture.a, fixture.b],
       ]);
@@ -97,6 +123,317 @@ describe('Daily order summaries', () => {
     await app.get(BuildOrderSummaryJob).handle(job?.data);
     await job?.remove();
   }
+
+  it('attributes only the buyer’s eligible tap before the order and records it once', async () => {
+    const buyer = randomUUID();
+    const campaign = randomUUID();
+    const db = fixture.connection.pool;
+    await db.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Buyer','01710000005','manual','customer')",
+      [buyer, fixture.a],
+    );
+    await db.query(
+      "insert into campaigns(id,store_id,name,channel,content) values($1,$2,'Sale','sms','{}')",
+      [campaign, fixture.a],
+    );
+    await db.query(
+      `insert into campaign_recipients(store_id,campaign_id,contact_id,destination_address,status,sent_at,id)
+       values($1,$2,$3,'01710000005','sent','2026-11-17T06:00:00Z',$4)`,
+      [fixture.a, campaign, buyer, randomUUID()],
+    );
+    const links = app.get(LinksService);
+    const [link] = await links.create(
+      fixture.a,
+      [
+        {
+          kind: 'redirect',
+          targetUrl: 'https://example.test',
+          sourceType: 'campaign',
+          sourceId: campaign,
+          contactId: buyer,
+        },
+      ],
+      { kind: 'system' },
+    );
+    const clock = vi.mocked(app.get(Clock).now);
+    clock.mockReturnValueOnce(new Date('2026-11-18T06:00:00Z'));
+    await links.redirect(link.code, { ip: '2001:db8::11', userAgent: undefined });
+    clock.mockReturnValueOnce(new Date('2026-11-20T06:00:00Z'));
+    await links.redirect(link.code, { ip: '2001:db8::12', userAgent: undefined });
+    const {
+      rows: [beforeOrder],
+    } = await db.query(
+      'select id from tracked_link_visits where tracked_link_id=$1 order by occurred_at limit 1',
+      [link.id],
+    );
+    const id = await order(fixture.a, now.toISOString(), buyer);
+    const conflict = await order(fixture.a, now.toISOString(), buyer);
+    const gift = await order(fixture.a, now.toISOString(), buyer);
+    await db.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Recipient','01710000007','manual','customer')",
+      [randomUUID(), fixture.a],
+    );
+    await db.query(
+      "update orders set recipient_phone='01710000007',is_recipient_buyer=(id=$2) where id in ($1,$2)",
+      [gift, conflict],
+    );
+    const worker = app.get(AttributeOrderCreated);
+    await worker.handle({ ...event(fixture.b, id), type: 'order.created' });
+    expect(await fixture.row('orders', id)).toMatchObject({ attributed_touch_id: null });
+    for (const orderId of [id, conflict, gift]) {
+      await worker.handle({ ...event(fixture.a, orderId), type: 'order.created' });
+    }
+    expect(await fixture.row('orders', conflict)).toMatchObject({ attributed_touch_id: null });
+    for (const orderId of [id, gift]) {
+      expect(await fixture.row('orders', orderId)).toMatchObject({
+        attributed_touch_id: beforeOrder.id,
+        attributed_source_id: campaign,
+        attributed_channel: 'sms',
+        attributed_amount_poisha: 125000,
+        attributed_window_days: 7,
+      });
+    }
+    await db.query("update contacts set phone='01710000008' where id=$1", [buyer]);
+    await worker.handle({ ...event(fixture.a, id), type: 'order.created' });
+    expect(await fixture.row('orders', id)).toMatchObject({ attributed_touch_id: beforeOrder.id });
+    const differentDestination = await order(fixture.a, now.toISOString(), buyer);
+    await db.query("update orders set recipient_phone='01710000008' where id=$1", [
+      differentDestination,
+    ]);
+    await worker.handle({ ...event(fixture.a, differentDestination), type: 'order.created' });
+    expect(await fixture.row('orders', differentDestination)).toMatchObject({
+      attributed_touch_id: null,
+    });
+    const result = await db.query(
+      "select 1 from outbox_events where type='attribution.created' and payload->>'orderId'=$1",
+      [id],
+    );
+    expect(result.rowCount).toBe(1);
+  });
+
+  it('credits the workflow behind a tapped send step and excludes failed sends', async () => {
+    const [buyer, workflow, version, run, sent, failed] = Array.from({ length: 6 }, () =>
+      randomUUID(),
+    );
+    const db = fixture.connection.pool;
+    await db.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Buyer','01710000006','manual','customer')",
+      [buyer, fixture.a],
+    );
+    await db.query(
+      "insert into automations(id,store_id,name,trigger_type,draft_graph) values($1,$2,'Flow','manual','{}')",
+      [workflow, fixture.a],
+    );
+    await db.query(
+      "insert into automation_versions(id,store_id,automation_id,version,graph) values($1,$2,$3,1,'{}')",
+      [version, fixture.a, workflow],
+    );
+    await db.query(
+      `insert into automation_runs(id,store_id,automation_id,version_id,contact_id,trigger_key,current_step_key,wake_at)
+       values($1,$2,$3,$4,$5,'manual','offer','2026-11-20T06:00:00Z')`,
+      [run, fixture.a, workflow, version, buyer],
+    );
+    await db.query(
+      `insert into automation_run_steps
+         (id,store_id,run_id,contact_id,step_key,kind,outcome,channel,category,sent_at)
+       values ($1,$3,$4,$5,'offer','send','sent','sms','marketing','2026-11-17T06:00:00Z'),
+              ($2,$3,$4,$5,'retry','send','failed','sms','marketing','2026-11-17T06:00:00Z')`,
+      [sent, failed, fixture.a, run, buyer],
+    );
+    const [eligibleVisit, failedVisit] = Array.from({ length: 2 }, () => randomUUID());
+    for (const [step, visit, at] of [
+      [sent, eligibleVisit, '2026-11-18T06:00:00Z'],
+      [failed, failedVisit, '2026-11-19T05:00:00Z'],
+    ] as const) {
+      const link = randomUUID();
+      await db.query(
+        `insert into tracked_links(id,store_id,code,source_type,source_id,contact_id,target_url)
+         values($1,$2,$3,'automation',$4,$5,'https://example.test')`,
+        [link, fixture.a, link, step, buyer],
+      );
+      await db.query(
+        'insert into tracked_link_visits(id,store_id,tracked_link_id,event_key,occurred_at) values ($1,$2,$3,$4,$5)',
+        [visit, fixture.a, link, visit, at],
+      );
+    }
+    const id = await order(fixture.a, now.toISOString(), buyer);
+    await db.query("update orders set recipient_phone='01710000006' where id=$1", [id]);
+    await app.get(AttributeOrderCreated).handle({ ...event(fixture.a, id), type: 'order.created' });
+    expect(await fixture.row('orders', id)).toMatchObject({
+      attributed_touch_id: eligibleVisit,
+      attributed_source_type: 'automation',
+      attributed_source_id: workflow,
+      attributed_channel: 'sms',
+    });
+  });
+
+  it('rebuilds recent orders using the newest window and exact visits from the oldest day', async () => {
+    const buyer = randomUUID();
+    const code = randomUUID();
+    const campaign = randomUUID();
+    const db = fixture.connection.pool;
+    await db.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Buyer','01710000009','manual','customer')",
+      [buyer, fixture.a],
+    );
+    await db.query(
+      "insert into campaigns(id,store_id,name,channel,content) values($1,$2,'Sale','sms','{}')",
+      [campaign, fixture.a],
+    );
+    await db.query(
+      `insert into campaign_recipients(id,store_id,campaign_id,contact_id,destination_address,status,sent_at)
+       values($1,$2,$3,$4,'01710000009','sent','2025-11-12T06:00:00Z')`,
+      [randomUUID(), fixture.a, campaign, buyer],
+    );
+    // New databases only have partitions from the current month forward.
+    await db.query(
+      `create table if not exists tracked_link_visits_y2025m11 partition of tracked_link_visits
+       for values from ('2025-11-01T00:00:00Z') to ('2025-12-01T00:00:00Z');
+       alter table tracked_link_visits_y2025m11 enable row level security;
+       revoke all on tracked_link_visits_y2025m11 from dakly_app`,
+    );
+    const link = randomUUID();
+    const visit = randomUUID();
+    await db.query(
+      `insert into tracked_links(id,store_id,code,source_type,source_id,contact_id,target_url)
+       values($1,$2,$3,'campaign',$4,$5,'https://example.test')`,
+      [link, fixture.a, code, campaign, buyer],
+    );
+    await db.query(
+      `insert into tracked_link_visits(id,store_id,tracked_link_id,event_key,occurred_at)
+       values($1::uuid,$2,$3,$1::uuid::text,'2025-11-12T18:00:00Z')`,
+      [visit, fixture.a, link],
+    );
+    const laterVisit = randomUUID();
+    await db.query(
+      `insert into tracked_link_visits(id,store_id,tracked_link_id,event_key,occurred_at)
+       values($1::uuid,$2,$3,$1::uuid::text,'2025-11-20T05:00:00Z')`,
+      [laterVisit, fixture.a, link],
+    );
+    const inRange = await order(fixture.a, '2025-11-19T18:00:00Z', buyer);
+    const outside = await order(fixture.a, '2025-11-19T17:59:59Z', buyer);
+    const later = await order(fixture.a, '2025-11-20T18:00:00Z', buyer);
+    await db.query("update orders set recipient_phone='01710000009' where id in ($1,$2,$3)", [
+      inRange,
+      outside,
+      later,
+    ]);
+    const stores = app.get(StoresService);
+    const owner = { userId: fixture.userA, access: ownerAccess };
+    const rebuild = app.get(AttributionRebuildService);
+    await stores.changeAttributionWindow(fixture.a, 3, owner);
+    const stale = (await stores.attributionRebuild(fixture.a)).rebuild!.id;
+    await stores.changeAttributionWindow(fixture.a, 7, owner);
+    const current = (await stores.attributionRebuild(fixture.a)).rebuild!.id;
+    await rebuild.runPage(fixture.a, stale, null);
+    expect((await stores.attributionRebuild(fixture.a)).rebuild?.id).toBe(current);
+    expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: null });
+    const engine = app.get(OrderAttributionEngine);
+    const select = engine.selectForOrders.bind(engine);
+    const changeDuringSelection = vi
+      .spyOn(engine, 'selectForOrders')
+      .mockImplementationOnce(async (...args) => {
+        const reference = await select(...args);
+        await db.query('update orders set is_recipient_buyer=false where id=$1', [inRange]);
+        return reference;
+      });
+    try {
+      await rebuild.runPage(fixture.a, current, null);
+    } finally {
+      changeDuringSelection.mockRestore();
+    }
+    await rebuild.runPage(fixture.a, current, null);
+    expect(await stores.attributionSettings(fixture.a)).toEqual({
+      windowDays: 7,
+      rebuilding: false,
+      processedOrders: null,
+    });
+    expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: visit });
+    expect(await fixture.row('orders', later)).toMatchObject({ attributed_touch_id: laterVisit });
+    expect(await fixture.row('orders', outside)).toMatchObject({ attributed_touch_id: null });
+    const {
+      rows: [refresh],
+    } = await db.query(
+      `select id, payload from outbox_events where store_id=$1 and type='attribution.orders_rebuilt'
+       and payload->'orderIds' @> jsonb_build_array($2::text)`,
+      [fixture.a, inRange],
+    );
+    expect(refresh.payload.orderIds).toContain(inRange);
+    await app.get(SummarizeAttributionRebuilt).handle({
+      ...refresh,
+      type: 'attribution.orders_rebuilt',
+      storeId: fixture.a,
+      occurredAt: now.toISOString(),
+    });
+
+    await finishOrderDay(fixture.a, '2025-11-20');
+    for (const job of await queue.getDelayed()) {
+      if (job.data.storeId === fixture.a) await job.remove();
+    }
+    const revenue = await app.get(AnalyticsService).marketingRevenue(fixture.a, {
+      from: '2025-11-20',
+      through: '2025-11-20',
+    });
+    expect(revenue.total).toBe(125000n);
+    await db.query("delete from store_daily_metrics where store_id=$1 and day='2025-11-20'", [
+      fixture.a,
+    ]);
+  });
+
+  it('commits bounded rebuild progress and resumes past a microsecond cursor', async () => {
+    await fixture.connection.pool.query(
+      `insert into orders(id,store_id,number,source,created_by_type,recipient_name,
+         recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,
+         cod_amount_poisha,created_at)
+       select gen_random_uuid(),$1,5000+n,'manual','user','Buyer','01710000005','Mirpur','Dhaka',
+         100,100,'2026-11-18 06:00:00+00'::timestamptz + n*interval '1 microsecond'
+       from generate_series(1,501) n`,
+      [fixture.b],
+    );
+    const stores = app.get(StoresService);
+    await stores.changeAttributionWindow(fixture.b, 1, {
+      userId: fixture.userB,
+      access: ownerAccess,
+    });
+    const started = (await stores.attributionRebuild(fixture.b)).rebuild!;
+    const cursor = { id: randomUUID(), at: '2026-11-18 05:59:59+00' };
+    await fixture.connection.pool.query(
+      `update stores set settings=jsonb_set(settings,'{attributionRebuild}',$2::jsonb) where id=$1`,
+      [fixture.b, JSON.stringify({ ...started, after: cursor, processedOrders: 1500 })],
+    );
+    const event = {
+      id: randomUUID(),
+      type: 'attribution.window_changed',
+      storeId: fixture.b,
+      occurredAt: now.toISOString(),
+      payload: { rebuildId: started.id },
+    };
+    const subscriber = app.get(OnAttributionWindowChanged);
+    await subscriber.handle(event);
+    expect(await stores.attributionSettings(fixture.b)).toEqual({
+      windowDays: 1,
+      rebuilding: true,
+      processedOrders: 2000,
+    });
+    expect(await stores.attributionRebuild(fixture.b)).toMatchObject({
+      rebuild: { after: { at: expect.stringContaining('06:00:00.0005') } },
+    });
+    await subscriber.handle(event);
+    const { rows } = await fixture.connection.pool.query(
+      `select id, payload from outbox_events where store_id=$1
+       and type='attribution.rebuild_continued' and payload->>'rebuildId'=$2`,
+      [fixture.b, started.id],
+    );
+    expect(rows).toHaveLength(1);
+    const continuation = { ...event, ...rows[0], type: 'attribution.rebuild_continued' };
+    await app.get(ContinueAttributionRebuild).handle(continuation);
+    await app.get(ContinueAttributionRebuild).handle(continuation);
+    expect(await stores.attributionSettings(fixture.b)).toEqual({
+      windowDays: 1,
+      rebuilding: false,
+      processedOrders: null,
+    });
+  });
 
   it('removes buyer activity for exactly the contacts deleted in the selected store', async () => {
     const manual = randomUUID();
@@ -506,5 +843,62 @@ describe('Daily order summaries', () => {
     ]);
     await repairs.reconcileBuyerPage(fixture.a, null);
     expect(await activity()).toEqual([]);
+  });
+
+  it('restates original-day attribution for partial and full returns and reassignment', async () => {
+    const day = '2026-11-18';
+    const id = await order(fixture.a, day + 'T06:00:00Z');
+    const campaign = randomUUID();
+    const workflow = randomUUID();
+    const db = fixture.connection.pool;
+    await db.query(
+      "update orders set attributed_source_type='campaign',attributed_source_id=$2,attributed_amount_poisha=120000 where id=$1",
+      [id, campaign],
+    );
+    const reports = app.get(AnalyticsService);
+    const summaries = app.get(AnalyticsSummariesService);
+    const period = { from: day, through: day };
+    await app.get(SummarizeAttributionCreated).handle({
+      ...event(fixture.a, id),
+      type: 'attribution.created',
+      payload: { orderId: id, sourceType: 'campaign', sourceId: campaign },
+    });
+    await finishOrderDay(fixture.a, day);
+    expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 120000n });
+    await db.query(
+      `update orders set stage='partially_delivered',delivered_items_subtotal_poisha=60000,
+       delivered_order_discount_poisha=0 where id=$1`,
+      [id],
+    );
+    await summaries.refreshOrderDays(fixture.a, period);
+    expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 60000n });
+    await db.query(
+      "update orders set stage='returned',attributed_source_type='automation',attributed_source_id=$2 where id=$1",
+      [id, workflow],
+    );
+    await summaries.refreshOrderDays(fixture.a, period);
+    await summaries.refreshOrderDays(fixture.a, period);
+    expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 0n });
+    const totals = await reports.attributionBySource(fixture.a, period, 'campaign', [campaign]);
+    expect(totals[campaign]).toEqual({ orders: '0', revenuePoisha: '0' });
+    const workflows = await reports.attributionBySource(fixture.a, period, 'automation', [
+      workflow,
+    ]);
+    expect(workflows[workflow]).toEqual({ orders: '1', revenuePoisha: '0' });
+
+    await db.query(
+      `update orders set stage='cancelled',cancel_reason='test',
+       attributed_source_type=null,attributed_source_id=null,attributed_amount_poisha=null where id=$1`,
+      [id],
+    );
+    await app.get(SummarizeAttributionRemoved).handle({
+      ...event(fixture.a, id),
+      type: 'attribution.removed',
+    });
+    await finishOrderDay(fixture.a, day);
+    const cancelled = await reports.attributionBySource(fixture.a, period, 'automation', [
+      workflow,
+    ]);
+    expect(cancelled[workflow]).toEqual({ orders: '0', revenuePoisha: '0' });
   });
 });

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 
 import { orders } from '@dakly/db/schema/orders';
 
@@ -112,6 +112,63 @@ export class OrderReportingRepository {
           ),
         )
         .groupBy(sql`1`, orders.source),
+    );
+  }
+
+  reportingDays(storeId: string, orderIds: string[], timeZone: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .selectDistinct({
+          day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text`,
+        })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), inArray(orders.id, orderIds))),
+    );
+  }
+
+  dailyAttributionMetrics(
+    storeId: string,
+    {
+      from,
+      through,
+      timeZone,
+    }: {
+      from: string;
+      through: string;
+      timeZone: string;
+    },
+  ) {
+    const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
+    const dimension = sql<string>`coalesce(${orders.attributedSourceType} || ':' || ${orders.attributedSourceId}::text, '')`;
+    const captured = sql`coalesce(${orders.attributedAmountPoisha}, 0)`;
+    const kept = sql`(coalesce(${orders.deliveredItemsSubtotalPoisha}, ${orders.itemsSubtotalPoisha})
+      - coalesce(${orders.deliveredOrderDiscountPoisha}, ${orders.orderDiscountPoisha}))`;
+    const net = sql`case
+      when ${orders.stage} = 'returned' then 0
+      when ${orders.stage} = 'partially_delivered' then ${kept}
+      else ${captured} end`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          day: sql<string>`${day}::text`,
+          dimension,
+          marketing_orders: sql<string>`count(*)::text`,
+          marketing_revenue: sql<string>`sum(${net})::text`,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            ne(orders.stage, 'cancelled'),
+            isNotNull(orders.attributedSourceType),
+            isNotNull(orders.attributedSourceId),
+            sql`${orders.createdAt} >= (${from}::date - 1)::timestamp at time zone 'UTC' and ${orders.createdAt} < (${through}::date + 2)::timestamp at time zone 'UTC'`,
+            sql`${day} between ${from}::date and ${through}::date`,
+          ),
+        )
+        .groupBy(
+          sql`grouping sets ((1), (1, ${orders.attributedSourceType}, ${orders.attributedSourceId}))`,
+        ),
     );
   }
 

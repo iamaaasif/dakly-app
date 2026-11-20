@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import type {
   AutomationExitReason,
@@ -88,6 +88,33 @@ export class AutomationRunsRepository {
     @Inject(TenantDatabase) private readonly database: TenantDatabase,
     @Inject(DATABASE) private readonly global: Database,
   ) {}
+
+  attributionSources(storeId: string, contactId: string, ids: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: automationRunSteps.id,
+          sourceId: automationRuns.automationId,
+          channel: automationRunSteps.channel,
+          sentAt: automationRunSteps.sentAt,
+        })
+        .from(automationRunSteps)
+        .innerJoin(
+          automationRuns,
+          and(eq(automationRuns.storeId, storeId), eq(automationRuns.id, automationRunSteps.runId)),
+        )
+        .where(
+          and(
+            eq(automationRunSteps.storeId, storeId),
+            eq(automationRunSteps.contactId, contactId),
+            inArray(automationRunSteps.id, ids),
+            eq(automationRunSteps.kind, 'send'),
+            eq(automationRunSteps.category, 'marketing'),
+            inArray(automationRunSteps.outcome, ['sent', 'delivered', 'read']),
+          ),
+        ),
+    );
+  }
 
   // Across stores through the SECURITY DEFINER function; each claim then runs inside its store.
   // A raw query returns timestamps as text.

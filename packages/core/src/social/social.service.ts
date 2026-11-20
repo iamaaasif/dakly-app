@@ -6,6 +6,7 @@ import type {
   PostListQuery,
   PostListResponse,
   PostResponse,
+  SchedulePostInput,
 } from '@dakly/contracts/social';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -14,13 +15,22 @@ import { ChannelConnectionsService } from '../channels/channel-connections.servi
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { OutboxService } from '../platform/outbox/outbox.service';
+import { DAY_MS } from '../platform/time';
+import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
+import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
+import { validateInstagramPhotos, validateInstagramPost } from './post-content';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
 type UserActor = { kind: 'user'; userId: string };
+type Editor = { actor: UserActor; access: StoreAccess };
 type Post = NonNullable<Awaited<ReturnType<SocialRepository['findPost']>>>['post'];
 type Target = Awaited<ReturnType<SocialRepository['listTargets']>>[number];
+type PostingConnection = Awaited<
+  ReturnType<ChannelConnectionsService['postingConnections']>
+>[number];
 
 function response(post: Post, targets: Target[]): PostResponse {
   return {
@@ -45,6 +55,8 @@ export class SocialService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(StoresService) private readonly stores: StoresService,
   ) {}
 
   createDraft(
@@ -64,8 +76,13 @@ export class SocialService {
         return response(post, targets);
       }
       const now = this.clock.now();
-      await this.validatePostMedia(storeId, input.mediaFileIds, now);
-      await this.validateTargets(storeId, input, []);
+      const connections = await this.validateTargets(storeId, input, []);
+      await this.validatePostMedia(
+        storeId,
+        input.mediaFileIds,
+        now,
+        this.hasInstagram(connections),
+      );
       const { targets, ...content } = input;
       const post = await this.repository.insertPost(storeId, {
         ...content,
@@ -139,12 +156,14 @@ export class SocialService {
           captionOverride,
         }));
       const now = this.clock.now();
-      if (change.mediaFileIds) await this.validatePostMedia(storeId, mediaFileIds, now);
-      await this.validateTargets(
+      const connections = await this.validateTargets(
         storeId,
         { kind, caption, mediaFileIds, targets: targetInput },
         targets,
       );
+      const instagram = this.hasInstagram(connections);
+      if (change.mediaFileIds || instagram)
+        await this.validatePostMedia(storeId, mediaFileIds, now, instagram);
       const edited = await this.repository.updatePost(storeId, postId, {
         ...change,
         isAiWritten: post.isAiWritten || isAiWritten,
@@ -183,6 +202,141 @@ export class SocialService {
     });
   }
 
+  approveDraft(storeId: string, postId: string, editor: Editor): Promise<PostResponse> {
+    return this.transaction.runLocked(storeId, async () => {
+      const { post, targets, now } = await this.draftForScheduling(storeId, postId, editor);
+      if (!this.team.canReviewSocialPosts(editor.access, 'approve'))
+        throw socialError('POST_APPROVAL_REQUIRED');
+      return response(await this.recordApproval(storeId, post, editor.actor, now), targets);
+    });
+  }
+
+  schedulePost(
+    storeId: string,
+    postId: string,
+    input: SchedulePostInput,
+    editor: Editor,
+  ): Promise<PostResponse> {
+    return this.transaction.runLocked(storeId, async () => {
+      const { post, targets, now, connections } = await this.draftForScheduling(
+        storeId,
+        postId,
+        editor,
+      );
+      const times = await this.chooseTimes(storeId, { targets, input, now, connections });
+      const reviewed = await this.approveOnSchedule(storeId, post, editor, now);
+      const scheduled = await this.repository.scheduleTargets(storeId, postId, times, now);
+      await this.audit.record(storeId, {
+        actor: editor.actor,
+        action: 'post.scheduled',
+        entityType: 'post',
+        entityId: postId,
+        after: { ids: scheduled.map(({ id }) => id), state: 'scheduled' },
+      });
+      await this.outbox.publishAll(
+        times.map(({ id, scheduledFor }) => ({
+          storeId,
+          type: 'post.scheduled',
+          occurredAt: now.toISOString(),
+          payload: { postId, postTargetId: id, scheduledFor: scheduledFor.toISOString() },
+        })),
+      );
+      return response(reviewed, scheduled);
+    });
+  }
+
+  private async chooseTimes(
+    storeId: string,
+    {
+      targets,
+      input,
+      now,
+      connections,
+    }: {
+      targets: Target[];
+      input: SchedulePostInput;
+      now: Date;
+      connections: Map<string, PostingConnection>;
+    },
+  ) {
+    const ids = targets.map(({ channelConnectionId }) => channelConnectionId);
+    if ('scheduledFor' in input) {
+      const scheduledFor = new Date(input.scheduledFor);
+      if (scheduledFor <= now) throw socialError('POST_TIME_IN_PAST');
+      const reserved = await this.repository.reservedTimes(storeId, ids, {
+        from: scheduledFor,
+        through: scheduledFor,
+      });
+      if (reserved.length) throw socialError('POST_SLOT_TAKEN');
+      return targets.map(({ id }) => ({ id, scheduledFor }));
+    }
+
+    const timeZone = await this.stores.timeZone(storeId);
+    // A reservation before now can occupy the second occurrence of a repeated local time.
+    const reserved = await this.repository.reservedTimes(storeId, ids, {
+      from: new Date(now.getTime() - DAY_MS),
+    });
+    const byConnection = new Map<string, Set<number>>();
+    for (const { channelConnectionId, scheduledFor } of reserved) {
+      if (!scheduledFor) continue;
+      const times = byConnection.get(channelConnectionId) ?? new Set<number>();
+      times.add(scheduledFor.getTime());
+      byConnection.set(channelConnectionId, times);
+    }
+    return targets.map(({ id, channelConnectionId }) => {
+      const scheduledFor = nextPostingSlot(
+        connections.get(channelConnectionId)?.postingSlots ?? recommendedPostingSlots,
+        now,
+        timeZone,
+        byConnection.get(channelConnectionId) ?? new Set(),
+      );
+      if (!scheduledFor) throw socialError('POST_NO_SLOTS');
+      return { id, scheduledFor };
+    });
+  }
+
+  private async draftForScheduling(storeId: string, postId: string, { actor, access }: Editor) {
+    const { post, targets } = await this.findPost(storeId, postId);
+    if (post.createdByUserId !== actor.userId && !this.team.canReviewSocialPosts(access, 'view'))
+      throw socialError('POST_NOT_FOUND');
+    this.requireDraft(targets);
+    if (!targets.length) throw socialError('POST_TARGET_REQUIRED');
+    const now = this.clock.now();
+    const connections = await this.validateTargets(storeId, { ...post, targets }, []);
+    await this.validatePostMedia(storeId, post.mediaFileIds, now, this.hasInstagram(connections));
+    if (
+      !post.mediaFileIds.length &&
+      !post.linkUrl &&
+      targets.some(({ captionOverride }) => !(captionOverride ?? post.caption)?.trim())
+    )
+      throw socialError('POST_CONTENT_REQUIRED');
+    return { post, targets, now, connections };
+  }
+
+  private approveOnSchedule(storeId: string, post: Post, { actor, access }: Editor, now: Date) {
+    if (!post.isAiWritten || post.approvedAt) return post;
+    if (!this.team.canReviewSocialPosts(access, 'approve'))
+      throw socialError('POST_APPROVAL_REQUIRED');
+    return this.recordApproval(storeId, post, actor, now);
+  }
+
+  private async recordApproval(storeId: string, post: Post, actor: UserActor, now: Date) {
+    if (post.approvedAt) return post;
+    const approved = await this.repository.updatePost(storeId, post.id, {
+      approvedByUserId: actor.userId,
+      approvedAt: now,
+      updatedAt: now,
+    });
+    if (!approved) throw socialError('POST_NOT_FOUND');
+    await this.audit.record(storeId, {
+      actor,
+      action: 'post.approved',
+      entityType: 'post',
+      entityId: post.id,
+    });
+    return approved;
+  }
+
   private async findPost(storeId: string, postId: string) {
     const post = await this.repository.findPost(storeId, postId);
     if (!post) throw socialError('POST_NOT_FOUND');
@@ -192,19 +346,28 @@ export class SocialService {
   private async ownDraft(storeId: string, postId: string, actor: UserActor) {
     const { post, targets } = await this.findPost(storeId, postId);
     if (post.createdByUserId !== actor.userId) throw socialError('POST_NOT_FOUND');
+    this.requireDraft(targets);
+    return { post, targets };
+  }
+
+  private requireDraft(targets: Target[]) {
     if (targets.some(({ status }) => status !== 'draft' && status !== 'waiting_approval'))
       throw socialError('POST_DRAFT_REQUIRED');
-    return { post, targets };
   }
 
   private draftStatus({ isAiWritten }: { isAiWritten: boolean }) {
     return isAiWritten ? 'waiting_approval' : 'draft';
   }
 
-  private async validatePostMedia(storeId: string, ids: string[], now: Date) {
+  private hasInstagram(connections: ReadonlyMap<string, PostingConnection>) {
+    return [...connections.values()].some(({ kind }) => kind === 'instagram');
+  }
+
+  private async validatePostMedia(storeId: string, ids: string[], now: Date, instagram: boolean) {
     if (!ids.length) return;
     const media = await this.repository.listPostMedia(storeId, ids, now);
     if (media.length !== new Set(ids).size) throw socialError('POST_MEDIA_NOT_FOUND');
+    if (instagram) validateInstagramPhotos(media);
   }
 
   private async validateTargets(
@@ -223,17 +386,11 @@ export class SocialService {
       if (!connection || (connection.status !== 'active' && !retained.has(connection.id)))
         throw socialError('POST_CONNECTION_NOT_FOUND');
       if (connection.kind === 'instagram')
-        this.validateInstagram(
+        validateInstagramPost(
           target.captionOverride ?? input.caption ?? '',
           input.mediaFileIds.length,
         );
     }
-  }
-
-  private validateInstagram(caption: string, photoCount: number) {
-    if (!photoCount) throw socialError('POST_PHOTOS_REQUIRED');
-    if (Array.from(caption).length > 2_200) throw socialError('POST_CAPTION_TOO_LONG');
-    if ((caption.match(/#[\p{L}\p{M}\p{N}_]+/gu)?.length ?? 0) > 30)
-      throw socialError('POST_TOO_MANY_HASHTAGS');
+    return connections;
   }
 }
