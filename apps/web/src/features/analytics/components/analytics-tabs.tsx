@@ -1,6 +1,5 @@
 'use client';
 
-
 import { CalendarDays, ChartLine, Layers, Megaphone, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
