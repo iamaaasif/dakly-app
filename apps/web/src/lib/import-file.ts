@@ -18,7 +18,8 @@ export function checkImportFile(file: File): string | undefined {
   return undefined;
 }
 
-export function readImportFile(bytes: ArrayBuffer): ImportFileSummary | string {
+// `rowName` is what a row is in the file, such as customers, for the messages.
+export function readImportFile(bytes: ArrayBuffer, rowName: string): ImportFileSummary | string {
   let text: string;
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -39,9 +40,9 @@ export function readImportFile(bytes: ArrayBuffer): ImportFileSummary | string {
       preview.rowCount += 1;
       if (preview.rows.length < IMPORT_PREVIEW_ROWS) preview.rows.push(cells);
     }
-    if (preview.rowCount === 0) return 'This file has no customers under its column names.';
+    if (preview.rowCount === 0) return `This file has no ${rowName} under its column names.`;
     if (preview.rowCount > MAX_IMPORT_ROWS)
-      return `A file can have at most ${formatCount(MAX_IMPORT_ROWS)} customers.`;
+      return `A file can have at most ${formatCount(MAX_IMPORT_ROWS)} ${rowName}.`;
     return preview;
   } catch {
     return 'This file could not be read as CSV. Look for a stray quote mark.';

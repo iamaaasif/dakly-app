@@ -4,8 +4,8 @@ import type { StartImportInput } from '@dakly/contracts/contacts';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import { importFields } from '../import-fields';
-import type { ImportFileSummary } from '../import-file';
-import { ImportStepActions } from './import-step-actions';
+import { ImportStepActions } from '@/components/import-step-actions';
+import type { ImportFileSummary } from '@/lib/import-file';
 
 type ImportPreviewStepProps = {
   preview: ImportFileSummary;

@@ -2,7 +2,7 @@ import { useFormContext } from 'react-hook-form';
 
 import type { ImportDuplicateMode, StartImportInput } from '@dakly/contracts/contacts';
 
-import { ImportStepActions } from './import-step-actions';
+import { ImportStepActions } from '@/components/import-step-actions';
 
 const modes: { value: ImportDuplicateMode; label: string; hint: string }[] = [
   {
