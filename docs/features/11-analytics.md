@@ -115,7 +115,7 @@ CSV per tab, UTF-8 with BOM so Excel shows Bangla correctly. File name `dakly-an
 
 ### Permissions
 
-Uses the Analytics area from Team and permissions (tab 1). Owner and Admin: everything, including the attribution window. Marketer (View by default): all tabs except the Sales tab, which needs Orders or Shop sales access; cannot change the window. Support agent and Shop counter staff: no access by default. "Download customer lists" is not needed to download Analytics CSVs, because they contain no phone numbers.
+Uses the Analytics area from Team and permissions (tab 1). Owner: all tabs and the attribution window setting. Admin: all tabs and the current window. Marketer (View by default): all tabs except the Sales tab, which needs Orders or Shop sales access; cannot change the window. Support agent and Shop counter staff: no access by default. "Download customer lists" is not needed to download Analytics CSVs, because they contain no phone numbers.
 
 ### Events
 
@@ -235,6 +235,10 @@ The attribution record is kept on the order. It stores the winning evidence ID a
 - Post taps and chat referrals wait on buyer linkage in SOC-3 and CHAT-1.
 
 The order-created subscriber uses the buyer's contact. For self-delivery the order phone must match the buyer profile. For gifts it uses the buyer's own phone and leaves the recipient's phone out of attribution. Erasure of identifying attribution fields waits on CUS-11. The initial worker reads committed evidence. The window rebuild can pick up an earlier tap that was still being recorded when the order was processed.
+
+The Owner changes the window through `PATCH /store/attribution` with 1, 3 or 7 days. A change records the old and new window in the audit log and starts a rebuild. `GET /store/attribution` shows the current window, whether the rebuild is running and how many orders it has processed. The banner and window control are part of ANA-3.
+
+The bulk worker covers the latest 365 shop-local dates up to the time of the change. It selects evidence before locking orders. It commits up to 25 orders and the cursor together. A job handles up to 2,000 orders before saving its next outbox event with the final cursor of that job. A newer window replaces the old job's progress. A retry resumes from the last committed cursor. If an order changes during selection, the worker rereads that page. A rebuild keeps the captured amount when it selects the same touch. Report refreshes are requested per page in the reports slice. It reads the exact tap records across the full lookback horizon. A local run rebuilt 100,000 synthetic orders in 4 minutes 10 seconds with a simulated one-second relay wait per job. Production timing also depends on live queue load.
 
 The current and previous periods use store-local calendar days. Sales returns the total and the amounts by order source. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
 
