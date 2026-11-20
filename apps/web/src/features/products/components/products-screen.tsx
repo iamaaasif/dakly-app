@@ -66,7 +66,10 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
           <ProductSheet
             key={productId}
             productId={productId}
-            onClose={() => router.replace(listHref)}
+            onClose={() => {
+              setStockError(null);
+              router.replace(listHref);
+            }}
           />
         ) : null}
         <SelectedStockAdjustment

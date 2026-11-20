@@ -13,11 +13,10 @@ const PRESETS = [
 ] as const;
 
 type ProductSizesProps = {
-  onStockChange: (index: number, quantity: number) => void;
   onAddOption: () => void;
 };
 
-export function ProductSizes({ onStockChange, onAddOption }: ProductSizesProps) {
+export function ProductSizes({ onAddOption }: ProductSizesProps) {
   const form = useFormContext<ProductFormValues>();
   const options = form.watch('options') ?? [];
   const variants = form.watch('variants') ?? [];
@@ -40,21 +39,19 @@ export function ProductSizes({ onStockChange, onAddOption }: ProductSizesProps) 
           ))}
         </div>
       </div>
-      {sizes.map((size, index) => {
-        const val = variants[index]?.initialStock;
-        const stock = typeof val === 'number' ? val : 0;
-        return (
-          <ProductSizeRow
-            key={index}
-            index={index}
-            size={size}
-            stock={stock}
-            onUpdate={(i, name) => updateSizeName(form, i, name)}
-            onStockChange={(i, qty) => onStockChange(i, qty)}
-            onRemove={(i) => removeSizeRow(form, sizes, i)}
-          />
-        );
-      })}
+      {sizes.map((size, index) => (
+        <ProductSizeRow
+          key={index}
+          index={index}
+          size={size}
+          stock={variants[index]?.initialStock ?? 0}
+          onUpdate={(i, name) => updateSizeName(form, i, name)}
+          onStockChange={(i, qty) =>
+            form.setValue(`variants.${i}.initialStock`, qty, { shouldDirty: true })
+          }
+          onRemove={(i) => removeSizeRow(form, sizes, i)}
+        />
+      ))}
       <div className="flex flex-wrap items-center gap-3 pt-1">
         <Button
           type="button"
@@ -79,17 +76,15 @@ export function ProductSizes({ onStockChange, onAddOption }: ProductSizesProps) 
 
 function applySizesPreset(form: UseFormReturn<ProductFormValues>, presetSizes: readonly string[]) {
   const list = [...presetSizes];
-  const current = form.getValues('variants') ?? [];
   form.setValue('options', [{ name: 'Size', values: list }], { shouldDirty: true });
   form.setValue(
     'variants',
-    list.map((size, index) => ({
-      id: current[index]?.id,
+    list.map((size) => ({
       optionValues: { 0: size },
-      sku: current[index]?.sku ?? null,
-      priceOverridePoisha: current[index]?.priceOverridePoisha ?? '',
-      costPoisha: current[index]?.costPoisha ?? '',
-      initialStock: current[index]?.initialStock ?? 0,
+      sku: null,
+      priceOverridePoisha: '',
+      costPoisha: '',
+      initialStock: 0,
     })),
     { shouldDirty: true },
   );
@@ -98,7 +93,7 @@ function applySizesPreset(form: UseFormReturn<ProductFormValues>, presetSizes: r
 function addSizeRow(form: UseFormReturn<ProductFormValues>, sizes: string[]) {
   const list = sizes.length ? [...sizes, ''] : [''];
   form.setValue('options', [{ name: 'Size', values: list }], { shouldDirty: true });
-  const current = form.getValues('variants') ?? [];
+  const current = sizes.length === 0 ? [] : (form.getValues('variants') ?? []);
   form.setValue(
     'variants',
     [

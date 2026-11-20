@@ -403,6 +403,89 @@ describe('Product form', () => {
     expect(submitted).toBe(false);
   });
 
+  it('adjusts stock only for retained sizes after deleting a size row', async () => {
+    const savedProduct: ProductResponse = {
+      ...product,
+      options: [{ name: 'Size', values: ['L'] }],
+      variants: [
+        {
+          ...product.variants[0]!,
+          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+          optionValues: { Size: 'L' },
+        },
+      ],
+    };
+    const adjustments: unknown[] = [];
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (url.includes('/stock-adjustments')) {
+          adjustments.push({ url, body: JSON.parse(String(init.body)) });
+          return Response.json({ id: 'adj-1' }, { headers: { 'x-session-context': 'verified' } });
+        }
+        return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+      }
+      return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+    });
+
+    const { onSaved } = show();
+    await userEvent.type(screen.getByLabelText('Name'), 'T-Shirt');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add size' }));
+    await userEvent.type(screen.getByLabelText('Size 1'), 'M');
+    await userEvent.type(screen.getByLabelText('Stock for size M'), '5');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add size' }));
+    await userEvent.type(screen.getByLabelText('Size 2'), 'L');
+    await userEvent.type(screen.getByLabelText('Stock for size L'), '3');
+
+    await userEvent.click(screen.getByLabelText('Delete size M'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct));
+    expect(adjustments).toEqual([
+      {
+        url: '/api/variants/019c01ea-cf15-7d31-a7f5-d73d66007ae5/stock-adjustments',
+        body: { quantity: 3, reason: 'Initial stock' },
+      },
+    ]);
+  });
+
+  it('reports failed initial stock adjustments with the failed size names', async () => {
+    const savedProduct: ProductResponse = {
+      ...product,
+      options: [{ name: 'Size', values: ['L'] }],
+      variants: [
+        {
+          ...product.variants[0]!,
+          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+          optionValues: { Size: 'L' },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (url.includes('/stock-adjustments')) {
+          return Response.json(
+            { error: { message: 'Stock adjustment failed' } },
+            { status: 500, headers: { 'x-session-context': 'verified' } },
+          );
+        }
+        return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+      }
+      return Response.json(savedProduct, { headers: { 'x-session-context': 'verified' } });
+    });
+
+    const { onSaved } = show();
+    await userEvent.type(screen.getByLabelText('Name'), 'T-Shirt');
+    await userEvent.click(screen.getByRole('button', { name: 'Add size' }));
+    await userEvent.type(screen.getByLabelText('Size 1'), 'L');
+    await userEvent.type(screen.getByLabelText('Stock for size L'), '3');
+    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct, ['L']));
+  });
+
   it('keeps unsaved values through refresh and a rejected save', async () => {
     vi.stubGlobal('fetch', async () =>
       Response.json(

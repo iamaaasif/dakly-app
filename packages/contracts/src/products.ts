@@ -144,13 +144,7 @@ export const productFormSchema = z
           sku: optionalTextInput.pipe(editVariantSchema.shape.sku.unwrap()).default(null),
           priceOverridePoisha: optionalTakaInput.pipe(money.positive().nullable()).default(null),
           costPoisha: optionalTakaInput.default(null),
-          initialStock: z
-            .union([
-              z.number().int().min(0),
-              z.literal('').transform(() => 0),
-              z.null().transform(() => 0),
-            ])
-            .default(0),
+          initialStock: z.number().int().min(0).default(0),
         }),
       )
       .max(100)

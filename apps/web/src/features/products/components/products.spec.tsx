@@ -323,6 +323,52 @@ describe('Product editor navigation', () => {
     ).toBe(product.id);
   });
 
+  it('shows an alert when initial stock adjustment fails and clears it on sheet close', async () => {
+    const savedProduct = {
+      ...product,
+      options: [{ name: 'Size', values: ['L'] }],
+      variants: [
+        {
+          ...product.variants[0]!,
+          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+          optionValues: { Size: 'L' },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (path.includes('/stock-adjustments')) {
+          return Response.json(
+            { error: { message: 'Stock adjustment failed' } },
+            { status: 500, headers: { 'x-session-context': 'verified' } },
+          );
+        }
+        return response(savedProduct);
+      }
+      return response(
+        path === `/api/products/${savedProduct.id}`
+          ? savedProduct
+          : { items: [savedProduct], nextCursor: null },
+      );
+    });
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Add size' }));
+    await userEvent.type(within(dialog).getByLabelText('Size 1'), 'L');
+    await userEvent.type(within(dialog).getByLabelText('Stock for size L'), '3');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save as hidden' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'Could not set initial stock for: L',
+    );
+    const sheet = await screen.findByRole('dialog', { name: savedProduct.name });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Close dialog' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('shows a saved product to viewers without edit or upload controls', async () => {
     vi.stubGlobal('fetch', async (path: string) =>
       response(

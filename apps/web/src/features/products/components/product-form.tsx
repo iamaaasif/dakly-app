@@ -36,10 +36,6 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
   const mutation = product ? change : create;
   const { dirtyFields, errors, isDirty } = form.formState;
 
-  const onStockChange = (index: number, quantity: number) => {
-    form.setValue(`variants.${index}.initialStock`, quantity, { shouldDirty: true });
-  };
-
   const onSubmit = form.handleSubmit((input) => {
     const setError = (error: Error) =>
       form.setError(productErrorField(error, input.variants.length), {
@@ -71,7 +67,7 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
     <FormProvider {...form}>
       <form className="space-y-3.5" onSubmit={onSubmit}>
         <ProductFields productId={product?.id} />
-        <ProductOptions mode={product ? 'edit' : 'create'} onStockChange={onStockChange} />
+        <ProductOptions mode={product ? 'edit' : 'create'} />
         {errors.root?.server?.message ? (
           <p role="alert" className="text-danger">
             {errors.root.server.message}
@@ -99,24 +95,34 @@ type SaveInitialStocksArgs = {
   }) => Promise<unknown>;
 };
 
+function findVariantId(
+  variants: ProductResponse['variants'],
+  optionName: string | undefined,
+  sizeName: string,
+): string | undefined {
+  const match = variants.find((v) =>
+    optionName
+      ? v.optionValues[optionName] === sizeName
+      : Object.values(v.optionValues).includes(sizeName),
+  );
+  return match?.id ?? (variants.length === 1 ? variants[0]?.id : undefined);
+}
+
 async function saveInitialStocks({
   saved,
   input,
   formVariants,
   adjustStock,
 }: SaveInitialStocksArgs): Promise<string[]> {
-  const adjustments = (formVariants ?? [])
-    .map((variant, index) => {
-      const quantity = typeof variant.initialStock === 'number' ? variant.initialStock : 0;
-      if (quantity <= 0) return null;
-      const variantId = saved.variants[index]?.id;
-      if (!variantId) return null;
-      const sizeName = input.options[0]?.values[index] || `Size ${index + 1}`;
-      return { sizeName, variantId, quantity };
-    })
-    .filter((item): item is { sizeName: string; variantId: string; quantity: number } =>
-      Boolean(item),
-    );
+  const sizeOptionName = input.options[0]?.name;
+  const adjustments = (formVariants ?? []).flatMap((variant, index) => {
+    const quantity = variant.initialStock ?? 0;
+    if (quantity <= 0) return [];
+    const sizeName = input.options[0]?.values[index] ?? '';
+    const variantId = findVariantId(saved.variants, sizeOptionName, sizeName);
+    if (!variantId) return [];
+    return [{ sizeName: sizeName || `Size ${index + 1}`, variantId, quantity }];
+  });
 
   if (adjustments.length === 0) return [];
 
@@ -129,9 +135,9 @@ async function saveInitialStocks({
     ),
   );
 
-  return results
-    .map((result, i) => (result.status === 'rejected' ? adjustments[i]?.sizeName : null))
-    .filter((name): name is string => Boolean(name));
+  return results.flatMap((result, index) =>
+    result.status === 'rejected' ? [adjustments[index]!.sizeName] : [],
+  );
 }
 
 type ProductFormActionsProps = {

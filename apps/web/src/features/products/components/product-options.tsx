@@ -1,4 +1,3 @@
-'use client';
 import type { UseFieldArrayRemove, UseFormReturn } from 'react-hook-form';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 
@@ -12,10 +11,9 @@ import { ProductVariants } from './product-variants';
 
 type ProductOptionsProps = {
   mode: 'create' | 'edit';
-  onStockChange: (index: number, quantity: number) => void;
 };
 
-export function ProductOptions({ mode, onStockChange }: ProductOptionsProps) {
+export function ProductOptions({ mode }: ProductOptionsProps) {
   const form = useFormContext<ProductFormValues>();
   const isStockTracked = form.watch('isStockTracked');
   const options = form.watch('options') ?? [];
@@ -25,12 +23,7 @@ export function ProductOptions({ mode, onStockChange }: ProductOptionsProps) {
     options.length === 0 || (options.length === 1 && options[0]?.name.toLowerCase() === 'size');
 
   if (mode === 'create' && isStockTracked && isSizesOnly) {
-    return (
-      <ProductSizes
-        onStockChange={onStockChange}
-        onAddOption={() => append({ name: '', values: [] })}
-      />
-    );
+    return <ProductSizes onAddOption={() => append({ name: '', values: [] })} />;
   }
 
   return (
