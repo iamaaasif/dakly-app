@@ -67,11 +67,11 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 | Job                         | Started by                     | Payload                                 | Makes a rerun harmless                                                                                                                                     |
 | --------------------------- | ------------------------------ | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `build-campaign-audience`   | Campaign scheduled or sent now | `storeId`, `campaignId`                 | Unique `campaign_recipients (campaign_id, contact_id)`                                                                                                     |
-| `send-campaign-batch`       | Sweep and after each batch     | `storeId`, `campaignId`                 | Claims up to 200 recipients. Defers during quiet hours and recovers expired in-flight attempts.                                                            |
+| `send-campaign-batch`       | Sweep and after each batch     | `storeId`, `lane`                       | Claims up to 200 recipients. Defers during quiet hours and recovers expired in-flight attempts.                                                            |
 | `wallet.credited`           | Verified SMS top-up            | `storeId`, `entryId` in the typed event | Resumes affordable balance-paused campaigns. Pages by campaign id after verifying the credit entry and its wallet revision.                                |
 | sweep `start-due-campaigns` | Every minute                   | none                                    | `campaign_send_work_stores` finds eligible stores. Start up to 100 due campaigns per store and enqueue sending and cancelled-claim recovery independently. |
 
-One campaign batch can execute per store. The send and cancellation lanes queue independently and share a Valkey lease during execution. A running worker renews its lease every 30 seconds and checks ownership before claims and provider calls. Completion or deferral releases the lease. If a worker stops, its lease expires five minutes after the last renewal.
+One campaign batch can execute per store. The send and cancellation lanes queue independently and share a Valkey lease during execution. A running worker renews its lease every 30 seconds and requires a minute of confirmed lease time before claims and provider calls. A continuation chooses the earliest eligible campaign in its lane. Completion or deferral releases the lease. If a worker stops, its lease expires five minutes after the last renewal.
 
 ## workflow
 

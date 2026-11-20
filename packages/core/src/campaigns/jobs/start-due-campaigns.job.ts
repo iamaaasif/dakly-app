@@ -17,7 +17,7 @@ const payload = z.strictObject({});
 export class StartDueCampaignsJob implements JobHandler {
   constructor(
     @Inject(CampaignSweepService) private readonly sweep: CampaignSweepService,
-    @InjectQueue(QUEUES.campaign) private readonly queue: Queue<Omit<CampaignBatch, 'lane'>>,
+    @InjectQueue(QUEUES.campaign) private readonly queue: Queue<CampaignBatch>,
   ) {}
 
   async handle(data: unknown) {
@@ -25,11 +25,11 @@ export class StartDueCampaignsJob implements JobHandler {
     await this.sweep.startDue(await this.queue.getWaitingCount(), async (batches) => {
       if (!batches.length) return;
       await this.queue.addBulk(
-        batches.map(({ lane, ...data }) => ({
+        batches.map((data) => ({
           name: SEND_CAMPAIGN_BATCH,
           data,
           opts: {
-            deduplication: { id: `${data.storeId}-${lane}` },
+            deduplication: { id: `${data.storeId}-${data.lane}` },
             attempts: 3,
             backoff: { type: 'exponential', delay: JOB_POLL_INTERVAL_MS },
             removeOnComplete: true,

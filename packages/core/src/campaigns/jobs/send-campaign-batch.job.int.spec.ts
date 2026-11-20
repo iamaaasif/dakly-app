@@ -14,9 +14,13 @@ import { QUEUES } from '../../platform/queue/queues';
 import { toRedisConnection } from '../../platform/queue/redis-connection';
 import { JOB_POLL_INTERVAL_MS, MINUTE_MS } from '../../platform/time';
 import { CampaignSenderService } from '../campaign-sender.service';
+import { CampaignSweepService } from '../campaign-sweep.service';
 import { SEND_CAMPAIGN_BATCH, SendCampaignBatchJob } from './send-campaign-batch.job';
 
-async function openQueue(sendBatch: CampaignSenderService['sendBatch']) {
+async function openQueue(
+  sendBatch: CampaignSenderService['sendBatch'],
+  nextForLane: CampaignSweepService['nextForLane'],
+) {
   const env = loadEnv();
   class TestModule {}
   Module({
@@ -32,6 +36,7 @@ async function openQueue(sendBatch: CampaignSenderService['sendBatch']) {
       CampaignJobDispatcher,
       SendCampaignBatchJob,
       { provide: CampaignSenderService, useValue: { sendBatch } },
+      { provide: CampaignSweepService, useValue: { nextForLane } },
       { provide: ErrorReporter, useValue: new ErrorReporter(undefined) },
     ],
   })(TestModule);
@@ -49,19 +54,29 @@ describe('Campaign batch dispatch (Valkey)', () => {
       if (storeId === deferred.storeId) return new Date(Date.now() + 60_000);
       return ++chainCalls < 3 ? new Date() : null;
     });
-    const { app, queue } = await openQueue(sendBatch);
+    const { app, queue } = await openQueue(sendBatch, async (storeId) =>
+      storeId === deferred.storeId ? deferred.campaignId : chained.campaignId,
+    );
     try {
       const opts = { deduplication: { id: deferred.storeId } };
-      const first = await queue.add(SEND_CAMPAIGN_BATCH, deferred, opts);
+      const first = await queue.add(
+        SEND_CAMPAIGN_BATCH,
+        { storeId: deferred.storeId, lane: 'sending' },
+        opts,
+      );
       await vi.waitFor(async () => expect(await first.getState()).toBe('delayed'));
 
-      await queue.add(SEND_CAMPAIGN_BATCH, deferred, opts);
+      await queue.add(SEND_CAMPAIGN_BATCH, { storeId: deferred.storeId, lane: 'sending' }, opts);
       expect(await queue.getDeduplicationJobId(deferred.storeId)).toBe(first.id);
       expect((await queue.getJobs(['delayed'])).map(({ id }) => id)).toEqual([first.id]);
 
-      const other = await queue.add(SEND_CAMPAIGN_BATCH, chained, {
-        deduplication: { id: chained.storeId },
-      });
+      const other = await queue.add(
+        SEND_CAMPAIGN_BATCH,
+        { storeId: chained.storeId, lane: 'sending' },
+        {
+          deduplication: { id: chained.storeId },
+        },
+      );
       await vi.waitFor(async () => expect(await other.getState()).toBe('completed'));
       expect(sendBatch.mock.calls).toEqual([
         [deferred.storeId, deferred.campaignId, expect.any(Function)],
@@ -90,8 +105,11 @@ describe('Campaign batch dispatch (Valkey)', () => {
       entered.resolve();
       return release.promise;
     });
-    const { app, handler } = await openQueue(sendBatch);
-    const first = handler.handle(active);
+    const { app, handler } = await openQueue(sendBatch, async (storeId, lane) => {
+      if (storeId === other.storeId) return other.campaignId;
+      return lane === 'sending' ? active.campaignId : recovery.campaignId;
+    });
+    const first = handler.handle({ storeId: active.storeId, lane: 'sending' });
     try {
       await Promise.race([
         entered.promise,
@@ -99,9 +117,9 @@ describe('Campaign batch dispatch (Valkey)', () => {
           throw new Error('The active campaign ended before entering its batch');
         }),
       ]);
-      const sameStore = await handler.handle(recovery);
+      const sameStore = await handler.handle({ storeId: recovery.storeId, lane: 'cancelled' });
       expect(sameStore?.delayUntil).toBeGreaterThan(Date.now());
-      expect(await handler.handle(other)).toBeUndefined();
+      expect(await handler.handle({ storeId: other.storeId, lane: 'sending' })).toBeUndefined();
       expect(sendBatch.mock.calls).toEqual([
         [active.storeId, active.campaignId, expect.any(Function)],
         [other.storeId, other.campaignId, expect.any(Function)],
@@ -110,7 +128,9 @@ describe('Campaign batch dispatch (Valkey)', () => {
       const quietHoursEnd = new Date(Date.now() + 60_000);
       release.resolve(quietHoursEnd);
       expect(await first).toEqual({ delayUntil: quietHoursEnd.getTime() });
-      expect(await handler.handle(recovery)).toBeUndefined();
+      expect(
+        await handler.handle({ storeId: recovery.storeId, lane: 'cancelled' }),
+      ).toBeUndefined();
       expect(sendBatch).toHaveBeenLastCalledWith(
         recovery.storeId,
         recovery.campaignId,
@@ -124,13 +144,16 @@ describe('Campaign batch dispatch (Valkey)', () => {
   });
 
   it('renews the lease while working and fences a batch that loses it', async () => {
-    const payload = { storeId: randomUUID(), campaignId: randomUUID() };
+    const payload = { storeId: randomUUID(), lane: 'sending' };
     const entered = Promise.withResolvers<() => boolean>();
     const finish = Promise.withResolvers<null>();
-    const { app, queue, handler } = await openQueue(async (_storeId, _campaignId, hasLease) => {
-      entered.resolve(hasLease!);
-      return finish.promise;
-    });
+    const { app, queue, handler } = await openQueue(
+      async (_storeId, _campaignId, hasLease) => {
+        entered.resolve(hasLease!);
+        return finish.promise;
+      },
+      async () => randomUUID(),
+    );
     const client = await queue.client;
     const key = queue.toKey(`batch-lease:${payload.storeId}`);
     client.defineCommand('campaignBatchLeaseTtl', {
@@ -154,6 +177,13 @@ describe('Campaign batch dispatch (Valkey)', () => {
       await vi.waitFor(async () => {
         expect(await client.runCommand('campaignBatchLeaseTtl', [key])).toBeGreaterThan(MINUTE_MS);
       });
+      const nearExpiry = performance.now() + 4 * MINUTE_MS + 1000;
+      const time = vi.spyOn(performance, 'now').mockReturnValue(nearExpiry);
+      try {
+        expect(hasLease()).toBe(false);
+      } finally {
+        time.mockRestore();
+      }
 
       await client.set(key, 'other-worker', { PX: MINUTE_MS });
       await vi.advanceTimersByTimeAsync(JOB_POLL_INTERVAL_MS);
