@@ -9,7 +9,7 @@ import { StoresService } from '../stores/stores.service';
 import { OrderAttributionEngine } from './order-attribution-engine.service';
 
 const PAGE_SIZE = 25;
-const ORDERS_PER_JOB = 500;
+const ORDERS_PER_JOB = 2000;
 
 @Injectable()
 export class AttributionRebuildService {
@@ -39,19 +39,13 @@ export class AttributionRebuildService {
   private async processPage(storeId: string, rebuildId: string, checkpoint: string | null) {
     const { rebuild, windowDays } = await this.stores.attributionRebuild(storeId);
     if (!matchesJob(rebuild, rebuildId, checkpoint)) return false;
-    const selections = await this.transaction.run(storeId, async () => {
-      const orders = await this.orders.rebuildPage(storeId, { ...rebuild, limit: PAGE_SIZE });
-      const page = [];
-      for (const order of orders)
-        page.push({ order, reference: await this.engine.select(storeId, order, windowDays) });
-      return page;
-    });
+    const orders = await this.orders.rebuildPage(storeId, { ...rebuild, limit: PAGE_SIZE });
+    const selections = await this.engine.selectForOrders(storeId, orders, windowDays);
     return this.transaction.runLocked(storeId, async () => {
       const current = await this.stores.attributionRebuild(storeId);
       if (!matchesJob(current.rebuild, rebuildId, checkpoint)) return false;
       if (current.rebuild.processedOrders !== rebuild.processedOrders) return true;
-      for (const { order, reference } of selections)
-        await this.orders.rebuild(storeId, order.id, order, reference);
+      await this.orders.rebuild(storeId, selections);
 
       const last = selections.at(-1)?.order;
       const after = selections.length === PAGE_SIZE && last ? { id: last.id, at: last.at } : null;

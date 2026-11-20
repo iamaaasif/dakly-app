@@ -45,20 +45,25 @@ export class OrderAttributionService {
     });
   }
 
-  rebuild(storeId: string, orderId: string, buyer: BuyerSnapshot, reference: Reference | null) {
+  rebuild(
+    storeId: string,
+    selections: { order: BuyerSnapshot & { id: string }; reference: Reference | null }[],
+  ) {
+    if (!selections.length) return;
     return this.transaction.run(storeId, async () => {
-      const order = await this.repository.find(storeId, orderId, 'no key update');
-      if (!order || order.stage === 'cancelled') return;
-      if (!sameBuyer(order, buyer)) throw orderError('ORDER_CHANGED');
-      if (!reference) {
-        if (order.sourceType) await this.repository.save(storeId, orderId, null);
-        return;
-      }
-      const same = sameTouch(order, reference);
-      if (same && order.windowDays === reference.windowDays) return;
-      const currentAmount = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
-      const amountPoisha = same ? (order.amountPoisha ?? currentAmount) : currentAmount;
-      await this.repository.save(storeId, orderId, { ...reference, amountPoisha });
+      const orders = await this.repository.lockRebuildOrders(
+        storeId,
+        selections.map(({ order }) => order.id),
+      );
+      const locked = new Map(orders.map((order) => [order.id, order]));
+      const writes = selections.flatMap(({ order: buyer, reference }) => {
+        const order = locked.get(buyer.id);
+        if (!order || order.stage === 'cancelled') return [];
+        if (!sameBuyer(order, buyer)) throw orderError('ORDER_CHANGED');
+        const record = rebuiltRecord(order, reference);
+        return record === undefined ? [] : [{ orderId: order.id, record }];
+      });
+      if (writes.length) await this.repository.saveRebuilt(storeId, writes);
     });
   }
 
@@ -91,6 +96,15 @@ function sameBuyer(order: BuyerSnapshot, buyer: BuyerSnapshot) {
     order.isRecipientBuyer === buyer.isRecipientBuyer &&
     (!order.isRecipientBuyer || order.recipientPhone === buyer.recipientPhone)
   );
+}
+
+function rebuiltRecord(order: OrderAttribution, reference: Reference | null) {
+  if (!reference) return order.sourceType ? null : undefined;
+  const same = sameTouch(order, reference);
+  if (same && order.windowDays === reference.windowDays) return;
+  const currentAmount = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
+  const amountPoisha = same ? (order.amountPoisha ?? currentAmount) : currentAmount;
+  return { ...reference, amountPoisha };
 }
 
 function sameTouch(order: OrderAttribution, reference: Reference) {

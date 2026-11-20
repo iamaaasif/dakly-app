@@ -129,8 +129,8 @@ describe('OrderAttributionService', () => {
       [orderId],
     );
     const reference = { ...attribution, windowDays: 3 } as const;
-    await service.rebuild(fixture.a, orderId, buyer, reference);
-    await service.rebuild(fixture.a, orderId, buyer, reference);
+    await service.rebuild(fixture.a, [{ order: { ...buyer, id: orderId }, reference }]);
+    await service.rebuild(fixture.a, [{ order: { ...buyer, id: orderId }, reference }]);
     expect(await fixture.row('orders', orderId)).toMatchObject({
       attributed_touch_id: attribution.touchId,
       attributed_window_days: 3,
