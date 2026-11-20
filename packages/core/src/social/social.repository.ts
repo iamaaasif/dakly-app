@@ -26,6 +26,12 @@ import { posts, postTargets } from '@dakly/db/schema/social';
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
+type ReplacedTargets = {
+  targets: CreatePostInput['targets'];
+  status: 'draft' | 'waiting_approval';
+  now: Date;
+};
+
 const postFields = {
   id: posts.id,
   kind: posts.kind,
@@ -393,19 +399,7 @@ export class SocialRepository {
     );
   }
 
-  async replaceTargets(
-    storeId: string,
-    postId: string,
-    {
-      targets,
-      status,
-      now,
-    }: {
-      targets: CreatePostInput['targets'];
-      status: 'draft' | 'waiting_approval';
-      now: Date;
-    },
-  ) {
+  async replaceTargets(storeId: string, postId: string, { targets, status, now }: ReplacedTargets) {
     await this.database.forStore(storeId, async (tx) => {
       await tx
         .delete(postTargets)
