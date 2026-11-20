@@ -3,35 +3,29 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
-import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { StoresService } from '../stores/stores.service';
-import { ProductOrderVariantsRepository } from './product-order-variants.repository';
-import { ProductsRepository } from './products.repository';
-import { ProductsService } from './products.service';
+import { ProductStockRepository } from './product-stock.repository';
+import { ProductStockService } from './product-stock.service';
 
 const reference = { actor: { kind: 'system' }, reason: 'Stock test' } as const;
 const now = new Date('2026-11-17T08:00:00Z');
 
-describe('ProductsService stock ledger', () => {
+describe('ProductStockService', () => {
   const f = new OwnerIsolationFixture();
   const app = createDatabase(process.env.DATABASE_URL!);
   const tenant = new TenantDatabase(app.db);
   const transaction = new StoreTransaction(tenant);
-  const repository = new ProductsRepository(tenant);
-  const service = new ProductsService(
+  const repository = new ProductStockRepository(tenant);
+  const service = new ProductStockService(
     repository,
-    new ProductOrderVariantsRepository(tenant),
     transaction,
-    new OutboxService(new OutboxRepository(app.db, tenant), transaction),
     { now: () => now },
-    {} as StoresService,
-    {} as FileStorageDriver,
+    new OutboxService(new OutboxRepository(app.db, tenant), transaction),
   );
   beforeAll(() => f.setup());
   afterAll(async () => {
@@ -117,6 +111,86 @@ describe('ProductsService stock ledger', () => {
     expect(await movements(id)).toEqual([]);
   });
 
+  it('reconciles concurrent imports of the same count with one signed movement', async () => {
+    const id = await variant(10, 2);
+    await Promise.all([
+      service.moveStock(f.a, id, { kind: 'import', onHand: 4, reference }),
+      service.moveStock(f.a, id, { kind: 'import', onHand: 4, reference }),
+    ]);
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 4, reserved: 2 });
+    expect(await movements(id)).toEqual([
+      { kind: 'import', quantity: -6, on_hand_after: 4, reserved_after: 2 },
+    ]);
+  });
+
+  it('rejects imported stock below reserved and hides variants from other stores', async () => {
+    const id = await variant(10, 2);
+    await expect(
+      service.moveStock(f.a, id, { kind: 'import', onHand: 1, reference }),
+    ).rejects.toMatchObject({
+      code: 'STOCK_NOT_AVAILABLE',
+    });
+    await expect(
+      service.moveStock(f.b, id, { kind: 'import', onHand: 4, reference }),
+    ).rejects.toMatchObject({
+      code: 'PRODUCT_VARIANT_NOT_FOUND',
+    });
+    const owner = new ProductStockRepository(f.tenant);
+    expect(await owner.reconcileStock(f.b, id, 4, now)).toBeUndefined();
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 10, reserved: 2 });
+    expect(await movements(id)).toEqual([]);
+  });
+
+  it('reconciles a repeated count once within the same store transaction', async () => {
+    const id = await variant(10);
+    await transaction.run(f.a, () =>
+      Promise.all([
+        service.moveStock(f.a, id, { kind: 'import', onHand: 8, reference }),
+        service.moveStock(f.a, id, { kind: 'import', onHand: 8, reference }),
+      ]),
+    );
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 8, reserved: 0 });
+    expect(await movements(id)).toEqual([
+      { kind: 'import', quantity: -2, on_hand_after: 8, reserved_after: 0 },
+    ]);
+  });
+
+  it('skips imported stock when tracking is off', async () => {
+    const id = await variant(0, 0, false);
+    await service.moveStock(f.a, id, { kind: 'import', onHand: 5, reference });
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 0, reserved: 0 });
+    expect(await movements(id)).toEqual([]);
+  });
+
+  it('keeps stock unchanged when a concurrent edit turns tracking off', async () => {
+    const id = await variant(2);
+    const { product_id: productId } = await f.row('product_variants', id);
+    const edit = await f.connection.pool.connect();
+    let reconciliation: Promise<void> | undefined;
+    try {
+      await edit.query('begin');
+      const { rows } = await edit.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await edit.query('update products set is_stock_tracked = false where id = $1', [productId]);
+      await edit.query('select id from product_variants where id = $1 for no key update', [id]);
+      reconciliation = service.moveStock(f.a, id, { kind: 'import', onHand: 5, reference });
+      await expect
+        .poll(async () => {
+          const waiting = await f.connection.pool.query(
+            'select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))',
+            [rows[0]!.pid],
+          );
+          return waiting.rowCount;
+        })
+        .toBe(1);
+    } finally {
+      await edit.query('commit');
+      edit.release();
+      await reconciliation;
+    }
+    expect(await f.row('product_variants', id)).toMatchObject({ on_hand: 2, reserved: 0 });
+    expect(await movements(id)).toEqual([]);
+  });
+
   it('rejects zero or negative reserve quantities and counter overflow', async () => {
     const id = await variant(2147483647);
     for (const quantity of [0, -1])
@@ -190,7 +264,7 @@ describe('ProductsService stock ledger', () => {
     ).rejects.toMatchObject({
       code: 'PRODUCT_VARIANT_NOT_FOUND',
     });
-    const owner = new ProductsRepository(f.tenant);
+    const owner = new ProductStockRepository(f.tenant);
     expect(await owner.findStockVariant(f.b, id)).toBeUndefined();
     expect(
       await owner.changeStock(f.b, id, { onHandDelta: 1, reservedDelta: 0 }, now),

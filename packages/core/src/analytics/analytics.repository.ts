@@ -218,4 +218,28 @@ export class AnalyticsRepository {
         }),
     );
   }
+
+  // Dhaka has no daylight saving, so a Dhaka day is always the same 24 UTC hours.
+  async rollUpAiRunDay(storeId: string, day: string) {
+    await this.database.forStore(storeId, (tx) =>
+      tx.execute(sql`
+        insert into store_daily_metrics (store_id, day, metric, dimension, value)
+        select ${storeId}::uuid, ${day}::date, m.metric, sums.purpose, m.value::bigint
+        from (
+          select purpose, count(*) as runs, sum(cost_micro_usd) as cost,
+            sum(input_tokens) as input, sum(output_tokens) as output
+          from ai_runs
+          where store_id = ${storeId}
+            and created_at >= (${day}::date::timestamp at time zone 'Asia/Dhaka')
+            and created_at < ((${day}::date + 1)::timestamp at time zone 'Asia/Dhaka')
+          group by purpose
+        ) sums
+        cross join lateral (values
+          ('ai_runs', sums.runs), ('ai_cost_micro_usd', sums.cost),
+          ('ai_input_tokens', sums.input), ('ai_output_tokens', sums.output)
+        ) as m(metric, value)
+        on conflict (store_id, day, metric, dimension) do update set value = excluded.value,
+          updated_at = now()`),
+    );
+  }
 }

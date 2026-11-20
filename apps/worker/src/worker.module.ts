@@ -41,6 +41,7 @@ import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
+import { MaintenanceModule } from '@dakly/core/maintenance/maintenance.module';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
 import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
 import { MessagingModule } from '@dakly/core/messaging/messaging.module';
@@ -143,6 +144,7 @@ import { JobSchedulers } from './job-schedulers';
     ImportsModule,
     ContactStatsRepairModule,
     AnalyticsModule,
+    MaintenanceModule,
     KnowledgeIndexModule,
     AiAgentModule,
     BullModule.forRootAsync({

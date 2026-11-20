@@ -125,7 +125,12 @@ List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) a
 
 1. A product has 0 to 3 option types (Size, Colour, Fabric) and one or more variants. A product with no options has one default variant, so an order always points at a variant.
 2. Stock lives on the variant: on hand and reserved. Available = on hand − reserved.
-3. Stock changes only through `ProductsService.moveStock(storeId, variantId, { kind, quantity, reference })`. It runs one guarded `UPDATE ... WHERE on_hand - reserved >= quantity` and writes a `stock_movements` row in the same transaction. Zero rows updated throws `STOCK_NOT_AVAILABLE`.
+3. Stock changes through `ProductStockService.moveStock`. A movement takes a quantity,
+   or an absolute on-hand count for an import. An import calculates the signed
+   change from the locked variant count. The update guards the resulting stock
+   and reservations. It writes a `stock_movements` row in the same transaction
+   when stock or reservations change. A count that would put on-hand stock below
+   reserved stock throws `STOCK_NOT_AVAILABLE`.
 4. Movement kinds: `reserve`, `release`, `ship`, `return`, `adjust`, `import`.
 5. Products with stock tracking off skip all of this and never block an order.
 6. Readiness labels are computed, not stored. Running low is any tracked variant at or under the store threshold (default 3).

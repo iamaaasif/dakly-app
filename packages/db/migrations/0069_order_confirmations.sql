@@ -18,6 +18,5 @@ ALTER TABLE "automation_runs" ADD CONSTRAINT "automation_runs_trigger_order_id_o
 ALTER TABLE "order_confirmations" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE POLICY "order_confirmations_isolation" ON "order_confirmations"
   USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid)
-  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);
---> statement-breakpoint
+  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "order_confirmations" TO dakly_app;

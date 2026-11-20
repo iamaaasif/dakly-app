@@ -86,7 +86,11 @@ export class S3FileStorageDriver implements FileStorageDriver {
   }
 
   async writeText(key: string, body: string, contentType: string): Promise<void> {
-    const content = { sizeBytes: Buffer.byteLength(body), contentType };
+    await this.writeBytes(key, Buffer.from(body), contentType);
+  }
+
+  async writeBytes(key: string, body: Uint8Array, contentType: string): Promise<void> {
+    const content = { sizeBytes: body.byteLength, contentType };
     const response = await fetch(this.createUploadUrl(key, REQUEST_SECONDS, content), {
       method: 'PUT',
       body,
