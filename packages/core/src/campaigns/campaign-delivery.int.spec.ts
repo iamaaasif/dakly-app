@@ -247,6 +247,62 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
+  it('releases the reservation when authorization waits past the claim expiry', async () => {
+    const { id } = await sendingCampaign(1);
+    const repository = app.get(CampaignSendingRepository);
+    const authorize = repository.authorizeSubmission.bind(repository);
+    const gate = vi
+      .spyOn(repository, 'authorizeSubmission')
+      .mockImplementationOnce(async (store, recipientId, claimedAt) => {
+        const client = await admin.pool.connect();
+        let waiting: Promise<boolean> | undefined;
+        try {
+          await client.query('begin');
+          await client.query('select id from campaign_recipients where id=$1 for update', [
+            recipientId,
+          ]);
+          const {
+            rows: [lock],
+          } = await client.query(
+            "select pg_backend_pid() as pid, clock_timestamp() + interval '1 second' as expires_at",
+          );
+          waiting = authorize(store, recipientId, claimedAt, lock.expires_at);
+          void waiting.catch(() => undefined);
+          await vi.waitFor(async () => {
+            const {
+              rows: [result],
+            } = await admin.pool.query(
+              'select exists (select 1 from pg_stat_activity where $1 = any(pg_blocking_pids(pid))) as blocked',
+              [lock.pid],
+            );
+            expect(result.blocked).toBe(true);
+          });
+          await client.query("select pg_sleep_until($1::timestamptz + interval '1 millisecond')", [
+            lock.expires_at,
+          ]);
+          await client.query('commit');
+          const authorized = await waiting;
+          await campaigns.cancel(storeId, id, actor);
+          clockNow = new Date(noon.getTime() + 6 * MINUTE);
+          expect(await sender.sendBatch(storeId, id)).toBeNull();
+          expect(authorized).toBe(false);
+          return authorized;
+        } finally {
+          await client.query('rollback');
+          client.release();
+          await waiting?.catch(() => undefined);
+        }
+      });
+    try {
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(calls).toHaveLength(0);
+      expect(await sendAttempts(id)).toEqual([0]);
+      expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
+    } finally {
+      gate.mockRestore();
+    }
+  });
+
   it('queues one batch per store and recovers expired cancellations before sending', async () => {
     const cancelled = await unknownFirstSend();
     await campaigns.cancel(storeId, cancelled.id, actor);

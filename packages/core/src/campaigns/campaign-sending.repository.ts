@@ -147,26 +147,32 @@ export class CampaignSendingRepository {
     return row as ClaimableRecipient | undefined;
   }
 
-  async authorizeSubmission(storeId: string, id: string, claimedAt: Date) {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
+  async authorizeSubmission(storeId: string, id: string, claimedAt: Date, expiresAt: Date) {
+    const claim = and(
+      eq(campaignRecipients.storeId, storeId),
+      eq(campaignRecipients.id, id),
+      eq(campaignRecipients.status, 'sending'),
+      eq(campaignRecipients.claimedAt, claimedAt),
+      isNull(campaignRecipients.providerMessageId),
+    );
+    return this.database.forStore(storeId, async (tx) => {
+      const [locked] = await tx
+        .select({ id: campaignRecipients.id })
+        .from(campaignRecipients)
+        .where(claim)
+        .for('update');
+      if (!locked) return false;
+      // Sample the database clock after the lock wait, before authorizing the submission.
+      const [row] = await tx
         .update(campaignRecipients)
         .set({
           dispatchStartedAt: claimedAt,
           sendAttempts: sql`${campaignRecipients.sendAttempts} + 1`,
         })
-        .where(
-          and(
-            eq(campaignRecipients.storeId, storeId),
-            eq(campaignRecipients.id, id),
-            eq(campaignRecipients.status, 'sending'),
-            eq(campaignRecipients.claimedAt, claimedAt),
-            isNull(campaignRecipients.providerMessageId),
-          ),
-        )
-        .returning({ id: campaignRecipients.id }),
-    );
-    return row !== undefined;
+        .where(and(claim, sql`clock_timestamp() < ${expiresAt.toISOString()}::timestamptz`))
+        .returning({ id: campaignRecipients.id });
+      return row !== undefined;
+    });
   }
 
   restoreUnsubmitted(

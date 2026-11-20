@@ -285,11 +285,12 @@ export class CampaignSenderService {
   private async deliver(storeId: string, submission: Submission) {
     const { recipient, destination, body, claimedAt, sender } = submission;
     const { id: recipientId, contactId } = recipient;
-    const canSubmit = () => this.clock.now().getTime() - claimedAt.getTime() < CAMPAIGN_CLAIM_MS;
+    const expiresAt = new Date(claimedAt.getTime() + CAMPAIGN_CLAIM_MS);
+    const canSubmit = () => this.clock.now() < expiresAt;
     const authorized =
       canSubmit() &&
       (await this.repository
-        .authorizeSubmission(storeId, recipientId, claimedAt)
+        .authorizeSubmission(storeId, recipientId, claimedAt, expiresAt)
         .catch(async (error: unknown) => {
           await this.recordRefusal(storeId, submission, true);
           throw error;
