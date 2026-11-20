@@ -20,8 +20,7 @@ export function campaignSmsUrls(text: string): SmsUrl[] {
     const prefix = match[1] ?? '';
     const raw = match[0].slice(prefix.length);
     const start = match.index + prefix.length;
-    const closer = closingWrapper[prefix.at(-1) ?? ''];
-    const candidate = closer ? wrappedUrl(raw, closer) : trimMessagePunctuation(raw);
+    const candidate = urlCandidate(raw, prefix);
     if (
       !candidate ||
       !nonEmptyAuthority.test(candidate) ||
@@ -49,11 +48,27 @@ export function replaceCampaignSmsUrls(
   return body + text.slice(cursor);
 }
 
-function wrappedUrl(raw: string, closer: string): string | undefined {
-  const end = raw.lastIndexOf(closer);
-  if (end < 0 || !trailingWrapperPunctuation.test(raw.slice(end + 1))) return undefined;
+function urlCandidate(raw: string, prefix: string): string | undefined {
+  const opener = prefix.at(-1) ?? '';
+  const closer = closingWrapper[opener];
+  if (!closer) return trimMessagePunctuation(raw);
+
+  const delimiter = closer === '>' ? '>'.repeat(prefix.match(/<+$/u)?.[0].length ?? 1) : closer;
+  const end = raw.lastIndexOf(delimiter);
+  if (end < 0 || !trailingWrapperPunctuation.test(raw.slice(end + delimiter.length))) {
+    return undefined;
+  }
   const candidate = raw.slice(0, end);
-  return closer === '>' ? candidate : trimMessagePunctuation(candidate);
+  if (closer === '>') return candidate;
+  if (isAmbiguousDoubleQuote(candidate, closer)) return undefined;
+  return trimMessagePunctuation(candidate);
+}
+
+function isAmbiguousDoubleQuote(candidate: string, closer: string): boolean {
+  if (closer === '”' && candidate.includes('“')) return true;
+  if (closer !== '"' && closer !== '”') return false;
+  const [location] = candidate.split(/[?#]/u, 1);
+  return location?.includes(closer) ?? false;
 }
 
 function trimMessagePunctuation(raw: string): string {

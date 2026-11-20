@@ -124,4 +124,18 @@ describe('SMS campaign body URLs', () => {
     const text = 'Open "https://shop.example.test/a"today. Or ‘https://shop.example.test/b.';
     expect(campaignSmsUrls(text)).toEqual([]);
   });
+
+  it('keeps adjacent quoted prose out of the URL', () => {
+    const text =
+      'Open “https://shop.example.test”—“today”. Or “https://shop.example.test/a”today”.';
+    expect(campaignSmsUrls(text)).toEqual([]);
+  });
+
+  it('keeps every surrounding bracket when a URL is nested in angle brackets', () => {
+    const text = 'Open <<https://shop.example.test/offer>>.';
+    const urls = campaignSmsUrls(text);
+
+    expect(urls.map((url) => url.target)).toEqual(['https://shop.example.test/offer']);
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe('Open <</short>>.');
+  });
 });
