@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -492,6 +494,26 @@ describe('Import customers', () => {
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
     expect((await screen.findByRole('alert')).textContent).toContain('could not be read');
     expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
+  });
+
+  it('shows the Excel file the owner picked on the Detect step, not the CSV made from it', async () => {
+    respond((path) =>
+      path === '/api/imports'
+        ? { body: { importId, uploadUrl: 'https://files.example.test/up' } }
+        : { status: 200, body: { items: [], nextCursor: null } },
+    );
+    show(<CustomersScreen query={allCustomers} />);
+    const user = userEvent.setup({ applyAccept: false });
+    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
+    const bytes = readFileSync('src/lib/fixtures/customers.xlsx');
+    await user.upload(screen.getByLabelText('Customer file'), new File([bytes], 'shop-list.xlsx'));
+    expect((await screen.findByRole('status')).textContent).toContain('shop-list.xlsx');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Step 2 of 7 · Detect')).toBeTruthy();
+    expect(screen.getByText('File', { selector: 'dt' }).nextSibling?.textContent).toBe(
+      'shop-list.xlsx',
+    );
   });
 
   it('undoes a finished import after the owner confirms', async () => {
