@@ -25,6 +25,7 @@ import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
+import type { PlacedBy } from './order-placement';
 import { moveOrderReservations } from './order-reservations';
 import { returnRisk } from './order-risk';
 import {
@@ -47,11 +48,6 @@ import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
 
 type Access = Pick<StoreAccess, 'seeFullPhone'>;
-type CreateEditor = {
-  actor: Extract<AuditEntry['actor'], { kind: 'user' }>;
-  access: Access;
-  idempotencyKey: string;
-};
 
 @Injectable()
 export class OrdersService {
@@ -81,7 +77,7 @@ export class OrdersService {
   createOrder(
     storeId: string,
     input: CreateOrderInput,
-    { idempotencyKey, access, actor }: CreateEditor,
+    { idempotencyKey, access, actor, source = 'manual', createdByType = 'user' }: PlacedBy,
   ): Promise<OrderDetail> {
     return this.transaction.runLocked(storeId, async () => {
       const existing = await this.repository.findByIdempotencyKey(storeId, idempotencyKey);
@@ -124,9 +120,9 @@ export class OrdersService {
         recipientPhone: recipient.phone,
         recipientAddress: recipient.address,
         isRecipientBuyer: recipient.isBuyer,
-        source: 'manual',
-        createdByType: 'user',
-        createdByUserId: actor.userId,
+        source,
+        createdByType,
+        createdByUserId: actor.kind === 'user' ? actor.userId : null,
         idempotencyKey,
         ...delivery,
         ...totals,
