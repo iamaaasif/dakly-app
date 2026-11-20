@@ -74,9 +74,10 @@ function EditorActions({ workflow, editor }: { workflow: Workflow; editor: Edito
           variant="secondary"
           disabled={editor.pending || !editor.dirty}
           loading={editor.saving}
+          title={editor.dirty ? 'Saves your changes to this draft' : 'No changes to publish'}
           onClick={() => void editor.save()}
         >
-          Save draft
+          Publish changes
         </Button>
       )}
       <Button disabled={editor.pending} onClick={() => void editor.confirm()}>

@@ -176,11 +176,11 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await page.getByLabel('Workflow name').fill('Renamed on the canvas');
     await page.getByRole('button', { name: 'Save name' }).click();
     await expect(page.getByRole('heading', { name: 'Renamed on the canvas' })).toBeVisible();
-    await page.getByRole('button', { name: 'Save draft' }).click();
+    await page.getByRole('button', { name: 'Publish changes' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Saved' })).toBeVisible();
     await page.reload();
     await expect(steps.getByText('Wait for')).toHaveCount(2);
-    await expect(page.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Publish changes' })).toBeDisabled();
     await captureEvidence(page, evidence, 'editor');
   } finally {
     await db.pool.query('delete from automations where id=$1', [id]);
