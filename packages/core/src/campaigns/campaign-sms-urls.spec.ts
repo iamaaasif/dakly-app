@@ -63,4 +63,40 @@ describe('SMS campaign body URLs', () => {
     expect(urls.map((url) => url.target)).toEqual(['https://shop.example.test/a']);
     expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe('See (/short.)');
   });
+
+  it.each([
+    {
+      text: "Visit https://shop.example.test/search?q=O'Reilly",
+      target: "https://shop.example.test/search?q=O'Reilly",
+      body: 'Visit /short',
+    },
+    {
+      text: 'Visit ‘https://shop.example.test/O’Reilly’, then browse.',
+      target: 'https://shop.example.test/O’Reilly',
+      body: 'Visit ‘/short’, then browse.',
+    },
+  ])('keeps internal apostrophes and any surrounding quotes in $text', ({ text, target, body }) => {
+    const urls = campaignSmsUrls(text);
+
+    expect(urls.map((url) => url.target)).toEqual([new URL(target).href]);
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(body);
+  });
+
+  it('does not wrap a partial destination before a backslash', () => {
+    const text = String.raw`Visit https://shop.example.test/a\b`;
+    const urls = campaignSmsUrls(text);
+
+    expect(urls).toEqual([]);
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(text);
+  });
+
+  it('keeps nested URLs inside unsupported URI tokens and wraps standalone URLs', () => {
+    const unsupported =
+      'Open myapp://open?target=https://shop.example.test/product or //shop.example.test/?return=https://other.example.test/a';
+    const text = `${unsupported} (<https://shop.example.test/offer>).`;
+    const urls = campaignSmsUrls(text);
+
+    expect(urls.map((url) => url.target)).toEqual(['https://shop.example.test/offer']);
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(`${unsupported} (</short>).`);
+  });
 });

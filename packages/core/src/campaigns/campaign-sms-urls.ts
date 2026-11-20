@@ -1,16 +1,17 @@
 type SmsUrl = { start: number; end: number; target: string };
 
 const absoluteHttpUrl =
-  /(?<=<)https?:\/\/[^\s<>\\]+(?=>)|(?<![\p{L}\p{N}_])https?:\/\/[^\s<>"'“”‘’\\]+/giu;
-const sentencePunctuation = /[.,!?;:…।॥]+$/u;
+  /(?:^|(?<=\s))[[({<"'“‘]*(?:(?<=<)(https?:\/\/[^\s<>]+)(?=>)|(https?:\/\/[^\s<>"]+))/giu;
+const sentencePunctuation = /[.,!?;:'’”…।॥]+$/u;
 const openingBracket: Partial<Record<string, string>> = { ')': '(', ']': '[', '}': '{' };
 
 export function campaignSmsUrls(text: string): SmsUrl[] {
   const urls: SmsUrl[] = [];
   for (const match of text.matchAll(absoluteHttpUrl)) {
-    const start = match.index;
-    const raw = match[0];
-    const bracketed = text[start - 1] === '<' && text[start + raw.length] === '>';
+    const [, bracketed, bare] = match;
+    const raw = bracketed ?? bare;
+    if (raw.includes('\\')) continue;
+    const start = match.index + match[0].length - raw.length;
     const candidate = bracketed ? raw : trimMessagePunctuation(raw);
     const parsed = URL.parse(candidate);
     if (parsed) urls.push({ start, end: start + candidate.length, target: parsed.href });
