@@ -218,7 +218,7 @@ caption generation and checks generated text before scheduling.
 
 ### Web screens (SOC-5)
 
-The Social hub lists each connected Facebook Page and Instagram account with its status, then the signed-in person's drafts, and shows a reconnect banner for an account whose access expired. Connect account and Reconnect lead to Integrations for now; part 2 opens the connect dialog from the hub. Where the screen differs from the design on purpose:
+The Social hub lists each connected Facebook Page and Instagram account with its status, then the signed-in person's drafts, and shows a reconnect banner for an account whose access expired. Connect account opens the choice of Facebook Page or Instagram account, then the same Facebook sign-in dialog as Integrations (`components/meta-connect/`). Reconnect opens that dialog for the expired account. Where the screen differs from the design on purpose:
 
 - Follower counts and Notify me wait for SOC-7 (followers are not stored and nothing records TikTok interest). Draft thumbnails arrive in SOC-5 part 2, with image URLs on post responses.
 - Instagram shows its single brand pink (`--color-instagram`) in place of the gradient.

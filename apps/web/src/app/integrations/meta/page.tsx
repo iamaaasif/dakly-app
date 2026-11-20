@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 
-import { metaLoginMessageType } from '@/features/integrations/meta-login-message';
+import { metaLoginMessageType } from '@/components/meta-connect/meta-login-message';
 
 // Facebook sends the shop back here. The page passes the result to the Integrations tab and closes.
 export default function MetaLoginReturnPage() {
