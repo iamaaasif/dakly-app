@@ -1,13 +1,15 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Instagram, MessageCircle, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ChannelConnection } from '@dakly/contracts/channels';
 import { Button } from '@dakly/ui/button';
 
-import { metaChannels, type MetaKind } from '../channel-labels';
+import { integrationsKeys } from '../api/integrations-keys';
 import { ConnectionRow } from './connection-row';
 import { DisconnectDialog } from './disconnect-dialog';
-import { MetaConnectDialog } from './meta-connect-dialog';
+import { metaChannels, type MetaKind } from '@/components/meta-connect/channel-labels';
+import { MetaConnectDialog } from '@/components/meta-connect/meta-connect-dialog';
 
 const icons: Record<MetaKind, LucideIcon> = { facebook_page: MessageCircle, instagram: Instagram };
 
@@ -85,6 +87,7 @@ type ChannelDialogProps = {
 };
 
 function ChannelDialog({ kind, dialog, connections, onClose, onNotice }: ChannelDialogProps) {
+  const client = useQueryClient();
   if (dialog?.type === 'connect')
     return (
       <MetaConnectDialog
@@ -93,6 +96,7 @@ function ChannelDialog({ kind, dialog, connections, onClose, onNotice }: Channel
         connections={connections}
         onClose={onClose}
         onConnected={(count) => {
+          void client.invalidateQueries({ queryKey: integrationsKeys.all });
           onClose();
           onNotice(
             count === 1
