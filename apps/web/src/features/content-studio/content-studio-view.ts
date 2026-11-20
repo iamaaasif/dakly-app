@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 import type { ContentPiece } from '@dakly/contracts/content';
 
-export const contentStudioTabs = ['create', 'library', 'brand'] as const;
-export const libraryGroups = ['all', 'social', 'messages', 'products'] as const;
+const contentStudioTabs = ['create', 'library', 'brand'] as const;
+const libraryGroups = ['all', 'social', 'messages', 'products'] as const;
 
 // Bad values fall back to the default instead of breaking a shared link.
 export const contentStudioViewSchema = z.object({
