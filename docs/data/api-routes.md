@@ -114,7 +114,7 @@ atomically and retain business data when an extension is disabled.
 | `GET /contacts/:contactId/memory`, `PUT /contacts/:contactId/memory`, `DELETE /contacts/:contactId/memory`                      | View with `customers.view`; edit and clear with `customers.edit` |
 | `POST /contacts/:contactId/merge` (idem; closes the suggestion)                                                                 | `customers`                                                      |
 | `GET /contact-merges`, `POST /contact-merges/:contactMergeId/undo` (within 7 days, D29)                                         | `customers`                                                      |
-| `GET /contact-match-suggestions`, `POST /contact-match-suggestions/:suggestionId/dismiss`                                       | `customers`                                                      |
+| `GET /contact-match-suggestions?contactId=`, `POST /contact-match-suggestions/:suggestionId/dismiss`                            | `customers`                                                      |
 | `POST /contacts/:contactId/consents`                                                                                            | `customers`                                                      |
 | `POST /imports`, `POST /imports/:importId/start`, `POST /imports/:importId/undo` (within 7 days, 202), `GET /imports/:importId` | `customers`                                                      |
 | `POST /contacts/exports`                                                                                                        | `customers` + "Download customer lists"                          |

@@ -11,6 +11,7 @@ import { createDatabase } from '@dakly/db/client';
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactsModule } from './contacts.module';
 import { ContactsService } from './contacts.service';
 
@@ -27,6 +28,7 @@ describe('ContactsService (Postgres)', () => {
   const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
   let app: INestApplicationContext;
   let service: ContactsService;
+  let suggestions: ContactMatchSuggestionsService;
   let transaction: StoreTransaction;
   let valkey: ValkeyClient;
   const storeId = randomUUID();
@@ -39,6 +41,7 @@ describe('ContactsService (Postgres)', () => {
   beforeAll(async () => {
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(ContactsService);
+    suggestions = app.get(ContactMatchSuggestionsService);
     transaction = app.get(StoreTransaction);
     valkey = app.get(ValkeyClient);
     await admin.pool.query(
@@ -371,5 +374,102 @@ describe('ContactsService (Postgres)', () => {
         profileName: 'Sumi Akter',
       },
     ]);
+  });
+
+  describe('own phone capture (D27)', () => {
+    const chatContact = async () => {
+      const id = randomUUID();
+      await admin.pool.query(
+        "insert into contacts(id,store_id,name,source,kind) values($1,$2,'Rahim','messenger','chat_only')",
+        [id, storeId],
+      );
+      return id;
+    };
+    const profile = async (id: string) =>
+      (
+        await admin.pool.query('select phone, kind, phone_verified_at from contacts where id=$1', [
+          id,
+        ])
+      ).rows[0];
+    const capture = (contactId: string, own: string, conversationId = randomUUID()) =>
+      service.captureOwnPhone(storeId, { contactId, phone: own, conversationId }, actor);
+
+    it('saves an unused own phone before any order and makes the chat contact a lead', async () => {
+      const id = await chatContact();
+      const own = phone();
+
+      await capture(id, own);
+
+      expect(await profile(id)).toEqual({ phone: own, kind: 'lead', phone_verified_at: null });
+      await expect(suggestions.list(storeId, id, full)).resolves.toEqual([]);
+    });
+
+    it('keeps both profiles and suggests a match when another contact has the phone', async () => {
+      const owner = await add();
+      const id = await chatContact();
+      const conversationId = randomUUID();
+
+      await expect(capture(id, owner.phone!, conversationId)).resolves.toBeUndefined();
+
+      expect(await profile(id)).toEqual({
+        phone: null,
+        kind: 'chat_only',
+        phone_verified_at: null,
+      });
+      const stored = await admin.pool.query(
+        'select contact_id, matched_contact_id, reason, conversation_id from contact_match_suggestions where contact_id=$1',
+        [id],
+      );
+      expect(stored.rows).toEqual([
+        {
+          contact_id: id,
+          matched_contact_id: owner.id,
+          reason: 'same_phone',
+          conversation_id: conversationId,
+        },
+      ]);
+      await capture(id, owner.phone!);
+      expect(await suggestions.list(storeId, id, masked)).toHaveLength(1);
+    });
+
+    it('keeps a different phone already on the profile', async () => {
+      const buyer = await add();
+
+      await capture(buyer.id, phone());
+
+      expect(await profile(buyer.id)).toMatchObject({ phone: buyer.phone, kind: 'customer' });
+    });
+
+    it('shows the other contact to both sides, masked without the flag, until staff dismiss it', async () => {
+      const owner = await add();
+      const id = await chatContact();
+      await capture(id, owner.phone!);
+
+      const [seen] = await suggestions.list(storeId, id, masked);
+      expect(seen).toMatchObject({
+        reason: 'same_phone',
+        otherContact: { id: owner.id, name: 'সুমি আক্তার', phone: expect.stringContaining('XXX') },
+      });
+      expect(JSON.stringify(seen)).not.toContain(owner.phone);
+      const [reverse] = await suggestions.list(storeId, owner.id, full);
+      expect(reverse!.otherContact).toMatchObject({ id, phone: null });
+
+      await suggestions.dismiss(storeId, seen!.id, limitedActor.userId);
+
+      expect(await suggestions.list(storeId, id, full)).toEqual([]);
+      await expect(
+        suggestions.dismiss(storeId, seen!.id, limitedActor.userId),
+      ).rejects.toMatchObject({ code: 'MATCH_SUGGESTION_NOT_FOUND', status: 404 });
+    });
+
+    it('does not read or change a contact of another store', async () => {
+      await expect(
+        service.captureOwnPhone(
+          otherStoreId,
+          { contactId: await chatContact(), phone: phone() },
+          actor,
+        ),
+      ).rejects.toMatchObject({ code: 'CONTACT_NOT_FOUND' });
+    });
   });
 });
