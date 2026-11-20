@@ -75,12 +75,20 @@ describe('SMS campaign body URLs', () => {
       target: 'https://shop.example.test/O’Reilly',
       body: 'Visit ‘/short’, then browse.',
     },
-  ])('keeps internal apostrophes and any surrounding quotes in $text', ({ text, target, body }) => {
-    const urls = campaignSmsUrls(text);
+    {
+      text: 'Visit "https://shop.example.test/search?q=a"b".',
+      target: 'https://shop.example.test/search?q=a"b',
+      body: 'Visit "/short".',
+    },
+  ])(
+    'keeps internal quote characters and any surrounding quotes in $text',
+    ({ text, target, body }) => {
+      const urls = campaignSmsUrls(text);
 
-    expect(urls.map((url) => url.target)).toEqual([new URL(target).href]);
-    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(body);
-  });
+      expect(urls.map((url) => url.target)).toEqual([new URL(target).href]);
+      expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(body);
+    },
+  );
 
   it('does not wrap a partial destination before a backslash', () => {
     const text = String.raw`Visit https://shop.example.test/a\b`;
@@ -98,5 +106,10 @@ describe('SMS campaign body URLs', () => {
 
     expect(urls.map((url) => url.target)).toEqual(['https://shop.example.test/offer']);
     expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(`${unsupported} (</short>).`);
+  });
+
+  it('leaves malformed schemes and unpaired angle delimiters untouched', () => {
+    const text = 'Open https:///shop.example.test/a or https://shop.example.test/a<extra>.';
+    expect(campaignSmsUrls(text)).toEqual([]);
   });
 });
