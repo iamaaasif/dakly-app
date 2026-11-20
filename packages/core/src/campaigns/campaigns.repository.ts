@@ -55,8 +55,6 @@ export type FrozenRecipient = {
   | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
 );
 export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
-  approvedByUserId: string | null;
-  approvedAt: Date;
   shortLinkBase: string;
   startedAt: Date | null;
   estimatedCostPoisha: number;
@@ -248,10 +246,15 @@ export class CampaignsRepository {
     await this.database.forStore(storeId, (tx) =>
       tx
         .insert(campaignRecipients)
-        .values(recipients.map((recipient) => ({ storeId, campaignId, ...recipient }))),
+        .values(recipients.map((recipient) => ({ storeId, campaignId, ...recipient })))
+        // The approval job repeats a page after a crash; the first row for a contact stands.
+        .onConflictDoNothing({
+          target: [campaignRecipients.campaignId, campaignRecipients.contactId],
+        }),
     );
   }
 
+  // The approval job calls this once the audience is frozen and the credits are reserved.
   async markApproved(
     storeId: string,
     id: string,
@@ -261,7 +264,7 @@ export class CampaignsRepository {
       tx
         .update(campaigns)
         .set(approval)
-        .where(statusWhere(storeId, id, 'draft'))
+        .where(statusWhere(storeId, id, 'approving'))
         .returning(campaignColumns),
     );
     return row;

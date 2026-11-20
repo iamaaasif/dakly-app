@@ -16,7 +16,10 @@ import { SmsModule } from '../sms/sms.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { CampaignApprovalQueueService } from './campaign-approval-queue.service';
 import { CampaignApprovalRepository } from './campaign-approval.repository';
+import { CampaignApprovalService } from './campaign-approval.service';
+import { CampaignAudienceService } from './campaign-audience.service';
 import { CampaignBatchService } from './campaign-batch.service';
 import { CampaignCountsRepository } from './campaign-counts.repository';
 import { CampaignCountsService } from './campaign-counts.service';
@@ -49,6 +52,8 @@ import { CampaignsService } from './campaigns.service';
   controllers: [CampaignsController],
   providers: [
     CampaignApprovalRepository,
+    CampaignApprovalService,
+    CampaignAudienceService,
     CampaignCountsRepository,
     CampaignCountsService,
     CampaignsRepository,
@@ -58,15 +63,20 @@ import { CampaignsService } from './campaigns.service';
     CampaignSenderService,
     CampaignFundingService,
   ],
-  exports: [CampaignCountsService, CampaignFundingService, CampaignsService],
+  exports: [
+    CampaignApprovalService,
+    CampaignCountsService,
+    CampaignFundingService,
+    CampaignsService,
+  ],
 })
 export class CampaignsModule {
   static forWorker(): DynamicModule {
     return {
       module: CampaignsModule,
       imports: [BullModule.registerQueue({ name: QUEUES.campaign })],
-      providers: [CampaignBatchService, CampaignSweepService],
-      exports: [CampaignBatchService, CampaignSweepService],
+      providers: [CampaignApprovalQueueService, CampaignBatchService, CampaignSweepService],
+      exports: [CampaignApprovalQueueService, CampaignBatchService, CampaignSweepService],
     };
   }
 }

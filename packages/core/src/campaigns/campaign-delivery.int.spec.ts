@@ -14,6 +14,7 @@ import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 import { type SmsMessage, SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
+import { runApprovalJob } from '../../test/approve-campaign';
 import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
@@ -25,6 +26,7 @@ import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
+import { CampaignApprovalService } from './campaign-approval.service';
 import { CampaignCountsRepository } from './campaign-counts.repository';
 import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
@@ -124,6 +126,7 @@ async function draftCampaign(count: number, scheduledFor: Date | null, text: str
 async function sendingCampaign(count: number, scheduledFor: Date | null = null, text = TEXT) {
   const { id, phones } = await draftCampaign(count, scheduledFor, text);
   await campaigns.approve(storeId, id, owner);
+  await runApprovalJob(app.get(CampaignApprovalService), admin.pool, storeId, id);
   return { id, phones };
 }
 
@@ -683,6 +686,7 @@ describe('Campaign sender (Postgres)', () => {
       smsCredits: 4,
     });
     await campaigns.approve(storeId, id, owner);
+    await runApprovalJob(app.get(CampaignApprovalService), admin.pool, storeId, id);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 4);
     expect(await findRedirects()).toEqual([]);
 

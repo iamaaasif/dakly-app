@@ -89,10 +89,14 @@ describe('campaign filters without RLS assistance', () => {
       },
     ]);
     const now = new Date('2026-11-16T05:00:00Z');
-    const approval = {
-      status: 'sending',
+    await approvals.markApproving(f.b, b.id, {
       approvedByUserId: f.userB,
       approvedAt: now,
+      updatedAt: now,
+      approvalEstimatedTotal: 1,
+    });
+    const approval = {
+      status: 'sending',
       shortLinkBase: 'http://localhost:4000/l',
       startedAt: now,
       updatedAt: now,
