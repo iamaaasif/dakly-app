@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { OrderAttributionService } from '../orders/order-attribution.service';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError } from '../platform/errors/app-error';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionEngine } from './order-attribution-engine.service';
 
@@ -18,8 +19,16 @@ export class AttributionRebuildService {
   ) {}
 
   async runPage(storeId: string, rebuildId: string, checkpoint: string | null) {
-    for (let page = 0; page < ORDERS_PER_JOB / PAGE_SIZE; page++) {
-      if (!(await this.processPage(storeId, rebuildId, checkpoint))) return;
+    let retries = 0;
+    for (let page = 0; page < ORDERS_PER_JOB / PAGE_SIZE;) {
+      try {
+        if (!(await this.processPage(storeId, rebuildId, checkpoint))) return;
+        page++;
+        retries = 0;
+      } catch (error) {
+        if (!(error instanceof AppError) || error.code !== 'ORDER_CHANGED' || ++retries === 3)
+          throw error;
+      }
     }
   }
 

@@ -4,6 +4,7 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { OrderAttributionRepository, type AttributionWrite } from './order-attribution.repository';
+import { orderError } from './orders.errors';
 
 type OrderAttribution = NonNullable<Awaited<ReturnType<OrderAttributionRepository['find']>>>;
 type BuyerSnapshot = Pick<
@@ -48,17 +49,16 @@ export class OrderAttributionService {
     return this.transaction.run(storeId, async () => {
       const order = await this.repository.find(storeId, orderId, 'no key update');
       if (!order || order.stage === 'cancelled') return;
-      if (!sameBuyer(order, buyer))
-        throw new Error('Order buyer changed during attribution rebuild');
+      if (!sameBuyer(order, buyer)) throw orderError('ORDER_CHANGED');
       if (!reference) {
-        if (order.sourceType) await this.write(storeId, orderId, null);
+        if (order.sourceType) await this.repository.save(storeId, orderId, null);
         return;
       }
       const same = sameTouch(order, reference);
       if (same && order.windowDays === reference.windowDays) return;
       const currentAmount = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
       const amountPoisha = same ? (order.amountPoisha ?? currentAmount) : currentAmount;
-      await this.write(storeId, orderId, { ...reference, amountPoisha });
+      await this.repository.save(storeId, orderId, { ...reference, amountPoisha });
     });
   }
 
