@@ -11,12 +11,12 @@ import { campaignChannels } from '@dakly/contracts/campaigns';
 import { AutomationsService } from '../automations/automations.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { DAY_MS } from '../platform/time';
+import { emptyTotals, readMessageTotals, sumTotals, type Totals } from './analytics-message-totals';
 import { percent, returnPerTaka } from './analytics-ratios';
 import { AnalyticsTabsService } from './analytics-tabs.service';
 import { AnalyticsService } from './analytics.service';
 import { shiftReportDay } from './report-period';
 
-type Totals = { sent: number; delivered: number; read: number; cost: bigint };
 type Period = { from: string; through: string };
 
 // SMS has no read receipts, so reads are measured against the other channels only (glossary).
@@ -49,8 +49,8 @@ export class AnalyticsOverviewService {
       this.reports.marketingOrders(storeId, current),
       this.reports.marketingOrders(storeId, previous),
       this.reports.marketingRevenueByChannel(storeId, current),
-      this.messageTotals(storeId, current, timeZone),
-      this.messageTotals(storeId, previous, timeZone),
+      readMessageTotals(this.campaigns, this.automations, storeId, { ...current, timeZone }),
+      readMessageTotals(this.campaigns, this.automations, storeId, { ...previous, timeZone }),
       this.reports.messagePeople(storeId, current, timeZone),
       this.reports.messagePeople(storeId, previous, timeZone),
     ]);
@@ -92,20 +92,6 @@ export class AnalyticsOverviewService {
       funnel: funnel(all, readable, people, Number(orders.total)),
     };
   }
-
-  private async messageTotals(storeId: string, period: Period, timeZone: string) {
-    const range = { ...period, timeZone };
-    const [fromCampaigns, fromAutomations] = await Promise.all([
-      this.campaigns.messageTotals(storeId, range),
-      this.automations.messageTotals(storeId, range),
-    ]);
-    const totals = new Map<string, Totals>();
-    for (const row of [...fromCampaigns, ...fromAutomations]) {
-      const known = totals.get(row.channel) ?? emptyTotals();
-      totals.set(row.channel, sumTotals([known, { ...row, cost: BigInt(row.costPoisha) }]));
-    }
-    return totals;
-  }
 }
 
 function channelRows(totals: Map<string, Totals>, revenue: Map<string, bigint>) {
@@ -119,22 +105,6 @@ function channelRows(totals: Map<string, Totals>, revenue: Map<string, bigint>) 
       revenuePoisha: (revenue.get(channel) ?? 0n).toString(),
     };
   });
-}
-
-function emptyTotals(): Totals {
-  return { sent: 0, delivered: 0, read: 0, cost: 0n };
-}
-
-function sumTotals(rows: Totals[]): Totals {
-  return rows.reduce(
-    (sum, row) => ({
-      sent: sum.sent + row.sent,
-      delivered: sum.delivered + row.delivered,
-      read: sum.read + row.read,
-      cost: sum.cost + row.cost,
-    }),
-    emptyTotals(),
-  );
 }
 
 function funnel(
