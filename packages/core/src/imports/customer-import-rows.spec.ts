@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 import { contactImportMappingSchema, createImportSchema } from '@dakly/contracts/contacts';
 
-import { decodeCustomerImportFile, readCustomerImportRows } from './customer-import-rows';
+import { decodeCsvFile } from './csv-records';
+import { readCustomerImportRows } from './customer-import-rows';
 
 const header = 'Name,Mobile,WhatsApp,Email,Area,Tags';
 const mapping = { name: 0, phone: 1, whatsappPhone: 2, email: 3, district: 4, tags: 5 };
@@ -252,25 +253,25 @@ describe('readCustomerImportRows', () => {
   });
 });
 
-describe('decodeCustomerImportFile', () => {
+describe('decodeCsvFile', () => {
   it.each([0, 1, 8, 11, 12, 14, 31])('refuses control byte %i before database writes', (byte) => {
     const bytes = new TextEncoder().encode(
       `Name,Mobile\nনাসরিন${String.fromCharCode(byte)},01712345678\n`,
     );
-    expect(() => decodeCustomerImportFile(bytes)).toThrow(
+    expect(() => decodeCsvFile(bytes)).toThrow(
       expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
     );
   });
 
   it('keeps tabs and CSV line breaks', () => {
     const file = 'Name,Mobile\r\nনাসরিন\tবেগম,01712345678\n';
-    expect(decodeCustomerImportFile(new TextEncoder().encode(file))).toBe(file);
+    expect(decodeCsvFile(new TextEncoder().encode(file))).toBe(file);
   });
 
   it('reads UTF-8 text, Bangla and a byte order mark included', () => {
     const bytes = new TextEncoder().encode('\uFEFFনাম,Mobile\n');
 
-    expect(decodeCustomerImportFile(bytes)).toBe('নাম,Mobile\n');
+    expect(decodeCsvFile(bytes)).toBe('নাম,Mobile\n');
   });
 
   it.each([
@@ -278,7 +279,7 @@ describe('decodeCustomerImportFile', () => {
     ['a UTF-16 file', Buffer.from('\uFEFFMobile\n01712345678\n', 'utf16le')],
     ['a file with an invalid byte', Uint8Array.from([0x4d, 0x6f, 0xff, 0x0a])],
   ])('refuses %s as unreadable', (_case, bytes) => {
-    expect(() => decodeCustomerImportFile(bytes)).toThrow(
+    expect(() => decodeCsvFile(bytes)).toThrow(
       expect.objectContaining({ code: 'IMPORT_FILE_UNREADABLE' }),
     );
   });

@@ -16,8 +16,11 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { FIELD_LABELS } from './customer-import-report';
-import { type CustomerImportRows, readCustomerImportRows } from './customer-import-rows';
+import {
+  type CustomerImportRows,
+  FIELD_LABELS,
+  readCustomerImportRows,
+} from './customer-import-rows';
 import { type ImportRun, ImportRunner } from './import-runner';
 import {
   type ImportCounts,

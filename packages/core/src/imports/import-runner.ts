@@ -14,8 +14,8 @@ import { newId } from '../platform/database/new-id';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import type { OutboxService } from '../platform/outbox/outbox.service';
-import { reportCsv } from './customer-import-report';
-import { decodeCustomerImportFile } from './customer-import-rows';
+import { decodeCsvFile } from './csv-records';
+import { reportCsv } from './import-report';
 import { importError } from './imports.errors';
 import type {
   Import,
@@ -45,7 +45,7 @@ type Outcome = {
 
 // What one import kind brings to the shared run: how to read its file and how to write a batch.
 export type ImportKind<Row> = {
-  // Names the upload rate limit, such as `customer-import`.
+  // Names the upload rate limit.
   name: string;
   batchSize: number;
   fieldLabels: Record<string, string>;
@@ -332,7 +332,7 @@ export class ImportRunner<Row> {
     const file = await this.services.storage.readBytes(objectKey, MAX_IMPORT_FILE_BYTES);
     if (file.kind === 'missing') throw importError('IMPORT_FILE_NOT_UPLOADED');
     if (file.kind === 'too_large') throw importError('IMPORT_FILE_TOO_LARGE');
-    return decodeCustomerImportFile(file.bytes);
+    return decodeCsvFile(file.bytes);
   }
 
   private async uploadReport(

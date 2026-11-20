@@ -1,18 +1,5 @@
 import type { ImportReportLine as ReportLine } from './imports.repository';
 
-export const FIELD_LABELS = {
-  phone: 'Phone',
-  name: 'Name',
-  whatsappPhone: 'WhatsApp number',
-  email: 'Email',
-  address: 'Address',
-  district: 'District',
-  tags: 'Tags',
-  notes: 'Notes',
-  sms: 'SMS',
-  whatsapp: 'WhatsApp',
-} as const satisfies Record<string, string>;
-
 // Every cell is quoted, so a message with a comma stays in one column.
 export function reportCsv(
   lines: ReportLine[],
