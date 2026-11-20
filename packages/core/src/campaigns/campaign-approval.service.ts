@@ -133,15 +133,20 @@ export class CampaignApprovalService {
     state: ApprovalState,
     { queued, skipped, now }: { queued: number; skipped: number; now: Date },
   ): Promise<void> {
-    const { shortLinkBase, smsParts } = this.sms.estimate(state.content.text);
-    await this.wallets.reserve(storeId, {
-      wallet: 'sms_credits',
-      quantity: smsParts * queued,
-      idempotencyKey: approvalKey(key.id, key.approvedAt),
-      actor: state.approvedByUserId
-        ? { kind: 'user', userId: state.approvedByUserId }
-        : { kind: 'system' },
-    });
+    // Messenger sends are free: no credits to reserve and no short links.
+    let shortLinkBase: string | null = null;
+    if (state.channel === 'sms') {
+      const estimate = this.sms.estimate(state.content.text);
+      shortLinkBase = estimate.shortLinkBase;
+      await this.wallets.reserve(storeId, {
+        wallet: 'sms_credits',
+        quantity: estimate.smsParts * queued,
+        idempotencyKey: approvalKey(key.id, key.approvedAt),
+        actor: state.approvedByUserId
+          ? { kind: 'user', userId: state.approvedByUserId }
+          : { kind: 'system' },
+      });
+    }
     const status = state.scheduledFor ? 'scheduled' : 'sending';
     await this.campaigns.markApproved(storeId, key.id, {
       status,
