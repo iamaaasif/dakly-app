@@ -4,6 +4,7 @@ import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 
 import { ContactsService } from '../contacts/contacts.service';
+import { OrderReportingService } from '../orders/order-reporting.service';
 import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
@@ -21,6 +22,7 @@ export class AutomationConditionsService {
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
+    @Inject(OrderReportingService) private readonly orders: OrderReportingService,
     @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
   ) {}
 
@@ -32,11 +34,19 @@ export class AutomationConditionsService {
     at: Date,
   ): Promise<AutomationExitReason | undefined> {
     const { goal, exitConditions, workflowFilters } = graph;
-    if (goal && hasHappened(goal, facts)) return 'goal';
-    if (exitConditions.some((exit) => hasHappened(exit, facts))) return 'exit_condition';
+    const order = await this.orderProgress(graph, facts);
+    if (goal && hasHappened(goal, facts, order)) return 'goal';
+    if (exitConditions.some((exit) => hasHappened(exit, facts, order))) return 'exit_condition';
     for (const filter of workflowFilters)
       if (!(await this.holds(filter, facts, at))) return 'workflow_filter';
     return undefined;
+  }
+
+  private async orderProgress(graph: AutomationGraph, { storeId, orderId }: RunFacts) {
+    const readsOrder = graph.exitConditions.some(
+      ({ kind }) => kind === 'order_confirmed' || kind === 'order_cancelled',
+    );
+    return readsOrder && orderId ? this.orders.progress(storeId, orderId) : undefined;
   }
 
   async refreshExitReason(facts: RunFacts, at: Date) {

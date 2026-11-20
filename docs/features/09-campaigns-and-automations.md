@@ -519,6 +519,10 @@ A workflow that starts from an order can write `{order_number}`, `{order_total}`
 
 `{confirm_link}` is `<short link base>/c/<token>`, where the token is 32 random bytes in base64url. `order_confirmations` keeps one row per issued token with only its sha256, so the address cannot be guessed or rebuilt from the database, and a tracked-link code never confirms anything. Every message about the order gets its own token, and all of them work while the order is in To confirm; a token left by a send that rolled back is harmless because nobody holds it. The page behind the address is described in feature 06, "Customer confirm page". `{order_total}` uses the shared `formatMoney` in `packages/contracts`. CAMP-14 adds the customer, link and product fields to the same renderer.
 
+### COD order confirmation template (ORD-4)
+
+The template starts on `order_placed` for orders with payment status COD pending and sends the SMS with `{confirm_link}`; a reminder follows after 6 hours. Its exits are Order is confirmed (the order has a confirmation time) and Order is cancelled (its stage is Cancelled). The runner reads the order before every step, so an order saved as confirmed (it still emits `order.created`) exits before the first message, and an order the customer or staff confirmed or cancelled gets no reminder. An order put on hold still gets the reminder. Messenger buttons are a later part of ORD-4, and the other order templates follow in part 3.
+
 ### Workflow catalogue
 
 The graph schema is [`automations/graph.ts`](../../packages/contracts/src/automations/graph.ts) in `packages/contracts` (A5 in the [plan](../plans/campaigns-and-automations.md)). It rejects a path that loops, a step that leads to a missing step, a graph over the limits above, an unknown step kind, a trigger filter the trigger does not take, and a condition or wait that reads replies or taps from a step that is not a send step. The publish checks that need store data (reachable channel, approved template, wait before a split, missing source) belong to the service.
@@ -568,12 +572,13 @@ Templates are in [`automations/templates.ts`](../../packages/contracts/src/autom
 
 Festival greetings are campaigns, not workflows (Asif, 16 Nov): a shop sends them as an ordinary campaign and picks the send date in the builder, so there is no festival or date-reached trigger.
 
-| Template                | Trigger                                   | Steps (default)                                                         | Goal         | Category         | Needs     |
-| ----------------------- | ----------------------------------------- | ----------------------------------------------------------------------- | ------------ | ---------------- | --------- |
-| Welcome new subscribers | Consent given                             | Welcome now; wait 2 days; SMS with best sellers                         | Placed order | Welcome          |           |
-| Chat follow-up          | Chat started on Messenger                 | Wait 2 hours; Messenger follow-up inside the window; exit if they reply | Placed order | Abandoned        | Channels  |
-| Back in stock           | Variant restocked, person on waiting list | Message with the product and order link                                 | Placed order | Abandoned        | Products  |
-| Birthday                | Birthday                                  | Greeting at 10:00; wait 7 days                                          | Placed order | Special occasion | Birthdays |
+| Template                | Trigger                                   | Steps (default)                                                                                      | Goal         | Category         | Needs     |
+| ----------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------ | ---------------- | --------- |
+| Welcome new subscribers | Consent given                             | Welcome now; wait 2 days; SMS with best sellers                                                      | Placed order | Welcome          |           |
+| Chat follow-up          | Chat started on Messenger                 | Wait 2 hours; Messenger follow-up inside the window; exit if they reply                              | Placed order | Abandoned        | Channels  |
+| Back in stock           | Variant restocked, person on waiting list | Message with the product and order link                                                              | Placed order | Abandoned        | Products  |
+| Birthday                | Birthday                                  | Greeting at 10:00; wait 7 days                                                                       | Placed order | Special occasion | Birthdays |
+| COD order confirmation  | Order placed, payment status COD pending  | SMS with the confirm link; wait 6 hours; SMS reminder; exit when the order is confirmed or cancelled | None         | Transactional    | Orders    |
 
 "If no order" in a template is its goal: placing an order exits the run before the next step.
 

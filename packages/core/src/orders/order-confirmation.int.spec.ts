@@ -12,6 +12,7 @@ import { DeliveryModule } from '../delivery/delivery.module';
 import { DeliveryService } from '../delivery/delivery.service';
 import { DatabaseModule } from '../platform/database/database.module';
 import { OrderConfirmationService } from './order-confirmation.service';
+import { OrderReportingService } from './order-reporting.service';
 import { OrdersModule } from './orders.module';
 import { OrdersService } from './orders.service';
 
@@ -164,6 +165,23 @@ describe('order confirmation links (Postgres)', () => {
     expect(await service.view(token, ip)).toEqual({ state: 'closed' });
     expect(await service.answer(token, 'cancel', ip)).toBe('closed');
     expect((await stored(created.id)).stage).toBe('to_pack');
+    // What the COD workflow reads before its first message.
+    expect(await app.get(OrderReportingService).progress(f.a, created.id)).toEqual({
+      isConfirmed: true,
+      isCancelled: false,
+    });
+  });
+
+  it('reports an order waiting for confirmation as neither confirmed nor cancelled', async () => {
+    const created = await order();
+    expect(await app.get(OrderReportingService).progress(f.a, created.id)).toEqual({
+      isConfirmed: false,
+      isCancelled: false,
+    });
+    await service.answer(await link(created.id), 'cancel', ip);
+    expect(await app.get(OrderReportingService).progress(f.a, created.id)).toMatchObject({
+      isCancelled: true,
+    });
   });
 
   it('does nothing once staff moved the order out of To confirm', async () => {
