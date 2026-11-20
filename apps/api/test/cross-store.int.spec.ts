@@ -3,7 +3,6 @@ import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { readSheet } from 'read-excel-file/node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
@@ -448,6 +447,7 @@ fixture('GET /contacts/export', async () => {
     expect(result.headers['content-disposition']).toMatch(
       /^attachment; filename="dakly-customers-\d{4}-\d{2}-\d{2}\.xlsx"$/,
     );
+    const { readSheet } = await import('read-excel-file/node');
     const rows = await readSheet(result.rawPayload);
     expect(rows).toHaveLength(2);
     expect(rows[1]?.[0]).toBe(own);
