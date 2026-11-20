@@ -30,7 +30,6 @@ function fixture(status: 'sending' | 'paused' = 'sending') {
     recipientsCount: 2,
     status,
     shortLinkBase: null,
-    wrapSmsLinks: false,
     startedAt: null,
     pauseReason: status === 'paused' ? 'balance' : null,
     balancePauseRevision: status === 'paused' ? 8 : null,

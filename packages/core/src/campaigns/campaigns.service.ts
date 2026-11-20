@@ -136,7 +136,7 @@ export class CampaignsService {
     const campaign = await this.find(storeId, campaignId);
     if (campaign.status !== 'draft') throw campaignError('CAMPAIGN_NOT_DRAFT');
     const recipients = await this.checkAudience(storeId, campaign);
-    return toEstimate(recipients, this.sms.estimate(campaign.content.text, true).smsParts);
+    return toEstimate(recipients, this.sms.estimate(campaign.content.text).smsParts);
   }
 
   // One store transaction (CAMP-2): the audience is frozen, the credits reserved and the event
@@ -157,7 +157,7 @@ export class CampaignsService {
       if (campaign.scheduledFor && campaign.scheduledFor <= now)
         throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
       const recipients = await this.checkAudience(storeId, campaign);
-      const { shortLinkBase, smsParts } = this.sms.estimate(campaign.content.text, true);
+      const { shortLinkBase, smsParts } = this.sms.estimate(campaign.content.text);
       const estimate = toEstimate(recipients, smsParts);
       if (estimate.recipientsCount === 0) throw campaignError('CAMPAIGN_NO_RECIPIENTS');
       for (let start = 0; start < recipients.length; start += AUDIENCE_PAGE_SIZE)
@@ -192,7 +192,6 @@ export class CampaignsService {
         approvedByUserId: null,
         approvedAt: null,
         shortLinkBase: null,
-        wrappedSmsApprovedAt: null,
         estimatedCostPoisha: null,
         recipientsCount: 0,
         skippedCount: 0,
@@ -326,7 +325,6 @@ export class CampaignsService {
       approvedByUserId: actor.kind === 'user' ? actor.userId : null,
       approvedAt: now,
       shortLinkBase,
-      wrappedSmsApprovedAt: now,
       startedAt: status === 'sending' ? now : null,
       updatedAt: now,
       estimatedCostPoisha: estimate.costPoisha,

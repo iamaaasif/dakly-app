@@ -9,7 +9,7 @@ import { campaignError } from './campaigns.errors';
 import type { LockedCampaign } from './campaigns.repository';
 
 const ACTOR = { kind: 'system' } as const;
-type SmsCampaign = Pick<LockedCampaign, 'id' | 'content' | 'shortLinkBase' | 'wrapSmsLinks'>;
+type SmsCampaign = Pick<LockedCampaign, 'id' | 'content' | 'shortLinkBase'>;
 type RecipientCodes = Pick<
   ClaimableRecipient,
   'contactId' | 'optOutLinkCode' | 'redirectLinkCodes'
@@ -19,13 +19,11 @@ type RecipientCodes = Pick<
 export class CampaignSmsService {
   constructor(@Inject(LinksService) private readonly links: LinksService) {}
 
-  estimate(text: string, wrap: boolean, base = this.links.shortLinkBase()) {
+  estimate(text: string, base = this.links.shortLinkBase()) {
     if (!text) return { shortLinkBase: base, smsParts: 0 };
-    const content = wrap
-      ? replaceCampaignSmsUrls(text, campaignSmsUrls(text), () =>
-          this.links.sampleRedirectUrl(base),
-        )
-      : text;
+    const content = replaceCampaignSmsUrls(text, campaignSmsUrls(text), () =>
+      this.links.sampleRedirectUrl(base),
+    );
     return {
       shortLinkBase: base,
       smsParts: countSmsParts(withOptOut(content, this.links.sampleOptOutUrl(base))),
@@ -35,7 +33,7 @@ export class CampaignSmsService {
   async prepare(storeId: string, campaign: SmsCampaign, recipient: RecipientCodes) {
     const { text } = campaign.content;
     const base = campaign.shortLinkBase ?? this.links.shortLinkBase();
-    const urls = campaign.wrapSmsLinks ? campaignSmsUrls(text) : [];
+    const urls = campaignSmsUrls(text);
     const { optOutLinkCode, redirectLinkCodes, createdLinks } = await this.prepareCodes(
       storeId,
       campaign.id,
@@ -50,7 +48,7 @@ export class CampaignSmsService {
     return {
       body: withOptOut(content, this.links.optOutUrl(optOutLinkCode, base)),
       optOutLinkCode,
-      redirectLinkCodes: campaign.wrapSmsLinks ? redirectLinkCodes : null,
+      redirectLinkCodes,
       createdLinks,
     };
   }

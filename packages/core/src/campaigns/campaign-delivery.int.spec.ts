@@ -31,7 +31,6 @@ import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsModule } from './campaigns.module';
-import { CampaignsRepository } from './campaigns.repository';
 import { CampaignsService } from './campaigns.service';
 import { RecordCampaignTapJob } from './jobs/record-campaign-tap.job';
 import { ResumeCampaignsOnWalletCredited } from './jobs/resume-campaigns-on-wallet-credited.job';
@@ -732,49 +731,22 @@ describe('Campaign sender (Postgres)', () => {
     expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 2, tapped: 1 });
   });
 
-  it('keeps the unwrapped body for campaigns approved before wrapping', async () => {
-    const text = 'See https://shop.example.test/offer';
-    const { id } = await sendingCampaign(1, null, text);
-    await admin.pool.query('update campaigns set wrapped_sms_approved_at=null where id=$1', [id]);
+  it('saves an empty redirect list for an SMS without body links', async () => {
+    const { id } = await sendingCampaign(1);
 
     expect(await sender.sendBatch(storeId, id)).toBeNull();
     expect(driver.messages.map(({ text }) => text)).toEqual([
-      expect.stringMatching(
-        /^See https:\/\/shop\.example\.test\/offer\nhttp:\/\/localhost:4000\/l\/s\/[0-9A-Za-z]{8}$/,
-      ),
+      expect.stringMatching(/^নতুন শাড়ি এসেছে\nhttp:\/\/localhost:4000\/l\/s\/[0-9A-Za-z]{8}$/),
     ]);
     expect(await settlementRows(id)).toEqual([
       { kind: 'release', quantity_delta: 1 },
       { kind: 'charge', quantity_delta: -1 },
     ]);
     const { rows } = await admin.pool.query(
-      "select id from tracked_links where store_id=$1 and source_id=$2 and kind='redirect'",
-      [storeId, id],
+      'select redirect_link_codes from campaign_recipients where campaign_id=$1',
+      [id],
     );
-    expect(rows).toEqual([]);
-  });
-
-  it('does not wrap a predecessor API reapproval that retains an old wrapping marker', async () => {
-    const { id } = await sendingCampaign(1, null, 'See https://shop.example.test/offer');
-    const repository = app.get(CampaignsRepository);
-    const lock = () =>
-      app.get(StoreTransaction).run(storeId, () => repository.lockCampaign(storeId, id, 'share'));
-    expect((await lock())?.wrapSmsLinks).toBe(true);
-
-    // The older API updates the approval timestamp without touching the wrapping marker.
-    await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [
-      id,
-      new Date(noon.getTime() + MINUTE),
-    ]);
-    try {
-      expect((await lock())?.wrapSmsLinks).toBe(false);
-      await admin.pool.query('update campaigns set approved_at=null where id=$1', [id]);
-      await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [id, noon]);
-      expect((await lock())?.wrapSmsLinks).toBe(false);
-    } finally {
-      await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [id, noon]);
-      await campaigns.cancel(storeId, id, actor);
-    }
+    expect(rows).toEqual([{ redirect_link_codes: [] }]);
   });
 
   it('reuses the prepared body redirects and approval base when an unresolved send retries', async () => {

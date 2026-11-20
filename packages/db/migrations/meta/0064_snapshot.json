@@ -1,5 +1,5 @@
 {
-  "id": "cdb4aee9-730d-4ac2-aaae-124ae430fa90",
+  "id": "2be1985d-b8ab-4d92-9de3-6a1ccbd5892c",
   "prevId": "3f4bd03b-1a08-43a2-adda-9aa269e02ebc",
   "version": "7",
   "dialect": "postgresql",
@@ -7554,12 +7554,6 @@
         "short_link_base": {
           "name": "short_link_base",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "wrapped_sms_approved_at": {
-          "name": "wrapped_sms_approved_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

@@ -109,11 +109,8 @@ export class CampaignSenderService {
   }
 
   private estimateCredits(campaign: LockedCampaign): number {
-    return this.smsText.estimate(
-      campaign.content.text,
-      campaign.wrapSmsLinks,
-      campaign.shortLinkBase ?? undefined,
-    ).smsParts;
+    return this.smsText.estimate(campaign.content.text, campaign.shortLinkBase ?? undefined)
+      .smsParts;
   }
 
   private async claimForSubmission(

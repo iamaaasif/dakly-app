@@ -366,11 +366,9 @@ When no queued or claimed recipient remains, the sender settles the reservation,
 
 ### SMS body links (CAMP-3)
 
-Approving an SMS freezes whether its body URLs will be wrapped and which short-link base it will use. The estimate and reservation count the final SMS parts, using sample redirect and opt-out codes of the same length as real codes. Approval creates no tracked links. An approval made by an older API keeps its original body and price, including when it replaces a wrapped approval.
+Approving an SMS freezes its short-link base. The estimate and reservation count the final SMS parts using sample redirect and opt-out codes of the same length as real codes. Approval creates no tracked links.
 
-During recipient preparation, the sender creates a separate tracked link for each standalone absolute HTTP or HTTPS URL in that recipient's SMS. Sentence punctuation stays in the message. When a closing bracket could belong to either the URL or the message, the sender leaves the token as written. Enclose a URL in angle brackets to mark its full destination, including any final punctuation. The sender stores the ordered redirect codes with the opt-out code under the recipient lock. Retries render the same body with the saved codes and original short-link base. The provider receives that body, and settlement uses its SMS parts.
-
-Apply the schema migration and drain and stop predecessor campaign workers before upgrading the API to approve wrapped SMS. Start the wrapping-aware workers after all API replicas are upgraded. Keep those workers for wrapped approvals through settlement if the API rolls back.
+During recipient preparation, the sender wraps each HTTP or HTTPS URL that starts a word in the message. The URL can be inside parentheses or square brackets and ends at the next space. Trailing sentence punctuation and unmatched closing brackets stay in the message. The sender stores the ordered redirect codes and the opt-out code under the recipient lock, with an empty redirect list when there are no links. Retries use the same codes and short-link base. Settlement uses the SMS parts in the rendered body.
 
 ### Results counts (CAMP-3)
 

@@ -91,10 +91,7 @@ export class CampaignFundingService {
     if (!reprice && campaign.status !== 'sending') return true;
     if (!campaign.approvedAt) throw campaignError('CAMPAIGN_APPROVAL_TIME_MISSING');
     if (!reprice) return true;
-    const { shortLinkBase: base, smsParts } = this.sms.estimate(
-      campaign.content.text,
-      campaign.wrapSmsLinks,
-    );
+    const { shortLinkBase: base, smsParts } = this.sms.estimate(campaign.content.text);
     const needed = smsParts * campaign.recipientsCount;
     const key = approvalKey(id, campaign.approvedAt);
     await this.wallets.lockForReservation(storeId, WALLET);
