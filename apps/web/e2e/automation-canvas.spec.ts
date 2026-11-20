@@ -165,6 +165,12 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     const before = await steps.getByRole('listitem').count();
     await page.getByRole('button', { name: 'Delay' }).click();
     await expect(steps.getByText('Wait for')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Edit step 4' }).click();
+    await expect(page).toHaveURL(/step=delay_1/);
+    await page.getByLabel('Amount').fill('3');
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(page).not.toHaveURL(/step=/);
+    await expect(steps.getByText('3 days')).toBeVisible();
     await page.getByRole('button', { name: /Options for step 4/ }).click();
     await expect(page.getByRole('menuitem', { name: 'Move down' })).toBeDisabled();
     await page.getByRole('menuitem', { name: 'Move up' }).click();
@@ -210,7 +216,7 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
   }
 });
 
-test('shows how many people reached each step', async ({ page, context, baseURL }) => {
+test('shows how many entries reached each step', async ({ page, context, baseURL }) => {
   const { headers, storeIds } = await signIn(context, baseURL!);
   const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const evidence = process.env.CAMP6_CANVAS_EVIDENCE;
@@ -248,10 +254,12 @@ test('shows how many people reached each step', async ({ page, context, baseURL 
     await page.goto(`/automations/${id}/canvas`);
     const steps = page.getByRole('list', { name: 'Workflow steps' });
     await expect(steps.getByText('Trigger', { exact: true })).toBeVisible();
-    await expect(steps.getByText(/reached|tapped/)).toHaveCount(0);
+    await expect(steps.getByText(/entry|entries|tapped/)).toHaveCount(0);
     await page.getByRole('button', { name: 'Show stats' }).click();
+    await expect(page).toHaveURL(/stats=1/);
+    await page.reload();
     await expect(steps.getByText(/^1 sent · 1 tapped/)).toBeVisible();
-    await expect(steps.getByText(/^1 reached/)).toBeVisible();
+    await expect(steps.getByText(/^1 entry/)).toBeVisible();
     await expect(steps.getByText(/^0 sent · 0 tapped/)).toBeVisible();
     for (const [width, height] of [
       [1440, 900],
