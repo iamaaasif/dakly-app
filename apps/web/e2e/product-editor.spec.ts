@@ -118,7 +118,7 @@ test('saves unfinished products, edits variants without losing stock and manages
       );
       await expect(page.getByLabel('Add photo')).toBeEnabled();
       const choosing = page.waitForEvent('filechooser');
-      await page.getByText('Add photo', { exact: true }).click();
+      await page.getByText('Add', { exact: true }).click();
       await (await choosing).setFiles(png);
       const saved = (await (await confirmed).json()) as ProductResponse;
       fileIds.push(saved.photos[count - 1]!.id);

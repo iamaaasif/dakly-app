@@ -19,7 +19,12 @@ export function ProductPhotos({ product }: ProductPhotosProps) {
   return (
     <section className="space-y-4" aria-label="Product photos">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-text">Photos</h2>
+        <h2
+          className="text-sm font-semibold text-text"
+          aria-label={`Photos (${product.photos.length})`}
+        >
+          Photos
+        </h2>
         <span className="text-xs text-text-muted">
           {product.photos.length} photo{product.photos.length === 1 ? '' : 's'}
         </span>
@@ -192,7 +197,7 @@ function PhotoInput({ id, input, disabled, onFile }: PhotoInputProps) {
         className="flex size-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-input-border bg-surface-muted text-xs font-medium text-text-muted focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-focus hover:border-text hover:text-text has-disabled:cursor-not-allowed has-disabled:opacity-50"
       >
         <Plus aria-hidden="true" size={16} strokeWidth={1.75} />
-        + Add
+        Add
         <input
           ref={input}
           id={id}
