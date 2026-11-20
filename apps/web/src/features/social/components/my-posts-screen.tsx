@@ -9,7 +9,7 @@ import { QueryError } from '@dakly/ui/query-error';
 
 import { usePosts } from '../api/get-posts';
 import { useSocialAccounts, type SocialAccount } from '../api/get-social-accounts';
-import { buildEntries, type CalendarEntry } from '../post-calendar';
+import { buildEntries, timeOnDay, type CalendarEntry } from '../post-calendar';
 import { useMovePost } from '../use-move-post';
 import { useMyPostsParams } from '../use-my-posts-params';
 import { CalendarPanel } from './calendar-panel';
@@ -78,9 +78,16 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
         url={url}
         canEdit={canEdit}
         onOpen={setOpen}
-        onMove={canEdit ? move : undefined}
+        onMove={canEdit ? (entry, day) => move(entry, timeOnDay(entry, day)) : undefined}
       />
-      {open && <PostDetailsDialog entry={open} accounts={accounts} onClose={() => setOpen(null)} />}
+      {open && (
+        <PostDetailsDialog
+          entry={open}
+          accounts={accounts}
+          onMove={canEdit ? move : undefined}
+          onClose={() => setOpen(null)}
+        />
+      )}
       <HubDialogs
         dialog={dialog}
         accounts={accounts}

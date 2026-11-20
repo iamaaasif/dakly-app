@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 import { useReschedulePost } from './api/reschedule-post';
 import { postTitle } from './components/post-chip';
-import { timeOnDay, type CalendarEntry } from './post-calendar';
+import type { CalendarEntry } from './post-calendar';
 import { formatShortDate } from '@/lib/format-date';
 
 type Notice = { message: string; tone?: 'error' };
@@ -11,8 +11,7 @@ type Notice = { message: string; tone?: 'error' };
 export function useMovePost() {
   const reschedule = useReschedulePost();
   const [notice, setNotice] = useState<Notice | null>(null);
-  const move = (entry: CalendarEntry, day: string) => {
-    const scheduledFor = timeOnDay(entry, day);
+  const move = (entry: CalendarEntry, scheduledFor: string) => {
     reschedule.mutate(
       { postId: entry.post.id, scheduledFor },
       {

@@ -1,13 +1,16 @@
 import Image from 'next/image';
+import { useState } from 'react';
 
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Dialog } from '@dakly/ui/dialog';
+import { Input } from '@dakly/ui/input';
+import { Label } from '@dakly/ui/label';
 
 import type { SocialAccount } from '../api/get-social-accounts';
-import { statusLabels, type CalendarEntry } from '../post-calendar';
+import { canMove, statusLabels, type CalendarEntry } from '../post-calendar';
 import { postTitle } from './post-chip';
-import { formatShortDateTime } from '@/lib/format-date';
+import { dhakaTimeOfDay, formatShortDateTime } from '@/lib/format-date';
 
 const targetLabels = {
   draft: 'Draft',
@@ -32,10 +35,12 @@ const targetVariants = {
 type PostDetailsDialogProps = {
   entry: CalendarEntry;
   accounts: SocialAccount[];
+  // Set when the person can schedule; moving by date and time is the keyboard route for dragging.
+  onMove?: (entry: CalendarEntry, scheduledFor: string) => void;
   onClose: () => void;
 };
 
-export function PostDetailsDialog({ entry, accounts, onClose }: PostDetailsDialogProps) {
+export function PostDetailsDialog({ entry, accounts, onMove, onClose }: PostDetailsDialogProps) {
   const { post } = entry;
   return (
     <Dialog
@@ -76,11 +81,44 @@ export function PostDetailsDialog({ entry, accounts, onClose }: PostDetailsDialo
           );
         })}
       </ul>
+      {onMove && canMove(entry) && <MoveField entry={entry} onMove={onMove} onClose={onClose} />}
       <div className="mt-6 flex justify-end">
         <Button variant="secondary" onClick={onClose}>
           Close
         </Button>
       </div>
     </Dialog>
+  );
+}
+
+type MoveFieldProps = {
+  entry: CalendarEntry;
+  onMove: (entry: CalendarEntry, at: string) => void;
+  onClose: () => void;
+};
+
+function MoveField({ entry, onMove, onClose }: MoveFieldProps) {
+  const [value, setValue] = useState(`${entry.dayKey}T${dhakaTimeOfDay(entry.at)}`);
+  return (
+    <div className="mt-4 flex flex-wrap items-end gap-3">
+      <div className="min-w-48 flex-1 space-y-1">
+        <Label htmlFor="move-post">Move to</Label>
+        <Input
+          id="move-post"
+          type="datetime-local"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      </div>
+      <Button
+        disabled={!value}
+        onClick={() => {
+          onMove(entry, `${value}:00+06:00`);
+          onClose();
+        }}
+      >
+        Move
+      </Button>
+    </div>
   );
 }

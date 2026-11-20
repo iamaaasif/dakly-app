@@ -279,6 +279,10 @@ test('moves a scheduled post to another day by dragging it', async ({ page, cont
         page.getByRole('gridcell').filter({ has: page.locator('time[datetime="2099-03-13"]') }),
       );
     await expect(page.getByText(/Moved “Drag me to Friday” to Mar 13/)).toBeVisible();
+    await page.getByRole('button', { name: /Drag me to Friday/ }).click();
+    await expect(page.getByLabel('Move to')).toHaveValue('2099-03-13T20:30');
+    await capture(page, 'move-to');
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(
       page
         .getByRole('gridcell')
