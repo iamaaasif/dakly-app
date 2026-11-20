@@ -106,18 +106,15 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await expect(page.getByRole('link', { name: 'Support access' })).toBeVisible();
     await page.locator('aside').getByRole('link', { name: 'All customers' }).click();
 
-    // 1. Sidebar collapse and phone navigation before opening dialog
     await page.getByRole('button', { name: 'Collapse navigation' }).click();
     await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible();
     await verifyPhoneNavigation(page);
 
-    // 2. Open "Add customers", fill "Unfinished draft" and run verifyPausedDraft
     await page.getByRole('button', { name: 'Add customers' }).click();
     const name = page.getByLabel('Name', { exact: true });
     await name.fill('Unfinished draft');
     await verifyPausedDraft(page);
 
-    // 3. Keep the dialog open and switch the shop from a second page in the same context
     const response = await context.request.get('/api/me/context');
     expect(response.status()).toBe(200);
     const before = (await response.json()) as SessionContext;
@@ -133,7 +130,6 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     );
     await secondPage.close();
 
-    // Assert on the first page that the draft is gone: dialog closed, old input disconnected, no db write
     await expect(page.getByRole('combobox', { name: 'Current shop' })).toHaveValue(
       fixture.storeIds[1],
     );
@@ -151,7 +147,6 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await page.locator('aside').getByRole('link', { name: 'All customers' }).click();
     await expect(page.getByRole('button', { name: 'Collapse navigation' })).toBeVisible();
 
-    // 4. In the new shop, open dialog again, add final customer, assert written only to verified shop
     await page.getByRole('button', { name: 'Add customers' }).click();
     const customer = { name: 'সাবিনা', phone: `018${randomInt(10000000, 99999999)}` };
     await page.getByLabel('Name', { exact: true }).fill(customer.name);
