@@ -1394,7 +1394,7 @@ erDiagram
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
         text short_link_base "NULL; text"
-        boolean wrap_sms_links "NOT NULL; boolean"
+        timestamp_with_time_zone wrapped_sms_approved_at "NULL; timestamp with time zone"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         timestamp_with_time_zone settlement_pending_at "NULL; timestamp with time zone"

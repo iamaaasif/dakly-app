@@ -366,7 +366,7 @@ When no queued or claimed recipient remains, the sender settles the reservation,
 
 ### SMS body links (CAMP-3)
 
-Approving an SMS freezes whether its body URLs will be wrapped and which short-link base it will use. The estimate and reservation count the final SMS parts, using sample redirect and opt-out codes of the same length as real codes. Approval creates no tracked links. SMS approved before wrapping keeps its original body and price.
+Approving an SMS freezes whether its body URLs will be wrapped and which short-link base it will use. The estimate and reservation count the final SMS parts, using sample redirect and opt-out codes of the same length as real codes. Approval creates no tracked links. An approval made by an older API keeps its original body and price, including when it replaces a wrapped approval.
 
 During recipient preparation, the sender creates a separate tracked link for each absolute HTTP or HTTPS URL in that recipient's SMS. Sentence punctuation stays in the message. To keep punctuation at the end of a URL, enclose it in angle brackets. The sender stores the ordered redirect codes with the opt-out code under the recipient lock. Retries render the same body with the saved codes and original short-link base. The provider receives that body, and settlement uses its SMS parts.
 

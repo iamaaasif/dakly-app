@@ -1,5 +1,5 @@
 {
-  "id": "ebcad054-c8c8-40a0-9db6-0daa1325d0c7",
+  "id": "1cf56d09-e34e-4600-bfa6-00b1f76f4370",
   "prevId": "4b9e8b44-f043-4b44-b027-646f90a7f36f",
   "version": "7",
   "dialect": "postgresql",
@@ -7557,12 +7557,11 @@
           "primaryKey": false,
           "notNull": false
         },
-        "wrap_sms_links": {
-          "name": "wrap_sms_links",
-          "type": "boolean",
+        "wrapped_sms_approved_at": {
+          "name": "wrapped_sms_approved_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": true,
-          "default": false
+          "notNull": false
         },
         "started_at": {
           "name": "started_at",

@@ -122,7 +122,7 @@ export const campaigns = pgTable(
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
     approvedAt: timestamptz('approved_at'),
     shortLinkBase: text('short_link_base'),
-    wrapSmsLinks: boolean('wrap_sms_links').notNull().default(false),
+    wrappedSmsApprovedAt: timestamptz('wrapped_sms_approved_at'),
     startedAt: timestamptz('started_at'),
     finishedAt: timestamptz('finished_at'),
     settlementPendingAt: timestamptz('settlement_pending_at'),

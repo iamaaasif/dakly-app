@@ -54,7 +54,7 @@ export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
   approvedByUserId: string | null;
   approvedAt: Date;
   shortLinkBase: string;
-  wrapSmsLinks: boolean;
+  wrappedSmsApprovedAt: Date;
   startedAt: Date | null;
   estimatedCostPoisha: number;
   recipientsCount: number;
@@ -76,7 +76,7 @@ export type CampaignStatusChange = Pick<Campaign, 'status' | 'updatedAt'> & {
   approvedByUserId?: null;
   approvedAt?: null;
   shortLinkBase?: string | null;
-  wrapSmsLinks?: false;
+  wrappedSmsApprovedAt?: null;
   estimatedCostPoisha?: null;
   recipientsCount?: 0;
   skippedCount?: 0;
@@ -283,7 +283,7 @@ export class CampaignsRepository {
           ...campaignColumns,
           approvedAt: campaigns.approvedAt,
           shortLinkBase: campaigns.shortLinkBase,
-          wrapSmsLinks: campaigns.wrapSmsLinks,
+          wrapSmsLinks: sql<boolean>`coalesce(${campaigns.wrappedSmsApprovedAt} = ${campaigns.approvedAt}, false)`,
           settlementPendingAt: campaigns.settlementPendingAt,
           balancePauseRevision: campaigns.balancePauseRevision,
           pauseReason: campaigns.pauseReason,

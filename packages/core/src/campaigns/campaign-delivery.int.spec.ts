@@ -32,6 +32,7 @@ import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignsModule } from './campaigns.module';
+import { CampaignsRepository } from './campaigns.repository';
 import { CampaignsService } from './campaigns.service';
 import { RecordCampaignTapJob } from './jobs/record-campaign-tap.job';
 import { ResumeCampaignsOnWalletCredited } from './jobs/resume-campaigns-on-wallet-credited.job';
@@ -731,7 +732,7 @@ describe('Campaign sender (Postgres)', () => {
   it('keeps the unwrapped body for campaigns approved before wrapping', async () => {
     const text = 'See https://shop.example.test/offer';
     const { id } = await sendingCampaign(1, null, text);
-    await admin.pool.query('update campaigns set wrap_sms_links=false where id=$1', [id]);
+    await admin.pool.query('update campaigns set wrapped_sms_approved_at=null where id=$1', [id]);
 
     expect(await sender.sendBatch(storeId, id)).toBeNull();
     expect(driver.messages.map(({ text }) => text)).toEqual([
@@ -748,6 +749,26 @@ describe('Campaign sender (Postgres)', () => {
       [storeId, id],
     );
     expect(rows).toEqual([]);
+  });
+
+  it('does not wrap a predecessor API reapproval that retains an old wrapping marker', async () => {
+    const { id } = await sendingCampaign(1, null, 'See https://shop.example.test/offer');
+    const repository = app.get(CampaignsRepository);
+    const lock = () =>
+      app.get(StoreTransaction).run(storeId, () => repository.lockCampaign(storeId, id, 'share'));
+    expect((await lock())?.wrapSmsLinks).toBe(true);
+
+    // The older API updates the approval timestamp without touching the wrapping marker.
+    await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [
+      id,
+      new Date(noon.getTime() + MINUTE),
+    ]);
+    try {
+      expect((await lock())?.wrapSmsLinks).toBe(false);
+    } finally {
+      await admin.pool.query('update campaigns set approved_at=$2 where id=$1', [id, noon]);
+      await campaigns.cancel(storeId, id, actor);
+    }
   });
 
   it('reuses the prepared body redirects and approval base when an unresolved send retries', async () => {
