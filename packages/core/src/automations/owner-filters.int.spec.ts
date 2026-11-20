@@ -175,6 +175,7 @@ describe('automation filters without RLS assistance', () => {
     await runs.changeStep(f.b, runId, 'offer', { outcome: 'sent' });
     expect(await runs.findSendingStep(f.a, runId, 'offer')).toEqual({
       id: stepId,
+      channel: null,
       firstTriedAt: null,
       latestDispatchAt: claimedAt,
       optOutUrl: null,
@@ -191,6 +192,7 @@ describe('automation filters without RLS assistance', () => {
     });
     expect(await runs.findSendingStep(f.a, runId, 'older-send')).toEqual({
       id: incompleteId,
+      channel: null,
       firstTriedAt: null,
       latestDispatchAt: null,
       optOutUrl: null,

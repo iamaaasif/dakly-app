@@ -28,7 +28,11 @@ import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignAnalyticsRepository } from './campaign-analytics.repository';
 import { CampaignApprovalRepository } from './campaign-approval.repository';
-import { audienceDecisionTime, CampaignAudienceService } from './campaign-audience.service';
+import {
+  audienceDecisionTime,
+  CampaignAudienceService,
+  MESSENGER_CAMPAIGN_WINDOW_MS,
+} from './campaign-audience.service';
 import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
 import { toCampaignResponse } from './campaign-response';
 import { CampaignSmsService } from './campaign-sms.service';
@@ -200,8 +204,7 @@ export class CampaignsService {
       if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_DRAFT');
       if (!campaign.content.text) throw campaignError('CAMPAIGN_TEXT_EMPTY');
       const now = this.clock.now();
-      if (campaign.scheduledFor && campaign.scheduledFor <= now)
-        throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
+      assertSendTime(campaign, now);
       const estimatedTotal = await this.segmentSize(storeId, campaign);
       if (estimatedTotal === 0) throw campaignError('CAMPAIGN_NO_RECIPIENTS');
       const approving = await this.approvals.markApproving(storeId, campaignId, {
@@ -431,4 +434,19 @@ function toEstimate(
     smsCredits: smsParts * recipientsCount,
     costPoisha: 0,
   };
+}
+
+function assertSendTime(
+  { channel, scheduledFor }: { channel: CampaignChannel; scheduledFor: Date | null },
+  now: Date,
+) {
+  if (!scheduledFor) return;
+  if (scheduledFor <= now) throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
+  // Messenger only reaches people who wrote in the last 23 hours, so a later send time would find
+  // nearly every window closed.
+  if (
+    channel === 'messenger' &&
+    scheduledFor.getTime() - now.getTime() > MESSENGER_CAMPAIGN_WINDOW_MS
+  )
+    throw campaignError('CAMPAIGN_SCHEDULE_TOO_LATE');
 }

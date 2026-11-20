@@ -211,7 +211,9 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await expect(detail.getByText('Staff ·')).toBeVisible();
     await expect(detail.getByText('3 hours ago')).toHaveAttribute('title', /Asia\/Dhaka/);
     await expect(detail.getByText('High return risk')).toBeVisible();
-    await expect(detail.getByText('Ask for a small advance first')).toBeVisible();
+    await expect(
+      detail.getByText(/Returned \d+ of \d+ parcels\. Ask for an advance\./),
+    ).toBeVisible();
     await expect(detail.getByText('Line discount')).toBeVisible();
     await verifyDrawerWhileSessionIsBlocked(page, detail);
     const confirm = detail.getByRole('button', { name: 'Confirm' });

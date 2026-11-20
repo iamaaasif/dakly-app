@@ -1,2 +1,2 @@
-export const agentTabs = ['settings'] as const;
+export const agentTabs = ['settings', 'knowledge'] as const;
 export type AgentTab = (typeof agentTabs)[number];
