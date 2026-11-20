@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { channelConnectionKinds, chatChannels } from '@dakly/contracts/channels';
+import type { messageAttachmentKinds } from '@dakly/contracts/chats';
 import { countSmsParts } from '@dakly/contracts/sms';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
@@ -25,10 +26,19 @@ export type InboundMessageInput = {
   externalAccountId: string;
   externalSenderId: string;
   externalMessageId: string;
-  content: string;
+  // Null when the customer sent only attachments.
+  content: string | null;
+  attachments: { kind: (typeof messageAttachmentKinds)[number]; sourceUrl: string }[];
   sentAt: Date;
   receivedAt: Date;
 };
+
+const attachmentPreviews = {
+  image: 'Photo',
+  voice: 'Voice message',
+  video: 'Video',
+  file: 'File',
+} as const;
 
 type ReceiveOutcome =
   'stored' | 'duplicate' | 'unknown_account' | 'stale_delivery' | 'invalid_timestamp';
@@ -111,6 +121,7 @@ export class MessagingService {
         senderIdentityId,
         externalMessageId: input.externalMessageId,
         text: input.content,
+        attachments: input.attachments,
         sentAt: input.sentAt,
       },
       now,
@@ -125,12 +136,36 @@ export class MessagingService {
         conversationId: conversation.id,
         at: input.sentAt,
         expiry: new Date(input.sentAt.getTime() + DAY_MS),
-        preview: input.content.slice(0, 160),
+        preview: input.content
+          ? input.content.slice(0, 160)
+          : attachmentPreviews[input.attachments[0]!.kind],
         reopenVersion: reopen ? conversation.version : undefined,
       },
       now,
     );
-    await this.recordStop(storeId, contactId, channel, input.content);
+    if (input.content) await this.recordStop(storeId, contactId, channel, input.content);
+    await this.publishInbound(
+      storeId,
+      input,
+      { message, conversation, contactId, connectionId, channel },
+      now,
+    );
+    return 'stored';
+  }
+
+  private async publishInbound(
+    storeId: string,
+    input: InboundMessageInput,
+    saved: {
+      message: { id: string };
+      conversation: { id: string; started: boolean };
+      contactId: string;
+      connectionId: string;
+      channel: (typeof chatChannels)[number];
+    },
+    now: Date,
+  ) {
+    const { message, conversation, contactId, connectionId, channel } = saved;
     const occurredAt = now.toISOString();
     if (conversation.started)
       await this.outbox.publish({
@@ -139,13 +174,19 @@ export class MessagingService {
         occurredAt,
         payload: { conversationId: conversation.id, contactId, connectionId, channel },
       });
+    if (input.attachments.length)
+      await this.outbox.publish({
+        type: 'message.attachments_requested',
+        storeId,
+        occurredAt,
+        payload: { messageId: message.id },
+      });
     await this.outbox.publish({
       type: 'message.received',
       storeId,
       occurredAt,
       payload: { messageId: message.id, conversationId: conversation.id, contactId, channel },
     });
-    return 'stored';
   }
 
   // The caller records status and cost in its own short transaction, before and after this.

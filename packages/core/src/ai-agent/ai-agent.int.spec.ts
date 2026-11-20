@@ -138,6 +138,7 @@ async function receive(shop: Shop, content: string, sender = 'customer', at = ne
     externalMessageId,
     externalSenderId: sender,
     content,
+    attachments: [],
     sentAt: at,
     receivedAt: new Date(),
   });

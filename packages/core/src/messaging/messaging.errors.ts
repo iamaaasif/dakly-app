@@ -14,6 +14,7 @@ const MESSAGING_ERRORS = {
     status: 409,
     message: "The contact's phone changed after this message was decided",
   },
+  ATTACHMENT_COPY_UNAVAILABLE: { status: 503, message: 'The attachment could not be copied yet' },
   // A provider call inside a store transaction would hold its connection and locks.
   MESSAGING_INSIDE_TRANSACTION: { status: 500, message: 'Something went wrong' },
 } as const satisfies ErrorCatalog;

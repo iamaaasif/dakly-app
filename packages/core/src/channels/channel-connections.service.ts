@@ -50,7 +50,8 @@ export class ChannelConnectionsService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(MetaPageSubscriptionsService)
     private readonly pageSubscriptions: MetaPageSubscriptionsService,
-    @Inject(META_CHANNEL_DRIVER) private readonly driver: Pick<ChannelDriver, 'send'> | null,
+    @Inject(META_CHANNEL_DRIVER)
+    private readonly driver: Pick<ChannelDriver, 'send' | 'downloadMedia'> | null,
   ) {}
 
   async list(
@@ -138,6 +139,27 @@ export class ChannelConnectionsService {
           { accountExternalId: externalAccountId, accessToken: token.toString() },
           { ...message, channel },
         ),
+      );
+    } catch (error) {
+      await this.recordSendCredentialRejection(storeId, connectionId, ciphertext, error);
+      throw error;
+    } finally {
+      token.fill(0);
+    }
+  }
+
+  async downloadMetaMedia(prepared: PreparedMetaSend, url: string, maxBytes: number) {
+    if (hasDatabaseTransactionScope()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
+    if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
+    const { storeId, connectionId, ciphertext, keyVersion } = prepared;
+    const token = this.encryption.decrypt(
+      { owner: 'store', storeId, purpose: 'channel-access-token' },
+      { ciphertext, keyVersion },
+    );
+    const driver = this.driver;
+    try {
+      return await measureVendorCall(this.logger, 'meta_media', 'Meta media measured', () =>
+        driver.downloadMedia(token.toString(), url, maxBytes),
       );
     } catch (error) {
       await this.recordSendCredentialRejection(storeId, connectionId, ciphertext, error);

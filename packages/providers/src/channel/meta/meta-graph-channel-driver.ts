@@ -4,6 +4,7 @@ import {
   MetaRequestError,
   type ChannelCredentials,
   type ChannelDriver,
+  type MediaDownload,
   type MetaAuthorizationDriver,
   type MetaPage,
   type MetaTokenHealthDriver,
@@ -13,6 +14,9 @@ import {
 const graph = 'https://graph.facebook.com/v27.0/';
 const login = 'https://www.facebook.com/v27.0/dialog/oauth';
 const requestTimeoutMs = 5000;
+const mediaTimeoutMs = 20_000;
+// The webhook is signed, but the token only goes to Meta's own media hosts.
+const mediaHostSuffixes = ['.fbcdn.net', '.cdninstagram.com', '.fbsbx.com'];
 const pageManagementTasks = ['MANAGE', 'PROFILE_PLUS_MANAGE', 'PROFILE_PLUS_FULL_CONTROL'];
 
 const accessTokenSchema = z.object({ access_token: z.string().min(1) });
@@ -77,6 +81,31 @@ function permissionDenied(code: number): boolean {
   return code === 10 || (code >= 200 && code <= 299);
 }
 
+function isMetaMediaUrl(url: string): boolean {
+  const { protocol, hostname } = new URL(url);
+  return protocol === 'https:' && mediaHostSuffixes.some((suffix) => hostname.endsWith(suffix));
+}
+
+function mediaType(response: Response): string {
+  return (response.headers.get('content-type') ?? '').split(';')[0]?.trim() ?? '';
+}
+
+// Content-Length can be missing or wrong, so the body is counted as it arrives.
+async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array | null> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of response.body ?? []) {
+      total += chunk.byteLength;
+      if (total > maxBytes) return null;
+      chunks.push(chunk);
+    }
+  } catch {
+    throw new MetaRequestError('unavailable');
+  }
+  return Buffer.concat(chunks);
+}
+
 type MetaApp = {
   appId: string;
   appSecret: string;
@@ -85,7 +114,10 @@ type MetaApp = {
 };
 
 export class MetaGraphChannelDriver
-  implements MetaAuthorizationDriver, MetaTokenHealthDriver, Pick<ChannelDriver, 'send'>
+  implements
+    MetaAuthorizationDriver,
+    MetaTokenHealthDriver,
+    Pick<ChannelDriver, 'send' | 'downloadMedia'>
 {
   constructor(private readonly app: MetaApp) {}
 
@@ -196,6 +228,31 @@ export class MetaGraphChannelDriver
       { method: 'POST', accessToken, signal: AbortSignal.timeout(requestTimeoutMs), body },
     );
     return { externalMessageId: response.message_id };
+  }
+
+  async downloadMedia(accessToken: string, url: string, maxBytes: number): Promise<MediaDownload> {
+    if (!isMetaMediaUrl(url)) throw new MetaRequestError('rejected');
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: AbortSignal.timeout(mediaTimeoutMs),
+        redirect: 'manual',
+        headers: { authorization: `Bearer ${accessToken}` },
+      });
+    } catch {
+      throw new MetaRequestError('unavailable');
+    }
+    // The token must never follow a redirect, so a redirect is a final answer.
+    if (response.status >= 300 && response.status < 400) throw new MetaRequestError('rejected');
+    if (response.status === 401) throw new MetaRequestError('auth_error');
+    // Signed media links answer 403 once they expire.
+    if ([400, 403, 404, 410].includes(response.status)) return { kind: 'expired' };
+    if (!response.ok) throw new MetaRequestError('unavailable');
+    const declared = Number(response.headers.get('content-length'));
+    if (declared > maxBytes) return { kind: 'too_large' };
+    const bytes = await readCapped(response, maxBytes);
+    if (!bytes) return { kind: 'too_large' };
+    return { kind: 'downloaded', bytes, contentType: mediaType(response) };
   }
 
   private async request<T>(
