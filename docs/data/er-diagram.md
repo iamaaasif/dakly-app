@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0063_snapshot.json`: **95 tables, 1283 columns, 392 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0064_snapshot.json`: **95 tables, 1284 columns, 392 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1424,6 +1424,7 @@ erDiagram
         timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
         timestamp_with_time_zone dispatch_started_at "NULL; timestamp with time zone"
         text opt_out_link_code "NULL; text"
+        text__ redirect_link_codes "NULL; text[]"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
         bigint cost_poisha "NULL; bigint"

@@ -22,6 +22,7 @@ import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
+import { CampaignSmsService } from './campaign-sms.service';
 import { CampaignSweepService } from './campaign-sweep.service';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsRepository } from './campaigns.repository';
@@ -50,6 +51,7 @@ import { CampaignsService } from './campaigns.service';
     CampaignCountsService,
     CampaignsRepository,
     CampaignSendingRepository,
+    CampaignSmsService,
     CampaignsService,
     CampaignSenderService,
     CampaignFundingService,

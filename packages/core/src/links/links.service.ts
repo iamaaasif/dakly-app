@@ -82,6 +82,10 @@ export class LinksService {
     return linkUrl('sms_opt_out', code, base);
   }
 
+  redirectUrl(code: string, base = this.shortLinkBase()): string {
+    return linkUrl('redirect', code, base);
+  }
+
   shortLinkBase(): string {
     return loadEnv().SHORT_LINK_BASE_URL;
   }
@@ -89,6 +93,10 @@ export class LinksService {
   // An opt-out address as long as a real one, so an estimate counts the characters it adds.
   sampleOptOutUrl(base = this.shortLinkBase()): string {
     return linkUrl('sms_opt_out', '0'.repeat(TRACKED_LINK_CODE_LENGTH), base);
+  }
+
+  sampleRedirectUrl(base = this.shortLinkBase()): string {
+    return this.redirectUrl('0'.repeat(TRACKED_LINK_CODE_LENGTH), base);
   }
 
   // D31: a visit keeps only an HMAC of the address and browser, never either value.

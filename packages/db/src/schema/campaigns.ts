@@ -227,6 +227,7 @@ export const campaignRecipients = pgTable(
     // Receipt lookup renews the lease while the frequency cap keeps using the dispatch time.
     dispatchStartedAt: timestamptz('dispatch_started_at'),
     optOutLinkCode: text('opt_out_link_code'),
+    redirectLinkCodes: text('redirect_link_codes').array(),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),

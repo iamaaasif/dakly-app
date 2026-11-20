@@ -88,8 +88,8 @@ let calls: SmsMessage[];
 let clockNow: Date;
 let phoneSeed = 0;
 
-// A campaign approved to send now to `count` new consented contacts, with their phones.
-async function sendingCampaign(count: number, scheduledFor: Date | null = null, text = TEXT) {
+// A campaign for `count` new consented contacts, with their phones.
+async function draftCampaign(count: number, scheduledFor: Date | null, text: string) {
   const district = `জেলা-${randomUUID()}`;
   const phones: string[] = [];
   for (let index = 0; index < count; index += 1) {
@@ -118,6 +118,11 @@ async function sendingCampaign(count: number, scheduledFor: Date | null = null, 
     scheduledFor: scheduledFor?.toISOString() ?? null,
   });
   const { id } = await campaigns.create(storeId, draft, actor);
+  return { id, phones };
+}
+
+async function sendingCampaign(count: number, scheduledFor: Date | null = null, text = TEXT) {
+  const { id, phones } = await draftCampaign(count, scheduledFor, text);
   await campaigns.approve(storeId, id, owner);
   return { id, phones };
 }
@@ -222,8 +227,8 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
-  async function unknownFirstSend() {
-    const campaign = await sendingCampaign(1);
+  async function unknownFirstSend(text = TEXT) {
+    const campaign = await sendingCampaign(1, null, text);
     vi.mocked(MailpitSmsDriver.prototype.send).mockImplementationOnce(async (message) => {
       calls.push({ ...message });
       throw new Error('provider timed out');
@@ -657,6 +662,153 @@ describe('Campaign sender (Postgres)', () => {
       [storeId, id],
     );
     expect(events).toHaveLength(1);
+  });
+
+  it('reserves the wrapped price at approval and creates tracked redirects only during preparation', async () => {
+    const target = 'https://a.co/';
+    const text = `${'A'.repeat(107)} ${target}`;
+    const { id } = await draftCampaign(2, null, text);
+    const before = await wallets.balance(storeId, 'sms_credits');
+    const findRedirects = async () =>
+      (
+        await admin.pool.query(
+          "select id, code, contact_id, target_url from tracked_links where store_id=$1 and source_id=$2 and kind='redirect'",
+          [storeId, id],
+        )
+      ).rows;
+
+    expect(await campaigns.estimate(storeId, id)).toMatchObject({
+      recipientsCount: 2,
+      smsParts: 2,
+      smsCredits: 4,
+    });
+    await campaigns.approve(storeId, id, owner);
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 4);
+    expect(await findRedirects()).toEqual([]);
+
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+    expect(driver.messages).toHaveLength(2);
+    const redirects = await findRedirects();
+    expect(redirects).toHaveLength(2);
+    expect(new Set(redirects.map(({ code }) => code)).size).toBe(2);
+    expect(new Set(redirects.map(({ contact_id }) => contact_id)).size).toBe(2);
+    for (const { code, target_url } of redirects) {
+      expect(target_url).toBe(target);
+      expect(driver.messages.map(({ text }) => text)).toContainEqual(
+        expect.stringMatching(
+          new RegExp(
+            `^A{107} http://localhost:4000/l/${code}\\nhttp://localhost:4000/l/s/[0-9A-Za-z]{8}$`,
+          ),
+        ),
+      );
+    }
+    expect(await settlementRows(id)).toEqual([
+      { kind: 'release', quantity_delta: 4 },
+      { kind: 'charge', quantity_delta: -4 },
+    ]);
+    expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 4);
+
+    const [redirect] = redirects;
+    expect(
+      await app.get(LinksService).redirect(redirect.code, {
+        ip: '203.0.113.23',
+        userAgent: 'sms body test',
+      }),
+    ).toBe(target);
+    const {
+      rows: [tap],
+    } = await admin.pool.query(
+      "select id,payload,occurred_at from outbox_events where store_id=$1 and type='message.tapped' and payload->>'trackedLinkId'=$2",
+      [storeId, redirect.id],
+    );
+    await app.get(RecordCampaignTapJob).handle({
+      id: tap.id,
+      type: 'message.tapped',
+      storeId,
+      occurredAt: tap.occurred_at.toISOString(),
+      payload: tap.payload,
+    });
+    expect((await campaigns.get(storeId, id)).counts).toMatchObject({ sent: 2, tapped: 1 });
+  });
+
+  it('saves an empty redirect list for an SMS without body links', async () => {
+    const { id } = await sendingCampaign(1);
+
+    expect(await sender.sendBatch(storeId, id)).toBeNull();
+    expect(driver.messages.map(({ text }) => text)).toEqual([
+      expect.stringMatching(/^নতুন শাড়ি এসেছে\nhttp:\/\/localhost:4000\/l\/s\/[0-9A-Za-z]{8}$/),
+    ]);
+    expect(await settlementRows(id)).toEqual([
+      { kind: 'release', quantity_delta: 1 },
+      { kind: 'charge', quantity_delta: -1 },
+    ]);
+    const { rows } = await admin.pool.query(
+      'select redirect_link_codes from campaign_recipients where campaign_id=$1',
+      [id],
+    );
+    expect(rows).toEqual([{ redirect_link_codes: [] }]);
+  });
+
+  it('reuses the prepared body redirects and approval base when an unresolved send retries', async () => {
+    const { id } = await sendingCampaign(1, null, 'See https://shop.example.test/offer');
+    const repository = app.get(CampaignSendingRepository);
+    const write = repository.changeRecipient.bind(repository);
+    const save = vi.spyOn(repository, 'changeRecipient').mockImplementation(async (...args) => {
+      const change = args[3];
+      if (change.status === 'sending' && change.providerMessageId)
+        throw new Error('worker stopped before saving the receipt');
+      return write(...args);
+    });
+    try {
+      await expect(sender.sendBatch(storeId, id)).rejects.toThrow(
+        'worker stopped before saving the receipt',
+      );
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.text).toMatch(/^See http:\/\/localhost:4000\/l\/[0-9A-Za-z]{8}\n/);
+      save.mockRestore();
+
+      vi.stubEnv('SHORT_LINK_BASE_URL', 'https://messages.preview.long-domain.example.test/l');
+      resetEnvForTests();
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(calls).toHaveLength(2);
+      expect(calls[1]).toEqual(calls[0]);
+      expect(driver.messages).toHaveLength(1);
+      expect(await sendAttempts(id)).toEqual([2]);
+      const { rows } = await admin.pool.query(
+        'select kind from tracked_links where store_id=$1 and source_id=$2 order by kind',
+        [storeId, id],
+      );
+      expect(rows).toEqual([{ kind: 'redirect' }, { kind: 'sms_opt_out' }]);
+      expect(await settlementRows(id)).toEqual([
+        { kind: 'release', quantity_delta: 1 },
+        { kind: 'charge', quantity_delta: -1 },
+      ]);
+    } finally {
+      save.mockRestore();
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    }
+  });
+
+  it('settles an unresolved cancelled SMS at its approved wrapped price', async () => {
+    const { id } = await unknownFirstSend(`${'A'.repeat(107)} https://a.co/`);
+    await campaigns.cancel(storeId, id, actor);
+    vi.stubEnv('SHORT_LINK_BASE_URL', 'https://s.test');
+    resetEnvForTests();
+    try {
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(calls).toHaveLength(1);
+      expect(await settlementRows(id)).toEqual([
+        { kind: 'release', quantity_delta: 2 },
+        { kind: 'charge', quantity_delta: -2 },
+      ]);
+      expect(await campaignRow(id)).toMatchObject({ status: 'cancelled' });
+    } finally {
+      vi.unstubAllEnvs();
+      resetEnvForTests();
+    }
   });
 
   it.each(['sent', 'cancelled'] as const)(

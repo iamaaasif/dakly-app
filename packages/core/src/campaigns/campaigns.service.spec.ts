@@ -21,6 +21,7 @@ import type {
 import type { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import type { WalletService } from '../wallets/wallet.service';
+import { CampaignSmsService } from './campaign-sms.service';
 import type {
   Campaign,
   CampaignApproval,
@@ -267,10 +268,11 @@ describe('CampaignsService', () => {
       new TeamService(undefined as never),
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
       { publish: async (event: DaklyEvent) => void events.push(event) } as unknown as OutboxService,
-      {
+      new CampaignSmsService({
         shortLinkBase: () => 'http://localhost:4000/l',
         sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000',
-      } as LinksService,
+        sampleRedirectUrl: () => 'http://localhost:4000/l/00000000',
+      } as LinksService),
       { now: () => clockNow } as Clock,
       { campaignAttribution: async () => ({}) } as unknown as AnalyticsService,
     );
