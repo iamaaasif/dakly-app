@@ -21,6 +21,7 @@ import { AiAgentService } from './ai-agent.service';
 import { ReplyToCustomerJob } from './jobs/reply-to-customer.job';
 import { ScheduleAiReplyOnMessage } from './jobs/schedule-ai-reply-on-message.job';
 import { SalesAgentToolsService } from './sales-agent-tools.service';
+import { SalesAgentService } from './sales-agent.service';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { SalesAgentToolsService } from './sales-agent-tools.service';
     AiAgentSettingsRepository,
     AiAgentService,
     ReplyToCustomerJob,
+    SalesAgentService,
     SalesAgentToolsService,
     ScheduleAiReplyOnMessage,
   ],

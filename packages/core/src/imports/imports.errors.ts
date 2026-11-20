@@ -1,6 +1,6 @@
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
-// Feature 03: a customer file holds at most 50,000 rows.
+// Features 03 and 05: a customer or product file holds at most 50,000 rows.
 
 const IMPORT_ERRORS = {
   IMPORT_FILE_UNREADABLE: {
@@ -11,10 +11,10 @@ const IMPORT_ERRORS = {
     status: 409,
     message: 'The uploaded file changed after a batch was saved. Start a new import',
   },
-  IMPORT_FILE_EMPTY: { status: 400, message: 'This file has no customer rows under its header' },
+  IMPORT_FILE_EMPTY: { status: 400, message: 'This file has no rows under its header' },
   IMPORT_FILE_TOO_MANY_ROWS: {
     status: 400,
-    message: 'A file can hold at most 50,000 customers',
+    message: 'A file can hold at most 50,000 rows',
   },
   IMPORT_COLUMN_MISSING: { status: 400, message: 'A mapped column is not in this file' },
   IMPORT_FILE_NOT_UPLOADED: { status: 400, message: 'The file was not uploaded. Upload it again' },
@@ -32,7 +32,7 @@ const IMPORT_ERRORS = {
   IMPORT_BEING_RUN: { status: 409, message: 'Another run is still importing this file' },
   IMPORT_RATE_LIMITED: {
     status: 429,
-    message: 'A shop can upload at most 20 customer files an hour',
+    message: 'A shop can upload at most 20 files of one kind an hour',
   },
 } as const satisfies ErrorCatalog;
 

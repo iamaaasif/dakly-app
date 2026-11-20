@@ -10,9 +10,9 @@ import { removesOwnTag, type SettingsInput } from '../workflow-settings-form';
 
 const exitLabels = {
   placed_order: 'Customer places an order (needs order exits)',
-  order_confirmed: 'Order is confirmed (needs order exits)',
+  order_confirmed: 'Order is confirmed',
   order_paid: 'Order is paid (needs order exits)',
-  order_cancelled: 'Order is cancelled (needs order exits)',
+  order_cancelled: 'Order is cancelled',
   got_tag: 'Customer receives a tag',
   tapped_link: 'Link tapped (needs workflow link tracking)',
   replied: 'Customer replies (needs chat exits)',

@@ -60,6 +60,7 @@ type TargetWrite = Partial<
     | 'publishedAt'
     | 'errorCode'
     | 'errorMessage'
+    | 'nextMetricsAt'
     | 'updatedAt'
   >
 >;
