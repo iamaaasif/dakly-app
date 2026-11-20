@@ -123,6 +123,8 @@ export const campaigns = pgTable(
     shortLinkBase: text('short_link_base'),
     startedAt: timestamptz('started_at'),
     finishedAt: timestamptz('finished_at'),
+    settlementPendingAt: timestamptz('settlement_pending_at'),
+    settledAt: timestamptz('settled_at'),
     estimatedCostPoisha: poisha('estimated_cost_poisha'),
     reservedPoisha: poisha('reserved_poisha').notNull().default(0),
     actualCostPoisha: poisha('actual_cost_poisha').notNull().default(0),
@@ -165,6 +167,11 @@ export const campaigns = pgTable(
     index('campaigns_start_due_by_store_idx')
       .on(table.storeId, table.scheduledFor, table.id)
       .where(sql`${table.status} = 'scheduled'`),
+    index('campaigns_send_work_idx')
+      .on(table.storeId, table.startedAt, table.id)
+      .where(
+        sql`(${table.status} = 'sending' and ${table.shortLinkBase} is not null) or (${table.status} = 'cancelled' and ${table.settlementPendingAt} is not null)`,
+      ),
     index('campaigns_channel_connection_id_idx').on(table.channelConnectionId),
     index('campaigns_whatsapp_template_id_idx').on(table.whatsappTemplateId),
     index('campaigns_approved_by_user_id_idx').on(table.approvedByUserId),
@@ -188,7 +195,7 @@ export const campaigns = pgTable(
 );
 
 // The frozen audience: one row per contact, written at approval, with the reason for every skip.
-// The sender picks up rows still queued, so a restart never sends twice.
+// The sender claims queued rows and recovers expired claims with the same operation key.
 export const campaignRecipients = pgTable(
   'campaign_recipients',
   {
@@ -207,6 +214,10 @@ export const campaignRecipients = pgTable(
     // Phone or page-scoped id at freeze time.
     destinationAddress: text('destination_address'),
     status: text('status', { enum: recipientStatuses }).notNull(),
+    claimedAt: timestamptz('claimed_at'),
+    // Receipt lookup renews the lease while the frequency cap keeps using the dispatch time.
+    dispatchStartedAt: timestamptz('dispatch_started_at'),
+    optOutLinkCode: text('opt_out_link_code'),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),
@@ -216,6 +227,10 @@ export const campaignRecipients = pgTable(
     readAt: timestamptz('read_at'),
     tappedAt: timestamptz('tapped_at'),
     failedAt: timestamptz('failed_at'),
+    // Credits of a message the provider took or may have taken.
+    smsCredits: integer('sms_credits'),
+    // Cap retries while the provider outcome stays unresolved.
+    sendAttempts: integer('send_attempts').notNull().default(0),
     createdAt: createdAt(),
   },
   (table) => [

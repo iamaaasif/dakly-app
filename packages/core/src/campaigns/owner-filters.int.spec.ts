@@ -137,10 +137,10 @@ describe('campaign filters without RLS assistance', () => {
 
     expect(await repository.lockScheduled(f.b, a.id)).toBeUndefined();
     expect(
-      await f.tenant.forStore(f.b, () => repository.lockForCancellation(f.b, a.id)),
+      await f.tenant.forStore(f.b, () => repository.lockCampaign(f.b, a.id, 'update')),
     ).toBeUndefined();
     expect(
-      await f.tenant.forStore(f.a, () => repository.lockForCancellation(f.a, a.id)),
+      await f.tenant.forStore(f.a, () => repository.lockCampaign(f.a, a.id, 'update')),
     ).toMatchObject({
       id: a.id,
       status: 'scheduled',

@@ -74,8 +74,8 @@ export class LinksService {
   }
 
   // A sender that kept the code builds the same address again.
-  optOutUrl(code: string): string {
-    return linkUrl('sms_opt_out', code);
+  optOutUrl(code: string, base = this.shortLinkBase()): string {
+    return linkUrl('sms_opt_out', code, base);
   }
 
   shortLinkBase(): string {

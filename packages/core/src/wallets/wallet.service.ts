@@ -79,6 +79,13 @@ export class WalletService {
     return entry && toResult(entry);
   }
 
+  async reservationFor(storeId: string, wallet: MessagingWallet, key: string) {
+    const entry = await this.ledger.findByIdempotencyKey(storeId, key);
+    if (entry?.kind !== 'reserve' || entry.wallet !== wallet)
+      throw walletError('WALLET_RESERVATION_NOT_FOUND');
+    return { entryId: entry.id, quantity: -entry.quantityDelta };
+  }
+
   // Dispatch takes this before its final checks, so a queued credit write cannot stale them.
   lockForReservation(storeId: string, wallet: MessagingWallet): Promise<void> {
     return this.ledger.lockWallet(storeId, wallet);

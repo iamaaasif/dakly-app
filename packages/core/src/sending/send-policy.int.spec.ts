@@ -15,7 +15,7 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { StoresService } from '../stores/stores.service';
-import { type SendRequest, SendPolicyService } from './send-policy.service';
+import { SendPolicyService } from './send-policy.service';
 import { SendingModule } from './sending.module';
 
 class TestModule {}
@@ -66,13 +66,34 @@ async function campaignSend(
   storeId: string,
   contactId: string,
   sentAt: Date | null,
-  { status = 'sent', category = 'marketing' } = {},
+  {
+    status = 'sent',
+    category = 'marketing',
+    claimedAt = null,
+  }: {
+    status?: string;
+    category?: string;
+    claimedAt?: Date | null;
+  } = {},
 ) {
   const campaignId = await campaign(storeId, category);
+  const recipientId = randomUUID();
   await admin.pool.query(
-    'insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at) values($1,$2,$3,$4,$5,$6)',
-    [randomUUID(), storeId, campaignId, contactId, status, sentAt],
+    'insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,sent_at,claimed_at,dispatch_started_at) values($1,$2,$3,$4,$5,$6,$7,$7)',
+    [recipientId, storeId, campaignId, contactId, status, sentAt, claimedAt],
   );
+  return recipientId;
+}
+
+async function unknownCampaignSend(storeId: string, contactId: string, claimedAt: Date) {
+  const campaignId = await campaign(storeId);
+  await admin.pool.query("update campaigns set status='cancelled' where id=$1", [campaignId]);
+  const id = randomUUID();
+  await admin.pool.query(
+    "insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,error_code,claimed_at) values($1,$2,$3,$4,'failed','outcome_unknown',$5)",
+    [id, storeId, campaignId, contactId, claimedAt],
+  );
+  return id;
 }
 
 async function workflowSend(
@@ -107,7 +128,11 @@ async function workflowSend(
 }
 
 // The sending job runs the gate inside its store transaction.
-function check(storeId: string, contactId: string, change: Partial<SendRequest> = {}) {
+function check(
+  storeId: string,
+  contactId: string,
+  change: Partial<Parameters<SendPolicyService['check']>[1]> = {},
+) {
   return app.get(StoreTransaction).run(storeId, () =>
     policy.check(storeId, {
       contactId,
@@ -187,6 +212,23 @@ describe('SendPolicyService (Postgres)', () => {
     expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
   });
 
+  it('counts a cancelled campaign’s uncertain SMS using its dispatch time', async () => {
+    const contactId = await consentedContact(storeA);
+    const id = await unknownCampaignSend(storeA, contactId, hoursBefore(1));
+
+    expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
+    await admin.pool.query('update campaign_recipients set dispatch_started_at=$2 where id=$1', [
+      id,
+      hoursBefore(25),
+    ]);
+    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
+    await admin.pool.query(
+      "update campaign_recipients set dispatch_started_at=$2, error_code='provider_confirmed_not_sent' where id=$1",
+      [id, hoursBefore(1)],
+    );
+    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
+  });
+
   it('does not count unsent, transactional, old or later messages', async () => {
     const contactId = await consentedContact(storeA);
     await campaignSend(storeA, contactId, hoursBefore(1), { status: 'failed' });
@@ -196,6 +238,28 @@ describe('SendPolicyService (Postgres)', () => {
     await campaignSend(storeA, contactId, hoursBefore(8 * 24));
     await workflowSend(storeA, contactId, hoursBefore(-1));
 
+    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
+  });
+
+  it.each([
+    ['campaign', campaignSend],
+    ['workflow', workflowSend],
+  ])('counts a committed %s send when the campaign worker clock is behind', async (_type, send) => {
+    const contactId = await consentedContact(storeA);
+    await send(storeA, contactId, new Date(noon.getTime() + 1000));
+    const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(noon);
+    try {
+      const live = await app.get(StoreTransaction).run(storeA, () =>
+        policy.checkForSend(storeA, {
+          contactId,
+          channel: 'sms',
+          category: 'marketing',
+        }),
+      );
+      expect(live.decision).toEqual({ action: 'skip', reason: 'frequency_cap' });
+    } finally {
+      clock.mockRestore();
+    }
     expect(await check(storeA, contactId)).toEqual({ action: 'send' });
   });
 
@@ -258,6 +322,69 @@ describe('SendPolicyService (Postgres)', () => {
     await campaignSend(storeA, contactId, null, { status: 'sending' });
 
     expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
+  });
+
+  it('reserves a live cap slot for a campaign claim older than a day', async () => {
+    const contactId = await consentedContact(storeA);
+    await campaignSend(storeA, contactId, null, { status: 'sending', claimedAt: hoursBefore(48) });
+
+    expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
+  });
+
+  it('counts a campaign claim in its own window when approving a future audience', async () => {
+    const contactId = await consentedContact(storeA);
+    await campaignSend(storeA, contactId, null, {
+      status: 'sending',
+      claimedAt: hoursBefore(1),
+    });
+
+    expect(await policy.checkAudience(storeA, audienceOf([contactId]))).toEqual([
+      expect.objectContaining({ decision: { action: 'skip', reason: 'frequency_cap' } }),
+    ]);
+    expect(
+      await policy.checkAudience(storeA, audienceOf([contactId], hoursBefore(-8 * 24))),
+    ).toEqual([expect.objectContaining({ decision: { action: 'send' } })]);
+  });
+
+  it('counts a charged unknown outcome from its original dispatch time', async () => {
+    const contactId = await consentedContact(storeA);
+    const campaignId = await campaign(storeA);
+    await admin.pool.query(
+      "insert into campaign_recipients(id,store_id,campaign_id,contact_id,status,claimed_at,failed_at,error_code,sms_credits) values($1,$2,$3,$4,'failed',$5,$6,'outcome_unknown',1)",
+      [randomUUID(), storeA, campaignId, contactId, hoursBefore(1), hoursBefore(0)],
+    );
+    expect(await check(storeA, contactId)).toEqual({ action: 'skip', reason: 'frequency_cap' });
+
+    await admin.pool.query('update campaign_recipients set claimed_at=$2 where campaign_id=$1', [
+      campaignId,
+      hoursBefore(25),
+    ]);
+    expect(await check(storeA, contactId)).toEqual({ action: 'send' });
+  });
+
+  it('excludes a campaign retry’s own recipient while counting other sends', async () => {
+    const contactId = await consentedContact(storeA);
+    const recipientId = await campaignSend(storeA, contactId, null, {
+      status: 'sending',
+      claimedAt: hoursBefore(1),
+    });
+    const clock = vi.spyOn(app.get(Clock), 'now').mockReturnValue(noon);
+    const retry = () =>
+      app.get(StoreTransaction).run(storeA, () =>
+        policy.checkForSend(storeA, {
+          contactId,
+          channel: 'sms',
+          category: 'marketing',
+          excludeCampaignRecipientId: recipientId,
+        }),
+      );
+    try {
+      expect((await retry()).decision).toEqual({ action: 'send' });
+      await workflowSend(storeA, contactId, hoursBefore(2), { outcome: 'unconfirmed' });
+      expect((await retry()).decision).toEqual({ action: 'skip', reason: 'frequency_cap' });
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it('reads the dispatch clock after waiting for the contact lock', async () => {

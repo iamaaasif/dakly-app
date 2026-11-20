@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CampaignStatus } from '@dakly/contracts/campaigns';
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
@@ -108,7 +108,7 @@ class FakeCampaignsRepository {
     return row?.status === 'scheduled' ? (row as Campaign & { approvedAt: Date }) : undefined;
   }
 
-  async lockForCancellation(_storeId: string, id: string) {
+  async lockCampaign(_storeId: string, id: string) {
     return this.rows.get(id);
   }
 
@@ -134,6 +134,19 @@ class FakeCampaignsRepository {
     for (const recipient of this.recipients)
       if (recipient.campaignId === campaignId && recipient.status === 'queued')
         Object.assign(recipient, { status: 'cancelled' });
+  }
+
+  async settlementTotals(_storeId: string, campaignId: string) {
+    return {
+      unsettled: this.recipients.filter(
+        (row) => row.campaignId === campaignId && row.status === 'queued',
+      ).length,
+      chargedCredits: 0,
+    };
+  }
+
+  async markSettled() {
+    return true;
   }
 
   async markApproved(_storeId: string, id: string, approval: CampaignApproval) {
@@ -217,6 +230,11 @@ describe('CampaignsService', () => {
       findByIdempotencyKey: async (_storeId: string, key: string) => {
         const reservation = reservations.get(key);
         return reservation && { entryId: reservation.entryId, balanceQuantity: balance };
+      },
+      reservationFor: async (_storeId: string, _wallet: string, key: string) => {
+        const reservation = reservations.get(key);
+        if (!reservation) throw new Error('Test reservation not found');
+        return { entryId: reservation.entryId, quantity: reservation.quantity };
       },
       release: async (_storeId: string, input: { reservationId: string }) => {
         const reservation = [...reservations.values()].find(
@@ -514,6 +532,17 @@ describe('CampaignsService', () => {
     expect(reserved).toEqual([2, 2]);
     expect(balance).toBe(998);
     expect(repository.recipients).toHaveLength(2);
+  });
+
+  it('keeps the reservation when the cancellation settlement is already stamped', async () => {
+    const campaign = await scheduled(6);
+    const stamp = vi.spyOn(repository, 'markSettled').mockResolvedValue(false);
+
+    await expect(service.cancel(STORE_ID, campaign.id, actor)).resolves.toMatchObject({
+      status: 'cancelled',
+    });
+    expect(stamp).toHaveBeenCalledOnce();
+    expect(balance).toBe(998);
   });
 
   it('refuses to unschedule a campaign that is already sending', async () => {

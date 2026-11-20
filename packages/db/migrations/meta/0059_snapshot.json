@@ -1,5 +1,5 @@
 {
-  "id": "e99cc291-d7ab-4c3b-aed3-72269b14b38c",
+  "id": "c8f16d24-212f-4b4a-a80a-f0c51fcd8220",
   "prevId": "5da93585-c721-4c0c-b9d7-330104897769",
   "version": "7",
   "dialect": "postgresql",
@@ -7094,6 +7094,24 @@
           "primaryKey": false,
           "notNull": true
         },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dispatch_started_at": {
+          "name": "dispatch_started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "opt_out_link_code": {
+          "name": "opt_out_link_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "skip_reason": {
           "name": "skip_reason",
           "type": "text",
@@ -7147,6 +7165,19 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "sms_credits": {
+          "name": "sms_credits",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "send_attempts": {
+          "name": "send_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
@@ -7526,6 +7557,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "settlement_pending_at": {
+          "name": "settlement_pending_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "estimated_cost_poisha": {
           "name": "estimated_cost_poisha",
           "type": "bigint",
@@ -7738,6 +7781,34 @@
           ],
           "isUnique": false,
           "where": "\"campaigns\".\"status\" = 'scheduled'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaigns_send_work_idx": {
+          "name": "campaigns_send_work_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "(\"campaigns\".\"status\" = 'sending' and \"campaigns\".\"short_link_base\" is not null) or (\"campaigns\".\"status\" = 'cancelled' and \"campaigns\".\"settlement_pending_at\" is not null)",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -15196,27 +15267,9 @@
           "primaryKey": false,
           "notNull": false
         },
-        "attributed_touch_id": {
-          "name": "attributed_touch_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "attributed_touch_at": {
           "name": "attributed_touch_at",
           "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attributed_amount_poisha": {
-          "name": "attributed_amount_poisha",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attributed_window_days": {
-          "name": "attributed_window_days",
-          "type": "smallint",
           "primaryKey": false,
           "notNull": false
         },
