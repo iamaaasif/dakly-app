@@ -2,8 +2,10 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AutomationExitReason } from '@dakly/contracts/automations';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import { usesConfirmLink } from '@dakly/contracts/automations/text';
 
 import { ContactsService } from '../contacts/contacts.service';
+import { OrderReportingService } from '../orders/order-reporting.service';
 import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { AutomationRunsRepository } from './automation-runs.repository';
@@ -12,6 +14,7 @@ import {
   hasHappened,
   type PathChoice,
   type RunFacts,
+  type SendStep,
 } from './automation-step-rules';
 
 // The goal, exit conditions, workflow filters and condition paths, read for one run.
@@ -21,6 +24,7 @@ export class AutomationConditionsService {
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
+    @Inject(OrderReportingService) private readonly orders: OrderReportingService,
     @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
   ) {}
 
@@ -32,18 +36,31 @@ export class AutomationConditionsService {
     at: Date,
   ): Promise<AutomationExitReason | undefined> {
     const { goal, exitConditions, workflowFilters } = graph;
-    if (goal && hasHappened(goal, facts)) return 'goal';
-    if (exitConditions.some((exit) => hasHappened(exit, facts))) return 'exit_condition';
+    const order = await this.orderProgress(graph, facts);
+    if (goal && hasHappened(goal, facts, order)) return 'goal';
+    if (exitConditions.some((exit) => hasHappened(exit, facts, order))) return 'exit_condition';
     for (const filter of workflowFilters)
       if (!(await this.holds(filter, facts, at))) return 'workflow_filter';
     return undefined;
   }
 
-  async refreshExitReason(facts: RunFacts, at: Date) {
-    const { storeId, contactId, runId } = facts;
+  private async orderProgress(graph: AutomationGraph, { storeId, orderId }: RunFacts) {
+    const readsOrder = graph.exitConditions.some(
+      ({ kind }) => kind === 'order_confirmed' || kind === 'order_cancelled',
+    );
+    return readsOrder && orderId ? this.orders.progress(storeId, orderId) : undefined;
+  }
+
+  // Read again inside the send gate. A message with the confirm link goes out only while the order
+  // still waits in To confirm, so on hold, confirmed or cancelled ends the run before the send.
+  async refreshExitReason(facts: RunFacts, step: SendStep, at: Date) {
+    const { storeId, contactId, runId, orderId } = facts;
     const tags = await this.contacts.findTags(storeId, contactId);
     const tappedStepKeys = await this.repository.listTappedStepKeys(storeId, runId);
-    return this.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
+    const exit = await this.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
+    if (exit || !orderId || !usesConfirmLink(step.message.text)) return exit;
+    const order = await this.orders.progress(storeId, orderId);
+    return order?.isAwaitingConfirmation ? undefined : 'order_not_awaiting_confirmation';
   }
 
   async firstHoldingPath(
