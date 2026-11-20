@@ -15,6 +15,8 @@ export type MetaPostMetrics = {
   reactions: number | null;
   comments: number | null;
   shares: number | null;
+  // Set when Meta rejected the insights request, so a wrong metric name shows up in the logs.
+  rejectedInsights: string | null;
 };
 
 export type MetaPostRef = {

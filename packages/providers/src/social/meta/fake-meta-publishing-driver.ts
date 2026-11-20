@@ -10,8 +10,8 @@ export class FakeMetaPublishingDriver implements MetaPublishingDriver {
   private readonly published = new Set<string>();
   private readonly metrics = new Map<string, MetaPostMetrics>();
 
-  setMetrics(externalPostId: string, metrics: MetaPostMetrics) {
-    this.metrics.set(externalPostId, metrics);
+  setMetrics(externalPostId: string, metrics: Omit<MetaPostMetrics, 'rejectedInsights'>) {
+    this.metrics.set(externalPostId, { ...metrics, rejectedInsights: null });
   }
 
   async uploadFacebookPhotos(_account: MetaPostingAccount, photoUrls: string[]) {
@@ -42,7 +42,13 @@ export class FakeMetaPublishingDriver implements MetaPublishingDriver {
 
   async postMetrics(_account: MetaPostingAccount, { externalPostId }: { externalPostId: string }) {
     return (
-      this.metrics.get(externalPostId) ?? { reach: 120, reactions: 14, comments: 3, shares: 2 }
+      this.metrics.get(externalPostId) ?? {
+        reach: 120,
+        reactions: 14,
+        comments: 3,
+        shares: 2,
+        rejectedInsights: null,
+      }
     );
   }
 }

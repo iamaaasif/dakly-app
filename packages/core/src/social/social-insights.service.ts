@@ -62,12 +62,15 @@ export class SocialInsightsService {
       isStory: target.postKind === 'story',
     };
     try {
-      return await measureVendorCall(
+      const { rejectedInsights, ...metrics } = await measureVendorCall(
         this.logger,
         'post_metrics',
         'Meta post metrics request measured',
         () => this.driver.postMetrics(account, post),
       );
+      if (rejectedInsights)
+        this.logger.warn(`Meta rejected the insights metric ${rejectedInsights}`);
+      return metrics;
     } catch (failure) {
       if (!(failure instanceof MetaPublishingError)) throw failure;
       // A rate limit or outage retries through the queue; anything else would fail again.

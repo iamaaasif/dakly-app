@@ -51,6 +51,11 @@ function responseError(status: number, payload: unknown) {
   return new MetaPublishingError(retryable ? 'retryable' : 'rejected');
 }
 
+function insightMetrics({ kind, isStory }: MetaPostRef) {
+  if (kind === 'facebook_page') return 'post_total_media_view_unique';
+  return isStory ? 'reach' : 'reach,shares';
+}
+
 function insightValue(insights: z.infer<typeof insightsResult>, name: string) {
   return insights.data.find((metric) => metric.name === name)?.values[0]?.value ?? null;
 }
@@ -139,43 +144,53 @@ export class MetaGraphPublishingDriver implements MetaPublishingDriver {
 
   async postMetrics(account: MetaPostingAccount, post: MetaPostRef): Promise<MetaPostMetrics> {
     const id = encodeURIComponent(post.externalPostId);
-    if (post.kind === 'facebook_page') {
-      const counts = await this.request(
-        account,
-        `${id}?fields=reactions.summary(true).limit(0),comments.summary(true).limit(0),shares`,
-        facebookCounts,
-      );
-      const insights = await this.request(
-        account,
-        `${id}/insights?metric=post_total_media_view_unique`,
-        insightsResult,
-      );
-      return {
-        reach: insightValue(insights, 'post_total_media_view_unique'),
-        reactions: counts.reactions.summary.total_count,
-        comments: counts.comments.summary.total_count,
-        shares: counts.shares?.count ?? 0,
-      };
-    }
-    // Stories have no likes or comments counts and expire after a day.
+    const counts = await this.counts(account, id, post);
+    const metrics = insightMetrics(post);
+    // A rejected metric name must not lose the counts.
     const insights = await this.request(
       account,
-      `${id}/insights?metric=${post.isStory ? 'reach' : 'reach,shares'}`,
+      `${id}/insights?metric=${metrics}`,
       insightsResult,
+    ).catch((failure: unknown) => {
+      if (failure instanceof MetaPublishingError && failure.code === 'rejected') return null;
+      throw failure;
+    });
+    return {
+      ...counts,
+      reach: insights && insightValue(insights, post.kind === 'facebook_page' ? metrics : 'reach'),
+      shares: counts.shares ?? (insights && insightValue(insights, 'shares')),
+      rejectedInsights: insights ? null : metrics,
+    };
+  }
+
+  // Stories have no likes or comments counts and expire after a day.
+  private async counts(account: MetaPostingAccount, id: string, post: MetaPostRef) {
+    if (post.isStory) return { reactions: null, comments: null, shares: null };
+    return post.kind === 'facebook_page'
+      ? this.facebookCounts(account, id)
+      : this.instagramCounts(account, id);
+  }
+
+  private async facebookCounts(account: MetaPostingAccount, id: string) {
+    const counts = await this.request(
+      account,
+      `${id}?fields=reactions.summary(true).limit(0),comments.summary(true).limit(0),shares`,
+      facebookCounts,
     );
-    const reach = insightValue(insights, 'reach');
-    if (post.isStory) return { reach, reactions: null, comments: null, shares: null };
+    return {
+      reactions: counts.reactions.summary.total_count,
+      comments: counts.comments.summary.total_count,
+      shares: counts.shares?.count ?? 0,
+    };
+  }
+
+  private async instagramCounts(account: MetaPostingAccount, id: string) {
     const counts = await this.request(
       account,
       `${id}?fields=like_count,comments_count`,
       instagramCounts,
     );
-    return {
-      reach,
-      reactions: counts.like_count,
-      comments: counts.comments_count,
-      shares: insightValue(insights, 'shares'),
-    };
+    return { reactions: counts.like_count, comments: counts.comments_count, shares: null };
   }
 
   private async request<T>(

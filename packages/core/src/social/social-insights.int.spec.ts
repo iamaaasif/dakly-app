@@ -166,7 +166,8 @@ describe('SocialInsightsService', () => {
   it('queues one refresh per due target, once an hour', async () => {
     const now = new Date(publishedAt.getTime() + 12 * HOUR_MS);
     const due = await publishedTarget(new Date(now.getTime() - HOUR_MS));
-    const later = await publishedTarget(new Date(now.getTime() + HOUR_MS));
+    // The database function compares with its own clock, so this date must be ahead of the real one.
+    const later = await publishedTarget(new Date(Date.now() + DAY_MS));
     const { sweep } = insights(now);
     await sweep.enqueueDueRefreshes();
     await sweep.enqueueDueRefreshes();
