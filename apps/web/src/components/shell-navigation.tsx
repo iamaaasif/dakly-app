@@ -175,7 +175,7 @@ function socialGroup(store: SessionContext['currentStore']): NavigationGroup {
       { href: '/social', label: 'Social hub', icon: Send, visible: store?.canViewSocial },
       {
         href: '/content-studio',
-        label: 'Content Studio',
+        label: 'AI Content Studio',
         icon: PenLine,
         visible: store?.canViewSocial,
       },
