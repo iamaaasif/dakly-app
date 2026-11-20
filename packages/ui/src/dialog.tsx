@@ -1,4 +1,5 @@
 'use client';
+import { X } from 'lucide-react';
 import { useEffect, useId, useRef, type ReactNode, type KeyboardEvent } from 'react';
 
 import { Button } from './button';
@@ -52,12 +53,12 @@ export function Dialog(props: DialogProps) {
         </h2>
         <Button
           variant="secondary"
-          className="shrink-0"
+          className="shrink-0 px-2"
           aria-label="Close dialog"
           disabled={closeDisabled}
           onClick={onClose}
         >
-          Close
+          <X aria-hidden="true" size={16} strokeWidth={1.75} />
         </Button>
       </div>
       {children}

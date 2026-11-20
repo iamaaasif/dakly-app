@@ -19,6 +19,7 @@ const CAMPAIGN_ERRORS = {
     message: 'A campaign can be edited until 5 minutes before it sends',
   },
   CAMPAIGN_NOT_SENDING: { status: 409, message: 'This campaign is not sending' },
+  CAMPAIGN_APPROVAL_TIME_MISSING: { status: 500, message: 'Campaign approval time is missing' },
   CAMPAIGN_NOT_PAUSED: { status: 409, message: 'This campaign is not paused' },
   CAMPAIGN_PAUSED_BY_SYSTEM: {
     status: 409,

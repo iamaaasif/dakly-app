@@ -52,13 +52,7 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
             onAdjust={canEdit ? onAdjust : undefined}
           />
         </section>
-        {create && canEdit ? (
-          <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
-            <ProductForm
-              onSaved={(product) => router.replace(`${listHref}&product=${product.id}`)}
-            />
-          </SessionDialog>
-        ) : null}
+        {create && canEdit ? <AddProductModal listHref={listHref} /> : null}
         {productId ? (
           <ProductSheet
             key={productId}
@@ -73,6 +67,18 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
         />
       </main>
     </StorePage>
+  );
+}
+
+function AddProductModal({ listHref }: { listHref: string }) {
+  const router = useRouter();
+  return (
+    <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
+      <ProductForm
+        onSaved={(product) => router.replace(`${listHref}&product=${product.id}`)}
+        onCancel={() => router.replace(listHref)}
+      />
+    </SessionDialog>
   );
 }
 

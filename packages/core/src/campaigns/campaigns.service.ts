@@ -229,6 +229,7 @@ export class CampaignsService {
         {
           status: 'cancelled',
           pauseReason: null,
+          balancePauseRevision: null,
           finishedAt: now,
           updatedAt: now,
           settlementPendingAt: campaign.approvedAt ? now : null,
@@ -272,7 +273,13 @@ export class CampaignsService {
     if (unsettled > 0) return false;
     if (cancelledAt && !(await this.repository.markSettled(storeId, id, cancelledAt))) return false;
     const key = approvalKey(id, approvedAt);
-    const reservation = await this.wallets.reservationFor(storeId, 'sms_credits', key);
+    const replacement = approvalKey(id, approvedAt, 'with-opt-out');
+    const adjusted = await this.wallets.findByIdempotencyKey(storeId, replacement);
+    const reservation = await this.wallets.reservationFor(
+      storeId,
+      'sms_credits',
+      adjusted ? replacement : key,
+    );
     const quantity = Math.min(chargedCredits, reservation.quantity);
     const write = { reservationId: reservation.entryId, actor };
     if (quantity)
@@ -387,8 +394,9 @@ export class CampaignsService {
 }
 
 // Holds the approval time, so a campaign approved again after an edit reserves anew.
-function approvalKey(campaignId: string, approvedAt: Date): string {
-  return `campaign-approval:${campaignId}:${approvedAt.toISOString()}`;
+export function approvalKey(campaignId: string, approvedAt: Date, suffix?: 'with-opt-out'): string {
+  const key = `campaign-approval:${campaignId}:${approvedAt.toISOString()}`;
+  return suffix ? `${key}:${suffix}` : key;
 }
 
 // CAMP-R4: every marketing SMS ends with the recipient's opt-out link.

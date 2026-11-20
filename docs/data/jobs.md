@@ -64,13 +64,14 @@ the buyer. The subscriber recomputes the contact's row from current orders.
 
 ## campaign
 
-| Job                         | Started by                     | Payload                 | Makes a rerun harmless                                                                                                                      |
-| --------------------------- | ------------------------------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `build-campaign-audience`   | Campaign scheduled or sent now | `storeId`, `campaignId` | Unique `campaign_recipients (campaign_id, contact_id)`                                                                                      |
-| `send-campaign-batch`       | Registered, schedule pending   | `storeId`, `campaignId` | Claims up to 200 recipients. Defers during quiet hours and recovers expired in-flight attempts.                                             |
-| sweep `start-due-campaigns` | Recurring schedule pending     | none                    | `campaign_send_work_stores` finds eligible stores. The top-up recovery part enables the sweep and enqueues the send and cancellation lanes. |
+| Job                         | Started by                     | Payload                                 | Makes a rerun harmless                                                                                                        |
+| --------------------------- | ------------------------------ | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `build-campaign-audience`   | Campaign scheduled or sent now | `storeId`, `campaignId`                 | Unique `campaign_recipients (campaign_id, contact_id)`                                                                        |
+| `send-campaign-batch`       | Sweep and after each batch     | `storeId`                               | Claims up to 200 recipients. Defers during quiet hours and recovers expired in-flight attempts.                               |
+| `wallet.credited`           | Verified SMS top-up            | `storeId`, `entryId` in the typed event | Resumes affordable balance-paused campaigns. Pages by campaign id after verifying the credit entry and its wallet revision.   |
+| sweep `start-due-campaigns` | Every minute                   | none                                    | `campaign_send_work_stores` finds eligible stores. Starts up to 100 due campaigns per store and enqueues one batch per store. |
 
-Per-store cap: one running campaign batch per store.
+BullMQ deduplicates batch jobs by store ID across waits, execution and retries. The batch settles ready cancellations before sending. A delayed continuation rechecks for recoverable cancellations within 30 seconds. Recipient claim guards protect submission and settlement if BullMQ restarts a stalled job.
 
 ## workflow
 
