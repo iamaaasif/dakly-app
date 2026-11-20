@@ -10,7 +10,8 @@ import { useSessionContext } from '@/lib/session-context';
 
 export function AskDaklyButton() {
   const { data } = useSessionContext();
-  return data?.currentStore ? <StoreAskDaklyButton /> : null;
+  // Keyed by the shop, so one shop's conversation never shows in or goes to the model for another.
+  return data?.currentStore ? <StoreAskDaklyButton key={data.currentStore.storeId} /> : null;
 }
 
 function StoreAskDaklyButton() {

@@ -6,6 +6,7 @@ import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { askDaklyRequestSchema } from '@dakly/contracts/assistant';
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
+import { Input } from '@dakly/ui/input';
 
 import { useAskDakly } from '../api/ask-dakly';
 import { useSessionContext } from '@/lib/session-context';
@@ -171,14 +172,13 @@ function Composer({ question, onQuestion, onSend, isPending, creditsLeft }: Comp
   return (
     <div className="shrink-0 border-t border-border px-4 py-3">
       <form onSubmit={submit} className="flex gap-2">
-        <input
+        <Input
           ref={input}
           value={question}
           onChange={(event) => onQuestion(event.target.value)}
           maxLength={500}
           aria-label="Ask Dakly AI"
           placeholder="Ask in English or Bangla"
-          className="min-h-10 w-full min-w-0 rounded-md border border-input-border bg-surface px-3 py-2 text-base text-text placeholder:text-text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         />
         <Button
           type="submit"

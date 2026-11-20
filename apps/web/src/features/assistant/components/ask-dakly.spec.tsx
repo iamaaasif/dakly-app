@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -45,13 +45,14 @@ function show(
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
     contextTag: 'verified',
-    currentStore: { id: 'shop', ...can },
+    currentStore: { storeId: 'shop-a', ...can },
   });
   render(
     <QueryClientProvider client={client}>
       <AskDaklyButton />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 beforeEach(() => {
@@ -128,6 +129,24 @@ describe('Ask Dakly AI panel', () => {
         { role: 'assistant', text: sales.text },
       ],
     });
+  });
+
+  it('starts an empty conversation when the shop changes', async () => {
+    const bodies = serve(() => Response.json(sales));
+    const client = show();
+    await userEvent.type(screen.getByLabelText('Ask Dakly AI'), 'How much did I sell?{Enter}');
+    await screen.findByText(sales.text);
+    act(() =>
+      client.setQueryData(sessionContextKey, {
+        contextTag: 'verified',
+        currentStore: { storeId: 'shop-b', canViewOrders: true },
+      }),
+    );
+    await waitFor(() => expect(screen.queryByText(sales.text)).toBeNull());
+    expect(screen.getByText('Suggested for this page')).toBeTruthy();
+    await userEvent.type(screen.getByLabelText('Ask Dakly AI'), 'And now?{Enter}');
+    await screen.findByText(sales.text);
+    expect(bodies[1]).toEqual({ question: 'And now?', history: [] });
   });
 
   it('shows a refusal without a source line', async () => {
