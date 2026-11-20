@@ -32,6 +32,11 @@ export class UsageService {
     return used + quantity <= allowance;
   }
 
+  async remaining(storeId: string, unit: UsageUnit): Promise<number> {
+    const { allowance, used } = await this.currentUsage(storeId, unit);
+    return Math.max(0, allowance - used);
+  }
+
   async isConsumed(storeId: string, unit: UsageUnit, reference: string): Promise<boolean> {
     return (await this.repository.findByReference(storeId, unit, reference)) !== undefined;
   }
