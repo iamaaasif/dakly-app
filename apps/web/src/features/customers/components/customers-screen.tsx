@@ -11,8 +11,10 @@ import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { customersSearch, useCustomers } from '../api/customers';
+import { AddCustomersChooser } from './add-customers-chooser';
 import { CustomerFilters } from './customer-filters';
 import { CustomerList } from './customer-list';
+import { ImportCustomersDialog } from './import-customers-dialog';
 import { NewCustomerForm } from './new-customer-form';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
@@ -20,7 +22,7 @@ import { useSessionContext } from '@/lib/session-context';
 type CustomersScreenProps = { query: ContactListQuery };
 
 export function CustomersScreen({ query }: CustomersScreenProps) {
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<'choose' | 'manual' | 'import' | null>(null);
   const [added, setAdded] = useState(false);
   const customers = useCustomers(query);
   const { data: context } = useSessionContext();
@@ -36,7 +38,7 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-xl font-bold">All customers</h1>
         {canCreate ? (
-          <Button onClick={() => setAdding(true)} className="gap-2">
+          <Button onClick={() => setAdding('choose')} className="gap-2">
             <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add customers
           </Button>
         ) : null}
@@ -55,17 +57,21 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
       />
       <CustomerResults query={query} customers={customers} hideError={Boolean(searchError)} />
 
-      {adding ? (
-        <Dialog open title="Add customer" onClose={() => setAdding(false)}>
+      {adding === 'choose' ? (
+        <AddCustomersChooser onChoose={setAdding} onClose={() => setAdding(null)} />
+      ) : null}
+      {adding === 'manual' ? (
+        <Dialog open title="Add customer" onClose={() => setAdding(null)}>
           <NewCustomerForm
             onAdded={() => {
-              setAdding(false);
+              setAdding(null);
               setAdded(true);
             }}
-            onCancel={() => setAdding(false)}
+            onCancel={() => setAdding(null)}
           />
         </Dialog>
       ) : null}
+      {adding === 'import' ? <ImportCustomersDialog onClose={() => setAdding(null)} /> : null}
     </main>
   );
 }

@@ -111,6 +111,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await verifyPhoneNavigation(page);
 
     await page.getByRole('button', { name: 'Add customers' }).click();
+    await page.getByRole('button', { name: /Add manually/ }).click();
     const name = page.getByLabel('Name', { exact: true });
     await name.fill('Unfinished draft');
     await verifyPausedDraft(page);
@@ -148,6 +149,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await expect(page.getByRole('button', { name: 'Collapse navigation' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Add customers' }).click();
+    await page.getByRole('button', { name: /Add manually/ }).click();
     const customer = { name: 'সাবিনা', phone: `018${randomInt(10000000, 99999999)}` };
     await page.getByLabel('Name', { exact: true }).fill(customer.name);
     await page.getByLabel('Phone', { exact: true }).fill(customer.phone);

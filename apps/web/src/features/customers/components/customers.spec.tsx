@@ -37,7 +37,11 @@ let sent: Sent[] = [];
 function respond(reply: (path: string, method: string) => Reply | Promise<never>) {
   vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
     const method = init.method ?? 'GET';
-    sent.push({ path, method, body: init.body ? JSON.parse(String(init.body)) : undefined });
+    sent.push({
+      path,
+      method,
+      body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined,
+    });
     const { status = 200, body } = await reply(path, method);
     return status === 204
       ? new Response(null, { status, headers: { 'x-session-context': 'verified' } })
@@ -174,6 +178,7 @@ describe('All customers', () => {
     show(<CustomersScreen query={allCustomers} />);
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(screen.getByRole('button', { name: /Add manually/ }));
     await user.type(screen.getByLabelText('Name'), 'Rahima Akter');
     await user.type(screen.getByLabelText('Phone'), '01712345678');
     await user.click(screen.getByRole('button', { name: 'Add customer' }));
@@ -305,5 +310,102 @@ describe('Customer profile', () => {
       path: `/api/contacts/${contactId}/consents`,
       body: { channel: 'whatsapp', status: 'granted', note: 'Said yes on a call' },
     });
+  });
+});
+
+describe('Import customers', () => {
+  // jsdom files cannot be read as bytes yet; browsers can.
+  beforeEach(() => {
+    File.prototype.arrayBuffer = function (this: File) {
+      return new Promise<ArrayBuffer>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as ArrayBuffer);
+        reader.readAsArrayBuffer(this);
+      });
+    };
+  });
+  const importId = '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e60';
+  const file = new File(
+    ['Customer Name,Mobile Number\r\nRahima Akter,01712345678\r\n"Karim, Uddin",01812345678\r\n'],
+    'customers.csv',
+    { type: 'text/csv' },
+  );
+  const done = (status: string, extra = {}) => ({
+    id: importId,
+    status,
+    undoFinishedAt: null,
+    rowsTotal: 2,
+    rowsAdded: 1,
+    rowsUpdated: 0,
+    rowsSkipped: 0,
+    rowsFailed: 1,
+    reportUrl: 'https://files.example.test/report.csv',
+    ...extra,
+  });
+
+  it('uploads the file, maps the columns and starts the import with the shop evidence', async () => {
+    respond((path) => {
+      if (path === '/api/imports')
+        return { body: { importId, uploadUrl: 'https://files.example.test/up' } };
+      if (path.startsWith('https://files')) return { status: 200, body: {} };
+      if (path.endsWith('/start')) return { status: 202, body: done('importing') };
+      if (path === `/api/imports/${importId}`) return { body: done('done') };
+      return { body: { items: [], nextCursor: null } };
+    });
+    show(<CustomersScreen query={allCustomers} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(screen.getByRole('button', { name: /Import from a CSV/ }));
+    await user.upload(screen.getByLabelText('Customer file'), file);
+    expect((await screen.findByRole('status')).textContent).toContain('2 rows · 2 columns');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(((await screen.findByLabelText('Phone')) as HTMLSelectElement).value).toBe('1');
+    expect((screen.getByLabelText(/Name/) as HTMLSelectElement).value).toBe('0');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(screen.getByRole('radio', { name: /Leave existing customers/ }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.type(screen.getByLabelText(/WhatsApp: where/), 'Shopify checkout');
+    await user.click(screen.getByRole('button', { name: 'Start import' }));
+
+    expect(await screen.findByText('Import finished.')).toBeTruthy();
+    expect(sent.find((request) => request.path.endsWith('/start'))?.body).toEqual({
+      mapping: { phone: 1, name: 0 },
+      duplicateMode: 'skip',
+      consentEvidence: { whatsapp: 'Shopify checkout' },
+    });
+    expect(screen.getByRole('link', { name: 'Download the error report' })).toBeTruthy();
+  });
+
+  it('asks for the phone column before going on', async () => {
+    respond((path) =>
+      path === '/api/imports'
+        ? { body: { importId, uploadUrl: 'https://files.example.test/up' } }
+        : { body: { items: [], nextCursor: null } },
+    );
+    show(<CustomersScreen query={allCustomers} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(screen.getByRole('button', { name: /Import from a CSV/ }));
+    await user.upload(
+      screen.getByLabelText('Customer file'),
+      new File(['Who,Number\r\nRahima,01712345678\r\n'], 'list.csv', { type: 'text/csv' }),
+    );
+    await screen.findByRole('status');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Choose the column that has phone numbers')).toBeTruthy();
+    expect(screen.queryByText('Step 3 of 5 · Duplicates')).toBeNull();
+  });
+
+  it('refuses a file that is not CSV before uploading it', async () => {
+    respond(() => ({ body: { items: [], nextCursor: null } }));
+    show(<CustomersScreen query={allCustomers} />);
+    const user = userEvent.setup({ applyAccept: false });
+    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(screen.getByRole('button', { name: /Import from a CSV/ }));
+    await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
+    expect((await screen.findByRole('alert')).textContent).toContain('Only CSV files');
+    expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
   });
 });
