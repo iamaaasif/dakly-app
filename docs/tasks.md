@@ -203,7 +203,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ------ | -------------------------------------------------- | ----------- | ------------- | ---------------- | ------------------------------------------------------------------------------------ |
 | ANA-1  | Glossary report functions and daily summary tables | Done        | ORD-3, CUS-3  | #194, #207, #210 | Daily summaries, report reads and nightly reconciliation merged.                     |
 | ANA-2  | Attribution of orders to messages and posts        | Done        | ANA-1, CAMP-3 | #226, #243, #244 | Tracked taps, window rebuild and shared reports merged.                              |
-| ANA-3  | Web: Analytics tabs                                | In progress | ANA-2         | #287, #310       | Part 2 adds the Campaigns and Automations reads and tabs; the AI tip waits on part 3 |
+| ANA-3  | Web: Analytics tabs                                | In progress | ANA-2         | #287, #310, #315 | Part 2 adds the Campaigns and Automations reads and tabs; the AI tip waits on part 3 |
 | HOME-3 | Web: Dashboard cards                               | Done        | ANA-1         | #211             |                                                                                      |
 | HOME-4 | Ask Dakly AI with read-only report tools           | Todo        | ANA-1, AI-2   |                  |                                                                                      |
 
