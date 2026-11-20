@@ -62,6 +62,8 @@ function show(query = defaults) {
       canEditAutomations: false,
       canViewCustomers: false,
       canCreateCustomer: false,
+      canViewSocial: false,
+      canEditSocial: false,
       canViewChats: true,
       canEditChats: true,
       canViewSegments: false,
