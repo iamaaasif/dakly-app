@@ -27,6 +27,8 @@ describe('product editor selection', () => {
     });
     expect(productScreenQuerySchema.safeParse({ productTab: 'invalid' }).success).toBe(false);
     expect(productScreenQuerySchema.safeParse({ product, create: '1' }).success).toBe(false);
+    expect(productScreenQuerySchema.safeParse({ import: '1', create: '1' }).success).toBe(false);
+    expect(productScreenQuerySchema.parse({ import: '1' })).toEqual({ import: '1', limit: 50 });
     expect(productScreenQuerySchema.safeParse({ product, adjust: product }).success).toBe(false);
     expect(productScreenQuerySchema.safeParse({ create: 'yes' }).success).toBe(false);
   });
