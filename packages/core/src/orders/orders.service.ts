@@ -196,10 +196,6 @@ export class OrdersService {
     });
   }
 
-  hasChatOrder(storeId: string): Promise<boolean> {
-    return this.repository.hasChatOrder(storeId);
-  }
-
   async list(
     storeId: string,
     query: OrderListQuery,

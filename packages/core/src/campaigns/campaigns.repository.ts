@@ -125,22 +125,6 @@ export const campaignColumns = {
 export class CampaignsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async hasStarted(storeId: string): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: campaigns.id })
-        .from(campaigns)
-        .where(
-          and(
-            eq(campaigns.storeId, storeId),
-            inArray(campaigns.status, ['sending', 'paused', 'sent']),
-          ),
-        )
-        .limit(1),
-    );
-    return rows.length > 0;
-  }
-
   async list(
     storeId: string,
     query: CampaignListQuery & { timeZone?: string | null },

@@ -9,9 +9,9 @@ import type { SetupProfile } from '@dakly/contracts/stores';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { KnowledgeSearchService } from '../ai/knowledge-search.service';
-import { CampaignsService } from '../campaigns/campaigns.service';
+import { CampaignSetupService } from '../campaigns/campaign-setup.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
-import { OrdersService } from '../orders/orders.service';
+import { OrderSetupService } from '../orders/order-setup.service';
 import { ProductsService } from '../products/products.service';
 import { SmsSendersService } from '../sms-senders/sms-senders.service';
 import { StoresService } from '../stores/stores.service';
@@ -28,9 +28,9 @@ export class SetupChecklistService {
     @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
     @Inject(KnowledgeSearchService) private readonly knowledge: KnowledgeSearchService,
     @Inject(ProductsService) private readonly products: ProductsService,
-    @Inject(OrdersService) private readonly orders: OrdersService,
+    @Inject(OrderSetupService) private readonly orders: OrderSetupService,
     @Inject(SmsSendersService) private readonly smsSenders: SmsSendersService,
-    @Inject(CampaignsService) private readonly campaigns: CampaignsService,
+    @Inject(CampaignSetupService) private readonly campaigns: CampaignSetupService,
   ) {}
 
   async view(storeId: string): Promise<SetupChecklistResponse> {

@@ -103,22 +103,6 @@ type OrderFilters = Omit<OrderListQuery, 'stage'> & {
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async hasChatOrder(storeId: string): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ id: orders.id })
-        .from(orders)
-        .where(
-          and(
-            eq(orders.storeId, storeId),
-            inArray(orders.source, ['messenger', 'instagram', 'whatsapp']),
-          ),
-        )
-        .limit(1),
-    );
-    return rows.length > 0;
-  }
-
   list(storeId: string, query: OrderFilters, overdueBefore: Date, phone?: string) {
     return this.database.forStore(storeId, (tx) =>
       tx
