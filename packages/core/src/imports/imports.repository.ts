@@ -137,7 +137,7 @@ export class ImportsRepository {
         .from(imports)
         .innerJoin(uploads, and(eq(uploads.storeId, storeId), eq(uploads.id, imports.fileId)))
         .leftJoin(reports, and(eq(reports.storeId, storeId), eq(reports.id, imports.reportFileId)))
-        .where(and(eq(imports.storeId, storeId), eq(imports.id, importId)))
+        .where(and(customerImport(storeId), eq(imports.id, importId)))
         .limit(1),
     );
     return rows[0];
@@ -254,7 +254,7 @@ export class ImportsRepository {
         await tx
           .update(imports)
           .set({ reportFileId: report.id })
-          .where(and(eq(imports.storeId, storeId), eq(imports.id, importId)));
+          .where(and(customerImport(storeId), eq(imports.id, importId)));
       }
       return true;
     });
@@ -313,7 +313,7 @@ export class ImportsRepository {
         .set({ status: 'undone', lastProgressAt: at })
         .where(
           and(
-            eq(imports.storeId, storeId),
+            customerImport(storeId),
             eq(imports.id, importId),
             inArray(imports.status, ['done', 'failed']),
           ),
@@ -339,7 +339,7 @@ export class ImportsRepository {
         .from(imports)
         .where(
           and(
-            eq(imports.storeId, storeId),
+            customerImport(storeId),
             eq(imports.status, 'undone'),
             isNull(imports.undoFinishedAt),
             lt(sql`coalesce(${imports.lastProgressAt}, ${imports.finishedAt})`, before),
@@ -351,7 +351,7 @@ export class ImportsRepository {
       const rows = await tx
         .update(imports)
         .set({ lastProgressAt: now })
-        .where(and(eq(imports.storeId, storeId), inArray(imports.id, pending)))
+        .where(and(customerImport(storeId), inArray(imports.id, pending)))
         .returning({ id: imports.id });
       return rows.map((row) => row.id);
     });
@@ -367,14 +367,19 @@ export class ImportsRepository {
   }
 }
 
+// Product imports share the table, so every customer import query names its kind.
+function customerImport(storeId: string) {
+  return and(eq(imports.storeId, storeId), eq(imports.kind, 'customers_csv'));
+}
+
 function stalled(storeId: string, before: Date) {
   return and(
-    eq(imports.storeId, storeId),
+    customerImport(storeId),
     eq(imports.status, 'importing'),
     lt(sql`coalesce(${imports.lastProgressAt}, ${imports.startedAt})`, before),
   );
 }
 
 function guard(storeId: string, importId: string, status: ImportStatus) {
-  return and(eq(imports.storeId, storeId), eq(imports.id, importId), eq(imports.status, status));
+  return and(customerImport(storeId), eq(imports.id, importId), eq(imports.status, status));
 }
