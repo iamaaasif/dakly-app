@@ -115,13 +115,6 @@ export class StaffAlertsService {
     }
   }
 
-  // A plain notice with no audit row. Without Slack settings it is skipped, not an error.
-  async notify(id: string, text: string): Promise<boolean> {
-    if (!this.credentials) return false;
-    await this.send({ id, text }, this.credentials);
-    return true;
-  }
-
   private send(message: StaffAlertMessage, credentials: StaffAlertCredentials) {
     return measureVendorCall(
       new Logger(StaffAlertsService.name),
