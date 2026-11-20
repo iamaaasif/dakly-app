@@ -25,7 +25,8 @@ export type PermissionArea = (typeof permissionAreas)[number];
 export type AccessLevel = (typeof accessLevels)[number];
 export type BuiltInRole = (typeof builtInRoles)[number];
 export type Permission = `${PermissionArea}.${Exclude<AccessLevel, 'none'>}`;
-export type OwnerAction = 'billing.edit' | 'store.close' | 'ownership.transfer';
+export type OwnerAction =
+  'attribution.window.edit' | 'billing.edit' | 'store.close' | 'ownership.transfer';
 
 export const customRolePermissionsSchema = z
   .strictObject({

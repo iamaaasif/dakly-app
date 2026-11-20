@@ -1,17 +1,12 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
-import type { Queue } from 'bullmq';
-import { z } from 'zod';
 
 import { OrderAttributionService } from '../orders/order-attribution.service';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { QUEUES } from '../platform/queue/queues';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionEngine } from './order-attribution-engine.service';
 
 const PAGE_SIZE = 25;
-export const REBUILD_ATTRIBUTION = 'rebuild-attribution';
-export const rebuildAttributionSchema = z.strictObject({ storeId: z.uuid(), rebuildId: z.uuid() });
+const ORDERS_PER_JOB = 500;
 
 @Injectable()
 export class AttributionRebuildService {
@@ -20,41 +15,53 @@ export class AttributionRebuildService {
     @Inject(OrderAttributionService) private readonly orders: OrderAttributionService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(StoresService) private readonly stores: StoresService,
-    @InjectQueue(QUEUES.bulk) private readonly queue: Queue,
   ) {}
 
-  async runPage(storeId: string, rebuildId: string) {
-    const next = await this.transaction.runLocked(storeId, async () => {
-      const { windowDays, rebuild } = await this.stores.attributionRebuild(storeId);
-      if (rebuild?.id !== rebuildId) return null;
-      const page = await this.orders.rebuildPage(storeId, { ...rebuild, limit: PAGE_SIZE });
-      const selections = [];
-      for (const order of page) {
-        selections.push({ order, reference: await this.engine.select(storeId, order, windowDays) });
-      }
+  async runPage(storeId: string, rebuildId: string, checkpoint: string | null) {
+    for (let page = 0; page < ORDERS_PER_JOB / PAGE_SIZE; page++) {
+      if (!(await this.processPage(storeId, rebuildId, checkpoint))) return;
+    }
+  }
+
+  private async processPage(storeId: string, rebuildId: string, checkpoint: string | null) {
+    const { rebuild, windowDays } = await this.stores.attributionRebuild(storeId);
+    if (!matchesJob(rebuild, rebuildId, checkpoint)) return false;
+    const selections = await this.transaction.run(storeId, async () => {
+      const orders = await this.orders.rebuildPage(storeId, { ...rebuild, limit: PAGE_SIZE });
+      const page = [];
+      for (const order of orders)
+        page.push({ order, reference: await this.engine.select(storeId, order, windowDays) });
+      return page;
+    });
+    return this.transaction.runLocked(storeId, async () => {
+      const current = await this.stores.attributionRebuild(storeId);
+      if (!matchesJob(current.rebuild, rebuildId, checkpoint)) return false;
+      if (current.rebuild.processedOrders !== rebuild.processedOrders) return true;
       for (const { order, reference } of selections)
         await this.orders.rebuild(storeId, order.id, order, reference);
-      const after = page.length === PAGE_SIZE ? (selections.at(-1)?.order ?? null) : null;
+
+      const last = selections.at(-1)?.order;
+      const after = selections.length === PAGE_SIZE && last ? { id: last.id, at: last.at } : null;
+      const processedOrders = rebuild.processedOrders + selections.length;
+      const atCheckpoint = processedOrders % ORDERS_PER_JOB === 0;
       await this.stores.saveAttributionRebuild(
         storeId,
         after && {
           ...rebuild,
-          after: { id: after.id, at: after.at },
-          processedOrders: rebuild.processedOrders + page.length,
+          after,
+          processedOrders,
+          checkpoint: atCheckpoint ? after.id : checkpoint,
         },
       );
-      return after;
+      return after !== null && !atCheckpoint;
     });
-    if (next)
-      await this.queue.add(
-        REBUILD_ATTRIBUTION,
-        { storeId, rebuildId },
-        {
-          jobId: `attribution-${rebuildId}-${next.id}`,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 1000 },
-          removeOnComplete: true,
-        },
-      );
   }
+}
+
+function matchesJob<T extends { id: string; checkpoint: string | null }>(
+  rebuild: T | null,
+  rebuildId: string,
+  checkpoint: string | null,
+): rebuild is T {
+  return rebuild?.id === rebuildId && rebuild.checkpoint === checkpoint;
 }

@@ -40,6 +40,7 @@ const rebuildSchema = z.object({
   startedAt: z.iso.datetime(),
   after: z.object({ id: z.uuid(), at: z.string() }).nullable(),
   processedOrders: z.int().nonnegative(),
+  checkpoint: z.uuid().nullable(),
 });
 
 @Injectable()
@@ -110,9 +111,10 @@ export class StoresService {
   changeAttributionWindow(
     storeId: string,
     windowDays: AttributionWindow,
-    actor: { userId: string; role: StoreAccess['role'] },
+    actor: { userId: string; access: StoreAccess },
   ): Promise<AttributionSettingsResponse> {
-    if (actor.role !== 'owner') throw storeError('STORE_ATTRIBUTION_SETTING_DENIED');
+    if (!this.team.canChangeAttributionWindow(actor.access))
+      throw storeError('STORE_ATTRIBUTION_SETTING_DENIED');
     return this.transaction.runLocked(storeId, async () => {
       const previous = await this.attributionRebuild(storeId);
       if (windowDays === previous.windowDays) {
@@ -133,6 +135,7 @@ export class StoresService {
           timeZone: previous.timeZone,
           after: null,
           processedOrders: 0,
+          checkpoint: null,
         },
         { windowDays, updatedAt: now },
       );
@@ -154,8 +157,15 @@ export class StoresService {
     });
   }
 
-  saveAttributionRebuild(storeId: string, rebuild: z.infer<typeof rebuildSchema> | null) {
-    return this.repository.writeAttributionState(storeId, rebuild);
+  async saveAttributionRebuild(storeId: string, rebuild: z.infer<typeof rebuildSchema> | null) {
+    await this.repository.writeAttributionState(storeId, rebuild);
+    if (rebuild?.after && rebuild.checkpoint === rebuild.after.id)
+      await this.outbox.publish({
+        type: 'attribution.rebuild_continued',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { rebuildId: rebuild.id, afterOrderId: rebuild.after.id },
+      });
   }
 
   async attributionWindowDays(storeId: string, lock?: 'share'): Promise<AttributionWindow> {

@@ -23,8 +23,8 @@ import { AnalyticsService } from './analytics.service';
 import { AttributionRebuildService } from './attribution-rebuild.service';
 import { AttributeOrderCreated } from './jobs/attribute-order-created.job';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
+import { ContinueAttributionRebuild } from './jobs/continue-attribution-rebuild.job';
 import { OnAttributionWindowChanged } from './jobs/on-attribution-window-changed.job';
-import { RebuildAttributionJob } from './jobs/rebuild-attribution.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
@@ -54,6 +54,13 @@ describe('Daily order summaries', () => {
   let queue: Queue;
   const now = new Date('2026-11-19T06:00:00Z');
   let number = 1000;
+  const ownerAccess = {
+    role: 'owner',
+    areas: {},
+    seeFullPhone: true,
+    exportLists: true,
+    refund: true,
+  } as const;
 
   beforeAll(async () => {
     await fixture.setup();
@@ -298,17 +305,17 @@ describe('Daily order summaries', () => {
       outside,
     ]);
     const stores = app.get(StoresService);
-    const owner = { userId: fixture.userA, role: 'owner' as const };
+    const owner = { userId: fixture.userA, access: ownerAccess };
     const rebuild = app.get(AttributionRebuildService);
     await stores.changeAttributionWindow(fixture.a, 3, owner);
     const stale = (await stores.attributionRebuild(fixture.a)).rebuild!.id;
     await stores.changeAttributionWindow(fixture.a, 7, owner);
     const current = (await stores.attributionRebuild(fixture.a)).rebuild!.id;
-    await rebuild.runPage(fixture.a, stale);
+    await rebuild.runPage(fixture.a, stale, null);
     expect((await stores.attributionRebuild(fixture.a)).rebuild?.id).toBe(current);
     expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: null });
-    await rebuild.runPage(fixture.a, current);
-    await rebuild.runPage(fixture.a, current);
+    await rebuild.runPage(fixture.a, current, null);
+    await rebuild.runPage(fixture.a, current, null);
     expect(await stores.attributionSettings(fixture.a)).toEqual({
       windowDays: 7,
       rebuilding: false,
@@ -325,12 +332,14 @@ describe('Daily order summaries', () => {
          cod_amount_poisha,created_at)
        select gen_random_uuid(),$1,5000+n,'manual','user','Buyer','01710000005','Mirpur','Dhaka',
          100,100,'2026-11-18 06:00:00+00'::timestamptz + n*interval '1 microsecond'
-       from generate_series(1,26) n`,
+       from generate_series(1,501) n`,
       [fixture.b],
     );
-    const bulk = app.get<Queue>(getQueueToken(QUEUES.bulk));
     const stores = app.get(StoresService);
-    await stores.changeAttributionWindow(fixture.b, 1, { userId: fixture.userB, role: 'owner' });
+    await stores.changeAttributionWindow(fixture.b, 1, {
+      userId: fixture.userB,
+      access: ownerAccess,
+    });
     const started = (await stores.attributionRebuild(fixture.b)).rebuild!;
     const event = {
       id: randomUUID(),
@@ -344,17 +353,21 @@ describe('Daily order summaries', () => {
     expect(await stores.attributionSettings(fixture.b)).toEqual({
       windowDays: 1,
       rebuilding: true,
-      processedOrders: 25,
+      processedOrders: 500,
     });
     expect(await stores.attributionRebuild(fixture.b)).toMatchObject({
-      rebuild: { after: { at: expect.stringContaining('06:00:00.000025') } },
+      rebuild: { after: { at: expect.stringContaining('06:00:00.0005') } },
     });
-    const jobs = await bulk.getWaiting();
-    const continuation = jobs.find(({ data }) => data.rebuildId === started.id);
-    expect(continuation?.name).toBe('rebuild-attribution');
-    await app.get(RebuildAttributionJob).handle(continuation?.data);
-    await continuation?.remove();
     await subscriber.handle(event);
+    const { rows } = await fixture.connection.pool.query(
+      `select id, payload from outbox_events where store_id=$1
+       and type='attribution.rebuild_continued' and payload->>'rebuildId'=$2`,
+      [fixture.b, started.id],
+    );
+    expect(rows).toHaveLength(1);
+    const continuation = { ...event, ...rows[0], type: 'attribution.rebuild_continued' };
+    await app.get(ContinueAttributionRebuild).handle(continuation);
+    await app.get(ContinueAttributionRebuild).handle(continuation);
     expect(await stores.attributionSettings(fixture.b)).toEqual({
       windowDays: 1,
       rebuilding: false,

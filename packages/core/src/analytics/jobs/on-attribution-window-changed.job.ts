@@ -18,6 +18,6 @@ export class OnAttributionWindowChanged implements JobHandler {
 
   async handle(data: unknown) {
     const { storeId, payload } = event.parse(data);
-    await this.rebuild.runPage(storeId, payload.rebuildId);
+    await this.rebuild.runPage(storeId, payload.rebuildId, null);
   }
 }

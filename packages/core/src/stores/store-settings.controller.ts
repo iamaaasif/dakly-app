@@ -57,7 +57,7 @@ export class StoreSettingsController {
   ): Promise<AttributionSettingsResponse> {
     return this.stores.changeAttributionWindow(storeId, windowDays, {
       userId,
-      role: access.role,
+      access,
     });
   }
 

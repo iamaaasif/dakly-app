@@ -16,8 +16,8 @@ import { AnalyticsRepository } from './analytics.repository';
 import { AttributionRebuildService } from './attribution-rebuild.service';
 import { AttributeOrderCreated } from './jobs/attribute-order-created.job';
 import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
+import { ContinueAttributionRebuild } from './jobs/continue-attribution-rebuild.job';
 import { OnAttributionWindowChanged } from './jobs/on-attribution-window-changed.job';
-import { RebuildAttributionJob } from './jobs/rebuild-attribution.job';
 import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { ScheduleLifecycleOnStatsRepaired } from './jobs/schedule-lifecycle-on-stats-repaired.job';
@@ -49,7 +49,7 @@ import { OrderAttributionEngine } from './order-attribution-engine.service';
     AttributeOrderCreated,
     AttributionRebuildService,
     OnAttributionWindowChanged,
-    RebuildAttributionJob,
+    ContinueAttributionRebuild,
     BuildOrderSummaryJob,
     OrderAttributionEngine,
     ReconcileAnalyticsJob,
