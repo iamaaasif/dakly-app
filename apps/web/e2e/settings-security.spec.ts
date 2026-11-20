@@ -280,7 +280,10 @@ async function deleteTeamRole(page: Page) {
   await page.getByRole('button', { name: 'Save role', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
   const role = page.getByRole('heading', { name: 'Disposable settings role', exact: true });
-  await role.locator('..').getByRole('button', { name: 'Delete role', exact: true }).click();
+  await role
+    .locator('xpath=ancestor::div[contains(@class, "rounded-lg")]')
+    .getByRole('button', { name: 'Delete role', exact: true })
+    .click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete role', exact: true }).click();
   await expect(role).toBeHidden();
 }

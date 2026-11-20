@@ -44,9 +44,9 @@ test('invites a new recipient, changes live access and transfers ownership to th
     await page.goto('/team?tab=roles');
     await page.getByRole('button', { name: 'Create role', exact: true }).click();
     await page.getByLabel('Role name').fill('Team reader');
-    await page.getByRole('combobox', { name: 'Dashboard', exact: true }).selectOption('view');
-    await page.getByRole('combobox', { name: 'Customers', exact: true }).selectOption('view');
-    await page.getByRole('combobox', { name: 'Team', exact: true }).selectOption('view');
+    await page.getByRole('group', { name: 'Dashboard' }).getByText('View', { exact: true }).click();
+    await page.getByRole('group', { name: 'Customers' }).getByText('View', { exact: true }).click();
+    await page.getByRole('group', { name: 'Team' }).getByText('View', { exact: true }).click();
     await page.getByRole('button', { name: 'Save role', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeHidden();
     await expect(page.getByRole('heading', { name: 'Team reader', exact: true })).toBeVisible();
@@ -99,7 +99,7 @@ test('invites a new recipient, changes live access and transfers ownership to th
     ).json()) as SessionContext;
     await page.goto('/team?tab=roles');
     await page.getByRole('button', { name: 'Edit role', exact: true }).click();
-    await page.getByRole('combobox', { name: 'Team', exact: true }).selectOption('none');
+    await page.getByRole('group', { name: 'Team' }).getByText('No access', { exact: true }).click();
     await page.getByRole('button', { name: 'Save role', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeHidden();
     const stale = await recipientContext.request.post('/api/members/invites', {
