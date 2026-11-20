@@ -1641,18 +1641,26 @@ fixture('POST /campaigns/:campaignId/duplicate', async () => {
   expect((await f.row('campaigns', copy.id)).store_id).toBe(a.id);
   await hidden(b, 'POST', (value) => `/campaigns/${value}/duplicate`, id);
 });
-async function sentCampaign(shop: Shop, finishedHoursAgo: number) {
+// A sent Messenger campaign: SMS has no read receipts, so only Messenger can be resent.
+async function sentCampaign(shop: Shop, finishedHoursAgo: number, channel: 'sms' | 'messenger') {
   const id = await approvableCampaign(shop);
+  const page = randomUUID();
   await f.admin.pool.query(
-    `update campaigns set status='sent', approved_at=now(), finished_at=now() - $2 * interval '1 hour'
+    "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values($1::uuid,$2,'facebook_page',$1::text,'Page')",
+    [page, shop.id],
+  );
+  await f.admin.pool.query(
+    `update campaigns set status='sent', approved_at=now(), channel=$3,
+       channel_connection_id=case when $3 = 'messenger' then $4::uuid end,
+       finished_at=now() - $2 * interval '1 hour'
      where id=$1`,
-    [id, finishedHoursAgo],
+    [id, finishedHoursAgo, channel, page],
   );
   return id;
 }
 fixture('POST /campaigns/:campaignId/resend', async () => {
   const { a, b } = await pair(),
-    id = await sentCampaign(a, 49);
+    id = await sentCampaign(a, 49, 'messenger');
   const draft = (await success(a, 'POST', `/campaigns/${id}/resend`, 201)).json();
   expect(draft).toMatchObject({
     status: 'draft',
@@ -1660,10 +1668,13 @@ fixture('POST /campaigns/:campaignId/resend', async () => {
   });
   expect((await f.row('campaigns', draft.id)).store_id).toBe(a.id);
   await hidden(b, 'POST', (value) => `/campaigns/${value}/resend`, id);
+  const sms = await sentCampaign(b, 49, 'sms');
+  const refused = await success(b, 'POST', `/campaigns/${sms}/resend`, 409);
+  expect(refused.json().error.code).toBe('CAMPAIGN_RESEND_NEEDS_READS');
 });
 fixture('POST /campaigns/:campaignId/follow-up', async () => {
   const { a, b } = await pair(),
-    id = await sentCampaign(a, 1);
+    id = await sentCampaign(a, 1, 'sms');
   const draft = (await success(a, 'POST', `/campaigns/${id}/follow-up`, 201)).json();
   expect(draft).toMatchObject({ source: { campaignId: id, outcome: 'follow_up_unordered' } });
   expect((await f.row('campaigns', draft.id)).store_id).toBe(a.id);
