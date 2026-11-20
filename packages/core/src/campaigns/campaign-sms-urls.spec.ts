@@ -100,6 +100,20 @@ describe('SMS campaign body URLs', () => {
     },
   );
 
+  it.each([
+    { prefix: '"', suffix: '".' },
+    { prefix: '("', suffix: '").' },
+  ])('keeps JSON quotes and brackets in a URL wrapped with $prefix', ({ prefix, suffix }) => {
+    const target = 'https://shop.example.test/search?filter={"tags":["new"]}';
+    const text = `Open ${prefix}${target}${suffix}`;
+    const urls = campaignSmsUrls(text);
+
+    expect(urls.map((url) => url.target)).toEqual([new URL(target).href]);
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(
+      `Open ${prefix}/short${suffix}`,
+    );
+  });
+
   it('does not wrap a partial destination before a backslash', () => {
     const text = String.raw`Visit https://shop.example.test/a\b`;
     const urls = campaignSmsUrls(text);
@@ -144,6 +158,7 @@ describe('SMS campaign body URLs', () => {
     'Open ("https://shop.example.test/?item=1")—("today").',
     'Open (‘https://shop.example.test/a’)—(‘today’).',
     'Open [(‘"https://shop.example.test/?item=1"’)]—[(‘"today"’)].',
+    'Open (https://shop.example.test/?item=1)—(today).',
   ])('keeps adjacent quoted prose out of the URL in %s', (text) => {
     expect(campaignSmsUrls(text)).toEqual([]);
   });
