@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 import type { AnalyticsChannel, AnalyticsOverviewResponse } from '@dakly/contracts/analytics';
 import { cn } from '@dakly/ui/cn';
@@ -9,7 +9,7 @@ import { channelFills, channelLabels } from '../analytics-labels';
 import { formatShortDate } from '@/lib/format-date';
 import { formatCompactTaka, formatWholeTaka } from '@/lib/format-money';
 
-const WIDTH = 720;
+const BAR_SLOT = 16;
 const HEIGHT = 240;
 const LEFT = 56;
 const TOP = 8;
@@ -68,6 +68,19 @@ export function RevenueChart({
   );
 }
 
+function useChartWidth(weekCount: number) {
+  const box = useRef<HTMLDivElement>(null);
+  const [available, setAvailable] = useState(720);
+  useLayoutEffect(() => {
+    const measure = () => setAvailable(box.current?.clientWidth || 720);
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  const width = Math.max(available, LEFT + weekCount * BAR_SLOT);
+  return { box, width, scrolls: width > available };
+}
+
 function WeeklyBars({
   weeks,
   shown,
@@ -77,26 +90,30 @@ function WeeklyBars({
   shown: AnalyticsChannel[];
   previous: bigint[];
 }) {
+  const { box, width, scrolls } = useChartWidth(weeks.length);
   const totals = weeks.map(({ byChannel }) =>
     shown.reduce((sum, channel) => sum + BigInt(byChannel[channel] ?? '0'), 0n),
   );
   const step = niceStep([...totals, ...previous].reduce((a, b) => (b > a ? b : a), 0n));
   const top = step * 4n;
   const plotHeight = HEIGHT - TOP - BOTTOM;
-  const slot = (WIDTH - LEFT) / Math.max(1, weeks.length);
+  const slot = (width - LEFT) / Math.max(1, weeks.length);
   const y = (value: bigint) => TOP + plotHeight - (Number(value) / Number(top)) * plotHeight;
   const previousPath = previous
     .map((value, index) => `${index ? 'L' : 'M'}${LEFT + slot * (index + 0.5)},${y(value)}`)
     .join(' ');
   return (
-    <div className="overflow-x-auto">
+    <div ref={box} className="overflow-x-auto">
+      {scrolls && <p className="mb-2 text-sm text-text-muted">Scroll for more weeks.</p>}
       <svg
         role="img"
         aria-label="Money from your marketing by week and channel"
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="h-auto w-full min-w-[32rem] text-text-muted"
+        viewBox={`0 0 ${width} ${HEIGHT}`}
+        width={width}
+        height={HEIGHT}
+        className="max-w-none text-text-muted"
       >
-        <Axis ticks={[0n, step, step * 2n, step * 3n, top]} y={y} />
+        <Axis ticks={[0n, step, step * 2n, step * 3n, top]} y={y} width={width} />
         {weeks.map((week, index) => (
           <WeekBars
             key={week.weekStart}
@@ -130,14 +147,22 @@ function niceStep(value: bigint): bigint {
   return BigInt(unit * magnitude) * 100n;
 }
 
-function Axis({ ticks, y }: { ticks: bigint[]; y: (value: bigint) => number }) {
+function Axis({
+  ticks,
+  y,
+  width,
+}: {
+  ticks: bigint[];
+  y: (value: bigint) => number;
+  width: number;
+}) {
   return (
     <>
       {ticks.map((tick) => (
         <g key={tick.toString()}>
           <line
             x1={LEFT}
-            x2={WIDTH}
+            x2={width}
             y1={y(tick)}
             y2={y(tick)}
             className="stroke-border"

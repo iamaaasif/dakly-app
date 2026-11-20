@@ -6,7 +6,6 @@ export const channelLabels: Record<AnalyticsChannel, string> = {
   messenger: 'Messenger',
 };
 
-// Chart fills and legend swatches share these theme tokens.
 export const channelFills: Record<AnalyticsChannel, { fill: string; swatch: string }> = {
   whatsapp: { fill: 'fill-success', swatch: 'bg-success' },
   sms: { fill: 'fill-ai', swatch: 'bg-ai' },

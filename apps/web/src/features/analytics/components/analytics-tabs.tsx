@@ -1,16 +1,12 @@
 import { ChartLine } from 'lucide-react';
 import Link from 'next/link';
 
-import type { AnalyticsTab, AnalyticsView } from '@dakly/contracts/analytics';
+import type { AnalyticsView } from '@dakly/contracts/analytics';
 import { cn } from '@dakly/ui/cn';
 
 import { analyticsHref } from '../api/analytics-overview';
 
-const tabs = [{ id: 'overview', label: 'Overview', icon: ChartLine }] as const satisfies readonly {
-  id: AnalyticsTab;
-  label: string;
-  icon: typeof ChartLine;
-}[];
+const tabs = [{ id: 'overview', label: 'Overview', icon: ChartLine }] as const;
 
 export function AnalyticsTabs({ view }: { view: AnalyticsView }) {
   return (
