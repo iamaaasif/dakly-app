@@ -1596,6 +1596,20 @@ fixture('GET /campaigns/:campaignId/estimate', async () => {
   expect(estimate).toMatchObject({ audienceCount: 1, recipientsCount: 1, smsCredits: 1 });
   await hidden(b, 'GET', (value) => `/campaigns/${value}/estimate`, id);
 });
+fixture('GET /campaigns/:campaignId/results', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  const results = (await success(a, 'GET', `/campaigns/${id}/results`, 200)).json();
+  expect(results).toMatchObject({ costPoisha: '0', returnPerTaka: null, failureReasons: [] });
+  await hidden(b, 'GET', (value) => `/campaigns/${value}/results`, id);
+});
+fixture('GET /campaigns/:campaignId/customers', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  const customers = await success(a, 'GET', `/campaigns/${id}/customers?outcome=failed`, 200);
+  expect(customers.json()).toEqual({ items: [], nextCursor: null });
+  await hidden(b, 'GET', (value) => `/campaigns/${value}/customers?outcome=failed`, id);
+});
 fixture('POST /campaigns/:campaignId/approve', async () => {
   const { a, b } = await pair(),
     own = await approvableCampaign(b),
