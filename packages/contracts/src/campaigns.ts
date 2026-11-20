@@ -23,6 +23,7 @@ export const campaignApprovalFailureCodes = [
   'WALLET_BALANCE_TOO_LOW',
   'CAMPAIGN_NO_RECIPIENTS',
   'CAMPAIGN_SEND_TIME_PASSED',
+  'SEGMENT_NOT_FOUND',
 ] as const;
 export const campaignPauseReasons = [
   'manual',

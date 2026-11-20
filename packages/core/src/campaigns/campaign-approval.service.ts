@@ -57,12 +57,25 @@ export class CampaignApprovalService {
   }
 
   private async addPage(storeId: string, key: ApprovalKey, state: ApprovalState): Promise<Step> {
-    const page = await this.audience.page(
-      storeId,
-      state,
-      { segmentIndex: state.segmentIndex, contactId: state.contactId },
-      state.scheduledFor ?? key.approvedAt,
-    );
+    const page = await this.audience
+      .page(
+        storeId,
+        state,
+        { segmentIndex: state.segmentIndex, contactId: state.contactId },
+        state.scheduledFor ?? key.approvedAt,
+      )
+      .catch(async (error: unknown) => {
+        // A segment deleted after approval started would fail every retry; refuse instead.
+        if (!(error instanceof AppError) || error.code !== 'SEGMENT_NOT_FOUND') throw error;
+        await this.approvals.markApprovalFailing(
+          storeId,
+          key,
+          'SEGMENT_NOT_FOUND',
+          this.clock.now(),
+        );
+        return null;
+      });
+    if (!page) return 'more';
     await this.transaction.run(storeId, async () => {
       const saved = await this.approvals.saveApprovalProgress(
         storeId,

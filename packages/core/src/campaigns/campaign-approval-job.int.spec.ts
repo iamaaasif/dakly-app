@@ -299,6 +299,29 @@ describe('Campaign approval job (Postgres)', () => {
     });
   });
 
+  it('goes back to draft with SEGMENT_NOT_FOUND when the segment is deleted after approval starts', async () => {
+    const rules = {
+      match: 'all',
+      conditions: [{ field: 'district', operator: 'is_any_of', values: ['সিলেট'] }],
+    } as const;
+    const gone = (await app.get(SegmentsService).create(storeId, { name: 'সাময়িক', rules }, actor))
+      .id;
+    const campaignId = await draft(gone);
+    await service.approve(storeId, campaignId, owner);
+    await app.get(SegmentsService).remove(storeId, gone, actor);
+    const reservedBefore = await reservations();
+
+    await runApprovalJob(approval, admin.pool, storeId, campaignId);
+
+    expect(await service.get(storeId, campaignId)).toMatchObject({
+      status: 'draft',
+      approval: null,
+      approvalFailureCode: 'SEGMENT_NOT_FOUND',
+    });
+    expect(await frozen(campaignId)).toEqual({ total: 0, contacts: 0 });
+    expect(await reservations()).toBe(reservedBefore);
+  });
+
   it('refuses an approval for a segment that does not exist, before it starts', async () => {
     const input = createCampaignSchema.parse({
       name: 'হারানো সেগমেন্ট',
