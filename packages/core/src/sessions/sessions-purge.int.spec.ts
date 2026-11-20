@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createDatabase } from '@dakly/db/client';
+
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { AccountDatabase } from '../platform/database/account-database';
 import { SessionsRepository } from './sessions.repository';
@@ -9,10 +11,9 @@ import { SessionsRepository } from './sessions.repository';
 describe('session purge (Postgres)', () => {
   const fixture = new OwnerIsolationFixture();
   const owner = fixture.connection.pool;
-  const repository = new SessionsRepository(
-    fixture.connection.db,
-    new AccountDatabase(fixture.connection.db),
-  );
+  // The app role is what runs in production, so row level security and grants apply.
+  const app = createDatabase(process.env.DATABASE_URL!);
+  const repository = new SessionsRepository(app.db, new AccountDatabase(app.db));
   const users = () => [fixture.userA, fixture.userB];
 
   beforeAll(async () => {
@@ -31,7 +32,7 @@ describe('session purge (Postgres)', () => {
   });
   afterAll(async () => {
     await owner.query('delete from sessions where user_id = any($1::uuid[])', [users()]);
-    await fixture.close();
+    await Promise.all([fixture.close(), app.pool.end()]);
   });
 
   it('deletes expired sessions in bounded batches and keeps live ones', async () => {

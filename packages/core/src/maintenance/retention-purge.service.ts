@@ -3,7 +3,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AutomationRunsService } from '../automations/automation-runs.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { SessionsService } from '../sessions/sessions.service';
 import { StoresService } from '../stores/stores.service';
 
 const STORE_PAGE_SIZE = 100;
@@ -17,7 +16,6 @@ export class RetentionPurgeService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(CampaignsService) private readonly campaigns: CampaignsService,
     @Inject(AutomationRunsService) private readonly automationRuns: AutomationRunsService,
-    @Inject(SessionsService) private readonly sessions: SessionsService,
   ) {}
 
   async purgeStoreTables() {
@@ -32,9 +30,5 @@ export class RetentionPurgeService {
       if (page.length < STORE_PAGE_SIZE) return;
       after = page.at(-1) ?? null;
     }
-  }
-
-  purgeExpiredSessions() {
-    return this.sessions.purgeExpired();
   }
 }

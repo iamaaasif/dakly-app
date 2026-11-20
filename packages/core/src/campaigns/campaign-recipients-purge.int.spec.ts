@@ -2,13 +2,18 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createDatabase } from '@dakly/db/client';
+
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { CampaignsRepository } from './campaigns.repository';
 
 describe('campaign recipient purge (Postgres)', () => {
   const fixture = new OwnerIsolationFixture();
   const owner = fixture.connection.pool;
-  const repository = new CampaignsRepository(fixture.tenant);
+  // The app role is what runs in production, so row level security and grants apply.
+  const app = createDatabase(process.env.DATABASE_URL!);
+  const repository = new CampaignsRepository(new TenantDatabase(app.db));
   const contactId = randomUUID();
   const otherContactId = randomUUID();
   const count = async (storeId: string) =>
@@ -56,7 +61,7 @@ describe('campaign recipient purge (Postgres)', () => {
     await owner.query('delete from contacts where store_id = any($1::uuid[])', [
       [fixture.a, fixture.b],
     ]);
-    await fixture.close();
+    await Promise.all([fixture.close(), app.pool.end()]);
   });
 
   it('deletes recipients 372 days after their campaign finished, not earlier or while it runs', async () => {

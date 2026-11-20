@@ -2,13 +2,18 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createDatabase } from '@dakly/db/client';
+
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { NotificationsRepository } from './notifications.repository';
 
 describe('notification purge (Postgres)', () => {
   const fixture = new OwnerIsolationFixture();
   const owner = fixture.connection.pool;
-  const repository = new NotificationsRepository(fixture.tenant, fixture.connection.db);
+  // The app role is what runs in production, so row level security and grants apply.
+  const app = createDatabase(process.env.DATABASE_URL!);
+  const repository = new NotificationsRepository(new TenantDatabase(app.db), app.db);
   const count = async (storeId: string) =>
     (
       await owner.query('select count(*)::int as total from notifications where store_id = $1', [
@@ -37,7 +42,7 @@ describe('notification purge (Postgres)', () => {
     await owner.query('delete from notifications where store_id = any($1::uuid[])', [
       [fixture.a, fixture.b],
     ]);
-    await fixture.close();
+    await Promise.all([fixture.close(), app.pool.end()]);
   });
 
   it('deletes a bounded batch of notifications older than 90 days for one store only', async () => {

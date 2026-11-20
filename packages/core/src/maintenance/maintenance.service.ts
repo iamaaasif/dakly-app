@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
+import { SessionsService } from '../sessions/sessions.service';
 import { AuditArchiveService } from './audit-archive.service';
 import { FilePurgeService } from './file-purge.service';
 import { MaintenanceRollupsService } from './maintenance-rollups.service';
@@ -18,6 +19,7 @@ export class MaintenanceService {
     @Inject(AccountSecurityEventsService)
     private readonly accountEvents: AccountSecurityEventsService,
     @Inject(RetentionPurgeService) private readonly retention: RetentionPurgeService,
+    @Inject(SessionsService) private readonly sessions: SessionsService,
   ) {}
 
   // Each step is safe to repeat, and a failed step does not stop the others: dropping a month
@@ -31,7 +33,7 @@ export class MaintenanceService {
       ['purge expired files', () => this.files.purgeExpiredFiles()],
       ['purge orphan product objects', () => this.files.purgeOrphanProductObjects()],
       ['purge expired store rows', () => this.retention.purgeStoreTables()],
-      ['purge expired sessions', () => this.retention.purgeExpiredSessions()],
+      ['purge expired sessions', () => this.sessions.purgeExpired()],
       ['purge account history', () => this.accountEvents.purgeExpired()],
     ] as const;
     let failed = 0;

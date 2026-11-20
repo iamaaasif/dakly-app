@@ -2,13 +2,18 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { createDatabase } from '@dakly/db/client';
+
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { AutomationRunsRepository } from './automation-runs.repository';
 
 describe('automation step purge (Postgres)', () => {
   const fixture = new OwnerIsolationFixture();
   const owner = fixture.connection.pool;
-  const repository = new AutomationRunsRepository(fixture.tenant, fixture.connection.db);
+  // The app role is what runs in production, so row level security and grants apply.
+  const app = createDatabase(process.env.DATABASE_URL!);
+  const repository = new AutomationRunsRepository(new TenantDatabase(app.db), app.db);
   const contactId = randomUUID();
   const automationId = randomUUID();
   const versionId = randomUUID();
@@ -58,7 +63,7 @@ describe('automation step purge (Postgres)', () => {
     await owner.query('delete from automation_runs where store_id = $1', [fixture.a]);
     await owner.query('delete from automation_versions where store_id = $1', [fixture.a]);
     await owner.query('delete from contacts where store_id = $1', [fixture.a]);
-    await fixture.close();
+    await Promise.all([fixture.close(), app.pool.end()]);
   });
 
   it('deletes steps 372 days after their run finished and keeps the rest', async () => {
