@@ -22,6 +22,7 @@ import { automationTemplates } from '@dakly/contracts/automations/templates';
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import { AnalyticsService } from '../analytics/analytics.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -72,27 +73,35 @@ export class AutomationsService {
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(WalletService) private readonly wallets: WalletService,
+    @Inject(AnalyticsService) private readonly reports: AnalyticsService,
   ) {}
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
     const since = new Date(this.clock.now().getTime() - 30 * DAY_MS);
     const rows = await this.repository.list(storeId, VISIBLE_STATUSES, query, since);
-    const items = rows
-      .slice(0, query.limit)
-      .map(({ publishedGraph, enteredLast30Days, ...row }) => {
-        const graph = publishedGraph ?? row.graph;
-        const steps = Object.values(graph.steps);
-        const channels = [
-          ...new Set(steps.flatMap((step) => (step.kind === 'send' ? step.channels : []))),
-        ];
-        return {
-          ...toAutomationResponse(row),
-          trigger: graph.trigger.key,
-          stepCount: steps.length,
-          channels,
-          enteredLast30Days,
-        };
-      });
+    const { current } = await this.reports.periods(storeId, 30);
+    const page = rows.slice(0, query.limit);
+    const attribution = await this.reports.attributionBySource(
+      storeId,
+      current,
+      'automation',
+      page.map(({ id }) => id),
+    );
+    const items = page.map(({ publishedGraph, enteredLast30Days, ...row }) => {
+      const graph = publishedGraph ?? row.graph;
+      const steps = Object.values(graph.steps);
+      const channels = [
+        ...new Set(steps.flatMap((step) => (step.kind === 'send' ? step.channels : []))),
+      ];
+      return {
+        ...toAutomationResponse(row),
+        trigger: graph.trigger.key,
+        stepCount: steps.length,
+        channels,
+        enteredLast30Days,
+        attributedRevenuePoisha: attribution[row.id]!.revenuePoisha,
+      };
+    });
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 

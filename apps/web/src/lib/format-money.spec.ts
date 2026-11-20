@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMoney, takaInputFromPoisha } from './format-money';
+import { formatMoney, formatWholeTaka, takaInputFromPoisha } from './format-money';
 
 describe('formatMoney', () => {
   it.each([
@@ -31,6 +31,16 @@ describe('formatMoney', () => {
       expect(() => formatMoney(amount)).toThrow(RangeError);
     },
   );
+});
+
+describe('formatWholeTaka', () => {
+  it.each([
+    [41893149n, '৳4,18,931'],
+    [41893150n, '৳4,18,932'],
+    [-41893150n, '-৳4,18,932'],
+  ])('rounds %s poisha to %s', (amount, expected) => {
+    expect(formatWholeTaka(amount)).toBe(expected);
+  });
 });
 
 describe('takaInputFromPoisha', () => {

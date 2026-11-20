@@ -5,7 +5,7 @@ import { lifecycleStages } from '@dakly/contracts/contacts';
 import { Clock } from '../platform/clock';
 import { StoresService } from '../stores/stores.service';
 import { AnalyticsRepository } from './analytics.repository';
-import { reportDay, shiftReportDay, type ReportPeriod } from './report-period';
+import { reportDay, retainedSince, shiftReportDay, type ReportPeriod } from './report-period';
 
 type Point = { day: string; value: bigint };
 
@@ -35,6 +35,45 @@ export class AnalyticsService {
 
   orders(storeId: string, period: ReportPeriod) {
     return this.readOrderMetric(storeId, period, 'orders');
+  }
+
+  marketingRevenue(storeId: string, period: ReportPeriod) {
+    return this.readOrderMetric(storeId, period, 'marketing_revenue');
+  }
+
+  async campaignAttribution(storeId: string, ids: string[]) {
+    const { current } = await this.periods(storeId, 30);
+    return this.attributionBySource(
+      storeId,
+      { from: retainedSince(current.through), through: current.through },
+      'campaign',
+      ids,
+    );
+  }
+
+  async attributionBySource(
+    storeId: string,
+    period: ReportPeriod,
+    source: 'campaign' | 'automation',
+    ids: string[],
+  ) {
+    if (!ids.length) return {};
+    const dimensions = ids.map((id) => `${source}:${id}`);
+    const rows = await this.repository.readAttributionMetrics(storeId, period, dimensions);
+    const totals = new Map<string, bigint>();
+    for (const { dimension, metric, value } of rows) {
+      const key = `${dimension}/${metric}`;
+      totals.set(key, (totals.get(key) ?? 0n) + value);
+    }
+    return Object.fromEntries(
+      ids.map((id) => [
+        id,
+        {
+          orders: (totals.get(`${source}:${id}/marketing_orders`) ?? 0n).toString(),
+          revenuePoisha: (totals.get(`${source}:${id}/marketing_revenue`) ?? 0n).toString(),
+        },
+      ]),
+    );
   }
 
   async sales(storeId: string, period: ReportPeriod) {

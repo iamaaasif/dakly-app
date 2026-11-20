@@ -1152,6 +1152,7 @@ fixture('GET /automations', async () => {
   expect((await success(a, 'GET', '/automations', 200)).json().items[0]).toMatchObject({
     id: aId,
     enteredLast30Days: 0,
+    attributedRevenuePoisha: '0',
     trigger: 'consent_given',
     channels: ['sms'],
   });
@@ -1892,7 +1893,9 @@ fixture('GET /dashboard', async () => {
        ($1,$2,'lifecycle','new',$4),
        ($1,$2,'sales','manual',$4::bigint * 10000),
        ($1,$2,'sales','order_link',$4::bigint * 5000),
-       ($1,$3,'sales','manual',$4::bigint * 10000)`,
+       ($1,$3,'sales','manual',$4::bigint * 10000),
+       ($1,$2,'marketing_revenue','',$4::bigint * 3200),
+       ($1,$3,'marketing_revenue','',$4::bigint * 1600)`,
       [shop.id, current.through, previous.through, count],
     );
     await f.admin.pool.query(
@@ -1928,6 +1931,13 @@ fixture('GET /dashboard', async () => {
       previousPoisha: previousSales.total.toString(),
       pointsPoisha: sales.points.map(({ value }) => value.toString()),
     });
+    const attributed = await reports.marketingRevenue(shop.id, current);
+    const previousAttribution = await reports.marketingRevenue(shop.id, previous);
+    expect(cards.marketingRevenue).toEqual({
+      totalPoisha: attributed.total.toString(),
+      previousPoisha: previousAttribution.total.toString(),
+      pointsPoisha: attributed.points.map(({ value }) => value.toString()),
+    });
     expect(cards.sales).toMatchObject({
       totalPoisha: String(count * 15000),
       previousPoisha: String(count * 10000),
@@ -1943,7 +1953,11 @@ fixture('GET /dashboard', async () => {
   ]);
   const restricted = await f.request(a.member, 'GET', '/dashboard?period=7');
   expect(restricted.statusCode, restricted.body).toBe(200);
-  expect(Object.keys(restricted.json().cards)).toEqual(['newCustomers', 'customersWhoCameBack']);
+  expect(Object.keys(restricted.json().cards)).toEqual([
+    'marketingRevenue',
+    'newCustomers',
+    'customersWhoCameBack',
+  ]);
   expect(restricted.json().lifecycle.new).toBe(2);
   const ordersOnly = await success(b, 'POST', '/roles', 201, {
     name: 'Order reader',
@@ -1954,6 +1968,7 @@ fixture('GET /dashboard', async () => {
   expect(ordersDashboard.statusCode, ordersDashboard.body).toBe(200);
   expect(ordersDashboard.json()).not.toHaveProperty('lifecycle');
   expect(ordersDashboard.json().cards).not.toHaveProperty('newCustomers');
+  expect(ordersDashboard.json().cards).not.toHaveProperty('marketingRevenue');
   expect(ordersDashboard.json().cards).not.toHaveProperty('customersWhoCameBack');
   expect(ordersDashboard.json().cards.orders.points).toHaveLength(30);
   expect(ordersDashboard.json().cards.sales.pointsPoisha).toHaveLength(30);
