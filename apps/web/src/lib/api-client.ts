@@ -1,7 +1,7 @@
 import { apiFetch, ApiError, readJson } from '@dakly/ui/api-client';
 
 type ApiOptions = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   signal?: AbortSignal;
   contextTag?: string;
   idempotencyKey?: string;

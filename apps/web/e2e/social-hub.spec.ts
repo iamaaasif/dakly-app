@@ -93,6 +93,31 @@ test('shows accounts, drafts and the reconnect banner', async ({ page, context, 
     await channels.getByRole('button', { name: 'Reconnect' }).click();
     await expect(page.getByRole('dialog', { name: 'Reconnect @urbantrend.bd' })).toBeVisible();
     await page.getByRole('button', { name: 'Back' }).click();
+
+    await page.getByRole('button', { name: 'Posting schedule' }).click();
+    const schedule = page.getByRole('dialog', { name: 'Posting schedule' });
+    await expect(schedule.getByText(/posting times a week/)).toBeVisible();
+    await capture(page, 'posting-schedule');
+    await schedule.getByRole('button', { name: 'Add a time on Sat' }).click();
+    await schedule.getByLabel('New time on Sat').fill('09:15');
+    await schedule.getByLabel('New time on Sat').press('Enter');
+    await schedule.getByRole('button', { name: 'Save schedule' }).click();
+    await expect(page.getByText('Posting schedule saved.')).toBeVisible();
+
+    // Meta rejects a copy that targets an account whose access expired, so copy the Page-only draft.
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Navy or maroon' })
+      .getByRole('button', { name: /^Duplicate draft:/ })
+      .click();
+    await expect(page.getByText('Draft duplicated.')).toBeVisible();
+    await page
+      .getByRole('button', { name: /^Delete draft:/ })
+      .first()
+      .click();
+    await capture(page, 'delete-draft');
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete draft' }).click();
+    await expect(page.getByText('Draft deleted.')).toBeVisible();
   } finally {
     await database.pool.query('delete from post_targets where store_id=$1', [storeId]);
     await database.pool.query('delete from posts where store_id=$1', [storeId]);
