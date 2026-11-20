@@ -119,6 +119,8 @@ export const contactListQuerySchema = z.strictObject({
   search: z.string().trim().min(1).max(120).optional(),
 });
 
+export const matchSuggestionListQuerySchema = z.strictObject({ contactId: z.uuid() });
+
 // A file column the mapping can name; the reader keeps no cells past this.
 export const MAX_IMPORT_COLUMNS = 200;
 const importColumn = z
@@ -229,6 +231,17 @@ export type ImportResponse = {
   rowsFailed: number | null;
   // A link to the CSV of row errors, valid for 15 minutes; null when nothing went wrong.
   reportUrl: string | null;
+};
+
+export type MatchSuggestionReason = (typeof matchSuggestionReasons)[number];
+
+// The other contact in an open suggestion, seen from the profile being viewed. The phone is masked
+// unless the member may see full numbers.
+export type MatchSuggestionResponse = {
+  id: string;
+  reason: MatchSuggestionReason;
+  otherContact: { id: string; name: string | null; phone: string | null };
+  createdAt: string;
 };
 
 export type ContactIdentityResponse = {

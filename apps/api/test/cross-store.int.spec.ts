@@ -433,6 +433,38 @@ fixture('GET /contacts', async () => {
     expect(ids).not.toContain(foreign);
   }
 });
+async function matchSuggestion(shop: Shop) {
+  const [contactId, matchedContactId] = [await contact(shop), await contact(shop)];
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into contact_match_suggestions (id,store_id,contact_id,matched_contact_id,reason,phone)
+     values($1,$2,$3,$4,'same_phone',$5)`,
+    [id, shop.id, contactId, matchedContactId, phone()],
+  );
+  return { id, contactId };
+}
+fixture('GET /contact-match-suggestions', async () => {
+  const { a, b } = await pair(),
+    own = await matchSuggestion(b),
+    foreign = await matchSuggestion(a);
+  const read = async (shop: Shop, contactId: string) =>
+    (await success(shop, 'GET', `/contact-match-suggestions?contactId=${contactId}`, 200)).json();
+  expect(await read(b, own.contactId)).toMatchObject([{ id: own.id, reason: 'same_phone' }]);
+  expect(await read(b, foreign.contactId)).toEqual([]);
+});
+fixture('POST /contact-match-suggestions/:suggestionId/dismiss', async () => {
+  const { a, b } = await pair(),
+    own = await matchSuggestion(b),
+    foreign = await matchSuggestion(a);
+  const before = await f.row('contact_match_suggestions', foreign.id);
+  await hidden(b, 'POST', (id) => `/contact-match-suggestions/${id}/dismiss`, foreign.id);
+  expect(await f.row('contact_match_suggestions', foreign.id)).toEqual(before);
+  await success(b, 'POST', `/contact-match-suggestions/${own.id}/dismiss`, 204);
+  expect(await f.row('contact_match_suggestions', own.id)).toMatchObject({
+    status: 'dismissed',
+    decided_by_user_id: b.owner.id,
+  });
+});
 for (const method of ['PATCH', 'DELETE'] as const)
   fixture(`${method} /contacts/:contactId`, async () => {
     const positive = await f.shop(),
