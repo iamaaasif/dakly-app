@@ -84,7 +84,7 @@ describe('Team screens', () => {
     await screen.findByRole('heading', { name: 'Rina' });
     expect(screen.getByText('01712-XXX678')).toBeTruthy();
     expect(screen.getByText('10 Jan 2026, 15:30 (Asia/Dhaka)')).toBeTruthy();
-    expect(screen.getByRole('meter').getAttribute('value')).toBe('1');
+    expect(screen.getByRole('meter').getAttribute('aria-valuenow')).toBe('1');
     expect(screen.queryByRole('button', { name: 'Invite member' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Remove member' })).toBeNull();
   });
@@ -124,10 +124,12 @@ describe('Team screens', () => {
     show(<RoleForm onDone={() => undefined} />, true);
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Role name'), 'Reader');
-    await user.selectOptions(screen.getByLabelText('Team', { exact: true }), 'view');
+    await user.click(
+      within(screen.getByRole('group', { name: 'Team' })).getByRole('radio', { name: 'View' }),
+    );
     await user.click(screen.getByLabelText('See full phone numbers'));
     expect(
-      within(screen.getByLabelText('Billing')).queryByRole('option', { name: 'Edit' }),
+      within(screen.getByRole('group', { name: 'Billing' })).queryByRole('radio', { name: 'Edit' }),
     ).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Save role' }));
     await screen.findByText('Choose another name');
@@ -204,9 +206,7 @@ describe('Role permission errors', () => {
     await userEvent.type(screen.getByLabelText('Role name'), 'Reader');
     await userEvent.click(screen.getByRole('button', { name: 'Save role' }));
     await screen.findByText('Check permissions');
-    expect(screen.getByLabelText('Team', { exact: true }).getAttribute('aria-invalid')).toBe(
-      'true',
-    );
+    expect(screen.getByRole('group', { name: 'Team' }).getAttribute('aria-invalid')).toBe('true');
     expect(screen.getByText('Choose a lower Team access level')).toBeTruthy();
   });
 });
