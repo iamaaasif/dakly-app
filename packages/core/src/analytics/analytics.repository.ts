@@ -143,7 +143,7 @@ export class AnalyticsRepository {
         with expired as (
           select ctid from store_daily_metrics
           where store_id = ${storeId} and day < ${reportBefore}::date
-            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle', 'marketing_orders', 'marketing_revenue')
+            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle', 'marketing_orders', 'marketing_revenue', 'ai_runs', 'ai_cost_micro_usd', 'ai_input_tokens', 'ai_output_tokens')
           order by day, metric, dimension limit ${limit} for update
         ), removed as (
           delete from store_daily_metrics as metrics using expired

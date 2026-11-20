@@ -60,6 +60,8 @@ const MAX_QUEUED_STEPS = 1000;
 const CLAIMS_PER_STORE = 100;
 const system = { kind: 'system' } as const;
 
+const PURGE_BATCH = 5000;
+
 @Injectable()
 export class AutomationRunsService {
   constructor(
@@ -425,5 +427,9 @@ export class AutomationRunsService {
           started.optOutUrl ?? undefined,
         ),
       });
+  }
+
+  async purgeExpiredSteps(storeId: string): Promise<void> {
+    while (await this.repository.purgeExpiredStepsBatch(storeId, PURGE_BATCH));
   }
 }

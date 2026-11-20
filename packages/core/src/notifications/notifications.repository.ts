@@ -163,4 +163,19 @@ export class NotificationsRepository {
         ),
     );
   }
+
+  // Deletes one batch of notifications older than 90 days and says whether the batch was full.
+  async purgeExpiredBatch(storeId: string, limit: number): Promise<boolean> {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ count: number }>(sql`
+        with removed as (
+          delete from notifications where ctid in (
+            select ctid from notifications
+            where store_id = ${storeId} and created_at < now() - interval '90 days'
+            limit ${limit} for update skip locked)
+          returning 1)
+        select count(*)::int as count from removed`),
+    );
+    return rows[0]?.count === limit;
+  }
 }

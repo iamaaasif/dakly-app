@@ -397,6 +397,22 @@ export class CampaignsRepository {
     );
     return rows.length > 0;
   }
+
+  // Recipients are kept 372 days after their campaign finishes (the attribution rebuild horizon).
+  async purgeExpiredRecipientsBatch(storeId: string, limit: number): Promise<boolean> {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ count: number }>(sql`
+        with removed as (
+          delete from campaign_recipients where ctid in (
+            select r.ctid from campaign_recipients r
+            join campaigns c on c.store_id = r.store_id and c.id = r.campaign_id
+            where r.store_id = ${storeId} and c.finished_at < now() - interval '372 days'
+            limit ${limit} for update of r skip locked)
+          returning 1)
+        select count(*)::int as count from removed`),
+    );
+    return rows[0]?.count === limit;
+  }
 }
 
 export type LockedCampaign = NonNullable<Awaited<ReturnType<CampaignsRepository['lockCampaign']>>>;

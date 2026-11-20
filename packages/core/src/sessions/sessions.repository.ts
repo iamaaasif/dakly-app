@@ -199,4 +199,15 @@ export class SessionsRepository {
     );
     return rows.length > 0;
   }
+
+  // Sessions are not tied to a store, so one batch covers every user. Returns whether it was full.
+  async purgeExpiredBatch(limit: number): Promise<boolean> {
+    const { rows } = await this.database.execute<{ count: number }>(sql`
+      with removed as (
+        delete from sessions where ctid in (
+          select ctid from sessions where expires_at < now() limit ${limit} for update skip locked)
+        returning 1)
+      select count(*)::int as count from removed`);
+    return rows[0]?.count === limit;
+  }
 }
