@@ -218,6 +218,65 @@ describe('Customer profile', () => {
     expect(screen.queryByRole('heading', { name: 'Marketing permission' })).toBeNull();
   });
 
+  describe('possible same person', () => {
+    const suggestion = {
+      id: 'suggestion',
+      reason: 'same_phone',
+      otherContact: { id: 'other', name: 'Karim Uddin', phone: '01712-XXX678' },
+      createdAt: '2026-11-18T08:00:00Z',
+    };
+    const serve = (suggestions: unknown[]) =>
+      respond((path, method) => {
+        if (path.includes('/dismiss')) return { status: 204 };
+        if (path.includes('/contact-match-suggestions') && method === 'GET')
+          return { body: suggestions };
+        return { body: detail };
+      });
+
+    it('lists the other contact with the phone as the API sent it, and links to them', async () => {
+      serve([suggestion]);
+      show(<CustomerProfile contactId={contactId} />);
+      expect(await screen.findByRole('heading', { name: 'Possible same person' })).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Karim Uddin' }).getAttribute('href')).toBe(
+        '/customers/other',
+      );
+      expect(screen.getByText(/01712-XXX678 · has the same phone number/)).toBeTruthy();
+      expect(sent.some((call) => call.path.endsWith(`contactId=${contactId}`))).toBe(true);
+    });
+
+    it('dismisses a match and then hides the note', async () => {
+      let open = [suggestion];
+      respond((path, method) => {
+        if (path.includes('/dismiss')) {
+          open = [];
+          return { status: 204 };
+        }
+        if (path.includes('/contact-match-suggestions') && method === 'GET') return { body: open };
+        return { body: detail };
+      });
+      show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('heading', { name: 'Possible same person' })).toBeNull(),
+      );
+      expect(sent.map((call) => call.path)).toContain(
+        '/api/contact-match-suggestions/suggestion/dismiss',
+      );
+    });
+
+    it('offers no Dismiss to a viewer, and shows nothing when there are no matches', async () => {
+      serve([suggestion]);
+      show(<CustomerProfile contactId={contactId} />, false);
+      expect(await screen.findByRole('heading', { name: 'Possible same person' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull();
+      cleanup();
+      serve([]);
+      show(<CustomerProfile contactId={contactId} />);
+      await screen.findByRole('heading', { name: 'Rahima Akter' });
+      expect(screen.queryByRole('heading', { name: 'Possible same person' })).toBeNull();
+    });
+  });
+
   it('says when the customer is gone', async () => {
     respond(() => apiError(404, 'CONTACT_NOT_FOUND', 'Contact not found'));
     show(<CustomerProfile contactId={contactId} />);
