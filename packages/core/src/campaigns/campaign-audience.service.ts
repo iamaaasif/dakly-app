@@ -115,15 +115,26 @@ export class CampaignAudienceService {
     };
   }
 
-  // An upper bound for progress: a follow-up may drop people who ordered.
-  sourceSize(
+  // The upper bound shown as progress: segments can overlap and exclusions apply, and a follow-up
+  // may drop people who ordered. A segment id that does not exist is refused here.
+  async estimatedSize(
     storeId: string,
-    { sourceCampaignId, sourceOutcome }: Pick<Campaign, 'sourceCampaignId' | 'sourceOutcome'>,
+    campaign: Pick<
+      Campaign,
+      'includeSegmentIds' | 'excludeSegmentIds' | 'sourceCampaignId' | 'sourceOutcome'
+    >,
   ): Promise<number> {
-    return this.sourceAudience.count(storeId, {
-      campaignId: sourceCampaignId!,
-      outcome: sourceOutcome!,
-    });
+    if (campaign.sourceCampaignId && campaign.sourceOutcome)
+      return this.sourceAudience.count(storeId, {
+        campaignId: campaign.sourceCampaignId,
+        outcome: campaign.sourceOutcome,
+      });
+    let total = 0;
+    for (const segmentId of campaign.includeSegmentIds)
+      total += await this.segments.contactCount(storeId, segmentId);
+    for (const segmentId of campaign.excludeSegmentIds)
+      await this.segments.assertExists(storeId, segmentId);
+    return total;
   }
 
   // A follow-up drops people who ordered after the campaign; a resend keeps everyone unread.

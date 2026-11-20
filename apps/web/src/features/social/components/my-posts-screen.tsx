@@ -9,10 +9,12 @@ import { QueryError } from '@dakly/ui/query-error';
 
 import { usePosts } from '../api/get-posts';
 import { useSocialAccounts, type SocialAccount } from '../api/get-social-accounts';
-import { buildEntries, type CalendarEntry } from '../post-calendar';
+import { buildEntries, timeOnDay, type CalendarEntry } from '../post-calendar';
+import { useMovePost } from '../use-move-post';
 import { useMyPostsParams } from '../use-my-posts-params';
 import { CalendarPanel } from './calendar-panel';
 import { HubDialogs, type HubDialog } from './hub-dialogs';
+import { HubNotice } from './hub-notice';
 import { PostDetailsDialog } from './post-details-dialog';
 import { PublishedList } from './published-list';
 import { ReconnectBanner } from './reconnect-banner';
@@ -53,6 +55,7 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
   const store = session?.currentStore;
   const canEdit = Boolean(store?.canEditSocial);
   const all = buildEntries(posts, accounts, null);
+  const { notice, move } = useMovePost();
   return (
     <main className="space-y-6 p-4 md:p-8">
       <MyPostsHeader
@@ -68,8 +71,23 @@ function MyPosts({ accounts, posts }: MyPostsProps) {
           setDialog({ type: 'connect', kind: account.kind, reconnecting: account })
         }
       />
-      <MyPostsBody accounts={accounts} posts={posts} url={url} canEdit={canEdit} onOpen={setOpen} />
-      {open && <PostDetailsDialog entry={open} accounts={accounts} onClose={() => setOpen(null)} />}
+      {notice && <HubNotice message={notice.message} tone={notice.tone} />}
+      <MyPostsBody
+        accounts={accounts}
+        posts={posts}
+        url={url}
+        canEdit={canEdit}
+        onOpen={setOpen}
+        onMove={canEdit ? (entry, day) => move(entry, timeOnDay(entry, day)) : undefined}
+      />
+      {open && (
+        <PostDetailsDialog
+          entry={open}
+          accounts={accounts}
+          onMove={canEdit ? move : undefined}
+          onClose={() => setOpen(null)}
+        />
+      )}
       <HubDialogs
         dialog={dialog}
         accounts={accounts}
@@ -187,9 +205,10 @@ type BodyProps = MyPostsProps & {
   url: ReturnType<typeof useMyPostsParams>;
   canEdit: boolean;
   onOpen: (entry: CalendarEntry) => void;
+  onMove?: (entry: CalendarEntry, day: string) => void;
 };
 
-function MyPostsBody({ accounts, posts, url, canEdit, onOpen }: BodyProps) {
+function MyPostsBody({ accounts, posts, url, canEdit, onOpen, onMove }: BodyProps) {
   if (accounts.length === 0) return <ConnectFirst />;
   const all = buildEntries(posts, accounts, null);
   const shown = buildEntries(posts, accounts, url.accountId);
@@ -215,6 +234,7 @@ function MyPostsBody({ accounts, posts, url, canEdit, onOpen }: BodyProps) {
           hasPosts={all.length > 0}
           canEdit={canEdit}
           onOpen={onOpen}
+          onMove={onMove}
         />
       )}
     </>

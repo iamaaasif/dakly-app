@@ -6,9 +6,11 @@ import type { SocialAccount } from './api/get-social-accounts';
 import {
   attentionReason,
   buildEntries,
+  canMove,
   monthWeeks,
   shiftMonth,
   sortPublished,
+  timeOnDay,
   weekOf,
 } from './post-calendar';
 
@@ -102,6 +104,23 @@ it('sorts published posts by newest, reach or reactions, with unmeasured posts l
   expect(ids('newest')).toEqual(['new', 'mid', 'old']);
   expect(ids('reach')).toEqual(['old', 'mid', 'new']);
   expect(ids('reactions')).toEqual(['mid', 'old', 'new']);
+});
+
+it('moves a post to another day at the same Dhaka time, and only while it is waiting to go out', () => {
+  const [late] = buildEntries(
+    [post([{ scheduledFor: '2026-11-07T19:00:00.000Z' }])],
+    [facebook],
+    null,
+  );
+  expect(late?.dayKey).toBe('2026-11-08');
+  expect(timeOnDay(late!, '2026-11-12')).toBe('2026-11-12T01:00:00+06:00');
+  const [sent] = buildEntries(
+    [post([{ status: 'published', publishedAt: '2026-11-07T14:30:00.000Z' }])],
+    [facebook],
+    null,
+  );
+  const [failed] = buildEntries([post([{ status: 'failed' }])], [facebook], null);
+  expect([canMove(late!), canMove(sent!), canMove(failed!)]).toEqual([true, false, false]);
 });
 
 it('says why a scheduled target needs attention', () => {

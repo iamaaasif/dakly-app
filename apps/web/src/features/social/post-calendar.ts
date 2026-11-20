@@ -1,7 +1,7 @@
 import type { PostResponse } from '@dakly/contracts/social';
 
 import type { SocialAccount } from './api/get-social-accounts';
-import { dhakaDayKey } from '@/lib/format-date';
+import { dhakaDayKey, dhakaTimeOfDay } from '@/lib/format-date';
 
 export type CalendarStatus = 'scheduled' | 'needs_attention' | 'published' | 'failed';
 
@@ -119,6 +119,16 @@ export function shiftMonth(month: string, by: number): string {
 
 export function shiftDay(dayKey: string, by: number): string {
   return addDays(dayKey, by);
+}
+
+// Only a post that is still waiting to go out can move. Dhaka has no daylight saving, so +06:00 holds.
+export function canMove({ status }: CalendarEntry): boolean {
+  return status === 'scheduled' || status === 'needs_attention';
+}
+
+// Dropping a post on another day keeps its time of day.
+export function timeOnDay(entry: CalendarEntry, day: string): string {
+  return `${day}T${dhakaTimeOfDay(entry.at)}:00+06:00`;
 }
 
 export const statusLabels: Record<CalendarStatus, string> = {

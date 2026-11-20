@@ -3,6 +3,7 @@ import { formatCount } from '@dakly/contracts/money';
 import { Card } from '@dakly/ui/card';
 
 import { AnalyticsBestCards } from './analytics-best-cards';
+import { AnalyticsTip } from './analytics-tip';
 import { RevenueChart } from './revenue-chart';
 
 export function AnalyticsOverviewTab({
@@ -23,6 +24,7 @@ export function AnalyticsOverviewTab({
       </Card>
       <AnalyticsBestCards best={data.best} />
       <Funnel funnel={data.funnel} />
+      <AnalyticsTip period={view.period} />
     </div>
   );
 }

@@ -18,12 +18,14 @@ import {
   editPostSchema,
   postIdempotencyKeySchema,
   postListQuerySchema,
+  reschedulePostSchema,
   schedulePostSchema,
   type CreatePostInput,
   type EditPostInput,
   type PostListQuery,
   type PostListResponse,
   type PostResponse,
+  type ReschedulePostInput,
   type SchedulePostInput,
 } from '@dakly/contracts/social';
 import type { StoreAccess } from '@dakly/contracts/team';
@@ -33,13 +35,17 @@ import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { SocialRescheduleService } from './social-reschedule.service';
 import { SocialService } from './social.service';
 
 const idempotencyKeyPipe = new ZodValidationPipe(postIdempotencyKeySchema);
 
 @Controller('posts')
 export class SocialController {
-  constructor(@Inject(SocialService) private readonly social: SocialService) {}
+  constructor(
+    @Inject(SocialService) private readonly social: SocialService,
+    @Inject(SocialRescheduleService) private readonly reschedule: SocialRescheduleService,
+  ) {}
 
   @Post()
   @RequirePermission('social.edit')
@@ -111,6 +117,22 @@ export class SocialController {
     @Body(new ZodValidationPipe(schedulePostSchema)) input: SchedulePostInput,
   ): Promise<PostResponse> {
     return this.social.schedulePost(storeId, postId, input, {
+      actor: { kind: 'user', userId },
+      access,
+    });
+  }
+
+  @Post(':postId/reschedule')
+  @RequirePermission('social.edit')
+  @HttpCode(200)
+  reschedulePost(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('postId', ParseUUIDPipe) postId: string,
+    @Body(new ZodValidationPipe(reschedulePostSchema)) input: ReschedulePostInput,
+  ): Promise<PostResponse> {
+    return this.reschedule.reschedulePost(storeId, postId, input, {
       actor: { kind: 'user', userId },
       access,
     });

@@ -47,6 +47,18 @@ async function captureAtBothSizes(page: Page, name: string) {
   }
 }
 
+async function captureSheet(page: Page, name: string) {
+  const evidence = process.env.ANA3_EVIDENCE;
+  if (!evidence) return;
+  for (const [width, height] of [
+    [1440, 900],
+    [360, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.screenshot({ path: resolve(evidence, `${name}-${width}.png`) });
+  }
+}
+
 test('shows the overview from the glossary reports and keeps the period and toggle in the URL', async ({
   page,
   context,
@@ -210,6 +222,41 @@ test('shows the overview from the glossary reports and keeps the period and togg
       await captureAtBothSizes(page, tab);
     }
     await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/analytics?tab=campaigns');
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Download' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(
+      /^dakly-analytics-campaigns-\d{4}-\d{2}-\d{2}-\d{4}-\d{2}-\d{2}\.csv$/,
+    );
+
+    await page.goto('/analytics');
+    await expect(page.getByText(/Orders placed within 7 days of a message or post/)).toBeVisible();
+    await page.getByRole('button', { name: 'How Dakly counts orders' }).click();
+    const sheet = page.getByRole('dialog', { name: 'How Dakly counts orders' });
+    await expect(sheet.getByRole('radio', { name: '7 days' })).toBeChecked();
+    await expect(sheet.getByText('What is not counted')).toBeVisible();
+    await captureSheet(page, 'counting-sheet');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await sheet.getByRole('radio', { name: '3 days' }).click();
+    await expect(page.getByText('Recalculating with the new 3-day window')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByText(/Orders placed within 3 days of a message or post/)).toBeVisible();
+    // The test worker may finish the recount before the phone-size capture, so the state is held for the pictures.
+    await page.route('**/api/store/attribution', (route) =>
+      route.request().method() === 'GET'
+        ? route.fulfill({
+            json: { windowDays: 3, rebuilding: true, processedOrders: 1200 },
+            headers: { 'x-session-context': route.request().headers()['x-session-context'] ?? '' },
+          })
+        : route.continue(),
+    );
+    await page.reload();
+    await expect(page.getByText('Recalculating with the new 3-day window')).toBeVisible();
+    await captureAtBothSizes(page, 'recalculating');
+    await page.unroute('**/api/store/attribution');
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/analytics');
     await page.getByRole('checkbox', { name: 'Compare with before' }).click();
     await expect(page).toHaveURL(/compare=off/);
@@ -223,6 +270,14 @@ test('shows the overview from the glossary reports and keeps the period and togg
     await expect(page.getByText(/in the last 3 months$/)).toBeVisible();
   } finally {
     await scrubPage(page);
+    await database.pool.query(
+      "update stores set attribution_window_days = 7, settings = settings - 'attributionRebuild' where id=$1",
+      [shop],
+    );
+    await database.pool.query(
+      "delete from outbox_events where store_id=$1 and type='attribution.window_changed'",
+      [shop],
+    );
     await database.pool.query('delete from automation_run_steps where store_id=$1', [shop]);
     await database.pool.query('delete from automation_runs where store_id=$1', [shop]);
     await database.pool.query(

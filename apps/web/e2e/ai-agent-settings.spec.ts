@@ -166,6 +166,73 @@ test('shows practice mode, keeps the person informed during Go live and survives
   }
 });
 
+test('lists answers and files in the Knowledge tab and adds an answer', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
+    token: string;
+    storeIds: [string, string];
+  };
+  const [storeId] = fixture.storeIds;
+  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const fileId = randomUUID();
+  try {
+    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
+      storeId,
+    ]);
+    await database.pool.query(
+      `insert into files (id, store_id, purpose, object_key, content_type, size_bytes, status)
+       values ($1, $2, 'knowledge_file', $3, 'application/pdf', 20480, 'ready')`,
+      [fileId, storeId, `stores/${storeId}/knowledge/${fileId}`],
+    );
+    await database.pool.query(
+      `insert into knowledge_items (id, store_id, kind, answer) values
+         (gen_random_uuid(), $1, 'policy', 'Our showroom is at House 12, Road 5, Dhanmondi. Open 10 am to 10 pm.'),
+         (gen_random_uuid(), $1, 'policy', 'Cash on delivery works everywhere in Bangladesh. Delivery is 120 taka outside Dhaka.')`,
+      [storeId],
+    );
+    await database.pool.query(
+      `insert into knowledge_items (id, store_id, kind, file_id, status, facts_count)
+       values (gen_random_uuid(), $1, 'file', $2, 'active', 41)`,
+      [storeId, fileId],
+    );
+    await context.addCookies([
+      {
+        name: 'dakly_session',
+        value: fixture.token,
+        url: baseURL!,
+        httpOnly: true,
+        sameSite: 'Lax',
+      },
+    ]);
+    await context.request.post('/api/me/active-store', {
+      headers: { Origin: baseURL! },
+      data: { storeId },
+    });
+    await page.goto('/chats?agent=knowledge');
+    const drawer = page.getByRole('dialog', { name: 'Dakly AI agent' });
+    await expect(drawer.getByText('Dhanmondi')).toBeVisible();
+    await expect(drawer.getByText('Learned 41 facts')).toBeVisible();
+    await capture(page, 'knowledge');
+    await drawer.getByRole('button', { name: 'Add answer' }).click();
+    await drawer.getByLabel('Answer', { exact: true }).fill('We exchange within 7 days.');
+    await capture(page, 'knowledge-add', () =>
+      drawer.getByRole('form', { name: 'Add answer' }).scrollIntoViewIfNeeded(),
+    );
+    await drawer.getByRole('button', { name: 'Save answer' }).click();
+    await expect(drawer.getByText('We exchange within 7 days.')).toBeVisible();
+    await drawer.getByLabel('Search answers').fill('showroom');
+    await expect(drawer.getByText('We exchange within 7 days.')).toBeHidden();
+  } finally {
+    await database.pool.query('delete from knowledge_chunks where store_id = $1', [storeId]);
+    await database.pool.query('delete from knowledge_items where store_id = $1', [storeId]);
+    await database.pool.query('delete from files where id = $1', [fileId]);
+    await database.pool.end();
+  }
+});
+
 async function capture(page: Page, screen: string, afterResize?: () => Promise<unknown>) {
   const evidence = process.env.AI8_SCREENSHOT_DIR;
   if (!evidence) return;

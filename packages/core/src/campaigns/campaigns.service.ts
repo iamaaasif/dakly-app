@@ -32,6 +32,7 @@ import {
   audienceDecisionTime,
   audiencePartCount,
   CampaignAudienceService,
+  MESSENGER_CAMPAIGN_WINDOW_MS,
 } from './campaign-audience.service';
 import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
 import { toCampaignResponse } from './campaign-response';
@@ -162,18 +163,11 @@ export class CampaignsService {
   private async checkChangeFitsChannel(
     storeId: string,
     campaignId: string,
-    {
-      content,
-      channelConnectionId,
-      includeSegmentIds,
-      excludeSegmentIds,
-    }: Pick<
-      ChangeCampaignInput,
-      'content' | 'channelConnectionId' | 'includeSegmentIds' | 'excludeSegmentIds'
-    >,
+    change: ChangeCampaignInput,
   ) {
+    const { content, channelConnectionId, includeSegmentIds, excludeSegmentIds } = change;
     const { channel, sourceCampaignId } = await this.find(storeId, campaignId);
-    if (sourceCampaignId && (includeSegmentIds !== undefined || excludeSegmentIds !== undefined))
+    if (sourceCampaignId && (includeSegmentIds ?? excludeSegmentIds) !== undefined)
       throw campaignError('CAMPAIGN_AUDIENCE_FIXED');
     const messenger = channel === 'messenger';
     const contentFits =
@@ -214,9 +208,8 @@ export class CampaignsService {
       if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_DRAFT');
       if (!campaign.content.text) throw campaignError('CAMPAIGN_TEXT_EMPTY');
       const now = this.clock.now();
-      if (campaign.scheduledFor && campaign.scheduledFor <= now)
-        throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
-      const estimatedTotal = await this.segmentSize(storeId, campaign);
+      assertSendTime(campaign, now);
+      const estimatedTotal = await this.audience.estimatedSize(storeId, campaign);
       if (estimatedTotal === 0) throw campaignError('CAMPAIGN_NO_RECIPIENTS');
       const approving = await this.approvals.markApproving(storeId, campaignId, {
         approvedByUserId: approver.actor.kind === 'user' ? approver.actor.userId : null,
@@ -376,18 +369,6 @@ export class CampaignsService {
     throw await this.refusal(storeId, campaignId, refused);
   }
 
-  // The upper bound shown as progress: segments can overlap and exclusions apply. A segment id
-  // that does not exist is refused here.
-  private async segmentSize(storeId: string, campaign: Campaign): Promise<number> {
-    if (campaign.sourceCampaignId) return this.audience.sourceSize(storeId, campaign);
-    let total = 0;
-    for (const segmentId of campaign.includeSegmentIds)
-      total += await this.segments.contactCount(storeId, segmentId);
-    for (const segmentId of campaign.excludeSegmentIds)
-      await this.segments.assertExists(storeId, segmentId);
-    return total;
-  }
-
   private async sampleAudience(storeId: string, campaign: Campaign) {
     const recipients = new Map<string, FrozenRecipient>();
     let cursor = { segmentIndex: 0, contactId: null as string | null };
@@ -446,4 +427,19 @@ function toEstimate(
     smsCredits: smsParts * recipientsCount,
     costPoisha: 0,
   };
+}
+
+function assertSendTime(
+  { channel, scheduledFor }: { channel: CampaignChannel; scheduledFor: Date | null },
+  now: Date,
+) {
+  if (!scheduledFor) return;
+  if (scheduledFor <= now) throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
+  // Messenger only reaches people who wrote in the last 23 hours, so a later send time would find
+  // nearly every window closed.
+  if (
+    channel === 'messenger' &&
+    scheduledFor.getTime() - now.getTime() > MESSENGER_CAMPAIGN_WINDOW_MS
+  )
+    throw campaignError('CAMPAIGN_SCHEDULE_TOO_LATE');
 }

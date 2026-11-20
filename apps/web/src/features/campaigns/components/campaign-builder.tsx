@@ -7,16 +7,13 @@ import { useId, useState } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import type { z } from 'zod';
 
-import {
-  campaignGoals,
-  campaignDetailsSchema,
-  type CampaignResponse,
-} from '@dakly/contracts/campaigns';
+import { campaignDetailsSchema, type CampaignResponse } from '@dakly/contracts/campaigns';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
+import { useMessengerPages } from '../api/campaign-pages';
 import { useSaveCampaign } from '../api/save-campaign';
 import {
   campaignChannelLabels,
@@ -25,7 +22,10 @@ import {
   campaignStatusLabels,
 } from '../campaign-labels';
 import { CampaignChannelCards } from './campaign-channel-cards';
+import { CampaignGoalCards } from './campaign-goal-cards';
 import { CampaignPageHeader } from './campaign-page-header';
+import { MessengerDraft } from './messenger-draft';
+import { SmsDraft } from './sms-draft';
 import { formatDateTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -41,33 +41,43 @@ export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
   const editable = canEdit && campaign.status === 'draft';
   return (
     <main className="space-y-6 p-6 md:p-8">
-      <CampaignPageHeader
-        title={campaign.name}
-        subtitle={editable ? 'Nothing is sent until you approve.' : 'Campaign summary'}
-      />
       {editable ? (
-        <CampaignDetailsForm key={contextTag} campaign={campaign} />
+        <DraftEditor key={contextTag} campaign={campaign} />
       ) : (
-        <CampaignSummary campaign={campaign} />
+        <>
+          <CampaignPageHeader title={campaign.name} subtitle="Campaign summary" />
+          <CampaignSummary campaign={campaign} />
+        </>
       )}
     </main>
   );
 }
 
+function DraftEditor({ campaign }: { campaign: CampaignResponse }) {
+  const pages = useMessengerPages();
+  if (campaign.channel === 'sms') return <SmsDraft campaign={campaign} />;
+  if (pages.isPending) return <p role="status">Loading…</p>;
+  if (pages.isError) return <p role="alert">Your Facebook Pages could not load. Try again soon.</p>;
+  return <MessengerDraft pages={pages.data} campaign={campaign} />;
+}
+
 const newCampaignSubtitle = 'Nothing is sent until you approve.';
 
 function NewCampaignBuilder() {
-  const [step, setStep] = useState<'start' | 'details' | 'channels'>('start');
+  const [step, setStep] = useState<'start' | 'details' | 'messenger' | 'channels'>('start');
+  const pages = useMessengerPages().data ?? [];
   return (
     <main className="space-y-6 p-6 md:p-8">
-      {step === 'details' ? (
-        <CampaignDetailsForm onBack={() => setStep('channels')} />
-      ) : (
+      {step === 'details' && <CampaignDetailsForm onBack={() => setStep('channels')} />}
+      {step === 'messenger' && <MessengerDraft pages={pages} onBack={() => setStep('channels')} />}
+      {step !== 'details' && step !== 'messenger' && (
         <>
           <CampaignPageHeader title="New campaign" subtitle={newCampaignSubtitle} />
           <CampaignChannelCards
             focusSms={step === 'channels'}
+            hasMessengerPage={pages.length > 0}
             onChooseSms={() => setStep('details')}
+            onChooseMessenger={() => setStep('messenger')}
           />
         </>
       )}
@@ -75,11 +85,9 @@ function NewCampaignBuilder() {
   );
 }
 
-function useCampaignDetailsForm(campaign?: CampaignResponse) {
+function useCampaignDetailsForm() {
   const save = useSaveCampaign();
   const router = useRouter();
-  const name = campaign?.name ?? '';
-  const goal = campaign?.goal ?? null;
   const form = useForm<DetailsInput, unknown, Details>({
     resolver: zodResolver(detailsSchema, {
       error: (issue) =>
@@ -87,65 +95,40 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
           ? 'Enter a campaign name.'
           : undefined,
     }),
-    defaultValues: { name, goal },
+    defaultValues: { name: '', goal: null },
   });
-  const { dirtyFields, isDirty } = form.formState;
-  const opening = !campaign && save.isSuccess;
-  const submit = form.handleSubmit((input) => {
-    const change = {
-      ...(dirtyFields.name && { name: input.name }),
-      ...(dirtyFields.goal && { goal: input.goal }),
-    };
-    if (campaign && !Object.keys(change).length) return;
+  const submit = form.handleSubmit((input) =>
     save.mutate(
-      campaign ? { id: campaign.id, input: change } : { input: { ...input, channel: 'sms' } },
-      {
-        onSuccess: (saved) => {
-          if (!campaign) {
-            router.replace(`/campaigns/${saved.id}`);
-            return;
-          }
-          form.reset({ name: saved.name, goal: saved.goal });
-        },
-      },
-    );
-  });
-  return { form, submit, save, isDirty, opening };
+      { input: { ...input, channel: 'sms' } },
+      { onSuccess: (saved) => router.replace(`/campaigns/${saved.id}`) },
+    ),
+  );
+  return { form, submit, save, opening: save.isSuccess };
 }
 
-function CampaignDetailsForm({
-  campaign,
-  onBack,
-}: {
-  campaign?: CampaignResponse;
-  onBack?: () => void;
-}) {
+function CampaignDetailsForm({ onBack }: { onBack: () => void }) {
   const formId = useId();
-  const { form, submit, save, isDirty, opening } = useCampaignDetailsForm(campaign);
+  const { form, submit, save, opening } = useCampaignDetailsForm();
   const busy = save.isPending || opening;
-  const saved = save.isSuccess && !isDirty;
-  const saveButton = (
-    <Button
-      type="submit"
-      form={formId}
-      variant={campaign ? 'primary' : 'secondary'}
-      loading={save.isPending}
-      disabled={opening || Boolean(campaign && !isDirty)}
-    >
-      Save draft
-    </Button>
-  );
   return (
     <>
-      {!campaign && (
-        <CampaignPageHeader
-          title="New campaign"
-          subtitle={newCampaignSubtitle}
-          onBack={onBack}
-          backDisabled={busy}
-          action={saveButton}
-        />
-      )}
+      <CampaignPageHeader
+        title="New campaign"
+        subtitle={newCampaignSubtitle}
+        onBack={onBack}
+        backDisabled={busy}
+        action={
+          <Button
+            type="submit"
+            form={formId}
+            variant="secondary"
+            loading={save.isPending}
+            disabled={opening}
+          >
+            Save draft
+          </Button>
+        }
+      />
       <FormProvider {...form}>
         <form
           id={formId}
@@ -153,28 +136,21 @@ function CampaignDetailsForm({
           className="max-w-xl space-y-4 rounded-lg border border-border bg-surface p-5"
         >
           <fieldset className="min-w-0 space-y-4" disabled={busy}>
-            <CampaignFields focusName={!campaign} />
+            <CampaignFields />
           </fieldset>
           {save.error && (
             <p role="alert" className="text-danger">
               {save.error.message}
             </p>
           )}
-          <CampaignSaveStatus opening={opening} saved={saved} />
-          {campaign && saveButton}
+          {opening && <p role="status">Opening draft…</p>}
         </form>
       </FormProvider>
     </>
   );
 }
 
-function CampaignSaveStatus({ opening, saved }: { opening: boolean; saved: boolean }) {
-  if (opening) return <p role="status">Opening draft…</p>;
-  if (saved) return <p role="status">Draft saved.</p>;
-  return null;
-}
-
-function CampaignFields({ focusName }: { focusName: boolean }) {
+function CampaignFields() {
   const { register } = useFormContext<DetailsInput>();
   return (
     <>
@@ -191,26 +167,11 @@ function CampaignFields({ focusName }: { focusName: boolean }) {
             {...control}
             {...register('name', { setValueAs: (value: string) => value.trim() })}
             aria-required="true"
-            autoFocus={focusName}
+            autoFocus
           />
         )}
       </FormField>
-      <FormField name="goal" label="Goal">
-        {(control) => (
-          <select
-            {...control}
-            {...register('goal', { setValueAs: (value: string) => value || null })}
-            className="min-h-10 w-full rounded-md border border-input-border bg-surface px-3 text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          >
-            <option value="">Choose a goal</option>
-            {campaignGoals.map((goal) => (
-              <option key={goal} value={goal}>
-                {campaignGoalLabels[goal]}
-              </option>
-            ))}
-          </select>
-        )}
-      </FormField>
+      <CampaignGoalCards />
     </>
   );
 }
