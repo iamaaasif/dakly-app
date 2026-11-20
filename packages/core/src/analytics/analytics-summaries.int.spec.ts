@@ -288,7 +288,9 @@ describe('Daily order summaries', () => {
     // New databases only have partitions from the current month forward.
     await db.query(
       `create table if not exists tracked_link_visits_y2025m11 partition of tracked_link_visits
-       for values from ('2025-11-01T00:00:00Z') to ('2025-12-01T00:00:00Z')`,
+       for values from ('2025-11-01T00:00:00Z') to ('2025-12-01T00:00:00Z');
+       alter table tracked_link_visits_y2025m11 enable row level security;
+       revoke all on tracked_link_visits_y2025m11 from dakly_app`,
     );
     const link = randomUUID();
     const visit = randomUUID();
