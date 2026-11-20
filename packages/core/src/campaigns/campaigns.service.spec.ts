@@ -272,7 +272,10 @@ describe('CampaignsService', () => {
         sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000',
       } as LinksService,
       { now: () => clockNow } as Clock,
-      { refresh: async () => undefined } as unknown as CampaignCountsService,
+      {
+        refresh: async () => undefined,
+        fillMissing: async (_storeId, campaigns) => campaigns,
+      } as Pick<CampaignCountsService, 'refresh' | 'fillMissing'> as CampaignCountsService,
     );
   });
 

@@ -253,13 +253,12 @@ export class CampaignSenderService {
       providerMessageId,
     } as const;
     if (result === 'sent') {
-      await this.repository.changeRecipient(storeId, recipientId, from, {
-        status: 'sent',
-        claimedAt: null,
-        smsCredits: credits,
+      await this.counts.recordAcceptance(storeId, campaignId, {
+        recipientId,
+        providerMessageId,
+        credits,
         sentAt: receipt.dispatchStartedAt,
-        errorCode: null,
-        failedAt: null,
+        requireSavedReceipt: true,
       });
       return;
     }
@@ -334,25 +333,25 @@ export class CampaignSenderService {
       if (retry && error.code === 'SMS_SEND_REFUSED') throw error;
       return;
     }
+    await this.saveAcceptance(storeId, submission, receipt);
+  }
+
+  private async saveAcceptance(storeId: string, submission: Submission, receipt: SentMessage) {
+    const {
+      campaignId,
+      recipient: { id: recipientId },
+      claimedAt,
+    } = submission;
     const { providerMessageId, credits } = receipt;
     const claim = { status: 'sending', claimedAt } as const;
     const knownReceipt = { status: 'sending', providerMessageId } as const;
     await this.repository.changeRecipient(storeId, recipientId, claim, knownReceipt);
-    // A late acceptance also replaces an uncertain outcome that kept the credits.
-    await this.repository.changeRecipient(
-      storeId,
+    await this.counts.recordAcceptance(storeId, campaignId, {
       recipientId,
-      { status: 'sending', uncertainReceipt: providerMessageId },
-      {
-        status: 'sent',
-        providerMessageId,
-        smsCredits: credits,
-        sentAt: claimedAt,
-        claimedAt: null,
-        errorCode: null,
-        failedAt: null,
-      },
-    );
+      providerMessageId,
+      credits,
+      sentAt: claimedAt,
+    });
   }
 
   private async recordRefusal(storeId: string, submission: Submission, unsubmitted = false) {

@@ -1,11 +1,20 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 
 import type { recipientStatuses } from '@dakly/contracts/campaigns';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { recipientsWhere } from './campaigns.repository';
+
+const recipientTotals = {
+  skippedCount: countOf(['skipped']),
+  sentCount: countOf(['sent', 'delivered', 'read']),
+  deliveredCount: countOf(['delivered', 'read']),
+  readCount: countOf(['read']),
+  failedCount: countOf(['failed']),
+  tappedCount: sql<number>`count(${campaignRecipients.tappedAt})`.mapWith(Number),
+};
 
 @Injectable()
 export class CampaignCountsRepository {
@@ -23,14 +32,7 @@ export class CampaignCountsRepository {
   async save(storeId: string, id: string, countedAt: Date): Promise<void> {
     await this.database.inTransaction(storeId, async (tx) => {
       const [counts] = await tx
-        .select({
-          skippedCount: countOf(['skipped']),
-          sentCount: countOf(['sent', 'delivered', 'read']),
-          deliveredCount: countOf(['delivered', 'read']),
-          readCount: countOf(['read']),
-          failedCount: countOf(['failed']),
-          tappedCount: sql<number>`count(${campaignRecipients.tappedAt})`.mapWith(Number),
-        })
+        .select(recipientTotals)
         .from(campaignRecipients)
         .where(recipientsWhere(storeId, id));
       await tx
@@ -40,24 +42,47 @@ export class CampaignCountsRepository {
     });
   }
 
+  async read(storeId: string, ids: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: campaignRecipients.campaignId, ...recipientTotals })
+        .from(campaignRecipients)
+        .where(
+          and(eq(campaignRecipients.storeId, storeId), inArray(campaignRecipients.campaignId, ids)),
+        )
+        .groupBy(campaignRecipients.campaignId),
+    );
+  }
+
   async recordTap(
     storeId: string,
     { campaignId, contactId, at }: { campaignId: string; contactId: string; at: Date },
-  ) {
-    const [row] = await this.database.inTransaction(storeId, (tx) =>
-      tx
+  ): Promise<void> {
+    await this.database.inTransaction(storeId, async (tx) => {
+      const recipient = and(
+        recipientsWhere(storeId, campaignId),
+        eq(campaignRecipients.contactId, contactId),
+      );
+      const [firstTap] = await tx
         .update(campaignRecipients)
         .set({ tappedAt: at })
-        .where(
-          and(
-            recipientsWhere(storeId, campaignId),
-            eq(campaignRecipients.contactId, contactId),
-            or(isNull(campaignRecipients.tappedAt), gt(campaignRecipients.tappedAt, at)),
-          ),
-        )
-        .returning({ id: campaignRecipients.id }),
-    );
-    return row !== undefined;
+        .where(and(recipient, isNull(campaignRecipients.tappedAt)))
+        .returning({ id: campaignRecipients.id });
+      if (firstTap) {
+        await tx
+          .update(campaigns)
+          .set({
+            tappedCount: sql`${campaigns.tappedCount} + 1`,
+            updatedAt: sql`${campaigns.updatedAt}`,
+          })
+          .where(and(eq(campaigns.storeId, storeId), eq(campaigns.id, campaignId)));
+      } else {
+        await tx
+          .update(campaignRecipients)
+          .set({ tappedAt: at })
+          .where(and(recipient, gt(campaignRecipients.tappedAt, at)));
+      }
+    });
   }
 }
 

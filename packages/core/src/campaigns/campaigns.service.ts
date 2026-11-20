@@ -79,12 +79,14 @@ export class CampaignsService {
     const timeZone =
       query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
     const rows = await this.repository.list(storeId, { ...query, timeZone });
-    const items = rows.slice(0, query.limit).map(toCampaignResponse);
+    const page = await this.counts.fillMissing(storeId, rows.slice(0, query.limit));
+    const items = page.map(toCampaignResponse);
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
   async get(storeId: string, campaignId: string): Promise<CampaignResponse> {
-    return toCampaignResponse(await this.find(storeId, campaignId));
+    const [row] = await this.counts.fillMissing(storeId, [await this.find(storeId, campaignId)]);
+    return toCampaignResponse(row!);
   }
 
   async create(
