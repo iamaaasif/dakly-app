@@ -296,25 +296,16 @@ match (`kind`, `tag`, `search`, no page or limit) as an Excel (.xlsx) file named
   filter matches more than 50,000 customers with `CONTACT_EXPORT_TOO_LARGE` (422): narrow the
   filters. A background export for larger lists is not built.
 - Every download writes the audit event `contacts.exported` with the number of rows, and the
-  <<<<<<< HEAD
   response is `Cache-Control: no-store` and carries the number of customers in `X-Row-Count`.
 - The customers screen shows an Export button beside Add customers to members whose session
   context has `canExportCustomers` (View Customers and the Download customer lists switch). It
   downloads the file for the kind, search and tag in the URL and then shows "Exporting N customers
   to Excel. Check your downloads in a moment." in a toast. A failed download shows its message
   under the title.
-  `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
-  `01XXXXXXXXX` format before API or form validation finishes.
-  \=======
-  response is `Cache-Control: no-store`.
-- Not built yet: the Export button and its "Exporting N customers to Excel" message on the
-  customers screen. The screen needs the member's `exportLists` flag in the session context first.
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
 `01XXXXXXXXX` format before API or form validation finishes.
-
-> > > > > > > origin/main
 
 Validation failures return `VALIDATION_FAILED` with `error.fields`, a list of
 `{ path, message }` entries for every invalid field. Paths use dots for nested
