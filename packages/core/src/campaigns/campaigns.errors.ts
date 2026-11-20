@@ -21,6 +21,10 @@ const CAMPAIGN_ERRORS = {
     status: 409,
     message: 'This campaign resumes on its own once the reason it paused is fixed',
   },
+  CAMPAIGN_CHANGE_NOT_FOR_CHANNEL: {
+    status: 400,
+    message: 'That change does not fit this campaign’s channel',
+  },
   CAMPAIGN_APPROVAL_DENIED: {
     status: 403,
     message: 'Only an owner or admin can approve sends in this shop',
