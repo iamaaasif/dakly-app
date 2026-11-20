@@ -11,6 +11,11 @@ export type NewStepKind = 'sms' | 'whatsapp' | 'delay' | 'tag' | 'split';
 
 type Steps = AutomationGraph['steps'];
 
+// New steps start with these. They are valid so a draft saves, but a workflow does not start
+// while a step still has them.
+export const PLACEHOLDER_MESSAGE = 'Hi {first_name}, thank you for shopping with us.';
+export const PLACEHOLDER_TAG = 'new_tag';
+
 // Every new step passes the contract, so a person can save at once and then edit the details in
 // the workflow settings.
 function newStep(kind: NewStepKind, next: string): AutomationStep {
@@ -21,7 +26,7 @@ function newStep(kind: NewStepKind, next: string): AutomationStep {
         kind: 'send',
         category: 'marketing',
         channels: [kind],
-        message: { text: 'Hi {first_name}, thank you for shopping with us.', buttons: [] },
+        message: { text: PLACEHOLDER_MESSAGE, buttons: [] },
         ifNotReachable: 'skip',
         reviewBeforeSending: false,
         next,
@@ -29,7 +34,7 @@ function newStep(kind: NewStepKind, next: string): AutomationStep {
     case 'delay':
       return { kind: 'wait', wait: { until: 'duration', minutes: 24 * 60 }, next };
     case 'tag':
-      return { kind: 'action', action: { action: 'add_tag', tag: 'new_tag' }, next };
+      return { kind: 'action', action: { action: 'add_tag', tag: PLACEHOLDER_TAG }, next };
     case 'split':
       return {
         kind: 'condition',
@@ -84,6 +89,21 @@ export function insertStep(
   const steps = { ...graph.steps, [key]: newStep(kind, target) };
   if (parent === TRIGGER_KEY) return { ...graph, firstStepKey: key, steps };
   return { ...graph, steps: { ...steps, [parent]: redirect(steps[parent]!, target, key) } };
+}
+
+export function insertDelay(
+  graph: AutomationGraph,
+  edge: { parent: string; target: string },
+  minutes: number,
+) {
+  const next = insertStep(graph, edge, 'delay');
+  const key = Object.keys(next.steps).find((item) => !Object.hasOwn(graph.steps, item))!;
+  const step = next.steps[key]!;
+  if (step.kind !== 'wait') return next;
+  return {
+    ...next,
+    steps: { ...next.steps, [key]: { ...step, wait: { until: 'duration' as const, minutes } } },
+  };
 }
 
 // The palette adds to the end of the main flow, just before the last exit that is reached.

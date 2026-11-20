@@ -14,7 +14,9 @@ import { useAutomation, useTriggerPreview } from '../api/automations';
 import { statusLabels } from '../automation-labels';
 import { useWorkflowEditor } from '../use-workflow-editor';
 import { layoutWorkflow } from '../workflow-canvas-layout';
+import { checkWorkflow } from '../workflow-checks';
 import { WorkflowCanvasViewport } from './workflow-canvas-viewport';
+import { WorkflowChecksPanel } from './workflow-checks-panel';
 import { WorkflowEditorHeader } from './workflow-editor-header';
 import { WorkflowPageHeader } from './workflow-page-header';
 import { WorkflowPalette } from './workflow-palette';
@@ -51,7 +53,29 @@ function recentEntriesLabel(preview: ReturnType<typeof useTriggerPreview>) {
 type Editor = ReturnType<typeof useWorkflowEditor>;
 type Workflow = AutomationDetailResponse;
 
-function EditorActions({ workflow, editor }: { workflow: Workflow; editor: Editor }) {
+function SaveDraftButton({ editor }: { editor: Editor }) {
+  return (
+    <Button
+      variant="secondary"
+      disabled={editor.pending || !editor.dirty}
+      loading={editor.saving}
+      title={editor.dirty ? 'Saves your changes to this draft' : 'No changes to publish'}
+      onClick={() => void editor.save()}
+    >
+      Publish changes
+    </Button>
+  );
+}
+
+function EditorActions({
+  workflow,
+  editor,
+  blocked,
+}: {
+  workflow: Workflow;
+  editor: Editor;
+  blocked: boolean;
+}) {
   const draft = workflow.status === 'draft';
   const publishLabel = workflow.status === 'paused' ? 'Publish and enable' : 'Publish changes';
   return (
@@ -69,18 +93,12 @@ function EditorActions({ workflow, editor }: { workflow: Workflow; editor: Edito
           Workflow settings
         </Link>
       )}
-      {draft && (
-        <Button
-          variant="secondary"
-          disabled={editor.pending || !editor.dirty}
-          loading={editor.saving}
-          title={editor.dirty ? 'Saves your changes to this draft' : 'No changes to publish'}
-          onClick={() => void editor.save()}
-        >
-          Publish changes
-        </Button>
-      )}
-      <Button disabled={editor.pending} onClick={() => void editor.confirm()}>
+      {draft && <SaveDraftButton editor={editor} />}
+      <Button
+        disabled={editor.pending || blocked}
+        title={blocked ? 'Fix the checks first' : undefined}
+        onClick={() => void editor.confirm()}
+      >
         {draft ? 'Start workflow' : publishLabel}
       </Button>
     </>
@@ -129,11 +147,26 @@ function ReadOnlyViewport({ workflow }: { workflow: Workflow }) {
   );
 }
 
+function EditorAlerts({ renameFailed, error }: { renameFailed: boolean; error?: string }) {
+  const messages = [renameFailed ? 'Could not rename this workflow.' : undefined, error].filter(
+    (message) => message !== undefined,
+  );
+  return messages.map((message) => (
+    <p key={message} role="alert" className="px-4 pt-2 text-danger">
+      {message}
+    </p>
+  ));
+}
+
 function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Refresh }) {
   const recentEntries = useCanvasPreview(workflow);
   const rename = useRenameAutomation(workflow.id);
   const editor = useWorkflowEditor(workflow, refresh);
   const layout = useMemo(() => layoutWorkflow(editor.graph), [editor.graph]);
+  const checks = useMemo(
+    () => checkWorkflow(editor.graph, layout.stepNumber),
+    [editor.graph, layout],
+  );
   return (
     <div className="flex h-screen flex-col bg-background">
       <WorkflowEditorHeader
@@ -146,18 +179,17 @@ function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Re
           )
         }
       >
-        <EditorActions workflow={workflow} editor={editor} />
+        <EditorActions
+          workflow={workflow}
+          editor={editor}
+          blocked={checks.some((check) => check.level === 'block')}
+        />
       </WorkflowEditorHeader>
-      {rename.isError && (
-        <p role="alert" className="px-4 pt-2 text-danger">
-          Could not rename this workflow.
-        </p>
-      )}
-      {editor.count === undefined && editor.error && (
-        <p role="alert" className="px-4 pt-2 text-danger">
-          {editor.error}
-        </p>
-      )}
+      <EditorAlerts
+        renameFailed={rename.isError}
+        error={editor.count === undefined ? editor.error : undefined}
+      />
+      <WorkflowChecksPanel checks={checks} onFix={(fix) => editor.apply(fix.apply(editor.graph))} />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <WorkflowPalette disabled={!editor.canAdd || editor.pending} onAdd={editor.append} />
         <main className="relative flex-1">

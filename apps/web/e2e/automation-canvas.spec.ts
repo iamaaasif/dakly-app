@@ -168,6 +168,22 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await page.getByRole('button', { name: 'Add a step here' }).first().click();
     await page.getByRole('menuitem', { name: 'Tag contact' }).click();
     await expect(steps.getByText('Add tag')).toBeVisible();
+    const checks = page.getByRole('region', { name: 'Workflow checks' });
+    await expect(checks.getByText(/sample tag/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start workflow' })).toBeDisabled();
+    for (const [width, height] of [
+      [1440, 900],
+      [360, 800],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      if (evidence) await page.screenshot({ path: resolve(evidence, `checks-${width}.png`) });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await checks.getByRole('button', { name: 'Delete step' }).click();
+    await expect(steps.getByText('Add tag')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Start workflow' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Add a step here' }).first().click();
+    await page.getByRole('menuitem', { name: 'Tag contact' }).click();
     await page.getByRole('button', { name: /Options for step 1/ }).click();
     await page.getByRole('menuitem', { name: 'Delete step' }).click();
     await expect(steps.getByText('Add tag')).toHaveCount(0);
