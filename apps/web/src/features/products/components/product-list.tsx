@@ -149,7 +149,7 @@ function ProductIdentity({ product, query }: ProductPartProps & { query: Product
 
 function ProductPrice({ product }: ProductPartProps) {
   const price = productPriceRange(product);
-  if (price === 'No price') return <span className="font-medium text-danger">No price</span>;
+  if (!price) return <span className="font-medium text-danger">No price</span>;
   const profit = firstVariantProfitPercent(product);
   return (
     <div className="space-y-0.5">

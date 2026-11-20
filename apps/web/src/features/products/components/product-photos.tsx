@@ -19,12 +19,7 @@ export function ProductPhotos({ product }: ProductPhotosProps) {
   return (
     <section className="space-y-4" aria-label="Product photos">
       <div className="flex items-center justify-between">
-        <h2
-          className="text-sm font-semibold text-text"
-          aria-label={`Photos (${product.photos.length})`}
-        >
-          Photos
-        </h2>
+        <h2 className="text-sm font-semibold text-text">Photos</h2>
         <span className="text-xs text-text-muted">
           {product.photos.length} photo{product.photos.length === 1 ? '' : 's'}
         </span>
