@@ -209,6 +209,8 @@ export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
 };
 export type ProductListResponse = { items: ProductResponse[]; nextCursor: string | null };
 
+export type ProductCategoriesResponse = { items: string[] };
+
 export type StockMovementKind = (typeof stockMovementKinds)[number];
 export const MAX_STOCK_QUANTITY = 2147483647;
 export const stockAdjustmentSchema = z.strictObject({

@@ -73,6 +73,7 @@ export const products = pgTable(
     uniqueIndex('products_store_id_id_key').on(table.storeId, table.id),
 
     index('products_store_id_status_idx').on(table.storeId, table.status, table.name),
+    index('products_store_category_idx').on(table.storeId, table.category),
     index('products_name_trgm_idx').using('gin', sql`${table.name} gin_trgm_ops`),
     index('products_aliases_idx').using('gin', table.aliases),
     uniqueIndex('products_store_id_external_ref_key')
