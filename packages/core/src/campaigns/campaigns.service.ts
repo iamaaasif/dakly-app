@@ -199,6 +199,7 @@ export class CampaignsService {
       const campaign = await this.repository.lockDraft(storeId, campaignId);
       if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_DRAFT');
       if (!campaign.content.text) throw campaignError('CAMPAIGN_TEXT_EMPTY');
+      if (campaign.channel !== 'sms') throw campaignError('CAMPAIGN_CHANNEL_NOT_SENDABLE');
       const now = this.clock.now();
       if (campaign.scheduledFor && campaign.scheduledFor <= now)
         throw campaignError('CAMPAIGN_SEND_TIME_PASSED');

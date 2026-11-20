@@ -223,7 +223,10 @@ The Social hub lists each connected Facebook Page and Instagram account with its
 - Follower counts and Notify me wait for SOC-7 (followers are not stored and nothing records TikTok interest). Draft rows show the first photo as a thumbnail; post responses carry `photos` (id and a 15 minute download link for each ready photo, in post order; a photo that is not ready is left out).
 - Instagram shows its single brand pink (`--color-instagram`) in place of the gradient.
 - Posting schedule edits one account's weekly slots at a time (an account picker shows when there are several), because slots are stored per connection. Use recommended times waits for follower-activity data and moves to SOC-7.
-- Duplicate copies the draft with its accounts and captions; Delete asks first. Create post and Edit arrive in a later SOC-5 part.
+- Duplicate copies the draft with its accounts and captions; Delete asks first. Edit arrives in a later SOC-5 part.
+- Create post (`/social/posts/new`) is a full-screen editor outside the app shell, like the workflow canvas, built from the shared post editor in `features/social/components/post-editor/`, which Content Studio reuses for Use in post. It has Post to, Post or Story, the caption (one for all or per network), a live Facebook and Instagram preview, When (Add to queue, Pick date and time, Publish now), Save draft and Add to queue. The preview shows "Next open slot" or the chosen time instead of a sample date, and an Instagram account whose access expired shows Access expired and cannot be selected.
+- Create post also has the AI caption panel (topic, tone, language, 3 options; Shorten, Make friendlier, Translate to Bangla or English), Add hashtags, photos from Products, the Facebook link and the Instagram first comment. Add hashtags builds tags from the caption's own words and uses no AI credits. A caption picked from, or changed by, the AI panel saves the draft as AI-written, so it needs approval (D7).
+- Missing from Create post until a later SOC-5 PR: Upload from device for photos that are not products.
 - An AI-written draft that nobody approved shows Needs your OK (D7).
 
 TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagram "Access expired" disagrees with the campaign builder; status comes from the real connection.
