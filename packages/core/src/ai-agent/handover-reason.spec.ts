@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ChatClassification } from '@dakly/contracts/chat-classification';
 
-import { handoverReason } from './ai-agent.service';
+import { handoverReason } from './handover-reason';
 
 const greeting: ChatClassification = {
   intent: 'greeting',

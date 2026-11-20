@@ -20,6 +20,7 @@ import { SegmentsService } from '../segments/segments.service';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
+import { CampaignAnalyticsRepository } from './campaign-analytics.repository';
 import { CampaignApprovalRepository } from './campaign-approval.repository';
 import { CampaignAudienceService } from './campaign-audience.service';
 import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
@@ -66,6 +67,8 @@ export class CampaignsService {
     @Inject(CampaignsRepository) private readonly repository: CampaignsRepository,
     @Inject(CampaignMessageTotalsRepository)
     private readonly messageTotalsRepository: CampaignMessageTotalsRepository,
+    @Inject(CampaignAnalyticsRepository)
+    private readonly analyticsRepository: CampaignAnalyticsRepository,
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(CampaignAudienceService) private readonly audience: CampaignAudienceService,
     @Inject(CampaignApprovalRepository) private readonly approvals: CampaignApprovalRepository,
@@ -94,6 +97,10 @@ export class CampaignsService {
 
   messageTotals(storeId: string, range: { from: string; through: string; timeZone: string }) {
     return this.messageTotalsRepository.messageTotals(storeId, range);
+  }
+
+  startedBetween(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.analyticsRepository.startedBetween(storeId, range);
   }
 
   attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {

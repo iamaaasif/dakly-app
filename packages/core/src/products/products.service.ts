@@ -126,6 +126,11 @@ export class ProductsService {
     return (await this.repository.searchForChat(storeId, text, limit)).map(chatProduct);
   }
 
+  // An empty search matches every active product shown in chats.
+  async hasChatProduct(storeId: string) {
+    return (await this.repository.searchForChat(storeId, '', 1)).length > 0;
+  }
+
   async getForChat(storeId: string, id: string): Promise<ChatProduct> {
     const product = await this.repository.findForChat(storeId, id);
     if (!product) throw productError('PRODUCT_NOT_FOUND');

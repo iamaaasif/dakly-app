@@ -16,6 +16,7 @@ Questions waiting for Asif. Until one is answered, build the "working assumption
 | Q11 | An organisation above stores in release 1?                                                      | No; a user has memberships in stores                                                         | Account                          |
 | Q13 | Shopify and WooCommerce sync in release 1?                                                      | Not built until answered                                                                     | Customers, Orders                |
 | Q15 | BullMQ Pro (groups) or a Valkey semaphore for per-store AI fairness?                            | Valkey semaphore, concurrency 3 per store                                                    | AI layer                         |
+| Q16 | Return per ৳1 thresholds for the Great and Good labels on the Analytics Campaigns tab           | No label is shown until the thresholds are set                                               | Analytics Campaigns tab labels   |
 
 ## Designs still needed before the screen is built
 

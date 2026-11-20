@@ -558,3 +558,94 @@ it('accepts small provider clock skew and ignores an implausibly future delivery
     }),
   ).toBe('invalid_timestamp');
 });
+
+function tap(externalAccountId: string, externalSenderId = 'sender-test') {
+  return {
+    kind: 'facebook_page',
+    externalAccountId,
+    externalSenderId,
+    payload: 'order-confirm:v1:abc',
+    sentAt: new Date(sentAt.getTime() + MINUTE_MS),
+    receivedAt: new Date(sentAt.getTime() + MINUTE_MS),
+  } as const;
+}
+
+it('turns a button tap from a known customer into one event and stores no message', async () => {
+  const storeId = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  await service.receiveInboundMessage(storeId, inbound(connectionId, 'first'));
+  const before = await admin.pool.query(
+    'select id, unread_count from conversations where store_id = $1',
+    [storeId],
+  );
+  expect(await service.receivePostback(storeId, tap(connectionId))).toBe('stored');
+  const events = await admin.pool.query(
+    "select payload from outbox_events where store_id = $1 and type = 'message.postback_received'",
+    [storeId],
+  );
+  expect(events.rows).toEqual([
+    {
+      payload: {
+        conversationId: before.rows[0].id,
+        contactId: expect.any(String),
+        channel: 'messenger',
+        postback: 'order-confirm:v1:abc',
+      },
+    },
+  ]);
+  const after = await admin.pool.query(
+    'select id, unread_count from conversations where store_id = $1',
+    [storeId],
+  );
+  expect(after.rows).toEqual([{ id: before.rows[0].id, unread_count: 1 }]);
+  const messages = await admin.pool.query(
+    'select count(*)::int as count from messages where store_id = $1',
+    [storeId],
+  );
+  expect(messages.rows[0].count).toBe(1);
+});
+
+it('ignores a tap from someone with no chat, another store and a delivery before connecting', async () => {
+  const storeId = await store();
+  const otherStore = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  expect(await service.receivePostback(storeId, tap(connectionId, 'stranger'))).toBe(
+    'unknown_contact',
+  );
+  expect(await service.receivePostback(otherStore, tap(connectionId))).toBe('unknown_account');
+  expect(
+    await service.receivePostback(storeId, {
+      ...tap(connectionId),
+      sentAt: new Date(sentAt.getTime() - 10 * MINUTE_MS),
+    }),
+  ).toBe('stale_delivery');
+  const events = await admin.pool.query(
+    "select 1 from outbox_events where store_id = any($1::uuid[]) and type = 'message.postback_received'",
+    [[storeId, otherStore]],
+  );
+  expect(events.rowCount).toBe(0);
+});
+
+it('keeps the window open for a tap 20 hours after the last message', async () => {
+  const storeId = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  await service.receiveInboundMessage(storeId, inbound(connectionId, 'first'));
+  const tapTime = new Date(sentAt.getTime() + 20 * 60 * MINUTE_MS);
+  expect(
+    await service.receivePostback(storeId, {
+      ...tap(connectionId),
+      sentAt: tapTime,
+      receivedAt: tapTime,
+    }),
+  ).toBe('stored');
+  const { rows } = await admin.pool.query(
+    'select window_expires_at as "expiresAt", last_inbound_at as "lastInboundAt" from conversations where store_id = $1',
+    [storeId],
+  );
+  expect(rows).toEqual([
+    { expiresAt: new Date(tapTime.getTime() + DAY_MS), lastInboundAt: tapTime },
+  ]);
+});

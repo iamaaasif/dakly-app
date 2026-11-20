@@ -22,6 +22,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ContactDeletionService } from './contact-deletion.service';
 import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
+import { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
 import { contactError } from './contacts.errors';
 import {
@@ -70,6 +71,8 @@ export class ContactsService {
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
     @Inject(ContactDeletionService) private readonly deletion: ContactDeletionService,
     @Inject(ContactPhoneAccessService) private readonly phoneAccess: ContactPhoneAccessService,
+    @Inject(ContactMatchSuggestionsService)
+    private readonly matchSuggestions: ContactMatchSuggestionsService,
   ) {}
 
   async create(storeId: string, input: CreateContactInput, access: Access, actor: Actor) {
@@ -173,26 +176,9 @@ export class ContactsService {
         });
       const phone = input.ownPhone ?? ('phone' in buyer ? buyer.phone : undefined);
       if (phone && phone !== contact.phone)
-        await this.saveOrderPhone(storeId, contact.id, { phone, orderId, now });
+        await this.matchSuggestions.saveOwnPhone(storeId, contact.id, { phone, orderId, now });
       return { id: contact.id, name: contact.name };
     });
-  }
-
-  private async saveOrderPhone(
-    storeId: string,
-    contactId: string,
-    { phone, orderId, now }: { phone: string; orderId: string; now: Date },
-  ): Promise<void> {
-    if (await this.orderContacts.saveOrderPhone(storeId, contactId, phone, now)) return;
-    const [owner] = await this.contactsRepository.list(storeId, { phone, limit: 1 });
-    if (owner && owner.id !== contactId)
-      await this.orderContacts.suggestOrderPhoneMatch(storeId, {
-        contactId,
-        matchedContactId: owner.id,
-        phone,
-        orderId,
-        createdAt: now,
-      });
   }
 
   async hasOrderPhoneMatch(

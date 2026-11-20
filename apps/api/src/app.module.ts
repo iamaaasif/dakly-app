@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AdminModule } from '@dakly/core/admin/admin.module';
 import { KnowledgeModule } from '@dakly/core/ai/knowledge/knowledge.module';
+import { AiPracticeModule } from '@dakly/core/ai-agent/ai-practice.module';
 import { AnalyticsOverviewModule } from '@dakly/core/analytics/analytics-overview.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
 import { AutomationsModule } from '@dakly/core/automations/automations.module';
@@ -52,6 +53,7 @@ import { HealthController } from './health.controller';
     PaymentsModule,
     ConsentsModule,
     ImportsModule,
+    AiPracticeModule,
     KnowledgeModule,
     LinksModule,
     InboxModule,
