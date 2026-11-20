@@ -21,9 +21,10 @@
     "rxjs": "^7.8.0"
   },
   "devDependencies": {
+    "@dakly/db": "workspace:*",
     "@nestjs/cli": "^11.0.0",
     "@types/node": "^22.0.0",
-    "vitest": "^4.1.12",
-    "@dakly/db": "workspace:*"
+    "read-excel-file": "9.3.10",
+    "vitest": "^4.1.12"
   }
 }

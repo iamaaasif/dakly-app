@@ -18,6 +18,22 @@ const CAMPAIGN_ERRORS = {
     status: 409,
     message: 'A campaign can be edited until 5 minutes before it sends',
   },
+  CAMPAIGN_NOT_FINISHED: {
+    status: 409,
+    message: 'Wait until this campaign has finished sending',
+  },
+  CAMPAIGN_RESEND_NEEDS_READS: {
+    status: 409,
+    message: 'SMS has no read receipts, so there is no one to resend to; send a follow-up instead',
+  },
+  CAMPAIGN_RESEND_TOO_EARLY: {
+    status: 409,
+    message: 'People get 48 hours to read a message before you can resend it',
+  },
+  CAMPAIGN_AUDIENCE_FIXED: {
+    status: 409,
+    message: 'The people in this campaign come from an earlier campaign and cannot change',
+  },
   CAMPAIGN_NOT_SENDING: { status: 409, message: 'This campaign is not sending' },
   CAMPAIGN_APPROVAL_TIME_MISSING: { status: 500, message: 'Campaign approval time is missing' },
   CAMPAIGN_NOT_PAUSED: { status: 409, message: 'This campaign is not paused' },

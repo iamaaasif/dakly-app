@@ -3,12 +3,21 @@ import { useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
 
-export function CopyButton({ text }: { text: string }) {
+export function CopyButton({
+  text,
+  label = 'Copy',
+  className,
+}: {
+  text: string;
+  label?: string;
+  className?: string;
+}) {
   const [copied, setCopied] = useState<boolean | null>(null);
   return (
     <>
       <Button
         variant="secondary"
+        className={className}
         onClick={() =>
           void navigator.clipboard.writeText(text).then(
             () => setCopied(true),
@@ -17,7 +26,7 @@ export function CopyButton({ text }: { text: string }) {
         }
       >
         {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
-        {copied ? 'Copied' : 'Copy'}
+        {copied ? 'Copied' : label}
       </Button>
       {copied === false && (
         <p role="alert" className="basis-full text-sm text-danger">

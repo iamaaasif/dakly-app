@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 import { cn } from '@dakly/ui/cn';
 
-import type { ContentStudioTab } from '../content-studio-view';
+import { contentStudioHref, type ContentStudioTab } from '../content-studio-view';
 
 const tabs = [
   { id: 'create', label: 'Create', icon: Sparkles },
@@ -20,7 +20,7 @@ export function ContentStudioTabs({ tab }: { tab: ContentStudioTab }) {
       {tabs.map(({ id, label, icon: Icon }) => (
         <Link
           key={id}
-          href={id === 'create' ? '/content-studio' : `/content-studio?tab=${id}`}
+          href={contentStudioHref({ tab: id })}
           aria-current={tab === id ? 'page' : undefined}
           className={cn(
             '-mb-px inline-flex min-h-10 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 text-base text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',

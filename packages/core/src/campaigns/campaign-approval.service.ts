@@ -15,6 +15,7 @@ import {
 import {
   type AudiencePage,
   audienceDecisionTime,
+  audiencePartCount,
   CampaignAudienceService,
 } from './campaign-audience.service';
 import { CampaignSmsService } from './campaign-sms.service';
@@ -55,8 +56,7 @@ export class CampaignApprovalService {
 
   private step(storeId: string, key: ApprovalKey, state: ApprovalState): Promise<Step> {
     if (state.approvalFailureCode) return this.undo(storeId, key, state.approvalFailureCode);
-    if (state.segmentIndex >= state.includeSegmentIds.length)
-      return this.finish(storeId, key, state);
+    if (state.segmentIndex >= audiencePartCount(state)) return this.finish(storeId, key, state);
     return this.addPage(storeId, key, state);
   }
 
