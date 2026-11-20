@@ -52,7 +52,7 @@ export function MessengerDraft({
   return (
     <FormProvider {...form}>
       {campaign ? (
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,36rem)_minmax(0,22rem)]">
           {formElement}
           <Side pages={pages} campaign={campaign} />
         </div>
