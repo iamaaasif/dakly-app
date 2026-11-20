@@ -5,7 +5,6 @@ import { countSmsParts } from '@dakly/contracts/sms';
 import { LinksService, type NewTrackedLink } from '../links/links.service';
 import type { ClaimableRecipient } from './campaign-sending.repository';
 import { campaignSmsUrls, replaceCampaignSmsUrls } from './campaign-sms-urls';
-import { campaignError } from './campaigns.errors';
 import type { LockedCampaign } from './campaigns.repository';
 
 const ACTOR = { kind: 'system' } as const;
@@ -40,11 +39,9 @@ export class CampaignSmsService {
       recipient,
       urls.map(({ target }) => target),
     );
-    const content = replaceCampaignSmsUrls(text, urls, (index) => {
-      const code = redirectLinkCodes[index];
-      if (!code) throw campaignError('CAMPAIGN_SMS_LINKS_MISSING');
-      return this.links.redirectUrl(code, base);
-    });
+    const content = replaceCampaignSmsUrls(text, urls, (index) =>
+      this.links.redirectUrl(redirectLinkCodes[index]!, base),
+    );
     return {
       body: withOptOut(content, this.links.optOutUrl(optOutLinkCode, base)),
       optOutLinkCode,
@@ -71,10 +68,8 @@ export class CampaignSmsService {
     }
 
     const created = pending.length ? await this.links.create(storeId, pending, ACTOR) : [];
-    const optOutLinkCode = recipient.optOutLinkCode ?? created.shift()?.code;
+    const optOutLinkCode = recipient.optOutLinkCode ?? created.shift()!.code;
     const redirectLinkCodes = recipient.redirectLinkCodes ?? created.map(({ code }) => code);
-    if (!optOutLinkCode || redirectLinkCodes.length !== targets.length)
-      throw campaignError('CAMPAIGN_SMS_LINKS_MISSING');
     return { optOutLinkCode, redirectLinkCodes, createdLinks: pending.length > 0 };
   }
 }
