@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
@@ -74,9 +74,15 @@ const post = (id: string, caption: string, target: Partial<Target>): PostRespons
   ],
 });
 
+const requests: { method: string; url: string; body?: string }[] = [];
+
 function show(posts: PostResponse[]) {
-  vi.stubGlobal('fetch', async (url: string) => {
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
     const headers = { 'x-session-context': 'verified' };
+    if (init.method === 'POST') {
+      requests.push({ method: 'POST', url, body: init.body as string });
+      return Response.json(posts[0], { headers });
+    }
     if (url.includes('/channel-connections'))
       return Response.json({ items: [page, instagram], nextCursor: null }, { headers });
     return Response.json({ items: posts, nextCursor: null }, { headers });
@@ -97,6 +103,7 @@ beforeEach(() => {
   vi.stubGlobal('matchMedia', () => ({ matches: false }));
 });
 afterEach(() => {
+  requests.length = 0;
   cleanup();
   vi.unstubAllGlobals();
   replace.mockClear();
@@ -156,5 +163,49 @@ it('offers Plan your first post when there are no posts', async () => {
   expect(await screen.findByText('No posts planned yet.')).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Plan your first post' }).getAttribute('href')).toBe(
     '/social/posts/new',
+  );
+});
+
+it('moves a scheduled post to the day it is dropped on and keeps its time', async () => {
+  query = 'view=month&date=2026-11-06';
+  show([post('a', 'Weekend sale', {})]);
+  await screen.findByRole('button', { name: /Weekend sale/ });
+  const cell = screen.getByText('12', { selector: 'time' }).closest('[role="gridcell"]')!;
+
+  fireEvent.drop(cell, { dataTransfer: { getData: () => 'a' } });
+
+  expect(await screen.findByText(/Moved “Weekend sale” to Nov 12/)).toBeTruthy();
+  expect(requests).toEqual([
+    {
+      method: 'POST',
+      url: expect.stringContaining('/posts/a/reschedule'),
+      body: JSON.stringify({ scheduledFor: '2026-11-12T12:30:00+06:00' }),
+    },
+  ]);
+});
+
+it('shows the reason when the server refuses the move', async () => {
+  query = 'view=month&date=2026-11-06';
+  show([post('a', 'Weekend sale', {})]);
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+    const headers = { 'x-session-context': 'verified' };
+    if (init.method === 'POST')
+      return Response.json(
+        {
+          error: { code: 'POST_SLOT_TAKEN', message: 'An account already has a post at this time' },
+        },
+        { status: 409, headers },
+      );
+    if (url.includes('/channel-connections'))
+      return Response.json({ items: [page, instagram], nextCursor: null }, { headers });
+    return Response.json({ items: [post('a', 'Weekend sale', {})], nextCursor: null }, { headers });
+  });
+  await screen.findByRole('button', { name: /Weekend sale/ });
+  const cell = screen.getByText('12', { selector: 'time' }).closest('[role="gridcell"]')!;
+
+  fireEvent.drop(cell, { dataTransfer: { getData: () => 'a' } });
+
+  expect((await screen.findByRole('alert')).textContent).toBe(
+    'An account already has a post at this time',
   );
 });

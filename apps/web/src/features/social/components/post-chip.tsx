@@ -26,9 +26,13 @@ export function postTitle(entry: CalendarEntry): string {
   return entry.post.caption?.trim() || (entry.post.kind === 'story' ? 'Story' : 'No caption');
 }
 
-type PostChipProps = { entry: CalendarEntry; onOpen: (entry: CalendarEntry) => void };
+type PostChipProps = {
+  entry: CalendarEntry;
+  draggable: boolean;
+  onOpen: (entry: CalendarEntry) => void;
+};
 
-export function PostChip({ entry, onOpen }: PostChipProps) {
+export function PostChip({ entry, draggable, onOpen }: PostChipProps) {
   const time = formatTime(entry.at);
   const title = postTitle(entry);
   const StatusIcon =
@@ -38,6 +42,8 @@ export function PostChip({ entry, onOpen }: PostChipProps) {
       type="button"
       aria-label={`${time}, ${title}, ${statusLabels[entry.status]}`}
       onClick={() => onOpen(entry)}
+      draggable={draggable}
+      onDragStart={(event) => event.dataTransfer.setData('text/plain', entry.post.id)}
       className={cn(
         'flex w-full min-w-0 flex-col items-center gap-1 rounded-md border px-1.5 py-1 text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:flex-row',
         tones[entry.status],

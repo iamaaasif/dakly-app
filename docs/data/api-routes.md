@@ -198,7 +198,7 @@ atomically and retain business data when an extension is disabled.
 | `POST /content-pieces/generate`                                                                                                 | `social.edit`, plus `products.view` when a product is selected |
 | `POST /products/:productId/write-description`                                                                                   | `products.edit`                                                |
 | `GET /posts`, `GET /posts/:postId`, `POST /posts` (idem), `PATCH /posts/:postId`, `DELETE /posts/:postId`                       | `socialPosts`                                                  |
-| `POST /posts/:postId/schedule`, `POST /posts/:postId/approve`                                                                   | `social.edit`                                                  |
+| `POST /posts/:postId/schedule`, `POST /posts/:postId/reschedule`, `POST /posts/:postId/approve`                                 | `social.edit`                                                  |
 | `POST /posts/:postId/publish-now`                                                                                               | `socialPosts`                                                  |
 | `POST /posts/captions` (AI writing)                                                                                             | `socialPosts`                                                  |
 | `GET /posts/queue-slots`                                                                                                        | `social.view`                                                  |

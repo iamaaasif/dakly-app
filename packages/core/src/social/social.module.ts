@@ -9,6 +9,7 @@ import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { PostingSlotsController } from './posting-slots.controller';
 import { PostingSlotsService } from './posting-slots.service';
+import { SocialRescheduleService } from './social-reschedule.service';
 import { SocialController } from './social.controller';
 import { SocialRepository } from './social.repository';
 import { SocialService } from './social.service';
@@ -24,6 +25,6 @@ import { SocialService } from './social.service';
     TeamModule,
   ],
   controllers: [PostingSlotsController, SocialController],
-  providers: [PostingSlotsService, SocialService, SocialRepository],
+  providers: [PostingSlotsService, SocialRescheduleService, SocialService, SocialRepository],
 })
 export class SocialModule {}

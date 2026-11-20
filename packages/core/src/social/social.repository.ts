@@ -332,6 +332,22 @@ export class SocialRepository {
     );
   }
 
+  moveScheduledTargets(storeId: string, ids: string[], scheduledFor: Date, now: Date) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .update(postTargets)
+        .set({ scheduledFor, updatedAt: now })
+        .where(
+          and(
+            eq(postTargets.storeId, storeId),
+            inArray(postTargets.id, ids),
+            eq(postTargets.status, 'scheduled'),
+          ),
+        )
+        .returning({ id: postTargets.id }),
+    );
+  }
+
   scheduleTargets(
     storeId: string,
     postId: string,

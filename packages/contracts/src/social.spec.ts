@@ -6,6 +6,7 @@ import {
   createPostSchema,
   editPostSchema,
   postIdempotencyKeySchema,
+  reschedulePostSchema,
   schedulePostSchema,
 } from './social';
 
@@ -60,5 +61,12 @@ describe('post scheduling', () => {
     expect(
       schedulePostSchema.safeParse({ scheduledFor: '9999-12-31T23:59:59-06:00' }).success,
     ).toBe(false);
+  });
+
+  it('reschedules only to a time, never to the next slot', () => {
+    expect(reschedulePostSchema.parse({ scheduledFor: '2099-11-23T20:30:00+06:00' })).toEqual({
+      scheduledFor: '2099-11-23T14:30:00.000Z',
+    });
+    expect(reschedulePostSchema.safeParse({ nextSlot: true }).success).toBe(false);
   });
 });
