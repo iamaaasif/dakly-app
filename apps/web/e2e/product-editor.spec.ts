@@ -46,7 +46,6 @@ test('saves unfinished products, edits variants without losing stock and manages
       await dialog.evaluate((element) => {
         element.scrollTop = 0;
       });
-      await dialog.getByRole('button', { name: /Close/ }).first().focus();
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))

@@ -9,7 +9,6 @@ import { Switch } from '@dakly/ui/switch';
 export function ProductTrackStock() {
   const { field } = useController<ProductFormValues, 'isStockTracked'>({ name: 'isStockTracked' });
   const id = useId();
-  const checked = Boolean(field.value);
 
   return (
     <div className="flex items-center justify-between gap-4 py-1">
@@ -21,12 +20,7 @@ export function ProductTrackStock() {
           Dakly warns you before you sell what you don't have.
         </p>
       </div>
-      <Switch
-        id={id}
-        checked={checked}
-        aria-label="Track stock"
-        onCheckedChange={(next) => field.onChange(next)}
-      />
+      <Switch id={id} checked={field.value} onCheckedChange={field.onChange} />
     </div>
   );
 }

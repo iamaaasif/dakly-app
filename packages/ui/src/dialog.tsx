@@ -14,12 +14,10 @@ export type DialogProps = {
   onClose: () => void;
   children: ReactNode;
 };
-
 export function Dialog(props: DialogProps) {
   const { title, open, suspended = false, closeDisabled, className, onClose, children } = props;
   const element = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -29,13 +27,11 @@ export function Dialog(props: DialogProps) {
       previous?.focus();
     };
   }, [open]);
-
   useEffect(() => {
     const dialog = element.current;
     if (open && !suspended) dialog?.showModal();
     else dialog?.close();
   }, [open, suspended]);
-
   return (
     <dialog
       ref={element}
@@ -69,7 +65,6 @@ export function Dialog(props: DialogProps) {
     </dialog>
   );
 }
-
 function trapFocus(event: KeyboardEvent<HTMLDialogElement>) {
   if (event.key !== 'Tab') return;
   const elements = Array.from(

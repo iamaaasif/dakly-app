@@ -15,17 +15,19 @@ const extraFlags = [
   ['isVisibleInChats', 'Show in chat replies'],
   ['isVisibleInOrderLink', 'Show in the order link'],
 ] as const;
-
 type ProductFieldsProps = { productId?: string };
-
 export function ProductFields({ productId }: ProductFieldsProps) {
   const form = useFormContext<ProductFormValues>();
   const simple = !form.watch('options')?.length && form.watch('variants')?.length === 1;
   const showSkuAndCost = !productId || simple;
-
   return (
     <>
-      <ProductInputField name="name" label="Name" placeholder="e.g. Cotton Panjabi" />
+      <ProductInputField
+        name="name"
+        label="Name"
+        placeholder="e.g. Cotton Panjabi"
+        autoFocus={!productId}
+      />
       <div className="grid gap-3 md:grid-cols-2">
         <ProductCategoryField />
         {showSkuAndCost ? (

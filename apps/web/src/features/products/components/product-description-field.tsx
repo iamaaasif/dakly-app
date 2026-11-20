@@ -1,4 +1,3 @@
-'use client';
 import { Sparkles } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useController, useFormContext } from 'react-hook-form';

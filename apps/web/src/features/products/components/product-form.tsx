@@ -47,7 +47,7 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
               }),
           };
           if (product) change.mutate(productChanges(input, dirtyFields), callbacks);
-          else create.mutate(withDefaultCost(input), callbacks);
+          else create.mutate(input, callbacks);
         })}
       >
         <ProductFields productId={product?.id} />
@@ -165,13 +165,4 @@ function productErrorField(
 ): 'root.server' | 'variants' | 'variants.0.sku' {
   if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
   return variantCount === 1 ? 'variants.0.sku' : 'variants';
-}
-
-function withDefaultCost(input: ProductFormInput): ProductFormInput {
-  const baseCost = input.variants[0]?.costPoisha;
-  if (!baseCost) return input;
-  return {
-    ...input,
-    variants: input.variants.map((v) => ({ ...v, costPoisha: v.costPoisha || baseCost })),
-  };
 }

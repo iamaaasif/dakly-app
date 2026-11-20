@@ -87,7 +87,6 @@ type SelectedStockAdjustmentProps = {
   variantId?: string;
   onClose: () => void;
 };
-
 function SelectedStockAdjustment({ products, variantId, onClose }: SelectedStockAdjustmentProps) {
   if (!variantId || !products) return null;
   const product = products.items.find((item) =>
