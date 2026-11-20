@@ -208,22 +208,23 @@ An Owner, Admin or Marketer must approve an AI-written draft.
 
 ## Campaigns and automations (09)
 
-| Route                                                                                                                                              | Permission    |
-| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/estimate` (draft only), `GET /campaigns/:campaignId/recipients`        | `campaigns`   |
-| `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                    | `campaigns`   |
-| `POST /campaigns/:campaignId/approve` (also Owner or Admin while the store's approval setting is on)                                               | `campaigns`   |
-| `POST /campaigns/:campaignId/unschedule` (scheduled, until 5 minutes before the send)                                                              | `campaigns`   |
-| `POST /campaigns/:campaignId/cancel` (scheduled, sending or paused)                                                                                | `campaigns`   |
-| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`                                                                          | `campaigns`   |
-| `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                               | `campaigns`   |
-| `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                      | `automations` |
-| `POST /automations/:automationId/publish`, `POST /automations/:automationId/enable` (also Owner or Admin while the store's approval setting is on) | `automations` |
-| `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`                                                                 | `automations` |
-| `POST /automations/:automationId/versions/:versionId/stop` (Stop the old version)                                                                  | `automations` |
-| `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                       | `automations` |
-| `GET /automations/:automationId/trigger-preview`                                                                                                   | `automations` |
-| `GET /automations/:automationId/runs`                                                                                                              | `automations` |
+| Route                                                                                                                                                                                                                     | Permission    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/estimate` (draft only), `GET /campaigns/:campaignId/recipients`, `GET /campaigns/:campaignId/results`, `GET /campaigns/:campaignId/customers` | `campaigns`   |
+| `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                                                                                           | `campaigns`   |
+| `POST /campaigns/:campaignId/duplicate` (any status; a new draft)                                                                                                                                                         | `campaigns`   |
+| `POST /campaigns/:campaignId/approve` (also Owner or Admin while the store's approval setting is on)                                                                                                                      | `campaigns`   |
+| `POST /campaigns/:campaignId/unschedule` (scheduled, until 5 minutes before the send)                                                                                                                                     | `campaigns`   |
+| `POST /campaigns/:campaignId/cancel` (scheduled, sending or paused)                                                                                                                                                       | `campaigns`   |
+| `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`                                                                                                                                                 | `campaigns`   |
+| `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                                                                                                      | `campaigns`   |
+| `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                                                                                             | `automations` |
+| `POST /automations/:automationId/publish`, `POST /automations/:automationId/enable` (also Owner or Admin while the store's approval setting is on)                                                                        | `automations` |
+| `POST /automations/:automationId/pause`, `POST /automations/:automationId/archive`                                                                                                                                        | `automations` |
+| `POST /automations/:automationId/versions/:versionId/stop` (Stop the old version)                                                                                                                                         | `automations` |
+| `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                                                                                              | `automations` |
+| `GET /automations/:automationId/trigger-preview`                                                                                                                                                                          | `automations` |
+| `GET /automations/:automationId/runs`                                                                                                                                                                                     | `automations` |
 
 Campaign detail and list responses include the send start, finish and stored recipient counts. The count time identifies when the worker last refreshed the recipient totals.
 

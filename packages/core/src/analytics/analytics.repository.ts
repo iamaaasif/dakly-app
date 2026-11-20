@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, gte, inArray, lte, notInArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, isNotNull, lte, ne, notInArray, sql } from 'drizzle-orm';
 
 import { storeDailyMetrics } from '@dakly/db/schema/analytics';
+import { contacts } from '@dakly/db/schema/contacts';
+import { orders } from '@dakly/db/schema/orders';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 import type { ReportPeriod } from './report-period';
@@ -22,6 +24,41 @@ export class AnalyticsRepository {
       period,
       metrics,
       sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`,
+    );
+  }
+
+  // Live orders credited to one source, one row per order, for the people behind a source's revenue.
+  attributedOrders(
+    storeId: string,
+    source: { type: 'campaign' | 'automation'; id: string },
+    { cursor, limit }: { cursor?: string; limit: number },
+  ) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: orders.id,
+          contactId: orders.buyerContactId,
+          name: contacts.name,
+          amountPoisha: orders.attributedAmountPoisha,
+          placedAt: orders.createdAt,
+        })
+        .from(orders)
+        .innerJoin(
+          contacts,
+          and(eq(contacts.storeId, storeId), eq(contacts.id, orders.buyerContactId)),
+        )
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.attributedSourceType, source.type),
+            eq(orders.attributedSourceId, source.id),
+            ne(orders.stage, 'cancelled'),
+            isNotNull(orders.buyerContactId),
+            cursor ? gt(orders.id, cursor) : undefined,
+          ),
+        )
+        .orderBy(asc(orders.id))
+        .limit(limit + 1),
     );
   }
 

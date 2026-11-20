@@ -5,7 +5,11 @@ import {
   assistantTools,
   getCustomersTool,
   getMarketingResultsTool,
+  getSalesThisMonthTool,
+  getSalesTodayTool,
   getSalesTool,
+  getSalesYesterdayTool,
+  getTopProductsTool,
   type AssistantToolDefinition,
   type ReportWindow,
 } from '@dakly/contracts/assistant-tools';
@@ -20,6 +24,12 @@ type Handler = (storeId: string, raw: unknown) => Promise<object>;
 type Periods = Awaited<ReturnType<AnalyticsService['periods']>>;
 type Total = { total: bigint };
 
+const TOP_PRODUCTS = 5;
+const calendarLabels = {
+  today: 'today',
+  yesterday: 'yesterday',
+  this_month: 'this month',
+} as const;
 const windowDays = { last_7_days: 7, last_30_days: 30, last_90_days: 90 } as const;
 
 const toLlmTool = (tool: AssistantToolDefinition): LlmTool => ({
@@ -37,6 +47,13 @@ const toLlmTool = (tool: AssistantToolDefinition): LlmTool => ({
 export class AssistantToolsService {
   private readonly handlers: Record<string, Handler> = {
     [getSalesTool.name]: (storeId, raw) => this.sales(storeId, raw),
+    [getSalesTodayTool.name]: (storeId, raw) =>
+      this.salesForCalendar(storeId, raw, getSalesTodayTool.input, 'today'),
+    [getSalesYesterdayTool.name]: (storeId, raw) =>
+      this.salesForCalendar(storeId, raw, getSalesYesterdayTool.input, 'yesterday'),
+    [getSalesThisMonthTool.name]: (storeId, raw) =>
+      this.salesForCalendar(storeId, raw, getSalesThisMonthTool.input, 'this_month'),
+    [getTopProductsTool.name]: (storeId, raw) => this.topProducts(storeId, raw),
     [getMarketingResultsTool.name]: (storeId, raw) => this.marketingResults(storeId, raw),
     [getCustomersTool.name]: (storeId, raw) => this.customers(storeId, raw),
   };
@@ -71,13 +88,33 @@ export class AssistantToolsService {
   private async sales(storeId: string, raw: unknown) {
     const { window } = getSalesTool.input.parse(raw);
     const periods = await this.reports.periods(storeId, windowDays[window]);
+    return { ...windowFacts(window, periods), ...(await this.salesFigures(storeId, periods)) };
+  }
+
+  private async salesForCalendar(
+    storeId: string,
+    raw: unknown,
+    input: typeof getSalesTodayTool.input,
+    calendar: keyof typeof calendarLabels,
+  ) {
+    // A model may send no arguments at all for a tool that takes none.
+    input.parse(raw ?? {});
+    const periods = await this.reports.calendarPeriods(storeId, calendar);
+    return {
+      period: calendarLabels[calendar],
+      from: periods.current.from,
+      through: periods.current.through,
+      ...(await this.salesFigures(storeId, periods)),
+    };
+  }
+
+  private async salesFigures(storeId: string, periods: Periods) {
     const [orders, sales, averageOrderValue] = await Promise.all([
       this.comparison(periods, (period) => this.reports.orders(storeId, period)),
       this.comparison(periods, (period) => this.reports.sales(storeId, period)),
       this.comparison(periods, (period) => this.reports.averageOrderValue(storeId, period)),
     ]);
     return {
-      ...windowFacts(window, periods),
       orders: Number(orders.current),
       previousOrders: Number(orders.previous),
       ordersChangePercent: changePercent(orders.current, orders.previous),
@@ -86,6 +123,20 @@ export class AssistantToolsService {
       salesChangePercent: changePercent(sales.current, sales.previous),
       averageOrderValueTaka: taka(averageOrderValue.current),
       previousAverageOrderValueTaka: taka(averageOrderValue.previous),
+    };
+  }
+
+  private async topProducts(storeId: string, raw: unknown) {
+    const { window } = getTopProductsTool.input.parse(raw);
+    const periods = await this.reports.periods(storeId, windowDays[window]);
+    const products = await this.reports.topProducts(storeId, periods.current, TOP_PRODUCTS);
+    return {
+      ...windowFacts(window, periods),
+      products: products.map(({ name, units, salesPoisha }) => ({
+        name,
+        units,
+        salesTaka: taka(salesPoisha),
+      })),
     };
   }
 

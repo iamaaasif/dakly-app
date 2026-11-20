@@ -13,14 +13,13 @@ import {
   type CreateAutomationInput,
   MAX_AUTOMATIONS_PER_STORE,
 } from '@dakly/contracts/automations';
-import { isTriggerAvailable } from '@dakly/contracts/automations/catalogue';
+import { isChannelSendable, isTriggerAvailable } from '@dakly/contracts/automations/catalogue';
 import {
   type AutomationGraph,
   type AutomationStep,
   nextStepKeys,
 } from '@dakly/contracts/automations/graph';
 import { automationTemplates } from '@dakly/contracts/automations/templates';
-import type { campaignChannels } from '@dakly/contracts/campaigns';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AnalyticsService } from '../analytics/analytics.service';
@@ -61,8 +60,6 @@ const PAUSE_REASONS = {
 // An archived workflow is deleted for the shop; its versions stay for the runs on them.
 const VISIBLE_STATUSES = ['draft', 'active', 'paused'] as const;
 
-// MSG-1 sends SMS only. Messenger comes with CHN-2 and CHAT-2, WhatsApp with Q2.
-const SENDABLE_CHANNELS: readonly (typeof campaignChannels)[number][] = ['sms'];
 const MIN_WAIT_BEFORE_SPLIT_MINUTES = 2 * 60;
 
 @Injectable()
@@ -325,10 +322,7 @@ function checkPublishable(graph: AutomationGraph) {
       { path: 'trigger.key', message: `${graph.trigger.key} is not available yet` },
     ]);
   for (const [key, step] of Object.entries(graph.steps)) {
-    if (
-      step.kind === 'send' &&
-      !step.channels.some((channel) => SENDABLE_CHANNELS.includes(channel))
-    )
+    if (step.kind === 'send' && !step.channels.some(isChannelSendable))
       throw automationError('AUTOMATION_CHANNEL_UNREACHABLE', [
         { path: `steps.${key}`, message: 'No channel on this step can send yet' },
       ]);

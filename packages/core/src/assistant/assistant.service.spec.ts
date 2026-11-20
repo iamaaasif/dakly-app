@@ -33,16 +33,28 @@ const supportAgent: StoreAccess = {
 };
 const salesOnly: StoreAccess = { ...supportAgent, areas: { orders: 'view' } };
 
+const isCurrent = ({ from }: { from: string }) =>
+  from === periods.current.from || from === '2026-11-20';
+
 // Saved report values: ৳3,42,800 from 904 orders now, ৳2,89,500 from 800 orders before.
 const reports = {
   periods: async () => periods,
   orders: async (_: string, period: { from: string }) => ({
-    total: period.from === periods.current.from ? 904n : 800n,
+    total: isCurrent(period) ? 904n : 800n,
   }),
   sales: async (_: string, period: { from: string }) => ({
-    total: period.from === periods.current.from ? 34_280_000n : 28_950_000n,
+    total: isCurrent(period) ? 34_280_000n : 28_950_000n,
   }),
   averageOrderValue: async () => ({ total: 37_920n }),
+  calendarPeriods: async () => ({
+    ...periods,
+    current: { from: '2026-11-20', through: '2026-11-20' },
+    previous: { from: '2026-11-19', through: '2026-11-19' },
+  }),
+  topProducts: async () => [
+    { name: 'পাঞ্জাবি', units: 41, salesPoisha: 1_845_000n },
+    { name: 'শাড়ি', units: 27, salesPoisha: 2_430_000n },
+  ],
 } as unknown as AnalyticsService;
 
 const salesCall = {
@@ -91,6 +103,49 @@ describe('Ask Dakly AI', () => {
     });
   });
 
+  it('answers about today and names the day', async () => {
+    const { service } = assistant([
+      {
+        ...salesCall,
+        toolCalls: [{ id: 'call-1', name: 'get_sales_today', argumentsJson: '{}' }],
+      },
+      reply('Today you have 904 orders worth ৳3,42,800.'),
+    ]);
+    expect(await service.ask(storeId, owner, question)).toMatchObject({
+      kind: 'answer',
+      sources: ['Orders, today'],
+    });
+  });
+
+  it('answers the best sellers from the top products report', async () => {
+    const { service } = assistant([
+      {
+        ...salesCall,
+        toolCalls: [
+          { id: 'call-1', name: 'get_top_products', argumentsJson: '{"window":"last_30_days"}' },
+        ],
+      },
+      reply('পাঞ্জাবি sold 41 items, ৳18,450.'),
+    ]);
+    expect(await service.ask(storeId, owner, question)).toMatchObject({
+      kind: 'answer',
+      sources: ['Orders, last 30 days'],
+    });
+  });
+
+  it('refuses a product figure the report did not return', async () => {
+    const { service } = assistant([
+      {
+        ...salesCall,
+        toolCalls: [
+          { id: 'call-1', name: 'get_top_products', argumentsJson: '{"window":"last_30_days"}' },
+        ],
+      },
+      reply('পাঞ্জাবি sold 99 items.'),
+    ]);
+    expect((await service.ask(storeId, owner, question)).kind).toBe('cannot_answer');
+  });
+
   it('refuses an answer that holds a figure no report returned', async () => {
     const { service } = assistant([salesCall, reply('You sold ৳4,00,000 in the last 30 days.')]);
     const answer = await service.ask(storeId, owner, question);
@@ -114,7 +169,13 @@ describe('Ask Dakly AI', () => {
   it('offers only the reports the member can view', async () => {
     const { service, requests } = assistant([reply('I can’t answer that yet.')]);
     await service.ask(storeId, salesOnly, question);
-    expect(requests[0]!.tools?.map((tool) => tool.name)).toEqual(['get_sales']);
+    expect(requests[0]!.tools?.map((tool) => tool.name)).toEqual([
+      'get_sales',
+      'get_sales_today',
+      'get_sales_yesterday',
+      'get_sales_this_month',
+      'get_top_products',
+    ]);
   });
 
   it('cannot answer at all when the member can view no report', async () => {

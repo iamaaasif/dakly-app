@@ -13,11 +13,15 @@ import {
 } from '@nestjs/common';
 
 import {
+  type CampaignCustomersQuery,
+  campaignCustomersQuerySchema,
+  type CampaignCustomersResponse,
   type CampaignEstimateResponse,
   type CampaignListQuery,
   campaignListQuerySchema,
   type CampaignListResponse,
   type CampaignResponse,
+  type CampaignResultsResponse,
   type ChangeCampaignInput,
   changeCampaignSchema,
   type CreateCampaignInput,
@@ -30,11 +34,17 @@ import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { CampaignDuplicateService } from './campaign-duplicate.service';
+import { CampaignResultsService } from './campaign-results.service';
 import { CampaignsService } from './campaigns.service';
 
 @Controller('campaigns')
 export class CampaignsController {
-  constructor(@Inject(CampaignsService) private readonly campaigns: CampaignsService) {}
+  constructor(
+    @Inject(CampaignsService) private readonly campaigns: CampaignsService,
+    @Inject(CampaignResultsService) private readonly results: CampaignResultsService,
+    @Inject(CampaignDuplicateService) private readonly copies: CampaignDuplicateService,
+  ) {}
 
   @Get()
   @RequirePermission('campaigns.view')
@@ -54,6 +64,25 @@ export class CampaignsController {
     return this.campaigns.get(storeId, campaignId);
   }
 
+  @Get(':campaignId/results')
+  @RequirePermission('campaigns.view')
+  campaignResults(
+    @CurrentStore() storeId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResultsResponse> {
+    return this.results.results(storeId, campaignId);
+  }
+
+  @Get(':campaignId/customers')
+  @RequirePermission('campaigns.view')
+  customers(
+    @CurrentStore() storeId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+    @Query(new ZodValidationPipe(campaignCustomersQuerySchema)) query: CampaignCustomersQuery,
+  ): Promise<CampaignCustomersResponse> {
+    return this.results.customers(storeId, campaignId, query);
+  }
+
   @Get(':campaignId/estimate')
   @RequirePermission('campaigns.view')
   estimate(
@@ -71,6 +100,16 @@ export class CampaignsController {
     @Body(new ZodValidationPipe(createCampaignSchema)) input: CreateCampaignInput,
   ): Promise<CampaignResponse> {
     return this.campaigns.create(storeId, input, { kind: 'user', userId });
+  }
+
+  @Post(':campaignId/duplicate')
+  @RequirePermission('campaigns.edit')
+  duplicate(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResponse> {
+    return this.copies.duplicate(storeId, campaignId, { kind: 'user', userId });
   }
 
   @Patch(':campaignId')
