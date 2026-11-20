@@ -52,6 +52,10 @@ const targetFields = {
   externalPostId: postTargets.externalPostId,
   errorCode: postTargets.errorCode,
   errorMessage: postTargets.errorMessage,
+  reach: postTargets.reach,
+  reactions: postTargets.reactions,
+  comments: postTargets.comments,
+  linkTaps: postTargets.linkTaps,
 };
 
 type TargetWrite = Partial<

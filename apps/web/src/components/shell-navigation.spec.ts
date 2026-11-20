@@ -106,13 +106,13 @@ describe('navigationGroups', () => {
     ]);
   });
 
-  it('shows the Social hub and Content Studio only to people who can view social posts', () => {
+  it('shows the Social hub, My posts and Content Studio only to people who can view social posts', () => {
     const links = (canViewSocial: boolean) =>
       navigationGroups(makeSession({ canViewSocial }))
         .find((group) => group.heading === 'Social auto post')
         ?.links.filter((link) => link.visible)
         .map((link) => link.href);
-    expect(links(true)).toEqual(['/social', '/content-studio']);
+    expect(links(true)).toEqual(['/social', '/social/posts', '/content-studio']);
     expect(links(false)).toEqual([]);
   });
 

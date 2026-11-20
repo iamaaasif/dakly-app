@@ -1,5 +1,8 @@
-import { ChartLine, Megaphone, Zap } from 'lucide-react';
+'use client';
+
+import { CalendarDays, ChartLine, Layers, Megaphone, Zap } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 
 import type { AnalyticsView } from '@dakly/contracts/analytics';
 import { cn } from '@dakly/ui/cn';
@@ -10,11 +13,23 @@ const tabs = [
   { id: 'overview', label: 'Overview', icon: ChartLine },
   { id: 'campaigns', label: 'Campaigns', icon: Megaphone },
   { id: 'automations', label: 'Automations', icon: Zap },
+  { id: 'channels', label: 'Channels', icon: Layers },
+  { id: 'social', label: 'Social posts', icon: CalendarDays },
 ] as const;
 
 export function AnalyticsTabs({ view }: { view: AnalyticsView }) {
+  const row = useRef<HTMLElement>(null);
+  useEffect(() => {
+    centerOpenTab(row.current);
+    // Web fonts change the tab widths once they load.
+    void document.fonts?.ready.then(() => centerOpenTab(row.current));
+  }, [view.tab]);
   return (
-    <nav aria-label="Analytics tabs" className="flex gap-1 overflow-x-auto border-b border-border">
+    <nav
+      aria-label="Analytics tabs"
+      ref={row}
+      className="flex gap-1 overflow-x-auto border-b border-border"
+    >
       {tabs.map(({ id, label, icon: Icon }) => (
         <Link
           key={id}
@@ -31,4 +46,10 @@ export function AnalyticsTabs({ view }: { view: AnalyticsView }) {
       ))}
     </nav>
   );
+}
+
+// On a phone the row scrolls sideways, so the open tab is centred. Only the row scrolls, never the page.
+function centerOpenTab(row: HTMLElement | null) {
+  const open = row?.querySelector<HTMLElement>('[aria-current="page"]');
+  if (row && open) row.scrollLeft = open.offsetLeft - (row.clientWidth - open.offsetWidth) / 2;
 }

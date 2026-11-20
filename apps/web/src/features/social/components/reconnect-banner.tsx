@@ -8,10 +8,16 @@ import { formatShortDate } from '@/lib/format-date';
 type ReconnectBannerProps = {
   account: SocialAccount;
   canReconnect: boolean;
+  scheduledCount?: number;
   onReconnect: () => void;
 };
 
-export function ReconnectBanner({ account, canReconnect, onReconnect }: ReconnectBannerProps) {
+export function ReconnectBanner({
+  account,
+  canReconnect,
+  scheduledCount,
+  onReconnect,
+}: ReconnectBannerProps) {
   const label = account.kind === 'instagram' ? 'Instagram' : 'Facebook';
   const expiredAt = account.tokenExpiresAt ? formatShortDate(account.tokenExpiresAt) : null;
   return (
@@ -23,8 +29,11 @@ export function ReconnectBanner({ account, canReconnect, onReconnect }: Reconnec
       <div className="min-w-48 flex-1">
         <h2 className="font-semibold">Reconnect {label} to keep posting</h2>
         <p className="text-sm text-text-muted">
-          Access to {account.displayName} expired{expiredAt ? ` on ${expiredAt}` : ''}. Scheduled{' '}
-          {label} posts won’t publish until you reconnect.
+          Access to {account.displayName} expired{expiredAt ? ` on ${expiredAt}` : ''}.{' '}
+          {scheduledCount
+            ? `${scheduledCount} scheduled ${label} ${scheduledCount === 1 ? 'post' : 'posts'} won’t`
+            : `Scheduled ${label} posts won’t`}{' '}
+          publish until you reconnect.
         </p>
       </div>
       {canReconnect && (

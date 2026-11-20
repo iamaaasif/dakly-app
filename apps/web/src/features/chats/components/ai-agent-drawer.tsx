@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { agentTabs, type AgentTab } from '../agent-tabs';
 import { AgentSettingsTab } from './agent-settings-tab';
+import { GoLivePanel } from './go-live-panel';
 import { useSessionContext } from '@/lib/session-context';
 
 const tabLabels: Record<AgentTab, string> = { settings: 'Settings' };
@@ -18,6 +19,7 @@ type AiAgentDrawerProps = {
 
 export function AiAgentDrawer({ tab, onTabChange, onClose }: AiAgentDrawerProps) {
   const { data } = useSessionContext();
+  const canEdit = Boolean(data?.currentStore?.canEditStoreSettings);
   return (
     <Sheet
       open={tab !== undefined}
@@ -40,7 +42,8 @@ export function AiAgentDrawer({ tab, onTabChange, onClose }: AiAgentDrawerProps)
           ))}
         </TabsList>
         <TabsContent value="settings">
-          <AgentSettingsTab canEdit={Boolean(data?.currentStore?.canEditStoreSettings)} />
+          <AgentSettingsTab canEdit={canEdit} />
+          <GoLivePanel canEdit={canEdit} />
         </TabsContent>
       </Tabs>
     </Sheet>

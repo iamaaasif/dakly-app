@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 
 import { dashboardQuerySchema } from '@dakly/contracts/dashboard';
 
+import { DashboardAskBox } from '@/features/assistant/components/dashboard-ask-box';
 import { Dashboard } from '@/features/dashboard/components/dashboard';
 import { requireSession } from '@/lib/require-session';
 
@@ -13,5 +14,7 @@ export default async function DashboardPage({
   const session = await requireSession();
   if (!session.hasMemberships) redirect('/setup');
   const parsed = dashboardQuerySchema.safeParse({ period: (await searchParams).period });
-  return <Dashboard period={parsed.success ? parsed.data.period : 30} />;
+  return (
+    <Dashboard period={parsed.success ? parsed.data.period : 30} askBox={<DashboardAskBox />} />
+  );
 }

@@ -37,6 +37,8 @@ export type ChannelConnection = {
   displayName: string;
   externalAccountId: string;
   status: (typeof channelConnectionStatuses)[number];
+  // False while the channel is in practice mode: the AI answers only testers until Go live.
+  isAiLive: boolean;
   tokenExpiresAt: string | null;
   connectedAt: string;
   disconnectedAt: string | null;
