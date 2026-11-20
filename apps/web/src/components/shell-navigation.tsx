@@ -7,6 +7,7 @@ import {
   Package,
   Plug,
   Puzzle,
+  Send,
   Settings,
   Store,
   Truck,
@@ -107,7 +108,7 @@ function NavigationItem({
   );
 }
 
-// Groups follow the design order. Social auto post joins when their screens exist.
+// Groups follow the design order.
 export function navigationGroups(session: SessionContext): NavigationGroup[] {
   const store = session.currentStore;
   return [
@@ -144,6 +145,10 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
           visible: store?.canViewCampaigns,
         },
       ],
+    },
+    {
+      heading: 'Social auto post',
+      links: [{ href: '/social', label: 'Social hub', icon: Send, visible: store?.canViewSocial }],
     },
     ...settingsGroups(store),
   ];

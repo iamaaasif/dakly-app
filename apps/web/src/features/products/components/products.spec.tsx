@@ -89,6 +89,8 @@ function show(
       canEditOrders: false,
       canViewCampaigns: false,
       canEditCampaigns: false,
+      canViewSocial: false,
+      canEditSocial: false,
       canViewAutomations: false,
       canEditAutomations: false,
       canViewCustomers: false,
