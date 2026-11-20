@@ -33,18 +33,19 @@ const trackerMilestones = ['Inquiry', 'Confirmed', 'Packed', 'With courier', 'De
 
 function milestoneStep(stage: OrderDetail['stage']): number {
   switch (stage) {
-    case 'to_confirm':
     case 'on_hold':
       return 1;
-    case 'to_pack':
+    case 'to_confirm':
       return 2;
+    case 'to_pack':
+      return 3;
     case 'with_courier':
       return 4;
     case 'delivered':
     case 'partially_delivered':
       return 5;
     default:
-      return 1;
+      return 0;
   }
 }
 
@@ -104,12 +105,6 @@ function OrderStageTracker({ currentStage, stageRef }: OrderStageTrackerProps) {
 type DeliveryDetailsProps = { order: OrderDetail };
 
 function DeliveryDetails({ order }: DeliveryDetailsProps) {
-  const isHighRisk = order.returnRisk === 'high';
-  const showAdvanceWarning =
-    isHighRisk &&
-    order.advancePaidPoisha === 0 &&
-    ['to_confirm', 'on_hold', 'to_pack'].includes(order.stage);
-
   return (
     <section aria-label="Delivery details" className="space-y-3">
       <h3 className="text-sm font-semibold text-text">Delivery details</h3>
@@ -143,7 +138,7 @@ function DeliveryDetails({ order }: DeliveryDetailsProps) {
         {order.recipientAddress}, {order.recipientDistrict}
       </p>
       <BuyerDetails order={order} />
-      <RiskBlock order={order} showAdvanceWarning={showAdvanceWarning} />
+      <RiskBlock order={order} />
       {order.hasRecipientPhoneMatch && (
         <p className="mt-1 text-sm text-warning">
           The delivery phone may match another customer profile.
@@ -153,29 +148,38 @@ function DeliveryDetails({ order }: DeliveryDetailsProps) {
   );
 }
 
-type RiskBlockProps = {
-  order: OrderDetail;
-  showAdvanceWarning: boolean;
-};
+type RiskBlockProps = { order: OrderDetail };
 
-function RiskBlock({ order, showAdvanceWarning }: RiskBlockProps) {
-  if (order.returnRisk === null) return null;
-  if (!showAdvanceWarning) {
-    return (
-      <div>
-        <OrderRiskBadge risk={order.returnRisk} />
-      </div>
-    );
-  }
+function riskDescription({ returnRisk, parcelHistory }: OrderDetail): string {
+  const { parcels, returned } = parcelHistory;
+  if (returnRisk === 'new_customer') return 'No delivery history yet.';
+  if (returnRisk === 'good') return `Received ${parcels - returned} of ${parcels} parcels.`;
+  const counts = `Returned ${returned} of ${parcels} parcels.`;
+  return returnRisk === 'high' ? `${counts} Ask for an advance.` : counts;
+}
+
+const riskBarClass = { good: 'bg-success', some_returns: 'bg-warning', high: 'bg-danger' } as const;
+
+function RiskBlock({ order }: RiskBlockProps) {
+  const { returnRisk, parcelHistory } = order;
+  if (returnRisk === null) return null;
+  const receivedPercent = Math.round(
+    ((parcelHistory.parcels - parcelHistory.returned) / Math.max(parcelHistory.parcels, 1)) * 100,
+  );
   return (
     <div className="space-y-1.5 rounded-lg bg-surface-muted/60 p-2.5">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <OrderRiskBadge risk={order.returnRisk} />
-        <span className="text-text-muted">Ask for a small advance first</span>
+        <OrderRiskBadge risk={returnRisk} />
+        <span className="text-text-muted">{riskDescription(order)}</span>
       </div>
-      <div aria-hidden="true" className="h-1 w-1/2 overflow-hidden rounded-full bg-border">
-        <div className="h-full w-3/5 rounded-full bg-danger" />
-      </div>
+      {returnRisk === 'new_customer' ? null : (
+        <div aria-hidden="true" className="h-1 w-1/2 overflow-hidden rounded-full bg-border">
+          <div
+            className={cn('h-full rounded-full', riskBarClass[returnRisk])}
+            style={{ width: `${receivedPercent}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }
