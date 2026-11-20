@@ -12,7 +12,11 @@ import {
   type ApprovalState,
   CampaignApprovalRepository,
 } from './campaign-approval.repository';
-import { type AudiencePage, CampaignAudienceService } from './campaign-audience.service';
+import {
+  type AudiencePage,
+  audienceDecisionTime,
+  CampaignAudienceService,
+} from './campaign-audience.service';
 import { CampaignSmsService } from './campaign-sms.service';
 import { CampaignsRepository } from './campaigns.repository';
 import { approvalKey } from './campaigns.service';
@@ -63,7 +67,7 @@ export class CampaignApprovalService {
         storeId,
         state,
         { segmentIndex: state.segmentIndex, contactId: state.contactId },
-        state.scheduledFor ?? key.approvedAt,
+        audienceDecisionTime(state, key.approvedAt),
       );
     } catch (error) {
       // A segment deleted after approval started would fail every retry; refuse instead.
@@ -129,15 +133,20 @@ export class CampaignApprovalService {
     state: ApprovalState,
     { queued, skipped, now }: { queued: number; skipped: number; now: Date },
   ): Promise<void> {
-    const { shortLinkBase, smsParts } = this.sms.estimate(state.content.text);
-    await this.wallets.reserve(storeId, {
-      wallet: 'sms_credits',
-      quantity: smsParts * queued,
-      idempotencyKey: approvalKey(key.id, key.approvedAt),
-      actor: state.approvedByUserId
-        ? { kind: 'user', userId: state.approvedByUserId }
-        : { kind: 'system' },
-    });
+    // Messenger sends are free: no credits to reserve and no short links.
+    let shortLinkBase: string | null = null;
+    if (state.channel === 'sms') {
+      const estimate = this.sms.estimate(state.content.text);
+      shortLinkBase = estimate.shortLinkBase;
+      await this.wallets.reserve(storeId, {
+        wallet: 'sms_credits',
+        quantity: estimate.smsParts * queued,
+        idempotencyKey: approvalKey(key.id, key.approvedAt),
+        actor: state.approvedByUserId
+          ? { kind: 'user', userId: state.approvedByUserId }
+          : { kind: 'system' },
+      });
+    }
     const status = state.scheduledFor ? 'scheduled' : 'sending';
     await this.campaigns.markApproved(storeId, key.id, {
       status,

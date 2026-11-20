@@ -337,7 +337,11 @@ Test questions are `{question, expectedAnswer}` pairs saved on the store (`PUT /
 
 `POST /ai-agent/channel-connections/:id/go-live` refuses, with the code of the first failed check, until the channel is active, Knowledge has an active item, a product is shown in chats, hand-over rules are saved and there are at least 3 test questions. It then runs every test question one after another. A question passes when the agent gives a reply and not a hand-over, the reply passes the fact check, and a fast-tier grader call (run purpose `grade_test`) says it agrees with the expected answer in meaning. The grader judges meaning because Bangla, Banglish and English write prices and places in many forms. If any question fails, the response is `GO_LIVE_TESTS_FAILED` with the failed positions and the channel stays in practice. When all pass, the channel goes live and an audit entry `channel_connection.ai_went_live` records the user.
 
-Waits on other tasks: saving the hand-over rules with undo history (AI settings save), the screens (AI-8), the batch test on the last 50 real chats (not in the rules) and re-running the tests after a knowledge change (AI-7).
+AI agent settings: `GET /ai-agent/settings` and `PUT /ai-agent/settings` (`storeSettings.view` and `storeSettings.edit`) read and save the auto-reply switch, reply language, the ability switches, the three hand-over rules, the return-to-AI timer (1 hour, 24 hours or until a person hands back) and extra rules. A shop that never saved gets the defaults with `version` 0 and `handoverRulesSaved` false. A save carries the version the person loaded and is refused with `AI_AGENT_SETTINGS_CHANGED` when it is stale. Each save writes an `ai_rule_changes` row with the old and new values and an `ai_agent.settings_changed` audit entry that lists only the field names.
+
+The AI agent drawer opens from the AI agent button on Chats (`/chats?agent=settings`; the tab is in the URL). The Settings tab edits the fields above with one Save changes button. A stale save shows the error and a Load latest settings button. Knowledge, Feedback and Test the agent tabs, and the Go live panel, come in the next AI-8 parts.
+
+Waits on other tasks: the remaining screens (AI-8), the batch test on the last 50 real chats (not in the rules) and re-running the tests after a knowledge change (AI-7).
 
 Comments: classified as question, positive, negative or spam. If "Answer post comments" is on, the AI posts a short public reply and one private reply with price. Spam is hidden; negative goes to Needs you. Nothing with a price, phone or address is posted publicly.
 
@@ -353,6 +357,12 @@ both end the request.
 Local development can select `LLM_DRIVER=fake` and supply scripted responses.
 Production rejects the fake driver. Selecting `LLM_DRIVER=openai` requires
 `OPENAI_API_KEY`. Tests use saved Responses API fixtures and make no network calls.
+
+### Golden-set eval
+
+`GoldenEvalService` runs golden cases through a responder and scores them: any amount in a reply that the case does not allow is a wrong price (must be 0), and a case that expects a hand-over must be handed over with the same reason (at least 90%). Unneeded hand-overs are reported but do not fail the run.
+The live responder asks the real practice pipeline of the shop in `AI_EVAL_STORE_ID`, which holds the catalog the cases assume. The nightly `run-golden-eval` job (20:00 UTC) calls `GoldenEvalService.runNightly()`. When the thresholds are missed it logs the report and sends a Slack staff notice, and it returns normally, because a thrown job is retried and would run the whole eval again. Only real errors throw. It does nothing when the variable is unset.
+CI replays saved outcomes and makes no network call. The starter set is in `ai-eval/golden-set.sample.ts`; the 200 beta chats replace it at M7.
 
 ### Shared AI service
 

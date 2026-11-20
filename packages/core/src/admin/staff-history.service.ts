@@ -4,6 +4,7 @@ import type { StaffAuditSearch, StaffAuditPage, StaffAuditRow } from '@dakly/con
 import type { StaffIdentity } from '@dakly/contracts/staff-auth';
 
 import { Clock } from '../platform/clock';
+import { csvCell } from '../platform/csv-cell';
 import { newId } from '../platform/database/new-id';
 import { StaffTransaction } from '../platform/database/staff-transaction';
 import { DAY_MS } from '../platform/time';
@@ -133,11 +134,6 @@ export class StaffHistoryService {
       throw supportError('SUPPORT_DENIED');
   }
 }
-function csv(value: unknown) {
-  const raw = typeof value === 'string' ? value : (JSON.stringify(value) ?? '');
-  const safe = /^[\t\r\n ]*[=+@-]/.test(raw) ? `'${raw}` : raw;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
 export function exportCsv(staffName: string, rows: StaffAuditRow[]) {
   const columns: (keyof StaffAuditRow)[] = [
     'id',
@@ -154,8 +150,8 @@ export function exportCsv(staffName: string, rows: StaffAuditRow[]) {
     'ip',
   ];
   return [
-    [csv('Exported by'), csv(staffName)].join(','),
-    columns.map(csv).join(','),
-    ...rows.map((row) => columns.map((key) => csv(row[key])).join(',')),
+    [csvCell('Exported by'), csvCell(staffName)].join(','),
+    columns.map(csvCell).join(','),
+    ...rows.map((row) => columns.map((key) => csvCell(row[key])).join(',')),
   ].join('\r\n');
 }

@@ -304,6 +304,7 @@ describe('SendPolicyService', () => {
       const recipient = await service.recheckRetryRecipient(STORE_ID, retry);
       if (recipient?.decision.action !== 'send') return recipient;
       const check = await service.prepareMarketingRetryCheck(STORE_ID, {
+        channel: 'sms',
         contactId: CONTACT_ID,
         workflowStepId: stepId,
         settings,

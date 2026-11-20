@@ -10,6 +10,7 @@ import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { KnowledgeIndexModule } from '@dakly/core/ai/knowledge/knowledge-index.module';
 import { AiAgentModule } from '@dakly/core/ai-agent/ai-agent.module';
+import { AiEvalModule } from '@dakly/core/ai-eval/ai-eval.module';
 import { AnalyticsModule } from '@dakly/core/analytics/analytics.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SendSecurityNoticeJob } from '@dakly/core/auth/jobs/send-security-notice.job';
@@ -160,6 +161,7 @@ import { JobSchedulers } from './job-schedulers';
     MaintenanceModule,
     KnowledgeIndexModule,
     AiAgentModule,
+    AiEvalModule,
     BullModule.forRootAsync({
       useFactory: () => {
         const env = loadEnv();

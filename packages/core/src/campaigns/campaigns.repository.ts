@@ -9,7 +9,7 @@ import type {
   campaignPauseReasons,
   CampaignStatus,
   recipientSkipReasons,
-  SmsCampaignContent,
+  CampaignContent,
 } from '@dakly/contracts/campaigns';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
@@ -21,7 +21,8 @@ export type Campaign = {
   name: string;
   goal: CampaignGoal | null;
   channel: CampaignChannel;
-  content: SmsCampaignContent;
+  content: CampaignContent;
+  channelConnectionId: string | null;
   includeSegmentIds: string[];
   excludeSegmentIds: string[];
   scheduledFor: Date | null;
@@ -44,18 +45,27 @@ export type Campaign = {
 };
 export type CampaignDraft = Pick<
   Campaign,
-  'name' | 'goal' | 'content' | 'includeSegmentIds' | 'excludeSegmentIds' | 'scheduledFor'
+  | 'name'
+  | 'goal'
+  | 'content'
+  | 'channelConnectionId'
+  | 'includeSegmentIds'
+  | 'excludeSegmentIds'
+  | 'scheduledFor'
 >;
 
 export type FrozenRecipient = {
   contactId: string;
+  // Messenger only: the contact's identity on the campaign's Page.
+  contactIdentityId?: string | null;
   destinationAddress: string | null;
 } & (
   | { status: 'queued'; skipReason: null }
   | { status: 'skipped'; skipReason: (typeof recipientSkipReasons)[number] }
 );
 export type CampaignApproval = Pick<Campaign, 'status' | 'updatedAt'> & {
-  shortLinkBase: string;
+  // SMS only: Messenger has no short links.
+  shortLinkBase: string | null;
   startedAt: Date | null;
   estimatedCostPoisha: number;
   recipientsCount: number;
@@ -89,6 +99,7 @@ export const campaignColumns = {
   goal: campaigns.goal,
   channel: campaigns.channel,
   content: campaigns.content,
+  channelConnectionId: campaigns.channelConnectionId,
   includeSegmentIds: campaigns.includeSegmentIds,
   excludeSegmentIds: campaigns.excludeSegmentIds,
   scheduledFor: campaigns.scheduledFor,
@@ -199,7 +210,7 @@ export class CampaignsRepository {
 
   async insert(
     storeId: string,
-    draft: CampaignDraft & { channel: 'sms'; createdByUserId: string | null },
+    draft: CampaignDraft & { channel: CampaignChannel; createdByUserId: string | null },
   ): Promise<Campaign> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
