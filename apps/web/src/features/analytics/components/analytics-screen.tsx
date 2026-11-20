@@ -13,9 +13,11 @@ import { periodChoices } from '../analytics-labels';
 import { analyticsHref, useAnalyticsOverview } from '../api/analytics-overview';
 import { AnalyticsAutomationsTab } from './analytics-automations-tab';
 import { AnalyticsCampaignsTab } from './analytics-campaigns-tab';
+import { AnalyticsChannelsTab } from './analytics-channels-tab';
 import { AnalyticsHeadline } from './analytics-headline';
 import { AnalyticsKeyFigures } from './analytics-key-figures';
 import { AnalyticsOverviewTab } from './analytics-overview-tab';
+import { AnalyticsSocialTab } from './analytics-social-tab';
 import { AnalyticsTabs } from './analytics-tabs';
 
 export function AnalyticsScreen({ view }: { view: AnalyticsView }) {
@@ -47,6 +49,10 @@ export function AnalyticsScreen({ view }: { view: AnalyticsView }) {
             <AnalyticsCampaignsTab view={view} timeZone={overview.data.timeZone} />
           )}
           {view.tab === 'automations' && <AnalyticsAutomationsTab view={view} />}
+          {view.tab === 'channels' && <AnalyticsChannelsTab view={view} />}
+          {view.tab === 'social' && (
+            <AnalyticsSocialTab view={view} timeZone={overview.data.timeZone} />
+          )}
         </>
       )}
     </main>
