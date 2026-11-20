@@ -75,9 +75,9 @@ describe('setup guide', () => {
     const steps = screen.getAllByRole('listitem');
     expect(steps).toHaveLength(6);
     expect(within(steps[0]!).getByText('Done')).toBeTruthy();
-    expect(within(steps[1]!).getByRole('link', { name: 'Teach Dakly' }).className).toContain(
-      'bg-action',
-    );
+    const teach = within(steps[1]!).getByRole('link', { name: 'Teach Dakly' });
+    expect(teach.className).toContain('bg-action');
+    expect(teach.getAttribute('href')).toBe('/chats?agent=settings');
     expect(within(steps[2]!).getByRole('link', { name: 'Add products' }).className).not.toContain(
       'bg-action',
     );

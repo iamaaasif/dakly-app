@@ -18,7 +18,7 @@ export const setupStepCopy: Record<
     title: 'Teach Dakly AI your answers',
     hint: 'Delivery charge, payment and exchange rules. Then it replies for you, day and night.',
     button: 'Teach Dakly',
-    href: '/chats',
+    href: '/chats?agent=settings',
     icon: <Sparkles size={20} />,
   },
   add_products: {
