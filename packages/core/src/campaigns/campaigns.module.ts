@@ -35,6 +35,8 @@ import { CampaignResultsService } from './campaign-results.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignSmsService } from './campaign-sms.service';
+import { CampaignSourceAudienceRepository } from './campaign-source-audience.repository';
+import { CampaignSourceService } from './campaign-source.service';
 import { CampaignSweepService } from './campaign-sweep.service';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsRepository } from './campaigns.repository';
@@ -72,6 +74,8 @@ import { CampaignsService } from './campaigns.service';
     CampaignResultsService,
     CampaignsRepository,
     CampaignSendingRepository,
+    CampaignSourceAudienceRepository,
+    CampaignSourceService,
     CampaignSmsService,
     CampaignsService,
     CampaignMessengerSender,

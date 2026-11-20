@@ -1641,6 +1641,34 @@ fixture('POST /campaigns/:campaignId/duplicate', async () => {
   expect((await f.row('campaigns', copy.id)).store_id).toBe(a.id);
   await hidden(b, 'POST', (value) => `/campaigns/${value}/duplicate`, id);
 });
+async function sentCampaign(shop: Shop, finishedHoursAgo: number) {
+  const id = await approvableCampaign(shop);
+  await f.admin.pool.query(
+    `update campaigns set status='sent', approved_at=now(), finished_at=now() - $2 * interval '1 hour'
+     where id=$1`,
+    [id, finishedHoursAgo],
+  );
+  return id;
+}
+fixture('POST /campaigns/:campaignId/resend', async () => {
+  const { a, b } = await pair(),
+    id = await sentCampaign(a, 49);
+  const draft = (await success(a, 'POST', `/campaigns/${id}/resend`, 201)).json();
+  expect(draft).toMatchObject({
+    status: 'draft',
+    source: { campaignId: id, outcome: 'resend_unread' },
+  });
+  expect((await f.row('campaigns', draft.id)).store_id).toBe(a.id);
+  await hidden(b, 'POST', (value) => `/campaigns/${value}/resend`, id);
+});
+fixture('POST /campaigns/:campaignId/follow-up', async () => {
+  const { a, b } = await pair(),
+    id = await sentCampaign(a, 1);
+  const draft = (await success(a, 'POST', `/campaigns/${id}/follow-up`, 201)).json();
+  expect(draft).toMatchObject({ source: { campaignId: id, outcome: 'follow_up_unordered' } });
+  expect((await f.row('campaigns', draft.id)).store_id).toBe(a.id);
+  await hidden(b, 'POST', (value) => `/campaigns/${value}/follow-up`, id);
+});
 fixture('GET /campaigns/:campaignId/results', async () => {
   const { a, b } = await pair(),
     id = await approvableCampaign(a);

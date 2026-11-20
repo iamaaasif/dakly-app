@@ -28,7 +28,11 @@ import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignAnalyticsRepository } from './campaign-analytics.repository';
 import { CampaignApprovalRepository } from './campaign-approval.repository';
-import { audienceDecisionTime, CampaignAudienceService } from './campaign-audience.service';
+import {
+  audienceDecisionTime,
+  audiencePartCount,
+  CampaignAudienceService,
+} from './campaign-audience.service';
 import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
 import { toCampaignResponse } from './campaign-response';
 import { CampaignSmsService } from './campaign-sms.service';
@@ -111,7 +115,7 @@ export class CampaignsService {
   }
 
   attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
-    return ids.length ? this.repository.attributionSources(storeId, buyer, ids) : [];
+    return ids.length ? this.analyticsRepository.attributionSources(storeId, buyer, ids) : [];
   }
 
   async get(storeId: string, campaignId: string): Promise<CampaignResponse> {
@@ -158,9 +162,19 @@ export class CampaignsService {
   private async checkChangeFitsChannel(
     storeId: string,
     campaignId: string,
-    { content, channelConnectionId }: Pick<ChangeCampaignInput, 'content' | 'channelConnectionId'>,
+    {
+      content,
+      channelConnectionId,
+      includeSegmentIds,
+      excludeSegmentIds,
+    }: Pick<
+      ChangeCampaignInput,
+      'content' | 'channelConnectionId' | 'includeSegmentIds' | 'excludeSegmentIds'
+    >,
   ) {
-    const { channel } = await this.find(storeId, campaignId);
+    const { channel, sourceCampaignId } = await this.find(storeId, campaignId);
+    if (sourceCampaignId && (includeSegmentIds !== undefined || excludeSegmentIds !== undefined))
+      throw campaignError('CAMPAIGN_AUDIENCE_FIXED');
     const messenger = channel === 'messenger';
     const contentFits =
       content === undefined ||
@@ -365,6 +379,7 @@ export class CampaignsService {
   // The upper bound shown as progress: segments can overlap and exclusions apply. A segment id
   // that does not exist is refused here.
   private async segmentSize(storeId: string, campaign: Campaign): Promise<number> {
+    if (campaign.sourceCampaignId) return this.audience.sourceSize(storeId, campaign);
     let total = 0;
     for (const segmentId of campaign.includeSegmentIds)
       total += await this.segments.contactCount(storeId, segmentId);
@@ -378,7 +393,7 @@ export class CampaignsService {
     let cursor = { segmentIndex: 0, contactId: null as string | null };
     let checked = 0;
     const at = audienceDecisionTime(campaign, this.clock.now());
-    while (cursor.segmentIndex < campaign.includeSegmentIds.length) {
+    while (cursor.segmentIndex < audiencePartCount(campaign)) {
       const page = await this.audience.page(storeId, campaign, cursor, at);
       for (const recipient of page.recipients)
         if (!recipients.has(recipient.contactId)) recipients.set(recipient.contactId, recipient);

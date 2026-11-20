@@ -1,4 +1,4 @@
-import type { CampaignResponse } from '@dakly/contracts/campaigns';
+import type { CampaignResponse, CampaignSourceOutcome } from '@dakly/contracts/campaigns';
 
 import type { Campaign } from './campaigns.repository';
 
@@ -13,6 +13,8 @@ export function toCampaignResponse({
   countsAt,
   approvalCheckedCount,
   approvalEstimatedTotal,
+  sourceCampaignId,
+  sourceOutcome,
   ...campaign
 }: Campaign): CampaignResponse {
   return {
@@ -21,6 +23,7 @@ export function toCampaignResponse({
       campaign.status === 'approving'
         ? { checked: approvalCheckedCount, estimatedTotal: approvalEstimatedTotal }
         : null,
+    source: toSource(sourceCampaignId, sourceOutcome),
     scheduledFor: campaign.scheduledFor?.toISOString() ?? null,
     startedAt: campaign.startedAt?.toISOString() ?? null,
     finishedAt: campaign.finishedAt?.toISOString() ?? null,
@@ -37,4 +40,11 @@ export function toCampaignResponse({
     createdAt: campaign.createdAt.toISOString(),
     updatedAt: campaign.updatedAt.toISOString(),
   };
+}
+
+function toSource(
+  campaignId: string | null,
+  outcome: CampaignSourceOutcome | null,
+): CampaignResponse['source'] {
+  return campaignId && outcome ? { campaignId, outcome } : null;
 }
