@@ -233,6 +233,69 @@ test('lists answers and files in the Knowledge tab and adds an answer', async ({
   }
 });
 
+test('tests the agent with a customer message and shows a reply and a hand-over', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
+    token: string;
+    storeIds: [string, string];
+  };
+  const [storeId] = fixture.storeIds;
+  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  try {
+    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
+      storeId,
+    ]);
+    await context.addCookies([
+      {
+        name: 'dakly_session',
+        value: fixture.token,
+        url: baseURL!,
+        httpOnly: true,
+        sameSite: 'Lax',
+      },
+    ]);
+    await context.request.post('/api/me/active-store', {
+      headers: { Origin: baseURL! },
+      data: { storeId },
+    });
+    // The real answer needs the AI model, so the browser test fixes it.
+    await page.route('**/api/ai-agent/test', async (route) => {
+      const { question } = route.request().postDataJSON() as { question: string };
+      // A real read gives the response headers that tie an answer to the signed-in shop.
+      const real = await route.fetch({
+        url: `${baseURL}/api/ai-agent/test-questions`,
+        method: 'GET',
+      });
+      await route.fulfill({
+        headers: real.headers(),
+        json:
+          question === 'Showroom kothay?'
+            ? {
+                kind: 'reply',
+                text: 'Amader showroom House 12, Road 5, Dhanmondi. Shokal 10 ta theke raat 10 ta.',
+              }
+            : { kind: 'handover', reason: 'refund' },
+      });
+    });
+    await page.goto('/chats?agent=test');
+    const drawer = page.getByRole('dialog', { name: 'Dakly AI agent' });
+    await expect(drawer.getByRole('tab', { name: 'Test the agent' })).toBeVisible();
+    await capture(page, 'test');
+    await drawer.getByRole('button', { name: 'Showroom kothay?' }).click();
+    await expect(drawer.getByText('Dhanmondi')).toBeVisible();
+    await capture(page, 'test-reply');
+    await drawer.getByLabel('Customer message').fill('Dam beshi, refund chai');
+    await drawer.getByRole('button', { name: 'Test', exact: true }).click();
+    await expect(drawer.getByText('This is about a refund or exchange.')).toBeVisible();
+    await capture(page, 'test-handover');
+  } finally {
+    await database.pool.end();
+  }
+});
+
 async function capture(page: Page, screen: string, afterResize?: () => Promise<unknown>) {
   const evidence = process.env.AI8_SCREENSHOT_DIR;
   if (!evidence) return;
