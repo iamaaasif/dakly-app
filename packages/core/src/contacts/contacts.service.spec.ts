@@ -7,6 +7,7 @@ import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import { ContactDeletionService } from './contact-deletion.service';
 import type { ContactIdentitiesRepository } from './contact-identities.repository';
+import type { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
 import type { Contact, ContactFilter, ContactsRepository, NewContact } from './contacts.repository';
 import { ContactsService } from './contacts.service';
@@ -63,6 +64,7 @@ describe('ContactsService', () => {
         {} as AuditService,
         storeTransaction,
       ),
+      {} as ContactMatchSuggestionsService,
     );
   });
 

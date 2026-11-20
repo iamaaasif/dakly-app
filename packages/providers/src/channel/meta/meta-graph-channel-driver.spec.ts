@@ -43,6 +43,99 @@ describe('MetaGraphChannelDriver', () => {
     });
   });
 
+  it('sends text with up to three postback buttons as a Messenger button template', async () => {
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      expect(await new Request(url, init).json()).toEqual({
+        recipient: { id: '999' },
+        message: {
+          attachment: {
+            type: 'template',
+            payload: {
+              template_type: 'button',
+              text: messengerReply.text,
+              buttons: [
+                { type: 'postback', title: 'হ্যাঁ', payload: 'confirm:1' },
+                { type: 'postback', title: 'না', payload: 'cancel:1' },
+              ],
+            },
+          },
+          metadata: messengerReply.operationKey,
+        },
+        messaging_type: 'RESPONSE',
+      });
+      return Response.json({ message_id: 'm_buttons' });
+    });
+    await expect(
+      driver.send(pageCredentials, {
+        ...messengerReply,
+        buttons: [
+          { title: 'হ্যাঁ', payload: 'confirm:1' },
+          { title: 'না', payload: 'cancel:1' },
+        ],
+      }),
+    ).resolves.toEqual({ externalMessageId: 'm_buttons' });
+  });
+
+  it('sends the image first and returns the id of the text message that carries the key', async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      bodies.push(await new Request(url, init).json());
+      return Response.json({ message_id: `m_${bodies.length}` });
+    });
+    await expect(
+      driver.send(pageCredentials, {
+        ...messengerReply,
+        imageUrl: 'https://cdn.example.test/offer.jpg',
+      }),
+    ).resolves.toEqual({ externalMessageId: 'm_2' });
+    expect(bodies).toEqual([
+      {
+        recipient: { id: '999' },
+        message: {
+          attachment: { type: 'image', payload: { url: 'https://cdn.example.test/offer.jpg' } },
+        },
+        messaging_type: 'RESPONSE',
+      },
+      {
+        recipient: { id: '999' },
+        message: { text: messengerReply.text, metadata: messengerReply.operationKey },
+        messaging_type: 'RESPONSE',
+      },
+    ]);
+  });
+
+  it('still sends the text when Meta refuses the image and reports it', async () => {
+    const bodies: { message: { text?: string } }[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      const body = await new Request(url, init).json();
+      bodies.push(body);
+      return bodies.length === 1
+        ? Response.json({ error: { code: 100 } }, { status: 400 })
+        : Response.json({ message_id: 'm_text' });
+    });
+    await expect(
+      driver.send(pageCredentials, {
+        ...messengerReply,
+        imageUrl: 'https://cdn.example.test/a.jpg',
+      }),
+    ).resolves.toEqual({ externalMessageId: 'm_text', imageRejected: true });
+    expect(bodies.map((body) => body.message.text)).toEqual([undefined, messengerReply.text]);
+  });
+
+  it('does not send the text when the image outcome is uncertain', async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new DOMException('Request timed out', 'TimeoutError');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      driver.send(pageCredentials, {
+        ...messengerReply,
+        imageUrl: 'https://cdn.example.test/a.jpg',
+      }),
+    ).rejects.toMatchObject({ code: 'unavailable' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves the difference between an invalid credential and an uncertain send', async () => {
     vi.stubGlobal('fetch', async () =>
       Response.json({ error: { code: 190, message: 'private details' } }, { status: 400 }),

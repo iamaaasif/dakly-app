@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
@@ -57,17 +57,48 @@ const draft = (overrides: Partial<PostResponse>): PostResponse => ({
   ...overrides,
 });
 
-function show({ connections = [page], drafts = [draft({})] } = {}) {
-  vi.stubGlobal('fetch', async (url: string) =>
-    Response.json(
-      { items: url.includes('/channel-connections') ? connections : drafts, nextCursor: null },
-      { headers: { 'x-session-context': 'verified' } },
-    ),
-  );
+const requests: { method: string; url: string; body?: string }[] = [];
+function show({
+  connections = [page],
+  drafts = [draft({})],
+  canEdit = true,
+  rejectCopy = false,
+} = {}) {
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+    requests.push({ method: init.method ?? 'GET', url, body: init.body as string | undefined });
+    const headers = { 'x-session-context': 'verified' };
+    if (init.method === 'DELETE') return new Response(null, { status: 204, headers });
+    if (url.includes('queue-slots') && init.method === 'PUT')
+      return Response.json(
+        { ...JSON.parse(init.body as string), timeZone: 'Asia/Dhaka' },
+        { headers },
+      );
+    if (url.includes('queue-slots'))
+      return Response.json(
+        {
+          channelConnectionId: page.id,
+          timeZone: 'Asia/Dhaka',
+          slots: [
+            { weekday: 5, time: '11:00' },
+            { weekday: 5, time: '20:00' },
+          ],
+        },
+        { headers },
+      );
+    if (url.includes('/channel-connections'))
+      return Response.json({ items: connections, nextCursor: null }, { headers });
+    if (init.method === 'POST' && rejectCopy)
+      return Response.json(
+        { error: { code: 'POST_CONNECTION_NOT_FOUND', message: 'Connected account not found' } },
+        { status: 404, headers },
+      );
+    if (init.method === 'POST') return Response.json(draft({ id: 'copy' }), { headers });
+    return Response.json({ items: drafts, nextCursor: null }, { headers });
+  });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
     contextTag: 'verified',
-    currentStore: { canViewSocial: true, canEditStoreSettings: true },
+    currentStore: { canViewSocial: true, canEditSocial: canEdit, canEditStoreSettings: true },
   });
   render(
     <QueryClientProvider client={client}>
@@ -76,6 +107,7 @@ function show({ connections = [page], drafts = [draft({})] } = {}) {
   );
 }
 beforeEach(() => {
+  requests.length = 0;
   HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
     this.setAttribute('open', '');
   };
@@ -135,4 +167,70 @@ it('shows a draft with its accounts and warns when it has no caption or photo', 
 it('marks an AI-written draft that nobody approved yet', async () => {
   show({ drafts: [draft({ isAiWritten: true })] });
   expect(await screen.findByText('Needs your OK')).toBeTruthy();
+});
+
+it('deletes a draft only after confirmation', async () => {
+  const user = userEvent.setup();
+  show();
+  await user.click(await screen.findByRole('button', { name: /^Delete draft:/ }));
+  const dialog = screen.getByRole('dialog');
+  expect(requests.some(({ method }) => method === 'DELETE')).toBe(false);
+  await user.click(within(dialog).getByRole('button', { name: 'Delete draft' }));
+  await waitFor(() =>
+    expect(requests).toContainEqual(
+      expect.objectContaining({
+        method: 'DELETE',
+        url: '/api/posts/33333333-3333-4333-8333-333333333333',
+      }),
+    ),
+  );
+  expect(await screen.findByText('Draft deleted.')).toBeTruthy();
+});
+
+it('copies a draft with its accounts and caption', async () => {
+  const user = userEvent.setup();
+  show();
+  await user.click(await screen.findByRole('button', { name: /^Duplicate draft:/ }));
+  await waitFor(() => expect(requests.some(({ method }) => method === 'POST')).toBe(true));
+  const post = requests.find(({ method }) => method === 'POST');
+  expect(JSON.parse(post!.body!)).toMatchObject({
+    caption: 'Mustard silk scarves are back in stock.',
+    targets: [{ channelConnectionId: page.id, captionOverride: null }],
+  });
+  expect(await screen.findByText('Draft duplicated.')).toBeTruthy();
+});
+
+it('shows a failed copy as an error, not as a success', async () => {
+  const user = userEvent.setup();
+  show({ rejectCopy: true });
+  await user.click(await screen.findByRole('button', { name: /^Duplicate draft:/ }));
+  expect((await screen.findByRole('alert')).textContent).toBe('Connected account not found');
+});
+
+it('hides draft actions from people who can only view', async () => {
+  show({ canEdit: false });
+  await screen.findByText('Mustard silk scarves are back in stock.');
+  expect(screen.queryByRole('button', { name: /^Delete draft:/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: /^Duplicate draft:/ })).toBeNull();
+});
+
+it('edits and saves the posting schedule', async () => {
+  const user = userEvent.setup();
+  show();
+  await user.click(await screen.findByRole('button', { name: 'Posting schedule' }));
+  expect(await screen.findByText('2 posting times a week · Dhaka time (GMT+6)')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Remove 8:00 pm on Fri' }));
+  await user.click(screen.getByRole('button', { name: 'Add a time on Sat' }));
+  await user.type(screen.getByLabelText('New time on Sat'), '12:30{Enter}');
+  expect(screen.getByText('12:30 pm')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Save schedule' }));
+  await waitFor(() => expect(requests.some(({ method }) => method === 'PUT')).toBe(true));
+  expect(JSON.parse(requests.find(({ method }) => method === 'PUT')!.body!)).toEqual({
+    channelConnectionId: page.id,
+    slots: [
+      { weekday: 5, time: '11:00' },
+      { weekday: 6, time: '12:30' },
+    ],
+  });
+  expect(await screen.findByText('Posting schedule saved.')).toBeTruthy();
 });

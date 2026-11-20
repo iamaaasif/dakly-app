@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AutomationsService } from '../automations/automations.service';
 import type { CampaignsService } from '../campaigns/campaigns.service';
 import { AnalyticsOverviewService } from './analytics-overview.service';
+import type { AnalyticsTabsService } from './analytics-tabs.service';
 import type { AnalyticsService } from './analytics.service';
 
 const current = { from: '2026-11-01', through: '2026-11-14' };
@@ -45,6 +46,7 @@ function overview(
     reports,
     messages(totals.campaigns, totals.previous) as unknown as CampaignsService,
     messages(totals.automations) as unknown as AutomationsService,
+    { best: async () => ({}) } as unknown as AnalyticsTabsService,
   ).overview('store', { period: 14 as 30 });
 }
 

@@ -105,3 +105,12 @@ export function formatShortDate(value: string, timeZone = 'Asia/Dhaka'): string 
 export function formatShortDateTime(value: string, timeZone = 'Asia/Dhaka'): string {
   return `${formatShortDate(value, timeZone)}, ${formatTime(value, timeZone)}`;
 }
+
+export function formatTimeZone(timeZone: string): string {
+  const offset = new Intl.DateTimeFormat('en', { timeZone, timeZoneName: 'longOffset' })
+    .formatToParts(new Date())
+    .find((part) => part.type === 'timeZoneName')
+    ?.value.replace(/^GMT([+-])0?(\d+):00$/, 'GMT$1$2');
+  const city = timeZone.split('/').at(-1)?.replaceAll('_', ' ') ?? timeZone;
+  return offset ? `${city} time (${offset})` : `${city} time`;
+}

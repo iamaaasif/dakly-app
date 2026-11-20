@@ -14,7 +14,7 @@ export function useStoreRequest() {
         body?: unknown;
         signal?: AbortSignal;
         idempotencyKey?: string;
-        method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+        method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
       } = {},
     ) => {
       if (!contextTag || !data?.currentStore)

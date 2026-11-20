@@ -21,6 +21,7 @@ import type {
 import type { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import type { WalletService } from '../wallets/wallet.service';
+import type { CampaignAnalyticsRepository } from './campaign-analytics.repository';
 import type {
   ApprovalKey,
   ApprovalProgress,
@@ -405,6 +406,7 @@ describe('CampaignsService', () => {
     service = new CampaignsService(
       repository as unknown as CampaignsRepository,
       {} as CampaignMessageTotalsRepository,
+      {} as CampaignAnalyticsRepository,
       segments as unknown as SegmentsService,
       audience,
       approvalRepository as unknown as CampaignApprovalRepository,

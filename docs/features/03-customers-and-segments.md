@@ -346,6 +346,8 @@ Self-delivery is the default. Save a valid own phone on the current buyer contac
 
 If another contact in the same store already has the normalised phone, leave both profiles and the buyer link unchanged. Keep the supplied phone in the draft or order snapshot and show a possible match to staff. Apply this rule even if the conflict appears during a concurrent save. Staff may resolve the suggestion through the existing merge workflow; the conflict does not block ordering, confirmation or delivery and gives the buyer no access to the other contact's history.
 
+`ContactMatchSuggestionsService.captureOwnPhone` does this for the AI `draft_order` tool and staff order entry, with an order id or a conversation id as the source of the suggestion. It returns nothing, so a typed phone never tells the caller who else has it. Saving it turns a `chat_only` contact into a `lead`. `GET /contact-match-suggestions?contactId=` lists the open suggestions on a profile from either side, with the other contact's phone masked unless the member sees full numbers; `POST /contact-match-suggestions/:suggestionId/dismiss` closes one.
+
 A saved own phone is self-reported, not proof of ownership. It does not trigger a merge or add marketing consent. A chat contact with that phone and zero orders qualifies as a Lead under the glossary; a conflicting phone kept only on a draft does not qualify that contact. Existing identity-matching rules remain separate. For delivery to someone else, save the recipient's phone only on the draft or order.
 
 **Consent**

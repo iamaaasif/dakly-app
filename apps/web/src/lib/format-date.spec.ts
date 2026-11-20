@@ -7,6 +7,7 @@ import {
   formatRelativeTime,
   formatShortDate,
   formatShortDateTime,
+  formatTimeZone,
   formatTime,
   localHour,
 } from './format-date';
@@ -156,5 +157,11 @@ describe('formatShortDateTime', () => {
   it('shows the Dhaka day and time', () => {
     expect(formatShortDateTime('2026-11-06T10:20:00Z')).toBe('Nov 6, 4:20 pm');
     expect(formatShortDateTime('2026-11-06T20:00:00Z')).toBe('Nov 7, 2:00 am');
+  });
+});
+
+describe('formatTimeZone', () => {
+  it('names the city and the offset', () => {
+    expect(formatTimeZone('Asia/Dhaka')).toBe('Dhaka time (GMT+6)');
   });
 });

@@ -8,7 +8,7 @@ import {
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 
 import { TRIGGER_KEY } from './workflow-canvas-layout';
-import { appendStep, insertStep, removeStep } from './workflow-graph-edit';
+import { appendStep, insertStep, moveStep, removeStep } from './workflow-graph-edit';
 
 const cart: AutomationGraph = automationTemplates.welcome_new_subscriber.graph;
 
@@ -67,4 +67,47 @@ describe('editing a workflow graph', () => {
     const exit = Object.keys(cart.steps).find((key) => cart.steps[key]!.kind === 'exit')!;
     expect(removeStep(cart, exit)).toBe(cart);
   });
+});
+
+describe('moving a step', () => {
+  const kindsAlong = (graph: AutomationGraph) => pathFrom(graph);
+
+  it('moves a step down and up again to where it was', () => {
+    const down = moveStep(cart, cart.firstStepKey, 'down')!;
+    expect(automationGraphSchema.safeParse(down).success).toBe(true);
+    expect(kindsAlong(down)).toEqual(['wait', 'send', 'send', 'exit']);
+    const back = moveStep(down, cart.firstStepKey, 'up')!;
+    expect(back).toEqual(cart);
+  });
+
+  it('does not move the first step up, the last step down, or a step past an exit', () => {
+    expect(moveStep(cart, cart.firstStepKey, 'up')).toBeUndefined();
+    const last = Object.keys(cart.steps).find(
+      (key) => nextStepKeys(cart.steps[key]!)[0] === 'end',
+    )!;
+    expect(moveStep(cart, last, 'down')).toBeUndefined();
+  });
+
+  it('does not move a step into a path that others also take', () => {
+    const split = insertStep(cart, { parent: TRIGGER_KEY, target: cart.firstStepKey }, 'split');
+    expect(moveStep(split, split.firstStepKey, 'down')).toBeUndefined();
+    expect(moveStep(split, cart.firstStepKey, 'up')).toBeUndefined();
+  });
+});
+
+describe('the canvas and the settings form', () => {
+  // The form saves what automationGraphSchema parses; the canvas edits the same shape.
+  it.each(Object.entries(automationTemplates))(
+    'leave the %s template unchanged by an edit and its undo',
+    (_name, template) => {
+      const graph: AutomationGraph = template.graph;
+      const saved = automationGraphSchema.parse(graph);
+      const edited = removeStep(
+        insertStep(saved, { parent: TRIGGER_KEY, target: saved.firstStepKey }, 'delay'),
+        'delay_1',
+      );
+      expect(edited).toEqual(saved);
+      expect(automationGraphSchema.parse(edited)).toEqual(saved);
+    },
+  );
 });
