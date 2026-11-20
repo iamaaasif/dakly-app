@@ -13,6 +13,15 @@ import { UseInPostButton } from './use-in-post-button';
 
 type ResultCardProps = { number: number; text: string; aiRunId: string; asked: GenerateInput };
 
+function OptionHeader({ number, length }: { number: number; length: number }) {
+  return (
+    <header className="flex items-center justify-between text-xs text-text-muted">
+      <span className="font-semibold tracking-wide uppercase">Option {number}</span>
+      <span>{length} characters</span>
+    </header>
+  );
+}
+
 export function ResultCard({ number, text, aiRunId, asked }: ResultCardProps) {
   const [piece, setPiece] = useState({
     kind: asked.kind,
@@ -31,10 +40,7 @@ export function ResultCard({ number, text, aiRunId, asked }: ResultCardProps) {
   };
   return (
     <article className="space-y-4 rounded-lg border border-border bg-surface p-4 md:p-5">
-      <header className="flex items-center justify-between text-xs text-text-muted">
-        <span className="font-semibold tracking-wide uppercase">Option {number}</span>
-        <span>{piece.body.length} characters</span>
-      </header>
+      <OptionHeader number={number} length={piece.body.length} />
       {editing ? (
         <Textarea
           aria-label="Edit text"
