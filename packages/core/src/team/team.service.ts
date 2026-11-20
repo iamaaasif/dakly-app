@@ -37,6 +37,11 @@ export class TeamService {
     return canApproveSends(access);
   }
 
+  // The route also needs View Customers, so the screen shows the button only with both.
+  canExportCustomers(access: StoreAccess): boolean {
+    return access.exportLists && canAccess(access, 'customers', 'view');
+  }
+
   canChangeAttributionWindow(access: StoreAccess): boolean {
     return canDo(access, 'attribution.window.edit');
   }
