@@ -64,3 +64,5 @@ export const productImportRowSchema = z.object({
 export type ProductImportMapping = z.infer<typeof productImportMappingSchema>;
 export type ProductImportRow = z.infer<typeof productImportRowSchema>;
 export type StartProductImportInput = z.infer<typeof startProductImportSchema>;
+// What a form holds before the schema fills in the default of no option columns.
+export type StartProductImportForm = z.input<typeof startProductImportSchema>;
