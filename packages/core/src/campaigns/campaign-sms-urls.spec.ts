@@ -109,7 +109,19 @@ describe('SMS campaign body URLs', () => {
   });
 
   it('leaves malformed schemes and unpaired angle delimiters untouched', () => {
-    const text = 'Open https:///shop.example.test/a or https://shop.example.test/a<extra>.';
+    const text =
+      'Open https:///shop.example.test/a or https://shop.example.test/a<extra>. Or <https://shop.example.test/a!';
+    expect(campaignSmsUrls(text)).toEqual([]);
+  });
+
+  it('leaves angle-bracket candidates connected to another token untouched', () => {
+    const text =
+      'Open <https://shop.example.test/a>extra. Or <https://shop.example.test/a><https://other.example.test/b>.';
+    expect(campaignSmsUrls(text)).toEqual([]);
+  });
+
+  it('leaves quoted candidates without a closing quote boundary untouched', () => {
+    const text = 'Open "https://shop.example.test/a"today. Or ‘https://shop.example.test/b.';
     expect(campaignSmsUrls(text)).toEqual([]);
   });
 });

@@ -1,19 +1,34 @@
 type SmsUrl = { start: number; end: number; target: string };
 
-const absoluteHttpUrl = /(?:^|(?<=\s))([[({<"'“‘]*)(https?:\/\/\S+)/giu;
+const absoluteHttpUrl = /(?:^|(?<=\s))([[({<"'“‘]*)https?:\/\/\S+/giu;
 const nonEmptyAuthority = /^https?:\/\/[^/?#]/iu;
 const unsupportedUrlCharacter = /[<>\\]/u;
 const sentencePunctuation = /[.,!?;:"'’”…।॥]+$/u;
+const trailingWrapperPunctuation = /^[)\]}.,!?;:"'’”…।॥]*$/u;
+const closingWrapper: Partial<Record<string, string>> = {
+  '<': '>',
+  '"': '"',
+  "'": "'",
+  '“': '”',
+  '‘': '’',
+};
 const openingBracket: Partial<Record<string, string>> = { ')': '(', ']': '[', '}': '{' };
 
 export function campaignSmsUrls(text: string): SmsUrl[] {
   const urls: SmsUrl[] = [];
   for (const match of text.matchAll(absoluteHttpUrl)) {
-    const [, prefix, raw] = match;
+    const prefix = match[1] ?? '';
+    const raw = match[0].slice(prefix.length);
     const start = match.index + prefix.length;
-    const angleEnd = prefix.endsWith('<') ? raw.indexOf('>') : -1;
-    const candidate = angleEnd < 0 ? trimMessagePunctuation(raw) : raw.slice(0, angleEnd);
-    if (!nonEmptyAuthority.test(candidate) || unsupportedUrlCharacter.test(candidate)) continue;
+    const closer = closingWrapper[prefix.at(-1) ?? ''];
+    const candidate = closer ? wrappedUrl(raw, closer) : trimMessagePunctuation(raw);
+    if (
+      !candidate ||
+      !nonEmptyAuthority.test(candidate) ||
+      unsupportedUrlCharacter.test(candidate)
+    ) {
+      continue;
+    }
     const parsed = URL.parse(candidate);
     if (parsed) urls.push({ start, end: start + candidate.length, target: parsed.href });
   }
@@ -32,6 +47,13 @@ export function replaceCampaignSmsUrls(
     cursor = url.end;
   }
   return body + text.slice(cursor);
+}
+
+function wrappedUrl(raw: string, closer: string): string | undefined {
+  const end = raw.lastIndexOf(closer);
+  if (end < 0 || !trailingWrapperPunctuation.test(raw.slice(end + 1))) return undefined;
+  const candidate = raw.slice(0, end);
+  return closer === '>' ? candidate : trimMessagePunctuation(candidate);
 }
 
 function trimMessagePunctuation(raw: string): string {
