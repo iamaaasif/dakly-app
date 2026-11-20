@@ -21,6 +21,7 @@ const errors = {
     message: 'The photo did not upload correctly. Choose it again.',
   },
   POST_MEDIA_ALREADY_ADDED: { status: 409, message: 'This photo was already added' },
+  POST_NOT_SCHEDULED: { status: 409, message: 'Only scheduled posts can be moved' },
   POST_DRAFT_REQUIRED: { status: 409, message: 'Only drafts can be changed' },
   POST_INSTAGRAM_PHOTO_FORMAT: { status: 400, message: 'Use JPEG photos for Instagram' },
   POST_STORE_INACTIVE: { status: 409, message: 'This store cannot publish posts' },

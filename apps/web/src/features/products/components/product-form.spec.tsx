@@ -61,6 +61,7 @@ function show(initial?: ProductResponse) {
       canEditOrders: false,
       canViewCampaigns: false,
       canViewAnalytics: false,
+      canChangeAttributionWindow: false,
       canEditCampaigns: false,
       canViewSocial: false,
       canEditSocial: false,
