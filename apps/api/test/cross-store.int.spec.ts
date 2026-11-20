@@ -1501,6 +1501,18 @@ fixture('GET /store/attribution', async () => {
 fixture('PATCH /store/attribution', async () => {
   const { a, b } = await pair();
   await success(a, 'PATCH', '/store/attribution', 200, { windowDays: 1 });
+  await success(a, 'PATCH', '/store/attribution', 200, { windowDays: 1 });
+  const audit = await f.admin.pool.query(
+    `select "before", "after" from audit_log
+     where store_id=$1 and action='attribution.window_changed'`,
+    [a.id],
+  );
+  expect(audit.rows).toEqual([{ before: { state: '7' }, after: { state: '1' } }]);
+  const events = await f.admin.pool.query(
+    "select id from outbox_events where store_id=$1 and type='attribution.window_changed'",
+    [a.id],
+  );
+  expect(events.rowCount).toBe(1);
   const before = await f.row('stores', a.id);
   await success(b, 'PATCH', '/store/attribution', 200, { windowDays: 3 });
   expect(await f.row('stores', a.id)).toEqual(before);
