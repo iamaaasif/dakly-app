@@ -4,14 +4,15 @@ import Link from 'next/link';
 import { useMemo } from 'react';
 
 import type { AutomationDetailResponse } from '@dakly/contracts/automations';
+import { formatCount } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 import { buttonVariants } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
-import { useAutomation } from '../api/automations';
+import { useAutomation, useTriggerPreview } from '../api/automations';
 import { statusLabels } from '../automation-labels';
 import { layoutWorkflow } from '../workflow-canvas-layout';
-import { WorkflowCanvasGraph } from './workflow-canvas-graph';
+import { WorkflowCanvasViewport } from './workflow-canvas-viewport';
 import { WorkflowPageHeader } from './workflow-page-header';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -30,14 +31,21 @@ export function WorkflowCanvas({ id }: { id: string }) {
   return <CanvasScreen workflow={workflow.data} />;
 }
 
-// A flow wider than the screen opens on its middle, where the trigger sits.
-function centerScroll(node: HTMLDivElement | null) {
-  if (node) node.scrollLeft = (node.scrollWidth - node.clientWidth) / 2;
+// Only these triggers have stored events to count.
+const countedTriggers = ['consent_given', 'tag_added', 'birthday'];
+
+function recentEntriesLabel(preview: ReturnType<typeof useTriggerPreview>) {
+  if (preview.isError) return 'Could not load';
+  if (!preview.data) return '…';
+  const { people, atLeast } = preview.data.lastSevenDays;
+  return `${formatCount(people)}${atLeast ? '+' : ''} ${people === 1 ? 'person' : 'people'}`;
 }
 
 function CanvasScreen({ workflow }: { workflow: AutomationDetailResponse }) {
   const { data } = useSessionContext();
   const canEdit = data?.currentStore?.canEditAutomations === true;
+  const counted = countedTriggers.includes(workflow.graph.trigger.key);
+  const preview = useTriggerPreview(workflow.id, counted);
   const layout = useMemo(() => layoutWorkflow(workflow.graph), [workflow.graph]);
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -59,12 +67,11 @@ function CanvasScreen({ workflow }: { workflow: AutomationDetailResponse }) {
         )}
       </WorkflowPageHeader>
       <main className="relative flex-1">
-        <div
-          ref={centerScroll}
-          className="absolute inset-0 overflow-auto bg-[radial-gradient(var(--color-border-strong)_1px,transparent_1px)] bg-size-[16px_16px]"
-        >
-          <WorkflowCanvasGraph graph={workflow.graph} layout={layout} />
-        </div>
+        <WorkflowCanvasViewport
+          graph={workflow.graph}
+          layout={layout}
+          recentEntries={counted ? recentEntriesLabel(preview) : undefined}
+        />
       </main>
     </div>
   );
