@@ -46,4 +46,21 @@ describe('SMS campaign body URLs', () => {
     expect(urls.map(({ target }) => target)).toEqual(['https://shop.example.test/?coupon=value!']);
     expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe('Open </short>.');
   });
+
+  it('wraps an explicitly bracketed URL with an apostrophe in its query', () => {
+    const target = "https://shop.example.test/search?q=O'Reilly";
+    const text = `Open <${target}>.`;
+    const urls = campaignSmsUrls(text);
+
+    expect(urls.map((url) => url.target)).toEqual([new URL(target).href]);
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe('Open </short>.');
+  });
+
+  it('leaves sentence punctuation inside an outer parenthetical', () => {
+    const text = 'See (https://shop.example.test/a.)';
+    const urls = campaignSmsUrls(text);
+
+    expect(urls.map((url) => url.target)).toEqual(['https://shop.example.test/a']);
+    expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe('See (/short.)');
+  });
 });

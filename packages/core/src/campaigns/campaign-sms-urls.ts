@@ -1,6 +1,7 @@
 type SmsUrl = { start: number; end: number; target: string };
 
-const absoluteHttpUrl = /(?<![\p{L}\p{N}_])https?:\/\/[^\s<>"'“”‘’\\]+/giu;
+const absoluteHttpUrl =
+  /(?<=<)https?:\/\/[^\s<>\\]+(?=>)|(?<![\p{L}\p{N}_])https?:\/\/[^\s<>"'“”‘’\\]+/giu;
 const sentencePunctuation = /[.,!?;:…।॥]+$/u;
 const openingBracket: Partial<Record<string, string>> = { ')': '(', ']': '[', '}': '{' };
 
@@ -36,7 +37,7 @@ function trimMessagePunctuation(raw: string): string {
   for (let last = candidate.at(-1); last; last = candidate.at(-1)) {
     const opening = openingBracket[last];
     if (!opening || candidate.split(opening).length >= candidate.split(last).length) break;
-    candidate = candidate.slice(0, -1);
+    candidate = candidate.slice(0, -1).replace(sentencePunctuation, '');
   }
   return candidate;
 }
