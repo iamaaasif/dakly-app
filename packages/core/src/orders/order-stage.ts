@@ -5,16 +5,27 @@ import {
   editableOrderStages,
   editablePaymentStatuses,
   orderStages,
+  orderStageTransitions,
   orderTabs,
+  type OrderConfirmationMethod,
   type OrderDetail,
   type OrderStage,
   type OrderStageChange,
 } from '@dakly/contracts/orders';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import type { AuditService } from '../audit/audit.service';
 import type { OutboxService } from '../platform/outbox/outbox.service';
 import { orderError } from './orders.errors';
 import type { StageWrite } from './orders.repository';
+
+export type StageEditor = {
+  actor: AuditEntry['actor'];
+  access: Pick<StoreAccess, 'seeFullPhone'>;
+  // A customer's answer must act on an order still in the stage the link was sent for.
+  onlyFrom?: OrderStage;
+  confirmationMethod?: OrderConfirmationMethod;
+};
 
 export const staffConfirmation = { to: 'to_pack' } as const;
 
@@ -46,16 +57,38 @@ export function orderStageCounts(rows: { stage: OrderStage; count: number }[]) {
   };
 }
 
-export function stageWrite(change: OrderStageChange, now: Date, confirmed: boolean): StageWrite {
+// confirmedBy is the method when this change confirms the order, and false when it does not.
+export function stageWrite(
+  change: OrderStageChange,
+  now: Date,
+  confirmedBy: OrderConfirmationMethod | false,
+): StageWrite {
   return {
     stage: change.to,
     onHoldReason: change.to === 'on_hold' ? change.reason : null,
     followUpOn: change.to === 'on_hold' ? (change.followUpOn ?? null) : null,
     cancelReason: change.to === 'cancelled' ? change.reason : null,
-    ...(confirmed && { confirmedAt: now, confirmationMethod: 'staff' }),
+    ...(confirmedBy && { confirmedAt: now, confirmationMethod: confirmedBy }),
     ...(change.to === 'cancelled' && { cancelledAt: now }),
     updatedAt: now,
   };
+}
+
+export function createdStageWrite(confirm: boolean, now: Date): StageWrite {
+  return stageWrite(confirm ? staffConfirmation : { to: 'to_confirm' }, now, confirm && 'staff');
+}
+
+export function requireStageChange(
+  order: Pick<OrderDetail, 'source' | 'stage'>,
+  to: OrderStage,
+  onlyFrom?: OrderStage,
+): void {
+  if (
+    !orderStageTransitions[order.stage].includes(to) ||
+    isSyncedOrder(order.source) ||
+    (onlyFrom && order.stage !== onlyFrom)
+  )
+    throw orderError('ORDER_STAGE_NOT_ALLOWED');
 }
 
 export function isSyncedOrder(source: OrderDetail['source']): boolean {

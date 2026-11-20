@@ -62,10 +62,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('lists the channels, shows WhatsApp as waiting and SMS on the shared sender', async () => {
+it('offers to connect Messenger and Instagram, shows WhatsApp as waiting and SMS on the shared sender', async () => {
   show();
-  await screen.findByRole('region', { name: 'Messenger' });
-  expect(screen.getByRole('region', { name: 'Instagram' })).toBeTruthy();
+  const messenger = await screen.findByRole('region', { name: 'Messenger' });
+  expect(within(messenger).getByRole('button', { name: 'Connect Facebook Page' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Connect Instagram' })).toBeTruthy();
   const whatsapp = screen.getByRole('region', { name: 'WhatsApp' });
   expect(within(whatsapp).getByText('Waiting for setup')).toBeTruthy();
   expect(within(whatsapp).queryByRole('button')).toBeNull();
@@ -73,7 +74,7 @@ it('lists the channels, shows WhatsApp as waiting and SMS on the shared sender',
   expect(screen.getByText('0 connected')).toBeTruthy();
 });
 
-it('lists a connected Page and one that needs reconnecting', async () => {
+it('lists a connected Page, and a Page that needs reconnecting asks to reconnect', async () => {
   show({
     items: [
       connection({}),
@@ -88,7 +89,16 @@ it('lists a connected Page and one that needs reconnecting', async () => {
   const messenger = await screen.findByRole('region', { name: 'Messenger' });
   expect(within(messenger).getByText('Connected')).toBeTruthy();
   expect(within(messenger).getByText('Needs reconnect')).toBeTruthy();
+  expect(within(messenger).getAllByRole('button', { name: 'Reconnect' })).toHaveLength(1);
   expect(screen.getByText('2 connected')).toBeTruthy();
+});
+
+it('warns when Facebook access ends within seven days', async () => {
+  show({
+    items: [connection({ tokenExpiresAt: new Date(Date.now() + 86_400_000).toISOString() })],
+  });
+  expect(await screen.findByText('Access ends soon')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy();
 });
 
 it('disconnects only after the shop confirms', async () => {

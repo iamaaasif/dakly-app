@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AiService } from '../ai.service';
+import type { AiService } from './ai.service';
+import type { KnowledgeRepository } from './knowledge/knowledge.repository';
 import { KnowledgeSearchService } from './knowledge-search.service';
-import type { KnowledgeRepository } from './knowledge.repository';
 
 describe('KnowledgeSearchService', () => {
   it('searches the store with an embedding of the same query', async () => {
