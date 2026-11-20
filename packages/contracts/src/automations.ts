@@ -15,6 +15,7 @@ export const automationExitReasons = [
   'exit_condition',
   'workflow_filter',
   'not_reachable',
+  'order_not_awaiting_confirmation',
 ] as const;
 export const automationStepKinds = [
   'trigger',
