@@ -233,6 +233,14 @@ The prototype is a concept with sample data. Build from this doc, not from the p
 
 **States.** Courier not connected (workflow shows "Connect a courier to start"); tracking number missing on an order; courier API down.
 
+### Missing design: customer confirm page (ORD-4)
+
+**Why it's needed.** The COD confirmation SMS carries a link, and Bangladesh SMS cannot take a reply. The page behind the link has no design, so ORD-4 built it plain in the layout of the public opt-out page.
+
+**What is built.** Store name and order number, the items with line totals, the total and the delivery address, then Confirm and Cancel. After a tap, one short result. A link that is used, unknown or for an order that is no longer in To confirm shows one neutral "This link no longer works" state. All text is Bangla with English beside it.
+
+**What to design.** Branding with the shop logo, a clearer cancel step, a field for the customer to change the address, and the result states.
+
 ## Engineering
 
 ### Screens in release 1
@@ -301,6 +309,10 @@ Staff can record the COD amount once after delivery. Returning an order with an 
 Later release (D21), kept here so the data model does not block it: courier connections with the shop's own keys, booking as an idempotent job per order, parcel status by webhook or polling, and COD reconciliation from courier payouts matched by consignment id. Do not build any of it in release 1.
 
 Order link: a public page per store and product (`dakly.shop/{store}/{product}`). It posts to a public endpoint that finds the store from the slug on the server, needs a Turnstile token, allows 5 orders per phone per day and 30 per IP per hour, and calls the same `createOrder`.
+
+### Customer confirm page (ORD-4)
+
+`GET /l/c/<token>` shows the order and changes nothing, because phones fetch links to draw previews. Confirm and Cancel are `POST /l/c/<token>?answer=confirm|cancel`. The store comes only from the token: `order_confirmation_for_token` (SECURITY DEFINER, like `tracked_link_for_code`) finds the row by its sha256. The answer acts only on an order still in To confirm, marks the token used in the same transaction, and goes through `OrdersService.changeStage` with a system actor. Confirm records `confirmation_method = sms_link`; Cancel uses the reason `customer_cancelled` and releases the stock. An order in on hold, to pack (including one saved as confirmed) or any later stage, or one synced from a store, is left alone and the page shows the closed state. The answer never reads or changes the contact (D26). Limits: 60 taps a minute per IP and 10 per token.
 
 ### Delivery zones
 

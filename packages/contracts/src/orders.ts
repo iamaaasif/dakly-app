@@ -50,6 +50,7 @@ export const orderConfirmationMethods = [
   'staff',
   'advance_paid',
 ] as const;
+export type OrderConfirmationMethod = (typeof orderConfirmationMethods)[number];
 export const onHoldReasons = [
   'pre_order',
   'cannot_reach',
@@ -309,6 +310,11 @@ export const orderStageChangeSchema = z.discriminatedUnion('to', [
     isDamaged: z.boolean().default(false),
   }),
 ]);
+// The 32 random bytes of a confirm link, in base64url.
+export const orderConfirmationTokenSchema = z.string().regex(/^[0-9A-Za-z_-]{43}$/);
+export const orderConfirmationAnswerSchema = z.enum(['confirm', 'cancel']);
+export type OrderConfirmationAnswer = z.infer<typeof orderConfirmationAnswerSchema>;
+
 export type OrderStageChange =
   z.infer<typeof orderStageChangeSchema> | ({ to: 'with_courier' } & DispatchOrderInput);
 
