@@ -9,11 +9,11 @@ import { LinksService } from '../links/links.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { AppError } from '../platform/errors/app-error';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
 import { AutomationConditionsService } from './automation-conditions.service';
+import { AutomationMessengerSendService } from './automation-messenger-send.service';
 import { AutomationOrderTextService } from './automation-order-text.service';
 import {
   AutomationRunsRepository,
@@ -40,7 +40,6 @@ import {
   holdsClaim,
   isLateSend,
   messageBody,
-  operationKey,
   randomPath,
   runAction,
   scheduleWait,
@@ -77,6 +76,8 @@ export class AutomationRunsService {
     @Inject(AutomationSmsDeliveryService)
     private readonly smsDelivery: AutomationSmsDeliveryService,
     @Inject(AutomationSendRetryService) private readonly smsRetry: AutomationSendRetryService,
+    @Inject(AutomationMessengerSendService)
+    private readonly messengerSend: AutomationMessengerSendService,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
     @Inject(AutomationsService) private readonly automations: AutomationsService,
   ) {}
@@ -150,7 +151,10 @@ export class AutomationRunsService {
       wakeAt: run.wakeAt,
       orderId: run.triggerOrderId,
     };
-    if (step.kind === 'send' && started) return this.resend(claim, step, facts, started);
+    if (step.kind === 'send' && started)
+      return started.channel === 'messenger'
+        ? this.messengerSend.interrupted(now)
+        : this.resend(claim, step, facts, started);
     const exitReason = await this.conditions.exitReason(run.graph, facts, now);
     if (exitReason) return exited(exitReason, now);
     if (
@@ -216,6 +220,11 @@ export class AutomationRunsService {
     const preparedPhone = shouldPrepare ? (prepared?.to ?? null) : undefined;
     const planned = await this.authorizeFirstSend(claim, step, facts, preparedPhone);
     if ('stop' in planned) return planned.stop;
+    if (planned.messenger)
+      return this.messengerSend.deliver(
+        { storeId: facts.storeId, contactId: facts.contactId, step },
+        { ...planned, messenger: planned.messenger },
+      );
     if (prepared)
       return this.smsDelivery.deliver(
         { storeId: facts.storeId, contactId: facts.contactId, step },
@@ -256,6 +265,7 @@ export class AutomationRunsService {
         body: started.body,
         at: started.at,
         firstTriedAt: started.firstTriedAt,
+        messenger: started.messenger,
       };
     return { stop: firstSendStop(renewed, step, started, facts.wakeAt) };
   }
@@ -267,20 +277,21 @@ export class AutomationRunsService {
     preparedPhone: string | null | undefined,
   ): Promise<GateResult> {
     const { storeId, contactId } = facts;
-    const hasSms = step.channels.includes('sms');
-    const lockedContactExists = await this.lockFirstSend(claim, facts, hasSms);
+    const lockedContactExists = await this.lockFirstSend(claim, facts, step);
     if (lockedContactExists === undefined) return 'not_live';
-    // MSG-1 sends SMS only; Messenger and WhatsApp send with CHAT-2 and CHN-3.
-    if (!hasSms) {
+    const checked = await this.messengerSend.checkChannels(
+      storeId,
+      step,
+      contactId,
+      lockedContactExists,
+    );
+    // WhatsApp sends with CHN-3.
+    if (!checked) {
       const checkedAt = await this.repository.schedulerTime(storeId);
       const late = await this.readLateGateResult(facts, checkedAt);
       return late ?? { decision: { action: 'skip', reason: 'window_closed' } };
     }
-    const { decision, destination, at } = await this.sendPolicy.checkForSend(
-      storeId,
-      { contactId, channel: 'sms', category: step.category },
-      lockedContactExists,
-    );
+    const { decision, destination, at } = checked;
     const exitReason = await this.conditions.refreshExitReason(facts, step, at);
     if (exitReason) return { exitReason, at };
     const firstTriedAt = await this.repository.schedulerTime(storeId);
@@ -289,6 +300,12 @@ export class AutomationRunsService {
     if (firstTriedAt.getTime() - claim.claimedAt.getTime() >= WORKFLOW_LEASE_MS)
       return { decision: { action: 'defer', until: facts.wakeAt ?? firstTriedAt } };
     if (decision.action !== 'send') return { decision };
+    if (checked.channel === 'messenger')
+      return this.messengerSend.reserve(
+        { storeId, claim, contactId, orderId: facts.orderId, step },
+        checked.route,
+        { sentAt: at, firstTriedAt },
+      );
     return this.reserveFirstSend(
       { storeId, claim, contactId, orderId: facts.orderId, step, destination },
       facts,
@@ -300,14 +317,14 @@ export class AutomationRunsService {
   private async lockFirstSend(
     claim: RunClaim,
     { storeId, contactId }: RunFacts,
-    hasSms: boolean,
+    step: SendStep,
   ): Promise<boolean | undefined> {
     let contactExists = false;
-    if (hasSms) {
+    if (step.channels.includes('sms'))
       await this.wallets.lockForReservation(storeId, 'sms_credits');
-      // Entry locks the contact before the workflow, so use the same order for dispatch.
+    // Entry locks the contact before the workflow, so use the same order for dispatch.
+    if (step.channels.some((channel) => channel === 'sms' || channel === 'messenger'))
       contactExists = await this.sendPolicy.lockForDispatch(storeId, contactId);
-    }
     const held = await this.repository.moveRunIfLive(
       storeId,
       claim,
@@ -354,21 +371,6 @@ export class AutomationRunsService {
     return sendLateness(wakeAt, now, await this.repository.findRun(storeId, runId));
   }
 
-  private async reserveCredits(storeId: string, claim: RunClaim, quantity: number) {
-    try {
-      await this.wallets.reserve(storeId, {
-        wallet: 'sms_credits',
-        quantity,
-        idempotencyKey: operationKey(claim),
-        actor: system,
-      });
-      return true;
-    } catch (error) {
-      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return false;
-      throw error;
-    }
-  }
-
   // Inside the gate's transaction. The credits are reserved first, so a short balance leaves
   // nothing behind; the opt-out address has a fixed length, so a stand-in code counts the same parts.
   private async writeSend(
@@ -379,7 +381,7 @@ export class AutomationRunsService {
     const standIn = isMarketing ? this.links.sampleOptOutUrl() : undefined;
     const prepared = await this.orderText.prepare(storeId, orderId, step.message.text);
     const quantity = countSmsParts(messageBody(prepared?.counted ?? step.message.text, standIn));
-    if (!(await this.reserveCredits(storeId, claim, quantity))) return undefined;
+    if (!(await this.smsDelivery.reserveCredits(storeId, claim, quantity))) return undefined;
     const text = await prepared?.render();
     const id = newId();
     // CAMP-R4: every marketing SMS ends with its one-tap opt-out link.

@@ -102,6 +102,21 @@ export class AutomationSmsDeliveryService {
     return retryAfterError(claim, firstTriedAt, now);
   }
 
+  async reserveCredits(storeId: string, claim: RunClaim, quantity: number) {
+    try {
+      await this.wallets.reserve(storeId, {
+        wallet: 'sms_credits',
+        quantity,
+        idempotencyKey: operationKey(claim),
+        actor: system,
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'WALLET_BALANCE_TOO_LOW') return false;
+      throw error;
+    }
+  }
+
   async settleCredits(storeId: string, claim: RunClaim, credits: CreditSettlement) {
     const key = operationKey(claim);
     // Every send row was written with its reservation, in the same transaction.

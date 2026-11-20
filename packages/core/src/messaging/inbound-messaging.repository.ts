@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import type { MessageAttachment, messageAttachmentKinds } from '@dakly/contracts/chats';
 import { conversations, messages } from '@dakly/db/schema/chats';
@@ -148,6 +148,29 @@ export class InboundMessagingRepository {
         })
         .where(and(eq(conversations.storeId, storeId), eq(conversations.id, conversationId))),
     );
+  }
+
+  // The Page where the contact wrote last, for a message that is not tied to one Page.
+  async findLatestInbound(storeId: string, contactId: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          connectionId: conversations.channelConnectionId,
+          lastInboundAt: conversations.lastInboundAt,
+        })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.storeId, storeId),
+            eq(conversations.contactId, contactId),
+            eq(conversations.channel, 'messenger'),
+            isNotNull(conversations.lastInboundAt),
+          ),
+        )
+        .orderBy(desc(conversations.lastInboundAt))
+        .limit(1),
+    );
+    return row;
   }
 
   findLastInbound(storeId: string, connectionId: string, contactIds: string[]) {
