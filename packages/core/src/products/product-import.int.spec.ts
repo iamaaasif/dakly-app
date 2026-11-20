@@ -79,7 +79,12 @@ describe('ProductImportService with Postgres', () => {
     outbox,
     clock,
   );
-  const context = { duplicateMode: 'update', importId: randomUUID(), actor } as const;
+  const context = {
+    duplicateMode: 'update',
+    importId: randomUUID(),
+    actor,
+    tracksStock: true,
+  } as const;
 
   beforeAll(() => f.setup());
   afterAll(async () => {
@@ -186,6 +191,64 @@ describe('ProductImportService with Postgres', () => {
     const row = await stored(f.a, 'UNT-1');
     expect(row.on_hand).toBe(0);
     expect(await movements(row.id)).toEqual([]);
+  });
+
+  it('tracks stock on new products only when the file has an on-hand column', async () => {
+    await importer.importBatch(f.a, [product([variant('TRK-1')], 'With counts')], context);
+    await importer.importBatch(f.a, [product([variant('TRK-2')], 'Without counts')], {
+      ...context,
+      tracksStock: false,
+    });
+    const tracked = async (name: string) =>
+      (await f.connection.pool.query('select is_stock_tracked from products where name=$1', [name]))
+        .rows[0].is_stock_tracked;
+    expect(await tracked('With counts')).toBe(true);
+    expect(await tracked('Without counts')).toBe(false);
+  });
+
+  it('writes the file price to the matched product in update mode and keeps it when blank', async () => {
+    await importer.importBatch(f.a, [product([variant('PRC-1')], 'Priced')], context);
+    const price = async () =>
+      (
+        await f.connection.pool.query(
+          "select price_poisha::int as price from products where name='Priced'",
+        )
+      ).rows[0].price;
+    await importer.importBatch(
+      f.a,
+      [{ ...product([variant('PRC-1')], 'Priced'), pricePoisha: 150000 }],
+      context,
+    );
+    expect(await price()).toBe(150000);
+    await importer.importBatch(
+      f.a,
+      [{ ...product([variant('PRC-1')], 'Priced'), pricePoisha: 0 }],
+      context,
+    );
+    expect(await price()).toBe(150000);
+    await importer.importBatch(
+      f.a,
+      [{ ...product([variant('PRC-1')], 'Priced'), pricePoisha: 99 }],
+      {
+        ...context,
+        duplicateMode: 'skip',
+      },
+    );
+    expect(await price()).toBe(150000);
+  });
+
+  it('reports rows whose skus belong to different products', async () => {
+    await importer.importBatch(f.a, [product([variant('TWO-A')], 'First')], context);
+    await importer.importBatch(f.a, [product([variant('TWO-B')], 'Second')], context);
+    const result = await importer.importBatch(
+      f.a,
+      [product([variant('TWO-A', { rowNumber: 2 }), variant('TWO-B', { rowNumber: 3 })], 'Mixed')],
+      context,
+    );
+    expect(result).toEqual([
+      { rowNumber: 2, outcome: 'updated' },
+      { rowNumber: 3, outcome: 'failed', message: 'These SKUs belong to different products' },
+    ]);
   });
 
   it('reports a new size of an existing product instead of guessing', async () => {
