@@ -29,6 +29,8 @@ import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignMessageTotalsRepository } from './campaign-message-totals.repository';
 import { CampaignMessengerSender } from './campaign-messenger-sender.service';
 import { CampaignReceiptReconciler } from './campaign-receipt-reconciler.service';
+import { CampaignResultsRepository } from './campaign-results.repository';
+import { CampaignResultsService } from './campaign-results.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
 import { CampaignSetupRepository } from './campaign-setup.repository';
@@ -66,6 +68,8 @@ import { CampaignsService } from './campaigns.service';
     CampaignCountsRepository,
     CampaignCountsService,
     CampaignMessageTotalsRepository,
+    CampaignResultsRepository,
+    CampaignResultsService,
     CampaignsRepository,
     CampaignSetupRepository,
     CampaignSetupService,

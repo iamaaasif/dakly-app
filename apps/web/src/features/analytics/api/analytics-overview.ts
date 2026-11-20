@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import type {
   AnalyticsAutomationsResponse,
   AnalyticsCampaignsResponse,
+  AnalyticsChannelsResponse,
   AnalyticsOverviewResponse,
+  AnalyticsSocialPostsResponse,
   AnalyticsView,
 } from '@dakly/contracts/analytics';
 
@@ -33,7 +35,7 @@ export function useAnalyticsOverview(period: AnalyticsView['period']) {
 }
 
 function useAnalyticsTab<Response>(
-  tab: 'campaigns' | 'automations',
+  tab: 'campaigns' | 'automations' | 'channels' | 'social-posts',
   period: AnalyticsView['period'],
 ) {
   const { contextTag, request } = useStoreRequest();
@@ -50,3 +52,9 @@ export const useAnalyticsCampaigns = (period: AnalyticsView['period']) =>
 
 export const useAnalyticsAutomations = (period: AnalyticsView['period']) =>
   useAnalyticsTab<AnalyticsAutomationsResponse>('automations', period);
+
+export const useAnalyticsChannels = (period: AnalyticsView['period']) =>
+  useAnalyticsTab<AnalyticsChannelsResponse>('channels', period);
+
+export const useAnalyticsSocialPosts = (period: AnalyticsView['period']) =>
+  useAnalyticsTab<AnalyticsSocialPostsResponse>('social-posts', period);
