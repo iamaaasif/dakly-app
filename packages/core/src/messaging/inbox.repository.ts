@@ -19,6 +19,9 @@ const fields = {
   id: conversations.id,
   channel: conversations.channel,
   contactId: conversations.contactId,
+  contactName: sql<
+    string | null
+  >`(select ${contacts.name} from ${contacts} where ${contacts.storeId} = ${conversations.storeId} and ${contacts.id} = ${conversations.contactId})`,
   status: conversations.status,
   responder: conversations.responder,
   assigneeUserId: conversations.assigneeUserId,
@@ -106,6 +109,28 @@ export class InboxRepository {
         .orderBy(sql`${conversations.lastMessageAt} desc nulls last`, desc(conversations.id))
         .limit(query.limit + 1),
     );
+  }
+
+  async counts(storeId: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          all: sql<number>`count(*)::int`,
+          needsYou: sql<number>`(count(*) filter (where ${conversations.status} = 'needs_you'))::int`,
+          aiHandling: sql<number>`(count(*) filter (where ${conversations.responder} = 'ai'))::int`,
+          followUp: sql<number>`(count(*) filter (where ${conversations.status} = 'later'))::int`,
+        })
+        .from(conversations)
+        .innerJoin(
+          contacts,
+          and(
+            eq(contacts.storeId, conversations.storeId),
+            eq(contacts.id, conversations.contactId),
+          ),
+        )
+        .where(and(eq(conversations.storeId, storeId), isNull(contacts.deletedAt))),
+    );
+    return row!;
   }
 
   async find(storeId: string, id: string, lock?: 'no key update') {

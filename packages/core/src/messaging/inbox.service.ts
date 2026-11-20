@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
+  ConversationCountsResponse,
   ConversationListQuery,
   ConversationMessageListQuery,
   ConversationMessageResponse,
@@ -48,6 +49,11 @@ export class InboxService {
       nextCursor:
         last && rows.length > query.limit ? `${last.lastMessageAt ?? 'none'}_${last.id}` : null,
     };
+  }
+
+  async counts(storeId: string): Promise<ConversationCountsResponse> {
+    await this.requireChats(storeId);
+    return this.repository.counts(storeId);
   }
 
   async get(storeId: string, id: string): Promise<ConversationResponse> {

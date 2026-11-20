@@ -95,3 +95,13 @@ function calendarDate(instant: number, timeZone: string) {
   date.setUTCFullYear(year, month - 1, day);
   return { year, day: date.getTime() / DAY_MS };
 }
+
+export function formatShortDate(value: string, timeZone = 'Asia/Dhaka'): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone, month: 'short', day: 'numeric' }).format(
+    parseInstant(value),
+  );
+}
+
+export function formatShortDateTime(value: string, timeZone = 'Asia/Dhaka'): string {
+  return `${formatShortDate(value, timeZone)}, ${formatTime(value, timeZone)}`;
+}
