@@ -112,7 +112,7 @@ function SettingsForm(props: SettingsProps) {
         className="min-h-screen bg-surface-muted"
         onSubmit={editor.save}
       >
-        <WorkflowPageHeader title={workflow.name} subtitle={subtitle}>
+        <WorkflowPageHeader title={workflow.name} subtitle={subtitle} canvasId={workflow.id}>
           <Button variant="secondary" type="submit" loading={saving} disabled={editor.pending}>
             Save draft
           </Button>

@@ -516,8 +516,15 @@
     {
       "idx": 73,
       "version": "7",
-      "when": 1795182235552,
-      "tag": "0073_analytics_send_indexes",
+      "when": 1795181357340,
+      "tag": "0073_order_exit_reason",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1795183125080,
+      "tag": "0074_analytics_send_indexes",
       "breakpoints": true
     }
   ]

@@ -34,6 +34,33 @@ export const triggerLabels: Record<TriggerKey, string> = {
   product_viewed: 'customers view a product',
 };
 
+// Finishes "Customers enter when they ..." on the canvas.
+export const triggerEntryLabels: Record<TriggerKey, string> = {
+  consent_given: 'subscribe to marketing',
+  tag_added: 'receive a tag',
+  segment_joined: 'join a segment',
+  link_tapped: 'tap a link',
+  birthday: 'have a birthday',
+  chat_started: 'start a chat',
+  comment_on_post: 'comment on a post',
+  lead_captured: 'become leads',
+  back_in_stock: 'wait for a product that comes back in stock',
+  price_dropped: 'follow a product whose price drops',
+  order_placed: 'place an order',
+  order_paid: 'pay for an order',
+  order_shipped: 'have their order shipped',
+  order_delivered: 'receive an order',
+  order_cancelled: 'cancel an order',
+  order_returned: 'return an order',
+  order_link_abandoned: 'leave an order link unfinished',
+  lifecycle_stage_entered: 'reach a new stage',
+  days_since_last_order: 'have not ordered for a set time',
+  reorder_due: 'are due to reorder',
+  cart_abandoned: 'leave items in their cart',
+  checkout_abandoned: 'start checkout without finishing',
+  product_viewed: 'view a product',
+};
+
 export const statusLabels: Record<AutomationStatus, string> = {
   active: 'Active',
   draft: 'Draft',

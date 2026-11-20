@@ -232,6 +232,23 @@ export class OrderReportingRepository {
     });
   }
 
+  // Where the order stands now, for a workflow that leaves once it is confirmed or cancelled.
+  async progress(storeId: string, orderId: string) {
+    const [order] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ stage: orders.stage, confirmedAt: orders.confirmedAt })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
+    );
+    return (
+      order && {
+        isCancelled: order.stage === 'cancelled',
+        isConfirmed: !!order.confirmedAt,
+        isAwaitingConfirmation: order.stage === 'to_confirm',
+      }
+    );
+  }
+
   async contactOrderTotals(storeId: string, contactId: string, timeZone: string) {
     const result = await this.database.forStore(storeId, (tx) =>
       tx.execute<{

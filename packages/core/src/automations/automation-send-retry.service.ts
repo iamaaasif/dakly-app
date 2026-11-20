@@ -169,7 +169,7 @@ export class AutomationSendRetryService {
       lockedContactExists,
     );
     const { decision, at } = gate;
-    const exit = await this.conditions.refreshExitReason(facts, at);
+    const exit = await this.conditions.refreshExitReason(facts, step, at);
     const now = await this.repository.schedulerTime(storeId);
     const result = exit
       ? endWithUnknownOutcome(exited(exit, now))

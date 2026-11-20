@@ -58,6 +58,8 @@ const NOT_YET_APPROVED: CampaignStatus[] = ['draft', 'waiting_approval', 'approv
 // CAMP-R7: a scheduled campaign can be edited until 5 minutes before it sends.
 const LAST_CHANGE_BEFORE_SEND_MS = 5 * 60 * 1000;
 
+const PURGE_BATCH = 5000;
+
 @Injectable()
 export class CampaignsService {
   constructor(
@@ -349,6 +351,10 @@ export class CampaignsService {
   private async refusal(storeId: string, campaignId: string, code: CampaignErrorCode) {
     await this.find(storeId, campaignId);
     return campaignError(code);
+  }
+
+  async purgeExpiredRecipients(storeId: string): Promise<void> {
+    while (await this.repository.purgeExpiredRecipientsBatch(storeId, PURGE_BATCH));
   }
 }
 
