@@ -339,7 +339,9 @@ Test questions are `{question, expectedAnswer}` pairs saved on the store (`PUT /
 
 AI agent settings: `GET /ai-agent/settings` and `PUT /ai-agent/settings` (`storeSettings.view` and `storeSettings.edit`) read and save the auto-reply switch, reply language, the ability switches, the three hand-over rules, the return-to-AI timer (1 hour, 24 hours or until a person hands back) and extra rules. A shop that never saved gets the defaults with `version` 0 and `handoverRulesSaved` false. A save carries the version the person loaded and is refused with `AI_AGENT_SETTINGS_CHANGED` when it is stale. Each save writes an `ai_rule_changes` row with the old and new values and an `ai_agent.settings_changed` audit entry that lists only the field names.
 
-Waits on other tasks: the screens (AI-8 parts 2 to 5), the batch test on the last 50 real chats (not in the rules) and re-running the tests after a knowledge change (AI-7).
+The AI agent drawer opens from the AI agent button on Chats (`/chats?agent=settings`; the tab is in the URL). The Settings tab edits the fields above with one Save changes button. A stale save shows the error and a Load latest settings button. Knowledge, Feedback and Test the agent tabs, and the Go live panel, come in the next AI-8 parts.
+
+Waits on other tasks: the remaining screens (AI-8), the batch test on the last 50 real chats (not in the rules) and re-running the tests after a knowledge change (AI-7).
 
 Comments: classified as question, positive, negative or spam. If "Answer post comments" is on, the AI posts a short public reply and one private reply with price. Spam is hidden; negative goes to Needs you. Nothing with a price, phone or address is posted publicly.
 
