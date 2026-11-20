@@ -118,11 +118,12 @@ test('saves unfinished products, edits variants without losing stock and manages
       );
       await expect(page.getByLabel('Add photo')).toBeEnabled();
       const choosing = page.waitForEvent('filechooser');
-      await page.getByText('Add photo', { exact: true }).click();
+      await page.getByText('Add', { exact: true }).click();
       await (await choosing).setFiles(png);
       const saved = (await (await confirmed).json()) as ProductResponse;
       fileIds.push(saved.photos[count - 1]!.id);
-      await expect(page.getByRole('heading', { name: `Photos (${count})` })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Photos', exact: true })).toBeVisible();
+      await expect(page.getByText(`${count} photo`)).toBeVisible();
     }
     await reopenWithCatalogPhoto(fileIds[0]!);
     await capture('gallery', photoEvidence);
@@ -174,7 +175,8 @@ test('saves unfinished products, edits variants without losing stock and manages
     }
     await removed;
     await page.unroute(removalPath);
-    await expect(page.getByRole('heading', { name: 'Photos (1)' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Photos', exact: true })).toBeVisible();
+    await expect(page.getByText('1 photo')).toBeVisible();
     const afterRemoval = (await (
       await request(`/products/${productId}`, undefined, 'GET')
     ).json()) as ProductResponse;

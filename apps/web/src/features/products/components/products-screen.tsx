@@ -2,7 +2,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
+import type { ProductListQuery, ProductListResponse, ProductTab } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 
 import { productsSearch, useProducts } from '../api/products';
@@ -19,9 +19,16 @@ type ProductsScreenProps = {
   query: ProductListQuery;
   adjust?: string;
   productId?: string;
+  productTab?: ProductTab;
   create?: '1';
 };
-export function ProductsScreen({ query, adjust, productId, create }: ProductsScreenProps) {
+export function ProductsScreen({
+  query,
+  adjust,
+  productId,
+  productTab,
+  create,
+}: ProductsScreenProps) {
   const { data: session } = useSessionContext();
   const products = useProducts(query);
   const router = useRouter();
@@ -32,20 +39,10 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
   return (
     <StorePage permission="canViewProducts">
       <main className="space-y-6 p-6 md:p-8">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
-            <p className="mt-1 text-sm text-text-muted">
-              What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take
-              orders and fill your order link.
-            </p>
-          </div>
-          {canEdit ? (
-            <Button onClick={() => router.push(`${listHref}&create=1`)}>
-              <span aria-hidden="true">+ </span>Add product
-            </Button>
-          ) : null}
-        </header>
+        <ProductsHeader
+          canEdit={Boolean(canEdit)}
+          onAdd={() => router.push(`${listHref}&create=1`)}
+        />
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
           <ProductFilters key={`${query.search}|${query.readiness}`} query={query} />
           <ProductResults
@@ -63,9 +60,11 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
           <AddProductModal listHref={listHref} onStockError={setStockError} />
         ) : null}
         {productId ? (
-          <ProductSheet
+          <SelectedProductSheet
             key={productId}
             productId={productId}
+            productTab={productTab}
+            query={query}
             onClose={() => {
               setStockError(null);
               router.replace(listHref);
@@ -79,6 +78,25 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
         />
       </main>
     </StorePage>
+  );
+}
+
+function ProductsHeader({ canEdit, onAdd }: { canEdit: boolean; onAdd: () => void }) {
+  return (
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
+        <p className="mt-1 text-sm text-text-muted">
+          What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take orders
+          and fill your order link.
+        </p>
+      </div>
+      {canEdit ? (
+        <Button onClick={onAdd}>
+          <span aria-hidden="true">+ </span>Add product
+        </Button>
+      ) : null}
+    </header>
   );
 }
 
@@ -118,4 +136,35 @@ function SelectedStockAdjustment({ products, variantId, onClose }: SelectedStock
   const variant = product?.variants.find((item) => item.id === variantId);
   if (!product || !variant) return <p role="alert">That variant is not on this page.</p>;
   return <StockAdjustmentForm productName={product.name} variant={variant} onClose={onClose} />;
+}
+
+type SelectedProductSheetProps = {
+  productId: string;
+  productTab?: ProductTab;
+  query: ProductListQuery;
+  onClose: () => void;
+};
+
+function SelectedProductSheet({
+  productId,
+  productTab,
+  query,
+  onClose,
+}: SelectedProductSheetProps) {
+  const router = useRouter();
+  const onTab = (nextTab: ProductTab) => {
+    const params = new URLSearchParams(productsSearch(query));
+    params.set('product', productId);
+    if (nextTab !== 'overview') params.set('productTab', nextTab);
+    router.push(`/products?${params.toString()}`);
+  };
+
+  return (
+    <ProductSheet
+      productId={productId}
+      tab={productTab ?? 'overview'}
+      onTab={onTab}
+      onClose={onClose}
+    />
+  );
 }

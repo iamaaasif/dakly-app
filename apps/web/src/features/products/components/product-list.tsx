@@ -7,6 +7,7 @@ import { cn } from '@dakly/ui/cn';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import { productsSearch } from '../api/products';
+import { firstVariantProfitPercent, productPriceRange } from '../product-prices';
 import { ProductReadiness } from './product-readiness';
 import { ProductThumbnail } from './product-thumbnail';
 import { formatMoney } from '@/lib/format-money';
@@ -146,28 +147,13 @@ function ProductIdentity({ product, query }: ProductPartProps & { query: Product
   );
 }
 
-function firstVariantProfitPercent(product: ProductResponse): string | null {
-  const variant = product.variants.find((v) => v.costPoisha !== null && v.pricePoisha > 0);
-  if (!variant || variant.costPoisha === null) return null;
-  const profit = Math.round(
-    ((variant.pricePoisha - variant.costPoisha) / variant.pricePoisha) * 100,
-  );
-  return `${profit}% profit`;
-}
-
 function ProductPrice({ product }: ProductPartProps) {
-  const prices = product.variants.map((variant) => variant.pricePoisha);
-  const minimum = Math.min(...prices),
-    maximum = Math.max(...prices);
-  if (maximum === 0) return <span className="font-medium text-danger">No price</span>;
+  const price = productPriceRange(product);
+  if (!price) return <span className="font-medium text-danger">No price</span>;
   const profit = firstVariantProfitPercent(product);
   return (
     <div className="space-y-0.5">
-      <span className="font-semibold text-text">
-        {minimum === maximum
-          ? formatMoney(minimum)
-          : `${formatMoney(minimum)}–${formatMoney(maximum)}`}
-      </span>
+      <span className="font-semibold text-text">{price}</span>
       {product.compareAtPricePoisha !== null ? (
         <del className="block text-xs text-text-muted">
           {formatMoney(product.compareAtPricePoisha)}

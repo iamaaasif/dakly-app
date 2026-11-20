@@ -1,28 +1,41 @@
 'use client';
+import { Pencil } from 'lucide-react';
 import { useState } from 'react';
 
-import type { ProductResponse } from '@dakly/contracts/products';
+import type { ProductResponse, ProductTab } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
+import {
+  firstVariantCostAmount,
+  firstVariantProfitAmount,
+  productPriceRange,
+} from '../product-prices';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
 import { ProductReadiness } from './product-readiness';
 import { ProductThumbnail } from './product-thumbnail';
 import { ProductsLoading } from './products-loading';
 import { SessionDialog } from '@/components/session-dialog';
-import { formatMoney } from '@/lib/format-money';
 import { useSessionContext } from '@/lib/session-context';
 
-type ProductSheetProps = { productId: string; onClose: () => void };
-export function ProductSheet({ productId, onClose }: ProductSheetProps) {
+type ProductSheetProps = {
+  productId: string;
+  tab: ProductTab;
+  onTab: (tab: ProductTab) => void;
+  onClose: () => void;
+};
+
+export function ProductSheet({ productId, tab, onTab, onClose }: ProductSheetProps) {
   const { data, error, isPending, refetch } = useGetProduct(productId);
+
   return (
     <SessionDialog
       title={data?.name ?? 'Product'}
-      className="inset-y-0 left-auto m-0 h-dvh max-w-md rounded-none border-y-0 border-r-0"
+      className="inset-y-0 right-0 left-auto m-0 h-dvh max-w-md rounded-none border-y-0 border-r-0 border-l shadow-overlay"
       open
       onClose={onClose}
     >
@@ -30,22 +43,30 @@ export function ProductSheet({ productId, onClose }: ProductSheetProps) {
         <QueryError message={error.message} onRetry={() => refetch()} retryLabel="Retry product" />
       ) : null}
       {isPending ? <ProductsLoading /> : null}
-      {data ? <ProductDetails product={data} /> : null}
+      {data ? <ProductDetails product={data} tab={tab} onTab={onTab} /> : null}
     </SessionDialog>
   );
 }
 
-type ProductDetailsProps = { product: ProductResponse };
+type ProductDetailsProps = {
+  product: ProductResponse;
+  tab: ProductTab;
+  onTab: (tab: ProductTab) => void;
+};
 
-function ProductDetails({ product }: ProductDetailsProps) {
+function ProductDetails({ product, tab, onTab }: ProductDetailsProps) {
   const change = useChangeProduct(product.id);
   const { data: session } = useSessionContext();
   const [editing, setEditing] = useState(false);
-  const canEdit = session?.currentStore?.canEditProducts;
+  const canEdit = session?.currentStore?.canEditProducts ?? false;
+
   return (
     <div className="space-y-6">
-      <ProductDetailHeader product={product} />
-      <ProductPhotos product={product} />
+      <ProductDetailHeader
+        product={product}
+        canEdit={canEdit && !editing}
+        onEdit={() => setEditing(true)}
+      />
       {editing && canEdit ? (
         <ProductForm
           product={product}
@@ -53,19 +74,7 @@ function ProductDetails({ product }: ProductDetailsProps) {
           onCancel={() => setEditing(false)}
         />
       ) : (
-        <>
-          <ProductOverview product={product} />
-          {canEdit ? (
-            <ProductDetailActions
-              product={product}
-              isPending={change.isPending}
-              onEdit={() => setEditing(true)}
-              onToggleStatus={() =>
-                change.mutate({ status: product.status === 'hidden' ? 'active' : 'hidden' })
-              }
-            />
-          ) : null}
-        </>
+        <ProductTabs product={product} tab={tab} onTab={onTab} change={change} canEdit={canEdit} />
       )}
       {change.error ? (
         <p role="alert" className="text-danger">
@@ -76,94 +85,146 @@ function ProductDetails({ product }: ProductDetailsProps) {
   );
 }
 
-type ProductDetailHeaderProps = { product: ProductResponse };
-
-function ProductDetailHeader({ product }: ProductDetailHeaderProps) {
-  return (
-    <div className="flex items-start gap-3">
-      <ProductThumbnail product={product} />
-      <div className="min-w-0 flex-1">
-        {product.category ? (
-          <p className="text-xs wrap-anywhere text-text-muted">{product.category}</p>
-        ) : null}
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          <ProductReadiness product={product} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type ProductDetailActionsProps = {
+type ProductDetailHeaderProps = {
   product: ProductResponse;
-  isPending: boolean;
+  canEdit: boolean;
   onEdit: () => void;
-  onToggleStatus: () => void;
 };
 
-function ProductDetailActions({
-  product,
-  isPending,
-  onEdit,
-  onToggleStatus,
-}: ProductDetailActionsProps) {
+function ProductDetailHeader({ product, canEdit, onEdit }: ProductDetailHeaderProps) {
+  const price = productPriceRange(product);
+
   return (
-    <div className="flex flex-wrap gap-2 pt-2">
-      <Button onClick={onEdit}>Edit product</Button>
-      <Button variant="secondary" loading={isPending} onClick={onToggleStatus}>
-        {product.status === 'hidden' ? 'Show product' : 'Hide product'}
-      </Button>
+    <header className="flex items-start justify-between gap-3">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
+        <ProductThumbnail product={product} />
+        <div className="min-w-0 flex-1">
+          {product.category ? (
+            <p className="text-xs wrap-anywhere text-text-muted">{product.category}</p>
+          ) : null}
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {price ? (
+              <span className="text-sm font-semibold text-text tabular-nums">{price}</span>
+            ) : (
+              <span className="text-sm font-semibold text-danger tabular-nums">No price</span>
+            )}
+            <ProductReadiness product={product} />
+          </div>
+        </div>
+      </div>
+      {canEdit ? (
+        <Button variant="secondary" onClick={onEdit} aria-label="Edit product">
+          <Pencil size={16} aria-hidden="true" />
+          Edit
+        </Button>
+      ) : null}
+    </header>
+  );
+}
+
+type ProductTabsProps = {
+  product: ProductResponse;
+  tab: ProductTab;
+  onTab: (tab: ProductTab) => void;
+  change: ReturnType<typeof useChangeProduct>;
+  canEdit: boolean;
+};
+
+function ProductTabs({ product, tab, onTab, change, canEdit }: ProductTabsProps) {
+  return (
+    <Tabs value={tab} onValueChange={(val) => onTab(val as ProductTab)} className="space-y-4">
+      <TabsList>
+        <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsTrigger value="stock">Stock</TabsTrigger>
+      </TabsList>
+      <TabsContent value="overview" className="space-y-6 pt-0">
+        <ProductOverview product={product} change={change} canEdit={canEdit} />
+      </TabsContent>
+      <TabsContent value="stock" className="space-y-4 pt-0">
+        <ProductStockBreakdown product={product} />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function ProductStockBreakdown({ product }: { product: ProductResponse }) {
+  if (!product.isStockTracked) {
+    return <p className="text-sm text-text-muted">Not tracked</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {product.variants.map((variant) => (
+        <div
+          key={variant.id}
+          className="space-y-1 rounded-lg border border-border bg-surface-muted p-3"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-text">{variant.title}</span>
+            {variant.sku ? (
+              <span className="text-xs text-text-muted">SKU: {variant.sku}</span>
+            ) : null}
+          </div>
+          <p className="text-xs text-text-muted">
+            <span className="font-semibold text-text tabular-nums">{variant.available}</span>{' '}
+            available · {variant.reserved} reserved · {variant.onHand} on hand
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
 
-function ProductOverview({ product }: ProductDetailsProps) {
-  const prices = product.variants.map((variant) => variant.pricePoisha);
-  const price = Math.min(...prices);
+function PriceTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="space-y-0.5 rounded-lg border border-border bg-surface-muted p-3">
+      <p className="text-xs text-text-muted">{label}</p>
+      <p className="text-sm font-semibold text-text tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+type ProductOverviewProps = {
+  product: ProductResponse;
+  change: ReturnType<typeof useChangeProduct>;
+  canEdit: boolean;
+};
+
+function ProductOverview({ product, change, canEdit }: ProductOverviewProps) {
+  const sellingPrice = productPriceRange(product) ?? 'No price';
+  const cost = firstVariantCostAmount(product);
+  const profit = firstVariantProfitAmount(product);
   const totalAvailable = product.variants.reduce((total, variant) => total + variant.available, 0);
+  const inStock = product.isStockTracked ? `${totalAvailable} available` : 'Not tracked';
+
   return (
     <>
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-text">Description</h2>
+      <ProductPhotos product={product} />
+      <section className="space-y-1.5">
+        <h3 className="text-sm font-semibold text-text">Description</h3>
         <p className="text-sm wrap-anywhere whitespace-pre-wrap text-text-muted">
           {product.description || "No description yet. It's used in posts and your order link."}
         </p>
       </section>
-      <dl className="grid grid-cols-2 gap-3 rounded-lg border border-border bg-surface-muted p-3">
-        <div className="space-y-0.5">
-          <dt className="text-xs text-text-muted">Price from</dt>
-          <dd className="font-semibold text-text tabular-nums">
-            {price ? formatMoney(price) : 'Needs a price'}
-          </dd>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <PriceTile label="Selling price" value={sellingPrice} />
+        <PriceTile label="Your cost" value={cost} />
+        <PriceTile label="Profit each" value={profit} />
+        <PriceTile label="In stock" value={inStock} />
+      </div>
+      {canEdit ? (
+        <div className="pt-2">
+          <Button
+            type="button"
+            variant="link"
+            loading={change.isPending}
+            onClick={() =>
+              change.mutate({ status: product.status === 'hidden' ? 'active' : 'hidden' })
+            }
+          >
+            {product.status === 'hidden' ? 'Show product' : 'Hide product'}
+          </Button>
         </div>
-        <div className="space-y-0.5">
-          <dt className="text-xs text-text-muted">Visibility</dt>
-          <dd className="text-sm font-medium text-text">
-            {product.status === 'hidden' ? 'Hidden' : 'Shown'}
-          </dd>
-        </div>
-        <div className="space-y-0.5">
-          <dt className="text-xs text-text-muted">Stock</dt>
-          <dd className="text-sm font-medium text-text">
-            {product.isStockTracked ? `${totalAvailable} available` : 'Not tracked'}
-          </dd>
-        </div>
-      </dl>
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-text">Stock</h2>
-        {product.isStockTracked ? (
-          <div className="space-y-1.5">
-            {product.variants.map((variant) => (
-              <p key={variant.id} className="text-sm wrap-anywhere text-text-muted">
-                <span className="font-medium text-text">{variant.title}:</span> {variant.available}{' '}
-                available · {variant.reserved} reserved
-              </p>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-text-muted">Not tracked</p>
-        )}
-      </section>
+      ) : null}
     </>
   );
 }

@@ -20,6 +20,12 @@ describe('product editor selection', () => {
   it('opens creation and a saved product from the address', () => {
     expect(productScreenQuerySchema.parse({ create: '1' })).toEqual({ create: '1', limit: 50 });
     expect(productScreenQuerySchema.parse({ product })).toEqual({ product, limit: 50 });
+    expect(productScreenQuerySchema.parse({ product, productTab: 'stock' })).toEqual({
+      product,
+      productTab: 'stock',
+      limit: 50,
+    });
+    expect(productScreenQuerySchema.safeParse({ productTab: 'invalid' }).success).toBe(false);
     expect(productScreenQuerySchema.safeParse({ product, create: '1' }).success).toBe(false);
     expect(productScreenQuerySchema.safeParse({ product, adjust: product }).success).toBe(false);
     expect(productScreenQuerySchema.safeParse({ create: 'yes' }).success).toBe(false);

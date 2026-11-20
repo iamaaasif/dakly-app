@@ -179,10 +179,14 @@ export const productListQuerySchema = z.strictObject({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
+export const productTabValues = ['overview', 'stock'] as const;
+export type ProductTab = (typeof productTabValues)[number];
+
 export const productScreenQuerySchema = productListQuerySchema
   .extend({
     adjust: z.uuid().optional(),
     product: z.uuid().optional(),
+    productTab: z.enum(productTabValues).optional(),
     create: z.literal('1').optional(),
   })
   .refine(
