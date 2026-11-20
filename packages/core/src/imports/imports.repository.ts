@@ -7,6 +7,7 @@ import type {
   ContactImportMapping,
   ImportConsentEvidence,
   ImportDuplicateMode,
+  ImportKind,
   ImportStatus,
 } from '@dakly/contracts/contacts';
 import type { Database } from '@dakly/db/client';
@@ -103,14 +104,16 @@ export type StartedImport = Pick<
   | 'startedByUserId'
 >;
 
-@Injectable()
-export class ImportsRepository {
+// Each import kind has its own subclass, so every query below stays inside one kind.
+export abstract class KindImportsRepository {
+  protected abstract readonly kind: ImportKind;
+
   constructor(
     @Inject(TenantDatabase) private readonly database: TenantDatabase,
     @Inject(DATABASE) private readonly global: Database,
   ) {}
 
-  createCustomerImport(
+  create(
     storeId: string,
     importId: string,
     upload: NewImportFile,
@@ -123,7 +126,7 @@ export class ImportsRepository {
       await tx.insert(imports).values({
         id: importId,
         storeId,
-        kind: 'customers_csv',
+        kind: this.kind,
         fileId: upload.id,
         createdByUserId,
       });
@@ -137,7 +140,7 @@ export class ImportsRepository {
         .from(imports)
         .innerJoin(uploads, and(eq(uploads.storeId, storeId), eq(uploads.id, imports.fileId)))
         .leftJoin(reports, and(eq(reports.storeId, storeId), eq(reports.id, imports.reportFileId)))
-        .where(and(customerImport(storeId), eq(imports.id, importId)))
+        .where(and(ofKind(storeId, this.kind), eq(imports.id, importId)))
         .limit(1),
     );
     return rows[0];
@@ -149,7 +152,7 @@ export class ImportsRepository {
       tx
         .update(imports)
         .set({ ...change, status: 'importing' })
-        .where(guard(storeId, importId, 'uploaded'))
+        .where(guard(storeId, this.kind, importId, 'uploaded'))
         .returning({ id: imports.id }),
     );
     return rows.length > 0;
@@ -163,7 +166,7 @@ export class ImportsRepository {
         .set({ claimedAt: lease, lastProgressAt: lease })
         .where(
           and(
-            guard(storeId, importId, 'importing'),
+            guard(storeId, this.kind, importId, 'importing'),
             or(isNull(imports.claimedAt), lt(imports.claimedAt, staleBefore)),
           ),
         )
@@ -177,7 +180,7 @@ export class ImportsRepository {
       tx
         .update(imports)
         .set({ claimedAt: null })
-        .where(and(guard(storeId, importId, 'importing'), eq(imports.claimedAt, lease))),
+        .where(and(guard(storeId, this.kind, importId, 'importing'), eq(imports.claimedAt, lease))),
     );
   }
 
@@ -197,7 +200,9 @@ export class ImportsRepository {
           claimedAt: lease.renewed,
           lastProgressAt: lease.renewed,
         })
-        .where(and(guard(storeId, importId, 'importing'), eq(imports.claimedAt, lease.held)))
+        .where(
+          and(guard(storeId, this.kind, importId, 'importing'), eq(imports.claimedAt, lease.held)),
+        )
         .returning({ id: imports.id }),
     );
     return rows.length > 0;
@@ -241,9 +246,9 @@ export class ImportsRepository {
         })
         .where(
           and(
-            guard(storeId, importId, 'importing'),
+            guard(storeId, this.kind, importId, 'importing'),
             held,
-            exhausted ? stalled(storeId, exhausted.before) : undefined,
+            exhausted ? stalled(storeId, this.kind, exhausted.before) : undefined,
             exhausted ? gte(imports.requeueCount, exhausted.limit) : undefined,
           ),
         )
@@ -254,7 +259,7 @@ export class ImportsRepository {
         await tx
           .update(imports)
           .set({ reportFileId: report.id })
-          .where(and(customerImport(storeId), eq(imports.id, importId)));
+          .where(and(ofKind(storeId, this.kind), eq(imports.id, importId)));
       }
       return true;
     });
@@ -283,7 +288,7 @@ export class ImportsRepository {
         })
         .from(imports)
         .innerJoin(uploads, and(eq(uploads.storeId, storeId), eq(uploads.id, imports.fileId)))
-        .where(stalled(storeId, before)),
+        .where(stalled(storeId, this.kind, before)),
     );
   }
 
@@ -298,7 +303,11 @@ export class ImportsRepository {
         .update(imports)
         .set({ requeueCount: sql`${imports.requeueCount} + 1`, lastProgressAt: now })
         .where(
-          and(stalled(storeId, before), eq(imports.id, importId), lt(imports.requeueCount, limit)),
+          and(
+            stalled(storeId, this.kind, before),
+            eq(imports.id, importId),
+            lt(imports.requeueCount, limit),
+          ),
         )
         .returning({ id: imports.id }),
     );
@@ -313,7 +322,7 @@ export class ImportsRepository {
         .set({ status: 'undone', lastProgressAt: at })
         .where(
           and(
-            customerImport(storeId),
+            ofKind(storeId, this.kind),
             eq(imports.id, importId),
             inArray(imports.status, ['done', 'failed']),
           ),
@@ -328,7 +337,7 @@ export class ImportsRepository {
       tx
         .update(imports)
         .set({ lastProgressAt: at })
-        .where(and(guard(storeId, importId, 'undone'), isNull(imports.undoFinishedAt))),
+        .where(and(guard(storeId, this.kind, importId, 'undone'), isNull(imports.undoFinishedAt))),
     );
   }
 
@@ -339,7 +348,7 @@ export class ImportsRepository {
         .from(imports)
         .where(
           and(
-            customerImport(storeId),
+            ofKind(storeId, this.kind),
             eq(imports.status, 'undone'),
             isNull(imports.undoFinishedAt),
             lt(sql`coalesce(${imports.lastProgressAt}, ${imports.finishedAt})`, before),
@@ -351,7 +360,7 @@ export class ImportsRepository {
       const rows = await tx
         .update(imports)
         .set({ lastProgressAt: now })
-        .where(and(customerImport(storeId), inArray(imports.id, pending)))
+        .where(and(ofKind(storeId, this.kind), inArray(imports.id, pending)))
         .returning({ id: imports.id });
       return rows.map((row) => row.id);
     });
@@ -362,24 +371,29 @@ export class ImportsRepository {
       tx
         .update(imports)
         .set({ undoFinishedAt: at })
-        .where(and(guard(storeId, importId, 'undone'), isNull(imports.undoFinishedAt))),
+        .where(and(guard(storeId, this.kind, importId, 'undone'), isNull(imports.undoFinishedAt))),
     );
   }
 }
 
-// Product imports share the table, so every customer import query names its kind.
-function customerImport(storeId: string) {
-  return and(eq(imports.storeId, storeId), eq(imports.kind, 'customers_csv'));
+// Imports of every kind share the table, so every query names its kind.
+function ofKind(storeId: string, kind: ImportKind) {
+  return and(eq(imports.storeId, storeId), eq(imports.kind, kind));
 }
 
-function stalled(storeId: string, before: Date) {
+function stalled(storeId: string, kind: ImportKind, before: Date) {
   return and(
-    customerImport(storeId),
+    ofKind(storeId, kind),
     eq(imports.status, 'importing'),
     lt(sql`coalesce(${imports.lastProgressAt}, ${imports.startedAt})`, before),
   );
 }
 
-function guard(storeId: string, importId: string, status: ImportStatus) {
-  return and(customerImport(storeId), eq(imports.id, importId), eq(imports.status, status));
+function guard(storeId: string, kind: ImportKind, importId: string, status: ImportStatus) {
+  return and(ofKind(storeId, kind), eq(imports.id, importId), eq(imports.status, status));
+}
+
+@Injectable()
+export class ImportsRepository extends KindImportsRepository {
+  protected readonly kind = 'customers_csv';
 }

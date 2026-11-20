@@ -183,6 +183,23 @@ export class DeliveryRepository {
     );
   }
 
+  findAreasByName(storeId: string, name: string, limit: number): Promise<AreaResponse[]> {
+    const pattern = `${name.replace(/[\\%_]/g, '\\$&')}%`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(areaColumns)
+        .from(bdAreas)
+        .where(
+          and(
+            ne(bdAreas.kind, 'division'),
+            or(sql`${bdAreas.name} ilike ${pattern}`, sql`${bdAreas.nameBn} ilike ${pattern}`),
+          ),
+        )
+        .orderBy(sql`lower(${bdAreas.name}) = lower(${name}) desc`, asc(bdAreas.id))
+        .limit(limit),
+    );
+  }
+
   findAreas(storeId: string, ids: number[]): Promise<AreaResponse[]> {
     return this.database.forStore(storeId, (tx) =>
       tx.select(areaColumns).from(bdAreas).where(inArray(bdAreas.id, ids)),

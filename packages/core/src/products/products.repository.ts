@@ -71,6 +71,12 @@ export type Variant = CreateProductInput['variants'][number] & {
   onHand: number;
   reserved: number;
 };
+export type SkuMatch = {
+  id: string;
+  productId: string;
+  sku: string;
+  isArchived: boolean;
+};
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
   position: number;
@@ -132,6 +138,51 @@ export class ProductsRepository {
         .orderBy(desc(products.id))
         .limit(query.limit + 1),
     );
+  }
+
+  // The AI agent may only offer active products the shop shows in chats.
+  searchForChat(storeId: string, text: string, limit: number): Promise<CatalogueProduct[]> {
+    const pattern = `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            eq(products.status, 'active'),
+            eq(products.isVisibleInChats, true),
+            sql`(${products.name} ilike ${pattern} or exists (select 1 from unnest(${products.aliases}) alias where alias ilike ${pattern}))`,
+          ),
+        )
+        .orderBy(desc(products.id))
+        .limit(limit),
+    );
+  }
+
+  async findForChat(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            eq(products.id, id),
+            eq(products.status, 'active'),
+            eq(products.isVisibleInChats, true),
+          ),
+        ),
+    );
+    return rows[0];
   }
 
   async listCategories(storeId: string): Promise<string[]> {
@@ -255,6 +306,42 @@ export class ProductsRepository {
       if (isConstraintViolation(error, '23505', 'product_variants_store_id_sku_key')) return false;
       throw error;
     }
+  }
+
+  // The SKU is unique per store across archived variants too, so an archived match is reported.
+  findVariantsBySku(storeId: string, skus: string[]): Promise<SkuMatch[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: productVariants.id,
+          productId: productVariants.productId,
+          sku: sql<string>`${productVariants.sku}`,
+          isArchived: sql<boolean>`${productVariants.status} = 'archived' or ${products.status} = 'archived'`,
+        })
+        .from(productVariants)
+        .innerJoin(products, eq(products.id, productVariants.productId))
+        .where(
+          and(
+            eq(productVariants.storeId, storeId),
+            eq(products.storeId, storeId),
+            inArray(productVariants.sku, skus),
+          ),
+        ),
+    );
+  }
+
+  async updateVariantPrices(
+    storeId: string,
+    variantId: string,
+    change: { priceOverridePoisha?: number; costPoisha?: number },
+    now: Date,
+  ): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(productVariants)
+        .set({ ...change, updatedAt: now })
+        .where(and(eq(productVariants.storeId, storeId), eq(productVariants.id, variantId))),
+    );
   }
 
   async archive(storeId: string, id: string, now: Date): Promise<boolean> {

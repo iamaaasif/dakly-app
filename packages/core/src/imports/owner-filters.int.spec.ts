@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
-import { ImportsRepository } from './imports.repository';
+import { ImportsRepository, KindImportsRepository } from './imports.repository';
+
+class ProductImportsRepository extends KindImportsRepository {
+  protected readonly kind = 'products_csv';
+}
 
 const counts = { rowsTotal: 3, rowsAdded: 2, rowsUpdated: 1, rowsSkipped: 0, rowsFailed: 0 };
 const mapping = { phone: 0, name: 1 };
@@ -35,7 +39,7 @@ describe('import filters without RLS assistance', () => {
       const importId = randomUUID();
       const lease = new Date('2026-11-17T04:30:00Z');
       const now = new Date('2026-11-17T06:00:00Z');
-      await repository.createCustomerImport(f.a, importId, upload(f.a), f.userA);
+      await repository.create(f.a, importId, upload(f.a), f.userA);
       await f.connection.pool.query(
         "update imports set status='importing', claimed_at=$2, last_progress_at=$3, requeue_count=$4 where id=$1",
         [importId, lease, progress, retries],
@@ -59,8 +63,8 @@ describe('import filters without RLS assistance', () => {
     const importA = randomUUID();
     const importB = randomUUID();
     const fileA = upload(f.a);
-    await repository.createCustomerImport(f.a, importA, fileA, f.userA);
-    await repository.createCustomerImport(f.b, importB, upload(f.b), f.userB);
+    await repository.create(f.a, importA, fileA, f.userA);
+    await repository.create(f.b, importB, upload(f.b), f.userB);
     expect(await f.row('imports', importA)).toMatchObject({ store_id: f.a, status: 'uploaded' });
     expect(await f.row('files', fileA.id)).toMatchObject({ store_id: f.a, purpose: 'import' });
     expect(await repository.findById(f.b, importA)).toBeUndefined();
@@ -144,7 +148,7 @@ describe('import filters without RLS assistance', () => {
 
   it('marks an import undone and finished only in the selected store and only once', async () => {
     const importId = randomUUID();
-    await repository.createCustomerImport(f.a, importId, upload(f.a), f.userA);
+    await repository.create(f.a, importId, upload(f.a), f.userA);
     expect(await repository.markUndone(f.a, importId, new Date('2026-11-18T00:00:00Z'))).toBe(
       false,
     );
@@ -167,10 +171,24 @@ describe('import filters without RLS assistance', () => {
     expect(new Date((await f.row('imports', importId)).undo_finished_at as string)).toEqual(at);
   });
 
+  it('keeps each kind of import in its own repository', async () => {
+    const products = new ProductImportsRepository(f.tenant, f.connection.db);
+    const importId = randomUUID();
+    await products.create(f.a, importId, upload(f.a), f.userA);
+    expect(await f.row('imports', importId)).toMatchObject({ kind: 'products_csv' });
+    expect(await products.findById(f.a, importId)).toMatchObject({ status: 'uploaded' });
+    expect(await repository.findById(f.a, importId)).toBeUndefined();
+
+    const customerId = randomUUID();
+    await repository.create(f.a, customerId, upload(f.a), f.userA);
+    expect(await products.findById(f.a, customerId)).toBeUndefined();
+    expect(await products.start(f.a, customerId, { startedAt: new Date() } as never)).toBe(false);
+  });
+
   it('never reads or changes a product import', async () => {
     const importId = randomUUID();
     const file = upload(f.a);
-    await repository.createCustomerImport(f.a, importId, file, f.userA);
+    await repository.create(f.a, importId, file, f.userA);
     const at = new Date('2026-11-17T04:30:00Z');
     const late = new Date('2026-11-17T06:00:00Z');
     const lease = new Date('2026-11-17T04:30:00Z');

@@ -5,10 +5,10 @@ import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { OwnerIsolationFixture } from '../../../test/owner-isolation-fixture';
-import { loadEnv, resetEnvForTests } from '../../platform/config/env';
-import { DatabaseModule } from '../../platform/database/database.module';
-import { KnowledgeIndexModule } from './knowledge-index.module';
+import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { loadEnv, resetEnvForTests } from '../platform/config/env';
+import { DatabaseModule } from '../platform/database/database.module';
+import { KnowledgeIndexModule } from './knowledge/knowledge-index.module';
 import { KnowledgeSearchService } from './knowledge-search.service';
 
 const workerSearch = Symbol('workerSearch');
