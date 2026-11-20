@@ -8,6 +8,7 @@ import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { WalletService } from '../wallets/wallet.service';
 import type { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
+import { CampaignSmsService } from './campaign-sms.service';
 import type { CampaignsRepository } from './campaigns.repository';
 import type { CampaignsService } from './campaigns.service';
 
@@ -29,6 +30,7 @@ function fixture(status: 'sending' | 'paused' = 'sending') {
     recipientsCount: 2,
     status,
     shortLinkBase: null,
+    wrapSmsLinks: false,
     startedAt: null,
     pauseReason: status === 'paused' ? 'balance' : null,
     balancePauseRevision: status === 'paused' ? 8 : null,
@@ -60,7 +62,7 @@ function fixture(status: 'sending' | 'paused' = 'sending') {
   const service = new CampaignFundingService(
     campaigns as unknown as CampaignsRepository,
     wallets as unknown as WalletService,
-    links as unknown as LinksService,
+    new CampaignSmsService(links as unknown as LinksService),
     notification as unknown as NotificationsService,
     transaction as StoreTransaction,
     { now: () => now } as Clock,

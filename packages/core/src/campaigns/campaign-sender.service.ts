@@ -2,7 +2,6 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { countSmsParts } from '@dakly/contracts/sms';
 
-import { LinksService } from '../links/links.service';
 import { MessagingService, type SentMessage } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -14,13 +13,12 @@ import { type StoreSendingSettings, StoresService } from '../stores/stores.servi
 import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSendingRepository, type ClaimableRecipient } from './campaign-sending.repository';
+import { CampaignSmsService } from './campaign-sms.service';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
-import { marketingSmsText } from './campaigns.service';
 
 const BATCH_SIZE = 200;
 export const CAMPAIGN_CLAIM_MS = 5 * MINUTE_MS;
 const SEND_ATTEMPTS = 3;
-const ACTOR = { kind: 'system' } as const;
 
 type Submission = {
   kind: 'send';
@@ -51,7 +49,7 @@ export class CampaignSenderService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(SmsService) private readonly sms: SmsService,
-    @Inject(LinksService) private readonly links: LinksService,
+    @Inject(CampaignSmsService) private readonly smsText: CampaignSmsService,
     @Inject(CampaignFundingService) private readonly funding: CampaignFundingService,
     @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -111,8 +109,11 @@ export class CampaignSenderService {
   }
 
   private estimateCredits(campaign: LockedCampaign): number {
-    const link = this.links.sampleOptOutUrl(campaign.shortLinkBase ?? undefined);
-    return countSmsParts(marketingSmsText(campaign.content.text, link));
+    return this.smsText.estimate(
+      campaign.content.text,
+      campaign.wrapSmsLinks,
+      campaign.shortLinkBase ?? undefined,
+    ).smsParts;
   }
 
   private async claimForSubmission(
@@ -166,14 +167,11 @@ export class CampaignSenderService {
     const { recipient, destination, settings } = input;
     const { name: sender } = await this.messaging.prepareSender(storeId);
     // The recipient lock orders code creation with all retries of this submission.
-    const source = {
-      sourceType: 'campaign',
-      sourceId: campaign.id,
-      contactId: recipient.contactId,
-      kind: 'sms_opt_out',
-    } as const;
-    const code =
-      recipient.optOutLinkCode ?? (await this.links.create(storeId, [source], ACTOR))[0]!.code;
+    const { body, optOutLinkCode, redirectLinkCodes, createdLinks } = await this.smsText.prepare(
+      storeId,
+      campaign,
+      recipient,
+    );
     const decide = await this.policy.prepareMarketingRetryCheck(storeId, {
       contactId: recipient.contactId,
       campaignRecipientId: recipient.id,
@@ -182,7 +180,7 @@ export class CampaignSenderService {
     const { decision, at } = decide();
     if (decision.action === 'skip')
       return this.skipSubmission(storeId, campaign, { recipient, reason: decision.reason });
-    if (decision.action === 'defer' && recipient.optOutLinkCode)
+    if (decision.action === 'defer' && !createdLinks)
       return { kind: 'defer', until: decision.until };
     const change =
       decision.action === 'send'
@@ -192,12 +190,10 @@ export class CampaignSenderService {
       storeId,
       recipient.id,
       { status: recipient.status },
-      { ...change, optOutLinkCode: code },
+      { ...change, optOutLinkCode, redirectLinkCodes },
     );
     if (decision.action === 'defer') return { kind: 'defer', until: decision.until };
     if (!saved) return { kind: 'next' };
-    const url = this.links.optOutUrl(code, campaign.shortLinkBase ?? undefined);
-    const body = marketingSmsText(campaign.content.text, url);
     return {
       kind: 'send',
       campaignId: campaign.id,

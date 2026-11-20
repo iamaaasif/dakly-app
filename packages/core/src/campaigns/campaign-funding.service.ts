@@ -1,17 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { countSmsParts } from '@dakly/contracts/sms';
-
-import { LinksService } from '../links/links.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignCountsService } from './campaign-counts.service';
+import { CampaignSmsService } from './campaign-sms.service';
 import { campaignError } from './campaigns.errors';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
-import { approvalKey, CampaignsService, marketingSmsText } from './campaigns.service';
+import { approvalKey, CampaignsService } from './campaigns.service';
 
 const ACTOR = { kind: 'system' } as const;
 const WALLET = 'sms_credits';
@@ -23,7 +21,7 @@ export class CampaignFundingService {
   constructor(
     @Inject(CampaignsRepository) private readonly campaigns: CampaignsRepository,
     @Inject(WalletService) private readonly wallets: WalletService,
-    @Inject(LinksService) private readonly links: LinksService,
+    @Inject(CampaignSmsService) private readonly sms: CampaignSmsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
@@ -93,9 +91,11 @@ export class CampaignFundingService {
     if (!reprice && campaign.status !== 'sending') return true;
     if (!campaign.approvedAt) throw campaignError('CAMPAIGN_APPROVAL_TIME_MISSING');
     if (!reprice) return true;
-    const base = this.links.shortLinkBase();
-    const body = marketingSmsText(campaign.content.text, this.links.sampleOptOutUrl(base));
-    const needed = countSmsParts(body) * campaign.recipientsCount;
+    const { shortLinkBase: base, smsParts } = this.sms.estimate(
+      campaign.content.text,
+      campaign.wrapSmsLinks,
+    );
+    const needed = smsParts * campaign.recipientsCount;
     const key = approvalKey(id, campaign.approvedAt);
     await this.wallets.lockForReservation(storeId, WALLET);
     const reservation = await this.wallets.reservationFor(storeId, WALLET, key);

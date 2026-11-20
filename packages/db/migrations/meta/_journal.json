@@ -442,6 +442,13 @@
       "when": 1795141756567,
       "tag": "0062_campaign_result_repair",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1795144235872,
+      "tag": "0063_campaign_sms_redirect_links",
+      "breakpoints": true
     }
   ]
 }

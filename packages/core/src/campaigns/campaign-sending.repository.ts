@@ -15,6 +15,7 @@ export type ClaimableRecipient = {
   providerMessageId: string | null;
   dispatchStartedAt: Date | null;
   optOutLinkCode: string | null;
+  redirectLinkCodes: string[] | null;
   sendAttempts: number;
 } & ({ status: 'queued'; claimedAt: Date | null } | { status: 'sending'; claimedAt: Date });
 type RecipientRow = typeof campaignRecipients.$inferSelect;
@@ -129,6 +130,7 @@ export class CampaignSendingRepository {
           claimedAt: campaignRecipients.claimedAt,
           dispatchStartedAt: campaignRecipients.dispatchStartedAt,
           optOutLinkCode: campaignRecipients.optOutLinkCode,
+          redirectLinkCodes: campaignRecipients.redirectLinkCodes,
           status: sql<ClaimableRecipient['status']>`${campaignRecipients.status}`,
           sendAttempts: campaignRecipients.sendAttempts,
         })

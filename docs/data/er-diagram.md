@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0062_snapshot.json`: **95 tables, 1283 columns, 391 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0063_snapshot.json`: **95 tables, 1285 columns, 391 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1394,6 +1394,7 @@ erDiagram
         uuid approved_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone approved_at "NULL; timestamp with time zone"
         text short_link_base "NULL; text"
+        boolean wrap_sms_links "NOT NULL; boolean"
         timestamp_with_time_zone started_at "NULL; timestamp with time zone"
         timestamp_with_time_zone finished_at "NULL; timestamp with time zone"
         timestamp_with_time_zone settlement_pending_at "NULL; timestamp with time zone"
@@ -1424,6 +1425,7 @@ erDiagram
         timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
         timestamp_with_time_zone dispatch_started_at "NULL; timestamp with time zone"
         text opt_out_link_code "NULL; text"
+        text__ redirect_link_codes "NULL; text[]"
         text skip_reason "NULL; text"
         text provider_message_id "NULL; text"
         bigint cost_poisha "NULL; bigint"

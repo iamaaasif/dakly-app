@@ -10,10 +10,8 @@ import type {
   ChangeCampaignInput,
   CreateCampaignInput,
 } from '@dakly/contracts/campaigns';
-import { countSmsParts } from '@dakly/contracts/sms';
 import type { StoreAccess } from '@dakly/contracts/team';
 
-import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -28,6 +26,7 @@ import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
 import { CampaignCountsService } from './campaign-counts.service';
 import { toCampaignResponse } from './campaign-response';
+import { CampaignSmsService } from './campaign-sms.service';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
 import {
   type Campaign,
@@ -70,7 +69,7 @@ export class CampaignsService {
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
-    @Inject(LinksService) private readonly links: LinksService,
+    @Inject(CampaignSmsService) private readonly sms: CampaignSmsService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
   ) {}
@@ -129,11 +128,8 @@ export class CampaignsService {
   async estimate(storeId: string, campaignId: string): Promise<CampaignEstimateResponse> {
     const campaign = await this.find(storeId, campaignId);
     if (campaign.status !== 'draft') throw campaignError('CAMPAIGN_NOT_DRAFT');
-    return toEstimate(
-      campaign,
-      await this.checkAudience(storeId, campaign),
-      this.links.sampleOptOutUrl(),
-    );
+    const recipients = await this.checkAudience(storeId, campaign);
+    return toEstimate(recipients, this.sms.estimate(campaign.content.text, true).smsParts);
   }
 
   // One store transaction (CAMP-2): the audience is frozen, the credits reserved and the event
@@ -154,8 +150,8 @@ export class CampaignsService {
       if (campaign.scheduledFor && campaign.scheduledFor <= now)
         throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
       const recipients = await this.checkAudience(storeId, campaign);
-      const shortLinkBase = this.links.shortLinkBase();
-      const estimate = toEstimate(campaign, recipients, this.links.sampleOptOutUrl(shortLinkBase));
+      const { shortLinkBase, smsParts } = this.sms.estimate(campaign.content.text, true);
+      const estimate = toEstimate(recipients, smsParts);
       if (estimate.recipientsCount === 0) throw campaignError('CAMPAIGN_NO_RECIPIENTS');
       for (let start = 0; start < recipients.length; start += AUDIENCE_PAGE_SIZE)
         await this.repository.insertRecipients(
@@ -189,6 +185,7 @@ export class CampaignsService {
         approvedByUserId: null,
         approvedAt: null,
         shortLinkBase: null,
+        wrapSmsLinks: false,
         estimatedCostPoisha: null,
         recipientsCount: 0,
         skippedCount: 0,
@@ -323,6 +320,7 @@ export class CampaignsService {
       approvedByUserId: actor.kind === 'user' ? actor.userId : null,
       approvedAt: now,
       shortLinkBase,
+      wrapSmsLinks: true,
       startedAt: status === 'sending' ? now : null,
       updatedAt: now,
       estimatedCostPoisha: estimate.costPoisha,
@@ -398,24 +396,11 @@ export function approvalKey(campaignId: string, approvedAt: Date, suffix?: 'with
   return suffix ? `${key}:${suffix}` : key;
 }
 
-// CAMP-R4: every marketing SMS ends with the recipient's opt-out link.
-export function marketingSmsText(text: string, optOutUrl: string): string {
-  return `${text}\n${optOutUrl}`;
-}
-
-// Counts the opt-out link at its real length, so the reservation covers what the sender sends.
-function toEstimate(
-  campaign: Campaign,
-  recipients: FrozenRecipient[],
-  optOutUrl: string,
-): CampaignEstimateResponse {
+function toEstimate(recipients: FrozenRecipient[], smsParts: number): CampaignEstimateResponse {
   const skippedByReason: CampaignEstimateResponse['skippedByReason'] = {};
   for (const { skipReason } of recipients)
     if (skipReason) skippedByReason[skipReason] = (skippedByReason[skipReason] ?? 0) + 1;
   const recipientsCount = recipients.filter((recipient) => recipient.status === 'queued').length;
-  const smsParts = campaign.content.text
-    ? countSmsParts(marketingSmsText(campaign.content.text, optOutUrl))
-    : 0;
   return {
     audienceCount: recipients.length,
     skippedByReason,

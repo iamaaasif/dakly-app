@@ -122,6 +122,7 @@ export const campaigns = pgTable(
     approvedByUserId: uuid('approved_by_user_id').references(() => users.id),
     approvedAt: timestamptz('approved_at'),
     shortLinkBase: text('short_link_base'),
+    wrapSmsLinks: boolean('wrap_sms_links').notNull().default(false),
     startedAt: timestamptz('started_at'),
     finishedAt: timestamptz('finished_at'),
     settlementPendingAt: timestamptz('settlement_pending_at'),
@@ -227,6 +228,7 @@ export const campaignRecipients = pgTable(
     // Receipt lookup renews the lease while the frequency cap keeps using the dispatch time.
     dispatchStartedAt: timestamptz('dispatch_started_at'),
     optOutLinkCode: text('opt_out_link_code'),
+    redirectLinkCodes: text('redirect_link_codes').array(),
     skipReason: text('skip_reason', { enum: recipientSkipReasons }),
     providerMessageId: text('provider_message_id'),
     costPoisha: poisha('cost_poisha'),
