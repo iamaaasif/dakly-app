@@ -3,7 +3,6 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
 import type { SegmentListResponse } from '@dakly/contracts/segments';
-import { Button } from '@dakly/ui/button';
 
 import { SegmentRow } from './segment-row';
 
