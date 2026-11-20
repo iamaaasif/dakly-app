@@ -120,8 +120,8 @@ export class AiAgentService {
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose({
       storeId,
-      conversationId,
       contactId: turn.contactId,
+      chat: { conversationId, channel: candidate.target.channel },
       customerTexts: texts,
     });
     if (composed.kind === 'busy') return this.retryLater();

@@ -157,16 +157,16 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M7. AI layer
 
-| ID   | Task                                                                    | Status      | Depends              | PR               | Notes                                                                                                             |
-| ---- | ----------------------------------------------------------------------- | ----------- | -------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- |
-| AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | Done        |                      | #137             | Q8                                                                                                                |
-| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | Done        | AI-1, PAY-1          | #140             | Q15                                                                                                               |
-| AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Done        | AI-2                 | #143, #146, #147 | PDF and plain text files. Items and uploads, indexing, then search. Images and website links are for later tasks. |
-| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Done        | AI-2, CHAT-2, CHAT-3 | #216, #223       | Exclude internal notes (`kind = 'note'`) from model context and all customer-facing messages.                     |
-| AI-5 | Sales agent tools and the fact check before sending                     | In progress | AI-4, ORD-3          | #284, #292, #303 | Parts 1 (#284) and 2 (#292) merged; part 4 in review; part 3 waits on CUS-4                                       |
-| AI-6 | Practice mode, test questions, Go live                                  | Done        | AI-5                 | #306             | Practice per channel; tests graded by a model; hand-over rules save waits on the AI settings task                 |
-| AI-7 | Golden-set eval runner and nightly job                                  | Todo        | AI-5                 |                  |                                                                                                                   |
-| AI-8 | Web: AI agent settings, knowledge, test tab                             | Todo        | AI-6                 |                  |                                                                                                                   |
+| ID   | Task                                                                    | Status      | Depends              | PR                     | Notes                                                                                                             |
+| ---- | ----------------------------------------------------------------------- | ----------- | -------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| AI-1 | `LlmDriver` and OpenAI driver (Responses API, structured output, tools) | Done        |                      | #137                   | Q8                                                                                                                |
+| AI-2 | `AiService`, tiers config, `ai_runs`, circuit breaker, per-store limit  | Done        | AI-1, PAY-1          | #140                   | Q15                                                                                                               |
+| AI-3 | Knowledge items, chunking, embeddings, hybrid search                    | Done        | AI-2                 | #143, #146, #147       | PDF and plain text files. Items and uploads, indexing, then search. Images and website links are for later tasks. |
+| AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Done        | AI-2, CHAT-2, CHAT-3 | #216, #223             | Exclude internal notes (`kind = 'note'`) from model context and all customer-facing messages.                     |
+| AI-5 | Sales agent tools and the fact check before sending                     | In progress | AI-4, ORD-3          | #284, #292, #303, #321 | Parts 1 (#284) and 2 (#292) merged; part 4 in review; part 3 (draft_order, confirm_order) in review               |
+| AI-6 | Practice mode, test questions, Go live                                  | Done        | AI-5                 | #306                   | Practice per channel; tests graded by a model; hand-over rules save waits on the AI settings task                 |
+| AI-7 | Golden-set eval runner and nightly job                                  | Todo        | AI-5                 |                        |                                                                                                                   |
+| AI-8 | Web: AI agent settings, knowledge, test tab                             | Todo        | AI-6                 |                        |                                                                                                                   |
 
 ## Later release: couriers and COD
 

@@ -2,6 +2,7 @@ import type { ZodType } from 'zod';
 import { z } from 'zod';
 
 import { handoverReasons } from './chats';
+import { bdMobileSchema } from './phone';
 
 export type AiToolDefinition = {
   name: string;
@@ -103,6 +104,38 @@ export const sendProductCardTool = {
   units: {},
 } satisfies AiToolDefinition;
 
+export const draftOrderTool = {
+  name: 'draft_order',
+  description:
+    'Create an order for this customer, delivered to the customer themselves, when you have the product variants, quantities, name, the customer’s own mobile number, the full address and the area (thana, upazila or district). Ask for every missing detail in one message first. The order waits for the customer’s yes. The result has the order number, items, delivery charge and total: write the summary from it and ask the customer to reply yes (হ্যাঁ). Never repeat the customer’s phone number in the summary. When the customer orders for another person, hand over instead.',
+  aliases: ['অর্ডার করব', 'নিব', 'কিনব', 'order korbo', 'nibo', 'order dibo', 'i want to order'],
+  input: z.strictObject({
+    items: z
+      .array(z.strictObject({ variantId: z.uuid(), quantity: z.int().positive().max(20) }))
+      .min(1)
+      .max(10),
+    recipientName: z.string().trim().min(1).max(120),
+    phone: bdMobileSchema,
+    address: z.string().trim().min(1).max(500),
+    area: z.string().trim().min(2).max(60),
+  }),
+  units: {
+    quantity: 'count of pieces, 1 to 20 per variant',
+    unitPriceTaka: 'taka, converted from poisha',
+    deliveryChargeTaka: 'taka, converted from poisha',
+    totalTaka: 'taka including delivery, converted from poisha',
+  },
+} satisfies AiToolDefinition;
+
+export const confirmOrderTool = {
+  name: 'confirm_order',
+  description:
+    'Confirm one of this customer’s own orders that is waiting for confirmation, after the customer said yes to the summary (হ্যাঁ, yes, ji, ok, ঠিক আছে). Use the order number from draft_order or get_my_orders. When the result says ORDER_ADVANCE_REQUIRED, hand over with the reason other: a person asks this customer for the delivery charge in advance.',
+  aliases: ['হ্যাঁ', 'ji', 'yes', 'ok', 'ঠিক আছে', 'thik ache', 'confirm'],
+  input: z.strictObject({ orderNumber: z.int().positive().max(2147483647) }),
+  units: {},
+} satisfies AiToolDefinition;
+
 export const handOverReasons = handoverReasons.filter(
   (reason) => reason !== 'ai_unavailable' && reason !== 'allowance_used',
 );
@@ -131,5 +164,7 @@ export const salesAgentTools = [
   getMyOrdersTool,
   getOrderStatusTool,
   sendProductCardTool,
+  draftOrderTool,
+  confirmOrderTool,
   handOverTool,
 ] as const;
