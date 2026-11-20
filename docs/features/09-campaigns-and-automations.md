@@ -521,7 +521,7 @@ A workflow that starts from an order can write `{order_number}`, `{order_total}`
 
 ### COD order confirmation template (ORD-4)
 
-The template starts on `order_placed` for orders with payment status COD pending and sends the SMS with `{confirm_link}`; a reminder follows after 6 hours. Its exits are Order is confirmed (the order has a confirmation time) and Order is cancelled (its stage is Cancelled). The runner reads the order before every step, so an order saved as confirmed (it still emits `order.created`) exits before the first message, and an order the customer or staff confirmed or cancelled gets no reminder. An order put on hold still gets the reminder. Messenger buttons are a later part of ORD-4, and the other order templates follow in part 3.
+The template starts on `order_placed` for orders with payment status COD pending and sends the SMS with `{confirm_link}`; a reminder follows after 6 hours. Its exits are Order is confirmed (the order has a confirmation time) and Order is cancelled (its stage is Cancelled). The runner reads the order before every step, so an order saved as confirmed (it still emits `order.created`) exits before the first message, and an order the customer or staff confirmed or cancelled gets no reminder. A send step that uses `{confirm_link}` goes out only while the order is in To confirm: the check runs inside the send gate, and an order on hold ends the run with reason `order_not_awaiting_confirmation` before the message. An order moved back to To confirm sends the next such message, because the stage is read at each send. Messenger buttons are a later part of ORD-4, and the other order templates follow in part 3.
 
 ### Workflow catalogue
 

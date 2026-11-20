@@ -279,7 +279,7 @@ export class AutomationRunsService {
       { contactId, channel: 'sms', category: step.category },
       lockedContactExists,
     );
-    const exitReason = await this.conditions.refreshExitReason(facts, at);
+    const exitReason = await this.conditions.refreshExitReason(facts, step, at);
     if (exitReason) return { exitReason, at };
     const firstTriedAt = await this.repository.schedulerTime(storeId);
     const late = await this.readLateGateResult(facts, firstTriedAt);

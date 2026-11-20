@@ -169,6 +169,7 @@ describe('order confirmation links (Postgres)', () => {
     expect(await app.get(OrderReportingService).progress(f.a, created.id)).toEqual({
       isConfirmed: true,
       isCancelled: false,
+      isAwaitingConfirmation: false,
     });
   });
 
@@ -177,6 +178,7 @@ describe('order confirmation links (Postgres)', () => {
     expect(await app.get(OrderReportingService).progress(f.a, created.id)).toEqual({
       isConfirmed: false,
       isCancelled: false,
+      isAwaitingConfirmation: true,
     });
     await service.answer(await link(created.id), 'cancel', ip);
     expect(await app.get(OrderReportingService).progress(f.a, created.id)).toMatchObject({
@@ -195,5 +197,14 @@ describe('order confirmation links (Postgres)', () => {
     );
     expect(await service.answer(token, 'confirm', ip)).toBe('closed');
     expect((await stored(created.id)).stage).toBe('on_hold');
+    const progress = () => app.get(OrderReportingService).progress(f.a, created.id);
+    expect(await progress()).toMatchObject({ isAwaitingConfirmation: false });
+    await orders.changeStage(
+      f.a,
+      created.id,
+      { to: 'to_confirm' },
+      { actor: staff, access: { seeFullPhone: true } },
+    );
+    expect(await progress()).toMatchObject({ isAwaitingConfirmation: true });
   });
 });

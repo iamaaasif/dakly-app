@@ -175,7 +175,11 @@ export function runAction(
 // built yet, so those exits cannot happen; publish
 // refuses the tap exit until taps on workflow messages are recorded. Tags carry no time, so a tag
 // the person already had counts as got.
-export type OrderProgress = { isConfirmed: boolean; isCancelled: boolean };
+export type OrderProgress = {
+  isConfirmed: boolean;
+  isCancelled: boolean;
+  isAwaitingConfirmation: boolean;
+};
 
 export function hasHappened(exit: ExitCondition, facts: RunFacts, order?: OrderProgress): boolean {
   if (exit.kind === 'order_confirmed') return !!order?.isConfirmed;

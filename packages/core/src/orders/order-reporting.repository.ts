@@ -235,7 +235,13 @@ export class OrderReportingRepository {
         .from(orders)
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
     );
-    return order && { isCancelled: order.stage === 'cancelled', isConfirmed: !!order.confirmedAt };
+    return (
+      order && {
+        isCancelled: order.stage === 'cancelled',
+        isConfirmed: !!order.confirmedAt,
+        isAwaitingConfirmation: order.stage === 'to_confirm',
+      }
+    );
   }
 
   async contactOrderTotals(storeId: string, contactId: string, timeZone: string) {
