@@ -17,6 +17,7 @@ import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
+import { useMessengerPages } from '../api/campaign-pages';
 import { useSaveCampaign } from '../api/save-campaign';
 import {
   campaignChannelLabels,
@@ -26,6 +27,7 @@ import {
 } from '../campaign-labels';
 import { CampaignChannelCards } from './campaign-channel-cards';
 import { CampaignPageHeader } from './campaign-page-header';
+import { MessengerDraft } from './messenger-draft';
 import { formatDateTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -46,7 +48,7 @@ export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
         subtitle={editable ? 'Nothing is sent until you approve.' : 'Campaign summary'}
       />
       {editable ? (
-        <CampaignDetailsForm key={contextTag} campaign={campaign} />
+        <DraftEditor key={contextTag} campaign={campaign} />
       ) : (
         <CampaignSummary campaign={campaign} />
       )}
@@ -54,20 +56,31 @@ export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
   );
 }
 
+function DraftEditor({ campaign }: { campaign: CampaignResponse }) {
+  const pages = useMessengerPages();
+  if (campaign.channel !== 'messenger') return <CampaignDetailsForm campaign={campaign} />;
+  if (pages.isPending) return <p role="status">Loading…</p>;
+  if (pages.isError) return <p role="alert">Your Facebook Pages could not load. Try again soon.</p>;
+  return <MessengerDraft pages={pages.data} campaign={campaign} />;
+}
+
 const newCampaignSubtitle = 'Nothing is sent until you approve.';
 
 function NewCampaignBuilder() {
-  const [step, setStep] = useState<'start' | 'details' | 'channels'>('start');
+  const [step, setStep] = useState<'start' | 'details' | 'messenger' | 'channels'>('start');
+  const pages = useMessengerPages().data ?? [];
   return (
     <main className="space-y-6 p-6 md:p-8">
-      {step === 'details' ? (
-        <CampaignDetailsForm onBack={() => setStep('channels')} />
-      ) : (
+      {step === 'details' && <CampaignDetailsForm onBack={() => setStep('channels')} />}
+      {step === 'messenger' && <MessengerDraft pages={pages} onBack={() => setStep('channels')} />}
+      {step !== 'details' && step !== 'messenger' && (
         <>
           <CampaignPageHeader title="New campaign" subtitle={newCampaignSubtitle} />
           <CampaignChannelCards
             focusSms={step === 'channels'}
+            hasMessengerPage={pages.length > 0}
             onChooseSms={() => setStep('details')}
+            onChooseMessenger={() => setStep('messenger')}
           />
         </>
       )}
