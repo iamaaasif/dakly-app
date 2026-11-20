@@ -30,3 +30,10 @@ export function canEditOrder(order: OrderSummary | undefined, canEditOrders?: bo
     editablePaymentStatuses.includes(order.paymentStatus)
   );
 }
+
+export function canMarkOrderDelivered(
+  order: Pick<OrderSummary, 'stage' | 'source'>,
+  canEditOrders?: boolean,
+): boolean {
+  return canChangeOrderStage(order, canEditOrders) && order.stage === 'with_courier';
+}
