@@ -5,7 +5,7 @@ import { UsageRepository } from './usage.repository';
 
 describe('usage filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
-  const repository = new UsageRepository(f.tenant);
+  const repository = new UsageRepository(f.tenant, f.connection.db);
   const period = '2026-11-16';
   beforeAll(() => f.setup());
   afterAll(async () => {
