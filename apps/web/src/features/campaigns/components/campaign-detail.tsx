@@ -2,8 +2,6 @@
 
 import { Button } from '@dakly/ui/button';
 
-import { useSessionContext } from '@/lib/session-context';
-
 import { useCampaignResults } from '../api/campaign-results';
 import { useCampaign } from '../api/get-campaign';
 import { CampaignBuilder } from './campaign-builder';
@@ -11,6 +9,7 @@ import { CampaignCopyActions } from './campaign-copy-actions';
 import { CampaignCustomers } from './campaign-customers';
 import { CampaignLoading } from './campaign-loading';
 import { CampaignResults } from './campaign-results';
+import { useSessionContext } from '@/lib/session-context';
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const campaign = useCampaign(campaignId);

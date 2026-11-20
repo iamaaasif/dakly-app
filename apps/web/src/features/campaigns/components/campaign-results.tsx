@@ -26,30 +26,9 @@ type CampaignResultsProps = {
 export function CampaignResults({ campaign, results, actions, customers }: CampaignResultsProps) {
   const { counts, channel } = campaign;
   const orders = BigInt(campaign.attribution?.orders ?? '0');
-  const revenue = BigInt(campaign.attribution?.revenuePoisha ?? '0');
   // Only WhatsApp and email report reads; an SMS has no read receipt.
   const reads = channel === 'sms' ? [] : [{ label: 'Read', count: counts.read }];
-  const cards = [
-    { label: 'Sent', value: formatCount(counts.sent) },
-    { label: 'Delivered', value: formatCount(counts.delivered) },
-    ...reads.map(({ label, count }) => ({ label, value: formatCount(count) })),
-    { label: 'Tapped link', value: formatCount(counts.tapped) },
-    { label: 'Failed', value: formatCount(counts.failed) },
-    { label: 'Orders', value: formatCount(orders) },
-    { label: 'Revenue', value: formatMoney(revenue) },
-    ...(results
-      ? [
-          { label: 'Cost', value: formatMoney(BigInt(results.costPoisha)) },
-          {
-            label: 'Return per ৳1',
-            value:
-              results.returnPerTaka === null
-                ? '—'
-                : formatMoney(BigInt(results.returnPerTaka) * 100n),
-          },
-        ]
-      : []),
-  ];
+  const cards = resultCards(campaign, results);
   return (
     <main className="space-y-6 p-6 md:p-8">
       <CampaignPageHeader
@@ -97,6 +76,30 @@ export function CampaignResults({ campaign, results, actions, customers }: Campa
       <CampaignMessage campaign={campaign} />
     </main>
   );
+}
+
+function resultCards(campaign: CampaignResponse, results?: CampaignResultsResponse) {
+  const { counts, channel } = campaign;
+  const orders = BigInt(campaign.attribution?.orders ?? '0');
+  const revenue = BigInt(campaign.attribution?.revenuePoisha ?? '0');
+  const reads = channel === 'sms' ? [] : [{ label: 'Read', value: formatCount(counts.read) }];
+  const cards = [
+    { label: 'Sent', value: formatCount(counts.sent) },
+    { label: 'Delivered', value: formatCount(counts.delivered) },
+    ...reads,
+    { label: 'Tapped link', value: formatCount(counts.tapped) },
+    { label: 'Failed', value: formatCount(counts.failed) },
+    { label: 'Orders', value: formatCount(orders) },
+    { label: 'Revenue', value: formatMoney(revenue) },
+  ];
+  if (!results) return cards;
+  const { costPoisha, returnPerTaka } = results;
+  const returned = returnPerTaka === null ? '—' : formatMoney(BigInt(returnPerTaka) * 100n);
+  return [
+    ...cards,
+    { label: 'Cost', value: formatMoney(BigInt(costPoisha)) },
+    { label: 'Return per ৳1', value: returned },
+  ];
 }
 
 function whenSent({ status, startedAt, finishedAt, createdAt }: CampaignResponse) {

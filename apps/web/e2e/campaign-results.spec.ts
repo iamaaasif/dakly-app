@@ -28,7 +28,6 @@ test('reads a sent campaign: cost, return, failures, customers and copy actions'
     Origin: baseURL!,
     'X-Session-Context': (await session()).contextTag,
   });
-  let campaignId = '';
 
   try {
     await context.request.post('/api/me/active-store', {
@@ -45,7 +44,7 @@ test('reads a sent campaign: cost, return, failures, customers and copy actions'
       headers: await headers(),
     });
     expect(created.status()).toBe(201);
-    campaignId = ((await created.json()) as CampaignResponse).id;
+    const campaignId = ((await created.json()) as CampaignResponse).id;
     await query(
       "update campaigns set status='sent', started_at=now() - interval '10 days', finished_at=now() - interval '10 days' where store_id=$1 and id=$2",
       [storeId, campaignId],

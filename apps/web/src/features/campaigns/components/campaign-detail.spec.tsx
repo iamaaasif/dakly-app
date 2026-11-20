@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import type { SessionContext } from '@dakly/contracts/sessions';
-
 import { ToastProvider } from '@dakly/ui/toast';
 
 import { CampaignDetail } from './campaign-detail';
@@ -63,11 +62,9 @@ const resultsBody = {
 function show(campaign: CampaignResponse, canEditCampaigns = false) {
   vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
     const url = String(input);
-    const body = url.includes('/results')
-      ? resultsBody
-      : url.includes('/customers')
-        ? { items: [], nextCursor: null }
-        : campaign;
+    let body: unknown = campaign;
+    if (url.includes('/results')) body = resultsBody;
+    if (url.includes('/customers')) body = { items: [], nextCursor: null };
     return Response.json(body, { headers: { 'x-session-context': 'verified' } });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
