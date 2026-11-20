@@ -298,11 +298,19 @@ describe('Daily order summaries', () => {
        values($1::uuid,$2,$3,$1::uuid::text,'2025-11-12T18:00:00Z')`,
       [visit, fixture.a, link],
     );
+    const laterVisit = randomUUID();
+    await db.query(
+      `insert into tracked_link_visits(id,store_id,tracked_link_id,event_key,occurred_at)
+       values($1::uuid,$2,$3,$1::uuid::text,'2025-11-20T05:00:00Z')`,
+      [laterVisit, fixture.a, link],
+    );
     const inRange = await order(fixture.a, '2025-11-19T18:00:00Z', buyer);
     const outside = await order(fixture.a, '2025-11-19T17:59:59Z', buyer);
-    await db.query("update orders set recipient_phone='01710000009' where id in ($1,$2)", [
+    const later = await order(fixture.a, '2025-11-20T18:00:00Z', buyer);
+    await db.query("update orders set recipient_phone='01710000009' where id in ($1,$2,$3)", [
       inRange,
       outside,
+      later,
     ]);
     const stores = app.get(StoresService);
     const owner = { userId: fixture.userA, access: ownerAccess };
@@ -315,9 +323,9 @@ describe('Daily order summaries', () => {
     expect((await stores.attributionRebuild(fixture.a)).rebuild?.id).toBe(current);
     expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: null });
     const engine = app.get(OrderAttributionEngine);
-    const select = engine.select.bind(engine);
+    const select = engine.selectForOrders.bind(engine);
     const changeDuringSelection = vi
-      .spyOn(engine, 'select')
+      .spyOn(engine, 'selectForOrders')
       .mockImplementationOnce(async (...args) => {
         const reference = await select(...args);
         await db.query('update orders set is_recipient_buyer=false where id=$1', [inRange]);
@@ -335,6 +343,7 @@ describe('Daily order summaries', () => {
       processedOrders: null,
     });
     expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: visit });
+    expect(await fixture.row('orders', later)).toMatchObject({ attributed_touch_id: laterVisit });
     expect(await fixture.row('orders', outside)).toMatchObject({ attributed_touch_id: null });
   });
 
@@ -354,6 +363,11 @@ describe('Daily order summaries', () => {
       access: ownerAccess,
     });
     const started = (await stores.attributionRebuild(fixture.b)).rebuild!;
+    const cursor = { id: randomUUID(), at: '2026-11-18 05:59:59+00' };
+    await fixture.connection.pool.query(
+      `update stores set settings=jsonb_set(settings,'{attributionRebuild}',$2::jsonb) where id=$1`,
+      [fixture.b, JSON.stringify({ ...started, after: cursor, processedOrders: 1500 })],
+    );
     const event = {
       id: randomUUID(),
       type: 'attribution.window_changed',
@@ -366,7 +380,7 @@ describe('Daily order summaries', () => {
     expect(await stores.attributionSettings(fixture.b)).toEqual({
       windowDays: 1,
       rebuilding: true,
-      processedOrders: 500,
+      processedOrders: 2000,
     });
     expect(await stores.attributionRebuild(fixture.b)).toMatchObject({
       rebuild: { after: { at: expect.stringContaining('06:00:00.0005') } },

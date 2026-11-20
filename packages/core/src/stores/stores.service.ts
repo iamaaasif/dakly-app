@@ -101,11 +101,7 @@ export class StoresService {
 
   async attributionSettings(storeId: string): Promise<AttributionSettingsResponse> {
     const { windowDays, rebuild } = await this.attributionRebuild(storeId);
-    return {
-      windowDays,
-      rebuilding: rebuild !== null,
-      processedOrders: rebuild?.processedOrders ?? null,
-    };
+    return toAttributionSettings(windowDays, rebuild);
   }
 
   changeAttributionWindow(
@@ -117,28 +113,20 @@ export class StoresService {
       throw storeError('STORE_ATTRIBUTION_SETTING_DENIED');
     return this.transaction.runLocked(storeId, async () => {
       const previous = await this.attributionRebuild(storeId);
-      if (windowDays === previous.windowDays) {
-        return {
-          windowDays,
-          rebuilding: previous.rebuild !== null,
-          processedOrders: previous.rebuild?.processedOrders ?? null,
-        };
-      }
+      if (windowDays === previous.windowDays)
+        return toAttributionSettings(windowDays, previous.rebuild);
       const now = this.clock.now();
       const id = newId();
       const startedAt = now.toISOString();
-      await this.repository.writeAttributionState(
-        storeId,
-        {
-          id,
-          startedAt,
-          timeZone: previous.timeZone,
-          after: null,
-          processedOrders: 0,
-          checkpoint: null,
-        },
-        { windowDays, updatedAt: now },
-      );
+      const rebuild = {
+        id,
+        startedAt,
+        timeZone: previous.timeZone,
+        after: null,
+        processedOrders: 0,
+        checkpoint: null,
+      };
+      await this.repository.writeAttributionState(storeId, rebuild, { windowDays, updatedAt: now });
       await this.audit.record(storeId, {
         actor: { kind: 'user', userId: actor.userId },
         action: 'attribution.window_changed',
@@ -153,7 +141,7 @@ export class StoresService {
         occurredAt: startedAt,
         payload: { rebuildId: id },
       });
-      return { windowDays, rebuilding: true, processedOrders: 0 };
+      return toAttributionSettings(windowDays, rebuild);
     });
   }
 
@@ -170,8 +158,8 @@ export class StoresService {
 
   async attributionWindowDays(storeId: string, lock?: 'share'): Promise<AttributionWindow> {
     const days = await this.repository.attributionWindowDays(storeId, lock);
-    if (days !== 1 && days !== 3 && days !== 7) throw storeError('STORE_NOT_FOUND');
-    return days;
+    if (days === undefined) throw storeError('STORE_NOT_FOUND');
+    return attributionWindowSchema.parse(days);
   }
 
   async timeZone(storeId: string): Promise<string> {
@@ -294,5 +282,16 @@ function toSettingsResponse(store: StoreSettingsRow): StoreSettingsResponse {
     ...store,
     sending: parseSending(store.sending),
     stock: stockSettingsSchema.parse(store.stock ?? {}),
+  };
+}
+
+function toAttributionSettings(
+  windowDays: AttributionWindow,
+  rebuild: z.infer<typeof rebuildSchema> | null,
+): AttributionSettingsResponse {
+  return {
+    windowDays,
+    rebuilding: rebuild !== null,
+    processedOrders: rebuild?.processedOrders ?? null,
   };
 }

@@ -73,8 +73,8 @@ export class LinksService {
     return rows.map((row) => ({ id: row.id, code: row.code, url: linkUrl(row.kind, row.code) }));
   }
 
-  attributionTaps(storeId: string, contactId: string, from: Date, through: Date) {
-    return this.repository.attributionTaps(storeId, contactId, from, through);
+  attributionTaps(storeId: string, orders: Parameters<LinksRepository['attributionTaps']>[1]) {
+    return orders.length ? this.repository.attributionTaps(storeId, orders) : [];
   }
 
   // A sender that kept the code builds the same address again.

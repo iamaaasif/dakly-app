@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 
 import type { attributionSourceTypes } from '@dakly/contracts/orders';
 import { orders } from '@dakly/db/schema/orders';
@@ -85,6 +85,41 @@ export class OrderAttributionRepository {
       return lock ? query.for(lock) : query;
     });
     return order;
+  }
+
+  lockRebuildOrders(storeId: string, ids: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ ...attributionFields, id: orders.id })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), inArray(orders.id, ids)))
+        .orderBy(asc(orders.id))
+        .for('no key update'),
+    );
+  }
+
+  saveRebuilt(storeId: string, writes: { orderId: string; record: AttributionWrite | null }[]) {
+    const rows = writes.map(({ orderId, record }) => ({
+      orderId,
+      ...(record ?? clearedAttribution),
+    }));
+    return this.database.forStore(storeId, (tx) =>
+      tx.execute(sql`
+      update orders as o set
+        attributed_source_type = patch."sourceType",
+        attributed_source_id = patch."sourceId",
+        attributed_channel = patch.channel,
+        attributed_touch_id = patch."touchId",
+        attributed_touch_at = patch."touchAt",
+        attributed_window_days = patch."windowDays",
+        attributed_amount_poisha = patch."amountPoisha"
+      from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as patch(
+        "orderId" uuid, "sourceType" text, "sourceId" uuid, channel text,
+        "touchId" uuid, "touchAt" timestamptz, "windowDays" smallint, "amountPoisha" bigint
+      )
+      where o.store_id=${storeId} and o.id=patch."orderId"
+    `),
+    );
   }
 
   save(storeId: string, orderId: string, record: AttributionWrite | null) {
