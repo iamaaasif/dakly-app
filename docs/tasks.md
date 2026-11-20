@@ -195,7 +195,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | SOC-2 | Publish jobs for Facebook and Instagram, retries | Done      | SOC-1   | #236, #237, #239 |                                                                                                                                                                                         |
 | SOC-3 | Post insights job                                | Done      | SOC-2   | #282             |                                                                                                                                                                                         |
 | SOC-4 | Content Studio writing                           | Done      | AI-2    | #225, #230, #232 | Brand profile, library, generation and product descriptions merged. The AI caption panel in Create post is SOC-5.                                                                       |
-| SOC-5 | Web: Social hub, My posts, Content Studio        | In review | SOC-4   | #286, #294, #TBD | Parts 1 to 2b: Social hub, connect dialog, draft actions, posting schedule. Left: thumbnails with image URLs on posts; My posts; Create post with the AI caption panel; Content Studio. |
+| SOC-5 | Web: Social hub, My posts, Content Studio        | In review | SOC-4   | #286, #294, #312 | Parts 1 to 2b: Social hub, connect dialog, draft actions, posting schedule. Left: thumbnails with image URLs on posts; My posts; Create post with the AI caption panel; Content Studio. |
 
 ## M11. Analytics and insights
 
