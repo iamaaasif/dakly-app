@@ -98,6 +98,7 @@ function sameBuyer(order: BuyerSnapshot, buyer: BuyerSnapshot) {
   );
 }
 
+// Returning undefined keeps the row as it is. Returning null clears its attribution.
 function rebuiltRecord(order: OrderAttribution, reference: Reference | null) {
   if (!reference) return order.sourceType ? null : undefined;
   const same = sameTouch(order, reference);
