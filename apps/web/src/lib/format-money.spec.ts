@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { formatMoney } from '@dakly/contracts/money';
 
-import { formatWholeTaka, takaInputFromPoisha } from './format-money';
+import { formatCompactTaka, formatWholeTaka, takaInputFromPoisha } from './format-money';
 
 describe('formatMoney', () => {
   it.each([
@@ -48,5 +48,17 @@ describe('formatWholeTaka', () => {
 describe('takaInputFromPoisha', () => {
   it('keeps the exact poisha for a supported amount that floating division rounds', () => {
     expect(takaInputFromPoisha(7036874417766401)).toBe('70368744177664.01');
+  });
+});
+
+describe('formatCompactTaka', () => {
+  it.each([
+    [0n, '৳0'],
+    [50000n, '৳500'],
+    [150000n, '৳1.5K'],
+    [30000000n, '৳3.0L'],
+    [1250000000n, '৳1.3Cr'],
+  ])('writes %s poisha as %s', (poisha, expected) => {
+    expect(formatCompactTaka(poisha)).toBe(expected);
   });
 });

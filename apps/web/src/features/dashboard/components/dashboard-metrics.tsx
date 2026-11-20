@@ -6,6 +6,7 @@ import { Badge } from '@dakly/ui/badge';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
 
+import { formatChange } from '@/lib/format-change';
 import { formatWholeTaka } from '@/lib/format-money';
 
 const metrics = [
@@ -107,20 +108,11 @@ function ReportChange({ total, previous, period }: Comparison) {
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-muted">
       <Badge variant={variant} className="gap-1 rounded-full tabular-nums">
         {variant !== 'neutral' && icon}
-        {change(total, previous)}
+        {formatChange(total, previous)}
       </Badge>
       <span>vs previous {period} days</span>
     </div>
   );
-}
-
-function change(total: bigint, previous: bigint) {
-  if (previous === 0n) return 'New';
-  const delta = total - previous;
-  if (delta === 0n) return '0.0%';
-  const magnitude = delta < 0n ? -delta : delta;
-  const tenths = (magnitude * 1000n + previous / 2n) / previous;
-  return `${delta < 0n ? '-' : '+'}${formatCount(tenths / 10n)}.${tenths % 10n}%`;
 }
 
 function Sparkline({ points, className }: { points: string[]; className: string }) {

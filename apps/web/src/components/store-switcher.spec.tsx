@@ -19,6 +19,7 @@ const selected = {
   canViewOrders: false,
   canEditOrders: false,
   canViewCampaigns: false,
+  canViewAnalytics: false,
   canEditCampaigns: false,
   canViewSocial: false,
   canEditSocial: false,

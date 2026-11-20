@@ -81,6 +81,7 @@ export class AnalyticsOverviewService {
       },
       returnPerTaka: returnPerTaka(revenue.total, all.cost),
       weeklyRevenue: weeklyRevenue(current, byChannel),
+      previousWeeklyRevenuePoisha: weeklyTotals(previousRevenue.points),
       channels: channelRows(now, revenueByChannel),
       funnel: funnel(all, readable, people, Number(orders.total)),
     };
@@ -145,10 +146,11 @@ function funnel(
   people: { delivered: number; tapped: number },
   ordered: number,
 ) {
-  const step = (count: number, before: number): AnalyticsFunnelStep => ({
-    count,
-    percentOfPrevious: percent(count, before),
-  });
+  // An order can follow a read with no tap, so Ordered can pass the step before it; that has no sensible percent.
+  const step = (count: number, before: number): AnalyticsFunnelStep => {
+    const share = percent(count, before);
+    return { count, percentOfPrevious: share !== null && share > 100 ? null : share };
+  };
   return {
     sent: { count: all.sent, percentOfPrevious: null },
     delivered: step(all.delivered, all.sent),
@@ -179,6 +181,15 @@ function weeklyRevenue(
       Object.entries(byChannel).map(([channel, value]) => [channel, value.toString()]),
     ),
   }));
+}
+
+function weeklyTotals(points: { value: bigint }[]) {
+  const weeks: bigint[] = [];
+  points.forEach(({ value }, index) => {
+    const week = Math.floor(index / 7);
+    weeks[week] = (weeks[week] ?? 0n) + value;
+  });
+  return weeks.map((total) => total.toString());
 }
 
 function isChannel(value: string): value is AnalyticsChannel {
