@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import type { AutomationDetailResponse } from '@dakly/contracts/automations';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
@@ -13,9 +13,10 @@ import { QueryError } from '@dakly/ui/query-error';
 import { useRenameAutomation } from '../api/automation-settings';
 import { useAutomation, useStepStats, useTriggerPreview } from '../api/automations';
 import { statusLabels } from '../automation-labels';
+import { useCanvasParam } from '../use-canvas-param';
 import { useWorkflowEditor } from '../use-workflow-editor';
 import { type CanvasLayout, layoutWorkflow } from '../workflow-canvas-layout';
-import { checkWorkflow } from '../workflow-checks';
+import { checkWorkflow, type WorkflowCheck } from '../workflow-checks';
 import type { CanvasEditing } from './workflow-canvas-nodes';
 import { WorkflowCanvasViewport } from './workflow-canvas-viewport';
 import { WorkflowChecksPanel } from './workflow-checks-panel';
@@ -24,6 +25,7 @@ import { WorkflowPageHeader } from './workflow-page-header';
 import { WorkflowPalette } from './workflow-palette';
 import { WorkflowPublishDialog } from './workflow-publish-dialog';
 import { WorkflowStatsToggle } from './workflow-stats-toggle';
+import { WorkflowStepPanel } from './workflow-step-panel';
 import { useSessionContext } from '@/lib/session-context';
 
 export function WorkflowCanvas({ id }: { id: string }) {
@@ -109,12 +111,46 @@ function EditorActions({
 }
 
 function useStats(id: string) {
-  const [on, setOn] = useState(false);
+  const [value, setValue] = useCanvasParam('stats');
+  const on = value === '1';
   const query = useStepStats(id, on);
   return {
     stats: on ? query.data?.steps : undefined,
-    control: <WorkflowStatsToggle on={on} failed={query.isError} onChange={setOn} />,
+    control: (
+      <WorkflowStatsToggle
+        on={on}
+        failed={query.isError}
+        onChange={(next) => setValue(next ? '1' : null)}
+      />
+    ),
   };
+}
+
+function StepPanelHost({
+  editor,
+  layout,
+  stepKey,
+  settingsHref,
+  onClose,
+}: {
+  editor: Editor;
+  layout: CanvasLayout;
+  stepKey: string | null;
+  settingsHref: string;
+  onClose: () => void;
+}) {
+  const step = stepKey ? editor.graph.steps[stepKey] : undefined;
+  if (!stepKey || !step || step.kind === 'exit') return null;
+  return (
+    <WorkflowStepPanel
+      key={stepKey}
+      step={step}
+      number={layout.stepNumber(stepKey)}
+      settingsHref={settingsHref}
+      onChange={(next) => editor.update(stepKey, next)}
+      onClose={onClose}
+    />
+  );
 }
 
 function useCanvasPreview(workflow: Workflow) {
@@ -185,16 +221,18 @@ function EditorAlerts({ renameFailed, error }: { renameFailed: boolean; error?: 
   ));
 }
 
-function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Refresh }) {
+function EditorTop({
+  workflow,
+  editor,
+  checks,
+}: {
+  workflow: Workflow;
+  editor: Editor;
+  checks: WorkflowCheck[];
+}) {
   const rename = useRenameAutomation(workflow.id);
-  const editor = useWorkflowEditor(workflow, refresh);
-  const layout = useMemo(() => layoutWorkflow(editor.graph), [editor.graph]);
-  const checks = useMemo(
-    () => checkWorkflow(editor.graph, layout.stepNumber),
-    [editor.graph, layout],
-  );
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <>
       <WorkflowEditorHeader
         name={workflow.name}
         badge={<StatusBadge workflow={workflow} />}
@@ -216,10 +254,37 @@ function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Re
         error={editor.count === undefined ? editor.error : undefined}
       />
       <WorkflowChecksPanel checks={checks} onFix={(fix) => editor.apply(fix.apply(editor.graph))} />
+    </>
+  );
+}
+
+function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Refresh }) {
+  const editor = useWorkflowEditor(workflow, refresh);
+  const [stepKey, openStep] = useCanvasParam('step');
+  const layout = useMemo(() => layoutWorkflow(editor.graph), [editor.graph]);
+  const checks = useMemo(
+    () => checkWorkflow(editor.graph, layout.stepNumber),
+    [editor.graph, layout],
+  );
+  return (
+    <div className="flex h-screen flex-col bg-background">
+      <EditorTop workflow={workflow} editor={editor} checks={checks} />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <WorkflowPalette disabled={!editor.canAdd || editor.pending} onAdd={editor.append} />
-        <CanvasMain workflow={workflow} graph={editor.graph} layout={layout} editing={editor} />
+        <CanvasMain
+          workflow={workflow}
+          graph={editor.graph}
+          layout={layout}
+          editing={{ ...editor, open: openStep }}
+        />
       </div>
+      <StepPanelHost
+        editor={editor}
+        layout={layout}
+        stepKey={stepKey}
+        settingsHref={`/automations/${workflow.id}`}
+        onClose={() => openStep(null)}
+      />
       {editor.count !== undefined && (
         <WorkflowPublishDialog
           count={editor.count}

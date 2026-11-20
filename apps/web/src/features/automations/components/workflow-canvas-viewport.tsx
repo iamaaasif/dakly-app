@@ -81,7 +81,9 @@ function ZoomControls({ scale, onChange, onFit, extra }: ZoomProps) {
         className="rounded-none border-0 border-l border-border whitespace-nowrap"
         onClick={onFit}
       >
-        Fit<span className="max-sm:sr-only"> to screen</span>
+        <span>
+          Fit<span className="max-sm:sr-only"> to screen</span>
+        </span>
       </Button>
       {extra}
     </div>

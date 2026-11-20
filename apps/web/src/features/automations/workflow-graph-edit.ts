@@ -165,3 +165,7 @@ export function moveStep(graph: AutomationGraph, key: string, direction: 'up' | 
   const parents = parentsOf(graph, key);
   return parents.length === 1 ? swapWithNext(graph, parents[0]!) : undefined;
 }
+
+export function replaceStep(graph: AutomationGraph, key: string, step: AutomationStep) {
+  return { ...graph, steps: { ...graph.steps, [key]: step } };
+}
