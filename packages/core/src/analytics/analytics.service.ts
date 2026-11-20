@@ -55,6 +55,14 @@ export class AnalyticsService {
     );
   }
 
+  attributedOrders(
+    storeId: string,
+    source: { type: 'campaign' | 'automation'; id: string },
+    page: { cursor?: string; limit: number },
+  ) {
+    return this.repository.attributedOrders(storeId, source, page);
+  }
+
   async attributionBySource(
     storeId: string,
     period: ReportPeriod,
