@@ -47,9 +47,14 @@ export function RoleForm({ role, onDone }: { role?: RoleResponse; onDone: () => 
         />
         <PermissionFields />
         <TeamError message={form.formState.errors.root?.message} />
-        <Button type="submit" loading={create.isPending || change.isPending}>
-          Save role
-        </Button>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" onClick={onDone}>
+            Close
+          </Button>
+          <Button type="submit" loading={create.isPending || change.isPending}>
+            Save role
+          </Button>
+        </div>
       </form>
     </FormProvider>
   );
