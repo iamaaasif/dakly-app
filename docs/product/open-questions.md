@@ -17,6 +17,7 @@ Questions waiting for Asif. Until one is answered, build the "working assumption
 | Q13 | Shopify and WooCommerce sync in release 1?                                                      | Not built until answered                                                                     | Customers, Orders                |
 | Q15 | BullMQ Pro (groups) or a Valkey semaphore for per-store AI fairness?                            | Valkey semaphore, concurrency 3 per store                                                    | AI layer                         |
 | Q16 | Return per ৳1 thresholds for the Great and Good labels on the Analytics Campaigns tab           | No label is shown until the thresholds are set                                               | Analytics Campaigns tab labels   |
+| Q17 | How do Dakly links in social posts get tracked, and do posts get order credit?                  | Posts show reach and reactions only; link taps, chats started, orders and money show a dash  | Analytics Social posts tab       |
 
 ## Designs still needed before the screen is built
 
