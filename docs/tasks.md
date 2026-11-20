@@ -189,13 +189,13 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M10. Content and social
 
-| ID    | Task                                             | Status      | Depends | PR               | Notes                                                                                                                                                    |
-| ----- | ------------------------------------------------ | ----------- | ------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SOC-1 | Posts, targets, posting slots, approval          | Done        | CHN-2   | #227, #234       |                                                                                                                                                          |
-| SOC-2 | Publish jobs for Facebook and Instagram, retries | Done        | SOC-1   | #236, #237, #239 |                                                                                                                                                          |
-| SOC-3 | Post insights job                                | Todo        | SOC-2   |                  |                                                                                                                                                          |
-| SOC-4 | Content Studio writing                           | Done        | AI-2    | #225, #230, #232 | Brand profile, library, generation and product descriptions merged. The AI caption panel in Create post is SOC-5.                                        |
-| SOC-5 | Web: Social hub, My posts, Content Studio        | In progress | SOC-4   |                  | Part 1: Social hub, accounts and drafts list. Left: draft actions and posting schedule, My posts, Create post with the AI caption panel, Content Studio. |
+| ID    | Task                                             | Status    | Depends | PR               | Notes                                                                                                                                                    |
+| ----- | ------------------------------------------------ | --------- | ------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SOC-1 | Posts, targets, posting slots, approval          | Done      | CHN-2   | #227, #234       |                                                                                                                                                          |
+| SOC-2 | Publish jobs for Facebook and Instagram, retries | Done      | SOC-1   | #236, #237, #239 |                                                                                                                                                          |
+| SOC-3 | Post insights job                                | Todo      | SOC-2   |                  |                                                                                                                                                          |
+| SOC-4 | Content Studio writing                           | Done      | AI-2    | #225, #230, #232 | Brand profile, library, generation and product descriptions merged. The AI caption panel in Create post is SOC-5.                                        |
+| SOC-5 | Web: Social hub, My posts, Content Studio        | In review | SOC-4   | #286             | Part 1: Social hub, accounts and drafts list. Left: draft actions and posting schedule, My posts, Create post with the AI caption panel, Content Studio. |
 
 ## M11. Analytics and insights
 
