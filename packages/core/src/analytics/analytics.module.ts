@@ -8,6 +8,7 @@ import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
+import { OutboxModule } from '../platform/outbox/outbox.module';
 import { QUEUES } from '../platform/queue/queues';
 import { StoresModule } from '../stores/stores.module';
 import { AnalyticsReconciliationService } from './analytics-reconciliation.service';
@@ -22,6 +23,7 @@ import { ReconcileAnalyticsJob } from './jobs/reconcile-analytics.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
 import { ScheduleLifecycleOnStatsRepaired } from './jobs/schedule-lifecycle-on-stats-repaired.job';
 import { SummarizeAttributionCreated } from './jobs/summarize-attribution-created.job';
+import { SummarizeAttributionRebuilt } from './jobs/summarize-attribution-rebuilt.job';
 import { SummarizeAttributionRemoved } from './jobs/summarize-attribution-removed.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
@@ -39,6 +41,7 @@ import { OrderAttributionEngine } from './order-attribution-engine.service';
     ContactsModule,
     LinksModule,
     OrdersModule,
+    OutboxModule,
     StoresModule,
     BullModule.registerQueue({ name: QUEUES.sync }, { name: QUEUES.bulk }),
   ],
@@ -56,6 +59,7 @@ import { OrderAttributionEngine } from './order-attribution-engine.service';
     RemoveDeletedBuyer,
     ScheduleLifecycleOnStatsRepaired,
     SummarizeAttributionCreated,
+    SummarizeAttributionRebuilt,
     SummarizeAttributionRemoved,
     SummarizeOrderCodCollected,
     SummarizeOrderCreated,

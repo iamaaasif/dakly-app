@@ -48,6 +48,12 @@ export class AnalyticsSummariesService {
     await this.scheduleOrderDay(storeId, day);
   }
 
+  async refreshAttributionOrders(storeId: string, orderIds: string[]) {
+    const timeZone = await this.stores.timeZone(storeId);
+    const days = await this.orders.reportingDays(storeId, orderIds, timeZone);
+    for (const { day } of days) await this.scheduleOrderDay(storeId, day);
+  }
+
   async removeBuyer(storeId: string, contactId: string) {
     await this.transaction.run(storeId, async () => {
       await this.summaries.lockSummaries(storeId, contactId);
@@ -110,7 +116,9 @@ export class AnalyticsSummariesService {
           metric,
           value: BigInt(values[metric]),
         });
-    if (metrics.size) await this.summaries.save(storeId, [...metrics.values()], now);
+    const rowsToSave = [...metrics.values()];
+    for (let start = 0; start < rowsToSave.length; start += 1000)
+      await this.summaries.save(storeId, rowsToSave.slice(start, start + 1000), now);
   }
 
   async reconciliationRange(storeId: string): Promise<ReportPeriod> {

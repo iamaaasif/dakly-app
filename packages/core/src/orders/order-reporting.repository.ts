@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 
 import { orders } from '@dakly/db/schema/orders';
 
@@ -115,6 +115,17 @@ export class OrderReportingRepository {
     );
   }
 
+  reportingDays(storeId: string, orderIds: string[], timeZone: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .selectDistinct({
+          day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text`,
+        })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), inArray(orders.id, orderIds))),
+    );
+  }
+
   dailyAttributionMetrics(
     storeId: string,
     {
@@ -130,12 +141,11 @@ export class OrderReportingRepository {
     const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
     const dimension = sql<string>`coalesce(${orders.attributedSourceType} || ':' || ${orders.attributedSourceId}::text, '')`;
     const captured = sql`coalesce(${orders.attributedAmountPoisha}, 0)`;
-    const current = sql`(${orders.itemsSubtotalPoisha} - ${orders.orderDiscountPoisha})`;
     const kept = sql`(coalesce(${orders.deliveredItemsSubtotalPoisha}, ${orders.itemsSubtotalPoisha})
       - coalesce(${orders.deliveredOrderDiscountPoisha}, ${orders.orderDiscountPoisha}))`;
     const net = sql`case
       when ${orders.stage} = 'returned' then 0
-      when ${orders.stage} = 'partially_delivered' then greatest(0, ${captured} - (${current} - ${kept}))
+      when ${orders.stage} = 'partially_delivered' then ${kept}
       else ${captured} end`;
     return this.database.forStore(storeId, (tx) =>
       tx

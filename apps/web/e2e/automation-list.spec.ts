@@ -116,10 +116,6 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
       await expect(disable).toBeDisabled();
       await expect(disable).not.toHaveAttribute('aria-busy', 'true');
     } finally {
-      await db.pool.query(
-        'delete from store_daily_metrics where store_id=$1 and dimension=any($2::text[])',
-        [storeId, ids.map((id) => `automation:${id}`)],
-      );
       releaseCopy();
     }
     const copy: AutomationResponse = await (await copied).json();
@@ -130,6 +126,10 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
     await page.getByRole('dialog').getByRole('button', { name: 'Delete workflow' }).click();
     await expect(page.getByRole('tab', { name: 'Draft 1' })).toBeVisible();
   } finally {
+    await db.pool.query(
+      'delete from store_daily_metrics where store_id=$1 and dimension=any($2::text[])',
+      [storeId, ids.map((id) => `automation:${id}`)],
+    );
     await db.pool.query('delete from automation_runs where automation_id=any($1::uuid[])', [ids]);
     await db.pool.query(
       'update automations set published_version_id=null where id=any($1::uuid[])',

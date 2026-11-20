@@ -26,6 +26,9 @@ import { BuildOrderSummaryJob } from './jobs/build-order-summary.job';
 import { ContinueAttributionRebuild } from './jobs/continue-attribution-rebuild.job';
 import { OnAttributionWindowChanged } from './jobs/on-attribution-window-changed.job';
 import { RemoveDeletedBuyer } from './jobs/remove-deleted-buyer.job';
+import { SummarizeAttributionCreated } from './jobs/summarize-attribution-created.job';
+import { SummarizeAttributionRebuilt } from './jobs/summarize-attribution-rebuilt.job';
+import { SummarizeAttributionRemoved } from './jobs/summarize-attribution-removed.job';
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
@@ -337,6 +340,33 @@ describe('Daily order summaries', () => {
     });
     expect(await fixture.row('orders', inRange)).toMatchObject({ attributed_touch_id: visit });
     expect(await fixture.row('orders', outside)).toMatchObject({ attributed_touch_id: null });
+    const {
+      rows: [refresh],
+    } = await db.query(
+      `select id, payload from outbox_events where store_id=$1 and type='attribution.orders_rebuilt'
+       and payload->'orderIds' @> jsonb_build_array($2::text)`,
+      [fixture.a, inRange],
+    );
+    expect(refresh.payload.orderIds).toContain(inRange);
+    await app.get(SummarizeAttributionRebuilt).handle({
+      ...refresh,
+      type: 'attribution.orders_rebuilt',
+      storeId: fixture.a,
+      occurredAt: now.toISOString(),
+    });
+
+    await finishOrderDay(fixture.a, '2025-11-20');
+    for (const job of await queue.getDelayed()) {
+      if (job.data.storeId === fixture.a) await job.remove();
+    }
+    const revenue = await app.get(AnalyticsService).marketingRevenue(fixture.a, {
+      from: '2025-11-20',
+      through: '2025-11-20',
+    });
+    expect(revenue.total).toBe(125000n);
+    await db.query("delete from store_daily_metrics where store_id=$1 and day='2025-11-20'", [
+      fixture.a,
+    ]);
   });
 
   it('commits bounded rebuild progress and resumes past a microsecond cursor', async () => {
@@ -812,7 +842,12 @@ describe('Daily order summaries', () => {
     const reports = app.get(AnalyticsService);
     const summaries = app.get(AnalyticsSummariesService);
     const period = { from: day, through: day };
-    await summaries.refreshOrderDays(fixture.a, period);
+    await app.get(SummarizeAttributionCreated).handle({
+      ...event(fixture.a, id),
+      type: 'attribution.created',
+      payload: { orderId: id, sourceType: 'campaign', sourceId: campaign },
+    });
+    await finishOrderDay(fixture.a, day);
     expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 120000n });
     await db.query(
       `update orders set stage='partially_delivered',delivered_items_subtotal_poisha=60000,
@@ -820,7 +855,7 @@ describe('Daily order summaries', () => {
       [id],
     );
     await summaries.refreshOrderDays(fixture.a, period);
-    expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 55000n });
+    expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 60000n });
     await db.query(
       "update orders set stage='returned',attributed_source_type='automation',attributed_source_id=$2 where id=$1",
       [id, workflow],
@@ -834,5 +869,20 @@ describe('Daily order summaries', () => {
       workflow,
     ]);
     expect(workflows[workflow]).toEqual({ orders: '1', revenuePoisha: '0' });
+
+    await db.query(
+      `update orders set stage='cancelled',cancel_reason='test',
+       attributed_source_type=null,attributed_source_id=null,attributed_amount_poisha=null where id=$1`,
+      [id],
+    );
+    await app.get(SummarizeAttributionRemoved).handle({
+      ...event(fixture.a, id),
+      type: 'attribution.removed',
+    });
+    await finishOrderDay(fixture.a, day);
+    const cancelled = await reports.attributionBySource(fixture.a, period, 'automation', [
+      workflow,
+    ]);
+    expect(cancelled[workflow]).toEqual({ orders: '0', revenuePoisha: '0' });
   });
 });

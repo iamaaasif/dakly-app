@@ -106,7 +106,13 @@ export class AnalyticsRepository {
         .where(
           and(
             eq(storeDailyMetrics.storeId, storeId),
-            inArray(storeDailyMetrics.metric, ['orders', 'delivered_orders', 'net_spend', 'sales']),
+            inArray(storeDailyMetrics.metric, [
+              'orders',
+              'delivered_orders',
+              'net_spend',
+              'sales',
+              ...marketingMetrics,
+            ]),
             gte(storeDailyMetrics.day, since),
           ),
         )
@@ -123,7 +129,7 @@ export class AnalyticsRepository {
         with expired as (
           select ctid from store_daily_metrics
           where store_id = ${storeId} and day < ${reportBefore}::date
-            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle')
+            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle', 'marketing_orders', 'marketing_revenue')
           order by day, metric, dimension limit ${limit} for update
         ), removed as (
           delete from store_daily_metrics as metrics using expired
