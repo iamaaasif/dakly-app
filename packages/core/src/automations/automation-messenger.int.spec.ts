@@ -250,6 +250,36 @@ describe('Workflow Messenger send steps (Postgres and Valkey)', () => {
     ]);
   });
 
+  it('skips as no_address when the contact never wrote on Messenger', async () => {
+    const contactId = await shopper([]);
+    const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
+    const runId = await dueRun(sendStep(['messenger']), contactId);
+
+    await runStep(runId);
+
+    expect(provider).not.toHaveBeenCalled();
+    expect((await outcome(runId)).steps).toEqual([
+      expect.objectContaining({ outcome: 'skipped', skip_reason: 'no_address' }),
+    ]);
+  });
+
+  it('falls to SMS when the contact never wrote on Messenger and the step lists SMS', async () => {
+    const contactId = await shopper([]);
+    const messenger = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
+    const sms = vi
+      .spyOn(MailpitSmsDriver.prototype, 'send')
+      .mockResolvedValue({ providerMessageId: 'fake-sms-2' });
+    const runId = await dueRun(sendStep(['messenger', 'sms']), contactId);
+
+    await runStep(runId);
+
+    expect(messenger).not.toHaveBeenCalled();
+    expect(sms).toHaveBeenCalledOnce();
+    expect((await outcome(runId)).steps).toEqual([
+      expect.objectContaining({ outcome: 'sent', channel: 'sms' }),
+    ]);
+  });
+
   it('falls back to SMS only when the step lists it', async () => {
     const contactId = await shopper([{ pageId: pages.newer, psid: 'psid-late', hoursAgo: 30 }]);
     const messenger = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');

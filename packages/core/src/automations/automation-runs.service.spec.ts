@@ -665,11 +665,11 @@ describe('AutomationRunsService', () => {
       expect(sent).toEqual([]);
     });
 
-    it('skips a Messenger-only step as a closed window when the contact has no chat', async () => {
+    it('skips a Messenger-only step as no_address when the contact has no chat', async () => {
       await start({ ...send, channels: ['messenger'] });
 
       expect(repository.steps).toEqual([
-        expect.objectContaining({ outcome: 'skipped', skipReason: 'window_closed' }),
+        expect.objectContaining({ outcome: 'skipped', skipReason: 'no_address' }),
       ]);
     });
 

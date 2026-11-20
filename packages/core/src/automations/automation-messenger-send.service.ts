@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { MessagingService } from '../messaging/messaging.service';
 import { newId } from '../platform/database/new-id';
 import { AppError } from '../platform/errors/app-error';
-import { SendPolicyService } from '../sending/send-policy.service';
+import { SendPolicyService, type SkipReason } from '../sending/send-policy.service';
 import { AutomationOrderTextService } from './automation-order-text.service';
 import { AutomationRunsRepository, type RunClaim } from './automation-runs.repository';
 import {
@@ -57,7 +57,7 @@ export class AutomationMessengerSendService {
   ) {
     if (!step.channels.includes('messenger')) return undefined;
     const route = await this.messaging.latestMessengerRoute(storeId, contactId);
-    const checked = await this.sendPolicy.checkForSend(
+    const policy = await this.sendPolicy.checkForSend(
       storeId,
       {
         contactId,
@@ -67,6 +67,11 @@ export class AutomationMessengerSendService {
       },
       lockedContactExists,
     );
+    // With no chat on any Page the contact has no address here; the window check would say
+    // window_closed first.
+    const { decision } = policy;
+    const noChat = !route && decision.action === 'skip' && decision.reason === 'window_closed';
+    const checked = noChat ? { ...policy, decision: skipped('no_address') } : policy;
     if (checked.decision.action === 'skip' && step.channels.includes('sms')) return undefined;
     return { ...checked, channel: 'messenger' as const, route };
   }
@@ -77,7 +82,7 @@ export class AutomationMessengerSendService {
     route: Route | undefined,
     times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<GateResult> {
-    if (!route) return { decision: { action: 'skip', reason: 'window_closed' } };
+    if (!route) return { decision: skipped('no_address') };
     const prepared = await this.orderText.prepare(storeId, orderId, step.message.text);
     const body = (await prepared?.render()) ?? step.message.text;
     const stepId = newId();
@@ -144,6 +149,10 @@ export class AutomationMessengerSendService {
   interrupted(now: Date): StepResult {
     return unconfirmed(now);
   }
+}
+
+function skipped(reason: SkipReason) {
+  return { action: 'skip', reason } as const;
 }
 
 function unconfirmed(now: Date): StepResult {
