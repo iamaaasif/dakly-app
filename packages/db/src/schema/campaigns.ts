@@ -297,6 +297,8 @@ export const campaignRecipients = pgTable(
     index('campaign_recipients_campaign_status_idx').on(table.campaignId, table.status, table.id),
     // Frequency cap and last-touch attribution look up a contact's recent sends.
     index('campaign_recipients_store_contact_idx').on(table.storeId, table.contactId, table.sentAt),
+    // Analytics reads the sends of a period.
+    index('campaign_recipients_store_sent_at_idx').on(table.storeId, table.sentAt),
     // Global, for SMS delivery reports that carry only the provider's message id.
     index('campaign_recipients_provider_message_idx')
       .on(table.providerMessageId)
