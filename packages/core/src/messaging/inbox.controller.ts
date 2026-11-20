@@ -43,6 +43,12 @@ export class InboxController {
     return this.inbox.list(storeId, query);
   }
 
+  @Get('counts')
+  @RequirePermission('chats.view')
+  counts(@CurrentStore() storeId: string) {
+    return this.inbox.counts(storeId);
+  }
+
   @Get(':conversationId')
   @RequirePermission('chats.view')
   get(@CurrentStore() storeId: string, @Param('conversationId', ParseUUIDPipe) id: string) {

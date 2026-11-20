@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
 import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
 import { CampaignApprovalService } from '@dakly/core/campaigns/campaign-approval.service';
-import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-authorization.service';
+import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-channel-driver';
 import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
@@ -2106,11 +2106,22 @@ async function expectRetryAfterSubscriptionFailure(shop: Shop) {
     });
     expect(response.statusCode).toBe(500);
     expect(subscriptionPending).toBe(false);
+    // Meta may have accepted the Page before the failure, so the reconciliation keeps a record.
+    expect(await pendingSubscriptions(shop)).toEqual([pageSelection.externalAccountId]);
   } finally {
     release();
     subscription.mockRestore();
   }
   await success(shop, 'POST', metaConnect, 201, { selectionId, accounts: [pageSelection] });
+  expect(await pendingSubscriptions(shop)).toEqual([]);
+}
+
+async function pendingSubscriptions(shop: Shop) {
+  const { rows } = await f.admin.pool.query<{ page_external_id: string }>(
+    'select page_external_id from meta_page_subscriptions where store_id=$1 order by 1',
+    [shop.id],
+  );
+  return rows.map((row) => row.page_external_id);
 }
 
 async function expectGrantConsumedAfterCacheFailure(shop: Shop) {
@@ -2183,8 +2194,17 @@ fixture('POST /channel-connections/meta', async () => {
   );
   const { ids } = connected.json();
   expect(ids).toHaveLength(2);
+  expect(await pendingSubscriptions(a)).toEqual([]);
   await expectSavedMetaCredential(a, ids[0], 'facebook_page');
   await expectSavedMetaCredential(a, ids[1], 'instagram');
+  const linked = await f.admin.pool.query(
+    'select kind, linked_page_external_id from channel_connections where id = any($1::uuid[]) order by kind',
+    [ids],
+  );
+  expect(linked.rows).toEqual([
+    { kind: 'facebook_page', linked_page_external_id: null },
+    { kind: 'instagram', linked_page_external_id: pageSelection.externalAccountId },
+  ]);
   expect((await f.request(a.owner, 'POST', metaConnect, input)).statusCode).toBe(404);
 
   await rejectMetaConflict(b, [pageSelection]);
@@ -2499,6 +2519,21 @@ async function seedConversation(shop: Shop) {
 async function enableChats(shop: Shop) {
   await success(shop, 'PATCH', '/store/extensions', 200, { extensions: ['chats'] });
 }
+
+fixture('GET /conversations/counts', async () => {
+  const { a, b } = await pair();
+  await seedConversation(a);
+  await seedConversation(a);
+  await seedConversation(b);
+  expect((await f.request(b.owner, 'GET', '/conversations/counts')).statusCode).toBe(403);
+  await enableChats(b);
+  expect((await success(b, 'GET', '/conversations/counts', 200)).json()).toEqual({
+    all: 1,
+    needsYou: 0,
+    aiHandling: 1,
+    followUp: 0,
+  });
+});
 
 fixture('GET /conversations', async () => {
   const { a, b } = await pair();

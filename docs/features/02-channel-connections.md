@@ -6,7 +6,7 @@
 | Status    | Not started                                                                                                                            |
 | Extension | Core                                                                                                                                   |
 | Code      | `packages/core/src/channels/`, `packages/providers/src/channel/{messenger,instagram,whatsapp}/`, `apps/web/src/features/integrations/` |
-| Tasks     | CHN-1 to CHN-6                                                                                                                         |
+| Tasks     | CHN-1 to CHN-6, CHN-8                                                                                                                  |
 
 ## Purpose
 
@@ -155,7 +155,13 @@ Enable `message_deliveries`, `message_reads` and `message_echoes` for the Page o
 
 For Instagram messaging, add `instagram_manage_messages` to the Facebook Login configuration so the Page token carries that permission. Turn on **Allow Access to Messages** under **Connected Tools** in the Instagram account's message controls, then reconnect the staging account to grant the updated permission. [Meta Instagram Messaging setup](https://developers.facebook.com/documentation/business-messaging/instagram-messaging/get-started)
 
-A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. CHN-8 finds and unsubscribes Pages in this state before live intake.
+A crash or later failure during selection can leave a Page subscribed at Meta without a Dakly connection. The routing worker ignores deliveries for those Pages. `POST /channel-connections/meta` saves the Page token encrypted in `meta_page_subscriptions` before it calls Meta, and deletes that record in the same transaction that saves the connections. A record that is still there therefore means Dakly subscribed the Page and no connection backs it.
+
+An Instagram connection stores the Page it messages through in `linked_page_external_id`, set when the shop picks the account. Instagram messages reach Dakly through that Page's subscription, so the Page stays subscribed while a Messenger connection or a linked Instagram connection for it is live.
+
+Disconnecting a Messenger or Instagram connection moves its Page token into `meta_page_subscriptions` in the disconnect transaction, then runs the same check as the daily job at once. The disconnect succeeds even when Meta fails.
+
+Every day, `reconcile-meta-page-subscriptions` goes through records older than one hour, so a selection still in progress is left alone. For each record it checks, across all stores through `meta_page_is_connected`, whether a Messenger connection or a linked Instagram connection that is not disconnected exists for the Page. If one does, it deletes the record and leaves the Page subscribed. If none does, it calls Meta to unsubscribe the Page, outside any transaction, and deletes the record once Meta accepts. A Meta error leaves the record for the next run. If Meta rejects the token and the record is older than 30 days, the shop most likely removed the app or lost the Page, so the record is deleted with one warning. Other errors keep retrying daily.
 
 Every minute, the worker checks Meta deliveries received more than one minute ago that still need processing. If a delivery’s Valkey job is missing, the worker queues it again with the same row id as its job id. If the final processing attempt fails, the worker marks the delivery as failed and keeps its payload until the daily purge.
 
