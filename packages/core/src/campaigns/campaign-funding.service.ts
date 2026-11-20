@@ -1,15 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { countSmsParts } from '@dakly/contracts/sms';
-
-import { LinksService } from '../links/links.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { WalletService } from '../wallets/wallet.service';
+import { CampaignCountsService } from './campaign-counts.service';
+import { CampaignSmsService } from './campaign-sms.service';
 import { campaignError } from './campaigns.errors';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
-import { approvalKey, marketingSmsText } from './campaigns.service';
+import { approvalKey, CampaignsService } from './campaigns.service';
 
 const ACTOR = { kind: 'system' } as const;
 const WALLET = 'sms_credits';
@@ -21,14 +21,53 @@ export class CampaignFundingService {
   constructor(
     @Inject(CampaignsRepository) private readonly campaigns: CampaignsRepository,
     @Inject(WalletService) private readonly wallets: WalletService,
-    @Inject(LinksService) private readonly links: LinksService,
+    @Inject(CampaignSmsService) private readonly sms: CampaignSmsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(CampaignsService) private readonly service: CampaignsService,
+    @Inject(CampaignCountsService) private readonly counts: CampaignCountsService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   prepare(storeId: string, id: string): Promise<boolean> {
     return this.transaction.run(storeId, () => this.fund(storeId, id, 'sending'));
+  }
+
+  async finish(storeId: string, id: string) {
+    await this.transaction.run(storeId, async () => {
+      const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
+      if (!campaign?.approvedAt) return;
+      const now = this.clock.now();
+      const cancelled = campaign.status === 'cancelled';
+      const canSettle = cancelled
+        ? campaign.settlementPendingAt
+        : campaign.status === 'sending' && campaign.shortLinkBase;
+      if (!canSettle) {
+        if (!campaign.countsAt) await this.counts.refresh(storeId, id, 'batch');
+        return;
+      }
+      const settled = await this.service.settleReservation(
+        storeId,
+        { id, approvedAt: campaign.approvedAt, cancelledAt: cancelled ? now : undefined },
+        ACTOR,
+      );
+      if (cancelled) return this.counts.refresh(storeId, id, 'force');
+      if (!settled) return this.counts.refresh(storeId, id, 'batch');
+      await this.campaigns.changeStatus(
+        storeId,
+        id,
+        { status: 'sending' },
+        { status: 'sent', finishedAt: now, updatedAt: now },
+      );
+      await this.counts.refresh(storeId, id, 'force');
+      await this.outbox.publish({
+        type: 'campaign.sent',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { campaignId: id },
+      });
+    });
   }
 
   async resumeAfterTopUp(storeId: string, entryId: string): Promise<void> {
@@ -52,9 +91,8 @@ export class CampaignFundingService {
     if (!reprice && campaign.status !== 'sending') return true;
     if (!campaign.approvedAt) throw campaignError('CAMPAIGN_APPROVAL_TIME_MISSING');
     if (!reprice) return true;
-    const base = this.links.shortLinkBase();
-    const body = marketingSmsText(campaign.content.text, this.links.sampleOptOutUrl(base));
-    const needed = countSmsParts(body) * campaign.recipientsCount;
+    const { shortLinkBase: base, smsParts } = this.sms.estimate(campaign.content.text);
+    const needed = smsParts * campaign.recipientsCount;
     const key = approvalKey(id, campaign.approvedAt);
     await this.wallets.lockForReservation(storeId, WALLET);
     const reservation = await this.wallets.reservationFor(storeId, WALLET, key);

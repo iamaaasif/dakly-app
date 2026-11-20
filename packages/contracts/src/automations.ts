@@ -91,5 +91,6 @@ export type AutomationListItem = AutomationResponse & {
   stepCount: number;
   channels: CampaignChannel[];
   enteredLast30Days: number;
+  attributedRevenuePoisha: string;
 };
 export type AutomationListResponse = { items: AutomationListItem[]; nextCursor: string | null };

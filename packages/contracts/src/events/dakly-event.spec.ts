@@ -142,6 +142,12 @@ const examples: DaklyEvent[] = [
     payload: { campaignId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1', status: 'scheduled' },
   },
   {
+    type: 'campaign.sent',
+    storeId,
+    occurredAt,
+    payload: { campaignId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1' },
+  },
+  {
     type: 'conversation.started',
     storeId,
     occurredAt,
@@ -177,6 +183,7 @@ const examples: DaklyEvent[] = [
     occurredAt,
     payload: { orderId, sourceType: 'campaign', sourceId: trackedLink.sourceId },
   },
+  { type: 'attribution.orders_rebuilt', storeId, occurredAt, payload: { orderIds: [orderId] } },
   { type: 'attribution.removed', storeId, occurredAt, payload: { orderId } },
   { type: 'attribution.window_changed', storeId, occurredAt, payload: { rebuildId: orderId } },
   {

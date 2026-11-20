@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module, type DynamicModule } from '@nestjs/common';
 
+import { AnalyticsReportsModule } from '../analytics/analytics-reports.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -16,9 +17,12 @@ import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { CampaignBatchService } from './campaign-batch.service';
+import { CampaignCountsRepository } from './campaign-counts.repository';
+import { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSenderService } from './campaign-sender.service';
 import { CampaignSendingRepository } from './campaign-sending.repository';
+import { CampaignSmsService } from './campaign-sms.service';
 import { CampaignSweepService } from './campaign-sweep.service';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsRepository } from './campaigns.repository';
@@ -26,6 +30,7 @@ import { CampaignsService } from './campaigns.service';
 
 @Module({
   imports: [
+    AnalyticsReportsModule,
     CacheModule,
     ClockModule,
     LinksModule,
@@ -42,13 +47,16 @@ import { CampaignsService } from './campaigns.service';
   ],
   controllers: [CampaignsController],
   providers: [
+    CampaignCountsRepository,
+    CampaignCountsService,
     CampaignsRepository,
     CampaignSendingRepository,
+    CampaignSmsService,
     CampaignsService,
     CampaignSenderService,
     CampaignFundingService,
   ],
-  exports: [CampaignFundingService, CampaignsService],
+  exports: [CampaignCountsService, CampaignFundingService, CampaignsService],
 })
 export class CampaignsModule {
   static forWorker(): DynamicModule {

@@ -5,16 +5,16 @@ import { Badge } from '@dakly/ui/badge';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
 
-import { formatCount, formatMoney } from '@/lib/format-money';
+import { formatCount, formatWholeTaka } from '@/lib/format-money';
 
 const metrics = [
   {
-    id: 'sales',
-    title: 'Sales',
+    id: 'marketingRevenue',
+    title: 'Money from Dakly messages',
     icon: ShoppingBag,
     color: 'text-action-hover',
     fill: 'bg-primary-soft',
-    description: 'Item totals after discounts, excluding delivery.',
+    description: 'Item totals from attributed orders, including returns up to today.',
   },
   {
     id: 'customersWhoCameBack',
@@ -40,13 +40,27 @@ const metrics = [
     fill: 'bg-surface-muted',
     description: 'Orders from all sources, excluding cancelled orders.',
   },
+  {
+    id: 'sales',
+    title: 'Sales',
+    icon: ShoppingBag,
+    color: 'text-action-hover',
+    fill: 'bg-primary-soft',
+    description: 'Item totals after discounts, excluding delivery.',
+  },
 ] as const;
 
 type MetricsProps = { cards: DashboardResponse['cards']; period: number };
 
 export function DashboardMetrics({ cards, period }: MetricsProps) {
   return (
-    <section aria-label="Key figures" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <section
+      aria-label="Key figures"
+      className={cn(
+        'grid gap-4 sm:grid-cols-2',
+        metrics.every(({ id }) => cards[id]) ? 'xl:grid-cols-5' : 'xl:grid-cols-4',
+      )}
+    >
       {metrics.map(({ id, title, icon: Icon, color, fill, description }) => {
         const card = cards[id];
         if (!card) return null;
@@ -54,17 +68,18 @@ export function DashboardMetrics({ cards, period }: MetricsProps) {
         const total = BigInt(sales ? card.totalPoisha : card.total);
         const previous = BigInt(sales ? card.previousPoisha : card.previous);
         const points = sales ? card.pointsPoisha : card.points;
+        const amount = sales ? formatWholeTaka(total) : formatCount(total);
         return (
           <Card key={id} className="flex min-w-0 flex-col gap-3 p-4">
-            <h2 className="flex items-center gap-2 text-md font-semibold xl:gap-1 xl:tracking-tight xl:whitespace-nowrap">
+            <h2 className="flex items-center gap-2 text-md font-semibold xl:gap-1 xl:tracking-tight">
               <span className={cn('shrink-0 rounded-md p-2 xl:p-1', color, fill)}>
                 <Icon aria-hidden className="size-4" strokeWidth={1.75} />
               </span>
               {title}
             </h2>
-            <div className="flex flex-wrap items-end gap-2">
-              <p className="max-w-full text-2xl font-bold wrap-anywhere tabular-nums">
-                {sales ? formatMoney(total) : formatCount(total)}
+            <div className="flex min-w-0 items-end gap-2">
+              <p className="min-w-0 truncate text-xl font-bold tabular-nums" title={amount}>
+                {amount}
               </p>
               <Sparkline points={points} className={color} />
             </div>

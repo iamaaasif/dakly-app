@@ -10,10 +10,9 @@ import type {
   ChangeCampaignInput,
   CreateCampaignInput,
 } from '@dakly/contracts/campaigns';
-import { countSmsParts } from '@dakly/contracts/sms';
 import type { StoreAccess } from '@dakly/contracts/team';
 
-import { LinksService } from '../links/links.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -26,6 +25,8 @@ import {
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
+import { toCampaignResponse } from './campaign-response';
+import { CampaignSmsService } from './campaign-sms.service';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
 import {
   type Campaign,
@@ -68,15 +69,21 @@ export class CampaignsService {
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
-    @Inject(LinksService) private readonly links: LinksService,
+    @Inject(CampaignSmsService) private readonly sms: CampaignSmsService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(AnalyticsService) private readonly reports: AnalyticsService,
   ) {}
 
   async list(storeId: string, query: CampaignListQuery): Promise<CampaignListResponse> {
     const timeZone =
       query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
     const rows = await this.repository.list(storeId, { ...query, timeZone });
-    const items = rows.slice(0, query.limit).map(toCampaignResponse);
+    const page = rows.slice(0, query.limit).map(toCampaignResponse);
+    const results = await this.reports.campaignAttribution(
+      storeId,
+      page.map(({ id }) => id),
+    );
+    const items = page.map((item) => ({ ...item, attribution: results[item.id] }));
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
@@ -85,7 +92,9 @@ export class CampaignsService {
   }
 
   async get(storeId: string, campaignId: string): Promise<CampaignResponse> {
-    return toCampaignResponse(await this.find(storeId, campaignId));
+    const campaign = await this.find(storeId, campaignId);
+    const results = await this.reports.campaignAttribution(storeId, [campaignId]);
+    return { ...toCampaignResponse(campaign), attribution: results[campaignId] };
   }
 
   async create(
@@ -126,11 +135,8 @@ export class CampaignsService {
   async estimate(storeId: string, campaignId: string): Promise<CampaignEstimateResponse> {
     const campaign = await this.find(storeId, campaignId);
     if (campaign.status !== 'draft') throw campaignError('CAMPAIGN_NOT_DRAFT');
-    return toEstimate(
-      campaign,
-      await this.checkAudience(storeId, campaign),
-      this.links.sampleOptOutUrl(),
-    );
+    const recipients = await this.checkAudience(storeId, campaign);
+    return toEstimate(recipients, this.sms.estimate(campaign.content.text).smsParts);
   }
 
   // One store transaction (CAMP-2): the audience is frozen, the credits reserved and the event
@@ -151,8 +157,8 @@ export class CampaignsService {
       if (campaign.scheduledFor && campaign.scheduledFor <= now)
         throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
       const recipients = await this.checkAudience(storeId, campaign);
-      const shortLinkBase = this.links.shortLinkBase();
-      const estimate = toEstimate(campaign, recipients, this.links.sampleOptOutUrl(shortLinkBase));
+      const { shortLinkBase, smsParts } = this.sms.estimate(campaign.content.text);
+      const estimate = toEstimate(recipients, smsParts);
       if (estimate.recipientsCount === 0) throw campaignError('CAMPAIGN_NO_RECIPIENTS');
       for (let start = 0; start < recipients.length; start += AUDIENCE_PAGE_SIZE)
         await this.repository.insertRecipients(
@@ -224,6 +230,7 @@ export class CampaignsService {
           finishedAt: now,
           updatedAt: now,
           settlementPendingAt: campaign.approvedAt ? now : null,
+          countsAt: null,
         },
       );
       if (!cancelled) throw campaignError('CAMPAIGN_NOT_CANCELLABLE');
@@ -238,7 +245,10 @@ export class CampaignsService {
   }
 
   async pause(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
-    return this.changeStatus(storeId, campaignId, 'pause', { pauseReason: 'manual' });
+    return this.changeStatus(storeId, campaignId, 'pause', {
+      pauseReason: 'manual',
+      countsAt: null,
+    });
   }
 
   async resume(storeId: string, campaignId: string, _actor: Actor): Promise<CampaignResponse> {
@@ -390,24 +400,11 @@ export function approvalKey(campaignId: string, approvedAt: Date, suffix?: 'with
   return suffix ? `${key}:${suffix}` : key;
 }
 
-// CAMP-R4: every marketing SMS ends with the recipient's opt-out link.
-export function marketingSmsText(text: string, optOutUrl: string): string {
-  return `${text}\n${optOutUrl}`;
-}
-
-// Counts the opt-out link at its real length, so the reservation covers what the sender sends.
-function toEstimate(
-  campaign: Campaign,
-  recipients: FrozenRecipient[],
-  optOutUrl: string,
-): CampaignEstimateResponse {
+function toEstimate(recipients: FrozenRecipient[], smsParts: number): CampaignEstimateResponse {
   const skippedByReason: CampaignEstimateResponse['skippedByReason'] = {};
   for (const { skipReason } of recipients)
     if (skipReason) skippedByReason[skipReason] = (skippedByReason[skipReason] ?? 0) + 1;
   const recipientsCount = recipients.filter((recipient) => recipient.status === 'queued').length;
-  const smsParts = campaign.content.text
-    ? countSmsParts(marketingSmsText(campaign.content.text, optOutUrl))
-    : 0;
   return {
     audienceCount: recipients.length,
     skippedByReason,
@@ -423,13 +420,4 @@ function toFrozenRecipient({ contactId, phone, decision }: AudienceDecision): Fr
   return decision.action === 'skip'
     ? { contactId, destinationAddress: phone, status: 'skipped', skipReason: decision.reason }
     : { contactId, destinationAddress: phone, status: 'queued', skipReason: null };
-}
-
-function toCampaignResponse(campaign: Campaign): CampaignResponse {
-  return {
-    ...campaign,
-    scheduledFor: campaign.scheduledFor?.toISOString() ?? null,
-    createdAt: campaign.createdAt.toISOString(),
-    updatedAt: campaign.updatedAt.toISOString(),
-  };
 }

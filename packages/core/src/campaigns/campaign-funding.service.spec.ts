@@ -4,9 +4,13 @@ import type { LinksService } from '../links/links.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
+import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { WalletService } from '../wallets/wallet.service';
+import type { CampaignCountsService } from './campaign-counts.service';
 import { CampaignFundingService } from './campaign-funding.service';
+import { CampaignSmsService } from './campaign-sms.service';
 import type { CampaignsRepository } from './campaigns.repository';
+import type { CampaignsService } from './campaigns.service';
 
 const storeId = '019c01ea-cf15-7d31-a7f5-d73d66007ad7';
 const campaignId = '019c01ea-cf15-7d31-a7f5-d73d66007ad8';
@@ -57,10 +61,13 @@ function fixture(status: 'sending' | 'paused' = 'sending') {
   const service = new CampaignFundingService(
     campaigns as unknown as CampaignsRepository,
     wallets as unknown as WalletService,
-    links as unknown as LinksService,
+    new CampaignSmsService(links as unknown as LinksService),
     notification as unknown as NotificationsService,
     transaction as StoreTransaction,
     { now: () => now } as Clock,
+    { settleReservation: vi.fn() } as unknown as CampaignsService,
+    { refresh: vi.fn() } as unknown as CampaignCountsService,
+    { publish: vi.fn() } as unknown as OutboxService,
   );
   return { service, campaigns, wallets, notification };
 }

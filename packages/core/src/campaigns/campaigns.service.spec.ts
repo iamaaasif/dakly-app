@@ -6,6 +6,7 @@ import type { CampaignStatus } from '@dakly/contracts/campaigns';
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
 import type { StoreAccess } from '@dakly/contracts/team';
 
+import type { AnalyticsService } from '../analytics/analytics.service';
 import type { LinksService } from '../links/links.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
@@ -20,6 +21,7 @@ import type {
 import type { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import type { WalletService } from '../wallets/wallet.service';
+import { CampaignSmsService } from './campaign-sms.service';
 import type {
   Campaign,
   CampaignApproval,
@@ -39,8 +41,7 @@ const now = new Date('2026-11-16T05:00:00Z');
 class FakeCampaignsRepository {
   readonly rows = new Map<
     string,
-    Campaign &
-      Pick<CampaignStatusChange, 'pauseReason' | 'finishedAt'> & { approvedAt?: Date | null }
+    Campaign & Pick<CampaignStatusChange, 'pauseReason'> & { approvedAt?: Date | null }
   >();
 
   add(
@@ -48,7 +49,7 @@ class FakeCampaignsRepository {
     id = randomUUID(),
     pauseReason?: CampaignStatusChange['pauseReason'],
   ): Campaign {
-    const row = {
+    const row: Campaign & Pick<CampaignStatusChange, 'pauseReason'> = {
       id,
       name: 'ঈদের অফার',
       goal: 'seasonal',
@@ -58,6 +59,16 @@ class FakeCampaignsRepository {
       excludeSegmentIds: [],
       scheduledFor: null,
       status,
+      startedAt: null,
+      finishedAt: null,
+      recipientsCount: 0,
+      skippedCount: 0,
+      sentCount: 0,
+      deliveredCount: 0,
+      readCount: 0,
+      tappedCount: 0,
+      failedCount: 0,
+      countsAt: null,
       createdAt: now,
       updatedAt: now,
       pauseReason,
@@ -257,11 +268,13 @@ describe('CampaignsService', () => {
       new TeamService(undefined as never),
       { run: (_storeId: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
       { publish: async (event: DaklyEvent) => void events.push(event) } as unknown as OutboxService,
-      {
+      new CampaignSmsService({
         shortLinkBase: () => 'http://localhost:4000/l',
         sampleOptOutUrl: () => 'http://localhost:4000/l/s/00000000',
-      } as LinksService,
+        sampleRedirectUrl: () => 'http://localhost:4000/l/00000000',
+      } as LinksService),
       { now: () => clockNow } as Clock,
+      { campaignAttribution: async () => ({}) } as unknown as AnalyticsService,
     );
   });
 
