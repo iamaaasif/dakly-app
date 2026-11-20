@@ -10,6 +10,7 @@ import {
   appendStep,
   canAddStep,
   insertStep,
+  moveStep,
   type NewStepKind,
   removeStep,
 } from './workflow-graph-edit';
@@ -23,6 +24,10 @@ function graphEdits(graph: AutomationGraph, change: (next: AutomationGraph) => v
       change(insertStep(graph, edge, kind)),
     append: (kind: NewStepKind) => change(appendStep(graph, kind)),
     remove: (key: string) => change(removeStep(graph, key)),
+    canMove: (key: string, direction: 'up' | 'down') =>
+      moveStep(graph, key, direction) !== undefined,
+    move: (key: string, direction: 'up' | 'down') =>
+      change(moveStep(graph, key, direction) ?? graph),
   };
 }
 
