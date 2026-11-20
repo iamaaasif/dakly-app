@@ -8,6 +8,7 @@ import {
 } from '@dakly/contracts/chat-classification';
 import type { handoverReasons } from '@dakly/contracts/chats';
 
+import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
 import { ConsentService } from '../consents/consent.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
@@ -42,6 +43,7 @@ type EligibleTurn = {
     identityId: string;
   };
   debounceSeconds: number;
+  claimTimeoutMinutes: number | null;
 };
 
 @Injectable()
@@ -49,6 +51,7 @@ export class AiAgentService {
   constructor(
     @Inject(AiAgentSettingsRepository) private readonly settings: AiAgentSettingsRepository,
     @Inject(AiService) private readonly ai: AiService,
+    @Inject(AiRunsService) private readonly runs: AiRunsService,
     @Inject(SalesAgentService) private readonly sales: SalesAgentService,
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(MessagingService) private readonly messaging: MessagingService,
@@ -90,6 +93,13 @@ export class AiAgentService {
     );
   }
 
+  // A person's reply keeps the chat with people until the store's return timer runs out.
+  async restartReturnAfterStaffReply(storeId: string, messageId: string) {
+    const settings = await this.enabledSettings(storeId);
+    if (settings?.returnToAiMinutes)
+      await this.inbox.restartReturnAfterStaffReply(storeId, messageId, settings.returnToAiMinutes);
+  }
+
   async reply(storeId: string, conversationId: string, messageId: string) {
     const candidate = await this.eligibleTurn(storeId, conversationId);
     if (!candidate) return;
@@ -122,7 +132,10 @@ export class AiAgentService {
       phone: shop.phone,
       linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
     });
-    if (!checked.isSafe) return this.handOver(storeId, conversationId, candidate, 'out_of_scope');
+    if (!checked.isSafe) {
+      await this.runs.setOutcome(storeId, composed.aiRunId, 'failed_check', checked.failure);
+      return this.handOver(storeId, conversationId, candidate, 'out_of_scope');
+    }
     return this.send(storeId, conversationId, candidate, composed);
   }
 
@@ -146,7 +159,12 @@ export class AiAgentService {
     if (consent.some(({ status }) => status === 'withdrawn')) return;
     const target = { contactId, channel, connectionId, identityId: latest.senderIdentityId };
     if (!(await this.identities.findOutboundIdentity(storeId, target))) return;
-    return { turn, target, debounceSeconds: settings.debounceSeconds };
+    return {
+      turn,
+      target,
+      debounceSeconds: settings.debounceSeconds,
+      claimTimeoutMinutes: settings.claimTimeoutMinutes,
+    };
   }
 
   private async enabledSettings(storeId: string) {
@@ -178,7 +196,12 @@ export class AiAgentService {
     await this.transaction.runLocked(storeId, async () => {
       const current = await this.lockCurrent(storeId, conversationId, before);
       if (!current) return;
-      const change = await this.inbox.handOver(storeId, conversationId, reason);
+      const change = await this.inbox.handOver(
+        storeId,
+        conversationId,
+        reason,
+        current.claimTimeoutMinutes,
+      );
       if (!change) return;
       await this.outbox.publish({
         type: 'conversation.handed_over',
@@ -211,6 +234,7 @@ export class AiAgentService {
     composed: Extract<ComposedReply, { kind: 'reply' }>,
   ) {
     const { aiRunId, cardTexts, sources, text } = composed;
+    let isSaved = false;
     try {
       await this.transaction.runLocked(storeId, async () => {
         const current = await this.lockCurrent(storeId, conversationId, before);
@@ -233,6 +257,7 @@ export class AiAgentService {
           quantity: 1,
           reference: await this.windowReference(storeId, current.target.contactId),
         });
+        isSaved = true;
       });
     } catch (error) {
       if (!(error instanceof AppError)) throw error;
@@ -241,6 +266,7 @@ export class AiAgentService {
         return this.handOver(storeId, conversationId, before, 'allowance_used');
       if (error.code !== 'MESSAGE_OPERATION_CONFLICT') throw error;
     }
+    if (isSaved) await this.runs.setOutcome(storeId, aiRunId, 'sent');
   }
 
   // One unit covers every AI reply to a contact in the 24 hours after the first.
