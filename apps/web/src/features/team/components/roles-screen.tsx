@@ -9,7 +9,7 @@ import { Card } from '@dakly/ui/card';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useRoles } from '../api/roles';
-import { roleLabels } from '../role-label';
+import { builtInRoleDescriptions, roleLabels } from '../role-label';
 import { PermissionSummary } from './permission-summary';
 import { RoleCard } from './role-card';
 import { RoleForm } from './role-form';
@@ -17,13 +17,6 @@ import { TeamLoading } from './team-loading';
 import { TeamPagination } from './team-pagination';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
-
-const builtInDescriptions: Record<string, string> = {
-  owner: 'Full access, including billing and closing the store. There is always one owner.',
-  admin: 'Runs the store day to day. Everything except billing.',
-  marketer: 'Creates campaigns, posts and automations, and sees the results.',
-  support_agent: 'Replies to customers in Inbox and checks their orders.',
-};
 
 type BuiltInRole = RoleListResponse['builtInRoles'][number];
 type CustomRole = RoleListResponse['items'][number];
@@ -36,15 +29,8 @@ function BuiltInRoleCard({ role }: { role: BuiltInRole }) {
           <h4 className="font-semibold text-text">{roleLabels[role.builtInRole]}</h4>
           <Badge variant="neutral">Built-in</Badge>
         </div>
-        <p className="text-sm text-text-muted">
-          {builtInDescriptions[role.builtInRole] ?? 'Built-in system role.'}
-        </p>
+        <p className="text-sm text-text-muted">{builtInRoleDescriptions[role.builtInRole]}</p>
         <PermissionSummary permissions={role.permissions} />
-      </div>
-
-      <div className="flex items-center gap-1.5 border-t border-border pt-3 text-xs text-text-muted">
-        <Shield className="size-3.5" aria-hidden="true" />
-        <span>Built-in role</span>
       </div>
     </Card>
   );

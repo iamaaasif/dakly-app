@@ -1,4 +1,3 @@
-import { Shield } from 'lucide-react';
 import { useState } from 'react';
 
 import type { RoleResponse } from '@dakly/contracts/team';
@@ -25,22 +24,16 @@ export function RoleCard({ role, canEdit }: { role: RoleResponse; canEdit: boole
         <PermissionSummary permissions={role.permissions} />
       </div>
 
-      <div className="flex items-center justify-between border-t border-border pt-3">
-        <div className="flex items-center gap-1.5 text-xs text-text-muted">
-          <Shield className="size-3.5" aria-hidden="true" />
-          <span>Custom role</span>
+      {canEdit ? (
+        <div className="flex justify-end gap-2 border-t border-border pt-3">
+          <Button variant="secondary" onClick={() => setAction('edit')}>
+            Edit role
+          </Button>
+          <Button variant="danger" onClick={() => setAction('delete')}>
+            Delete role
+          </Button>
         </div>
-        {canEdit ? (
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => setAction('edit')}>
-              Edit role
-            </Button>
-            <Button variant="danger" onClick={() => setAction('delete')}>
-              Delete role
-            </Button>
-          </div>
-        ) : null}
-      </div>
+      ) : null}
 
       {action === 'edit' ? (
         <Dialog open title={`Edit ${role.name}`} onClose={() => setAction(null)}>

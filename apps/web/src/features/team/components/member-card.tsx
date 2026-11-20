@@ -8,7 +8,6 @@ import { MemberActions } from './member-actions';
 import { formatDateTime } from '@/lib/format-date';
 import { formatPhone } from '@/lib/format-phone';
 import { initialsOf } from '@/lib/initials';
-import { useSessionContext } from '@/lib/session-context';
 
 function MemberRoleDisplay({ member }: { member: MemberResponse }) {
   if (member.builtInRole === 'owner') {
@@ -40,60 +39,45 @@ function MemberActivity({ member }: { member: MemberResponse }) {
   return <span>No activity recorded</span>;
 }
 
+const statusLabels: Record<MemberResponse['status'], string> = {
+  invited: 'Invited',
+  active: 'Active',
+  removed: 'Removed',
+};
+
 function MemberStatusBadge({ status }: { status: MemberResponse['status'] }) {
   const variant = status === 'active' ? 'success' : 'warning';
   return <Badge variant={variant}>{statusLabels[status]}</Badge>;
 }
 
-function MemberIdentity({
-  name,
-  contact,
-  isCurrentUser,
+export function MemberCard({
+  member,
+  canEdit,
+  currentUserId,
 }: {
-  name: string;
-  contact: string | null;
-  isCurrentUser: boolean;
+  member: MemberResponse;
+  canEdit: boolean;
+  currentUserId?: string;
 }) {
-  return (
-    <div className="flex min-w-0 items-center gap-3">
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface-muted text-sm font-semibold text-text">
-        {initialsOf(name)}
-      </div>
-      <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <h3 className="truncate font-semibold text-text">{name}</h3>
-          {isCurrentUser ? <Badge variant="neutral">You</Badge> : null}
-        </div>
-        <p className="truncate text-sm text-text-muted">{contact}</p>
-      </div>
-    </div>
-  );
-}
-
-function getMemberContact(member: MemberResponse): string | null {
-  if (member.phone) return formatPhone(member.phone);
-  return member.email;
-}
-
-function getMemberName(member: MemberResponse, contact: string | null): string {
-  if (member.name) return member.name;
-  if (contact) return contact;
-  return 'Invited member';
-}
-
-function canShowActions(member: MemberResponse, canEdit: boolean): boolean {
-  return canEdit && member.builtInRole !== 'owner' && member.status !== 'removed';
-}
-
-export function MemberCard({ member, canEdit }: { member: MemberResponse; canEdit: boolean }) {
-  const { data: context } = useSessionContext();
-  const contact = getMemberContact(member);
-  const name = getMemberName(member, contact);
-  const isCurrentUser = Boolean(context?.user?.id && member.userId === context.user.id);
+  const contact = member.phone ? formatPhone(member.phone) : member.email;
+  const name = member.name || contact || 'Invited member';
+  const isCurrentUser = Boolean(currentUserId && member.userId === currentUserId);
+  const showActions = canEdit && member.builtInRole !== 'owner' && member.status !== 'removed';
 
   return (
     <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <MemberIdentity name={name} contact={contact} isCurrentUser={isCurrentUser} />
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface-muted text-sm font-semibold text-text">
+          {initialsOf(name)}
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate font-semibold text-text">{name}</h3>
+            {isCurrentUser ? <Badge variant="neutral">You</Badge> : null}
+          </div>
+          <p className="truncate text-sm text-text-muted">{contact}</p>
+        </div>
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end sm:gap-6">
         <div className="text-sm font-medium">
@@ -107,14 +91,8 @@ export function MemberCard({ member, canEdit }: { member: MemberResponse; canEdi
           </div>
         </div>
 
-        {canShowActions(member, canEdit) ? <MemberActions member={member} name={name} /> : null}
+        {showActions ? <MemberActions member={member} name={name} /> : null}
       </div>
     </div>
   );
 }
-
-const statusLabels: Record<MemberResponse['status'], string> = {
-  invited: 'Invited',
-  active: 'Active',
-  removed: 'Removed',
-};

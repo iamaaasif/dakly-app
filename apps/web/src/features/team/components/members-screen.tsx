@@ -1,5 +1,5 @@
 'use client';
-import { Search, UserPlus } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 import { useState } from 'react';
 
 import type { MemberResponse } from '@dakly/contracts/team';
@@ -40,61 +40,15 @@ function MemberSeatsCard({ seats }: { seats: { used: number; limit: number } }) 
   );
 }
 
-function MemberFilters({
-  query,
-  setQuery,
-  roleFilter,
-  setRoleFilter,
+function MemberList({
+  items,
+  canEdit,
+  currentUserId,
 }: {
-  query: string;
-  setQuery: (q: string) => void;
-  roleFilter: string;
-  setRoleFilter: (r: string) => void;
+  items: MemberResponse[];
+  canEdit: boolean;
+  currentUserId?: string;
 }) {
-  return (
-    <div className="flex flex-col gap-3 sm:flex-row">
-      <div className="flex-1 space-y-1">
-        <label htmlFor="member-search" className="block text-xs font-medium text-text-muted">
-          Search members
-        </label>
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-text-muted"
-            aria-hidden="true"
-          />
-          <input
-            id="member-search"
-            type="search"
-            placeholder="Search by name, phone or email"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="min-h-10 w-full rounded-md border border-input-border bg-surface pr-3 pl-9 text-sm focus-visible:border-focus focus-visible:ring-1 focus-visible:ring-focus focus-visible:outline-none"
-          />
-        </div>
-      </div>
-      <div className="space-y-1 sm:w-48">
-        <label htmlFor="role-filter" className="block text-xs font-medium text-text-muted">
-          Filter by role
-        </label>
-        <select
-          id="role-filter"
-          value={roleFilter}
-          onChange={(e) => setRoleFilter(e.target.value)}
-          className="min-h-10 w-full rounded-md border border-input-border bg-surface px-3 text-sm focus-visible:border-focus focus-visible:ring-1 focus-visible:ring-focus focus-visible:outline-none"
-        >
-          <option value="all">All roles</option>
-          <option value="owner">Owner</option>
-          <option value="admin">Admin</option>
-          <option value="marketer">Marketer</option>
-          <option value="support_agent">Support agent</option>
-          <option value="custom">Custom roles</option>
-        </select>
-      </div>
-    </div>
-  );
-}
-
-function MemberList({ items, canEdit }: { items: MemberResponse[]; canEdit: boolean }) {
   if (!items.length) {
     return (
       <p className="text-text-muted">
@@ -105,7 +59,12 @@ function MemberList({ items, canEdit }: { items: MemberResponse[]; canEdit: bool
   return (
     <Card className="divide-y divide-border overflow-hidden p-0">
       {items.map((member) => (
-        <MemberCard key={member.id} member={member} canEdit={canEdit} />
+        <MemberCard
+          key={member.id}
+          member={member}
+          canEdit={canEdit}
+          currentUserId={currentUserId}
+        />
       ))}
     </Card>
   );
@@ -115,8 +74,6 @@ export function MembersScreen({ cursor }: { cursor?: string }) {
   const members = useMembers(cursor);
   const { data: context } = useSessionContext();
   const [inviting, setInviting] = useState(false);
-  const [query, setQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
 
   if (members.isPending) return <TeamLoading />;
   if (members.error)
@@ -130,17 +87,10 @@ export function MembersScreen({ cursor }: { cursor?: string }) {
   const { seats, items, nextCursor } = members.data;
   const canEdit = Boolean(context?.currentStore?.canEditTeam);
 
-  const filteredItems = items.filter((member) => {
-    if (roleFilter !== 'all' && (member.builtInRole ?? 'custom') !== roleFilter) return false;
-    if (!query) return true;
-    const q = query.toLowerCase();
-    return [member.name, member.phone, member.email].some((v) => v?.toLowerCase().includes(q));
-  });
-
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-lg font-semibold">Members ({items.length})</h2>
+        <h2 className="text-lg font-semibold">Members ({seats.used})</h2>
         {canEdit ? (
           <Button
             disabled={seats.used >= seats.limit}
@@ -159,20 +109,13 @@ export function MembersScreen({ cursor }: { cursor?: string }) {
 
       <MemberSeatsCard seats={seats} />
 
-      <MemberFilters
-        query={query}
-        setQuery={setQuery}
-        roleFilter={roleFilter}
-        setRoleFilter={setRoleFilter}
-      />
-
       {inviting ? (
         <Dialog open title="Invite a team member" onClose={() => setInviting(false)}>
           <InviteForm onDone={() => setInviting(false)} />
         </Dialog>
       ) : null}
 
-      <MemberList items={filteredItems} canEdit={canEdit} />
+      <MemberList items={items} canEdit={canEdit} currentUserId={context?.user?.id} />
       <TeamPagination path="/team?tab=members" cursor={cursor} nextCursor={nextCursor} />
     </section>
   );

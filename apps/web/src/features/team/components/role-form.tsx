@@ -1,7 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm } from 'react-hook-form';
 
-import { createRoleSchema, type RoleResponse } from '@dakly/contracts/team';
+import {
+  createRoleSchema,
+  permissionAreas,
+  type CreateRoleInput,
+  type RoleResponse,
+} from '@dakly/contracts/team';
 import { Button } from '@dakly/ui/button';
 
 import { useChangeRole } from '../api/change-role';
@@ -11,35 +16,48 @@ import { TeamError } from './team-error';
 import { TeamField } from './team-field';
 import { formError } from '@/lib/form-error';
 
-export function RoleForm({ role, onDone }: { role?: RoleResponse; onDone: () => void }) {
-  const form = useForm({
-    resolver: zodResolver(createRoleSchema),
-    defaultValues: {
-      name: role?.name ?? '',
-      permissions: role?.permissions ?? {
-        areas: {},
-        seeFullPhone: false,
-        exportLists: false,
-        refund: false,
-      },
+function initialAreas(customAreas?: CreateRoleInput['permissions']['areas']) {
+  const base: CreateRoleInput['permissions']['areas'] = {};
+  for (const area of permissionAreas) {
+    base[area] = customAreas?.[area] ?? 'none';
+  }
+  return base;
+}
+
+function initialRoleValues(role?: RoleResponse): CreateRoleInput {
+  const perms = role?.permissions;
+  return {
+    name: role ? role.name : '',
+    permissions: {
+      areas: initialAreas(perms?.areas),
+      seeFullPhone: Boolean(perms?.seeFullPhone),
+      exportLists: Boolean(perms?.exportLists),
+      refund: Boolean(perms?.refund),
     },
+  };
+}
+
+export function RoleForm({ role, onDone }: { role?: RoleResponse; onDone: () => void }) {
+  const form = useForm<CreateRoleInput>({
+    resolver: zodResolver(createRoleSchema),
+    defaultValues: initialRoleValues(role),
   });
   const create = useCreateRole();
   const change = useChangeRole(role?.id ?? '');
+
+  const onSubmit = async (input: CreateRoleInput) => {
+    try {
+      if (role) await change.mutateAsync(input);
+      else await create.mutateAsync(input);
+      onDone();
+    } catch (error) {
+      formError(error, form.setError);
+    }
+  };
+
   return (
     <FormProvider {...form}>
-      <form
-        className="space-y-4"
-        onSubmit={form.handleSubmit(async (input) => {
-          try {
-            if (role) await change.mutateAsync(input);
-            else await create.mutateAsync(input);
-            onDone();
-          } catch (error) {
-            formError(error, form.setError);
-          }
-        })}
-      >
+      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
         <TeamField
           label="Role name"
           field={form.register('name')}
@@ -49,7 +67,7 @@ export function RoleForm({ role, onDone }: { role?: RoleResponse; onDone: () => 
         <TeamError message={form.formState.errors.root?.message} />
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" onClick={onDone}>
-            Close
+            Cancel
           </Button>
           <Button type="submit" loading={create.isPending || change.isPending}>
             Save role
