@@ -82,11 +82,12 @@ export class CampaignSendingRepository {
   // Keep the active lane and the cancellation lane independent of one another.
   async firstWork(storeId: string, expiredBefore: Date) {
     const active = sql`${campaigns.status} = 'sending'`;
-    const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null
-      and not exists (
+    const cancelled = sql`${campaigns.status} = 'cancelled' and ${campaigns.settlementPendingAt} is not null`;
+    const ready = sql`not exists (
         select 1 from campaign_recipients r
-        where r.store_id = ${storeId} and r.campaign_id = ${campaigns.id} and r.status = 'sending'
-        having bool_and(coalesce(r.claimed_at >= ${expiredBefore.toISOString()}::timestamptz, true))
+        where r.store_id = ${storeId} and r.campaign_id = ${campaigns.id}
+          and r.status in ('queued', 'sending')
+        having bool_and(r.status = 'sending' and coalesce(r.claimed_at >= ${expiredBefore.toISOString()}::timestamptz, true))
       )`;
     return this.database.forStore(storeId, (tx) =>
       tx
@@ -95,7 +96,7 @@ export class CampaignSendingRepository {
           status: sql<'sending' | 'cancelled'>`${campaigns.status}`,
         })
         .from(campaigns)
-        .where(and(eq(campaigns.storeId, storeId), or(active, cancelled)))
+        .where(and(eq(campaigns.storeId, storeId), or(active, cancelled), ready))
         .orderBy(
           asc(campaigns.status),
           asc(sql`coalesce(${campaigns.startedAt}, ${campaigns.approvedAt})`),
@@ -140,11 +141,14 @@ export class CampaignSendingRepository {
     return row as ClaimableRecipient | undefined;
   }
 
-  async isCurrentClaim(storeId: string, id: string, claimedAt: Date) {
+  async authorizeSubmission(storeId: string, id: string, claimedAt: Date) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({ id: campaignRecipients.id })
-        .from(campaignRecipients)
+        .update(campaignRecipients)
+        .set({
+          dispatchStartedAt: claimedAt,
+          sendAttempts: sql`${campaignRecipients.sendAttempts} + 1`,
+        })
         .where(
           and(
             eq(campaignRecipients.storeId, storeId),
@@ -153,7 +157,8 @@ export class CampaignSendingRepository {
             eq(campaignRecipients.claimedAt, claimedAt),
             isNull(campaignRecipients.providerMessageId),
           ),
-        ),
+        )
+        .returning({ id: campaignRecipients.id }),
     );
     return row !== undefined;
   }

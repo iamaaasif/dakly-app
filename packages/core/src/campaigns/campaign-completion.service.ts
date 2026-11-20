@@ -25,7 +25,7 @@ export class CampaignCompletionService {
       const campaign = await this.campaigns.lockCampaign(storeId, id, 'update');
       if (!campaign?.approvedAt) return;
       const now = this.clock.now();
-      if (!canProcess(campaign)) {
+      if (!canSettle(campaign)) {
         if (processed) await this.counts.refresh(storeId, id, 'batch');
         return;
       }
@@ -56,9 +56,15 @@ export class CampaignCompletionService {
   }
 }
 
-export function canProcess(campaign: LockedCampaign): boolean {
+function canSettle(campaign: LockedCampaign): boolean {
   return (
     (campaign.status === 'sending' && campaign.shortLinkBase !== null) ||
     (campaign.status === 'cancelled' && campaign.settlementPendingAt !== null)
   );
+}
+
+export function canProcess(
+  campaign: LockedCampaign | undefined,
+): campaign is LockedCampaign & { shortLinkBase: string } {
+  return !!campaign?.shortLinkBase && canSettle(campaign);
 }
