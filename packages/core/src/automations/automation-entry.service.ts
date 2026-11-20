@@ -28,17 +28,15 @@ export const automationTagEvent = contactTagAddedEventSchema.extend({ id: z.uuid
 export const automationBirthdayEvent = contactBirthdayEventSchema.extend({ id: z.uuid() });
 export const automationOrderCreatedEvent = orderCreatedEventSchema.extend({ id: z.uuid() });
 export const automationOrderStageEvent = orderStageChangedEventSchema.extend({ id: z.uuid() });
-type OrderEvent = {
-  id: string;
-  type: 'order.created' | 'order.stage_changed';
-  occurredAt: string;
-  payload: { orderId: string; to?: OrderStage };
-};
+type OrderEvent =
+  | Omit<z.infer<typeof automationOrderCreatedEvent>, 'storeId'>
+  | Omit<z.infer<typeof automationOrderStageEvent>, 'storeId'>;
 type OrderFacts = NonNullable<Awaited<ReturnType<OrderReportingService['triggerFacts']>>>;
 // An order event carries the buyer and the order facts that the trigger filters read.
-type OrderTriggerEvent = Omit<OrderEvent, 'payload'> & {
-  payload: OrderEvent['payload'] & OrderFacts;
-};
+type WithFacts<E> = E extends { payload: infer P }
+  ? Omit<E, 'payload'> & { payload: P & OrderFacts }
+  : never;
+type OrderTriggerEvent = WithFacts<OrderEvent>;
 type TriggerEvent =
   | Omit<z.infer<typeof automationConsentEvent>, 'storeId'>
   | Omit<z.infer<typeof automationTagEvent>, 'storeId'>
@@ -73,8 +71,14 @@ export class AutomationEntryService {
   async startMatchingOrder(storeId: string, event: OrderEvent): Promise<void> {
     if (!orderTriggerFor(event)) return;
     const facts = await this.orders.triggerFacts(storeId, event.payload.orderId);
-    if (facts)
-      await this.startMatching(storeId, { ...event, payload: { ...event.payload, ...facts } });
+    if (!facts) return;
+    // Spreading the union loses the link between type and payload, so each branch is typed alone.
+    await this.startMatching(
+      storeId,
+      event.type === 'order.created'
+        ? { ...event, payload: { ...event.payload, ...facts } }
+        : { ...event, payload: { ...event.payload, ...facts } },
+    );
   }
 
   async start(storeId: string, automationId: string, event: TriggerEvent): Promise<void> {
@@ -124,8 +128,7 @@ export class AutomationEntryService {
 }
 
 function orderTriggerFor(event: OrderEvent): TriggerKey | undefined {
-  if (event.type === 'order.created') return 'order_placed';
-  return event.payload.to && stageTriggers[event.payload.to];
+  return event.type === 'order.created' ? 'order_placed' : stageTriggers[event.payload.to];
 }
 
 function triggerFor(event: TriggerEvent) {
