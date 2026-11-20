@@ -1,13 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 
 import type {
   AccountSecurityEvent,
   AccountSecurityHistory,
 } from '@dakly/contracts/account-security-events';
+import type { Database } from '@dakly/db/client';
 import { accountSecurityEvents } from '@dakly/db/schema/account-security-events';
 
 import { AccountDatabase } from '../platform/database/account-database';
+import { DATABASE } from '../platform/database/database.tokens';
 
 const historyColumns = {
   id: accountSecurityEvents.id,
@@ -23,7 +25,19 @@ const historyColumns = {
 
 @Injectable()
 export class AccountSecurityEventsRepository {
-  constructor(@Inject(AccountDatabase) private readonly database: AccountDatabase) {}
+  constructor(
+    @Inject(AccountDatabase) private readonly database: AccountDatabase,
+    @Inject(DATABASE) private readonly global: Database,
+  ) {}
+
+  // The SQL function deletes only rows older than two years, one short transaction per call.
+  async purgeExpiredBatch(limit: number): Promise<number> {
+    const { rows } = await this.global.execute<{ deleted: number }>(
+      sql`select public.purge_account_security_events(${limit}) as deleted`,
+    );
+    return rows[0]?.deleted ?? 0;
+  }
+
   async insert(userId: string, entry: AccountSecurityEvent): Promise<void> {
     await this.database.inTransaction(userId, (tx) =>
       tx.insert(accountSecurityEvents).values({

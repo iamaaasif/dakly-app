@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { AiService } from '../ai.service';
-import { KnowledgeRepository, type KnowledgeHit } from './knowledge.repository';
+import { AiService } from './ai.service';
+import { KnowledgeRepository, type KnowledgeHit } from './knowledge/knowledge.repository';
 
 @Injectable()
 export class KnowledgeSearchService {
