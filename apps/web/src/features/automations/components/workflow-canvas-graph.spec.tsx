@@ -71,4 +71,18 @@ describe('WorkflowCanvasGraph', () => {
     expect(steps.getByText('Tapped the link in step 2: step 4')).toBeTruthy();
     expect(steps.getByText('Else: step 5')).toBeTruthy();
   });
+
+  it('shows the recent entry count on the trigger card', () => {
+    render(
+      <WorkflowCanvasGraph graph={graph} layout={layoutWorkflow(graph)} recentEntries="3 people" />,
+    );
+    expect(screen.getByText('Last 7 days')).toBeTruthy();
+    expect(screen.getByText('3 people')).toBeTruthy();
+  });
+
+  it('scales the drawing without changing its content', () => {
+    const layout = layoutWorkflow(graph);
+    const { container } = render(<WorkflowCanvasGraph graph={graph} layout={layout} scale={0.5} />);
+    expect((container.firstChild as HTMLElement).style.width).toBe(`${layout.width / 2}px`);
+  });
 });

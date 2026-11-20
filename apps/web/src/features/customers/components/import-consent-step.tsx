@@ -5,7 +5,7 @@ import { ApiError } from '@dakly/ui/api-client';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { ImportStepActions } from './import-step-actions';
+import { ImportStepActions } from '@/components/import-step-actions';
 
 const blankToUndefined = (value: string) => value.trim() || undefined;
 

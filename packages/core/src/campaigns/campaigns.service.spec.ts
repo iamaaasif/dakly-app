@@ -404,6 +404,7 @@ describe('CampaignsService', () => {
     );
     service = new CampaignsService(
       repository as unknown as CampaignsRepository,
+      {} as CampaignMessageTotalsRepository,
       segments as unknown as SegmentsService,
       audience,
       approvalRepository as unknown as CampaignApprovalRepository,

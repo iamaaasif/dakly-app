@@ -76,6 +76,10 @@ export class AutomationsService {
     @Inject(AnalyticsService) private readonly reports: AnalyticsService,
   ) {}
 
+  messageTotals(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.repository.messageTotals(storeId, range);
+  }
+
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {
     const since = new Date(this.clock.now().getTime() - 30 * DAY_MS);
     const rows = await this.repository.list(storeId, VISIBLE_STATUSES, query, since);
