@@ -38,6 +38,7 @@ type CalendarPanelProps = {
   today: string;
   accountId: string | null;
   setParams: (changes: Record<string, string | null>) => void;
+  onOpen: (entry: CalendarEntry) => void;
 };
 
 function heading(view: CalendarView, date: string) {
@@ -105,7 +106,8 @@ function CalendarToolbar({ accounts, view, date, accountId, setParams }: Toolbar
 }
 
 export function CalendarPanel(props: CalendarPanelProps) {
-  const { accounts, entries, hasPosts, canEdit, view, date, today, accountId, setParams } = props;
+  const { accounts, entries, hasPosts, canEdit, view, date, today, accountId, setParams, onOpen } =
+    props;
   const month = date.slice(0, 7);
   return (
     <section aria-label="Calendar" className="rounded-lg border border-border bg-surface">
@@ -138,7 +140,10 @@ export function CalendarPanel(props: CalendarPanelProps) {
         </p>
       )}
       {view === 'list' ? (
-        <PostListView entries={entries.filter(({ dayKey }) => dayKey.startsWith(month))} />
+        <PostListView
+          entries={entries.filter(({ dayKey }) => dayKey.startsWith(month))}
+          onOpen={onOpen}
+        />
       ) : (
         <CalendarGrid
           weeks={view === 'week' ? [weekOf(date)] : monthWeeks(month)}
@@ -146,6 +151,7 @@ export function CalendarPanel(props: CalendarPanelProps) {
           today={today}
           month={view === 'week' ? null : month}
           tall={view === 'week'}
+          onOpen={onOpen}
         />
       )}
     </section>
