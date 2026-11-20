@@ -54,7 +54,7 @@ export function SegmentBuilder({ segment, listHref }: SegmentBuilderProps) {
   return (
     <FormProvider {...form}>
       <form onSubmit={handleSubmit} className="space-y-6 p-4 md:p-8">
-        <SegmentBuilderHeader
+        <SegmentCampaignPageHeader
           segment={segment}
           listHref={listHref}
           isPending={create.isPending || change.isPending}
@@ -89,7 +89,7 @@ export function SegmentBuilder({ segment, listHref }: SegmentBuilderProps) {
   );
 }
 
-function SegmentBuilderHeader({
+function SegmentCampaignPageHeader({
   segment,
   listHref,
   isPending,
