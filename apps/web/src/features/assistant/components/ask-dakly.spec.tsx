@@ -77,7 +77,7 @@ describe('Ask Dakly AI panel', () => {
     expect(navigation.replaced).toEqual(['/dashboard?ask=open']);
   });
 
-  it('shows the page it is on, a suggestion for every report and the approval note', () => {
+  it('shows the page it is on, three suggestions and the approval note', () => {
     show();
     const panel = screen.getByRole('complementary', { name: 'Dakly AI' });
     expect(within(panel).getByText('Knows you’re on Dashboard')).toBeTruthy();
@@ -86,11 +86,7 @@ describe('Ask Dakly AI panel', () => {
         .getAllByRole('button', { name: suggestionName })
         .map((button) => button.textContent),
     ).toEqual([
-      'Which product sells best?',
       'How much did I sell today?',
-      'How much did I sell this month?',
-      'How much did I sell yesterday?',
-      'How much did I sell in the last 30 days?',
       'Explain my campaign performance',
       'How many customers came back in the last 30 days?',
     ]);
@@ -104,11 +100,9 @@ describe('Ask Dakly AI panel', () => {
     expect(
       screen.getAllByRole('button', { name: suggestionName }).map((b) => b.textContent),
     ).toEqual([
-      'Which product sells best?',
       'How much did I sell today?',
+      'Which product sells best?',
       'How much did I sell this month?',
-      'How much did I sell yesterday?',
-      'How much did I sell in the last 30 days?',
     ]);
   });
 
