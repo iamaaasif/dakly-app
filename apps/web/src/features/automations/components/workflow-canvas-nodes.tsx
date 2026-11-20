@@ -10,16 +10,24 @@ import {
   Split,
   Tag,
   Ticket,
+  EllipsisVertical,
   Zap,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 import { cn } from '@dakly/ui/cn';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@dakly/ui/dropdown-menu';
 
 import { channelLabels, triggerEntryLabels } from '../automation-labels';
 import { actionDetail, actionLabel, triggerRows, waitParts } from '../workflow-canvas-labels';
 import type { CanvasLayout, CanvasNode } from '../workflow-canvas-layout';
+import type { NewStepKind } from '../workflow-graph-edit';
 
 const actionIcons: Record<
   Extract<AutomationStep, { kind: 'action' }>['action']['action'],
@@ -43,7 +51,7 @@ function IconBox({ icon: Icon }: { icon: LucideIcon }) {
 
 function StepCard({ icon, title, detail }: { icon: LucideIcon; title: string; detail?: string }) {
   return (
-    <div className="shadow-sm flex h-full items-center gap-3 rounded-lg border border-border bg-surface px-3">
+    <div className="shadow-sm flex h-full items-center gap-3 rounded-lg border border-border bg-surface pr-9 pl-3">
       <IconBox icon={icon} />
       <div className="min-w-0">
         <p className="truncate font-semibold" title={title}>
@@ -64,7 +72,7 @@ function stepBody(step: AutomationStep) {
     case 'wait': {
       const [lead, amount] = waitParts(step.wait);
       return (
-        <p className="shadow-sm flex h-full items-center gap-2 rounded-full border border-border bg-surface px-4">
+        <p className="shadow-sm flex h-full items-center gap-2 rounded-full border border-border bg-surface pr-9 pl-4">
           <Clock size={16} aria-hidden="true" className="shrink-0 text-text-muted" />
           <span className="truncate">
             {lead} <strong>{amount}</strong>
@@ -108,6 +116,29 @@ function stepBody(step: AutomationStep) {
   }
 }
 
+// Set while the canvas is being edited.
+export type CanvasEditing = {
+  canAdd: boolean;
+  insert: (edge: { parent: string; target: string }, kind: NewStepKind) => void;
+  remove: (key: string) => void;
+};
+
+function StepMenu({ number, onRemove }: { number: number; onRemove: () => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label={`Options for step ${number}`}
+        className="absolute top-1/2 right-1 grid size-8 -translate-y-1/2 place-items-center rounded-md text-text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
+      >
+        <EllipsisVertical size={16} aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={onRemove}>Delete step</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 type TriggerCardProps = { graph: AutomationGraph; layout: CanvasLayout; recentEntries?: string };
 
 function TriggerCard({ graph, layout, recentEntries }: TriggerCardProps) {
@@ -144,7 +175,8 @@ export function CanvasNodeItem({
   graph,
   layout,
   recentEntries,
-}: TriggerCardProps & { node: CanvasNode }): ReactNode {
+  editing,
+}: TriggerCardProps & { node: CanvasNode; editing?: CanvasEditing }): ReactNode {
   const { step, number } = node;
   return (
     <li
@@ -155,6 +187,9 @@ export function CanvasNodeItem({
         stepBody(step)
       ) : (
         <TriggerCard graph={graph} layout={layout} recentEntries={recentEntries} />
+      )}
+      {editing && step && number !== null && (
+        <StepMenu number={number} onRemove={() => editing.remove(node.key)} />
       )}
       {node.branches.length > 0 && (
         <ul className="sr-only">
