@@ -515,9 +515,9 @@ In CAMP-5, the `wake-due-runs` job on the `workflow` queue runs every minute in 
 
 ### Order fields in workflow text (ORD-4)
 
-A workflow that starts from an order can write `{order_number}`, `{order_total}` and `{confirm_link}` in a send step's text. The graph is refused when another trigger uses them. The run keeps the order that started it (`trigger_order_id`). On the first send the runner reads the order, fills the fields, and counts SMS parts on the filled text with a stand-in link of the real length before it reserves credits. The filled text is kept on the send step (`rendered_text`), so a retry sends the same words even if the order is edited meanwhile. `{order_total}` is written in taka with lakh grouping (`৳1,25,000`).
+A workflow that starts from an order can write `{order_number}`, `{order_total}` and `{confirm_link}` in a send step's text. The graph is refused when another trigger uses them. The run keeps the order that started it (`trigger_order_id`). On the first send the runner reads the order, fills the fields, and counts SMS parts on the filled text with a stand-in link of the real length before it reserves credits. The filled text is kept on the send step (`rendered_text`), so a retry sends the same words even if the order is edited meanwhile.
 
-`{confirm_link}` is a tracked link of kind `order_confirm` (source `order`), one per order, made by `LinksService.orderConfirmUrl` and read again on later sends. Its address is `<short link base>/c/<code>`. The page behind it is ORD-4 part 2(b). CAMP-14 adds the customer fields and the link and product fields to the same renderer.
+`{confirm_link}` is `<short link base>/c/<token>`, where the token is 32 random bytes in base64url. `order_confirmations` keeps one row per order with only the sha256 of the token, so the address cannot be guessed or rebuilt from the database, and a tracked-link code never confirms anything. A new message about the same order issues a new token and the earlier address stops working. The page behind the address is ORD-4 part 2(b). `{order_total}` uses the shared `formatMoney` in `packages/contracts`. CAMP-14 adds the customer, link and product fields to the same renderer.
 
 ### Workflow catalogue
 

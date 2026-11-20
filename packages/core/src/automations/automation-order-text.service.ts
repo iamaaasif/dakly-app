@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { usesOrderFields } from '@dakly/contracts/automations/text';
 
-import { LinksService } from '../links/links.service';
+import { OrderConfirmationService } from '../orders/order-confirmation.service';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { renderOrderText } from './automation-order-text';
 import { automationError } from './automations.errors';
@@ -10,14 +10,14 @@ import { automationError } from './automations.errors';
 export type PreparedOrderText = {
   // Filled with a stand-in link of the real length, to count SMS parts before credits are reserved.
   counted: string;
-  render: (contactId: string) => Promise<string>;
+  render: () => Promise<string>;
 };
 
 @Injectable()
 export class AutomationOrderTextService {
   constructor(
     @Inject(OrderReportingService) private readonly orders: OrderReportingService,
-    @Inject(LinksService) private readonly links: LinksService,
+    @Inject(OrderConfirmationService) private readonly confirmations: OrderConfirmationService,
   ) {}
 
   // Undefined when the text names no order field.
@@ -30,9 +30,9 @@ export class AutomationOrderTextService {
     const order = orderId ? await this.orders.triggerFacts(storeId, orderId) : undefined;
     if (!orderId || !order) throw automationError('AUTOMATION_ORDER_MISSING');
     return {
-      counted: renderOrderText(text, order, this.links.sampleOrderConfirmUrl()),
-      render: async (contactId) =>
-        renderOrderText(text, order, await this.links.orderConfirmUrl(storeId, orderId, contactId)),
+      counted: renderOrderText(text, order, this.confirmations.sampleUrl()),
+      render: async () =>
+        renderOrderText(text, order, await this.confirmations.issueUrl(storeId, orderId)),
     };
   }
 }

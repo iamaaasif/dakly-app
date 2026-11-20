@@ -376,9 +376,9 @@ export class AutomationRunsService {
     const isMarketing = step.category === 'marketing';
     const standIn = isMarketing ? this.links.sampleOptOutUrl() : undefined;
     const prepared = await this.orderText.prepare(storeId, orderId, step.message.text);
-    const quantity = countSmsParts(messageBody(step, standIn, prepared?.counted));
+    const quantity = countSmsParts(messageBody(prepared?.counted ?? step.message.text, standIn));
     if (!(await this.reserveCredits(storeId, claim, quantity))) return undefined;
-    const text = await prepared?.render(contactId);
+    const text = await prepared?.render();
     const id = newId();
     // CAMP-R4: every marketing SMS ends with its one-tap opt-out link.
     const [optOut] = isMarketing
@@ -400,7 +400,7 @@ export class AutomationRunsService {
       optOutUrl: optOut?.url,
       renderedText: text,
     });
-    return messageBody(step, optOut?.url, text);
+    return messageBody(text ?? step.message.text, optOut?.url);
   }
 
   private async resend(claim: RunClaim, step: SendStep, facts: RunFacts, started: SendingStep) {
@@ -420,7 +420,10 @@ export class AutomationRunsService {
     if (prepared)
       return this.smsDelivery.deliver({ storeId, contactId: facts.contactId, step }, prepared, {
         ...planned,
-        body: messageBody(step, started.optOutUrl ?? undefined, started.renderedText ?? undefined),
+        body: messageBody(
+          started.renderedText ?? step.message.text,
+          started.optOutUrl ?? undefined,
+        ),
       });
   }
 }

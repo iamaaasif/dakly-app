@@ -354,10 +354,6 @@ export const trackedLinks = pgTable(
       'tracked_links_opt_out_contact',
       sql`${table.kind} <> 'sms_opt_out' or ${table.contactId} is not null`,
     ),
-    check(
-      'tracked_links_order_confirm_source',
-      sql`${table.kind} <> 'order_confirm' or (${table.sourceType} = 'order' and ${table.sourceId} is not null)`,
-    ),
   ],
 );
 

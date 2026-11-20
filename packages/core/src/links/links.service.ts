@@ -20,8 +20,7 @@ import { LinksRepository, type NewTrackedLinkRow } from './links.repository';
 type LinkSource = { sourceType: TrackedLinkSourceType; sourceId: string };
 export type NewTrackedLink =
   | (LinkSource & { kind: 'redirect'; targetUrl: string; contactId: string | null })
-  | (LinkSource & { kind: 'sms_opt_out'; contactId: string })
-  | (LinkSource & { kind: 'order_confirm'; contactId: string });
+  | (LinkSource & { kind: 'sms_opt_out'; contactId: string });
 export type TrackedLink = { id: string; code: string; url: string };
 export type Visitor = { ip: string; userAgent: string | undefined };
 
@@ -74,19 +73,6 @@ export class LinksService {
     return rows.map((row) => ({ id: row.id, code: row.code, url: linkUrl(row.kind, row.code) }));
   }
 
-  // One address per order, so every message about the order and every retry names the same one.
-  async orderConfirmUrl(storeId: string, orderId: string, contactId: string): Promise<string> {
-    const code = await this.repository.findOrderConfirmCode(storeId, orderId);
-    if (code) return linkUrl('order_confirm', code, this.shortLinkBase());
-    const [link] = await this.create(
-      storeId,
-      [{ kind: 'order_confirm', sourceType: 'order', sourceId: orderId, contactId }],
-      { kind: 'system' },
-    );
-    if (!link) throw linkError('LINK_CODES_EXHAUSTED');
-    return link.url;
-  }
-
   attributionTaps(storeId: string, orders: Parameters<LinksRepository['attributionTaps']>[1]) {
     return orders.length ? this.repository.attributionTaps(storeId, orders) : [];
   }
@@ -107,11 +93,6 @@ export class LinksService {
   // An opt-out address as long as a real one, so an estimate counts the characters it adds.
   sampleOptOutUrl(base = this.shortLinkBase()): string {
     return linkUrl('sms_opt_out', '0'.repeat(TRACKED_LINK_CODE_LENGTH), base);
-  }
-
-  // An address as long as a real one, so a text counts the characters it adds.
-  sampleOrderConfirmUrl(base = this.shortLinkBase()): string {
-    return linkUrl('order_confirm', '0'.repeat(TRACKED_LINK_CODE_LENGTH), base);
   }
 
   sampleRedirectUrl(base = this.shortLinkBase()): string {
@@ -221,6 +202,5 @@ function linkUrl(
   code: string,
   base = loadEnv().SHORT_LINK_BASE_URL,
 ): string {
-  if (kind === 'redirect') return `${base}/${code}`;
-  return kind === 'order_confirm' ? `${base}/c/${code}` : `${base}/s/${code}`;
+  return kind === 'redirect' ? `${base}/${code}` : `${base}/s/${code}`;
 }

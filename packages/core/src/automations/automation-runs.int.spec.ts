@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import { type INestApplicationContext, Module } from '@nestjs/common';
@@ -317,6 +317,7 @@ describe('Workflow runner (Postgres and Valkey)', () => {
       await admin.pool.query('delete from automations where store_id=$1', [storeId]);
       await admin.pool.query('delete from wallet_ledger where store_id=$1', [storeId]);
       await admin.pool.query('delete from tracked_links where store_id=$1', [storeId]);
+      await admin.pool.query('delete from order_confirmations where store_id=$1', [storeId]);
       await admin.pool.query('delete from orders where store_id=$1', [storeId]);
       await admin.pool.query('delete from contacts where store_id=$1', [storeId]);
       await admin.pool.query('delete from stores where id=$1', [storeId]);
@@ -1047,13 +1048,16 @@ describe('Workflow runner (Postgres and Valkey)', () => {
           [runId],
         )
       ).rows;
-      const link = await admin.pool.query(
-        "select kind,code,source_id from tracked_links where store_id=$1 and source_type='order'",
+      const confirmation = await admin.pool.query(
+        'select order_id,token_hash from order_confirmations where store_id=$1',
         [storeId],
       );
-      const [{ code }] = link.rows;
-      const text = `অর্ডার 1042: ৳1,260। নিশ্চিত করুন: ${loadEnv().SHORT_LINK_BASE_URL}/c/${code}`;
-      expect(link.rows).toEqual([{ kind: 'order_confirm', code, source_id: orderId }]);
+      const token = started.rendered_text.match(/\/c\/([\w-]{43})$/u)?.[1] ?? '';
+      const text = `অর্ডার 1042: ৳1,260। নিশ্চিত করুন: ${loadEnv().SHORT_LINK_BASE_URL}/c/${token}`;
+      // Only the sha256 of the token is kept.
+      expect(confirmation.rows).toEqual([
+        { order_id: orderId, token_hash: createHash('sha256').update(token).digest() },
+      ]);
       expect(started.rendered_text).toBe(text);
 
       // The order is edited while the retry waits; the words and the SMS parts stay as reserved.

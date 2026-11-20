@@ -199,19 +199,6 @@ describe('tracked links over Fastify', () => {
     expect(await visits(stop.id)).toEqual([]);
   });
 
-  it('gives one confirm address per order and reuses it', async () => {
-    const contactId = await contact(storeA);
-    const orderId = randomUUID();
-    const first = await links.orderConfirmUrl(storeA, orderId, contactId);
-    expect(first).toMatch(/\/c\/[0-9A-Za-z]{8}$/u);
-    expect(await links.orderConfirmUrl(storeA, orderId, contactId)).toBe(first);
-    const rows = await admin.pool.query(
-      "select count(*)::int as count from tracked_links where source_id=$1 and kind='order_confirm'",
-      [orderId],
-    );
-    expect(rows.rows[0].count).toBe(1);
-  });
-
   it.each(['granted', 'not_answered'] as const)(
     'withdraws SMS consent once from %s when the opt-out is tapped twice',
     async (status) => {

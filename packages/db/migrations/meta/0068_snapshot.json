@@ -1,5 +1,5 @@
 {
-  "id": "d27598db-0653-4b84-ac35-4de8de13796f",
+  "id": "c89f958a-61b1-45ca-9979-12b4a87c9bd8",
   "prevId": "30927033-7974-4cf1-bfc8-dba22fac59c7",
   "version": "7",
   "dialect": "postgresql",
@@ -8664,7 +8664,7 @@
       "checkConstraints": {
         "tracked_links_kind": {
           "name": "tracked_links_kind",
-          "value": "\"tracked_links\".\"kind\" in ('redirect', 'sms_opt_out', 'order_confirm')"
+          "value": "\"tracked_links\".\"kind\" in ('redirect', 'sms_opt_out')"
         },
         "tracked_links_source_type": {
           "name": "tracked_links_source_type",
@@ -8677,10 +8677,6 @@
         "tracked_links_opt_out_contact": {
           "name": "tracked_links_opt_out_contact",
           "value": "\"tracked_links\".\"kind\" <> 'sms_opt_out' or \"tracked_links\".\"contact_id\" is not null"
-        },
-        "tracked_links_order_confirm_source": {
-          "name": "tracked_links_order_confirm_source",
-          "value": "\"tracked_links\".\"kind\" <> 'order_confirm' or (\"tracked_links\".\"source_type\" = 'order' and \"tracked_links\".\"source_id\" is not null)"
         }
       },
       "isRLSEnabled": false
@@ -14879,6 +14875,137 @@
           "value": "\"discount_codes\".\"max_redemptions\" is null or \"discount_codes\".\"redemption_count\" <= \"discount_codes\".\"max_redemptions\""
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.order_confirmations": {
+      "name": "order_confirmations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "used_at": {
+          "name": "used_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "order_confirmations_store_order_key": {
+          "name": "order_confirmations_store_order_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "order_confirmations_token_hash_key": {
+          "name": "order_confirmations_token_hash_key",
+          "columns": [
+            {
+              "expression": "token_hash",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "order_confirmations_order_id_idx": {
+          "name": "order_confirmations_order_id_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "order_confirmations_store_id_stores_id_fk": {
+          "name": "order_confirmations_store_id_stores_id_fk",
+          "tableFrom": "order_confirmations",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "order_confirmations_order_id_store_fk": {
+          "name": "order_confirmations_order_id_store_fk",
+          "tableFrom": "order_confirmations",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "store_id",
+            "order_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.order_items": {

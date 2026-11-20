@@ -180,12 +180,7 @@ export function hasHappened(exit: ExitCondition, facts: RunFacts): boolean {
   return false;
 }
 
-// The text is the step's own unless order fields were filled in for this send.
-export function messageBody(
-  step: SendStep,
-  optOutUrl: string | undefined,
-  text = step.message.text,
-): string {
+export function messageBody(text: string, optOutUrl: string | undefined): string {
   return optOutUrl ? `${text}\n${optOutUrl}` : text;
 }
 
