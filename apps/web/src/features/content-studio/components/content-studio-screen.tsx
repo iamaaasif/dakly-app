@@ -1,10 +1,11 @@
 'use client';
 
-import type { ContentStudioTab } from '../content-studio-view';
+import type { ContentStudioView } from '../content-studio-view';
 import { ContentStudioTabs } from './content-studio-tabs';
 import { CreateTab } from './create-tab';
+import { LibraryTab } from './library-tab';
 
-export function ContentStudioScreen({ tab }: { tab: ContentStudioTab }) {
+export function ContentStudioScreen({ view }: { view: ContentStudioView }) {
   return (
     <main className="space-y-6 p-4 md:p-8">
       <header>
@@ -14,8 +15,9 @@ export function ContentStudioScreen({ tab }: { tab: ContentStudioTab }) {
           Then post, send or save them.
         </p>
       </header>
-      <ContentStudioTabs tab={tab} />
-      {tab === 'create' && <CreateTab />}
+      <ContentStudioTabs tab={view.tab} />
+      {view.tab === 'create' && <CreateTab />}
+      {view.tab === 'library' && <LibraryTab view={view} />}
     </main>
   );
 }
