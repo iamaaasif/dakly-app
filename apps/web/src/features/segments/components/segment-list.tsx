@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
 import type { SegmentListResponse } from '@dakly/contracts/segments';
+import { buttonVariants } from '@dakly/ui/button';
 
 import { SegmentRow } from './segment-row';
 
@@ -19,20 +20,8 @@ export function SegmentList({ page, cursor, canEdit }: SegmentListProps) {
     : '/segments?edit=';
   return (
     <main className="space-y-6 p-4 md:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-bold">Segments</h1>
-          <p className="text-text-muted">
-            Groups of customers to send a campaign to. Counts are live.
-          </p>
-        </div>
-        {canEdit ? (
-          <Link href="/segments?edit=new" className={linkClass}>
-            <Plus aria-hidden="true" size={16} strokeWidth={1.75} />
-            Create segment
-          </Link>
-        ) : null}
-      </div>
+      <SegmentListHeader canEdit={canEdit} />
+
       {page.items.length ? (
         <div className="space-y-3">
           {page.items.map((segment) => (
@@ -63,5 +52,24 @@ export function SegmentList({ page, cursor, canEdit }: SegmentListProps) {
         ) : null}
       </nav>
     </main>
+  );
+}
+
+function SegmentListHeader({ canEdit }: { canEdit: boolean }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="text-xl font-bold">Segments</h1>
+        <p className="text-sm text-text-muted">
+          Groups of customers that update every day. Send each group the message that fits them.
+        </p>
+      </div>
+      {canEdit ? (
+        <Link href="/segments?edit=new" className={buttonVariants()}>
+          <Plus aria-hidden="true" size={16} strokeWidth={2} />
+          Create segment
+        </Link>
+      ) : null}
+    </div>
   );
 }
