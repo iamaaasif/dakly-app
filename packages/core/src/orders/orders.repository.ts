@@ -39,6 +39,10 @@ const summaryColumns = {
   deliveredItemsSubtotalPoisha: orders.deliveredItemsSubtotalPoisha,
   deliveredOrderDiscountPoisha: orders.deliveredOrderDiscountPoisha,
   createdAt: orders.createdAt,
+  courier: orders.courier,
+  courierOtherName: orders.courierOtherName,
+  returnedAt: orders.returnedAt,
+  returnReason: orders.returnReason,
 };
 
 const detailColumns = {
@@ -53,14 +57,10 @@ const detailColumns = {
   onHoldReason: orders.onHoldReason,
   followUpOn: orders.followUpOn,
   cancelReason: orders.cancelReason,
-  courier: orders.courier,
-  courierOtherName: orders.courierOtherName,
   trackingCode: orders.trackingCode,
   shippedAt: orders.shippedAt,
   shippedByUserId: orders.shippedByUserId,
   deliveredAt: orders.deliveredAt,
-  returnedAt: orders.returnedAt,
-  returnReason: orders.returnReason,
   codCollectedAt: orders.codCollectedAt,
   possibleDuplicateOfOrderId: orders.possibleDuplicateOfOrderId,
 };
