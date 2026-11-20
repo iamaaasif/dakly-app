@@ -80,6 +80,10 @@ export class ChannelConnectionsService {
     };
   }
 
+  hasActive(storeId: string, kind: ChannelConnection['kind']): Promise<boolean> {
+    return this.repository.hasActive(storeId, kind);
+  }
+
   async isAiLive(storeId: string, id: string) {
     return (await this.repository.aiState(storeId, id))?.isAiLive ?? false;
   }
