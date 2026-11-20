@@ -15,6 +15,7 @@ The full suites are slow, and CI runs all of them on every push, so run them onc
 - While writing code, run the tests for what you changed: `pnpm --filter <package> test <path>` for unit tests, and `pnpm --filter <package> test:int <path>` for the Postgres tests of that feature.
 - Before you open the PR, run the full set and the fresh-context review described above.
 - After review comments, run `pnpm check` and the tests for the files you changed, then push. CI runs `pnpm test:int` and `pnpm test:e2e`, and nothing merges until it is green. Repeat the fresh-context review only when the fix changes logic, not for renames, comments or docs.
+- After you merge `main` into your branch, check only what the merge changed. When it resolved conflicts in docs alone, such as `docs/tasks.md`, run `pnpm exec prettier --check <files>` and `pnpm lint:docs`. When it touched code, run `pnpm check`.
 - A test that fails at random is a bug: fix it in its own PR without weakening an assertion or a timeout. Never rerun the full suite to get past one.
 
 ## While a PR waits for review
@@ -22,6 +23,8 @@ The full suites are slow, and CI runs all of them on every push, so run them onc
 - Do not end your session while you have an open PR or an unfinished task. A status report is not a reason to stop.
 - When nothing else can move, wait in a loop: every 5 minutes, list your open PRs (`gh pr list --author @me --state open`) and read the comments and review comments posted since your last check, including on your PRs merged in the last day. Use `sleep 300` between checks.
 - A review comment that asks for a change is a decision, not an open question. Make the change; do not wait for anyone to confirm it. If you disagree, reply once with the reason, then follow the reviewer's answer.
+- Never rewrite a pushed branch: no rebase, amend or force-push. Fixes go in new commits, and `main` comes in as a merge commit, so the reviewer can read only what changed since the last review.
+- When `main` moves and your PR conflicts, merge `main` at once. GitHub runs no CI on a PR with conflicts. When the PR your branch is stacked on merges, merge `main` and retarget your PR to `main` in the same step.
 - While one PR waits, work on the next task that does not depend on it, within the open-PR limit your task sets.
 - Stop only when every assigned task is merged, or when you reach a usage or context limit. Then post the report your task asks for.
 

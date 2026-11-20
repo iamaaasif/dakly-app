@@ -9,6 +9,7 @@ import {
   campaignStatusColors,
   campaignStatusLabels,
 } from '../campaign-labels';
+import { formatCount, formatMoney } from '@/lib/format-money';
 
 const campaignMetrics = ['Sent', 'Clicked', 'Orders', 'Revenue'] as const;
 
@@ -50,7 +51,7 @@ export function CampaignTable({ campaigns }: { campaigns: CampaignResponse[] }) 
                 </TableCell>
                 {campaignMetrics.map((metric) => (
                   <TableCell key={metric} className="text-right tabular-nums">
-                    <UnavailableMetric />
+                    <CampaignMetric campaign={campaign} metric={metric} />
                   </TableCell>
                 ))}
               </TableRow>
@@ -88,7 +89,7 @@ function CampaignCard({ campaign }: { campaign: CampaignResponse }) {
             <div key={metric} className="flex justify-between gap-2">
               <dt className="text-text-muted">{metric}</dt>
               <dd>
-                <UnavailableMetric />
+                <CampaignMetric campaign={campaign} metric={metric} />
               </dd>
             </div>
           ))}
@@ -100,6 +101,21 @@ function CampaignCard({ campaign }: { campaign: CampaignResponse }) {
 
 function CampaignSubtitle({ campaign }: { campaign: CampaignResponse }) {
   return <p className="text-sm text-text-muted">{campaignChannelLabels[campaign.channel]}</p>;
+}
+
+function CampaignMetric({
+  campaign,
+  metric,
+}: {
+  campaign: CampaignResponse;
+  metric: (typeof campaignMetrics)[number];
+}) {
+  const attribution = campaign.attribution;
+  if (attribution && campaign.status !== 'draft') {
+    if (metric === 'Orders') return formatCount(BigInt(attribution.orders));
+    if (metric === 'Revenue') return formatMoney(BigInt(attribution.revenuePoisha));
+  }
+  return <UnavailableMetric />;
 }
 
 function UnavailableMetric() {

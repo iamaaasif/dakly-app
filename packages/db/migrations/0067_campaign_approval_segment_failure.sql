@@ -1,0 +1,2 @@
+ALTER TABLE "campaigns" DROP CONSTRAINT "campaigns_approval_failure_code";--> statement-breakpoint
+ALTER TABLE "campaigns" ADD CONSTRAINT "campaigns_approval_failure_code" CHECK ("campaigns"."approval_failure_code" in ('WALLET_BALANCE_TOO_LOW', 'CAMPAIGN_NO_RECIPIENTS', 'CAMPAIGN_SEND_TIME_PASSED', 'SEGMENT_NOT_FOUND'));

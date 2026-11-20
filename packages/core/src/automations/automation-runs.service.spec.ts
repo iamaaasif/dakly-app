@@ -335,7 +335,7 @@ describe('AutomationRunsService', () => {
     const links = {
       create: async (_storeId: string, asked: NewTrackedLink[]) =>
         asked.map(() => ({ id: 'link-1', code: 'Ab3dE6gH', url: optOutUrl })),
-      optOutUrl: (code: string) => `https://links.dakly.test/s/${code}`,
+      sampleOptOutUrl: () => 'https://links.dakly.test/s/00000000',
     };
     // The workflow pauses once, for the first run short of credits.
     pausedForBalance = [];

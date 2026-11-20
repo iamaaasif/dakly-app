@@ -24,6 +24,14 @@ export default async function ProductsPage({
         This products page address is invalid. <Link href="/products">Open all products</Link>.
       </p>
     );
-  const { adjust, create, product, ...query } = parsed.data;
-  return <ProductsScreen query={query} adjust={adjust} create={create} productId={product} />;
+  const { adjust, create, product, productTab, ...query } = parsed.data;
+  return (
+    <ProductsScreen
+      query={query}
+      adjust={adjust}
+      create={create}
+      productId={product}
+      productTab={productTab}
+    />
+  );
 }

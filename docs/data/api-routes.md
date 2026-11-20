@@ -191,13 +191,20 @@ atomically and retain business data when an extension is disabled.
 
 ## Content and social (08)
 
-| Route                                                                                                     | Permission    |
-| --------------------------------------------------------------------------------------------------------- | ------------- |
-| `GET /brand-profile`, `PUT /brand-profile`                                                                | `socialPosts` |
-| `GET /posts`, `GET /posts/:postId`, `POST /posts` (idem), `PATCH /posts/:postId`, `DELETE /posts/:postId` | `socialPosts` |
-| `POST /posts/:postId/schedule`, `POST /posts/:postId/publish-now`, `POST /posts/:postId/approve`          | `socialPosts` |
-| `POST /posts/captions` (AI writing)                                                                       | `socialPosts` |
-| `GET /posts/queue-slots`, `PUT /posts/queue-slots`                                                        | `socialPosts` |
+| Route                                                                                                                           | Permission                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `GET /brand-profile`, `GET /content-pieces`, `GET /content-pieces/:contentPieceId`                                              | `social.view`                                                  |
+| `PUT /brand-profile`, `POST /content-pieces`, `PATCH /content-pieces/:contentPieceId`, `DELETE /content-pieces/:contentPieceId` | `social.edit`                                                  |
+| `POST /content-pieces/generate`                                                                                                 | `social.edit`, plus `products.view` when a product is selected |
+| `POST /products/:productId/write-description`                                                                                   | `products.edit`                                                |
+| `GET /posts`, `GET /posts/:postId`, `POST /posts` (idem), `PATCH /posts/:postId`, `DELETE /posts/:postId`                       | `socialPosts`                                                  |
+| `POST /posts/:postId/schedule`, `POST /posts/:postId/approve`                                                                   | `social.edit`                                                  |
+| `POST /posts/:postId/publish-now`                                                                                               | `socialPosts`                                                  |
+| `POST /posts/captions` (AI writing)                                                                                             | `socialPosts`                                                  |
+| `GET /posts/queue-slots`                                                                                                        | `social.view`                                                  |
+| `PUT /posts/queue-slots`                                                                                                        | `social.edit`                                                  |
+
+An Owner, Admin or Marketer must approve an AI-written draft.
 
 ## Campaigns and automations (09)
 
@@ -206,7 +213,8 @@ atomically and retain business data when an extension is disabled.
 | `GET /campaigns`, `GET /campaigns/:campaignId`, `GET /campaigns/:campaignId/estimate` (draft only), `GET /campaigns/:campaignId/recipients`        | `campaigns`   |
 | `POST /campaigns`, `PATCH /campaigns/:campaignId`, `DELETE /campaigns/:campaignId` (draft only)                                                    | `campaigns`   |
 | `POST /campaigns/:campaignId/approve` (also Owner or Admin while the store's approval setting is on)                                               | `campaigns`   |
-| `POST /campaigns/:campaignId/unschedule`, `POST /campaigns/:campaignId/cancel` (scheduled, until 5 minutes before the send)                        | `campaigns`   |
+| `POST /campaigns/:campaignId/unschedule` (scheduled, until 5 minutes before the send)                                                              | `campaigns`   |
+| `POST /campaigns/:campaignId/cancel` (scheduled, sending or paused)                                                                                | `campaigns`   |
 | `POST /campaigns/:campaignId/pause`, `POST /campaigns/:campaignId/resume`                                                                          | `campaigns`   |
 | `GET /whatsapp-templates`, `POST /whatsapp-templates`, `POST /whatsapp-templates/:templateId/submit`                                               | `campaigns`   |
 | `GET /automations`, `GET /automations/:automationId`, `POST /automations`, `PATCH /automations/:automationId`                                      | `automations` |
@@ -216,6 +224,8 @@ atomically and retain business data when an extension is disabled.
 | `GET /automations/templates`, `POST /automations/templates/:templateKey/use`                                                                       | `automations` |
 | `GET /automations/:automationId/trigger-preview`                                                                                                   | `automations` |
 | `GET /automations/:automationId/runs`                                                                                                              | `automations` |
+
+Campaign detail and list responses include the send start, finish and stored recipient counts. The count time identifies when the worker last refreshed the recipient totals.
 
 `POST /campaigns/:campaignId/approve` takes no `Idempotency-Key` header: the draft row lock, `CAMPAIGN_NOT_DRAFT` (409) on a repeat and the wallet reservation key make a retry safe. A send-now route outside approval (CAMP-3) takes a real key.
 

@@ -20,8 +20,12 @@ export function OrderSearch({ query }: { query: OrderListQuery }) {
   }
 
   return (
-    <form role="search" onSubmit={submit} className="flex flex-wrap items-end gap-2">
-      <div className="w-72 max-w-full">
+    <form
+      role="search"
+      onSubmit={submit}
+      className="flex w-full flex-wrap items-end gap-2 sm:w-auto"
+    >
+      <div className="w-full max-w-full sm:w-72">
         <label htmlFor="order-search" className="mb-1 block text-sm font-medium">
           Search orders
         </label>

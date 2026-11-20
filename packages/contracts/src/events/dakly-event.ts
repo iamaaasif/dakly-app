@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { campaignApprovedEventSchema } from './campaigns';
+import { attributionOrdersRebuiltEventSchema } from './analytics';
+import {
+  campaignApprovalStartedEventSchema,
+  campaignApprovedEventSchema,
+  campaignSentEventSchema,
+} from './campaigns';
 import {
   channelConnectedEventSchema,
   channelDisconnectedEventSchema,
@@ -19,6 +24,7 @@ import {
 } from './contacts';
 import { knowledgeIndexRequestedEventSchema } from './knowledge';
 import {
+  conversationHandedOverEventSchema,
   conversationStartedEventSchema,
   messageDeliveredEventSchema,
   messageFailedEventSchema,
@@ -31,6 +37,8 @@ import {
 } from './messaging';
 import { notificationCreatedEventSchema } from './notifications';
 import {
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
@@ -42,6 +50,15 @@ import {
   stockChangedEventSchema,
   variantRestockedEventSchema,
 } from './products';
+import {
+  postFailedEventSchema,
+  postPublishedEventSchema,
+  postScheduledEventSchema,
+} from './social';
+import {
+  attributionRebuildContinuedEventSchema,
+  attributionWindowChangedEventSchema,
+} from './stores';
 import { walletCreditedEventSchema } from './wallets';
 
 export const daklyEventSchema = z.discriminatedUnion('type', [
@@ -58,11 +75,14 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   importStartedEventSchema,
   importUndoRequestedEventSchema,
   knowledgeIndexRequestedEventSchema,
+  campaignApprovalStartedEventSchema,
   campaignApprovedEventSchema,
+  campaignSentEventSchema,
   channelConnectedEventSchema,
   channelDisconnectedEventSchema,
   channelNeedsReconnectEventSchema,
   conversationStartedEventSchema,
+  conversationHandedOverEventSchema,
   messageReceivedEventSchema,
   messageSendRequestedEventSchema,
   messageSentEventSchema,
@@ -78,6 +98,14 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
   orderEditedEventSchema,
+  attributionCreatedEventSchema,
+  attributionRemovedEventSchema,
+  attributionWindowChangedEventSchema,
+  attributionRebuildContinuedEventSchema,
+  attributionOrdersRebuiltEventSchema,
+  postScheduledEventSchema,
+  postPublishedEventSchema,
+  postFailedEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

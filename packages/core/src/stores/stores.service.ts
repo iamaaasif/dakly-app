@@ -1,10 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { z } from 'zod';
 
 import type { PlansResponse } from '@dakly/contracts/billing';
 import {
   sendingSettingsSchema,
   stockSettingsSchema,
   type CreateStoreInput,
+  attributionWindowSchema,
+  type AttributionSettingsResponse,
+  type AttributionWindow,
   type StoreResponse,
   type ChangeStoreSettingsInput,
   type ChangeStoreExtensionsInput,
@@ -17,8 +21,10 @@ import { AuditService } from '../audit/audit.service';
 import { UsersService } from '../auth/users.service';
 import { BillingService } from '../billing/billing.service';
 import { Clock } from '../platform/clock';
+import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamService } from '../team/team.service';
 import { MaintenanceStoresRepository } from './maintenance-stores.repository';
@@ -27,6 +33,15 @@ import { storeError } from './stores.errors';
 import { type StoreSettingsRow, StoresRepository } from './stores.repository';
 
 export type StoreSendingSettings = SendingSettings & { timeZone: string };
+
+const rebuildSchema = z.object({
+  id: z.uuid(),
+  timeZone: z.string(),
+  startedAt: z.iso.datetime(),
+  after: z.object({ id: z.uuid(), at: z.string() }).nullable(),
+  processedOrders: z.int().nonnegative(),
+  checkpoint: z.uuid().nullable(),
+});
 
 @Injectable()
 export class StoresService {
@@ -40,6 +55,7 @@ export class StoresService {
     @Inject(BillingService) private readonly billing: BillingService,
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   async nextOrderNumber(storeId: string): Promise<number> {
@@ -66,6 +82,84 @@ export class StoresService {
     const days = await this.repository.customerInactivityDays(storeId);
     if (days === undefined) throw storeError('STORE_NOT_FOUND');
     return days;
+  }
+
+  // The share lock stays held only while the caller's transaction is open.
+  async isActive(storeId: string): Promise<boolean> {
+    return (await this.repository.lockedStatus(storeId)) === 'active';
+  }
+
+  async attributionRebuild(storeId: string) {
+    const state = await this.repository.attributionState(storeId);
+    if (!state) throw storeError('STORE_NOT_FOUND');
+    return {
+      timeZone: state.timeZone,
+      windowDays: attributionWindowSchema.parse(state.windowDays),
+      rebuild: rebuildSchema.nullable().parse(state.rebuild),
+    };
+  }
+
+  async attributionSettings(storeId: string): Promise<AttributionSettingsResponse> {
+    const { windowDays, rebuild } = await this.attributionRebuild(storeId);
+    return toAttributionSettings(windowDays, rebuild);
+  }
+
+  changeAttributionWindow(
+    storeId: string,
+    windowDays: AttributionWindow,
+    actor: { userId: string; access: StoreAccess },
+  ): Promise<AttributionSettingsResponse> {
+    if (!this.team.canChangeAttributionWindow(actor.access))
+      throw storeError('STORE_ATTRIBUTION_SETTING_DENIED');
+    return this.transaction.runLocked(storeId, async () => {
+      const previous = await this.attributionRebuild(storeId);
+      if (windowDays === previous.windowDays)
+        return toAttributionSettings(windowDays, previous.rebuild);
+      const now = this.clock.now();
+      const id = newId();
+      const startedAt = now.toISOString();
+      const rebuild = {
+        id,
+        startedAt,
+        timeZone: previous.timeZone,
+        after: null,
+        processedOrders: 0,
+        checkpoint: null,
+      };
+      await this.repository.writeAttributionState(storeId, rebuild, { windowDays, updatedAt: now });
+      await this.audit.record(storeId, {
+        actor: { kind: 'user', userId: actor.userId },
+        action: 'attribution.window_changed',
+        entityType: 'store',
+        entityId: storeId,
+        before: { state: String(previous.windowDays) },
+        after: { state: String(windowDays) },
+      });
+      await this.outbox.publish({
+        type: 'attribution.window_changed',
+        storeId,
+        occurredAt: startedAt,
+        payload: { rebuildId: id },
+      });
+      return toAttributionSettings(windowDays, rebuild);
+    });
+  }
+
+  async saveAttributionRebuild(storeId: string, rebuild: z.infer<typeof rebuildSchema> | null) {
+    await this.repository.writeAttributionState(storeId, rebuild);
+    if (rebuild?.after && rebuild.checkpoint === rebuild.after.id)
+      await this.outbox.publish({
+        type: 'attribution.rebuild_continued',
+        storeId,
+        occurredAt: this.clock.now().toISOString(),
+        payload: { rebuildId: rebuild.id, afterOrderId: rebuild.after.id },
+      });
+  }
+
+  async attributionWindowDays(storeId: string, lock?: 'share'): Promise<AttributionWindow> {
+    const days = await this.repository.attributionWindowDays(storeId, lock);
+    if (days === undefined) throw storeError('STORE_NOT_FOUND');
+    return attributionWindowSchema.parse(days);
   }
 
   async timeZone(storeId: string): Promise<string> {
@@ -188,5 +282,16 @@ function toSettingsResponse(store: StoreSettingsRow): StoreSettingsResponse {
     ...store,
     sending: parseSending(store.sending),
     stock: stockSettingsSchema.parse(store.stock ?? {}),
+  };
+}
+
+function toAttributionSettings(
+  windowDays: AttributionWindow,
+  rebuild: z.infer<typeof rebuildSchema> | null,
+): AttributionSettingsResponse {
+  return {
+    windowDays,
+    rebuilding: rebuild !== null,
+    processedOrders: rebuild?.processedOrders ?? null,
   };
 }

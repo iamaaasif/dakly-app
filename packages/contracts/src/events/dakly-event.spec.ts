@@ -54,6 +54,36 @@ const examples: DaklyEvent[] = [
   { type: 'order.created', storeId, occurredAt, payload: { orderId } },
   { type: 'order.cod_collected', storeId, occurredAt, payload: { orderId } },
   {
+    type: 'post.scheduled',
+    storeId,
+    occurredAt,
+    payload: {
+      postId: '019c01ea-cf15-7d31-a7f5-d73d66007ae4',
+      postTargetId: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+      scheduledFor: '2026-11-20T14:30:00.000Z',
+    },
+  },
+  {
+    type: 'post.published',
+    storeId,
+    occurredAt,
+    payload: {
+      postId: '019c01ea-cf15-7d31-a7f5-d73d66007ae4',
+      postTargetId: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+      externalPostId: 'meta-post',
+    },
+  },
+  {
+    type: 'post.failed',
+    storeId,
+    occurredAt,
+    payload: {
+      postId: '019c01ea-cf15-7d31-a7f5-d73d66007ae4',
+      postTargetId: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
+      errorCode: 'POST_PROVIDER_REJECTED',
+    },
+  },
+  {
     type: 'stock.changed',
     storeId,
     occurredAt,
@@ -106,16 +136,34 @@ const examples: DaklyEvent[] = [
     payload: { importId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1' },
   },
   {
+    type: 'campaign.approval_started',
+    storeId,
+    occurredAt,
+    payload: { campaignId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1', approvedAt: occurredAt },
+  },
+  {
     type: 'campaign.approved',
     storeId,
     occurredAt,
     payload: { campaignId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1', status: 'scheduled' },
   },
   {
+    type: 'campaign.sent',
+    storeId,
+    occurredAt,
+    payload: { campaignId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1' },
+  },
+  {
     type: 'conversation.started',
     storeId,
     occurredAt,
     payload: { conversationId, contactId, connectionId, channel: 'instagram' },
+  },
+  {
+    type: 'conversation.handed_over',
+    storeId,
+    occurredAt,
+    payload: { conversationId, reason: 'asked_for_person' },
   },
   { type: 'message.received', storeId, occurredAt, payload: message },
   { type: 'message.send_requested', storeId, occurredAt, payload: { messageId } },
@@ -134,6 +182,21 @@ const examples: DaklyEvent[] = [
       userId: '019c01ea-cf15-7d31-a7f5-d73d66007ade',
       category: 'fix_now',
     },
+  },
+  {
+    type: 'attribution.created',
+    storeId,
+    occurredAt,
+    payload: { orderId, sourceType: 'campaign', sourceId: trackedLink.sourceId },
+  },
+  { type: 'attribution.orders_rebuilt', storeId, occurredAt, payload: { orderIds: [orderId] } },
+  { type: 'attribution.removed', storeId, occurredAt, payload: { orderId } },
+  { type: 'attribution.window_changed', storeId, occurredAt, payload: { rebuildId: orderId } },
+  {
+    type: 'attribution.rebuild_continued',
+    storeId,
+    occurredAt,
+    payload: { rebuildId: orderId, afterOrderId: orderId },
   },
   {
     type: 'wallet.credited',

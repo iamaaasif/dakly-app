@@ -1,0 +1,1 @@
+ALTER TABLE "campaign_recipients" ADD COLUMN "redirect_link_codes" text[];

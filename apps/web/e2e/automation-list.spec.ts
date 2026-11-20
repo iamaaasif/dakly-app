@@ -60,6 +60,11 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
             ($2,$3,$4,$5,$6,'old','end','done',now()-interval '31 days')`,
       [randomUUID(), randomUUID(), storeId, active.id, active.publishedVersionId, contactId],
     );
+    await db.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value)
+        values($1,(now() at time zone 'Asia/Dhaka')::date,'marketing_revenue',$2,342800)`,
+      [storeId, `automation:${active.id}`],
+    );
     await page.goto('/automations');
     await expect(page.getByRole('tab', { name: 'All 4' })).toHaveAttribute('aria-selected', 'true');
     expect(
@@ -71,6 +76,7 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
     ).toBe(true);
     const welcome = page.getByRole('listitem').filter({ hasText: active.name });
     await expect(welcome.locator('dd').first()).toHaveText('1');
+    await expect(welcome.getByText('৳3,428', { exact: true })).toBeVisible();
     const evidence = process.env.CAMP12_LIST_EVIDENCE;
     if (evidence) await mkdir(evidence, { recursive: true });
     for (const [width, height] of [
@@ -120,6 +126,10 @@ test('lists workflows, counts recent entries and switches tabs and status', asyn
     await page.getByRole('dialog').getByRole('button', { name: 'Delete workflow' }).click();
     await expect(page.getByRole('tab', { name: 'Draft 1' })).toBeVisible();
   } finally {
+    await db.pool.query(
+      'delete from store_daily_metrics where store_id=$1 and dimension=any($2::text[])',
+      [storeId, ids.map((id) => `automation:${id}`)],
+    );
     await db.pool.query('delete from automation_runs where automation_id=any($1::uuid[])', [ids]);
     await db.pool.query(
       'update automations set published_version_id=null where id=any($1::uuid[])',

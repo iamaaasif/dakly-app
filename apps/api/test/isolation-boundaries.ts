@@ -7,6 +7,11 @@ const groups = [
     routes: ['GET /webhooks/meta', 'POST /webhooks/meta'],
   },
   {
+    evidence: 'payments/payments.int.spec.ts',
+    boundary: 'public callback intake with merchant signature verification in the worker',
+    routes: ['POST /webhooks/payments/:gateway'],
+  },
+  {
     evidence:
       'sessions/sessions-http.int.spec.ts; stores/stores.int.spec.ts; team/members.int.spec.ts; admin/staff-recovery.int.spec.ts',
     boundary: 'account membership, token recipient, or new-store creation',

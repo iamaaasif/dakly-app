@@ -191,8 +191,11 @@ export const orders = pgTable(
     attributedSourceType: text('attributed_source_type', { enum: attributionSourceTypes }),
     attributedSourceId: uuid('attributed_source_id'),
     attributedChannel: text('attributed_channel'),
+    attributedTouchId: uuid('attributed_touch_id'),
     // When the winning read, tap or delivery happened, not when attribution was calculated.
     attributedTouchAt: timestamptz('attributed_touch_at'),
+    attributedAmountPoisha: poisha('attributed_amount_poisha'),
+    attributedWindowDays: smallint('attributed_window_days'),
     possibleDuplicateOfOrderId: uuid('possible_duplicate_of_order_id').references(
       (): AnyPgColumn => orders.id,
     ),

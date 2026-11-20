@@ -29,6 +29,7 @@ const billedRequest: AiRequest<z.infer<typeof schema>> = {
   tier: 'writer',
   purpose: 'content',
   usageReference: 'draft-123',
+  usageQuantity: 1,
 };
 
 const config: AiConfig = {
@@ -146,6 +147,21 @@ describe('AiService', () => {
     expect(Array.from(used.values(), (event) => event.unit)).toEqual(['ai_content', 'ai_ask']);
   });
 
+  it('charges a valid generation three credits once and an invalid generation nothing', async () => {
+    const bad = { ...reply, output: { reply: 100 } };
+    const { service, charges } = fixture([bad, reply, bad, bad]);
+    const generation = { ...billedRequest, usageQuantity: 3 };
+
+    await expect(service.run(storeId, generation)).resolves.toMatchObject({ kind: 'output' });
+    await expect(
+      service.run(storeId, { ...generation, usageReference: 'bad-generation' }),
+    ).resolves.toMatchObject({ kind: 'failure', code: 'AI_OUTPUT_MISMATCH' });
+
+    expect(charges).toEqual([
+      { reference: generation.usageReference, unit: 'ai_content', quantity: 3 },
+    ]);
+  });
+
   it('leaves the allowance untouched on a billed timeout or final schema mismatch', async () => {
     const bad = { ...reply, output: { reply: 100 } };
     const { service, used } = fixture([new LlmError('LLM_TIMEOUT'), bad, bad]);
@@ -221,6 +237,7 @@ function fixture(
   let failures = 0;
   const runs: AiRun[] = [];
   const used = new Map<string, { id: string; unit: ConsumeUsageInput['unit'] }>();
+  const charges: ConsumeUsageInput[] = [];
   const repo = {
     async insert(_storeId: string, run: AiRun) {
       if (options.failWrites) throw new Error('Run insert failed');
@@ -229,7 +246,9 @@ function fixture(
     },
   } as AiRunsRepository;
   const usageService = {
-    async consume(_storeId: string, { reference, unit }: ConsumeUsageInput) {
+    async consume(_storeId: string, charge: ConsumeUsageInput) {
+      charges.push(charge);
+      const { reference, unit } = charge;
       const event = used.get(reference) ?? { id: reference, unit };
       used.set(reference, event);
       return event;
@@ -253,5 +272,5 @@ function fixture(
     config,
     clock,
   );
-  return { service, runs, used };
+  return { service, runs, used, charges };
 }

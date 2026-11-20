@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from 'drizzle-orm';
 
 import type { TrackedLinkKind, TrackedLinkSourceType } from '@dakly/contracts/campaigns';
 import type { Database } from '@dakly/db/client';
@@ -60,6 +60,51 @@ export class LinksRepository {
     return rows.map((row) => row.id);
   }
 
+  attributionTaps(
+    storeId: string,
+    orders: { orderId: string; contactId: string; fromAt: Date; throughAt: Date }[],
+  ) {
+    return this.tenant.forStore(storeId, (tx) => {
+      const requests = sql`jsonb_to_recordset(${JSON.stringify(orders)}::jsonb) as request(
+        "orderId" uuid, "contactId" uuid, "fromAt" timestamptz, "throughAt" timestamptz
+      )`;
+      const latestVisit = tx
+        .select({ id: trackedLinkVisits.id, eligibleAt: trackedLinkVisits.occurredAt })
+        .from(trackedLinkVisits)
+        .where(
+          and(
+            eq(trackedLinkVisits.storeId, storeId),
+            eq(trackedLinkVisits.trackedLinkId, trackedLinks.id),
+            gte(trackedLinkVisits.occurredAt, sql`request."fromAt"`),
+            lte(trackedLinkVisits.occurredAt, sql`request."throughAt"`),
+          ),
+        )
+        .orderBy(desc(trackedLinkVisits.occurredAt), desc(trackedLinkVisits.id))
+        .limit(1)
+        .as('latest_visit');
+      return tx
+        .select({
+          orderId: sql<string>`request."orderId"`,
+          contactId: sql<string>`request."contactId"`,
+          id: latestVisit.id,
+          eligibleAt: latestVisit.eligibleAt,
+          sourceType: trackedLinks.sourceType,
+          sourceId: trackedLinks.sourceId,
+        })
+        .from(requests)
+        .innerJoin(trackedLinks, eq(trackedLinks.contactId, sql`request."contactId"`))
+        .innerJoinLateral(latestVisit, sql`true`)
+        .where(
+          and(
+            eq(trackedLinks.storeId, storeId),
+            eq(trackedLinks.kind, 'redirect'),
+            isNotNull(trackedLinks.sourceId),
+            inArray(trackedLinks.sourceType, ['campaign', 'automation']),
+          ),
+        );
+    });
+  }
+
   async recordRedirectTap(
     storeId: string,
     trackedLinkId: string,
@@ -104,6 +149,25 @@ export class LinksRepository {
       selectOptOutLink(tx, storeId, trackedLinkId).for('update'),
     );
     return link;
+  }
+
+  // Dhaka has no daylight saving, so a Dhaka day is always the same 24 UTC hours.
+  rollUpVisitDay(storeId: string, day: string) {
+    return this.tenant.forStore(storeId, (tx) =>
+      tx.execute(sql`
+        insert into tracked_link_visit_days
+          (store_id, tracked_link_id, day, visits, unique_visitors, first_at, last_at)
+        select store_id, tracked_link_id, ${day}::date, count(*), count(distinct visitor_hash),
+          min(occurred_at), max(occurred_at)
+        from tracked_link_visits
+        where store_id = ${storeId}
+          and occurred_at >= (${day}::date::timestamp at time zone 'Asia/Dhaka')
+          and occurred_at < ((${day}::date + 1)::timestamp at time zone 'Asia/Dhaka')
+        group by store_id, tracked_link_id
+        on conflict (tracked_link_id, day) do update set visits = excluded.visits,
+          unique_visitors = excluded.unique_visitors, first_at = excluded.first_at,
+          last_at = excluded.last_at`),
+    );
   }
 }
 

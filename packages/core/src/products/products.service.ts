@@ -10,6 +10,7 @@ import type {
 import type {
   CreateProductInput,
   ChangeProductInput,
+  ProductCategoriesResponse,
   ProductListQuery,
   ProductListResponse,
   ProductResponse,
@@ -103,6 +104,10 @@ export class ProductsService {
       toResponse(product, product.variants, stock.lowStockThreshold, this.storage),
     );
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+  }
+
+  async listCategories(storeId: string): Promise<ProductCategoriesResponse> {
+    return { items: await this.repository.listCategories(storeId) };
   }
 
   async listForOrders(storeId: string, query: OrderCatalogueQuery): Promise<OrderCataloguePage> {
@@ -254,14 +259,8 @@ export class ProductsService {
       if (!product) throw productError('PRODUCT_NOT_FOUND');
       if (!product.imageFileIds.includes(fileId)) throw productError('PRODUCT_PHOTO_NOT_FOUND');
       const now = this.clock.now();
-      if (
-        !(await this.repository.updatePhotos(
-          storeId,
-          productId,
-          product.imageFileIds.filter((id) => id !== fileId),
-          now,
-        ))
-      )
+      const imageFileIds = product.imageFileIds.filter((id) => id !== fileId);
+      if (!(await this.repository.updatePhotos(storeId, productId, imageFileIds, now)))
         throw productError('PRODUCT_NOT_FOUND');
       await this.repository.expirePhoto(storeId, fileId, now);
       await this.publishUpdated(storeId, productId);
@@ -304,10 +303,11 @@ export class ProductsService {
   }
 
   private publishUpdated(storeId: string, productId: string) {
+    const occurredAt = this.clock.now().toISOString();
     return this.outbox.publish({
       type: 'product.updated',
       storeId,
-      occurredAt: this.clock.now().toISOString(),
+      occurredAt,
       payload: { productId },
     });
   }

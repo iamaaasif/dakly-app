@@ -3,7 +3,7 @@
 |           |                                                                                  |
 | --------- | -------------------------------------------------------------------------------- |
 | Release   | 1                                                                                |
-| Status    | Not started                                                                      |
+| Status    | In progress                                                                      |
 | Extension | Core (Content Studio), Social Auto Post                                          |
 | Code      | `packages/core/src/{content,social}/`, `apps/web/src/features/{content,social}/` |
 | Tasks     | SOC-1 to SOC-6                                                                   |
@@ -169,6 +169,47 @@ The post composer and scheduling are well thought out. But the design can't deci
 
 ## Engineering
 
+### Posts and targets
+
+The posts API saves, reads, edits and deletes drafts. Each target names a connected
+Facebook Page or Instagram account in the store. Drafts belong to their creator.
+Owners and Admins can read team drafts. Editing an AI-written draft keeps its
+approval requirement. Reusing a create key returns the creator's saved draft.
+
+Owners, Admins and Marketers can approve an AI-written draft. Scheduling it can
+also record their approval. Editing the draft clears an earlier approval.
+People can pick a future time or queue each target in the store's time zone.
+Each connection can save weekly posting slots. An account without saved slots
+uses 12:30 and 20:30 daily. A queue slot must be at least 15 minutes away, and
+one account can use a slot once. Scheduling records `post.scheduled` for each
+target.
+
+With Meta publishing configured, the worker queues a publish job for each target. Instagram waits for its media
+container to finish. A successful target stays published when another target
+fails. Each target gets three retries over 30 minutes and a Fix now notification
+if it fails. A check 24 hours before publishing flags an account that needs
+reconnecting or a photo that is missing. Instagram targets require JPEG photos
+when saved, approved and published. A suspended store cannot publish. Its
+target fails if the store is still suspended on the last attempt. A first
+comment goes to Instagram only. A recovery job runs each minute and restores
+missing or failed jobs for targets due within 24 hours. The window for a missed
+or failed publication ends 30 minutes after the scheduled time, including time
+with Meta publishing disabled. After that, recovery records a saved receipt or
+marks the target failed.
+
+If Meta receives a publish request without returning a result, Dakly checks the
+Instagram container for confirmation. A confirmed container can be marked
+published even if Meta did not return the post ID. For a Facebook result it cannot confirm,
+Dakly asks the shop to check the Page before posting again.
+
+Facebook and Instagram use the connected Page token. Live publishing requires
+Meta app review for `pages_manage_posts` and `instagram_content_publish`. Stores
+may need to reconnect to grant them. An Instagram first comment needs comment
+permission. Dakly shows a warning if it cannot confirm the comment.
+
+Insights (SOC-3) and the web screens (SOC-5) are separate tasks. SOC-4 adds AI
+caption generation and checks generated text before scheduling.
+
 ### Screens in release 1
 
 ![Social hub](../design/screenshots/social-hub.webp)
@@ -185,10 +226,11 @@ TikTok shows Coming soon and stays hidden in release 1. The prototype's Instagra
 4. Publishing is a delayed job per target. Instagram uses the container flow (create, wait for finished, publish). Three retries over 30 minutes, then `failed` with a Fix now notification.
 5. 24 hours ahead, a job flags targets whose token is expired or whose media is missing.
 6. Insights are fetched every 6 hours for 7 days, then daily to day 30.
-7. Content Studio generates 3 captions per request from the brand profile and counts against `ai_content` (3 per generation, 1 per edit).
-8. Save to library stores the edited text, format, language, creator and AI provenance in `content_pieces`. Formats are Facebook post, Instagram caption, WhatsApp, SMS and product description; languages are Bangla, English and Banglish. Copying or editing an AI piece keeps its AI-written approval provenance. Library filters use kind and language, ordered by `(created_at, id)`.
+7. Content Studio writes 3 options per request using the brand profile. Shorten, Friendlier and Translate return one option. Product writing uses saved product details. The model gets the brand profile only when the member can view it. The store's words to avoid always apply. A valid generation uses 3 `ai_content` credits and a valid edit uses 1.
+8. Save to library stores the edited text, format, language, creator and AI provenance in `content_pieces`. Formats are Facebook post, Instagram caption, WhatsApp, SMS and product description; languages are Bangla, English and Banglish. Save to library checks that an AI run belongs to this store and completed content writing before adding AI provenance. Copying or editing an AI piece keeps its AI-written approval provenance. Library filters use kind and language, ordered by `(created_at, id)`.
 9. Each `(post, connection)` has one target. A null caption override uses the post caption; an empty override intentionally has no caption. Resolve this effective text before validating each selected network's format and limits at save, approval and publish. The storage ceiling is not proof that a provider accepts the caption.
-10. Brand audience, preferred words and Bangla/English calls to action have dedicated fields. Brand voice remains the writing style; it does not carry unrelated values.
+10. Brand audience, preferred words and Bangla/English calls to action have dedicated fields. Brand voice remains the writing style; it does not carry unrelated values. A store with no saved profile starts with empty fields.
+11. Library pages show the newest pieces first. Editing keeps the creator and AI provenance. A copy uses the current member as its creator and keeps the source's AI provenance.
 
 ### Rules
 

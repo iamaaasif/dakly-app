@@ -94,8 +94,10 @@ Messages (`messages.status`): `queued` → `sent` → `delivered` → `read`, or
 stateDiagram-v2
     [*] --> draft
     draft --> waiting_approval: WhatsApp template not approved yet
-    draft --> scheduled
-    draft --> sending: send now
+    draft --> approving: approve
+    approving --> scheduled: audience frozen, credits reserved
+    approving --> sending: audience frozen, credits reserved, send now
+    approving --> draft: approval refused
     waiting_approval --> scheduled
     waiting_approval --> failed: template rejected
     scheduled --> sending
@@ -108,6 +110,8 @@ stateDiagram-v2
     paused --> cancelled
     sent --> [*]
 ```
+
+`approving` is the time a background job writes the recipient rows and then reserves the credits. If the balance is short, no recipient can get the message or the send time has passed, the job deletes the rows and moves the campaign back to `draft`, with the reason in `approval_failure_code`. Edit, delete and cancel are refused while it runs.
 
 `pause_reason`: `manual`, `balance`, `whatsapp_quality`, `template_rejected`, `provider_error`.
 

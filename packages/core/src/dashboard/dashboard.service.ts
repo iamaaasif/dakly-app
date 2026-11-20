@@ -6,7 +6,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { TeamService } from '../team/team.service';
 
-type CardReport = 'orders' | 'sales' | 'newCustomers' | 'customersWhoCameBack';
+type CardReport = 'orders' | 'sales' | 'marketingRevenue' | 'newCustomers' | 'customersWhoCameBack';
 type Periods = Awaited<ReturnType<AnalyticsService['periods']>>;
 
 @Injectable()
@@ -25,13 +25,16 @@ export class DashboardService {
     const { asOf, timeZone } = periods;
     const canViewOrders = this.team.canAccess(access, 'orders', 'view');
     const canViewCustomers = this.team.canAccess(access, 'customers', 'view');
-    const [orders, sales, newCustomers, customersWhoCameBack, lifecycle] = await Promise.all([
-      canViewOrders ? this.readCard(storeId, periods, 'orders') : undefined,
-      canViewOrders ? this.readCard(storeId, periods, 'sales') : undefined,
-      canViewCustomers ? this.readCard(storeId, periods, 'newCustomers') : undefined,
-      canViewCustomers ? this.readCard(storeId, periods, 'customersWhoCameBack') : undefined,
-      canViewCustomers ? this.reports.lifecycleCounts(storeId, periods.current) : undefined,
-    ]);
+    const canViewAnalytics = this.team.canAccess(access, 'analytics', 'view');
+    const [orders, sales, marketingRevenue, newCustomers, customersWhoCameBack, lifecycle] =
+      await Promise.all([
+        canViewOrders ? this.readCard(storeId, periods, 'orders') : undefined,
+        canViewOrders ? this.readCard(storeId, periods, 'sales') : undefined,
+        canViewAnalytics ? this.readCard(storeId, periods, 'marketingRevenue') : undefined,
+        canViewCustomers ? this.readCard(storeId, periods, 'newCustomers') : undefined,
+        canViewCustomers ? this.readCard(storeId, periods, 'customersWhoCameBack') : undefined,
+        canViewCustomers ? this.reports.lifecycleCounts(storeId, periods.current) : undefined,
+      ]);
     return {
       asOf,
       timeZone,
@@ -41,6 +44,11 @@ export class DashboardService {
           totalPoisha: sales.total,
           previousPoisha: sales.previous,
           pointsPoisha: sales.points,
+        },
+        marketingRevenue: marketingRevenue && {
+          totalPoisha: marketingRevenue.total,
+          previousPoisha: marketingRevenue.previous,
+          pointsPoisha: marketingRevenue.points,
         },
         newCustomers,
         customersWhoCameBack,

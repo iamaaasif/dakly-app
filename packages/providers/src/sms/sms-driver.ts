@@ -3,12 +3,15 @@
 export type SmsMessage = { to: string; text: string; idempotencyKey?: string; sender?: string };
 
 export type SmsSendResult = { providerMessageId: string };
+export type SmsReceipt = { providerMessageId: string; idempotencyKey: string };
+export type SmsReceiptStatus = 'sent' | 'not_sent' | 'unknown';
 
 // SmsSendRefused means this attempt did not reach provider acceptance. Any other send error
 // leaves the outcome unknown. Callers reconcile earlier attempts and apply their send rules
 // before retrying under the same key.
 export type SmsDriver = {
   send(message: SmsMessage, signal?: AbortSignal): Promise<SmsSendResult>;
+  receiptStatus?(receipt: SmsReceipt): Promise<SmsReceiptStatus>;
 };
 
 export class SmsSendRefused extends Error {

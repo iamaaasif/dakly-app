@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, isNotNull, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
 
-import { orders } from '@dakly/db/schema/orders';
+import { orderItems, orders } from '@dakly/db/schema/orders';
+import { productVariants } from '@dakly/db/schema/products';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -115,6 +116,63 @@ export class OrderReportingRepository {
     );
   }
 
+  reportingDays(storeId: string, orderIds: string[], timeZone: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .selectDistinct({
+          day: sql<string>`(${orders.createdAt} at time zone ${timeZone})::date::text`,
+        })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), inArray(orders.id, orderIds))),
+    );
+  }
+
+  dailyAttributionMetrics(
+    storeId: string,
+    {
+      from,
+      through,
+      timeZone,
+    }: {
+      from: string;
+      through: string;
+      timeZone: string;
+    },
+  ) {
+    const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
+    const dimension = sql<string>`coalesce(${orders.attributedSourceType} || ':' || ${orders.attributedSourceId}::text, '')`;
+    const captured = sql`coalesce(${orders.attributedAmountPoisha}, 0)`;
+    const kept = sql`(coalesce(${orders.deliveredItemsSubtotalPoisha}, ${orders.itemsSubtotalPoisha})
+      - coalesce(${orders.deliveredOrderDiscountPoisha}, ${orders.orderDiscountPoisha}))`;
+    const net = sql`case
+      when ${orders.stage} = 'returned' then 0
+      when ${orders.stage} = 'partially_delivered' then ${kept}
+      else ${captured} end`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          day: sql<string>`${day}::text`,
+          dimension,
+          marketing_orders: sql<string>`count(*)::text`,
+          marketing_revenue: sql<string>`sum(${net})::text`,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            ne(orders.stage, 'cancelled'),
+            isNotNull(orders.attributedSourceType),
+            isNotNull(orders.attributedSourceId),
+            sql`${orders.createdAt} >= (${from}::date - 1)::timestamp at time zone 'UTC' and ${orders.createdAt} < (${through}::date + 2)::timestamp at time zone 'UTC'`,
+            sql`${day} between ${from}::date and ${through}::date`,
+          ),
+        )
+        .groupBy(
+          sql`grouping sets ((1), (1, ${orders.attributedSourceType}, ${orders.attributedSourceId}))`,
+        ),
+    );
+  }
+
   async buyerContactId(storeId: string, orderId: string) {
     const [order] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -123,6 +181,50 @@ export class OrderReportingRepository {
         .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId))),
     );
     return order?.contactId;
+  }
+
+  // What a workflow trigger filter looks at. Undefined when the buyer was purged or never linked.
+  async triggerFacts(storeId: string, orderId: string) {
+    return this.database.forStore(storeId, async (tx) => {
+      const [order] = await tx
+        .select({
+          contactId: orders.buyerContactId,
+          number: orders.number,
+          paymentStatus: orders.paymentStatus,
+          bdAreaId: orders.recipientBdAreaId,
+          itemsSubtotalPoisha: orders.itemsSubtotalPoisha,
+          orderDiscountPoisha: orders.orderDiscountPoisha,
+          deliveryChargePoisha: orders.deliveryChargePoisha,
+          deliveredItemsSubtotalPoisha: orders.deliveredItemsSubtotalPoisha,
+          deliveredOrderDiscountPoisha: orders.deliveredOrderDiscountPoisha,
+        })
+        .from(orders)
+        .where(and(eq(orders.storeId, storeId), eq(orders.id, orderId)));
+      if (!order?.contactId) return undefined;
+      const products = await tx
+        .selectDistinct({ productId: productVariants.productId })
+        .from(orderItems)
+        .innerJoin(productVariants, eq(productVariants.id, orderItems.variantId))
+        .where(and(eq(orderItems.storeId, storeId), eq(orderItems.orderId, orderId)));
+      const [earlier] = await tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.buyerContactId, order.contactId),
+            ne(orders.stage, 'cancelled'),
+            lt(orders.number, order.number),
+          ),
+        )
+        .limit(1);
+      return {
+        ...order,
+        contactId: order.contactId,
+        productIds: products.map(({ productId }) => productId),
+        isFirstOrder: !earlier,
+      };
+    });
   }
 
   async contactOrderTotals(storeId: string, contactId: string, timeZone: string) {

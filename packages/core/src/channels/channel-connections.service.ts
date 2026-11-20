@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import type { ChannelConnection, ChannelConnectionListQuery } from '@dakly/contracts/channels';
+import { postingSlotsSchema, type PostingSlot } from '@dakly/contracts/social';
 import type { StoreAccess } from '@dakly/contracts/team';
 import {
   MetaRequestError,
@@ -66,6 +67,27 @@ export class ChannelConnectionsService {
     };
   }
 
+  async postingConnections(storeId: string, ids: string[]) {
+    if (!ids.length) return [];
+    const rows = await this.repository.findPostingConnections(storeId, ids);
+    return rows.map(({ postingSlots, ...connection }) => ({
+      ...connection,
+      postingSlots: postingSlotsSchema.safeParse(postingSlots).data ?? null,
+    }));
+  }
+
+  async savePostingSlots(
+    storeId: string,
+    input: { channelConnectionId: string; slots: PostingSlot[] },
+  ) {
+    const [saved] = await this.repository.savePostingSlots(storeId, {
+      ...input,
+      now: this.clock.now(),
+    });
+    if (!saved) return undefined;
+    return { ...saved, postingSlots: input.slots };
+  }
+
   async findInbound(
     storeId: string,
     lookup: Parameters<ChannelConnectionsRepository['findInbound']>[1],
@@ -74,6 +96,14 @@ export class ChannelConnectionsService {
     if (!connection) return null;
     const channel = connection.kind === 'facebook_page' ? 'messenger' : connection.kind;
     return { id: connection.id, channel, connectedAt: connection.connectedAt } as const;
+  }
+
+  async postingCredential(storeId: string, channelConnectionId: string) {
+    const token = await this.repository.activeMetaToken(storeId, channelConnectionId);
+    if (!token?.ciphertext || token.keyVersion === null) return undefined;
+    const { kind, ciphertext, keyVersion, expiresAt, externalAccountId } = token;
+    if (kind !== 'facebook_page' && kind !== 'instagram') return undefined;
+    return { kind, ciphertext, keyVersion, expiresAt, externalAccountId };
   }
 
   async prepareMetaSend(

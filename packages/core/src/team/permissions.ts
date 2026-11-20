@@ -11,7 +11,12 @@ import {
 
 const levelRanks = { none: 0, view: 1, edit: 2 } as const;
 const permissionFlags = ['seeFullPhone', 'exportLists', 'refund'] as const;
-const ownerActions: readonly OwnerAction[] = ['billing.edit', 'store.close', 'ownership.transfer'];
+const ownerActions: readonly OwnerAction[] = [
+  'attribution.window.edit',
+  'billing.edit',
+  'store.close',
+  'ownership.transfer',
+];
 
 export function hasKnownRole(access: StoreAccess): boolean {
   return access.role === 'custom' || builtInRoles.includes(access.role as BuiltInRole);
@@ -61,6 +66,10 @@ export function hasSameMemberRole(
 
 export function hasStoreAdminRole(access: StoreAccess): boolean {
   return access.role === 'owner' || access.role === 'admin';
+}
+
+export function canReviewSocialPosts(access: StoreAccess, action: 'view' | 'approve'): boolean {
+  return hasStoreAdminRole(access) || (action === 'approve' && access.role === 'marketer');
 }
 
 export function canChangeExtensions(access: StoreAccess): boolean {

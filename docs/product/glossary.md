@@ -127,6 +127,17 @@ Segments are filters. A customer can be in several. To avoid confusion with the 
 | COD with couriers              | Sum of COD amounts of orders marked Delivered whose money the courier has not yet paid to the store. In release 1 staff mark COD collected by hand (D21). |
 | Due (baki)                     | Sum of unpaid amounts in the Due book for a person. Payments reduce the oldest debt first.                                                                |
 
+## AI usage metrics
+
+Daily totals kept in `store_daily_metrics`, one row per Asia/Dhaka day and AI purpose (the row's dimension). Written by the daily maintenance job from `ai_runs`, so they stay after the raw runs are dropped at 13 months.
+
+| Metric              | Definition                                                            |
+| ------------------- | --------------------------------------------------------------------- |
+| `ai_runs`           | Number of AI model calls that day for the purpose.                    |
+| `ai_cost_micro_usd` | Vendor cost of those calls in millionths of a US dollar (an integer). |
+| `ai_input_tokens`   | Input tokens sent, including cached tokens.                           |
+| `ai_output_tokens`  | Output tokens received.                                               |
+
 ## Formats
 
 - Money: `৳` then the amount with lakh grouping, no decimals unless the amount has poisha: `৳3,42,800`, `৳1,250.50`. One formatter in the web app does this.

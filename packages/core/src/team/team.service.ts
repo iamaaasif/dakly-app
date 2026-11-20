@@ -16,6 +16,7 @@ import {
   canApproveSupport,
   canChangeExtensions,
   canDo,
+  canReviewSocialPosts,
   hasStoreAdminRole,
 } from './permissions';
 import { TeamRepository } from './team.repository';
@@ -36,6 +37,10 @@ export class TeamService {
     return canApproveSends(access);
   }
 
+  canChangeAttributionWindow(access: StoreAccess): boolean {
+    return canDo(access, 'attribution.window.edit');
+  }
+
   canTransferOwnership(access: StoreAccess): boolean {
     return canDo(access, 'ownership.transfer');
   }
@@ -46,6 +51,10 @@ export class TeamService {
 
   canManageChannelConnections(access: StoreAccess): boolean {
     return hasStoreAdminRole(access);
+  }
+
+  canReviewSocialPosts(access: StoreAccess, action: 'view' | 'approve'): boolean {
+    return canReviewSocialPosts(access, action);
   }
 
   async accessFor(storeId: string, userId: string): Promise<StoreAccess | undefined> {
@@ -60,6 +69,14 @@ export class TeamService {
       const access = toStoreAccess(member);
       return member.userId && access && canAccess(access, area, level) ? [member.userId] : [];
     });
+  }
+
+  async inboxNotificationRecipient(storeId: string, assigneeUserId: string | null) {
+    const members = await this.repository.findActiveAccess(storeId);
+    const assignee = assigneeUserId && members.find((member) => member.userId === assigneeUserId);
+    const access = assignee && toStoreAccess(assignee);
+    if (access && canAccess(access, 'chats', 'view')) return assigneeUserId;
+    return members.find((member) => member.builtInRole === 'owner')?.userId;
   }
 
   lockAndFindOwnedStore(storeId: string, userId: string): Promise<string | undefined> {

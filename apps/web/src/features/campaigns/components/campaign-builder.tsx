@@ -1,9 +1,9 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, MessageSquare } from 'lucide-react';
-import Link from 'next/link';
+import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useId, useState } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import type { z } from 'zod';
 
@@ -24,6 +24,8 @@ import {
   campaignStatusColors,
   campaignStatusLabels,
 } from '../campaign-labels';
+import { CampaignChannelCards } from './campaign-channel-cards';
+import { CampaignPageHeader } from './campaign-page-header';
 import { formatDateTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -33,35 +35,43 @@ type Details = z.output<typeof detailsSchema>;
 
 export function CampaignBuilder({ campaign }: { campaign?: CampaignResponse }) {
   const { data } = useSessionContext();
-  const editable =
-    data?.currentStore?.canEditCampaigns && (!campaign || campaign.status === 'draft');
+  const contextTag = data?.contextTag;
+  const canEdit = data?.currentStore?.canEditCampaigns;
+  if (!campaign) return canEdit ? <NewCampaignBuilder key={contextTag} /> : null;
+  const editable = canEdit && campaign.status === 'draft';
   return (
     <main className="space-y-6 p-6 md:p-8">
-      <BuilderHeader title={campaign?.name ?? 'New campaign'} editable={Boolean(editable)} />
+      <CampaignPageHeader
+        title={campaign.name}
+        subtitle={editable ? 'Nothing is sent until you approve.' : 'Campaign summary'}
+      />
       {editable ? (
-        <CampaignDetailsForm key={data?.contextTag} campaign={campaign} />
+        <CampaignDetailsForm key={contextTag} campaign={campaign} />
       ) : (
-        campaign && <CampaignSummary campaign={campaign} />
+        <CampaignSummary campaign={campaign} />
       )}
     </main>
   );
 }
 
-function BuilderHeader({ title, editable }: { title: string; editable: boolean }) {
+const newCampaignSubtitle = 'Nothing is sent until you approve.';
+
+function NewCampaignBuilder() {
+  const [step, setStep] = useState<'start' | 'details' | 'channels'>('start');
   return (
-    <header className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3">
-      <Link
-        href="/campaigns"
-        aria-label="Back to campaigns"
-        className="row-span-2 inline-flex size-10 items-center justify-center rounded-md text-action hover:bg-primary-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-      >
-        <ArrowLeft aria-hidden="true" size={20} strokeWidth={1.75} />
-      </Link>
-      <h1 className="text-xl font-bold break-words">{title}</h1>
-      <p className="mt-1 text-text-muted">
-        {editable ? 'Nothing is sent until you approve.' : 'Campaign summary'}
-      </p>
-    </header>
+    <main className="space-y-6 p-6 md:p-8">
+      {step === 'details' ? (
+        <CampaignDetailsForm onBack={() => setStep('channels')} />
+      ) : (
+        <>
+          <CampaignPageHeader title="New campaign" subtitle={newCampaignSubtitle} />
+          <CampaignChannelCards
+            focusSms={step === 'channels'}
+            onChooseSms={() => setStep('details')}
+          />
+        </>
+      )}
+    </main>
   );
 }
 
@@ -103,37 +113,68 @@ function useCampaignDetailsForm(campaign?: CampaignResponse) {
   return { form, submit, save, isDirty, opening };
 }
 
-function CampaignDetailsForm({ campaign }: { campaign?: CampaignResponse }) {
+function CampaignDetailsForm({
+  campaign,
+  onBack,
+}: {
+  campaign?: CampaignResponse;
+  onBack?: () => void;
+}) {
+  const formId = useId();
   const { form, submit, save, isDirty, opening } = useCampaignDetailsForm(campaign);
+  const busy = save.isPending || opening;
   const saved = save.isSuccess && !isDirty;
+  const saveButton = (
+    <Button
+      type="submit"
+      form={formId}
+      variant={campaign ? 'primary' : 'secondary'}
+      loading={save.isPending}
+      disabled={opening || Boolean(campaign && !isDirty)}
+    >
+      Save draft
+    </Button>
+  );
   return (
-    <FormProvider {...form}>
-      <form
-        onSubmit={submit}
-        className="max-w-xl space-y-4 rounded-lg border border-border bg-surface p-5"
-      >
-        <fieldset className="min-w-0 space-y-4" disabled={save.isPending || opening}>
-          <CampaignFields />
-        </fieldset>
-        {save.error && (
-          <p role="alert" className="text-danger">
-            {save.error.message}
-          </p>
-        )}
-        {opening ? <p role="status">Opening draft…</p> : saved && <p role="status">Draft saved.</p>}
-        <Button
-          type="submit"
-          loading={save.isPending}
-          disabled={opening || Boolean(campaign && !isDirty)}
+    <>
+      {!campaign && (
+        <CampaignPageHeader
+          title="New campaign"
+          subtitle={newCampaignSubtitle}
+          onBack={onBack}
+          backDisabled={busy}
+          action={saveButton}
+        />
+      )}
+      <FormProvider {...form}>
+        <form
+          id={formId}
+          onSubmit={submit}
+          className="max-w-xl space-y-4 rounded-lg border border-border bg-surface p-5"
         >
-          {campaign ? 'Save draft' : 'Create SMS draft'}
-        </Button>
-      </form>
-    </FormProvider>
+          <fieldset className="min-w-0 space-y-4" disabled={busy}>
+            <CampaignFields focusName={!campaign} />
+          </fieldset>
+          {save.error && (
+            <p role="alert" className="text-danger">
+              {save.error.message}
+            </p>
+          )}
+          <CampaignSaveStatus opening={opening} saved={saved} />
+          {campaign && saveButton}
+        </form>
+      </FormProvider>
+    </>
   );
 }
 
-function CampaignFields() {
+function CampaignSaveStatus({ opening, saved }: { opening: boolean; saved: boolean }) {
+  if (opening) return <p role="status">Opening draft…</p>;
+  if (saved) return <p role="status">Draft saved.</p>;
+  return null;
+}
+
+function CampaignFields({ focusName }: { focusName: boolean }) {
   const { register } = useFormContext<DetailsInput>();
   return (
     <>
@@ -150,6 +191,7 @@ function CampaignFields() {
             {...control}
             {...register('name', { setValueAs: (value: string) => value.trim() })}
             aria-required="true"
+            autoFocus={focusName}
           />
         )}
       </FormField>

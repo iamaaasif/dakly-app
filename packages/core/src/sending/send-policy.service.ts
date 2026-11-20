@@ -31,8 +31,13 @@ export type SendDecision =
 export type AudienceRequest = Omit<SendRequest, 'contactId'> & { contactIds: string[] };
 // The phone is frozen as the SMS destination of a campaign recipient.
 export type AudienceDecision = { contactId: string; phone: string | null; decision: SendDecision };
-type CapReadOptions = { excludeWorkflowStepId?: string; includeCommittedFuture?: boolean };
-type SendWindow = { windowClosesAt?: Date | null };
+type CapReadOptions = {
+  dispatch?: boolean;
+  excludeCampaignRecipientId?: string;
+  excludeWorkflowStepId?: string;
+  includeCommittedFuture?: boolean;
+};
+type SendWindow = { windowClosesAt?: Date | null; excludeCampaignRecipientId?: string };
 
 // The most contacts one checkAudience call takes: its consent read's limit.
 export const AUDIENCE_PAGE_SIZE = ConsentService.AUDIENCE_LIMIT;
@@ -70,7 +75,10 @@ export class SendPolicyService {
     const [checked] = await this.evaluateAudience(
       storeId,
       { ...request, contactIds: [request.contactId], at },
-      { includeCommittedFuture: true },
+      {
+        includeCommittedFuture: true,
+        excludeCampaignRecipientId: request.excludeCampaignRecipientId,
+      },
     );
     return { decision: checked!.decision, destination: checked!.phone, at };
   }
@@ -99,7 +107,9 @@ export class SendPolicyService {
     const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
     if (quietUntil) return { action: 'defer', until: quietUntil };
     await this.repository.lockContact(storeId, request.contactId);
-    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at);
+    const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at, {
+      dispatch: true,
+    });
     return capReached(sends, request, settings.frequencyCap) ? skip('frequency_cap') : SEND;
   }
 
@@ -134,12 +144,19 @@ export class SendPolicyService {
     {
       contactId,
       workflowStepId,
+      campaignRecipientId,
       settings: { quietHours, timeZone, frequencyCap },
-    }: { contactId: string; workflowStepId: string; settings: StoreSendingSettings },
+    }: {
+      contactId: string;
+      workflowStepId?: string;
+      campaignRecipientId?: string;
+      settings: StoreSendingSettings;
+    },
   ) {
     this.requireTransaction();
     const sends = await this.listWeekOfSends(storeId, [contactId], this.clock.now(), {
       excludeWorkflowStepId: workflowStepId,
+      excludeCampaignRecipientId: campaignRecipientId,
       includeCommittedFuture: true,
     });
     return (): { decision: SendDecision; at: Date } => {

@@ -10,11 +10,36 @@ type Metric = { day: string; metric: string; dimension?: string; value: bigint }
 
 const BUYER_ACTIVITY = 'buyer_activity';
 
+export const marketingMetrics = ['marketing_orders', 'marketing_revenue'] as const;
+
 @Injectable()
 export class AnalyticsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
   readDailyMetrics(storeId: string, period: ReportPeriod, metrics: string[]) {
+    return this.readMetrics(
+      storeId,
+      period,
+      metrics,
+      sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`,
+    );
+  }
+
+  readAttributionMetrics(storeId: string, period: ReportPeriod, dimensions?: string[]) {
+    return this.readMetrics(
+      storeId,
+      period,
+      [...marketingMetrics],
+      dimensions ? inArray(storeDailyMetrics.dimension, dimensions) : undefined,
+    );
+  }
+
+  private readMetrics(
+    storeId: string,
+    period: ReportPeriod,
+    metrics: string[],
+    filter: ReturnType<typeof sql> | undefined,
+  ) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -30,7 +55,7 @@ export class AnalyticsRepository {
             gte(storeDailyMetrics.day, period.from),
             lte(storeDailyMetrics.day, period.through),
             inArray(storeDailyMetrics.metric, metrics),
-            sql`(${storeDailyMetrics.dimension} = '' or ${storeDailyMetrics.metric} = 'sales')`,
+            filter,
           ),
         ),
     );
@@ -95,7 +120,13 @@ export class AnalyticsRepository {
         .where(
           and(
             eq(storeDailyMetrics.storeId, storeId),
-            inArray(storeDailyMetrics.metric, ['orders', 'delivered_orders', 'net_spend', 'sales']),
+            inArray(storeDailyMetrics.metric, [
+              'orders',
+              'delivered_orders',
+              'net_spend',
+              'sales',
+              ...marketingMetrics,
+            ]),
             gte(storeDailyMetrics.day, since),
           ),
         )
@@ -112,7 +143,7 @@ export class AnalyticsRepository {
         with expired as (
           select ctid from store_daily_metrics
           where store_id = ${storeId} and day < ${reportBefore}::date
-            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle')
+            and metric in ('orders', 'sales', 'delivered_orders', 'net_spend', 'buyer_activity', 'lifecycle', 'marketing_orders', 'marketing_revenue')
           order by day, metric, dimension limit ${limit} for update
         ), removed as (
           delete from store_daily_metrics as metrics using expired
@@ -185,6 +216,30 @@ export class AnalyticsRepository {
           setWhere: sql`${eq(storeDailyMetrics.storeId, storeId)}
           and ${storeDailyMetrics.value} is distinct from excluded.value`,
         }),
+    );
+  }
+
+  // Dhaka has no daylight saving, so a Dhaka day is always the same 24 UTC hours.
+  async rollUpAiRunDay(storeId: string, day: string) {
+    await this.database.forStore(storeId, (tx) =>
+      tx.execute(sql`
+        insert into store_daily_metrics (store_id, day, metric, dimension, value)
+        select ${storeId}::uuid, ${day}::date, m.metric, sums.purpose, m.value::bigint
+        from (
+          select purpose, count(*) as runs, sum(cost_micro_usd) as cost,
+            sum(input_tokens) as input, sum(output_tokens) as output
+          from ai_runs
+          where store_id = ${storeId}
+            and created_at >= (${day}::date::timestamp at time zone 'Asia/Dhaka')
+            and created_at < ((${day}::date + 1)::timestamp at time zone 'Asia/Dhaka')
+          group by purpose
+        ) sums
+        cross join lateral (values
+          ('ai_runs', sums.runs), ('ai_cost_micro_usd', sums.cost),
+          ('ai_input_tokens', sums.input), ('ai_output_tokens', sums.output)
+        ) as m(metric, value)
+        on conflict (store_id, day, metric, dimension) do update set value = excluded.value,
+          updated_at = now()`),
     );
   }
 }

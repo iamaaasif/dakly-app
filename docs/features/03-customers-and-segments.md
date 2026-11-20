@@ -3,7 +3,7 @@
 |           |                                                                                                          |
 | --------- | -------------------------------------------------------------------------------------------------------- |
 | Release   | 1                                                                                                        |
-| Status    | In progress (CUS-1 contacts, CUS-2 consent, CUS-8 import)                                                |
+| Status    | In progress (CUS-1 contacts, CUS-2 consent)                                                              |
 | Extension | Core                                                                                                     |
 | Code      | `packages/core/src/{contacts,consents,imports,segments}/`, `apps/web/src/features/{customers,segments}/` |
 | Tasks     | CUS-1 to CUS-14                                                                                          |
@@ -96,8 +96,10 @@ The web app has two customer screens.
   search box takes a name or a mobile number and a tag box takes one tag. The kind, search,
   tag and page live in the URL. A name search under 3 letters shows the API's message on the
   search field. Rows link to the profile and become cards on a phone. Members with Edit
-  Customers add a customer with the form beside the list; a phone the store already has shows
-  its error on the phone field.
+  Customers press Add customers and choose Add manually or Import from a CSV file. The manual
+  form shows a phone the store already has as an error on the phone field. Add by voice, Scan
+  your khata, Connect your store and Connect your POS are not offered until their tasks ship
+  (CUS-10, release 2 and the store and POS connectors).
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
@@ -108,11 +110,30 @@ The web app has two customer screens.
   returns to the list. The Marketing permission form records an answer for one channel with a
   required note saying how the customer told the shop. Agreed is offered only on WhatsApp and
   SMS; on Messenger and Instagram staff can record only a withdrawal.
+- The import window has six steps, with a progress bar and "Step N of 6" on top. Upload takes
+  a CSV by choosing or dropping it, checks the name, the 10 MB limit, UTF-8 and the 50,000 row limit in
+  the browser, and shows the file name, row count, column count and size. A template download is offered. Continue
+  sends the file straight to storage (`POST /imports`, then the signed PUT). Map fields
+  matches column names to the eight fields by name and lets the owner change each one; Phone
+  is required and one column fills one field at most. Preview shows the first 20 rows as
+  Dakly will read them, read from the file in the browser. Duplicates chooses Update their
+  details (default) or Leave existing customers as they are. Consent takes where customers
+  agreed for WhatsApp and for SMS, each optional, and Start import calls
+  `POST /imports/:importId/start`. Results polls `GET /imports/:importId` every 2 seconds
+  and shows added, updated, skipped and failed counts with a link to the error report CSV.
+  Undo import asks once, then calls `POST /imports/:importId/undo` and shows "Undoing the
+  import" until `undoFinishedAt` is set. The customer list reloads when the window closes.
+  The prototype's Detect, Validate and Confirm steps are folded into Upload, Duplicates plus
+  Consent, and the Start import button. The preview has no Ready, Already in Dakly or Invalid
+  labels, because no route checks rows before the import starts; row problems appear in the
+  report after it.
 - Both screens show the phone as the API sent it: full for members with "See full phone
   numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
-- Not built yet, because no route gives the data: header totals and tab counts, sort, columns,
-  export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
-  tabs, and the current consent answer per channel.
+- Not built yet, because no route gives the data: header totals and tab counts, sort, columns
+  (WhatsApp, Email, Location), export, bulk actions, the profile stats and its Orders, Activity,
+  Campaign history and Notes tabs, profile fields (Email, Address, Favourite category), quick
+  actions (Call, WhatsApp, SMS), tag input inside the tags card, and the current consent answer
+  per channel.
 
 Customer import (CUS-8) saves the rows of a CSV file the shop uploads as contacts, and can
 undo the contacts it added and the consent grants it recorded.
@@ -247,8 +268,7 @@ undo the contacts it added and the consent grants it recorded.
   per store per sweep. Queueing and progress renew `last_progress_at`; concurrent sweeps skip
   claimed work. Recovery has no seven-day cutoff once undo was accepted. Fully undone imports
   are never requeued.
-- Not built yet: the import screens and the preview of the first 20 rows before start (a later
-  CUS-8 part), and upload scanning (OPS-4).
+- Not built yet: upload scanning (OPS-4).
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII

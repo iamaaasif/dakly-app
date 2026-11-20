@@ -57,9 +57,14 @@ export function InviteForm({ onDone }: { onDone: () => void }) {
         until they expire or are cancelled.
       </p>
       <TeamError message={form.formState.errors.root?.message} />
-      <Button type="submit" loading={invite.isPending}>
-        Send invitation
-      </Button>
+      <div className="flex justify-end gap-3 pt-2">
+        <Button variant="secondary" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit" loading={invite.isPending}>
+          Send invitation
+        </Button>
+      </div>
     </form>
   );
 }

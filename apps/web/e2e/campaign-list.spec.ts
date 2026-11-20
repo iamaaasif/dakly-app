@@ -6,7 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
 
-async function captureCampaignList(page: Page) {
+async function captureCampaignList(page: Page, screen = 'list') {
   const evidence = process.env.CAMP4_LIST_SCREENSHOT_DIR;
   if (evidence) await mkdir(evidence, { recursive: true });
   for (const [width, height] of [
@@ -17,7 +17,7 @@ async function captureCampaignList(page: Page) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    if (evidence) await page.screenshot({ path: resolve(evidence, `list-${width}.png`) });
+    if (evidence) await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`) });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 }
@@ -64,10 +64,16 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     const draft = await create('Winter Kurti collection');
     const sent = await create('Puja winback');
     await database.pool.query(
-      "update campaigns set status='sent', finished_at=now() where store_id=$1 and id=$2",
+      "update campaigns set status='sent', started_at=now(), finished_at=now() where store_id=$1 and id=$2",
       [storeId, sent],
     );
 
+    await database.pool.query(
+      `insert into store_daily_metrics (store_id,day,metric,dimension,value)
+        values($1,(now() at time zone 'Asia/Dhaka')::date,'marketing_revenue',$2,342800),
+              ($1,(now() at time zone 'Asia/Dhaka')::date,'marketing_orders',$2,12)`,
+      [storeId, `campaign:${sent}`],
+    );
     await page.goto('/campaigns');
     await expect(page.getByRole('link', { name: 'Campaigns', exact: true })).toHaveAttribute(
       'aria-current',
@@ -90,7 +96,8 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await expect(page.getByRole('row', { name: /Puja winback/ })).toContainText('SMS');
     await expect(
       page.getByRole('row', { name: /Puja winback/ }).getByText('—', { exact: true }),
-    ).toHaveCount(4);
+    ).toHaveCount(2);
+    await expect(page.getByRole('row', { name: /Puja winback/ })).toContainText('৳3,428');
     await expect(page.getByRole('combobox', { name: 'Channel' })).toBeHidden();
     await expect(page.getByRole('button', { name: 'Filters', exact: true })).toHaveAttribute(
       'aria-expanded',
@@ -201,6 +208,11 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
       sentStatus.y + sentStatus.height / 2,
     );
     await expect(page).toHaveURL(new RegExp(`/campaigns/${sent}$`));
+    await expect(
+      page.getByRole('heading', { name: 'Campaign results', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText('৳3,428', { exact: true })).toBeVisible();
+    await captureCampaignList(page, 'results');
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
     await expect(page.getByText('Win back customers')).toBeVisible();
     await expect(page.getByText('Come back this week for our Puja collection.')).toBeVisible();
@@ -245,6 +257,10 @@ test('finds a campaign, opens its builder and reads a sent campaign summary', as
     await page.getByRole('link', { name: 'First page' }).click();
     await expect(page.getByRole('link', { name: longName })).toBeVisible();
   } finally {
+    await database.pool.query(
+      'delete from store_daily_metrics where store_id=$1 and dimension=any($2::text[])',
+      [storeId, ids.map((id) => `campaign:${id}`)],
+    );
     try {
       await database.pool.query(
         "update memberships set built_in_role='marketer' where store_id=$1 and built_in_role='support_agent'",

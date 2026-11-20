@@ -1,7 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { FormProvider, useForm } from 'react-hook-form';
 
-import { createRoleSchema, type RoleResponse } from '@dakly/contracts/team';
+import {
+  createRoleSchema,
+  permissionAreas,
+  type CreateRoleInput,
+  type RoleResponse,
+} from '@dakly/contracts/team';
 import { Button } from '@dakly/ui/button';
 
 import { useChangeRole } from '../api/change-role';
@@ -12,20 +17,25 @@ import { TeamField } from './team-field';
 import { formError } from '@/lib/form-error';
 
 export function RoleForm({ role, onDone }: { role?: RoleResponse; onDone: () => void }) {
-  const form = useForm({
+  const perms = role ? role.permissions : undefined;
+  const form = useForm<CreateRoleInput>({
     resolver: zodResolver(createRoleSchema),
     defaultValues: {
-      name: role?.name ?? '',
-      permissions: role?.permissions ?? {
-        areas: {},
-        seeFullPhone: false,
-        exportLists: false,
-        refund: false,
+      name: role ? role.name : '',
+      permissions: {
+        areas: Object.fromEntries(
+          permissionAreas.map((area) => [area, perms ? perms.areas[area] : 'none']),
+        ),
+        seeFullPhone: perms ? perms.seeFullPhone : false,
+        exportLists: perms ? perms.exportLists : false,
+        refund: perms ? perms.refund : false,
       },
     },
   });
   const create = useCreateRole();
-  const change = useChangeRole(role?.id ?? '');
+  const change = useChangeRole(role ? role.id : '');
+  const rootError = form.formState.errors.root;
+
   return (
     <FormProvider {...form}>
       <form
@@ -46,10 +56,15 @@ export function RoleForm({ role, onDone }: { role?: RoleResponse; onDone: () => 
           error={form.formState.errors.name}
         />
         <PermissionFields />
-        <TeamError message={form.formState.errors.root?.message} />
-        <Button type="submit" loading={create.isPending || change.isPending}>
-          Save role
-        </Button>
+        <TeamError message={rootError ? rootError.message : undefined} />
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" onClick={onDone}>
+            Cancel
+          </Button>
+          <Button type="submit" loading={create.isPending || change.isPending}>
+            Save role
+          </Button>
+        </div>
       </form>
     </FormProvider>
   );

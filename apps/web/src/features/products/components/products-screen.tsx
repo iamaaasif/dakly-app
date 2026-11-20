@@ -1,7 +1,8 @@
 'use client';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
-import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
+import type { ProductListQuery, ProductListResponse, ProductTab } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 
 import { productsSearch, useProducts } from '../api/products';
@@ -18,32 +19,30 @@ type ProductsScreenProps = {
   query: ProductListQuery;
   adjust?: string;
   productId?: string;
+  productTab?: ProductTab;
   create?: '1';
 };
-export function ProductsScreen({ query, adjust, productId, create }: ProductsScreenProps) {
+export function ProductsScreen({
+  query,
+  adjust,
+  productId,
+  productTab,
+  create,
+}: ProductsScreenProps) {
   const { data: session } = useSessionContext();
   const products = useProducts(query);
   const router = useRouter();
+  const [stockError, setStockError] = useState<string | null>(null);
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
   const canEdit = session?.currentStore?.canEditProducts;
   return (
     <StorePage permission="canViewProducts">
       <main className="space-y-6 p-6 md:p-8">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
-            <p className="mt-1 text-sm text-text-muted">
-              What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take
-              orders and fill your order link.
-            </p>
-          </div>
-          {canEdit ? (
-            <Button onClick={() => router.push(`${listHref}&create=1`)}>
-              <span aria-hidden="true">+ </span>Add product
-            </Button>
-          ) : null}
-        </header>
+        <ProductsHeader
+          canEdit={Boolean(canEdit)}
+          onAdd={() => router.push(`${listHref}&create=1`)}
+        />
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
           <ProductFilters key={`${query.search}|${query.readiness}`} query={query} />
           <ProductResults
@@ -52,18 +51,24 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
             onAdjust={canEdit ? onAdjust : undefined}
           />
         </section>
+        {stockError ? (
+          <p role="alert" className="text-danger">
+            {stockError}
+          </p>
+        ) : null}
         {create && canEdit ? (
-          <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
-            <ProductForm
-              onSaved={(product) => router.replace(`${listHref}&product=${product.id}`)}
-            />
-          </SessionDialog>
+          <AddProductModal listHref={listHref} onStockError={setStockError} />
         ) : null}
         {productId ? (
-          <ProductSheet
+          <SelectedProductSheet
             key={productId}
             productId={productId}
-            onClose={() => router.replace(listHref)}
+            productTab={productTab}
+            query={query}
+            onClose={() => {
+              setStockError(null);
+              router.replace(listHref);
+            }}
           />
         ) : null}
         <SelectedStockAdjustment
@@ -73,6 +78,48 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
         />
       </main>
     </StorePage>
+  );
+}
+
+function ProductsHeader({ canEdit, onAdd }: { canEdit: boolean; onAdd: () => void }) {
+  return (
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
+        <p className="mt-1 text-sm text-text-muted">
+          What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take orders
+          and fill your order link.
+        </p>
+      </div>
+      {canEdit ? (
+        <Button onClick={onAdd}>
+          <span aria-hidden="true">+ </span>Add product
+        </Button>
+      ) : null}
+    </header>
+  );
+}
+
+function AddProductModal({
+  listHref,
+  onStockError,
+}: {
+  listHref: string;
+  onStockError: (error: string) => void;
+}) {
+  const router = useRouter();
+  return (
+    <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
+      <ProductForm
+        onSaved={(product, failedSizes) => {
+          router.replace(`${listHref}&product=${product.id}`);
+          if (failedSizes.length > 0) {
+            onStockError(`Could not set initial stock for: ${failedSizes.join(', ')}`);
+          }
+        }}
+        onCancel={() => router.replace(listHref)}
+      />
+    </SessionDialog>
   );
 }
 
@@ -89,4 +136,35 @@ function SelectedStockAdjustment({ products, variantId, onClose }: SelectedStock
   const variant = product?.variants.find((item) => item.id === variantId);
   if (!product || !variant) return <p role="alert">That variant is not on this page.</p>;
   return <StockAdjustmentForm productName={product.name} variant={variant} onClose={onClose} />;
+}
+
+type SelectedProductSheetProps = {
+  productId: string;
+  productTab?: ProductTab;
+  query: ProductListQuery;
+  onClose: () => void;
+};
+
+function SelectedProductSheet({
+  productId,
+  productTab,
+  query,
+  onClose,
+}: SelectedProductSheetProps) {
+  const router = useRouter();
+  const onTab = (nextTab: ProductTab) => {
+    const params = new URLSearchParams(productsSearch(query));
+    params.set('product', productId);
+    if (nextTab !== 'overview') params.set('productTab', nextTab);
+    router.push(`/products?${params.toString()}`);
+  };
+
+  return (
+    <ProductSheet
+      productId={productId}
+      tab={productTab ?? 'overview'}
+      onTab={onTab}
+      onClose={onClose}
+    />
+  );
 }

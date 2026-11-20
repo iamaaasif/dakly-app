@@ -7,6 +7,7 @@ import { cn } from '@dakly/ui/cn';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import { productsSearch } from '../api/products';
+import { firstVariantProfitPercent, productPriceRange } from '../product-prices';
 import { ProductReadiness } from './product-readiness';
 import { ProductThumbnail } from './product-thumbnail';
 import { formatMoney } from '@/lib/format-money';
@@ -147,22 +148,18 @@ function ProductIdentity({ product, query }: ProductPartProps & { query: Product
 }
 
 function ProductPrice({ product }: ProductPartProps) {
-  const prices = product.variants.map((variant) => variant.pricePoisha);
-  const minimum = Math.min(...prices),
-    maximum = Math.max(...prices);
-  if (maximum === 0) return <span className="font-medium text-danger">No price</span>;
+  const price = productPriceRange(product);
+  if (!price) return <span className="font-medium text-danger">No price</span>;
+  const profit = firstVariantProfitPercent(product);
   return (
     <div className="space-y-0.5">
-      <span className="font-semibold text-text">
-        {minimum === maximum
-          ? formatMoney(minimum)
-          : `${formatMoney(minimum)}–${formatMoney(maximum)}`}
-      </span>
+      <span className="font-semibold text-text">{price}</span>
       {product.compareAtPricePoisha !== null ? (
         <del className="block text-xs text-text-muted">
           {formatMoney(product.compareAtPricePoisha)}
         </del>
       ) : null}
+      {profit ? <span className="block text-xs font-medium text-success">{profit}</span> : null}
     </div>
   );
 }
@@ -180,23 +177,26 @@ function variantStockColorClass(available: number) {
 type ProductStockProps = ProductPartProps & Pick<ProductListProps, 'onAdjust'>;
 
 function ProductStock({ product, onAdjust }: ProductStockProps) {
-  if (!product.isStockTracked) return <p className="text-sm text-text-muted">Not tracked</p>;
+  if (!product.isStockTracked) {
+    return <p className="text-sm text-text-muted">Not tracked</p>;
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {product.variants.map((variant) => {
-        const colorClass = variantStockColorClass(variant.available);
+        const label = `${variant.title} ${variant.available}`;
         return onAdjust ? (
           <Button
             key={variant.id}
             variant="secondary"
             className={cn(
               'min-h-11 max-w-full rounded-md border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs',
-              colorClass,
+              variantStockColorClass(variant.available),
             )}
             aria-label={`Adjust stock for ${product.name}, ${variant.title}`}
             onClick={() => onAdjust(variant.id)}
           >
-            {variant.title}: {variant.available}
+            {label}
           </Button>
         ) : (
           <Badge
@@ -204,7 +204,7 @@ function ProductStock({ product, onAdjust }: ProductStockProps) {
             variant={stockBadgeVariant(variant.available)}
             className="min-h-11 max-w-full rounded-md border border-border px-3 py-2 text-sm font-medium wrap-anywhere tabular-nums md:h-7 md:min-h-7 md:px-2 md:py-0.5 md:text-xs"
           >
-            {variant.title}: {variant.available}
+            {label}
           </Badge>
         );
       })}

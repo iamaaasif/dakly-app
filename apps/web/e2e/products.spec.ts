@@ -110,7 +110,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await page.goto('/products');
     await expect(page.getByRole('table', { name: 'Products' })).toBeVisible();
     await expect(page.getByRole('table').getByRole('row')).toHaveCount(4);
-    await expect(page.getByRole('table').getByText('Ready', { exact: true })).toBeVisible();
+    await expect(page.getByRole('table').getByText('Selling', { exact: true })).toBeVisible();
     await expect(page.getByRole('table').getByRole('img', { name: 'Silk scarf' })).toBeVisible();
     await expect
       .poll(() =>
@@ -128,7 +128,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await expect(page.getByRole('table').getByRole('row')).toHaveCount(2);
     await capture('running-low');
     await page.getByRole('searchbox', { name: 'Search products' }).fill('Cotton');
-    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByRole('searchbox', { name: 'Search products' }).press('Enter');
     await expect(page).toHaveURL(/search=Cotton/);
     await expect(page.getByRole('link', { name: 'Running low', exact: true })).toHaveAttribute(
       'aria-current',
@@ -150,7 +150,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: 'Adjust stock for Cotton Panjabi, XL' }),
-    ).toHaveText('XL: 10');
+    ).toHaveText('XL 10');
     await page.getByRole('button', { name: 'Adjust stock for Cotton Panjabi, XL' }).click();
     await page.getByLabel('Reason', { exact: true }).fill('Keep this draft on focus');
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
@@ -273,7 +273,7 @@ for (const mode of ['editable', 'read-only'] as const) {
         await close.click();
         await expect(page.getByRole('dialog')).toHaveCount(0);
       } else {
-        await expect(page.getByText(`${label}: 0`, { exact: true }).last()).toBeVisible();
+        await expect(page.getByText(`${label} 0`, { exact: true }).last()).toBeVisible();
         await expect(page.getByRole('button', { name: /Adjust stock/ })).toHaveCount(0);
       }
       await expect
