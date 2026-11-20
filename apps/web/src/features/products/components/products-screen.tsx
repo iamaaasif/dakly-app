@@ -1,5 +1,6 @@
 'use client';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
@@ -24,6 +25,7 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
   const { data: session } = useSessionContext();
   const products = useProducts(query);
   const router = useRouter();
+  const [stockError, setStockError] = useState<string | null>(null);
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
   const canEdit = session?.currentStore?.canEditProducts;
@@ -52,7 +54,14 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
             onAdjust={canEdit ? onAdjust : undefined}
           />
         </section>
-        {create && canEdit ? <AddProductModal listHref={listHref} /> : null}
+        {stockError ? (
+          <p role="alert" className="text-danger">
+            {stockError}
+          </p>
+        ) : null}
+        {create && canEdit ? (
+          <AddProductModal listHref={listHref} onStockError={setStockError} />
+        ) : null}
         {productId ? (
           <ProductSheet
             key={productId}
@@ -70,12 +79,23 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
   );
 }
 
-function AddProductModal({ listHref }: { listHref: string }) {
+function AddProductModal({
+  listHref,
+  onStockError,
+}: {
+  listHref: string;
+  onStockError: (error: string) => void;
+}) {
   const router = useRouter();
   return (
     <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
       <ProductForm
-        onSaved={(product) => router.replace(`${listHref}&product=${product.id}`)}
+        onSaved={(product, failedSizes) => {
+          router.replace(`${listHref}&product=${product.id}`);
+          if (failedSizes && failedSizes.length > 0) {
+            onStockError(`Could not set initial stock for: ${failedSizes.join(', ')}`);
+          }
+        }}
         onCancel={() => router.replace(listHref)}
       />
     </SessionDialog>

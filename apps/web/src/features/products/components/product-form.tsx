@@ -5,6 +5,7 @@ import { FormProvider, useForm, type FormState } from 'react-hook-form';
 import {
   productFormSchema,
   type ChangeProductInput,
+  type CreateProductInput,
   type ProductFormInput,
   type ProductFormValues,
   type ProductResponse,
@@ -12,6 +13,7 @@ import {
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 
+import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
 import { ProductFields } from './product-fields';
@@ -20,7 +22,7 @@ import { takaInputFromPoisha } from '@/lib/format-money';
 
 type ProductFormProps = {
   product?: ProductResponse;
-  onSaved: (product: ProductResponse) => void;
+  onSaved: (product: ProductResponse, failedSizes?: string[]) => void;
   onCancel?: () => void;
 };
 
@@ -31,27 +33,81 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
   });
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
+  const adjustStock = useAdjustStock();
   const mutation = product ? change : create;
   const { dirtyFields, errors, isDirty } = form.formState;
+
+  const onStockChange = (index: number, quantity: number) => {
+    form.setValue(`variants.${index}.initialStock`, quantity, { shouldDirty: true });
+  };
 
   return (
     <FormProvider {...form}>
       <form
         className="space-y-3.5"
         onSubmit={form.handleSubmit((input) => {
-          const callbacks = {
-            onSuccess: (saved: ProductResponse) => onSaved(saved),
-            onError: (error: Error) =>
-              form.setError(productErrorField(error, input.variants.length), {
-                message: error.message,
-              }),
-          };
-          if (product) change.mutate(productChanges(input, dirtyFields), callbacks);
-          else create.mutate(input, callbacks);
+          if (product) {
+            change.mutate(productChanges(input, dirtyFields), {
+              onSuccess: (saved: ProductResponse) => onSaved(saved),
+              onError: (error: Error) =>
+                form.setError(productErrorField(error, input.variants.length), {
+                  message: error.message,
+                }),
+            });
+          } else {
+            create.mutate(input, {
+              onError: (error: Error) =>
+                form.setError(productErrorField(error, input.variants.length), {
+                  message: error.message,
+                }),
+              onSuccess: async (saved: ProductResponse) => {
+                const formVariants = form.getValues('variants') ?? [];
+                const initialAdjustments = formVariants
+                  .map((variant, index) => {
+                    const raw = variant.initialStock;
+                    const quantity = typeof raw === 'number' ? raw : 0;
+                    if (quantity <= 0) return null;
+                    const variantId = saved.variants[index]?.id;
+                    if (!variantId) return null;
+                    const sizeName = input.options[0]?.values[index] || `Size ${index + 1}`;
+                    return { sizeName, variantId, quantity };
+                  })
+                  .filter(
+                    (item): item is { sizeName: string; variantId: string; quantity: number } =>
+                      Boolean(item),
+                  );
+
+                if (initialAdjustments.length > 0) {
+                  const results = await Promise.allSettled(
+                    initialAdjustments.map((item) =>
+                      adjustStock.mutateAsync({
+                        variantId: item.variantId,
+                        input: { quantity: item.quantity, reason: 'Initial stock' },
+                      }),
+                    ),
+                  );
+                  const failedSizes = results
+                    .map((result, i) =>
+                      result.status === 'rejected' ? initialAdjustments[i]?.sizeName : null,
+                    )
+                    .filter((name): name is string => Boolean(name));
+
+                  if (failedSizes.length > 0) {
+                    onSaved(saved, failedSizes);
+                    return;
+                  }
+                }
+                onSaved(saved);
+              },
+            });
+          }
         })}
       >
         <ProductFields productId={product?.id} />
-        <ProductOptions />
+        <ProductOptions
+          mode={product ? 'edit' : 'create'}
+          onStockChange={onStockChange}
+        />
         {errors.root?.server?.message ? (
           <p role="alert" className="text-danger">
             {errors.root.server.message}
@@ -166,3 +222,4 @@ function productErrorField(
   if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
   return variantCount === 1 ? 'variants.0.sku' : 'variants';
 }
+

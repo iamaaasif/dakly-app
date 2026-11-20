@@ -144,6 +144,13 @@ export const productFormSchema = z
           sku: optionalTextInput.pipe(editVariantSchema.shape.sku.unwrap()).default(null),
           priceOverridePoisha: optionalTakaInput.pipe(money.positive().nullable()).default(null),
           costPoisha: optionalTakaInput.default(null),
+          initialStock: z
+            .union([
+              z.number().int().min(0),
+              z.literal('').transform(() => 0),
+              z.null().transform(() => 0),
+            ])
+            .default(0),
         }),
       )
       .max(100)
@@ -152,7 +159,7 @@ export const productFormSchema = z
   // Positions keep selections attached while option names are being edited.
   .transform((input) => ({
     ...input,
-    variants: input.variants.map((variant) => ({
+    variants: input.variants.map(({ initialStock: _stock, ...variant }) => ({
       ...variant,
       optionValues: Object.fromEntries(
         input.options.flatMap(({ name }, index) => {
