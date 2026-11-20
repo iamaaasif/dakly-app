@@ -95,6 +95,18 @@ describe('Knowledge tab', () => {
     });
   });
 
+  it('asks before deleting a file and deletes only after the owner confirms', async () => {
+    stubApi([item({ kind: 'file', answer: null, fileId: crypto.randomUUID(), factsCount: 3 })]);
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete file' }));
+    expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete file' }));
+    // The icon button is replaced by the confirm button of the same name.
+    fireEvent.click(screen.getByRole('button', { name: 'Delete file' }));
+    await waitFor(() => expect(calls.some((call) => call.method === 'DELETE')).toBe(true));
+  });
+
   it('hides the edit buttons from someone who can only view', async () => {
     stubApi([item({})]);
     show(false);

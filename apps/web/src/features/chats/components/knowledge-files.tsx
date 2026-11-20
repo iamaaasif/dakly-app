@@ -1,5 +1,5 @@
 import { FileText, Trash2, Upload } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import { knowledgeFileBytes, type KnowledgeItemResponse } from '@dakly/contracts/knowledge';
 import { Button } from '@dakly/ui/button';
@@ -72,20 +72,32 @@ type FileRowProps = {
 };
 
 function FileRow({ item, canEdit, onRemove }: FileRowProps) {
+  const [confirming, setConfirming] = useState(false);
   return (
     <li className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
       <FileText aria-hidden="true" size={16} strokeWidth={1.75} />
       <span>Uploaded file</span>
       <KnowledgeItemStatus item={item} />
-      {canEdit ? (
+      {canEdit && !confirming ? (
         <Button
           variant="secondary"
           className="ml-auto"
           aria-label="Delete file"
-          onClick={() => onRemove(item.id)}
+          onClick={() => setConfirming(true)}
         >
           <Trash2 aria-hidden="true" size={16} strokeWidth={1.75} />
         </Button>
+      ) : null}
+      {confirming ? (
+        <div role="alert" className="flex w-full flex-wrap items-center gap-3">
+          <span>Dakly will forget what it learned from this file.</span>
+          <Button variant="danger" onClick={() => onRemove(item.id)}>
+            Delete file
+          </Button>
+          <Button variant="secondary" onClick={() => setConfirming(false)}>
+            Keep it
+          </Button>
+        </div>
       ) : null}
     </li>
   );
