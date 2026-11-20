@@ -13,7 +13,7 @@ import type {
 } from '@dakly/contracts/contacts';
 import { MAX_CONTACT_TAGS } from '@dakly/contracts/contacts';
 import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
-import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
+import { maskPhone } from '@dakly/contracts/phone';
 import type { SegmentRules } from '@dakly/contracts/segments';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -24,11 +24,11 @@ import { ContactDeletionService } from './contact-deletion.service';
 import { ContactIdentitiesRepository, type InboundIdentity } from './contact-identities.repository';
 import { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
+import { searchFilter } from './contact-search';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
   type Contact,
-  type ContactFilter,
   type ContactRecipient,
   ContactsRepository,
   type TagChange,
@@ -369,19 +369,6 @@ export type { TagChange } from './contacts.repository';
 
 // A partial number is a prefix search only for members who see full phones. Anyone may find a
 // contact by its exact full number; the result stays masked without the flag.
-function searchFilter(
-  search: string | undefined,
-  seeFullPhone: boolean,
-): Pick<ContactFilter, 'name' | 'phone' | 'phonePrefix'> {
-  if (!search) return {};
-  const fullPhone = bdMobileSchema.safeParse(search);
-  if (fullPhone.success) return { phone: fullPhone.data };
-  if (/^\d+$/.test(search)) return seeFullPhone ? { phonePrefix: search } : { phone: search };
-  // The trigram name index cannot narrow a search shorter than one trigram.
-  if (search.length < 3) throw contactError('CONTACT_SEARCH_TOO_SHORT');
-  return { name: search };
-}
-
 function importOutcome(
   contact: ImportMatch,
   importId: string,
