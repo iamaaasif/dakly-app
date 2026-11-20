@@ -20,6 +20,7 @@ import type { SendDecision, SendPolicyService, SkipReason } from '../sending/sen
 import type { StoresService } from '../stores/stores.service';
 import type { WalletService } from '../wallets/wallet.service';
 import { AutomationConditionsService } from './automation-conditions.service';
+import { AutomationMessengerSendService } from './automation-messenger-send.service';
 import type {
   AutomationRunsRepository,
   ClaimedRun,
@@ -311,6 +312,7 @@ describe('AutomationRunsService', () => {
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
+      latestMessengerRoute: async () => undefined,
       prepareSender: async (storeId: string) => {
         if (senderLookupError) throw senderLookupError;
         return { storeId, name: undefined };
@@ -384,6 +386,12 @@ describe('AutomationRunsService', () => {
         sendPolicy as unknown as SendPolicyService,
         contacts as unknown as ContactsService,
         conditions,
+      ),
+      new AutomationMessengerSendService(
+        messaging as unknown as MessagingService,
+        sendPolicy as unknown as SendPolicyService,
+        { prepare: async () => undefined } as unknown as AutomationOrderTextService,
+        repository as unknown as AutomationRunsRepository,
       ),
       conditions,
       automations as unknown as AutomationsService,
@@ -657,7 +665,7 @@ describe('AutomationRunsService', () => {
       expect(sent).toEqual([]);
     });
 
-    it('skips a step with no SMS channel as a closed window', async () => {
+    it('skips a Messenger-only step as a closed window when the contact has no chat', async () => {
       await start({ ...send, channels: ['messenger'] });
 
       expect(repository.steps).toEqual([

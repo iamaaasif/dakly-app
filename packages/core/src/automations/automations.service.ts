@@ -61,8 +61,8 @@ const PAUSE_REASONS = {
 // An archived workflow is deleted for the shop; its versions stay for the runs on them.
 const VISIBLE_STATUSES = ['draft', 'active', 'paused'] as const;
 
-// MSG-1 sends SMS only. Messenger comes with CHN-2 and CHAT-2, WhatsApp with Q2.
-const SENDABLE_CHANNELS: readonly (typeof campaignChannels)[number][] = ['sms'];
+// SMS and Messenger send; WhatsApp comes with Q2.
+const SENDABLE_CHANNELS: readonly (typeof campaignChannels)[number][] = ['sms', 'messenger'];
 const MIN_WAIT_BEFORE_SPLIT_MINUTES = 2 * 60;
 
 @Injectable()
