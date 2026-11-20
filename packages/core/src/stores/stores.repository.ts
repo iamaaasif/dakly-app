@@ -44,6 +44,7 @@ export type AttributionRebuild = {
   startedAt: string;
   after: { id: string; at: string } | null;
   processedOrders: number;
+  checkpoint: string | null;
 };
 
 @Injectable()

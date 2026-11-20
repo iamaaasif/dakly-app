@@ -238,7 +238,7 @@ The order-created subscriber uses the buyer's contact. For self-delivery the ord
 
 The Owner changes the window through `PATCH /store/attribution` with 1, 3 or 7 days. A change records the old and new window in the audit log and starts a rebuild. `GET /store/attribution` shows the current window, whether the rebuild is running and how many orders it has processed. The banner and window control are part of ANA-3.
 
-The bulk worker covers the latest 365 shop-local dates up to the time of the change. It selects evidence before locking orders. It commits up to 25 orders, the cursor and the outbox event for the next page together. A newer window replaces the old job's progress. A retry resumes from the last committed cursor, and a rebuild keeps the captured amount when it selects the same touch. It reads the exact tap records across the full lookback horizon.
+The bulk worker covers the latest 365 shop-local dates up to the time of the change. It selects evidence before locking orders. It commits up to 25 orders and the cursor together. A job handles up to 500 orders before saving its next outbox event with the final cursor of that job. A newer window replaces the old job's progress. A retry resumes from the last committed cursor, and a rebuild keeps the captured amount when it selects the same touch. It reads the exact tap records across the full lookback horizon.
 
 The current and previous periods use store-local calendar days. Sales returns the total and the amounts by order source. Delivered sales reads net spend. A returning buyer counts once over the period, while each daily point counts how many of that group ordered that day.
 

@@ -47,7 +47,9 @@ export class OrderAttributionService {
   rebuild(storeId: string, orderId: string, buyer: BuyerSnapshot, reference: Reference | null) {
     return this.transaction.run(storeId, async () => {
       const order = await this.repository.find(storeId, orderId, 'no key update');
-      if (!order || order.stage === 'cancelled' || !sameBuyer(order, buyer)) return;
+      if (!order || order.stage === 'cancelled') return;
+      if (!sameBuyer(order, buyer))
+        throw new Error('Order buyer changed during attribution rebuild');
       if (!reference) {
         if (order.sourceType) await this.write(storeId, orderId, null);
         return;

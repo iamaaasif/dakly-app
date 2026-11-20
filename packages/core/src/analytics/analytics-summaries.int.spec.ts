@@ -329,7 +329,7 @@ describe('Daily order summaries', () => {
          cod_amount_poisha,created_at)
        select gen_random_uuid(),$1,5000+n,'manual','user','Buyer','01710000005','Mirpur','Dhaka',
          100,100,'2026-11-18 06:00:00+00'::timestamptz + n*interval '1 microsecond'
-       from generate_series(1,26) n`,
+       from generate_series(1,501) n`,
       [fixture.b],
     );
     const stores = app.get(StoresService);
@@ -350,10 +350,10 @@ describe('Daily order summaries', () => {
     expect(await stores.attributionSettings(fixture.b)).toEqual({
       windowDays: 1,
       rebuilding: true,
-      processedOrders: 25,
+      processedOrders: 500,
     });
     expect(await stores.attributionRebuild(fixture.b)).toMatchObject({
-      rebuild: { after: { at: expect.stringContaining('06:00:00.000025') } },
+      rebuild: { after: { at: expect.stringContaining('06:00:00.0005') } },
     });
     await subscriber.handle(event);
     const { rows } = await fixture.connection.pool.query(

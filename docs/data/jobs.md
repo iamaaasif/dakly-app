@@ -129,7 +129,7 @@ Page IDs deduplicate retries. Jobs from older sweep days are ignored. The contac
 
 `sweep-analytics` runs at 00:00 UTC and queues one reconciliation per store. `reconcile-analytics` repairs up to 31 local order days or 100 buyers per job. It prunes expired report rows in batches of 5,000.
 
-`attribution.window_changed` starts a bulk rebuild. Each job processes up to 25 orders. The cursor and the next `attribution.rebuild_continued` event commit together. A job for a replaced window exits without changing orders. The final contact stats rank page publishes `contact_stats.repaired`. Bulk jobs deduplicate per store and local date. A repair received during a snapshot schedules one more run. Each counts the stages when it runs and replaces the snapshot for the event’s date, even after midnight.
+`attribution.window_changed` starts a bulk rebuild. Each job processes up to 500 orders in transactions of 25. The final cursor of the job and the next `attribution.rebuild_continued` event commit together. A job for a replaced window exits without changing orders. The final contact stats rank page publishes `contact_stats.repaired`. Bulk jobs deduplicate per store and local date. A repair received during a snapshot schedules one more run. Each counts the stages when it runs and replaces the snapshot for the event’s date, even after midnight.
 
 ## payments
 

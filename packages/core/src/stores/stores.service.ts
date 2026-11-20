@@ -40,6 +40,7 @@ const rebuildSchema = z.object({
   startedAt: z.iso.datetime(),
   after: z.object({ id: z.uuid(), at: z.string() }).nullable(),
   processedOrders: z.int().nonnegative(),
+  checkpoint: z.uuid().nullable(),
 });
 
 @Injectable()
@@ -134,6 +135,7 @@ export class StoresService {
           timeZone: previous.timeZone,
           after: null,
           processedOrders: 0,
+          checkpoint: null,
         },
         { windowDays, updatedAt: now },
       );
@@ -157,7 +159,7 @@ export class StoresService {
 
   async saveAttributionRebuild(storeId: string, rebuild: z.infer<typeof rebuildSchema> | null) {
     await this.repository.writeAttributionState(storeId, rebuild);
-    if (rebuild?.after)
+    if (rebuild?.after && rebuild.checkpoint === rebuild.after.id)
       await this.outbox.publish({
         type: 'attribution.rebuild_continued',
         storeId,
