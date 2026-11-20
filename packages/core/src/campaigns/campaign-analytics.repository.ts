@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, gte, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, lt, ne, or, sql } from 'drizzle-orm';
 
-import { campaigns } from '@dakly/db/schema/campaigns';
+import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -40,6 +40,36 @@ export class CampaignAnalyticsRepository {
           ),
         )
         .orderBy(asc(campaigns.startedAt)),
+    );
+  }
+
+  // The sends an order's buyer received from these campaigns, for last-touch attribution.
+  attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: campaigns.id,
+          sourceId: campaigns.id,
+          channel: campaigns.channel,
+          sentAt: campaignRecipients.sentAt,
+        })
+        .from(campaignRecipients)
+        .innerJoin(
+          campaigns,
+          and(eq(campaigns.storeId, storeId), eq(campaigns.id, campaignRecipients.campaignId)),
+        )
+        .where(
+          and(
+            eq(campaignRecipients.storeId, storeId),
+            eq(campaignRecipients.contactId, buyer.id),
+            inArray(campaignRecipients.campaignId, ids),
+            inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
+            or(
+              ne(campaigns.channel, 'sms'),
+              eq(campaignRecipients.destinationAddress, buyer.phone),
+            ),
+          ),
+        ),
     );
   }
 }

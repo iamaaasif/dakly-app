@@ -36,6 +36,7 @@ import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { CampaignDuplicateService } from './campaign-duplicate.service';
 import { CampaignResultsService } from './campaign-results.service';
+import { CampaignSourceService } from './campaign-source.service';
 import { CampaignsService } from './campaigns.service';
 
 @Controller('campaigns')
@@ -44,6 +45,7 @@ export class CampaignsController {
     @Inject(CampaignsService) private readonly campaigns: CampaignsService,
     @Inject(CampaignResultsService) private readonly results: CampaignResultsService,
     @Inject(CampaignDuplicateService) private readonly copies: CampaignDuplicateService,
+    @Inject(CampaignSourceService) private readonly sources: CampaignSourceService,
   ) {}
 
   @Get()
@@ -100,6 +102,29 @@ export class CampaignsController {
     @Body(new ZodValidationPipe(createCampaignSchema)) input: CreateCampaignInput,
   ): Promise<CampaignResponse> {
     return this.campaigns.create(storeId, input, { kind: 'user', userId });
+  }
+
+  @Post(':campaignId/resend')
+  @RequirePermission('campaigns.edit')
+  resend(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResponse> {
+    return this.sources.createDraft(storeId, campaignId, 'resend_unread', { kind: 'user', userId });
+  }
+
+  @Post(':campaignId/follow-up')
+  @RequirePermission('campaigns.edit')
+  followUp(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<CampaignResponse> {
+    return this.sources.createDraft(storeId, campaignId, 'follow_up_unordered', {
+      kind: 'user',
+      userId,
+    });
   }
 
   @Post(':campaignId/duplicate')

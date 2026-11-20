@@ -18,6 +18,7 @@ import {
 import {
   type CampaignGoal,
   campaignApprovalFailureCodes,
+  campaignSourceOutcomes,
   campaignChannels,
   campaignPauseReasons,
   campaignStatuses,
@@ -33,6 +34,7 @@ import {
 
 import { uuidv7 } from '../uuid-v7';
 import { users } from './auth';
+import { sendingIndexes, sourceConstraints } from './campaign-constraints';
 import { channelConnections } from './channels';
 import { bytea, createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { contactIdentities, contacts } from './contacts';
@@ -142,6 +144,9 @@ export const campaigns = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::uuid[]`),
+    // A resend or follow-up draft reads its audience from this campaign's recipients, not segments.
+    sourceCampaignId: uuid('source_campaign_id'),
+    sourceOutcome: text('source_outcome', { enum: campaignSourceOutcomes }),
     status: text('status', { enum: campaignStatuses }).notNull().default('draft'),
     pauseReason: text('pause_reason', { enum: campaignPauseReasons }),
     balancePauseRevision: integer('balance_pause_revision'),
@@ -189,19 +194,10 @@ export const campaigns = pgTable(
       ],
     }),
 
+    ...sourceConstraints(table),
     index('campaigns_store_id_status_idx').on(table.storeId, table.status, table.createdAt),
     index('campaigns_store_id_created_at_id_idx').on(table.storeId, table.createdAt, table.id),
-    index('campaigns_due_idx')
-      .on(table.scheduledFor)
-      .where(sql`${table.status} = 'scheduled'`),
-    index('campaigns_start_due_by_store_idx')
-      .on(table.storeId, table.scheduledFor, table.id)
-      .where(sql`${table.status} = 'scheduled'`),
-    index('campaigns_send_work_idx')
-      .on(table.storeId, table.startedAt, table.id)
-      .where(
-        sql`${table.status} = 'sending' or (${table.status} = 'cancelled' and ${table.settlementPendingAt} is not null)`,
-      ),
+    ...sendingIndexes(table),
     ...approvalConstraints(table),
     index('campaigns_balance_paused_idx')
       .on(table.storeId, table.id)

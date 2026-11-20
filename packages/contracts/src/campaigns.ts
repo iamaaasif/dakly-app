@@ -42,6 +42,9 @@ export const recipientStatuses = [
   'failed',
   'cancelled',
 ] as const;
+// A draft made from a finished campaign takes its audience from that campaign's recipients:
+// delivered but never read, or tapped but never ordered.
+export const campaignSourceOutcomes = ['resend_unread', 'follow_up_unordered'] as const;
 export const recipientSkipReasons = [
   'no_consent',
   'not_customer',
@@ -204,6 +207,7 @@ export const campaignCustomersQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 
+export type CampaignSourceOutcome = (typeof campaignSourceOutcomes)[number];
 export type CampaignChannel = (typeof campaignChannels)[number];
 export type CampaignGoal = (typeof campaignGoals)[number];
 export type CampaignStatus = (typeof campaignStatuses)[number];
@@ -224,6 +228,8 @@ export type CampaignResponse = {
   channelConnectionId: string | null;
   includeSegmentIds: string[];
   excludeSegmentIds: string[];
+  // Set when the audience comes from a finished campaign instead of segments.
+  source: { campaignId: string; outcome: CampaignSourceOutcome } | null;
   scheduledFor: string | null;
   status: CampaignStatus;
   // Set while the status is approving. The total is an upper bound: segments can overlap and
