@@ -16,6 +16,7 @@ import { SmsModule } from '../sms/sms.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { CampaignAnalyticsRepository } from './campaign-analytics.repository';
 import { CampaignApprovalQueueService } from './campaign-approval-queue.service';
 import { CampaignApprovalRepository } from './campaign-approval.repository';
 import { CampaignApprovalService } from './campaign-approval.service';
@@ -52,6 +53,7 @@ import { CampaignsService } from './campaigns.service';
   ],
   controllers: [CampaignsController],
   providers: [
+    CampaignAnalyticsRepository,
     CampaignApprovalRepository,
     CampaignApprovalService,
     CampaignAudienceService,

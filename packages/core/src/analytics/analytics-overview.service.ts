@@ -11,6 +11,8 @@ import { campaignChannels } from '@dakly/contracts/campaigns';
 import { AutomationsService } from '../automations/automations.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { DAY_MS } from '../platform/time';
+import { percent, returnPerTaka } from './analytics-ratios';
+import { AnalyticsTabsService } from './analytics-tabs.service';
 import { AnalyticsService } from './analytics.service';
 import { shiftReportDay } from './report-period';
 
@@ -26,6 +28,7 @@ export class AnalyticsOverviewService {
     @Inject(AnalyticsService) private readonly reports: AnalyticsService,
     @Inject(CampaignsService) private readonly campaigns: CampaignsService,
     @Inject(AutomationsService) private readonly automations: AutomationsService,
+    @Inject(AnalyticsTabsService) private readonly tabs: AnalyticsTabsService,
   ) {}
 
   async overview(storeId: string, { period }: AnalyticsQuery): Promise<AnalyticsOverviewResponse> {
@@ -59,6 +62,8 @@ export class AnalyticsOverviewService {
     for (const { channel, value } of byChannel)
       revenueByChannel.set(channel, (revenueByChannel.get(channel) ?? 0n) + value);
 
+    const channels = channelRows(now, revenueByChannel);
+    const best = await this.tabs.best(storeId, { ...current, timeZone }, channels);
     return {
       asOf,
       timeZone,
@@ -82,7 +87,8 @@ export class AnalyticsOverviewService {
       returnPerTaka: returnPerTaka(revenue.total, all.cost),
       weeklyRevenue: weeklyRevenue(current, byChannel),
       previousWeeklyRevenuePoisha: weeklyTotals(previousRevenue.points),
-      channels: channelRows(now, revenueByChannel),
+      channels,
+      best,
       funnel: funnel(all, readable, people, Number(orders.total)),
     };
   }
@@ -129,15 +135,6 @@ function sumTotals(rows: Totals[]): Totals {
     }),
     emptyTotals(),
   );
-}
-
-function percent(part: number, whole: number) {
-  return whole === 0 ? null : Math.round((part / whole) * 1000) / 10;
-}
-
-// Glossary: money from marketing ÷ message cost, rounded to whole ৳, hidden when cost is ৳0.
-function returnPerTaka(revenue: bigint, cost: bigint) {
-  return cost === 0n ? null : Number((revenue + cost / 2n) / cost);
 }
 
 function funnel(

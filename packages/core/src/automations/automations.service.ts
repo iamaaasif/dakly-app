@@ -30,6 +30,7 @@ import { DAY_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
+import { AutomationAnalyticsRepository } from './automation-analytics.repository';
 import { automationError } from './automations.errors';
 import { type Automation, AutomationsRepository } from './automations.repository';
 
@@ -67,6 +68,8 @@ const MIN_WAIT_BEFORE_SPLIT_MINUTES = 2 * 60;
 export class AutomationsService {
   constructor(
     @Inject(AutomationsRepository) private readonly repository: AutomationsRepository,
+    @Inject(AutomationAnalyticsRepository)
+    private readonly analyticsRepository: AutomationAnalyticsRepository,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresService) private readonly stores: StoresService,
@@ -78,6 +81,10 @@ export class AutomationsService {
 
   messageTotals(storeId: string, range: { from: string; through: string; timeZone: string }) {
     return this.repository.messageTotals(storeId, range);
+  }
+
+  liveInRange(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.analyticsRepository.inRange(storeId, range);
   }
 
   async list(storeId: string, query: AutomationListQuery): Promise<AutomationListResponse> {

@@ -7,6 +7,7 @@ import { SegmentsModule } from '../segments/segments.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { AutomationAnalyticsRepository } from './automation-analytics.repository';
 import { AutomationPreviewRepository } from './automation-preview.repository';
 import { AutomationPreviewService } from './automation-preview.service';
 import { AutomationsController } from './automations.controller';
@@ -25,6 +26,7 @@ import { AutomationsService } from './automations.service';
   ],
   controllers: [AutomationsController],
   providers: [
+    AutomationAnalyticsRepository,
     AutomationsRepository,
     AutomationsService,
     AutomationPreviewRepository,

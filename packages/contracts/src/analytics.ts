@@ -42,6 +42,38 @@ export type AnalyticsChannelRow = {
   revenuePoisha: string;
 };
 
+export type AnalyticsCampaignRow = {
+  id: string;
+  name: string;
+  channel: AnalyticsChannel;
+  startedAt: string;
+  sent: number;
+  delivered: number;
+  tapPercent: number | null;
+  orders: number;
+  revenuePoisha: string;
+  returnPerTaka: number | null;
+};
+
+export type AnalyticsAutomationRow = {
+  id: string;
+  name: string;
+  channels: AnalyticsChannel[];
+  isActive: boolean;
+  entered: number;
+  sent: number;
+  orders: number;
+  revenuePoisha: string;
+  orderedPercent: number | null;
+  returnPerTaka: number | null;
+};
+
+export type AnalyticsCampaignsResponse = { current: DayRange; campaigns: AnalyticsCampaignRow[] };
+export type AnalyticsAutomationsResponse = {
+  current: DayRange;
+  automations: AnalyticsAutomationRow[];
+};
+
 export type AnalyticsFunnelStep = { count: number; percentOfPrevious: number | null };
 
 export type AnalyticsOverviewResponse = {
@@ -63,6 +95,18 @@ export type AnalyticsOverviewResponse = {
   // Total money per week of the previous period, for the dashed line when Compare is on.
   previousWeeklyRevenuePoisha: string[];
   channels: AnalyticsChannelRow[];
+  best: {
+    campaign: { id: string; name: string; revenuePoisha: string; returnPerTaka: number } | null;
+    channel: { channel: AnalyticsChannel; returnPerTaka: number } | null;
+    // Shown under the best channel when another channel earned more money.
+    mostMoneyChannel: { channel: AnalyticsChannel; revenuePoisha: string } | null;
+    automation: {
+      id: string;
+      name: string;
+      revenuePoisha: string;
+      returnPerTaka: number | null;
+    } | null;
+  };
   funnel: {
     sent: AnalyticsFunnelStep;
     delivered: AnalyticsFunnelStep;
