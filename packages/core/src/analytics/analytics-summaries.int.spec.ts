@@ -852,7 +852,7 @@ describe('Daily order summaries', () => {
     const workflow = randomUUID();
     const db = fixture.connection.pool;
     await db.query(
-      "update orders set attributed_source_type='campaign',attributed_source_id=$2,attributed_amount_poisha=120000 where id=$1",
+      "update orders set attributed_source_type='campaign',attributed_source_id=$2,attributed_amount_poisha=120000,attributed_channel='sms' where id=$1",
       [id, campaign],
     );
     const reports = app.get(AnalyticsService);
@@ -865,6 +865,9 @@ describe('Daily order summaries', () => {
     });
     await finishOrderDay(fixture.a, day);
     expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 120000n });
+    expect(await reports.marketingRevenueByChannel(fixture.a, period)).toEqual([
+      { day, channel: 'sms', value: 120000n },
+    ]);
     await db.query(
       `update orders set stage='partially_delivered',delivered_items_subtotal_poisha=60000,
        delivered_order_discount_poisha=0 where id=$1`,
@@ -872,6 +875,9 @@ describe('Daily order summaries', () => {
     );
     await summaries.refreshOrderDays(fixture.a, period);
     expect(await reports.marketingRevenue(fixture.a, period)).toMatchObject({ total: 60000n });
+    expect(await reports.marketingRevenueByChannel(fixture.a, period)).toMatchObject([
+      { channel: 'sms', value: 60000n },
+    ]);
     await db.query(
       "update orders set stage='returned',attributed_source_type='automation',attributed_source_id=$2 where id=$1",
       [id, workflow],

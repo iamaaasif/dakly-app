@@ -192,6 +192,23 @@ export class InboxRepository {
     });
   }
 
+  async findStaffReply(storeId: string, messageId: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ conversationId: messages.conversationId, createdAt: messages.createdAt })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(messages.id, messageId),
+            eq(messages.direction, 'out'),
+            eq(messages.authorType, 'user'),
+          ),
+        ),
+    );
+    return row;
+  }
+
   async firstAiReplySince(storeId: string, contactId: string, since: Date) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx

@@ -6,6 +6,8 @@ import { StoreTransaction } from '../database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../errors/app-error';
 import { OutboxRepository } from './outbox.repository';
 
+const PURGE_BATCH = 5000;
+
 @Injectable()
 export class OutboxService {
   constructor(
@@ -36,5 +38,10 @@ export class OutboxService {
         occurredAt: new Date(occurredAt),
       })),
     );
+  }
+
+  // Published events are kept 7 days. The daily maintenance job calls this until a batch is short.
+  async purgePublished(): Promise<void> {
+    while ((await this.repository.purgePublishedBatch(PURGE_BATCH)) === PURGE_BATCH);
   }
 }

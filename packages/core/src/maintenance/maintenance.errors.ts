@@ -14,6 +14,10 @@ const MAINTENANCE_ERRORS = {
     status: 500,
     message: 'An audit month changed while it was archived',
   },
+  MAINTENANCE_MESSAGE_ARCHIVE_FAILED: {
+    status: 500,
+    message: 'The message archive failed for at least one store',
+  },
   MAINTENANCE_STEPS_FAILED: { status: 500, message: 'Daily maintenance did not finish' },
 } as const satisfies ErrorCatalog;
 

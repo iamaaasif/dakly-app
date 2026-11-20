@@ -30,4 +30,13 @@ export class AiRunsRepository {
     );
     return row!.id;
   }
+
+  async setOutcome(storeId: string, id: string, outcome: AiRun['outcome'], errorCode?: string) {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(aiRuns)
+        .set({ outcome, errorCode: errorCode ?? null })
+        .where(and(eq(aiRuns.storeId, storeId), eq(aiRuns.id, id))),
+    );
+  }
 }

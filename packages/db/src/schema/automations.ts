@@ -266,6 +266,8 @@ export const automationRunSteps = pgTable(
       table.contactId,
       table.sentAt,
     ),
+    // Analytics reads the sends of a period.
+    index('automation_run_steps_store_sent_at_idx').on(table.storeId, table.sentAt),
     // Global, for SMS delivery reports that carry only the provider's message id.
     index('automation_run_steps_provider_message_idx')
       .on(table.providerMessageId)

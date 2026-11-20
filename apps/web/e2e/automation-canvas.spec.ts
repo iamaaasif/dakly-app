@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -79,7 +80,10 @@ const skipping: AutomationGraph = {
 };
 
 test('shows a saved workflow as a numbered canvas', async ({ page, context, baseURL }) => {
-  const { token } = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string };
+  const { token, storeIds } = JSON.parse(process.env.BROWSER_FIXTURE!) as {
+    token: string;
+    storeIds: string[];
+  };
   await context.addCookies([
     { name: 'dakly_session', value: token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -87,9 +91,19 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
   const headers = { Origin: baseURL!, 'X-Session-Context': contextTag };
   const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const ids: string[] = [];
+  const eventId = randomUUID();
   const evidence = process.env.CAMP6_CANVAS_EVIDENCE;
   if (evidence) await mkdir(evidence, { recursive: true });
   try {
+    await db.pool.query(
+      `insert into outbox_events(id,store_id,type,payload,occurred_at)
+       values($1,$2,'consent.changed',$3,now())`,
+      [
+        eventId,
+        storeIds[0],
+        { contactId: randomUUID(), channel: 'sms', status: 'granted', source: 'manual' },
+      ],
+    );
     const drafts = [
       { name: 'Welcome new subscribers', templateKey: 'welcome_new_subscriber' },
       { name: 'Welcome with a follow-up split', graph: branching },
@@ -112,11 +126,19 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
       }
       await captureEvidence(page, evidence, `canvas-${index + 1}`);
     }
+    const trigger = page.getByRole('list', { name: 'Workflow steps' });
+    await expect(trigger.getByText('Last 7 days')).toBeVisible();
+    await expect(trigger.getByText('1 person', { exact: true })).toBeVisible();
+    const zoom = page.getByRole('status').filter({ hasText: '%' });
+    await page.getByRole('button', { name: 'Zoom out' }).click();
+    await expect(zoom).toHaveText(/^\d+%$/);
+    await page.getByRole('button', { name: 'Fit to screen' }).click();
     await page.getByRole('link', { name: 'Workflow settings' }).click();
     await expect(page).toHaveURL(new RegExp(`/automations/${ids.at(-1)}$`));
     await page.getByRole('link', { name: 'View canvas' }).click();
     await expect(page).toHaveURL(new RegExp(`/automations/${ids.at(-1)}/canvas$`));
   } finally {
+    await db.pool.query('delete from outbox_events where id=$1', [eventId]);
     await db.pool.query('delete from automations where id=any($1::uuid[])', [ids]);
     await db.pool.end();
   }
