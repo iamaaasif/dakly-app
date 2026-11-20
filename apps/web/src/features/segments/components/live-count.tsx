@@ -24,7 +24,12 @@ export function LiveCount() {
 }
 
 function countState(valid: boolean, count: ReturnType<typeof useSegmentCount>) {
-  if (!valid) return <p className="text-sm text-text-muted">Finish each condition to see how many customers match.</p>;
+  if (!valid)
+    return (
+      <p className="text-sm text-text-muted">
+        Finish each condition to see how many customers match.
+      </p>
+    );
   if (count.error)
     return (
       <div role="alert" className="space-y-2">
@@ -37,7 +42,7 @@ function countState(valid: boolean, count: ReturnType<typeof useSegmentCount>) {
   if (!count.data) return <p className="text-sm text-text-muted">Counting…</p>;
   return (
     <div className="space-y-1">
-      <p className="text-2xl font-bold tabular-nums text-text">{matchText(count.data.count)}</p>
+      <p className="text-2xl font-bold text-text tabular-nums">{matchText(count.data.count)}</p>
       {count.isFetching ? <p className="text-xs text-text-muted">Updating…</p> : null}
     </div>
   );
