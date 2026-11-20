@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AiService } from '../ai/ai.service';
 import type { AutomationsService } from '../automations/automations.service';
 import type { CampaignsService } from '../campaigns/campaigns.service';
+import type { ValkeyClient } from '../platform/cache/valkey-client';
 import { AnalyticsTipService } from './analytics-tip.service';
 import type { AnalyticsService } from './analytics.service';
 
@@ -13,7 +14,15 @@ function service(options: {
   now: { sent: number; delivered: number; tapped: number };
   usual: { sent: number; delivered: number; tapped: number };
   ai?: AiService['run'];
+  store?: Map<string, string>;
 }) {
+  const store = options.store ?? new Map<string, string>();
+  const cache = {
+    connection: {
+      get: async (key: string) => store.get(key) ?? null,
+      set: async (key: string, value: string) => void store.set(key, value),
+    },
+  } as unknown as ValkeyClient;
   const pick = ({ from }: Window) => (from === '2026-11-01' ? options.now : options.usual);
   const reports = {
     periods: async () => ({
@@ -37,7 +46,7 @@ function service(options: {
     run:
       options.ai ?? (async () => ({ kind: 'output', output: { suggestion: 'Send one button.' } })),
   } as unknown as AiService;
-  return new AnalyticsTipService(reports, campaigns, automations, ai);
+  return new AnalyticsTipService(reports, campaigns, automations, ai, cache);
 }
 
 describe('analytics tip', () => {
@@ -77,5 +86,23 @@ describe('analytics tip', () => {
       ai: async () => ({ kind: 'failure', code: 'AI_PAUSED' }),
     }).tip('store', { period: 30 });
     expect(tip).toMatchObject({ step: 'tapped', suggestion: null });
+  });
+
+  it('computes once a day: the second read makes no model call', async () => {
+    const store = new Map<string, string>();
+    let calls = 0;
+    const options = {
+      now: { sent: 100, delivered: 90, tapped: 18 },
+      usual: { sent: 100, delivered: 90, tapped: 36 },
+      store,
+      ai: (async () => {
+        calls += 1;
+        return { kind: 'output', output: { suggestion: 'Send one button.' } };
+      }) as unknown as AiService['run'],
+    };
+    const first = await service(options).tip('store', { period: 30 });
+    const second = await service(options).tip('store', { period: 30 });
+    expect(second).toEqual(first);
+    expect(calls).toBe(1);
   });
 });

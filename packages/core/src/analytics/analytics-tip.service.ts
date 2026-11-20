@@ -11,6 +11,7 @@ import {
 import { AiService } from '../ai/ai.service';
 import { AutomationsService } from '../automations/automations.service';
 import { CampaignsService } from '../campaigns/campaigns.service';
+import { ValkeyClient } from '../platform/cache/valkey-client';
 import { funnel } from './analytics-funnel';
 import { emptyTotals, readMessageTotals, sumTotals } from './analytics-message-totals';
 import { AnalyticsService } from './analytics.service';
@@ -21,6 +22,9 @@ const BASELINE_WEEKS = 13;
 const MINIMUM_WEEKS = 4;
 // Smaller drops are normal week to week and not worth a tip.
 const MINIMUM_DROP_POINTS = 5;
+// One computation and one model call per store, period and report day; a missing fix is retried sooner.
+const CACHE_SECONDS = 2 * 24 * 60 * 60;
+const RETRY_SECONDS = 15 * 60;
 
 const suggestionSchema = z.object({ suggestion: z.string().min(1).max(240) });
 
@@ -33,21 +37,34 @@ export class AnalyticsTipService {
     @Inject(CampaignsService) private readonly campaigns: CampaignsService,
     @Inject(AutomationsService) private readonly automations: AutomationsService,
     @Inject(AiService) private readonly ai: AiService,
+    @Inject(ValkeyClient) private readonly cache: ValkeyClient,
   ) {}
 
   async tip(storeId: string, { period }: AnalyticsQuery): Promise<AnalyticsTipResponse> {
     const { timeZone, current } = await this.reports.periods(storeId, period);
-    const now = await this.rates(storeId, current, timeZone);
-    const weeks: Rates[] = [];
-    for (let index = 0; index < BASELINE_WEEKS; index += 1) {
+    const key = `analytics:tip:${storeId}:${period}:${current.through}`;
+    const cached = await this.cache.connection.get(key);
+    if (cached) return JSON.parse(cached) as AnalyticsTipResponse;
+    const windows = Array.from({ length: BASELINE_WEEKS }, (_, index) => {
       const through = shiftReportDay(current.through, -7 * index);
-      weeks.push(
-        await this.rates(storeId, { from: shiftReportDay(through, -6), through }, timeZone),
-      );
-    }
+      return { from: shiftReportDay(through, -6), through };
+    });
+    const [now, weeks] = await Promise.all([
+      this.rates(storeId, current, timeZone),
+      Promise.all(windows.map((window) => this.rates(storeId, window, timeZone))),
+    ]);
     const found = biggestDrop(now, weeks);
-    if (!found) return { tip: null };
-    return { tip: { ...found, suggestion: await this.suggest(storeId, found) } };
+    const response: AnalyticsTipResponse = found
+      ? { tip: { ...found, suggestion: await this.suggest(storeId, found) } }
+      : { tip: null };
+    const retry = response.tip !== null && response.tip.suggestion === null;
+    await this.cache.connection.set(
+      key,
+      JSON.stringify(response),
+      'EX',
+      retry ? RETRY_SECONDS : CACHE_SECONDS,
+    );
+    return response;
   }
 
   private async rates(storeId: string, period: ReportPeriod, timeZone: string): Promise<Rates> {

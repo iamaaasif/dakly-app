@@ -4,6 +4,7 @@ import { AiModule } from '../ai/ai.module';
 import { AuditModule } from '../audit/audit.module';
 import { AutomationsModule } from '../automations/automations.module';
 import { CampaignsModule } from '../campaigns/campaigns.module';
+import { CacheModule } from '../platform/cache/cache.module';
 import { SocialModule } from '../social/social.module';
 import { AnalyticsChannelsService } from './analytics-channels.service';
 import { AnalyticsExportService } from './analytics-export.service';
@@ -20,6 +21,7 @@ import { AnalyticsController } from './analytics.controller';
     AnalyticsReportsModule,
     AuditModule,
     AutomationsModule,
+    CacheModule,
     CampaignsModule,
     SocialModule,
   ],
