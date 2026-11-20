@@ -9,7 +9,7 @@ import type {
   campaignPauseReasons,
   CampaignStatus,
   recipientSkipReasons,
-  SmsCampaignContent,
+  CampaignContent,
 } from '@dakly/contracts/campaigns';
 import { campaignRecipients, campaigns } from '@dakly/db/schema/campaigns';
 
@@ -21,7 +21,8 @@ export type Campaign = {
   name: string;
   goal: CampaignGoal | null;
   channel: CampaignChannel;
-  content: SmsCampaignContent;
+  content: CampaignContent;
+  channelConnectionId: string | null;
   includeSegmentIds: string[];
   excludeSegmentIds: string[];
   scheduledFor: Date | null;
@@ -44,11 +45,19 @@ export type Campaign = {
 };
 export type CampaignDraft = Pick<
   Campaign,
-  'name' | 'goal' | 'content' | 'includeSegmentIds' | 'excludeSegmentIds' | 'scheduledFor'
+  | 'name'
+  | 'goal'
+  | 'content'
+  | 'channelConnectionId'
+  | 'includeSegmentIds'
+  | 'excludeSegmentIds'
+  | 'scheduledFor'
 >;
 
 export type FrozenRecipient = {
   contactId: string;
+  // Messenger only: the contact's identity on the campaign's Page.
+  contactIdentityId?: string | null;
   destinationAddress: string | null;
 } & (
   | { status: 'queued'; skipReason: null }
@@ -89,6 +98,7 @@ export const campaignColumns = {
   goal: campaigns.goal,
   channel: campaigns.channel,
   content: campaigns.content,
+  channelConnectionId: campaigns.channelConnectionId,
   includeSegmentIds: campaigns.includeSegmentIds,
   excludeSegmentIds: campaigns.excludeSegmentIds,
   scheduledFor: campaigns.scheduledFor,
@@ -199,7 +209,7 @@ export class CampaignsRepository {
 
   async insert(
     storeId: string,
-    draft: CampaignDraft & { channel: 'sms'; createdByUserId: string | null },
+    draft: CampaignDraft & { channel: CampaignChannel; createdByUserId: string | null },
   ): Promise<Campaign> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx

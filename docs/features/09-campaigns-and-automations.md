@@ -310,7 +310,7 @@ Campaign states: `draft` → `waiting_approval` or `approving` → `scheduled` �
 
 WhatsApp templates: every WhatsApp campaign uses a template. Edited or new templates go to Meta for approval; the campaign waits as Scheduled. A rejection moves it to Draft with Meta's reason in plain words.
 
-Messenger campaigns (D24): the audience is filtered to people whose last inbound Messenger message is under 23 hours old at approval, and each send checks again; a closed window skips the recipient as `window_closed`. Messenger sends are free, so the estimate shows ৳0.
+Messenger campaigns (D24): the audience is filtered to people whose last inbound Messenger message is under 23 hours old at approval, and each send checks again; a closed window skips the recipient as `window_closed`. Messenger sends are free, so the estimate shows ৳0. The audience is built per Page: `MessagingService.pageAudience` returns the contact's identity and last inbound time on the selected connection only, so a contact on two Pages gets the identity of the chosen Page and its own window. The window runs 23 hours from that last inbound time (an hour inside Meta's 24 for the gap before Meta accepts the send); a button tap counts as inbound. A contact with no identity on the Page is skipped as `no_address`. A Messenger audience is judged as of the approval time, so a scheduled send still starts from people whose window is open now, and the send check repeats the window. Until the send part of CAMP-7 lands, approving a Messenger campaign is refused with `CAMPAIGN_CHANNEL_NOT_SENDABLE`.
 
 ### Tracked links and the SMS opt-out page
 
@@ -325,7 +325,7 @@ The public routes take no session. They find the store and link from the code th
 
 `CampaignsService` in `packages/core/src/campaigns/` keeps drafts, so the builder can save on every step. `POST /campaigns` takes a name and the channel; goal, content, include and exclude segment ids (up to 10 each) and `scheduledFor` are optional, and a later `PATCH /campaigns/:campaignId` changes only the fields it sends. An empty `scheduledFor` means send on approval. `GET /campaigns` lists newest first by creation time, then ID, with a shop-scoped cursor. It filters by literal name search, status, channel and inclusive creation dates in the shop time zone, and `DELETE /campaigns/:campaignId` removes a draft. Reads need `campaigns.view` and writes `campaigns.edit`. Change and delete apply only to a `draft`; anything later is refused with `CAMPAIGN_NOT_DRAFT`.
 
-SMS is the only channel a draft accepts: its content is `{ text }`, up to 1,000 characters, and the builder counts its parts with `countSmsParts`. Messenger content (text, image and buttons) comes with CAMP-7, and WhatsApp templates with CAMP-1. A draft does not check that its segment ids exist; the estimate and approval do, with `SEGMENT_NOT_FOUND`.
+A draft takes SMS or Messenger. SMS content is `{ text }`, up to 1,000 characters, and the builder counts its parts with `countSmsParts`. Messenger content is `{ text, imageUrl, buttons }`: text up to 640 characters, an optional https image and up to 3 buttons with titles of up to 20 characters. A Messenger draft also carries `channelConnectionId`, one connected Facebook Page of the shop (`CHANNEL_CONNECTION_NOT_FOUND` otherwise), and a change must fit the campaign's channel (`CAMPAIGN_CHANGE_NOT_FOR_CHANNEL`). WhatsApp templates come with CAMP-1. A draft does not check that its segment ids exist; the estimate and approval do, with `SEGMENT_NOT_FOUND`.
 
 ### Estimate and approval (CAMP-2, CAMP-13)
 

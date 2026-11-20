@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, notLike } from 'drizzle-orm';
 
 import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
@@ -68,6 +68,27 @@ export class ContactIdentitiesRepository {
         ),
     );
     return identity;
+  }
+
+  // Retired identities keep a `deleted:` id and can no longer be written to.
+  findOnConnection(storeId: string, connectionId: string, contactIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: contactIdentities.id,
+          contactId: contactIdentities.contactId,
+          externalId: contactIdentities.externalId,
+        })
+        .from(contactIdentities)
+        .where(
+          and(
+            eq(contactIdentities.storeId, storeId),
+            eq(contactIdentities.channelConnectionId, connectionId),
+            inArray(contactIdentities.contactId, contactIds),
+            notLike(contactIdentities.externalId, 'deleted:%'),
+          ),
+        ),
+    );
   }
 
   async retireInboundIdentity(storeId: string, id: string) {

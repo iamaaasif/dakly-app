@@ -29,7 +29,7 @@ async function capture(page: Page, name: string, scrollTo?: Locator) {
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 
-test('writes a caption and schedules the post', async ({ page, context, baseURL }) => {
+test('writes a caption with AI and queues the post', async ({ page, context, baseURL }) => {
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
     token: string;
     storeIds: [string, string];
@@ -62,6 +62,21 @@ test('writes a caption and schedules the post', async ({ page, context, baseURL 
         })
       ).status(),
     ).toBe(204);
+    const { contextTag } = await (await context.request.get('/api/me/context')).json();
+    // The real model is not called in tests; the reply carries the context header the app checks.
+    await page.route('**/api/content-pieces/generate', (route) =>
+      route.fulfill({
+        headers: { 'x-session-context': contextTag },
+        json: {
+          aiRunId: '00000000-0000-4000-8000-000000000001',
+          options: [
+            'New winter kurtis are here. 15% off this weekend, cash on delivery.',
+            'Stay warm in style. Our winter kurtis are 15% off this weekend.',
+            'Winter kurtis, 15% off. Order now and pay on delivery.',
+          ],
+        },
+      }),
+    );
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/social/posts/new');
     await expect(page.getByRole('heading', { name: 'Create post', level: 1 })).toBeVisible();
@@ -69,10 +84,19 @@ test('writes a caption and schedules the post', async ({ page, context, baseURL 
     await expect(page.getByText('Coming soon')).toBeVisible();
     await capture(page, 'create-post');
 
-    await page.getByRole('textbox', { name: 'Caption', exact: true }).fill('New winter kurtis');
-    await expect(page.getByRole('complementary', { name: 'Preview' })).toContainText(
-      'New winter kurtis',
+    await page.getByLabel('What’s this post about?').fill('New winter kurtis, 15% off');
+    await page.getByRole('button', { name: 'Generate captions' }).click();
+    const options = page.getByRole('list', { name: 'Caption options' });
+    await expect(options.getByRole('listitem')).toHaveCount(3);
+    await options.getByRole('button').first().click();
+    await expect(page.getByRole('textbox', { name: 'Caption', exact: true })).toHaveValue(
+      /New winter kurtis/,
     );
+    await page.getByRole('button', { name: 'Add hashtags' }).click();
+    await expect(page.getByRole('textbox', { name: 'Caption', exact: true })).toHaveValue(
+      /#winter/,
+    );
+    await expect(page.getByRole('complementary', { name: 'Preview' })).toContainText('#winter');
     await capture(page, 'caption-written', page.getByRole('region', { name: 'Caption' }));
 
     await page.getByRole('radio', { name: /Pick date and time/ }).check();
@@ -83,7 +107,7 @@ test('writes a caption and schedules the post', async ({ page, context, baseURL 
       'select p.is_ai_written, t.status from posts p join post_targets t on t.post_id = p.id where p.store_id=$1',
       [storeId],
     );
-    expect(scheduled.rows).toEqual([{ is_ai_written: false, status: 'scheduled' }]);
+    expect(scheduled.rows).toEqual([{ is_ai_written: true, status: 'scheduled' }]);
 
     await page.goto('/social/posts/new');
     await page.getByRole('textbox', { name: 'Caption', exact: true }).fill('Typed by a person');
