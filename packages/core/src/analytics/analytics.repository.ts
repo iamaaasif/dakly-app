@@ -34,6 +34,15 @@ export class AnalyticsRepository {
     );
   }
 
+  readChannelRevenue(storeId: string, period: ReportPeriod) {
+    return this.readMetrics(
+      storeId,
+      period,
+      ['marketing_revenue'],
+      sql`${storeDailyMetrics.dimension} like 'channel:%'`,
+    );
+  }
+
   private readMetrics(
     storeId: string,
     period: ReportPeriod,

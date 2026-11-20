@@ -140,7 +140,12 @@ export class OrderReportingRepository {
     },
   ) {
     const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
-    const dimension = sql<string>`coalesce(${orders.attributedSourceType} || ':' || ${orders.attributedSourceId}::text, '')`;
+    // Three groups: the day total, each campaign or workflow, and each channel for the Overview chart.
+    const dimension = sql<string>`case
+      when grouping(${orders.attributedSourceType}) = 1 and grouping(${orders.attributedChannel}) = 0
+        then 'channel:' || coalesce(${orders.attributedChannel}, 'unknown')
+      else coalesce(${orders.attributedSourceType} || ':' || ${orders.attributedSourceId}::text, '')
+    end`;
     const captured = sql`coalesce(${orders.attributedAmountPoisha}, 0)`;
     const kept = sql`(coalesce(${orders.deliveredItemsSubtotalPoisha}, ${orders.itemsSubtotalPoisha})
       - coalesce(${orders.deliveredOrderDiscountPoisha}, ${orders.orderDiscountPoisha}))`;
@@ -168,7 +173,7 @@ export class OrderReportingRepository {
           ),
         )
         .groupBy(
-          sql`grouping sets ((1), (1, ${orders.attributedSourceType}, ${orders.attributedSourceId}))`,
+          sql`grouping sets ((1), (1, ${orders.attributedSourceType}, ${orders.attributedSourceId}), (1, ${orders.attributedChannel}))`,
         ),
     );
   }

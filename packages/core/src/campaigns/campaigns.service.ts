@@ -87,6 +87,10 @@ export class CampaignsService {
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
+  messageTotals(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.repository.messageTotals(storeId, range);
+  }
+
   attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
     return ids.length ? this.repository.attributionSources(storeId, buyer, ids) : [];
   }
