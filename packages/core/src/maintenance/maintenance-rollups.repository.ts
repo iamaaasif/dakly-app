@@ -4,7 +4,6 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '@dakly/db/client';
 
 import { DATABASE } from '../platform/database/database.tokens';
-import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type Rollup = 'tracked_link_visit_days' | 'ai_run_daily_metrics';
 
@@ -14,16 +13,9 @@ const SOURCE_TABLE: Record<Rollup, string> = {
   ai_run_daily_metrics: 'ai_runs',
 };
 
-// Dhaka has no daylight saving, so a day is always the same 24 UTC hours.
-const dayStart = (day: string) => sql`(${day}::date::timestamp at time zone 'Asia/Dhaka')`;
-const dayEnd = (day: string) => sql`((${day}::date + 1)::timestamp at time zone 'Asia/Dhaka')`;
-
 @Injectable()
 export class MaintenanceRollupsRepository {
-  constructor(
-    @Inject(DATABASE) private readonly database: Database,
-    @Inject(TenantDatabase) private readonly tenant: TenantDatabase,
-  ) {}
+  constructor(@Inject(DATABASE) private readonly database: Database) {}
 
   async ensureMonthlyPartitions(monthsAhead: number) {
     await this.database.execute(sql`select ensure_monthly_partitions(${monthsAhead})`);
@@ -86,42 +78,5 @@ export class MaintenanceRollupsRepository {
             update maintenance_watermarks set completed_through = ${day}, updated_at = now()
             where rollup = ${rollup} and completed_through = ${expected} returning rollup`);
     return rows.length > 0;
-  }
-
-  rollUpLinkVisits(storeId: string, day: string) {
-    return this.tenant.forStore(storeId, (tx) =>
-      tx.execute(sql`
-        insert into tracked_link_visit_days
-          (store_id, tracked_link_id, day, visits, unique_visitors, first_at, last_at)
-        select store_id, tracked_link_id, ${day}::date, count(*), count(distinct visitor_hash),
-          min(occurred_at), max(occurred_at)
-        from tracked_link_visits
-        where store_id = ${storeId} and occurred_at >= ${dayStart(day)} and occurred_at < ${dayEnd(day)}
-        group by store_id, tracked_link_id
-        on conflict (tracked_link_id, day) do update set visits = excluded.visits,
-          unique_visitors = excluded.unique_visitors, first_at = excluded.first_at,
-          last_at = excluded.last_at`),
-    );
-  }
-
-  rollUpAiRuns(storeId: string, day: string) {
-    return this.tenant.forStore(storeId, (tx) =>
-      tx.execute(sql`
-        insert into store_daily_metrics (store_id, day, metric, dimension, value)
-        select ${storeId}::uuid, ${day}::date, m.metric, sums.purpose, m.value::bigint
-        from (
-          select purpose, count(*) as runs, sum(cost_micro_usd) as cost,
-            sum(input_tokens) as input, sum(output_tokens) as output
-          from ai_runs
-          where store_id = ${storeId} and created_at >= ${dayStart(day)} and created_at < ${dayEnd(day)}
-          group by purpose
-        ) sums
-        cross join lateral (values
-          ('ai_runs', sums.runs), ('ai_cost_micro_usd', sums.cost),
-          ('ai_input_tokens', sums.input), ('ai_output_tokens', sums.output)
-        ) as m(metric, value)
-        on conflict (store_id, day, metric, dimension) do update set value = excluded.value,
-          updated_at = now()`),
-    );
   }
 }

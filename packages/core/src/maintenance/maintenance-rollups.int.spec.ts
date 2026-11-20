@@ -1,35 +1,46 @@
+import 'reflect-metadata';
 import { randomUUID } from 'node:crypto';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
-import { createDatabase } from '@dakly/db/client';
+import { BullModule } from '@nestjs/bullmq';
+import { Module, type INestApplicationContext } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { Clock } from '../platform/clock';
-import { TenantDatabase } from '../platform/database/tenant-database';
-import type { StoresService } from '../stores/stores.service';
+import { loadEnv } from '../platform/config/env';
+import { DatabaseModule } from '../platform/database/database.module';
+import { toRedisConnection } from '../platform/queue/redis-connection';
+import { StoresService } from '../stores/stores.service';
 import { MaintenanceRollupsRepository } from './maintenance-rollups.repository';
 import { MaintenanceRollupsService } from './maintenance-rollups.service';
+import { MaintenanceModule } from './maintenance.module';
+
+class TestModule {}
+Module({
+  imports: [
+    DatabaseModule,
+    MaintenanceModule,
+    BullModule.forRootAsync({
+      useFactory: () => {
+        const env = loadEnv();
+        return { connection: toRedisConnection(env.REDIS_URL), prefix: env.QUEUE_PREFIX };
+      },
+    }),
+  ],
+})(TestModule);
 
 const ROLLUPS = ['tracked_link_visit_days', 'ai_run_daily_metrics'];
 
 describe('maintenance rollups (Postgres)', () => {
   const fixture = new OwnerIsolationFixture();
-  const app = createDatabase(process.env.DATABASE_URL!);
-  const repository = new MaintenanceRollupsRepository(app.db, new TenantDatabase(app.db));
+  let app: INestApplicationContext;
+  let repository: MaintenanceRollupsRepository;
+  let service: MaintenanceRollupsService;
   const owner = fixture.connection.pool;
   const linkA = randomUUID();
   const linkB = randomUUID();
   let savedWatermarks: unknown[] = [];
-
-  // 2019-03-05 12:00 UTC is 18:00 in Dhaka on 5 March; the clock is set to the Dhaka morning of
-  // the 7th, so 5 and 6 March are the finished days.
-  const clock = { now: () => new Date('2019-03-07T03:00:00Z') } as Clock;
-  const stores = {
-    maintenanceStoreIds: async (after: string | null) =>
-      after === null ? [fixture.a, fixture.b] : [],
-  } as StoresService;
-  const service = new MaintenanceRollupsService(repository, stores, clock);
 
   const insertVisit = (storeId: string, linkId: string, at: string, visitor: string) =>
     owner.query(
@@ -47,6 +58,15 @@ describe('maintenance rollups (Postgres)', () => {
 
   beforeAll(async () => {
     await fixture.setup();
+    app = await NestFactory.createApplicationContext(TestModule, { logger: false });
+    // 2019-03-05 12:00 UTC is 18:00 in Dhaka on 5 March; the clock is the Dhaka morning of the
+    // 7th, so 5 and 6 March are the finished days.
+    vi.spyOn(app.get(Clock), 'now').mockReturnValue(new Date('2019-03-07T03:00:00Z'));
+    vi.spyOn(app.get(StoresService), 'maintenanceStoreIds').mockImplementation(async (after) =>
+      after === null ? [fixture.a, fixture.b] : [],
+    );
+    repository = app.get(MaintenanceRollupsRepository);
+    service = app.get(MaintenanceRollupsService);
     savedWatermarks = (await owner.query('select * from maintenance_watermarks')).rows;
     await owner.query('delete from maintenance_watermarks');
     await owner.query(
@@ -69,7 +89,7 @@ describe('maintenance rollups (Postgres)', () => {
   });
 
   afterAll(async () => {
-    await app.pool.end();
+    await app?.close();
     await owner.query('delete from tracked_link_visit_days where store_id = any($1::uuid[])', [
       [fixture.a, fixture.b],
     ]);

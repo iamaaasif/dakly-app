@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { AnalyticsService } from '../analytics/analytics.service';
+import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
 import { DAY_MS, HOUR_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
@@ -20,6 +22,8 @@ export class MaintenanceRollupsService {
   constructor(
     @Inject(MaintenanceRollupsRepository) private readonly repository: MaintenanceRollupsRepository,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(LinksService) private readonly links: LinksService,
+    @Inject(AnalyticsService) private readonly analytics: AnalyticsService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -64,9 +68,8 @@ export class MaintenanceRollupsService {
     for (;;) {
       const page = await this.stores.maintenanceStoreIds(after, STORE_PAGE_SIZE);
       for (const storeId of page) {
-        if (rollup === 'tracked_link_visit_days')
-          await this.repository.rollUpLinkVisits(storeId, day);
-        else await this.repository.rollUpAiRuns(storeId, day);
+        if (rollup === 'tracked_link_visit_days') await this.links.rollUpVisitDay(storeId, day);
+        else await this.analytics.rollUpAiRunDay(storeId, day);
       }
       if (page.length < STORE_PAGE_SIZE) return;
       after = page.at(-1) ?? null;

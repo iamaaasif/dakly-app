@@ -150,6 +150,25 @@ export class LinksRepository {
     );
     return link;
   }
+
+  // Dhaka has no daylight saving, so a Dhaka day is always the same 24 UTC hours.
+  rollUpVisitDay(storeId: string, day: string) {
+    return this.tenant.forStore(storeId, (tx) =>
+      tx.execute(sql`
+        insert into tracked_link_visit_days
+          (store_id, tracked_link_id, day, visits, unique_visitors, first_at, last_at)
+        select store_id, tracked_link_id, ${day}::date, count(*), count(distinct visitor_hash),
+          min(occurred_at), max(occurred_at)
+        from tracked_link_visits
+        where store_id = ${storeId}
+          and occurred_at >= (${day}::date::timestamp at time zone 'Asia/Dhaka')
+          and occurred_at < ((${day}::date + 1)::timestamp at time zone 'Asia/Dhaka')
+        group by store_id, tracked_link_id
+        on conflict (tracked_link_id, day) do update set visits = excluded.visits,
+          unique_visitors = excluded.unique_visitors, first_at = excluded.first_at,
+          last_at = excluded.last_at`),
+    );
+  }
 }
 
 function selectOptOutLink(tx: Transaction, storeId: string, trackedLinkId: string) {
