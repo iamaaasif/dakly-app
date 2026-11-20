@@ -96,7 +96,11 @@ export class CampaignSendingRepository {
         })
         .from(campaigns)
         .where(and(eq(campaigns.storeId, storeId), or(active, cancelled)))
-        .orderBy(asc(campaigns.status), asc(campaigns.startedAt), asc(campaigns.id)),
+        .orderBy(
+          asc(campaigns.status),
+          asc(sql`coalesce(${campaigns.startedAt}, ${campaigns.approvedAt})`),
+          asc(campaigns.id),
+        ),
     );
   }
 

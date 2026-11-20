@@ -25,7 +25,11 @@ describe('campaign batch job', () => {
     const job = buildJob(sender);
 
     expect(await job.handle(payload)).toEqual({ delayUntil: next.getTime() });
-    expect(sender.sendBatch).toHaveBeenCalledWith(payload.storeId, payload.campaignId);
+    expect(sender.sendBatch).toHaveBeenCalledWith(
+      payload.storeId,
+      payload.campaignId,
+      expect.any(Function),
+    );
   });
 
   it('lets the batch finish when there is no continuation', async () => {

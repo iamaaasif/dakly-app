@@ -42,7 +42,7 @@ Module({
     BullModule.registerQueue({ name: QUEUES.campaign }),
     BullModule.forRoot({
       connection: toRedisConnection(loadEnv().REDIS_URL),
-      prefix: `campaign-delivery-${randomUUID()}`,
+      prefix: `${loadEnv().QUEUE_PREFIX}-campaign-delivery-${randomUUID()}`,
     }),
   ],
   providers: [
@@ -253,6 +253,53 @@ describe('Campaign sender (Postgres)', () => {
       await campaigns.cancel(storeId, active.id, actor);
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
       await sender.sendBatch(storeId, cancelled.id);
+    }
+  });
+
+  it('selects an older approved campaign without a recorded start before newer work', async () => {
+    const legacy = await sendingCampaign(1);
+    const newer = await sendingCampaign(1);
+    try {
+      await admin.pool.query(
+        'update campaigns set short_link_base=null, started_at=null where id=$1',
+        [legacy.id],
+      );
+      await admin.pool.query('update campaigns set started_at=$2 where id=$1', [
+        newer.id,
+        new Date(noon.getTime() + MINUTE),
+      ]);
+
+      expect(await app.get(CampaignSendingRepository).firstWork(storeId, noon)).toEqual([
+        { campaignId: legacy.id, status: 'sending' },
+      ]);
+    } finally {
+      await campaigns.cancel(storeId, legacy.id, actor);
+      await campaigns.cancel(storeId, newer.id, actor);
+    }
+  });
+
+  it('does not submit a claimed recipient after the batch loses its execution lease', async () => {
+    const { id } = await sendingCampaign(1);
+    const repository = app.get(CampaignSendingRepository);
+    const check = repository.isCurrentClaim.bind(repository);
+    let hasLease = true;
+    const current = vi
+      .spyOn(repository, 'isCurrentClaim')
+      .mockImplementationOnce(async (...args) => {
+        const result = await check(...args);
+        hasLease = false;
+        return result;
+      });
+    try {
+      expect(await sender.sendBatch(storeId, id, () => hasLease)).toBeNull();
+      expect(current).toHaveBeenCalledTimes(1);
+      expect(calls).toHaveLength(0);
+      expect(await settlementRows(id)).toEqual([]);
+    } finally {
+      current.mockRestore();
+      await campaigns.cancel(storeId, id, actor);
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      await sender.sendBatch(storeId, id);
     }
   });
 

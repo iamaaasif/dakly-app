@@ -62,12 +62,17 @@ export class CampaignSenderService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  async sendBatch(storeId: string, campaignId: string): Promise<Date | null> {
+  async sendBatch(
+    storeId: string,
+    campaignId: string,
+    hasLease = () => true,
+  ): Promise<Date | null> {
     if (!(await this.funding.prepare(storeId, campaignId))) return null;
     const deadline = performance.now() + MINUTE_MS / 4;
     let processed = false;
     for (let position = 0; position < BATCH_SIZE; position++) {
-      const claim = await this.claimNext(storeId, campaignId);
+      const claim = await this.claimNext(storeId, campaignId, hasLease);
+      if (!hasLease()) return null;
       if (claim.kind === 'stop') {
         await this.finish(storeId, campaignId, processed);
         return null;
@@ -76,7 +81,7 @@ export class CampaignSenderService {
         await this.counts.refresh(storeId, campaignId, 'force');
         return claim.until;
       }
-      if (claim.kind === 'send') await this.deliver(storeId, claim);
+      if (claim.kind === 'send') await this.deliver(storeId, claim, hasLease);
       if (claim.kind === 'receipt') await this.reconcileReceipt(storeId, campaignId, claim);
       processed = true;
       if (performance.now() >= deadline) break;
@@ -87,7 +92,8 @@ export class CampaignSenderService {
 
   // Cancellation and consent changes that commit before this claim stop a new submission.
   // Provider I/O happens after the transaction releases both locks.
-  private claimNext(storeId: string, campaignId: string): Promise<Claim> {
+  private claimNext(storeId: string, campaignId: string, hasLease: () => boolean): Promise<Claim> {
+    if (!hasLease()) return Promise.resolve({ kind: 'stop' });
     return this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, campaignId, 'share');
       if (!campaign || !canProcess(campaign)) return { kind: 'stop' };
@@ -97,7 +103,7 @@ export class CampaignSenderService {
         campaign,
         new Date(now.getTime() - CAMPAIGN_CLAIM_MS),
       );
-      if (!recipient) return { kind: 'stop' };
+      if (!recipient || !hasLease()) return { kind: 'stop' };
       if (recipient.status === 'sending') {
         const { providerMessageId } = recipient;
         if (providerMessageId)
@@ -295,11 +301,20 @@ export class CampaignSenderService {
     );
   }
 
-  private async deliver(storeId: string, submission: Submission): Promise<void> {
+  private async deliver(
+    storeId: string,
+    submission: Submission,
+    hasLease: () => boolean,
+  ): Promise<void> {
     const { recipient, destination, body, claimedAt, sender } = submission;
     const { id: recipientId, contactId } = recipient;
     const current = await this.repository.isCurrentClaim(storeId, recipientId, claimedAt);
-    if (!current || this.clock.now().getTime() - claimedAt.getTime() >= CAMPAIGN_CLAIM_MS) return;
+    if (
+      !current ||
+      !hasLease() ||
+      this.clock.now().getTime() - claimedAt.getTime() >= CAMPAIGN_CLAIM_MS
+    )
+      return;
     let receipt: SentMessage;
     try {
       receipt = await this.messaging.send(
