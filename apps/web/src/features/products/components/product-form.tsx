@@ -1,6 +1,5 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
 import { FormProvider, useForm, type FormState } from 'react-hook-form';
 
 import {
@@ -13,7 +12,6 @@ import {
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 
-import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
 import { ProductFields } from './product-fields';
@@ -27,15 +25,12 @@ type ProductFormProps = {
 };
 
 export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
-  const [stocks, setStocks] = useState<Record<number, number>>({});
-  const resolver = zodResolver(productFormSchema);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
-    resolver: (values, context, options) => resolver(parseFormValues(values), context, options),
+    resolver: zodResolver(productFormSchema),
     defaultValues: formValues(product),
   });
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
-  const adjust = useAdjustStock();
   const mutation = product ? change : create;
   const { dirtyFields, errors, isDirty } = form.formState;
 
@@ -45,10 +40,7 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
         className="space-y-3.5"
         onSubmit={form.handleSubmit((input) => {
           const callbacks = {
-            onSuccess: async (saved: ProductResponse) => {
-              if (!product) await applyInitialStocks(saved, stocks, adjust.mutateAsync);
-              onSaved(saved);
-            },
+            onSuccess: (saved: ProductResponse) => onSaved(saved),
             onError: (error: Error) =>
               form.setError(productErrorField(error, input.variants.length), {
                 message: error.message,
@@ -59,11 +51,7 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
         })}
       >
         <ProductFields productId={product?.id} />
-        <ProductOptions
-          mode={product ? 'edit' : 'create'}
-          sizeStocks={stocks}
-          onStockChange={(i, qty) => setStocks((prev) => ({ ...prev, [i]: qty }))}
-        />
+        <ProductOptions />
         {errors.root?.server?.message ? (
           <p role="alert" className="text-danger">
             {errors.root.server.message}
@@ -179,13 +167,6 @@ function productErrorField(
   return variantCount === 1 ? 'variants.0.sku' : 'variants';
 }
 
-function parseFormValues(values: ProductFormValues) {
-  if (values.pricePoisha !== '') return values;
-  const copy: Record<string, unknown> = { ...values };
-  delete copy.pricePoisha;
-  return copy as ProductFormValues;
-}
-
 function withDefaultCost(input: ProductFormInput): ProductFormInput {
   const baseCost = input.variants[0]?.costPoisha;
   if (!baseCost) return input;
@@ -193,22 +174,4 @@ function withDefaultCost(input: ProductFormInput): ProductFormInput {
     ...input,
     variants: input.variants.map((v) => ({ ...v, costPoisha: v.costPoisha || baseCost })),
   };
-}
-
-async function applyInitialStocks(
-  product: ProductResponse,
-  stocks: Record<number, number>,
-  adjustStock: (vars: {
-    variantId: string;
-    input: { quantity: number; reason: string };
-  }) => Promise<unknown>,
-) {
-  const adjustments = product.variants
-    .map((variant, index) => {
-      const quantity = stocks[index] ?? 0;
-      if (quantity <= 0) return null;
-      return adjustStock({ variantId: variant.id, input: { quantity, reason: 'Initial stock' } });
-    })
-    .filter(Boolean);
-  if (adjustments.length > 0) await Promise.allSettled(adjustments);
 }

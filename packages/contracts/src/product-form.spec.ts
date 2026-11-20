@@ -32,7 +32,8 @@ describe('product form', () => {
     expect(changeProductSchema.parse(parsed)).toEqual(parsed);
   });
 
-  it('allows a zero base price but rejects a zero override', () => {
+  it('allows an empty or zero base price but rejects a zero override', () => {
+    expect(productFormSchema.parse({ ...input, pricePoisha: '' }).pricePoisha).toBe(0);
     expect(productFormSchema.parse({ ...input, pricePoisha: '0' }).pricePoisha).toBe(0);
     expect(
       productFormSchema.safeParse({
@@ -42,7 +43,7 @@ describe('product form', () => {
     ).toBe(false);
   });
 
-  it.each(['', '-1', 'NaN', '1e3', '12.345', '90071992547409.92'])(
+  it.each(['-1', 'NaN', '1e3', '12.345', '90071992547409.92'])(
     'rejects invalid or unsafe Taka input %s',
     (pricePoisha) => {
       expect(productFormSchema.safeParse({ ...input, pricePoisha }).success).toBe(false);

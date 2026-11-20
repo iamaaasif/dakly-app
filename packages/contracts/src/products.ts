@@ -135,7 +135,7 @@ export const productFormSchema = z
       .transform((values) => values.filter((value) => value.trim()))
       .pipe(createProductSchema.shape.aliases.unwrap())
       .default([]),
-    pricePoisha: takaInput.default(0),
+    pricePoisha: z.union([z.literal('').transform(() => 0), takaInput]).default(0),
     compareAtPricePoisha: optionalTakaInput.default(null),
     variants: z
       .array(

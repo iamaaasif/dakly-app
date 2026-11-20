@@ -10,18 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { productsKeys } from '@/lib/product-query-keys';
 
-type ProductCategoryFieldProps = {
-  name?: 'category';
-  categories?: string[];
-};
-
-export function ProductCategoryField({
-  name = 'category',
-  categories: initialCategories,
-}: ProductCategoryFieldProps) {
-  const { field } = useController<ProductFormValues, 'category'>({ name });
+export function ProductCategoryField() {
+  const { field } = useController<ProductFormValues, 'category'>({ name: 'category' });
   const id = useId();
-  const categories = useStoreCategories(initialCategories, field.value);
+  const categories = useStoreCategories(field.value);
 
   const [isNew, setIsNew] = useState(() =>
     Boolean(field.value && !categories.includes(field.value)),
@@ -74,21 +66,20 @@ export function ProductCategoryField({
   );
 }
 
-function useStoreCategories(initialCategories?: string[], currentValue?: string | null) {
+function useStoreCategories(currentValue?: string | null) {
   const queryClient = useQueryClient();
   return useMemo(() => {
-    if (initialCategories) return initialCategories;
     const cached = queryClient.getQueriesData<ProductListResponse>({
       queryKey: productsKeys.all,
     });
     const list = cached
       .flatMap(([, data]) => data?.items ?? [])
       .map((item) => item.category?.trim())
-      .filter(Boolean) as string[];
+      .filter((item): item is string => Boolean(item));
     const set = new Set(list);
     if (currentValue?.trim()) set.add(currentValue.trim());
     return Array.from(set);
-  }, [initialCategories, queryClient, currentValue]);
+  }, [queryClient, currentValue]);
 }
 
 type NewCategoryInputProps = {

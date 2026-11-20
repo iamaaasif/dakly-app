@@ -10,23 +10,13 @@ export type DialogProps = {
   open: boolean;
   suspended?: boolean;
   closeDisabled?: boolean;
-  closeAriaLabel?: string;
   className?: string;
   onClose: () => void;
   children: ReactNode;
 };
 
 export function Dialog(props: DialogProps) {
-  const {
-    title,
-    open,
-    suspended = false,
-    closeDisabled,
-    closeAriaLabel = 'Close dialog',
-    className,
-    onClose,
-    children,
-  } = props;
+  const { title, open, suspended = false, closeDisabled, className, onClose, children } = props;
   const element = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -68,7 +58,7 @@ export function Dialog(props: DialogProps) {
         <Button
           variant="secondary"
           className="shrink-0 px-2"
-          aria-label={closeAriaLabel}
+          aria-label="Close dialog"
           disabled={closeDisabled}
           onClick={onClose}
         >

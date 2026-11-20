@@ -20,7 +20,6 @@ type ProductsScreenProps = {
   productId?: string;
   create?: '1';
 };
-
 export function ProductsScreen({ query, adjust, productId, create }: ProductsScreenProps) {
   const { data: session } = useSessionContext();
   const products = useProducts(query);
@@ -28,7 +27,6 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
   const canEdit = session?.currentStore?.canEditProducts;
-
   return (
     <StorePage permission="canViewProducts">
       <main className="space-y-6 p-6 md:p-8">
@@ -75,12 +73,7 @@ export function ProductsScreen({ query, adjust, productId, create }: ProductsScr
 function AddProductModal({ listHref }: { listHref: string }) {
   const router = useRouter();
   return (
-    <SessionDialog
-      title="Add product"
-      open
-      closeAriaLabel="Close"
-      onClose={() => router.replace(listHref)}
-    >
+    <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
       <ProductForm
         onSaved={(product) => router.replace(`${listHref}&product=${product.id}`)}
         onCancel={() => router.replace(listHref)}
