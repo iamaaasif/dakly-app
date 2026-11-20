@@ -27,6 +27,7 @@ const connection = (overrides: Partial<ChannelConnection>): ChannelConnection =>
   tokenExpiresAt: null,
   connectedAt: '2026-11-01T06:00:00.000Z',
   disconnectedAt: null,
+  isAiLive: false,
   ...overrides,
 });
 const page = connection({});

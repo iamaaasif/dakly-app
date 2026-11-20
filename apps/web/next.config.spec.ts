@@ -16,6 +16,9 @@ describe('shop API routing', () => {
       ]),
     );
   });
+  it('waits three minutes for the API so a Go live run is not cut off', () => {
+    expect(nextConfig.experimental?.proxyTimeout).toBe(180_000);
+  });
   it('defaults locally and refuses credentials, paths and non-HTTP destinations', () => {
     vi.stubEnv('WEB_API_URL', undefined);
     expect(webApiUrl()).toBe('http://localhost:4000');

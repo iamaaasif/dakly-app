@@ -16,6 +16,7 @@ const connection = (overrides: Partial<ChannelConnection>): ChannelConnection =>
   externalAccountId: '1001001',
   status: 'active',
   tokenExpiresAt: null,
+  isAiLive: false,
   connectedAt: '2026-11-01T06:00:00.000Z',
   disconnectedAt: null,
   ...overrides,

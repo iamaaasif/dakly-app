@@ -10,6 +10,7 @@ import { campaignListQuerySchema, createCampaignSchema } from '@dakly/contracts/
 import { createDatabase } from '@dakly/db/client';
 
 import { DatabaseModule } from '../platform/database/database.module';
+import { CampaignDuplicateService } from './campaign-duplicate.service';
 import { CampaignResultsService } from './campaign-results.service';
 import { CampaignsModule } from './campaigns.module';
 import { CampaignsService } from './campaigns.service';
@@ -24,6 +25,7 @@ const actor = { kind: 'user', userId } as const;
 let app: INestApplicationContext;
 let service: CampaignsService;
 let results: CampaignResultsService;
+let copies: CampaignDuplicateService;
 
 function draft(name: string) {
   return service.create(storeId, createCampaignSchema.parse({ name, channel: 'sms' }), actor);
@@ -42,6 +44,7 @@ describe('CampaignsService drafts (Postgres)', () => {
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     service = app.get(CampaignsService);
     results = app.get(CampaignResultsService);
+    copies = app.get(CampaignDuplicateService);
   });
 
   afterAll(async () => {
@@ -203,5 +206,29 @@ describe('CampaignsService drafts (Postgres)', () => {
     await expect(
       results.customers(otherStoreId, campaign.id, { outcome: 'failed', limit: 25 }),
     ).rejects.toMatchObject({ code: 'CAMPAIGN_NOT_FOUND' });
+  });
+
+  it('duplicates any campaign into a fresh draft, and reports a campaign of another shop missing', async () => {
+    const source = await draft('ঈদের অফার');
+    await service.changeDraft(
+      storeId,
+      source.id,
+      { content: { text: 'ঈদে ২০% ছাড়' }, goal: 'seasonal' },
+      actor,
+    );
+    const copy = await copies.duplicate(storeId, source.id, actor);
+    expect(copy).toMatchObject({
+      name: 'Copy of ঈদের অফার',
+      goal: 'seasonal',
+      status: 'draft',
+      channel: 'sms',
+      content: { text: 'ঈদে ২০% ছাড়' },
+      scheduledFor: null,
+      counts: { sent: 0 },
+    });
+    expect(copy.id).not.toBe(source.id);
+    await expect(copies.duplicate(randomUUID(), source.id, actor)).rejects.toMatchObject({
+      code: 'CAMPAIGN_NOT_FOUND',
+    });
   });
 });

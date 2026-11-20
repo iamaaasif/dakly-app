@@ -244,15 +244,43 @@ describe('Manual dispatch and delivery', () => {
     await order(f.a, 'partially_delivered', { phone });
     for (let i = 0; i < 4; i++) await order(f.b, 'delivered', { phone });
     const newPhone = await order(f.a, 'to_confirm', { phone: '01710000007' });
-    expect((await service.getById(f.a, own, editor().access)).returnRisk).toBe('high');
+    const detail = await service.getById(f.a, own, editor().access);
+    expect(detail.returnRisk).toBe('high');
+    expect(detail.parcelHistory).toEqual({ parcels: 2, returned: 1 });
     const page = await service.list(f.a, { stage: 'to_confirm', limit: 20 });
     expect(page.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: own, returnRisk: 'high' }),
-        expect.objectContaining({ id: newPhone, returnRisk: 'new_customer' }),
+        expect.objectContaining({
+          id: own,
+          returnRisk: 'high',
+          parcelHistory: { parcels: 2, returned: 1 },
+        }),
+        expect.objectContaining({
+          id: newPhone,
+          returnRisk: 'new_customer',
+          parcelHistory: { parcels: 0, returned: 0 },
+        }),
       ]),
     );
     expect(page.items[0]).not.toHaveProperty('recipientPhone');
+  });
+
+  it('lists the courier and return reason of each order on the row', async () => {
+    const id = await order(f.a, 'returned');
+    await f.connection.pool.query(
+      "update orders set courier = 'steadfast', return_reason = 'Refused at the door', returned_at = now() where id = $1",
+      [id],
+    );
+    const { items } = await service.list(f.a, { stage: 'returned', limit: 20 });
+    expect(items.find((row) => row.id === id)).toMatchObject({
+      courier: 'steadfast',
+      courierOtherName: null,
+      returnReason: 'Refused at the door',
+      returnedAt: expect.any(String),
+    });
+    expect((await service.list(f.b, { stage: 'returned', limit: 20 })).items).not.toContainEqual(
+      expect.objectContaining({ id }),
+    );
   });
 
   it('keeps an exact COD balance past the largest single safe integer', async () => {
