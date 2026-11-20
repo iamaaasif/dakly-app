@@ -135,6 +135,7 @@ describe('SMS campaign body URLs', () => {
     'Open “https://shop.example.test/a”today”.',
     'Open ‘https://shop.example.test/O’Reilly’—‘today’.',
     'Open "https://shop.example.test/?item=1"—"today".',
+    'Open “‘https://shop.example.test/a’”—“‘today’”.',
   ])('keeps adjacent quoted prose out of the URL in %s', (text) => {
     expect(campaignSmsUrls(text)).toEqual([]);
   });
