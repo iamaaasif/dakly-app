@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0060_snapshot.json`: **95 tables, 1282 columns, 389 explicit indexes and 300 foreign keys**.
+Built from `packages/db/migrations/meta/0061_snapshot.json`: **95 tables, 1283 columns, 390 explicit indexes and 300 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1388,6 +1388,7 @@ erDiagram
         uuid__ exclude_segment_ids "NOT NULL; uuid[]"
         text status "NOT NULL; text"
         text pause_reason "NULL; text"
+        integer balance_pause_revision "NULL; integer"
         boolean is_ai_written "NOT NULL; boolean"
         timestamp_with_time_zone scheduled_for "NULL; timestamp with time zone"
         uuid approved_by_user_id FK "NULL; uuid"
