@@ -106,6 +106,10 @@ describe('SMS campaign body URLs', () => {
     { prefix: '("', value: '["red","blue"]', suffix: '").' },
     { prefix: '(["', value: '[["]]"],"blue"]&view=grid', suffix: '"]).' },
     { prefix: '"', value: '[%22red","blue"]', suffix: '".' },
+    { prefix: '"', value: '["red","blue"]', suffix: '."' },
+    { prefix: '("', value: '["red","blue"]', suffix: '!").' },
+    { prefix: '"', value: '[%22red","blue"]', suffix: '."' },
+    { prefix: '"', value: '["]"]', suffix: '".' },
   ])('keeps JSON quotes and brackets in a URL with $value', ({ prefix, value, suffix }) => {
     const target = `https://shop.example.test/search?filter=${value}`;
     const text = `Open ${prefix}${target}${suffix}`;

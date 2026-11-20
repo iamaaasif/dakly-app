@@ -93,7 +93,7 @@ function bareUrl(raw: string, prefix: string): string | undefined {
 }
 
 function hasQuotedProse(candidate: string, prefix: string): boolean {
-  const json = jsonSpans(candidate);
+  const json = jsonSpans(candidate.replace(sentencePunctuation, ''));
   const closers = matchingClosers(prefix);
   for (let count = 1; count <= closers.length; count += 1) {
     const follows = (following: string, end: number) => {
@@ -155,6 +155,7 @@ function trimMessagePunctuation(raw: string): string {
   for (let last = candidate.at(-1); last; last = candidate.at(-1)) {
     const opening = openingBracket[last];
     if (!opening || candidate.split(opening).length >= candidate.split(last).length) break;
+    if (jsonSpans(candidate).some(({ end }) => end === candidate.length)) break;
     candidate = candidate.slice(0, -1).replace(sentencePunctuation, '');
   }
   return candidate;
