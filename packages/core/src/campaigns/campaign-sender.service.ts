@@ -85,7 +85,7 @@ export class CampaignSenderService {
     if (!hasLease()) return Promise.resolve({ kind: 'stop' });
     return this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, campaignId, 'share');
-      if (!campaign?.shortLinkBase || !canProcess(campaign)) return { kind: 'stop' };
+      if (!canProcess(campaign)) return { kind: 'stop' };
       const now = this.clock.now();
       const recipient = await this.repository.lockNextRecipient(
         storeId,
@@ -97,7 +97,11 @@ export class CampaignSenderService {
         const { providerMessageId } = recipient;
         if (providerMessageId)
           return this.claimReceipt(storeId, { ...recipient, providerMessageId }, now, campaign);
-        if (campaign.status === 'cancelled' || recipient.sendAttempts >= SEND_ATTEMPTS)
+        if (
+          !recipient.dispatchStartedAt ||
+          campaign.status === 'cancelled' ||
+          recipient.sendAttempts >= SEND_ATTEMPTS
+        )
           return this.skipSubmission(storeId, campaign, { recipient });
       }
       return this.claimForSubmission(storeId, campaign, recipient, hasLease);
@@ -139,18 +143,17 @@ export class CampaignSenderService {
     campaign: LockedCampaign,
     { recipient, reason }: { recipient: ClaimableRecipient; reason?: SkipReason },
   ): Promise<Claim> {
-    if (recipient.status === 'sending')
+    if (recipient.status === 'sending' && recipient.dispatchStartedAt)
       await this.failUnknown(storeId, recipient, this.estimateCredits(campaign));
-    else if (reason)
+    else {
+      const restored = campaign.status === 'cancelled' ? 'cancelled' : 'queued';
       await this.repository.changeRecipient(
         storeId,
         recipient.id,
-        { status: 'queued' },
-        {
-          status: 'skipped',
-          skipReason: reason,
-        },
+        { status: recipient.status },
+        { status: reason ? 'skipped' : restored, claimedAt: null, skipReason: reason },
       );
+    }
     return { kind: 'next' };
   }
 
@@ -184,12 +187,7 @@ export class CampaignSenderService {
       return { kind: 'defer', until: decision.until };
     const change =
       decision.action === 'send'
-        ? {
-            status: 'sending' as const,
-            claimedAt: at,
-            dispatchStartedAt: at,
-            sendAttempts: recipient.sendAttempts + 1,
-          }
+        ? { status: 'sending' as const, claimedAt: at }
         : { status: recipient.status };
     const saved = await this.repository.changeRecipient(
       storeId,
@@ -293,19 +291,17 @@ export class CampaignSenderService {
     );
   }
 
-  private async deliver(
-    storeId: string,
-    submission: Submission,
-    hasLease: () => boolean,
-  ): Promise<void> {
+  private async deliver(storeId: string, submission: Submission, hasLease: () => boolean) {
     const { recipient, destination, body, claimedAt, sender } = submission;
     const { id: recipientId, contactId } = recipient;
-    const current = await this.repository.isCurrentClaim(storeId, recipientId, claimedAt);
-    if (
-      !current ||
-      !hasLease() ||
-      this.clock.now().getTime() - claimedAt.getTime() >= CAMPAIGN_CLAIM_MS
-    ) {
+    const canSubmit = () =>
+      hasLease() && this.clock.now().getTime() - claimedAt.getTime() < CAMPAIGN_CLAIM_MS;
+    const authorized =
+      canSubmit() &&
+      (await this.repository
+        .authorizeSubmission(storeId, recipientId, claimedAt)
+        .catch(() => false));
+    if (!authorized || !canSubmit()) {
       await this.recordRefusal(storeId, submission, true);
       return;
     }
@@ -413,9 +409,12 @@ export class CampaignSenderService {
   }
 }
 
-function canProcess(campaign: LockedCampaign): boolean {
+function canProcess(
+  campaign: LockedCampaign | undefined,
+): campaign is LockedCampaign & { shortLinkBase: string } {
   return (
-    campaign.status === 'sending' ||
-    (campaign.status === 'cancelled' && campaign.settlementPendingAt !== null)
+    !!campaign?.shortLinkBase &&
+    (campaign.status === 'sending' ||
+      (campaign.status === 'cancelled' && campaign.settlementPendingAt !== null))
   );
 }

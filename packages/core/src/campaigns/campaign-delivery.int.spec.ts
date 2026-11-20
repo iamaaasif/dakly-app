@@ -250,6 +250,27 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
+  it('selects ready sending work while an older campaign still has a live claim', async () => {
+    const earlier = await unknownFirstSend();
+    const later = await sendingCampaign(1);
+    await admin.pool.query('update campaigns set started_at=$2 where id=$1', [
+      later.id,
+      new Date(noon.getTime() + MINUTE),
+    ]);
+    try {
+      await expect(
+        app.get(SendCampaignBatchJob).handle({ storeId, lane: 'sending' }),
+      ).resolves.toBeUndefined();
+      expect((await recipients(earlier.id)).map(({ status }) => status)).toEqual(['sending']);
+      expect((await recipients(later.id)).map(({ status }) => status)).toEqual(['sent']);
+      expect(calls.map(({ to }) => to)).toEqual([earlier.phones[0], later.phones[0]]);
+    } finally {
+      await campaigns.cancel(storeId, earlier.id, actor);
+      clockNow = new Date(noon.getTime() + 6 * MINUTE);
+      await sender.sendBatch(storeId, earlier.id);
+    }
+  });
+
   it('selects an older approved campaign without a recorded start before newer work', async () => {
     const legacy = await sendingCampaign(1);
     const newer = await sendingCampaign(1);
@@ -272,31 +293,38 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
-  it('does not submit a claimed recipient after the batch loses its execution lease', async () => {
-    const { id } = await sendingCampaign(1);
-    const repository = app.get(CampaignSendingRepository);
-    const check = repository.isCurrentClaim.bind(repository);
-    let hasLease = true;
-    const current = vi
-      .spyOn(repository, 'isCurrentClaim')
-      .mockImplementationOnce(async (...args) => {
-        const result = await check(...args);
-        hasLease = false;
-        return result;
-      });
-    try {
-      expect(await sender.sendBatch(storeId, id, () => hasLease)).toBeNull();
-      expect(current).toHaveBeenCalledTimes(1);
-      expect(calls).toHaveLength(0);
-      expect(await settlementRows(id)).toEqual([]);
-      expect(await sendAttempts(id)).toEqual([0]);
-      expect((await recipients(id)).map(({ status }) => status)).toEqual(['queued']);
-      await campaigns.cancel(storeId, id, actor);
-      expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
-    } finally {
-      current.mockRestore();
-    }
-  });
+  it.each([false, true])(
+    'releases an unsubmitted claim after losing its lease (authorization failed: %s)',
+    async (failed) => {
+      const { id } = await sendingCampaign(1);
+      const repository = app.get(CampaignSendingRepository);
+      const check = repository.authorizeSubmission.bind(repository);
+      let hasLease = true;
+      const current = vi
+        .spyOn(repository, 'authorizeSubmission')
+        .mockImplementationOnce(async (...args) => {
+          if (failed) {
+            hasLease = false;
+            throw new Error('authorization write unavailable');
+          }
+          const result = await check(...args);
+          hasLease = false;
+          return result;
+        });
+      try {
+        expect(await sender.sendBatch(storeId, id, () => hasLease)).toBeNull();
+        expect(current).toHaveBeenCalledTimes(1);
+        expect(calls).toHaveLength(0);
+        expect(await settlementRows(id)).toEqual([]);
+        expect(await sendAttempts(id)).toEqual([0]);
+        expect((await recipients(id)).map(({ status }) => status)).toEqual(['queued']);
+        await campaigns.cancel(storeId, id, actor);
+        expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
+      } finally {
+        current.mockRestore();
+      }
+    },
+  );
 
   it('preserves the earlier ambiguous claim when a retry is stopped before the provider', async () => {
     const { id } = await unknownFirstSend();
@@ -310,10 +338,10 @@ describe('Campaign sender (Postgres)', () => {
     const prior = await readClaim();
     clockNow = new Date(noon.getTime() + 6 * MINUTE);
     const repository = app.get(CampaignSendingRepository);
-    const check = repository.isCurrentClaim.bind(repository);
+    const check = repository.authorizeSubmission.bind(repository);
     let hasLease = true;
     const current = vi
-      .spyOn(repository, 'isCurrentClaim')
+      .spyOn(repository, 'authorizeSubmission')
       .mockImplementationOnce(async (...args) => {
         const result = await check(...args);
         hasLease = false;
@@ -846,9 +874,9 @@ describe('Campaign sender (Postgres)', () => {
       const waiting = Promise.withResolvers<void>();
       const proceed = Promise.withResolvers<void>();
       const repository = app.get(CampaignSendingRepository);
-      const current = repository.isCurrentClaim.bind(repository);
+      const current = repository.authorizeSubmission.bind(repository);
       const gate = vi
-        .spyOn(repository, 'isCurrentClaim')
+        .spyOn(repository, 'authorizeSubmission')
         .mockImplementationOnce(async (...args) => {
           expect(app.get(StoreTransaction).isOpen()).toBe(false);
           waiting.resolve();
@@ -873,8 +901,16 @@ describe('Campaign sender (Postgres)', () => {
         await first;
         expect(calls).toHaveLength(expired ? 0 : 1);
         expect((await recipients(id)).map((row) => row.status)).toEqual([
-          expired ? 'failed' : 'sent',
+          expired ? 'cancelled' : 'sent',
         ]);
+        expect(await settlementRows(id)).toEqual(
+          expired
+            ? [{ kind: 'release', quantity_delta: 1 }]
+            : [
+                { kind: 'release', quantity_delta: 1 },
+                { kind: 'charge', quantity_delta: -1 },
+              ],
+        );
       } finally {
         proceed.resolve();
         gate.mockRestore();
