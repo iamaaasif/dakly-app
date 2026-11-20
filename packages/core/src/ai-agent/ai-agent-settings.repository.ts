@@ -20,6 +20,8 @@ export class AiAgentSettingsRepository {
         .select({
           debounceSeconds: aiAgentSettings.debounceSeconds,
           testers: aiAgentSettings.testers,
+          claimTimeoutMinutes: aiAgentSettings.claimTimeoutMinutes,
+          returnToAiMinutes: aiAgentSettings.returnToAiMinutes,
         })
         .from(aiAgentSettings)
         .where(and(eq(aiAgentSettings.storeId, storeId), eq(aiAgentSettings.isAutoReplyOn, true))),

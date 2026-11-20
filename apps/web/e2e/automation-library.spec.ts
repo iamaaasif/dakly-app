@@ -28,7 +28,7 @@ test('filters the template library and copies a ready workflow into a draft', as
     await page.getByRole('link', { name: 'Create workflow' }).click();
     await expect(page.getByRole('heading', { name: 'Pick a ready-made workflow' })).toBeVisible();
     await expect(
-      page.getByRole('region', { name: 'Type' }).getByRole('button', { name: 'Transactional 1' }),
+      page.getByRole('region', { name: 'Type' }).getByRole('button', { name: 'Transactional 2' }),
     ).toBeVisible();
     const followUp = page.getByRole('article').filter({ hasText: 'Chat follow-up' });
     await expect(followUp.getByText(/Needs a connected channel/)).toBeVisible();

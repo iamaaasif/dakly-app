@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
+import type { OutboxService } from '../platform/outbox/outbox.service';
 import type { SessionsService } from '../sessions/sessions.service';
+import type { UsageService } from '../usage/usage.service';
 import type { AuditArchiveService } from './audit-archive.service';
 import type { FilePurgeService } from './file-purge.service';
 import type { MaintenanceRollupsService } from './maintenance-rollups.service';
@@ -19,8 +21,10 @@ function build(rollUp: () => Promise<void>) {
     archive: { archiveExpiredMonths: done() },
     files: { purgeExpiredFiles: done(), purgeOrphanProductObjects: done() },
     accountEvents: { purgeExpired: done() },
-    retention: { purgeStoreTables: done() },
+    retention: { purgeStoreTables: done(), archiveStoreMessages: done() },
     sessions: { purgeExpired: done() },
+    outbox: { purgePublished: done() },
+    usage: { purgeExpired: done() },
   };
   const service = new MaintenanceService(
     parts.rollups as unknown as MaintenanceRollupsService,
@@ -29,15 +33,16 @@ function build(rollUp: () => Promise<void>) {
     parts.accountEvents as unknown as AccountSecurityEventsService,
     parts.retention as unknown as RetentionPurgeService,
     parts.sessions as unknown as SessionsService,
+    parts.outbox as unknown as OutboxService,
+    parts.usage as unknown as UsageService,
   );
   return { service, ...parts };
 }
 
 describe('MaintenanceService', () => {
   it('runs every later step after a failed one, then reports the failure', async () => {
-    const { service, rollups, archive, files, accountEvents, retention, sessions } = build(() =>
-      Promise.reject(new Error('store scan failed')),
-    );
+    const { service, rollups, archive, files, accountEvents, retention, sessions, outbox, usage } =
+      build(() => Promise.reject(new Error('store scan failed')));
 
     await expect(service.run()).rejects.toMatchObject({ code: 'MAINTENANCE_STEPS_FAILED' });
 
@@ -47,7 +52,10 @@ describe('MaintenanceService', () => {
     expect(files.purgeOrphanProductObjects).toHaveBeenCalledOnce();
     expect(accountEvents.purgeExpired).toHaveBeenCalledOnce();
     expect(retention.purgeStoreTables).toHaveBeenCalledOnce();
+    expect(retention.archiveStoreMessages).toHaveBeenCalledOnce();
     expect(sessions.purgeExpired).toHaveBeenCalledOnce();
+    expect(outbox.purgePublished).toHaveBeenCalledOnce();
+    expect(usage.purgeExpired).toHaveBeenCalledOnce();
   });
 
   it('finishes quietly when every step works', async () => {

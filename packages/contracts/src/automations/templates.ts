@@ -197,5 +197,81 @@ export const automationTemplates = {
       },
     },
   },
+  // Staff move the order to With courier (D21), so this is the shipped message without a courier
+  // tracking link; the link comes with the courier connection.
+  shipped_order: {
+    name: 'Order shipped',
+    description: 'Tell the customer their order is on its way.',
+    libraryGoal: 'build_trust',
+    category: 'transactional',
+    needs: ['orders'],
+    graph: {
+      trigger: { key: 'order_shipped', filters: [] },
+      reEntry: { rule: 'every_time' },
+      workflowFilters: [],
+      goal: null,
+      exitConditions: [{ kind: 'order_cancelled' }],
+      firstStepKey: 'shipped',
+      steps: {
+        shipped: send(
+          'transactional',
+          ['sms'],
+          '{first_name}, আপনার অর্ডার #{order_number} কুরিয়ারে পাঠানো হয়েছে।',
+          'end',
+        ),
+        end,
+      },
+    },
+  },
+  thank_you_first_order: {
+    name: 'Thank you after the first order',
+    description: 'Thank a new customer the day after their first order.',
+    libraryGoal: 'repeat_orders',
+    category: 'post_purchase',
+    needs: ['orders'],
+    graph: {
+      trigger: { key: 'order_placed', filters: [{ field: 'first_order' }] },
+      reEntry: { rule: 'once' },
+      workflowFilters: [],
+      goal: null,
+      exitConditions: [{ kind: 'order_cancelled' }],
+      firstStepKey: 'wait',
+      steps: {
+        wait: wait(DAY, 'thanks'),
+        thanks: send(
+          'marketing',
+          MARKETING_CHANNELS,
+          '{first_name}, প্রথম অর্ডারের জন্য ধন্যবাদ! আপনার অর্ডার #{order_number} নিয়ে কিছু জানার থাকলে আমাদের জানান।',
+          'end',
+        ),
+        end,
+      },
+    },
+  },
+  cancellation_follow_up: {
+    name: 'Cancellation follow-up',
+    description: 'Ask a customer whose order was cancelled whether you can help.',
+    libraryGoal: 'recover_sales',
+    category: 'post_purchase',
+    needs: ['orders'],
+    graph: {
+      trigger: { key: 'order_cancelled', filters: [] },
+      reEntry: DEFAULT_RE_ENTRY,
+      workflowFilters: [],
+      goal: { kind: 'placed_order' },
+      exitConditions: [],
+      firstStepKey: 'wait',
+      steps: {
+        wait: wait(DAY, 'ask'),
+        ask: send(
+          'marketing',
+          MARKETING_CHANNELS,
+          '{first_name}, আপনার অর্ডার #{order_number} বাতিল হয়েছে। কোনো সমস্যা হয়ে থাকলে আমাদের জানান, আমরা সাহায্য করব।',
+          'end',
+        ),
+        end,
+      },
+    },
+  },
 } satisfies Record<string, AutomationTemplate>;
 export type TemplateKey = keyof typeof automationTemplates;
