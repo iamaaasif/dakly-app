@@ -282,6 +282,8 @@ Create Messenger message opens the name, goal and Page step, with the first conn
 
 The image is an https link the shop already hosts, because the file upload that backs the social posts is not wired to campaigns. The estimate refreshes after each save, not on each key press.
 
+**Builder steps (CAMP-17).** A saved SMS or Messenger draft shows a step bar above its form and keeps the current step in the URL (`?step=goal` or `?step=content`). Goal holds the name, the nine goals and "Start from scratch" as cards, and for Messenger the Page. Content holds the message, with the SMS part count or the Messenger image and buttons, and a live preview. Continue saves what changed, then opens the next step; Save draft saves and stays. The audience, schedule, review and approve, and test send steps follow in their own PRs.
+
 Left out because the SMS builder does not have them either and no task owns them yet: the audience step (so a draft's segments are set through the API), the schedule and Approve controls, the AI writing helper and the test send. They are shared builder steps and should land once for every channel, with Messenger's 23 hour schedule limit (`CAMPAIGN_SCHEDULE_TOO_LATE`) shown on the schedule control. Button taps appear in results with CAMP-10.
 
 ### Missing design: AI voice calls (hidden, D3)

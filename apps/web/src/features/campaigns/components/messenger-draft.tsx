@@ -7,7 +7,9 @@ import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import type { ChannelConnection } from '@dakly/contracts/channels';
 import { Button } from '@dakly/ui/button';
 
+import { CampaignDraftShell } from './campaign-draft-shell';
 import { CampaignPageHeader } from './campaign-page-header';
+import { useCampaignStep } from './campaign-steps';
 import { MessengerContentFields } from './messenger-content-fields';
 import { MessengerDetailsFields } from './messenger-details-fields';
 import { MessengerEstimate } from './messenger-estimate';
@@ -23,82 +25,104 @@ export function MessengerDraft({
   campaign?: CampaignResponse;
   onBack?: () => void;
 }) {
-  const formId = useId();
-  const { form, submit, save, isDirty, opening } = useMessengerDraftForm(pages, campaign);
-  const busy = save.isPending || opening;
-  const saved = Boolean(campaign) && save.isSuccess && !isDirty;
-  const saveButton = (
-    <SaveButton
-      formId={formId}
-      isNew={!campaign}
-      loading={save.isPending}
-      disabled={opening || Boolean(campaign && !isDirty)}
-    />
-  );
-  const formElement = (
-    <form
-      id={formId}
-      onSubmit={submit}
-      className="max-w-xl min-w-0 space-y-4 rounded-lg border border-border bg-surface p-5"
-    >
-      <fieldset className="min-w-0 space-y-4" disabled={busy}>
-        <MessengerDetailsFields pages={pages} focusName={!campaign} />
-        {campaign && <MessengerContentFields />}
-      </fieldset>
-      <DraftStatus error={save.error?.message} message={status(opening, saved)} />
-      {campaign && saveButton}
-    </form>
-  );
+  const { goTo, next } = useCampaignStep();
+  const draft = useMessengerDraftForm(pages, campaign, () => next && goTo(next));
   return (
-    <FormProvider {...form}>
+    <FormProvider {...draft.form}>
       {campaign ? (
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,36rem)_minmax(0,22rem)]">
-          {formElement}
-          <Side pages={pages} campaign={campaign} />
-        </div>
+        <SavedDraft pages={pages} campaign={campaign} draft={draft} />
       ) : (
-        <>
-          <CampaignPageHeader
-            title="New campaign"
-            subtitle="Nothing is sent until you approve."
-            onBack={onBack}
-            backDisabled={busy}
-            action={saveButton}
-          />
-          {formElement}
-        </>
+        <NewDraft pages={pages} draft={draft} onBack={onBack} />
       )}
     </FormProvider>
   );
 }
 
+type Draft = ReturnType<typeof useMessengerDraftForm>;
+
+function SavedDraft({
+  pages,
+  campaign,
+  draft,
+}: {
+  pages: ChannelConnection[];
+  campaign: CampaignResponse;
+  draft: Draft;
+}) {
+  const { submit, saveDraft, save, isDirty, opening } = draft;
+  return (
+    <CampaignDraftShell
+      title={campaign.name}
+      channel="messenger"
+      formId={useId()}
+      onSubmit={submit}
+      onSaveDraft={saveDraft}
+      saving={save.isPending}
+      canSave={isDirty}
+      busy={save.isPending || opening}
+      error={save.error?.message}
+      message={save.isSuccess && !isDirty ? 'Draft saved.' : undefined}
+      fields={(step) =>
+        step === 'goal' ? (
+          <MessengerDetailsFields pages={pages} focusName={false} />
+        ) : (
+          <MessengerContentFields />
+        )
+      }
+      side={(step) => step === 'content' && <Side pages={pages} campaign={campaign} />}
+    />
+  );
+}
+
+function NewDraft({
+  pages,
+  draft,
+  onBack,
+}: {
+  pages: ChannelConnection[];
+  draft: Draft;
+  onBack?: () => void;
+}) {
+  const formId = useId();
+  const { submit, save, opening } = draft;
+  const busy = save.isPending || opening;
+  return (
+    <>
+      <CampaignPageHeader
+        title="New campaign"
+        subtitle="Nothing is sent until you approve."
+        onBack={onBack}
+        backDisabled={busy}
+        action={<SaveButton formId={formId} loading={save.isPending} disabled={opening} />}
+      />
+      <form
+        id={formId}
+        onSubmit={submit}
+        className="max-w-xl min-w-0 space-y-4 rounded-lg border border-border bg-surface p-5"
+      >
+        <fieldset className="min-w-0 space-y-4" disabled={busy}>
+          <MessengerDetailsFields pages={pages} focusName />
+        </fieldset>
+        <DraftStatus error={save.error?.message} message={opening ? 'Opening draft…' : undefined} />
+      </form>
+    </>
+  );
+}
+
 function SaveButton({
   formId,
-  isNew,
   loading,
   disabled,
 }: {
   formId: string;
-  isNew: boolean;
   loading: boolean;
   disabled: boolean;
 }) {
   return (
-    <Button
-      type="submit"
-      form={formId}
-      variant={isNew ? 'secondary' : 'primary'}
-      loading={loading}
-      disabled={disabled}
-    >
+    <Button type="submit" form={formId} variant="secondary" loading={loading} disabled={disabled}>
       Save draft
     </Button>
   );
-}
-
-function status(opening: boolean, saved: boolean) {
-  if (opening) return 'Opening draft…';
-  return saved ? 'Draft saved.' : undefined;
 }
 
 function DraftStatus({ error, message }: { error?: string; message?: string }) {
