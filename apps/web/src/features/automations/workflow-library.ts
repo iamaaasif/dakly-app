@@ -30,6 +30,7 @@ export function stepLabel(step: AutomationStep): string {
 
 export const minutesPerUnit = { minutes: 1, hours: 60, days: 1440 };
 export type DelayUnit = keyof typeof minutesPerUnit;
+export const delayUnits: DelayUnit[] = ['minutes', 'hours', 'days'];
 
 export function delayUnit(minutes: number): DelayUnit {
   if (minutes % minutesPerUnit.days === 0) return 'days';

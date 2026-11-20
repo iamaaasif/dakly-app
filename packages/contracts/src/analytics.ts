@@ -86,6 +86,47 @@ export type AnalyticsAutomationsResponse = {
   automations: AnalyticsAutomationRow[];
 };
 
+export type AnalyticsChannelDetail = {
+  channel: AnalyticsChannel;
+  revenuePoisha: string;
+  orders: number;
+  // Share of all money from marketing; null when marketing earned nothing.
+  sharePercent: number | null;
+  sent: number;
+  deliveredPercent: number | null;
+  // Null for SMS, which has no read receipts.
+  readPercent: number | null;
+  tapPercent: number | null;
+  costPoisha: string;
+  // Cost of one message in poisha, rounded; null when nothing was sent.
+  costPerMessagePoisha: string | null;
+  returnPerTaka: number | null;
+};
+
+export type AnalyticsChannelsResponse = {
+  current: DayRange;
+  channels: AnalyticsChannelDetail[];
+  social: { posts: number; reach: number };
+};
+
+export type AnalyticsSocialPostRow = {
+  id: string;
+  caption: string;
+  networks: ('facebook' | 'instagram')[];
+  publishedAt: string;
+  reach: number | null;
+  reactions: number | null;
+  comments: number | null;
+  // Dakly links in posts are not tracked yet, so link taps stay null until they are.
+  linkTaps: number | null;
+};
+
+export type AnalyticsSocialPostsResponse = {
+  current: DayRange;
+  posts: AnalyticsSocialPostRow[];
+  totals: { reach: number; reactions: number };
+};
+
 export type AnalyticsFunnelStep = { count: number; percentOfPrevious: number | null };
 
 export type AnalyticsOverviewResponse = {
