@@ -3,6 +3,8 @@ import { MetaGraphChannelDriver } from '@dakly/providers/channel/meta/meta-graph
 
 import { loadEnv } from '../platform/config/env';
 
+export const META_CHANNEL_DRIVER = Symbol('META_CHANNEL_DRIVER');
+
 export function createMetaChannelDriver() {
   const configuration = loadEnv().metaChannel;
   if (!configuration) return null;

@@ -156,6 +156,15 @@ export class MetaGraphChannelDriver
     );
   }
 
+  async unsubscribePage(pageId: string, accessToken: string): Promise<void> {
+    await this.request(
+      `${encodeURIComponent(pageId)}/subscribed_apps`,
+      {},
+      z.object({ success: z.literal(true) }),
+      { method: 'DELETE', signal: AbortSignal.timeout(requestTimeoutMs), accessToken },
+    );
+  }
+
   async isTokenValid(accessToken: string): Promise<boolean> {
     const result = await this.request(
       'debug_token',
@@ -193,7 +202,12 @@ export class MetaGraphChannelDriver
     path: string,
     query: Record<string, string>,
     schema: z.ZodType<T>,
-    options: { signal: AbortSignal; accessToken?: string; method?: 'POST'; body?: string },
+    options: {
+      signal: AbortSignal;
+      accessToken?: string;
+      method?: 'POST' | 'DELETE';
+      body?: string;
+    },
   ): Promise<T> {
     const url = new URL(path, graph);
     url.search = new URLSearchParams(query).toString();
