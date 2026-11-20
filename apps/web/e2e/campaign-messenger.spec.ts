@@ -94,7 +94,7 @@ test('builds a Messenger draft with an image and buttons', async ({ page, contex
     await page.getByRole('button', { name: 'Create Messenger message' }).click();
     await expect(page.getByLabel('Facebook Page')).toHaveValue(pageId);
     await page.getByLabel('Campaign name').fill('Eid offer');
-    await page.getByLabel('Goal').selectOption('seasonal');
+    await page.getByText('Seasonal campaign', { exact: true }).click();
     const created = page.waitForResponse(
       (result) => result.url().endsWith('/api/campaigns') && result.status() === 201,
     );
@@ -107,6 +107,10 @@ test('builds a Messenger draft with an image and buttons', async ({ page, contex
       (await send('patch', `/campaigns/${draft.id}`, { includeSegmentIds: [segmentId] })).status(),
     ).toBe(200);
     await page.reload();
+    await expect(page.getByLabel('Campaign name')).toHaveValue('Eid offer');
+    await capture(page, 'goal-step');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page).toHaveURL(/step=content$/);
     const estimate = page.getByRole('region', { name: 'Estimate' });
     await expect(estimate).toContainText('Will receive');
     await expect(estimate).toContainText('Messenger only allows a message');

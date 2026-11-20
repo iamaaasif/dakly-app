@@ -69,6 +69,11 @@ export const createStoreSchema = z.strictObject({
   billingCycle: z.enum(billingCycles),
 });
 export type CreateStoreInput = z.infer<typeof createStoreSchema>;
+export type SetupProfile = {
+  howYouSell: (typeof howYouSellOptions)[number][];
+  extensions: string[];
+  guideHidden: boolean;
+};
 export type StoreResponse = { id: string; name: string; slug: string | null; extensions: string[] };
 
 export const changeStoreSettingsSchema = z

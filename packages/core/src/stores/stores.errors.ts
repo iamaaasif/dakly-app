@@ -5,6 +5,10 @@ const STORE_ERRORS = {
     status: 403,
     message: 'Only the Owner or an Admin can change extensions',
   },
+  STORE_SETUP_DENIED: {
+    status: 403,
+    message: 'Only the Owner or an Admin can change the setup guide',
+  },
   STORE_APPROVAL_SETTING_DENIED: {
     status: 403,
     message: 'Only the Owner or an Admin can change who approves sends',

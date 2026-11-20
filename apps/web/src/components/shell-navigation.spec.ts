@@ -46,6 +46,7 @@ describe('navigationGroups', () => {
         canEditOrders: false,
         canViewCampaigns: false,
         canViewAnalytics: false,
+        canChangeAttributionWindow: false,
         canEditCampaigns: false,
         canViewSocial: permissions.canViewSocial ?? false,
         canEditSocial: false,
