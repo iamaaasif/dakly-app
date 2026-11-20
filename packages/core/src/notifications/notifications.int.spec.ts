@@ -151,7 +151,8 @@ async function openStream(viewer: Member, storeId: string, lastEventId?: string)
       text += chunk.value;
     isEnded = true;
   })().catch(() => (isEnded = true));
-  await until(async () => (await subscribers(storeId)) > 0);
+  // The server sends this comment once this stream has joined its channel.
+  await until(() => text.includes(': ready'));
   return {
     ids: () => [...text.matchAll(/^id: (.+)$/gm)].map((match) => match[1]),
     text: () => text,

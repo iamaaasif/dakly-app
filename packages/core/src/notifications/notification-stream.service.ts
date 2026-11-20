@@ -78,6 +78,9 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
         enqueue(async () =>
           (await this.notifications.listCreatedAfter(storeId, userId, lastEventId)).forEach(send),
         );
+      // Tells the client, and the tests, that the stream is subscribed and replayed, since the
+      // HTTP headers go out before Valkey confirms the subscription.
+      enqueue(async () => subscriber.next({ comment: 'ready' }));
       const heartbeat = setInterval(
         () =>
           enqueue(async () => {
