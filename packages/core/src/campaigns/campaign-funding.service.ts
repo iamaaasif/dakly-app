@@ -7,8 +7,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { WalletService } from '../wallets/wallet.service';
-import { approvalKey, marketingSmsText, replacementKey } from './campaign-sms';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
+import { approvalKey, marketingSmsText } from './campaigns.service';
 
 const ACTOR = { kind: 'system' } as const;
 const WALLET = 'sms_credits';
@@ -67,7 +67,7 @@ export class CampaignFundingService {
       await this.wallets.reserve(storeId, {
         wallet: WALLET,
         quantity: needed,
-        idempotencyKey: replacementKey(key),
+        idempotencyKey: approvalKey(id, campaign.approvedAt, 'with-opt-out'),
         actor: ACTOR,
       });
     }

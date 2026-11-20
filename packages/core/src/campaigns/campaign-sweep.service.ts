@@ -14,7 +14,7 @@ const CURSOR_LIFETIME_SECONDS = (7 * DAY_MS) / 1000;
 const STORE_CURSOR = 'campaign-start:store';
 const MAX_WAITING_BATCHES = 200;
 
-export type CampaignBatch = { storeId: string; campaignId: string; lane: string };
+export type CampaignBatch = { storeId: string; lane: 'sending' | 'cancelled' };
 
 @Injectable()
 export class CampaignSweepService {
@@ -26,13 +26,18 @@ export class CampaignSweepService {
     @Inject(ValkeyClient) private readonly valkey: ValkeyClient,
   ) {}
 
+  async nextForLane(storeId: string, lane: CampaignBatch['lane']) {
+    const expired = new Date(this.clock.now().getTime() - CAMPAIGN_CLAIM_MS);
+    const work = await this.repository.firstWork(storeId, expired);
+    return work.find(({ status }) => status === lane)?.campaignId;
+  }
+
   async startDue(
     waiting = 0,
     enqueue: (batches: CampaignBatch[]) => Promise<void> = async () => undefined,
   ): Promise<void> {
-    const room = MAX_WAITING_BATCHES - waiting;
-    if (room <= 0) return;
-    const limit = Math.min(STORES_PER_TICK, Math.max(1, Math.floor(room / 2)));
+    const limit = Math.min(STORES_PER_TICK, Math.floor((MAX_WAITING_BATCHES - waiting) / 2));
+    if (limit <= 0) return;
     const now = this.clock.now();
     const after = await this.valkey.connection.get(STORE_CURSOR);
     let stores = await this.repository.listDueStores(now, after, limit);
@@ -43,9 +48,7 @@ export class CampaignSweepService {
       try {
         await this.repository.startDueInStore(storeId, now);
         const work = await this.repository.firstWork(storeId, before);
-        batches.push(
-          ...work.map(({ campaignId, status: lane }) => ({ storeId, campaignId, lane })),
-        );
+        batches.push(...work.map(({ status: lane }) => ({ storeId, lane })));
       } catch (error) {
         this.logger.error({ storeId }, 'Campaign starts failed for store');
         const { jobId } = jobLogBindings();

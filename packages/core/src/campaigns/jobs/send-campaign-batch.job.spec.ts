@@ -2,6 +2,7 @@ import type { Queue } from 'bullmq';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { CampaignSenderService } from '../campaign-sender.service';
+import type { CampaignSweepService } from '../campaign-sweep.service';
 import { SendCampaignBatchJob } from './send-campaign-batch.job';
 
 const payload = {
@@ -15,6 +16,9 @@ function buildJob(sender: { sendBatch: CampaignSenderService['sendBatch'] }) {
   return new SendCampaignBatchJob(
     sender as unknown as CampaignSenderService,
     queue as unknown as Queue,
+    {
+      nextForLane: vi.fn().mockResolvedValue(payload.campaignId),
+    } as unknown as CampaignSweepService,
   );
 }
 
@@ -24,7 +28,9 @@ describe('campaign batch job', () => {
     const sender = { sendBatch: vi.fn().mockResolvedValue(next) };
     const job = buildJob(sender);
 
-    expect(await job.handle(payload)).toEqual({ delayUntil: next.getTime() });
+    expect(await job.handle({ storeId: payload.storeId, lane: 'sending' })).toEqual({
+      delayUntil: next.getTime(),
+    });
     expect(sender.sendBatch).toHaveBeenCalledWith(
       payload.storeId,
       payload.campaignId,
@@ -36,6 +42,6 @@ describe('campaign batch job', () => {
     const sender = { sendBatch: vi.fn().mockResolvedValue(null) };
     const job = buildJob(sender);
 
-    expect(await job.handle(payload)).toBeUndefined();
+    expect(await job.handle({ storeId: payload.storeId, lane: 'sending' })).toBeUndefined();
   });
 });

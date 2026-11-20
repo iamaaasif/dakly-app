@@ -26,7 +26,6 @@ import {
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { WalletService } from '../wallets/wallet.service';
-import { approvalKey, marketingSmsText, replacementKey } from './campaign-sms';
 import { campaignError, type CampaignErrorCode } from './campaigns.errors';
 import {
   type Campaign,
@@ -261,7 +260,7 @@ export class CampaignsService {
     if (unsettled > 0) return false;
     if (cancelledAt && !(await this.repository.markSettled(storeId, id, cancelledAt))) return false;
     const key = approvalKey(id, approvedAt);
-    const replacement = replacementKey(key);
+    const replacement = approvalKey(id, approvedAt, 'with-opt-out');
     const adjusted = await this.wallets.findByIdempotencyKey(storeId, replacement);
     const reservation = await this.wallets.reservationFor(
       storeId,
@@ -379,6 +378,17 @@ export class CampaignsService {
     await this.find(storeId, campaignId);
     return campaignError(code);
   }
+}
+
+// Holds the approval time, so a campaign approved again after an edit reserves anew.
+export function approvalKey(campaignId: string, approvedAt: Date, suffix?: 'with-opt-out'): string {
+  const key = `campaign-approval:${campaignId}:${approvedAt.toISOString()}`;
+  return suffix ? `${key}:${suffix}` : key;
+}
+
+// CAMP-R4: every marketing SMS ends with the recipient's opt-out link.
+export function marketingSmsText(text: string, optOutUrl: string): string {
+  return `${text}\n${optOutUrl}`;
 }
 
 // Counts the opt-out link at its real length, so the reservation covers what the sender sends.

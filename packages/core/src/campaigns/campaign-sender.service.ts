@@ -7,16 +7,14 @@ import { MessagingService, type SentMessage } from '../messaging/messaging.servi
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
-import { OutboxService } from '../platform/outbox/outbox.service';
 import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService, type SkipReason } from '../sending/send-policy.service';
 import { SmsService } from '../sms/sms.service';
 import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
 import { CampaignFundingService } from './campaign-funding.service';
 import { CampaignSendingRepository, type ClaimableRecipient } from './campaign-sending.repository';
-import { marketingSmsText } from './campaign-sms';
 import { CampaignsRepository, type LockedCampaign } from './campaigns.repository';
-import { CampaignsService } from './campaigns.service';
+import { CampaignsService, marketingSmsText } from './campaigns.service';
 
 const BATCH_SIZE = 200;
 export const CAMPAIGN_CLAIM_MS = 5 * MINUTE_MS;
@@ -56,7 +54,6 @@ export class CampaignSenderService {
     @Inject(CampaignsService) private readonly service: CampaignsService,
     @Inject(CampaignFundingService) private readonly funding: CampaignFundingService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
-    @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -69,13 +66,13 @@ export class CampaignSenderService {
     const deadline = performance.now() + MINUTE_MS / 4;
     for (let position = 0; position < BATCH_SIZE; position++) {
       const claim = await this.claimNext(storeId, campaignId, hasLease);
+      if (claim.kind === 'send') await this.deliver(storeId, claim, hasLease);
       if (!hasLease()) return null;
       if (claim.kind === 'stop') {
         await this.finish(storeId, campaignId);
         return null;
       }
       if (claim.kind === 'defer') return claim.until;
-      if (claim.kind === 'send') await this.deliver(storeId, claim, hasLease);
       if (claim.kind === 'receipt') await this.reconcileReceipt(storeId, campaignId, claim);
       if (performance.now() >= deadline) break;
     }
@@ -103,7 +100,7 @@ export class CampaignSenderService {
         if (campaign.status === 'cancelled' || recipient.sendAttempts >= SEND_ATTEMPTS)
           return this.skipSubmission(storeId, campaign, { recipient });
       }
-      return this.claimForSubmission(storeId, campaign, recipient);
+      return this.claimForSubmission(storeId, campaign, recipient, hasLease);
     });
   }
 
@@ -116,6 +113,7 @@ export class CampaignSenderService {
     storeId: string,
     campaign: LockedCampaign,
     recipient: ClaimableRecipient,
+    hasLease: () => boolean,
   ): Promise<Claim> {
     const { id, contactId, destinationAddress } = recipient;
     const resend = recipient.status === 'sending';
@@ -133,7 +131,7 @@ export class CampaignSenderService {
         recipient,
         reason: decision.action === 'skip' ? decision.reason : 'no_address',
       });
-    return this.saveSubmission(storeId, campaign, { recipient, destination, settings });
+    return this.saveSubmission(storeId, campaign, { recipient, destination, settings }, hasLease);
   }
 
   private async skipSubmission(
@@ -160,6 +158,7 @@ export class CampaignSenderService {
     storeId: string,
     campaign: LockedCampaign,
     input: { recipient: ClaimableRecipient; destination: string; settings: StoreSendingSettings },
+    hasLease: () => boolean,
   ): Promise<Claim> {
     const { recipient, destination, settings } = input;
     const { name: sender } = await this.messaging.prepareSender(storeId);
@@ -178,6 +177,7 @@ export class CampaignSenderService {
       settings,
     });
     const { decision, at } = decide();
+    if (!hasLease()) return { kind: 'stop' };
     if (decision.action === 'skip')
       return this.skipSubmission(storeId, campaign, { recipient, reason: decision.reason });
     if (decision.action === 'defer' && recipient.optOutLinkCode)
@@ -305,8 +305,10 @@ export class CampaignSenderService {
       !current ||
       !hasLease() ||
       this.clock.now().getTime() - claimedAt.getTime() >= CAMPAIGN_CLAIM_MS
-    )
+    ) {
+      await this.recordRefusal(storeId, submission, true);
       return;
+    }
     let receipt: SentMessage;
     try {
       receipt = await this.messaging.send(
@@ -351,13 +353,16 @@ export class CampaignSenderService {
     );
   }
 
-  private async recordRefusal(storeId: string, submission: Submission): Promise<boolean> {
+  private async recordRefusal(storeId: string, submission: Submission, unsubmitted = false) {
     return this.transaction.run(storeId, async () => {
       const campaign = await this.campaigns.lockCampaign(storeId, submission.campaignId, 'share');
       if (!campaign || !(canProcess(campaign) || campaign.status === 'paused')) return false;
-      const { id, sendAttempts } = submission.recipient;
-      const claim = { status: 'sending', claimedAt: submission.claimedAt } as const;
       const cancelled = campaign.status === 'cancelled';
+      const { recipient, claimedAt } = submission;
+      if (unsubmitted)
+        return this.repository.restoreUnsubmitted(storeId, recipient, claimedAt, cancelled);
+      const { id, sendAttempts } = recipient;
+      const claim = { status: 'sending', claimedAt } as const;
       const exhausted = !cancelled && sendAttempts + 1 >= SEND_ATTEMPTS;
       if (!exhausted && !cancelled) {
         const requeued = await this.repository.changeRecipient(storeId, id, claim, {
@@ -404,12 +409,6 @@ export class CampaignSenderService {
         { status: 'sending' },
         { status: 'sent', finishedAt: now, updatedAt: now },
       );
-      await this.outbox.publish({
-        type: 'campaign.sent',
-        storeId,
-        occurredAt: now.toISOString(),
-        payload: { campaignId: id },
-      });
     });
   }
 }

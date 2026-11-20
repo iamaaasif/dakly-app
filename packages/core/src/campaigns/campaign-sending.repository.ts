@@ -92,7 +92,7 @@ export class CampaignSendingRepository {
       tx
         .selectDistinctOn([campaigns.status], {
           campaignId: campaigns.id,
-          status: campaigns.status,
+          status: sql<'sending' | 'cancelled'>`${campaigns.status}`,
         })
         .from(campaigns)
         .where(and(eq(campaigns.storeId, storeId), or(active, cancelled)))
@@ -156,6 +156,29 @@ export class CampaignSendingRepository {
         ),
     );
     return row !== undefined;
+  }
+
+  restoreUnsubmitted(
+    storeId: string,
+    prior: ClaimableRecipient,
+    claimedAt: Date,
+    cancelled: boolean,
+  ) {
+    const { id, status, claimedAt: previousClaim, dispatchStartedAt, sendAttempts } = prior;
+    return this.changeRecipient(
+      storeId,
+      id,
+      { status: 'sending', claimedAt, uncertainReceipt: null },
+      {
+        status: cancelled && status === 'queued' ? 'cancelled' : status,
+        claimedAt: previousClaim,
+        dispatchStartedAt,
+        sendAttempts,
+        smsCredits: null,
+        errorCode: null,
+        failedAt: null,
+      },
+    );
   }
 
   // Guarded on the status, and on the claim when one is given, so a stale worker cannot overwrite

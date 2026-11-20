@@ -229,7 +229,7 @@ describe('Campaign sender (Postgres)', () => {
     try {
       await sweep.handle({});
       let waiting = await queue.getWaiting();
-      expect(waiting.map(({ data }) => data)).toEqual([{ storeId, campaignId: active.id }]);
+      expect(waiting.map(({ data }) => data)).toEqual([{ storeId, lane: 'sending' }]);
 
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
       await sweep.handle({});
@@ -238,8 +238,8 @@ describe('Campaign sender (Postgres)', () => {
       expect(waiting.every(({ name }) => name === SEND_CAMPAIGN_BATCH)).toBe(true);
       expect(waiting.map(({ data }) => data)).toEqual(
         expect.arrayContaining([
-          { storeId, campaignId: active.id },
-          { storeId, campaignId: cancelled.id },
+          { storeId, lane: 'sending' },
+          { storeId, lane: 'cancelled' },
         ]),
       );
     } finally {
@@ -289,11 +289,48 @@ describe('Campaign sender (Postgres)', () => {
       expect(current).toHaveBeenCalledTimes(1);
       expect(calls).toHaveLength(0);
       expect(await settlementRows(id)).toEqual([]);
+      expect(await sendAttempts(id)).toEqual([0]);
+      expect((await recipients(id)).map(({ status }) => status)).toEqual(['queued']);
+      await campaigns.cancel(storeId, id, actor);
+      expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 1 }]);
     } finally {
       current.mockRestore();
+    }
+  });
+
+  it('preserves the earlier ambiguous claim when a retry is stopped before the provider', async () => {
+    const { id } = await unknownFirstSend();
+    const readClaim = async () =>
+      (
+        await admin.pool.query(
+          'select claimed_at, dispatch_started_at, send_attempts from campaign_recipients where campaign_id=$1',
+          [id],
+        )
+      ).rows[0];
+    const prior = await readClaim();
+    clockNow = new Date(noon.getTime() + 6 * MINUTE);
+    const repository = app.get(CampaignSendingRepository);
+    const check = repository.isCurrentClaim.bind(repository);
+    let hasLease = true;
+    const current = vi
+      .spyOn(repository, 'isCurrentClaim')
+      .mockImplementationOnce(async (...args) => {
+        const result = await check(...args);
+        hasLease = false;
+        return result;
+      });
+    try {
+      expect(await sender.sendBatch(storeId, id, () => hasLease)).toBeNull();
+      expect(calls).toHaveLength(1);
+      expect(await readClaim()).toEqual(prior);
       await campaigns.cancel(storeId, id, actor);
-      clockNow = new Date(noon.getTime() + 6 * MINUTE);
       await sender.sendBatch(storeId, id);
+      expect(await settlementRows(id)).toEqual([
+        { kind: 'release', quantity_delta: 1 },
+        { kind: 'charge', quantity_delta: -1 },
+      ]);
+    } finally {
+      current.mockRestore();
     }
   });
 
@@ -326,10 +363,16 @@ describe('Campaign sender (Postgres)', () => {
     vi.stubEnv('SHORT_LINK_BASE_URL', 'https://s.test');
     resetEnvForTests();
     let hold: string | undefined;
+    let newerId: string | undefined;
     try {
       const before = await wallets.balance(storeId, sms);
       const { id, phones } = await sendingCampaign(2, null, 'a'.repeat(134));
       expect(await wallets.balance(storeId, sms)).toBe(before - 2);
+      newerId = (await sendingCampaign(1)).id;
+      await admin.pool.query('update campaigns set started_at=$2 where id=$1', [
+        newerId,
+        new Date(noon.getTime() + MINUTE),
+      ]);
       const previous = await sendCredit('before-pause');
       const spare = await wallets.balance(storeId, sms);
       hold = (
@@ -350,7 +393,7 @@ describe('Campaign sender (Postgres)', () => {
       const queue = app.get<Queue>(getQueueToken(QUEUES.campaign));
       await app.get(StartDueCampaignsJob).handle({});
       const waiting = await queue.getWaiting();
-      expect(waiting.map(({ data }) => data)).toContainEqual({ storeId, campaignId: id });
+      expect(waiting.map(({ data }) => data)).toContainEqual({ storeId, lane: 'sending' });
       for (const pending of waiting) await pending.remove();
       await expect(sender.sendBatch(storeId, id)).resolves.toBeNull();
       const readPause = async () =>
@@ -367,6 +410,12 @@ describe('Campaign sender (Postgres)', () => {
       });
       expect(calls).toHaveLength(0);
       expect(await settlementRows(id)).toEqual([]);
+      await app.get(StartDueCampaignsJob).handle({});
+      const [continuation] = await queue.getWaiting();
+      expect(continuation?.data).toEqual({ storeId, lane: 'sending' });
+      expect(await app.get(CampaignSendingRepository).firstWork(storeId, noon)).toEqual([
+        { campaignId: newerId, status: 'sending' },
+      ]);
       await deliverCredit(previous.entryId);
       expect(await readPause()).toMatchObject({ status: 'paused', pause_reason: 'balance' });
 
@@ -386,8 +435,10 @@ describe('Campaign sender (Postgres)', () => {
       expect(calls).toHaveLength(0);
       expect(await settlementRows(id)).toEqual([{ kind: 'release', quantity_delta: 2 }]);
 
-      expect(await sender.sendBatch(storeId, id)).toBeNull();
+      expect(await app.get(SendCampaignBatchJob).handle(continuation!.data)).toBeUndefined();
+      await continuation!.remove();
       expect(calls.map(({ to }) => to).sort()).toEqual(phones);
+      expect((await recipients(newerId)).map(({ status }) => status)).toEqual(['queued']);
       expect(await readPause()).toMatchObject({ status: 'sent', pause_reason: null });
       expect(await settlementRows(id)).toEqual([
         { kind: 'release', quantity_delta: 2 },
@@ -395,6 +446,7 @@ describe('Campaign sender (Postgres)', () => {
         { kind: 'charge', quantity_delta: -4 },
       ]);
     } finally {
+      if (newerId) await campaigns.cancel(storeId, newerId, actor);
       if (hold)
         await wallets.release(storeId, {
           reservationId: hold,
@@ -406,7 +458,7 @@ describe('Campaign sender (Postgres)', () => {
     }
   });
 
-  it('sends each recipient its opt-out link, then charges what was sent and emits campaign.sent', async () => {
+  it('sends each recipient its opt-out link and charges what was sent', async () => {
     const before = await wallets.balance(storeId, 'sms_credits');
     const { id, phones } = await sendingCampaign(3);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
@@ -434,11 +486,6 @@ describe('Campaign sender (Postgres)', () => {
       { kind: 'charge', quantity_delta: -3 },
     ]);
     expect(await wallets.balance(storeId, 'sms_credits')).toBe(before - 3);
-    const { rows: events } = await admin.pool.query(
-      "select payload from outbox_events where store_id=$1 and type='campaign.sent' and payload->>'campaignId'=$2",
-      [storeId, id],
-    );
-    expect(events).toHaveLength(1);
   });
 
   it.each(['sent', 'cancelled'] as const)(
@@ -642,7 +689,7 @@ describe('Campaign sender (Postgres)', () => {
       await contacted.promise;
       await campaigns.cancel(storeId, id, actor);
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
-      await app.get(SendCampaignBatchJob).handle({ storeId, campaignId: id });
+      await app.get(SendCampaignBatchJob).handle({ storeId, lane: 'cancelled' });
       expect((await recipients(id)).map((row) => row.status)).toEqual(['failed']);
 
       reply.resolve(receipt);
@@ -682,7 +729,7 @@ describe('Campaign sender (Postgres)', () => {
       await campaigns.cancel(storeId, id, actor);
       reply.reject(new SmsSendRefused());
       await batch;
-      await app.get(SendCampaignBatchJob).handle({ storeId, campaignId: id });
+      await app.get(SendCampaignBatchJob).handle({ storeId, lane: 'cancelled' });
 
       expect(calls).toHaveLength(1);
       expect((await recipients(id)).map((row) => row.status)).toEqual(['failed']);
@@ -1049,12 +1096,12 @@ describe('Campaign sender (Postgres)', () => {
       await campaigns.cancel(storeId, id, actor);
       const settle = app.get(SendCampaignBatchJob);
 
-      await settle.handle({ storeId, campaignId: id });
+      await settle.handle({ storeId, lane: 'cancelled' });
 
       expect(await settlementRows(id)).toEqual([]);
       clockNow = new Date(noon.getTime() + 6 * MINUTE);
-      await settle.handle({ storeId, campaignId: id });
-      await settle.handle({ storeId, campaignId: id });
+      await settle.handle({ storeId, lane: 'cancelled' });
+      await settle.handle({ storeId, lane: 'cancelled' });
 
       expect(calls).toHaveLength(1);
       expect(await outcome(id)).toEqual([
@@ -1157,7 +1204,7 @@ describe('Campaign sender (Postgres)', () => {
 
         try {
           if (state === 'cancelled')
-            await app.get(SendCampaignBatchJob).handle({ storeId, campaignId: id });
+            await app.get(SendCampaignBatchJob).handle({ storeId, lane: 'cancelled' });
           else expect(await sender.sendBatch(storeId, id)).toBeNull();
 
           expect(lookup).toHaveBeenCalledExactlyOnceWith({
