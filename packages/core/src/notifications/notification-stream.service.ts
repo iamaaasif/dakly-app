@@ -63,9 +63,8 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
           .catch((error: unknown) => {
             // Name and step only: the error message can carry ids or row data.
             this.logger.error(
-              `Notification stream failed at ${stepName}: ${error instanceof Error ? `${error.name} ${error.message}` : 'unknown error'}`,
+              `Notification stream failed at ${stepName}: ${error instanceof Error ? error.name : 'unknown error'}`,
             );
-            console.error('STREAMDIAG', stepName, error);
             subscriber.error(error);
           });
       };
@@ -142,7 +141,9 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
 
   private connection(): Redis {
     if (this.subscriber) return this.subscriber;
-    const subscriber = this.valkey.connection.duplicate();
+    // The ready check sends INFO, which a connection already in subscribe mode rejects. A subscribe
+    // that lands before the check finishes then fails the stream and resets the connection.
+    const subscriber = this.valkey.connection.duplicate({ enableReadyCheck: false });
     subscriber.on('error', () => this.logger.error('Valkey subscriber connection failed'));
     subscriber.on('message', (channel: string, message: string) => {
       const ids = liveNotificationSchema.safeParse(message.split(' '));
