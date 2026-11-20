@@ -28,4 +28,16 @@ describe('Switch', () => {
     await user.click(toggle);
     expect(onCheckedChange).toHaveBeenCalledWith(false);
   });
+
+  it('ignores clicks and cannot be focused when disabled', async () => {
+    const user = userEvent.setup();
+    const onCheckedChange = vi.fn();
+    render(<Switch checked={false} disabled onCheckedChange={onCheckedChange} />);
+    const toggle = screen.getByRole('switch');
+    await user.click(toggle);
+    await user.tab();
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    expect(document.activeElement).not.toBe(toggle);
+    expect(onCheckedChange).not.toHaveBeenCalled();
+  });
 });

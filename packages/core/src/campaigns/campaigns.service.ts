@@ -6,6 +6,7 @@ import {
   smsCampaignContentSchema,
 } from '@dakly/contracts/campaigns';
 import type {
+  CampaignChannel,
   CampaignEstimateResponse,
   CampaignListQuery,
   CampaignListResponse,
@@ -198,7 +199,6 @@ export class CampaignsService {
       const campaign = await this.repository.lockDraft(storeId, campaignId);
       if (!campaign) throw await this.refusal(storeId, campaignId, 'CAMPAIGN_NOT_DRAFT');
       if (!campaign.content.text) throw campaignError('CAMPAIGN_TEXT_EMPTY');
-      if (campaign.channel !== 'sms') throw campaignError('CAMPAIGN_CHANNEL_NOT_SENDABLE');
       const now = this.clock.now();
       if (campaign.scheduledFor && campaign.scheduledFor <= now)
         throw campaignError('CAMPAIGN_SEND_TIME_PASSED');
@@ -236,7 +236,7 @@ export class CampaignsService {
       });
       await this.settleReservation(
         storeId,
-        { id: campaignId, approvedAt: campaign.approvedAt! },
+        { id: campaignId, channel: campaign.channel, approvedAt: campaign.approvedAt! },
         actor,
       );
       return draft;
@@ -274,7 +274,12 @@ export class CampaignsService {
       if (campaign.approvedAt)
         await this.settleReservation(
           storeId,
-          { id: campaignId, approvedAt: campaign.approvedAt, cancelledAt: now },
+          {
+            id: campaignId,
+            channel: campaign.channel,
+            approvedAt: campaign.approvedAt,
+            cancelledAt: now,
+          },
           actor,
         );
       return toCampaignResponse(cancelled);
@@ -304,12 +309,19 @@ export class CampaignsService {
   // The caller holds the campaign lock. Take the wallet lock last.
   async settleReservation(
     storeId: string,
-    { id, approvedAt, cancelledAt }: { id: string; approvedAt: Date; cancelledAt?: Date },
+    {
+      id,
+      channel,
+      approvedAt,
+      cancelledAt,
+    }: { id: string; channel: CampaignChannel; approvedAt: Date; cancelledAt?: Date },
     actor: Actor,
   ): Promise<boolean> {
     const { unsettled, chargedCredits } = await this.repository.settlementTotals(storeId, id);
     if (unsettled > 0) return false;
     if (cancelledAt && !(await this.repository.markSettled(storeId, id, cancelledAt))) return false;
+    // Only SMS holds credits.
+    if (channel !== 'sms') return true;
     const key = approvalKey(id, approvedAt);
     const replacement = approvalKey(id, approvedAt, 'with-opt-out');
     const adjusted = await this.wallets.findByIdempotencyKey(storeId, replacement);

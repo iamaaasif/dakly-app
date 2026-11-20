@@ -25,10 +25,6 @@ const CAMPAIGN_ERRORS = {
     status: 400,
     message: 'That change does not fit this campaign’s channel',
   },
-  CAMPAIGN_CHANNEL_NOT_SENDABLE: {
-    status: 409,
-    message: 'Messenger campaigns cannot be approved yet',
-  },
   CAMPAIGN_APPROVAL_DENIED: {
     status: 403,
     message: 'Only an owner or admin can approve sends in this shop',
