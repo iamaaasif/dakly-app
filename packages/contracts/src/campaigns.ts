@@ -190,6 +190,20 @@ export const campaignListQuerySchema = z
     { path: ['createdThrough'], message: 'End date must be on or after the start date' },
   );
 
+export const campaignOutcomes = [
+  'ordered',
+  'tapped',
+  'read',
+  'delivered',
+  'failed',
+  'opted_out',
+] as const;
+export const campaignCustomersQuerySchema = z.strictObject({
+  outcome: z.enum(campaignOutcomes),
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
 export type CampaignChannel = (typeof campaignChannels)[number];
 export type CampaignGoal = (typeof campaignGoals)[number];
 export type CampaignStatus = (typeof campaignStatuses)[number];
@@ -233,6 +247,33 @@ export type CampaignCounts = {
   tapped: number;
   failed: number;
   countedAt: string | null;
+};
+export type CampaignOutcome = (typeof campaignOutcomes)[number];
+export type CampaignCustomersQuery = z.infer<typeof campaignCustomersQuerySchema>;
+// One row per person for an outcome. `at` is when it happened; an order also carries its value.
+export type CampaignCustomerResponse = {
+  contactId: string;
+  name: string | null;
+  at: string | null;
+  orderValuePoisha: string | null;
+};
+export type CampaignCustomersResponse = {
+  items: CampaignCustomerResponse[];
+  nextCursor: string | null;
+};
+// Money is integer poisha as strings. returnPerTaka is whole ৳ earned per ৳1 spent, rounded as the
+// Analytics pages do, and null while nothing has been spent.
+export type CampaignResultsResponse = {
+  costPoisha: string;
+  returnPerTaka: number | null;
+  // The shop's attribution window; orders placed until it ends can still count.
+  attributionWindowDays: number;
+  // Null until the campaign has finished sending.
+  resultsFinalAt: string | null;
+  failureReasons: { code: string; count: number }[];
+  // Failed people on another channel who agreed to SMS and have a phone.
+  smsFallbackCount: number;
+  optedOutCount: number;
 };
 export type CampaignListResponse = { items: CampaignResponse[]; nextCursor: string | null };
 // SMS is counted in credits, one per part, and has no poisha rate yet, so costPoisha is 0.

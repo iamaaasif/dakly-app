@@ -106,13 +106,13 @@ describe('navigationGroups', () => {
     ]);
   });
 
-  it('shows the Social hub only to people who can view social posts', () => {
+  it('shows the Social hub and My posts only to people who can view social posts', () => {
     const links = (canViewSocial: boolean) =>
       navigationGroups(makeSession({ canViewSocial }))
         .find((group) => group.heading === 'Social auto post')
         ?.links.filter((link) => link.visible)
         .map((link) => link.href);
-    expect(links(true)).toEqual(['/social']);
+    expect(links(true)).toEqual(['/social', '/social/posts']);
     expect(links(false)).toEqual([]);
   });
 
