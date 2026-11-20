@@ -16,8 +16,8 @@ import { statusLabels, triggerLabels } from '../automation-labels';
 import type { SettingsInput } from '../workflow-settings-form';
 import { WorkflowEntrySettings } from './workflow-entry-settings';
 import { WorkflowPageHeader } from './workflow-page-header';
+import { WorkflowPublishDialog } from './workflow-publish-dialog';
 import { WorkflowStepSettings } from './workflow-step-settings';
-import { SessionDialog } from '@/components/session-dialog';
 
 export function WorkflowSettings({ id }: { id: string }) {
   const workflow = useAutomation(id);
@@ -133,26 +133,14 @@ function SettingsForm(props: SettingsProps) {
         </fieldset>
       </form>
       {editor.count !== undefined && (
-        <SessionDialog
-          open
-          title={paused ? 'Publish and enable workflow?' : 'Publish workflow?'}
+        <WorkflowPublishDialog
+          count={editor.count}
+          paused={paused}
+          error={editor.error}
+          pending={editor.pending}
           onClose={editor.close}
-          closeDisabled={editor.pending}
-        >
-          <p>
-            {editor.count === 1 ? '1 person is' : `${editor.count} people are`} in this workflow
-            now.
-          </p>
-          <p className="mt-2 text-sm text-text-muted">People keep their current version.</p>
-          {editor.error && (
-            <p role="alert" className="mt-2 text-danger">
-              {editor.error}
-            </p>
-          )}
-          <Button className="mt-4" onClick={editor.start} loading={editor.pending}>
-            Publish workflow
-          </Button>
-        </SessionDialog>
+          onPublish={editor.start}
+        />
       )}
     </FormProvider>
   );

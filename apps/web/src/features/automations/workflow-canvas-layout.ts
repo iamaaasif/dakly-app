@@ -38,10 +38,14 @@ export type CanvasNode = {
 
 type CanvasEdge = {
   id: string;
+  from: string;
+  to: string;
   path: string;
   label?: string;
   labelX: number;
   labelY: number;
+  midX: number;
+  midY: number;
 };
 
 export type CanvasLayout = {
@@ -244,10 +248,15 @@ export function layoutWorkflow(graph: AutomationGraph): CanvasLayout {
     const target = spots.get(to)!;
     return {
       id: `${index}:${from}:${to}`,
+      from,
+      to,
       path: routePath(routes[index]!, spots),
       label,
       labelX: target.centerX,
       labelY: target.top - ROW_GAP / 4,
+      // Where the add button of this line sits: above the label, in the last gap before the target.
+      midX: target.centerX,
+      midY: target.top - (label ? (ROW_GAP * 3) / 4 : ROW_GAP / 2),
     };
   });
   return {
