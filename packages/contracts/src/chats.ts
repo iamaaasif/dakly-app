@@ -94,6 +94,7 @@ export type TakeOverConversationInput = z.infer<typeof takeOverConversationSchem
 export type ConversationResponse = {
   id: string;
   contactId: string;
+  contactName: string | null;
   channel: (typeof chatChannels)[number];
   status: (typeof conversationStatuses)[number];
   responder: (typeof conversationResponders)[number];
@@ -118,4 +119,11 @@ export type ConversationMessageResponse = {
   sourceType: (typeof messageSourceTypes)[number];
   createdAt: string;
   sentAt: string | null;
+};
+
+export type ConversationCountsResponse = {
+  all: number;
+  needsYou: number;
+  aiHandling: number;
+  followUp: number;
 };

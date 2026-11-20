@@ -32,6 +32,7 @@ describe('navigationGroups', () => {
   function makeSession(permissions: {
     canViewOrders?: boolean;
     canViewProducts?: boolean;
+    canViewSocial?: boolean;
   }): SessionContext {
     return {
       user: { id: 'user-1', name: 'Test User' },
@@ -45,10 +46,14 @@ describe('navigationGroups', () => {
         canEditOrders: false,
         canViewCampaigns: false,
         canEditCampaigns: false,
+        canViewSocial: permissions.canViewSocial ?? false,
+        canEditSocial: false,
         canViewAutomations: false,
         canEditAutomations: false,
         canViewCustomers: true,
         canCreateCustomer: false,
+        canViewChats: true,
+        canEditChats: true,
         canViewSegments: true,
         canEditSegments: false,
         canApproveSupport: false,
@@ -93,9 +98,20 @@ describe('navigationGroups', () => {
       'Customers',
       'Sales',
       'Marketing',
+      'Social auto post',
       'Store information',
       'Configuration',
     ]);
+  });
+
+  it('shows the Social hub only to people who can view social posts', () => {
+    const links = (canViewSocial: boolean) =>
+      navigationGroups(makeSession({ canViewSocial }))
+        .find((group) => group.heading === 'Social auto post')
+        ?.links.filter((link) => link.visible)
+        .map((link) => link.href);
+    expect(links(true)).toEqual(['/social']);
+    expect(links(false)).toEqual([]);
   });
 
   it('handles session without active store', () => {

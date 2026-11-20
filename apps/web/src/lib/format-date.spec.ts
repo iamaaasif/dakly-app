@@ -5,6 +5,8 @@ import {
   formatDate,
   formatDateTime,
   formatRelativeTime,
+  formatShortDate,
+  formatShortDateTime,
   formatTime,
   localHour,
 } from './format-date';
@@ -141,5 +143,18 @@ describe('formatRelativeTime', () => {
     ['2026-11-18T12:05:00Z', 'in 5 minutes'],
   ])('formats %s as %s', (value, expected) => {
     expect(formatRelativeTime(value, now)).toBe(expected);
+  });
+});
+
+describe('formatShortDate', () => {
+  it('shows the Dhaka day', () => {
+    expect(formatShortDate('2026-11-05T19:00:00Z')).toBe('Nov 6');
+  });
+});
+
+describe('formatShortDateTime', () => {
+  it('shows the Dhaka day and time', () => {
+    expect(formatShortDateTime('2026-11-06T10:20:00Z')).toBe('Nov 6, 4:20 pm');
+    expect(formatShortDateTime('2026-11-06T20:00:00Z')).toBe('Nov 7, 2:00 am');
   });
 });

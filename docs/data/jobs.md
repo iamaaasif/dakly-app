@@ -83,18 +83,19 @@ BullMQ deduplicates batch jobs by store ID across waits, execution and retries. 
 
 ## sync
 
-| Job                          | Started by                                              | Payload                          | Makes a rerun harmless                                                                              |
-| ---------------------------- | ------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `recover-post-targets`       | Every minute                                            | none (sweep)                     | Finds stores with targets due within 24 hours and restores jobs under their original IDs.           |
-| `refresh-post-metrics`       | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                                                  |
-| `queue-channel-token-checks` | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due`                            |
-| `check-channel-token`        | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                                               |
-| `queue-conversation-returns` | Every minute                                            | none (sweep)                     | Reads up to 100 due IDs in stores with Chats enabled and queues one job per conversation and minute |
-| `return-conversation-to-ai`  | `queue-conversation-returns`                            | `storeId`, `conversationId`      | Checks the extension and deadline before returning the chat and clearing `ai_resumes_at`            |
-| `sync-whatsapp-templates`    | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                                                 |
-| `build-daily-metrics`        | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                                                      |
-| `build-order-summary`        | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run            |
-| `run-maintenance`            | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                                |
+| Job                                 | Started by                                              | Payload                          | Makes a rerun harmless                                                                                                         |
+| ----------------------------------- | ------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `recover-post-targets`              | Every minute                                            | none (sweep)                     | Finds stores with targets due within 24 hours and restores jobs under their original IDs.                                      |
+| `refresh-post-metrics`              | Sweep `due_post_metrics`, hourly                        | `storeId`, `postTargetId`        | Overwrites metrics                                                                                                             |
+| `queue-channel-token-checks`        | Daily                                                   | none (sweep)                     | Queues one job per store and UTC day from `meta_channel_connections_due`                                                       |
+| `check-channel-token`               | Sweep `queue-channel-token-checks`, daily               | `storeId`                        | Status only set, notification deduped                                                                                          |
+| `reconcile-meta-page-subscriptions` | Daily                                                   | none (sweep)                     | Unsubscribes Pages saved in `meta_page_subscriptions` that no connection backs, then deletes the record; a Meta error keeps it |
+| `queue-conversation-returns`        | Every minute                                            | none (sweep)                     | Reads up to 100 due IDs in stores with Chats enabled and queues one job per conversation and minute                            |
+| `return-conversation-to-ai`         | `queue-conversation-returns`                            | `storeId`, `conversationId`      | Checks the extension and deadline before returning the chat and clearing `ai_resumes_at`                                       |
+| `sync-whatsapp-templates`           | Template webhook, and daily                             | `storeId`, `channelConnectionId` | Upsert on `(channel_connection_id, name, language)`                                                                            |
+| `build-daily-metrics`               | Outbox changes within 5 minutes; nightly reconciliation | `storeId`, `day`                 | Upsert on `(store_id, day, metric, dimension)`                                                                                 |
+| `build-order-summary`               | At the end of the minute after an order event           | `storeId`, `day`                 | One pending job per store and original order day; retries a change received during a run                                       |
+| `run-maintenance`                   | Daily                                                   | none (sweep)                     | Each step is safe to repeat; see [run-maintenance](#run-maintenance)                                                           |
 
 The ANA-1 reconciliation follow-up repairs missed day refreshes nightly.
 

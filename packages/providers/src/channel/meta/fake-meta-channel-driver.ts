@@ -54,6 +54,11 @@ export class FakeMetaChannelDriver
       throw new MetaRequestError('auth_error');
   }
 
+  async unsubscribePage(pageId: string, accessToken: string): Promise<void> {
+    if (!pages.some((page) => page.id === pageId && page.accessToken === accessToken))
+      throw new MetaRequestError('auth_error');
+  }
+
   async isTokenValid(accessToken: string): Promise<boolean> {
     return pages.some((page) => page.accessToken === accessToken);
   }

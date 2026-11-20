@@ -391,6 +391,14 @@ The inbox routes require the Chats extension. Staff with view access can list co
 
 Staff with edit access can set status, assign an active member or clear the assignment, take over and hand back to AI. Each change bumps the conversation version and records the names of the changed fields in the audit log. Changing the responder leaves status and assignment alone. An inbound message newer than the previous one reopens a Done or Later conversation and keeps its responder and assignee. If staff change the conversation while the message is being saved, their change wins.
 
+The list shows the contact name on each row. `GET /conversations/counts` returns the tab numbers: all chats, chats that need you, chats the AI is handling and chats set to follow up. The chat list screen (`/chats`) keeps its tab and channel filter in the URL. The card fills the window and the list scrolls inside it. Work that is not built yet, and where it goes:
+
+- CHAT-5 part 1b: search by name or phone through a `q` parameter on the list (phone search follows the CUS-15 exact-match rules and rate limit for members without See full phone numbers), the sort select, and the Assigned to filter through a chats-scoped `GET /conversations/assignees` that lists members who can view chats. The header assign picker in part 4 uses the same list.
+- CHAT-5 part 4: Select with bulk actions, and the header pills.
+- Labels (VIP and the Label button): this doc names Label in the screens and in Edit Chats permission but gives no data model, so labels need an owner decision before a CHAT-5 part 5.
+- Intent tags, "Lead saved" and "Dakly is typing": AI-5 shows them from the AI pipeline.
+- Comments channel: CHAT-6.
+
 Staff can add internal notes to the inbox thread. A note records its author and time, stays inside Dakly, and leaves the customer preview, reply window and unread count as they were.
 
 Staff can take over until they hand back, or choose a return after 30 minutes, one hour or six hours. The worker checks for due returns every minute in stores with Chats enabled. It checks the extension and reads the current deadline again when it handles the job. Turning off Chats keeps the deadline, and an extended takeover keeps its new deadline even if a job has already been queued.
