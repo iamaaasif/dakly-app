@@ -89,7 +89,14 @@ function bareUrl(raw: string, prefix: string): string | undefined {
   const bracketedProse = (following: string, end: number) =>
     followingBracket.test(following) && bracketsClosed(raw.slice(0, end), closingRun);
   if (hasAdjacentProse(raw, closingRun, bracketedProse)) return undefined;
-  return trimMessagePunctuation(raw);
+  const candidate = trimMessagePunctuation(raw);
+  if (candidate === raw.replace(sentencePunctuation, '') && candidate.at(-1) === closingRun[0]) {
+    const encoded = jsonSpans(candidate).some(
+      ({ start, end }) => end === candidate.length && candidate[start] === '%',
+    );
+    if (encoded) return undefined;
+  }
+  return candidate;
 }
 
 function hasQuotedProse(candidate: string, prefix: string): boolean {
@@ -152,11 +159,26 @@ function jsonSpans(text: string): { start: number; end: number }[] {
 
 function trimMessagePunctuation(raw: string): string {
   let candidate = raw.replace(sentencePunctuation, '');
+  if (openingBracket[candidate.at(-1) ?? '']) {
+    const jsonUrl = trimAfterJson(candidate);
+    if (jsonUrl) return jsonUrl;
+  }
   for (let last = candidate.at(-1); last; last = candidate.at(-1)) {
     const opening = openingBracket[last];
     if (!opening || candidate.split(opening).length >= candidate.split(last).length) break;
-    if (jsonSpans(candidate).some(({ end }) => end === candidate.length)) break;
     candidate = candidate.slice(0, -1).replace(sentencePunctuation, '');
   }
   return candidate;
+}
+
+function trimAfterJson(raw: string): string | undefined {
+  if (!/[?&#]/u.test(raw)) return undefined;
+  let candidate = raw;
+  while (candidate) {
+    if (jsonSpans(candidate).some(({ end }) => end === candidate.length)) return candidate;
+    const last = candidate.at(-1) ?? '';
+    if (!openingBracket[last]) break;
+    candidate = candidate.slice(0, -1).replace(sentencePunctuation, '');
+  }
+  return undefined;
 }

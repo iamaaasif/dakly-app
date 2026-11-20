@@ -181,6 +181,11 @@ describe('SMS campaign body URLs', () => {
   it.each([
     { prefix: '(', target: 'https://shop.example.test/a(foo)-(bar)', suffix: ').' },
     { prefix: '[', target: 'https://shop.example.test/search?filter=[[1],[2]]', suffix: '].' },
+    { prefix: '[', target: 'https://shop.example.test/search?filter=["["]', suffix: '].' },
+    { prefix: '(', target: 'https://shop.example.test/search?filter=["("]', suffix: ').' },
+    { prefix: '[[', target: 'https://shop.example.test/search?filter=["["]', suffix: ']].' },
+    { prefix: '', target: 'https://shop.example.test/search?q=%5B]', suffix: '.' },
+    { prefix: '[', target: 'https://shop.example.test/search?q=%5B]', suffix: '].' },
   ])('keeps balanced URL brackets with the outer $prefix wrapper', ({ prefix, target, suffix }) => {
     const text = `Open ${prefix}${target}${suffix}`;
     const urls = campaignSmsUrls(text);
@@ -189,6 +194,12 @@ describe('SMS campaign body URLs', () => {
     expect(replaceCampaignSmsUrls(text, urls, () => '/short')).toBe(
       `Open ${prefix}/short${suffix}`,
     );
+  });
+
+  it('leaves ambiguous message closers after an encoded JSON opener untouched', () => {
+    const text =
+      'Open [https://shop.example.test/search?q=%5B]. Or {https://shop.example.test/search?q=%7B}.';
+    expect(campaignSmsUrls(text)).toEqual([]);
   });
 
   it('keeps every surrounding bracket when a URL is nested in angle brackets', () => {
