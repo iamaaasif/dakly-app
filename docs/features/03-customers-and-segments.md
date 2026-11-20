@@ -110,9 +110,11 @@ The web app has two customer screens.
   SMS; on Messenger and Instagram staff can record only a withdrawal.
 - Both screens show the phone as the API sent it: full for members with "See full phone
   numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
-- Not built yet, because no route gives the data: header totals and tab counts, sort, columns,
-  export, bulk actions, the profile stats and its Orders, Activity, Campaign history and Notes
-  tabs, and the current consent answer per channel.
+- Not built yet, because no route gives the data: header totals and tab counts, sort, columns
+  (WhatsApp, Email, Location), export, bulk actions, the profile stats and its Orders, Activity,
+  Campaign history and Notes tabs, profile fields (Email, Address, Favourite category), quick
+  actions (Call, WhatsApp, SMS), tag input inside the tags card, and the current consent answer
+  per channel.
 
 Customer import (CUS-8) saves the rows of a CSV file the shop uploads as contacts, and can
 undo the contacts it added and the consent grants it recorded.

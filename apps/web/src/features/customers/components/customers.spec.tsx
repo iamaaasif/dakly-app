@@ -173,6 +173,7 @@ describe('All customers', () => {
     );
     show(<CustomersScreen query={allCustomers} />);
     const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Add customers' }));
     await user.type(screen.getByLabelText('Name'), 'Rahima Akter');
     await user.type(screen.getByLabelText('Phone'), '01712345678');
     await user.click(screen.getByRole('button', { name: 'Add customer' }));

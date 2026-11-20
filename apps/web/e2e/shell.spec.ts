@@ -9,7 +9,6 @@ async function verifyOnFocus(page: Page) {
   const response = page.waitForResponse((item) => item.url().endsWith('/api/me/context'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   expect((await response).status()).toBe(200);
-  await expect(page.getByLabel('Name', { exact: true })).toBeVisible();
 }
 
 async function verifyPausedDraft(page: Page) {
@@ -69,7 +68,6 @@ async function verifyPhoneNavigation(page: Page) {
   await page.keyboard.press('Enter');
   await verifyOnFocus(page);
   await expect(drawer).toBeHidden();
-  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unfinished draft');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
 }
@@ -101,38 +99,57 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
       },
     ]);
     await page.goto('/customers');
-    const name = page.getByLabel('Name', { exact: true });
     await expect(page.getByRole('combobox', { name: 'Current shop' })).toHaveValue(
       fixture.storeIds[0],
     );
     await page.locator('aside').getByRole('link', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Support access' })).toBeVisible();
     await page.locator('aside').getByRole('link', { name: 'All customers' }).click();
-    await name.fill('Unfinished draft');
+
     await page.getByRole('button', { name: 'Collapse navigation' }).click();
-    await verifyPausedDraft(page);
     await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible();
     await verifyPhoneNavigation(page);
+
+    await page.getByRole('button', { name: 'Add customers' }).click();
+    const name = page.getByLabel('Name', { exact: true });
+    await name.fill('Unfinished draft');
+    await verifyPausedDraft(page);
+
     const response = await context.request.get('/api/me/context');
     expect(response.status()).toBe(200);
     const before = (await response.json()) as SessionContext;
     const oldInput = await name.elementHandle();
-    await page
+
+    const secondPage = await context.newPage();
+    await secondPage.goto('/customers');
+    await secondPage
       .getByRole('combobox', { name: 'Current shop' })
       .selectOption({ label: 'Sylhet Books' });
+    await expect(secondPage.getByRole('combobox', { name: 'Current shop' })).toHaveValue(
+      fixture.storeIds[1],
+    );
+    await secondPage.close();
+
     await expect(page.getByRole('combobox', { name: 'Current shop' })).toHaveValue(
       fixture.storeIds[1],
     );
-    await expect(name).toHaveValue('');
+    await expect(page.getByRole('dialog', { name: 'Add customer' })).toBeHidden();
     expect(await oldInput!.evaluate((element) => element.isConnected)).toBe(false);
     await oldInput!.dispose();
+    const unwrittenDraft = await database.pool.query('select name from contacts where name=$1', [
+      'Unfinished draft',
+    ]);
+    expect(unwrittenDraft.rows).toEqual([]);
+
     await page.locator('aside').getByRole('link', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Ownership transfer' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Support access' })).toHaveCount(0);
     await page.locator('aside').getByRole('link', { name: 'All customers' }).click();
     await expect(page.getByRole('button', { name: 'Collapse navigation' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Add customers' }).click();
     const customer = { name: 'সাবিনা', phone: `018${randomInt(10000000, 99999999)}` };
-    await name.fill(customer.name);
+    await page.getByLabel('Name', { exact: true }).fill(customer.name);
     await page.getByLabel('Phone', { exact: true }).fill(customer.phone);
     await page.getByRole('button', { name: 'Add customer', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText('Customer added');
