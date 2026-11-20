@@ -57,6 +57,7 @@ function show(query = defaults) {
       canViewOrders: false,
       canEditOrders: false,
       canViewCampaigns: false,
+      canViewAnalytics: false,
       canEditCampaigns: false,
       canViewAutomations: false,
       canEditAutomations: false,
