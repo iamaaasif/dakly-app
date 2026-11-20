@@ -165,7 +165,7 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | AI-4 | Reply pipeline: debounce, gates, classify, hand-over rules              | Done        | AI-2, CHAT-2, CHAT-3 | #216, #223             | Exclude internal notes (`kind = 'note'`) from model context and all customer-facing messages.                     |
 | AI-5 | Sales agent tools and the fact check before sending                     | Done        | AI-4, ORD-3          | #284, #292, #303, #321 | Parts 1 to 4 merged: tools, agent loop and fact check, return timers, order tools                                 |
 | AI-6 | Practice mode, test questions, Go live                                  | Done        | AI-5                 | #306                   | Practice per channel; tests graded by a model; hand-over rules save waits on the AI settings task                 |
-| AI-7 | Golden-set eval runner and nightly job                                  | In progress | AI-5                 |                        | Runner, scoring and nightly job on a starter set. The 200 beta chats come at M7.                                  |
+| AI-7 | Golden-set eval runner and nightly job                                  | In progress | AI-5                 | #337                   | Runner, scoring and nightly job on a starter set. The 200 beta chats come at M7.                                  |
 | AI-8 | Web: AI agent settings, knowledge, test tab                             | Todo        | AI-6                 |                        |                                                                                                                   |
 
 ## Later release: couriers and COD
