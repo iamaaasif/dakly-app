@@ -1,5 +1,5 @@
 {
-  "id": "2d7058ce-c738-4ebb-8b09-ae6c2cc9eed7",
+  "id": "93d3b178-f5f6-4b6e-b4b8-2985a5f669b7",
   "prevId": "ccbeff2b-c9f8-4081-862a-71f9765370ac",
   "version": "7",
   "dialect": "postgresql",
@@ -5073,7 +5073,7 @@
         },
         "automation_runs_exit_reason": {
           "name": "automation_runs_exit_reason",
-          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable')"
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable', 'order_not_awaiting_confirmation')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",
