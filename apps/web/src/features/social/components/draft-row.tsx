@@ -11,12 +11,14 @@ import { formatShortDateTime } from '@/lib/format-date';
 type DraftRowProps = { draft: PostResponse; accounts: SocialAccount[] };
 
 export function DraftRow({ draft, accounts }: DraftRowProps) {
-  const kinds = new Set(
-    draft.targets.flatMap(({ channelConnectionId }) => {
-      const account = accounts.find(({ id }) => id === channelConnectionId);
-      return account ? [account.kind] : [];
-    }),
-  );
+  const kinds = [
+    ...new Set(
+      draft.targets.flatMap(({ channelConnectionId }) => {
+        const account = accounts.find(({ id }) => id === channelConnectionId);
+        return account ? [account.kind] : [];
+      }),
+    ),
+  ].sort();
   const caption = draft.caption?.trim();
   return (
     <li className="flex items-center gap-3 px-4 py-3 md:px-6">
@@ -32,11 +34,11 @@ export function DraftRow({ draft, accounts }: DraftRowProps) {
         </p>
         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-text-muted">
           <span className="flex gap-1">
-            {[...kinds].map((kind) => (
+            {kinds.map((kind) => (
               <NetworkIcon key={kind} kind={kind} size="small" />
             ))}
           </span>
-          {[...kinds].map((kind) => networkNames[kind]).join(' + ') || 'No account chosen'}
+          {kinds.map((kind) => networkNames[kind]).join(' + ') || 'No account chosen'}
           {' · '}
           {draft.kind === 'story' ? 'Story' : 'Post'} · Edited{' '}
           {formatShortDateTime(draft.updatedAt)}

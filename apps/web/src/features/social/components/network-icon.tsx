@@ -5,8 +5,8 @@ import { cn } from '@dakly/ui/cn';
 import type { SocialAccount } from '../api/get-social-accounts';
 
 const networks = {
-  facebook_page: { icon: Facebook, tile: 'bg-info text-on-primary' },
-  instagram: { icon: Instagram, tile: 'bg-ai text-on-primary' },
+  facebook_page: { icon: Facebook, tile: 'bg-facebook text-on-primary' },
+  instagram: { icon: Instagram, tile: 'bg-instagram text-on-primary' },
   tiktok: { icon: Music2, tile: 'bg-text-muted text-on-primary' },
 } as const;
 
