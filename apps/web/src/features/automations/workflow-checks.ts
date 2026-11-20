@@ -1,3 +1,4 @@
+import { isChannelSendable, isTriggerAvailable } from '@dakly/contracts/automations/catalogue';
 import { type AutomationGraph, nextStepKeys } from '@dakly/contracts/automations/graph';
 
 import { TRIGGER_KEY } from './workflow-canvas-layout';
@@ -67,6 +68,25 @@ function placeholderChecks(graph: AutomationGraph, stepNumber: StepNumber) {
       fix: { label: 'Delete step', apply: (current) => removeStep(current, key) },
     });
   }
+  return checks;
+}
+
+// The server refuses these on publish, so they show up before the owner presses the button.
+function readinessChecks(graph: AutomationGraph, stepNumber: StepNumber) {
+  const checks: WorkflowCheck[] = [];
+  if (!isTriggerAvailable(graph.trigger.key))
+    checks.push({
+      id: 'trigger-unavailable',
+      level: 'block',
+      message: 'This workflow starts from something your shop cannot use yet.',
+    });
+  for (const [key, step] of Object.entries(graph.steps))
+    if (step.kind === 'send' && !step.channels.some(isChannelSendable))
+      checks.push({
+        id: `no-channel:${key}`,
+        level: 'block',
+        message: `Step ${stepNumber(key)} has no channel that can send yet. Only SMS sends today; change the channels in the workflow settings.`,
+      });
   return checks;
 }
 
@@ -143,6 +163,7 @@ function warningChecks(graph: AutomationGraph, stepNumber: StepNumber) {
 
 export function checkWorkflow(graph: AutomationGraph, stepNumber: StepNumber): WorkflowCheck[] {
   return [
+    ...readinessChecks(graph, stepNumber),
     ...placeholderChecks(graph, stepNumber),
     ...splitChecks(graph, stepNumber),
     ...warningChecks(graph, stepNumber),

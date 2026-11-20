@@ -20,6 +20,10 @@ const MAX_ROUNDS = 4;
 const ASK_BUDGET_MS = 20_000;
 const sourceLabels: Record<string, string> = {
   get_sales: 'Orders',
+  get_sales_today: 'Orders',
+  get_sales_yesterday: 'Orders',
+  get_sales_this_month: 'Orders',
+  get_top_products: 'Orders',
   get_marketing_results: 'Marketing results',
   get_customers: 'Customers',
 };
@@ -118,7 +122,8 @@ export class AssistantService {
 function sourcesOf(results: ToolResult[]): string[] {
   const labels = results.map(({ tool, result }) => {
     const days = 'days' in result ? `, last ${String(result.days)} days` : '';
-    return `${sourceLabels[tool] ?? tool}${days}`;
+    const calendar = 'period' in result ? `, ${String(result.period)}` : '';
+    return `${sourceLabels[tool] ?? tool}${days}${calendar}`;
   });
   return [...new Set(labels)];
 }

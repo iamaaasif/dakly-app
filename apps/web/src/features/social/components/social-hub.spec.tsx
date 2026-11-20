@@ -17,6 +17,7 @@ const page: ChannelConnection = {
   externalAccountId: '1001',
   status: 'active',
   tokenExpiresAt: null,
+  isAiLive: false,
   connectedAt: '2026-11-01T06:00:00.000Z',
   disconnectedAt: null,
 };
@@ -53,6 +54,10 @@ const draft = (overrides: Partial<PostResponse>): PostResponse => ({
       externalPostId: null,
       errorCode: null,
       errorMessage: null,
+      reach: null,
+      reactions: null,
+      comments: null,
+      linkTaps: null,
     },
   ],
   ...overrides,
