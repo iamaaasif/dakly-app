@@ -86,6 +86,26 @@ function isMetaMediaUrl(url: string): boolean {
   return protocol === 'https:' && mediaHostSuffixes.some((suffix) => hostname.endsWith(suffix));
 }
 
+// Meta's signed media links carry their expiry as hex Unix seconds in the `oe` parameter.
+function linkExpired(url: string): boolean {
+  const expiry = Number.parseInt(new URL(url).searchParams.get('oe') ?? '', 16);
+  return Number.isFinite(expiry) && expiry * 1000 < Date.now();
+}
+
+// Returns a final answer for a failed fetch, throws for an uncertain one, or nothing on success.
+function failedMediaResult(response: Response, url: string): MediaDownload | undefined {
+  const { status } = response;
+  // The token must never follow a redirect, so a redirect is a final answer.
+  if (status >= 300 && status < 400) throw new MetaRequestError('rejected');
+  if (status === 401) throw new MetaRequestError('auth_error');
+  if ([400, 404, 410].includes(status)) return { kind: 'expired' };
+  // A 403 is only an expired link when the link's own expiry has passed; otherwise it may pass
+  // on a retry, so it counts as a fetch failure.
+  if (status === 403 && linkExpired(url)) return { kind: 'expired' };
+  if (!response.ok) throw new MetaRequestError('unavailable');
+  return undefined;
+}
+
 function mediaType(response: Response): string {
   return (response.headers.get('content-type') ?? '').split(';')[0]?.trim() ?? '';
 }
@@ -242,12 +262,8 @@ export class MetaGraphChannelDriver
     } catch {
       throw new MetaRequestError('unavailable');
     }
-    // The token must never follow a redirect, so a redirect is a final answer.
-    if (response.status >= 300 && response.status < 400) throw new MetaRequestError('rejected');
-    if (response.status === 401) throw new MetaRequestError('auth_error');
-    // Signed media links answer 403 once they expire.
-    if ([400, 403, 404, 410].includes(response.status)) return { kind: 'expired' };
-    if (!response.ok) throw new MetaRequestError('unavailable');
+    const failure = failedMediaResult(response, url);
+    if (failure) return failure;
     const declared = Number(response.headers.get('content-length'));
     if (declared > maxBytes) return { kind: 'too_large' };
     const bytes = await readCapped(response, maxBytes);

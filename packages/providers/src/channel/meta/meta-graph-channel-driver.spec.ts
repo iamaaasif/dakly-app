@@ -330,8 +330,15 @@ describe('MetaGraphChannelDriver', () => {
     });
 
     it('reports an expired link, an oversize body and an outage as different results', async () => {
-      vi.stubGlobal('fetch', async () => new Response('gone', { status: 403 }));
+      vi.stubGlobal('fetch', async () => new Response('gone', { status: 404 }));
       await expect(driver.downloadMedia('t', url, 10)).resolves.toEqual({ kind: 'expired' });
+      vi.stubGlobal('fetch', async () => new Response('denied', { status: 403 }));
+      await expect(driver.downloadMedia('t', `${url}?oe=1`, 10)).resolves.toEqual({
+        kind: 'expired',
+      });
+      await expect(driver.downloadMedia('t', `${url}?oe=ffffffffff`, 10)).rejects.toMatchObject({
+        code: 'unavailable',
+      });
       vi.stubGlobal('fetch', async () => new Response(new Uint8Array(11)));
       await expect(driver.downloadMedia('t', url, 10)).resolves.toEqual({ kind: 'too_large' });
       vi.stubGlobal('fetch', async () => new Response('', { status: 302 }));
