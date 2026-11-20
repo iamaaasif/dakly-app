@@ -89,6 +89,10 @@ export class AnalyticsService {
     }));
   }
 
+  messagePeople(storeId: string, period: ReportPeriod, timeZone: string) {
+    return this.repository.messagePeople(storeId, { ...period, timeZone });
+  }
+
   async sales(storeId: string, period: ReportPeriod) {
     const rows = await this.repository.readDailyMetrics(storeId, period, ['sales']);
     const byDay = new Map<string, bigint>();

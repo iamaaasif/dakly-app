@@ -328,13 +328,11 @@ export class AutomationsRepository {
         sent: number;
         delivered: number;
         read: number;
-        tapped: number;
         costPoisha: string;
       }>(sql`
         select channel, count(*)::int as sent,
           (count(*) filter (where coalesce(delivered_at, read_at) is not null))::int as delivered,
           (count(*) filter (where read_at is not null))::int as read,
-          (count(*) filter (where tapped_at is not null))::int as tapped,
           coalesce(sum(cost_poisha), 0)::text as "costPoisha"
         from automation_run_steps
         where store_id = ${storeId} and kind = 'send' and category = 'marketing'

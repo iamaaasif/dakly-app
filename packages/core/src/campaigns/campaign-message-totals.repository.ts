@@ -8,7 +8,6 @@ export type MessageTotalsRow = {
   sent: number;
   delivered: number;
   read: number;
-  tapped: number;
   costPoisha: string;
 };
 
@@ -26,7 +25,6 @@ export class CampaignMessageTotalsRepository {
         select c.channel, count(*)::int as sent,
           (count(*) filter (where coalesce(r.delivered_at, r.read_at) is not null))::int as delivered,
           (count(*) filter (where r.read_at is not null))::int as read,
-          (count(*) filter (where r.tapped_at is not null))::int as tapped,
           coalesce(sum(r.cost_poisha), 0)::text as "costPoisha"
         from campaign_recipients r
         join campaigns c on c.store_id = r.store_id and c.id = r.campaign_id

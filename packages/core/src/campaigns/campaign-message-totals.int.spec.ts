@@ -65,8 +65,8 @@ describe('campaign message totals', () => {
   it('counts each channel inside the shop-local day and leaves other stores out', async () => {
     const rows = await repository.messageTotals(f.a, range);
     expect(rows.sort((a, b) => a.channel.localeCompare(b.channel))).toEqual([
-      { channel: 'sms', sent: 2, delivered: 1, read: 0, tapped: 1, costPoisha: '70' },
-      { channel: 'whatsapp', sent: 1, delivered: 1, read: 1, tapped: 0, costPoisha: '95' },
+      { channel: 'sms', sent: 2, delivered: 1, read: 0, costPoisha: '70' },
+      { channel: 'whatsapp', sent: 1, delivered: 1, read: 1, costPoisha: '95' },
     ]);
   });
 });

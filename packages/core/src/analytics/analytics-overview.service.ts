@@ -14,7 +14,7 @@ import { DAY_MS } from '../platform/time';
 import { AnalyticsService } from './analytics.service';
 import { shiftReportDay } from './report-period';
 
-type Totals = { sent: number; delivered: number; read: number; tapped: number; cost: bigint };
+type Totals = { sent: number; delivered: number; read: number; cost: bigint };
 type Period = { from: string; through: string };
 
 // SMS has no read receipts, so reads are measured against the other channels only (glossary).
@@ -30,16 +30,27 @@ export class AnalyticsOverviewService {
 
   async overview(storeId: string, { period }: AnalyticsQuery): Promise<AnalyticsOverviewResponse> {
     const { asOf, timeZone, current, previous } = await this.reports.periods(storeId, period);
-    const [revenue, previousRevenue, orders, previousOrders, byChannel, now, before] =
-      await Promise.all([
-        this.reports.marketingRevenue(storeId, current),
-        this.reports.marketingRevenue(storeId, previous),
-        this.reports.marketingOrders(storeId, current),
-        this.reports.marketingOrders(storeId, previous),
-        this.reports.marketingRevenueByChannel(storeId, current),
-        this.messageTotals(storeId, current, timeZone),
-        this.messageTotals(storeId, previous, timeZone),
-      ]);
+    const [
+      revenue,
+      previousRevenue,
+      orders,
+      previousOrders,
+      byChannel,
+      now,
+      before,
+      people,
+      previousPeople,
+    ] = await Promise.all([
+      this.reports.marketingRevenue(storeId, current),
+      this.reports.marketingRevenue(storeId, previous),
+      this.reports.marketingOrders(storeId, current),
+      this.reports.marketingOrders(storeId, previous),
+      this.reports.marketingRevenueByChannel(storeId, current),
+      this.messageTotals(storeId, current, timeZone),
+      this.messageTotals(storeId, previous, timeZone),
+      this.reports.messagePeople(storeId, current, timeZone),
+      this.reports.messagePeople(storeId, previous, timeZone),
+    ]);
 
     const all = sumTotals([...now.values()]);
     const previousAll = sumTotals([...before.values()]);
@@ -64,23 +75,14 @@ export class AnalyticsOverviewService {
       messages: {
         sent: { current: all.sent, previous: previousAll.sent },
         deliveredPercent: percent(all.delivered, all.sent),
-        tappedPeople: { current: all.tapped, previous: previousAll.tapped },
-        tapPercent: percent(all.tapped, all.delivered),
+        tappedPeople: { current: people.tapped, previous: previousPeople.tapped },
+        tapPercent: percent(people.tapped, people.delivered),
         cost: { currentPoisha: all.cost.toString(), previousPoisha: previousAll.cost.toString() },
       },
       returnPerTaka: returnPerTaka(revenue.total, all.cost),
       weeklyRevenue: weeklyRevenue(current, byChannel),
-      channels: campaignChannels.map((channel) => {
-        const totals = now.get(channel) ?? emptyTotals();
-        return {
-          channel,
-          sent: totals.sent,
-          deliveredPercent: percent(totals.delivered, totals.sent),
-          costPoisha: totals.cost.toString(),
-          revenuePoisha: (revenueByChannel.get(channel) ?? 0n).toString(),
-        };
-      }),
-      funnel: funnel(all, readable, Number(orders.total)),
+      channels: channelRows(now, revenueByChannel),
+      funnel: funnel(all, readable, people, Number(orders.total)),
     };
   }
 
@@ -99,8 +101,21 @@ export class AnalyticsOverviewService {
   }
 }
 
+function channelRows(totals: Map<string, Totals>, revenue: Map<string, bigint>) {
+  return campaignChannels.map((channel) => {
+    const row = totals.get(channel) ?? emptyTotals();
+    return {
+      channel,
+      sent: row.sent,
+      deliveredPercent: percent(row.delivered, row.sent),
+      costPoisha: row.cost.toString(),
+      revenuePoisha: (revenue.get(channel) ?? 0n).toString(),
+    };
+  });
+}
+
 function emptyTotals(): Totals {
-  return { sent: 0, delivered: 0, read: 0, tapped: 0, cost: 0n };
+  return { sent: 0, delivered: 0, read: 0, cost: 0n };
 }
 
 function sumTotals(rows: Totals[]): Totals {
@@ -109,7 +124,6 @@ function sumTotals(rows: Totals[]): Totals {
       sent: sum.sent + row.sent,
       delivered: sum.delivered + row.delivered,
       read: sum.read + row.read,
-      tapped: sum.tapped + row.tapped,
       cost: sum.cost + row.cost,
     }),
     emptyTotals(),
@@ -125,7 +139,12 @@ function returnPerTaka(revenue: bigint, cost: bigint) {
   return cost === 0n ? null : Number((revenue + cost / 2n) / cost);
 }
 
-function funnel(all: Totals, readable: Totals, ordered: number) {
+function funnel(
+  all: Totals,
+  readable: Totals,
+  people: { delivered: number; tapped: number },
+  ordered: number,
+) {
   const step = (count: number, before: number): AnalyticsFunnelStep => ({
     count,
     percentOfPrevious: percent(count, before),
@@ -135,8 +154,9 @@ function funnel(all: Totals, readable: Totals, ordered: number) {
     delivered: step(all.delivered, all.sent),
     // The read step divides by delivered on the channels that report reads, not by all delivered.
     read: step(readable.read, readable.delivered),
-    tapped: step(all.tapped, all.delivered),
-    ordered: step(ordered, all.tapped),
+    // Tapped counts people, so it is measured against people delivered to, as the tap rate is.
+    tapped: step(people.tapped, people.delivered),
+    ordered: step(ordered, people.tapped),
   };
 }
 
