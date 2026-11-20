@@ -45,6 +45,35 @@ describe('account security storage (Postgres)', () => {
     }
   });
 
+  it('lets the app role purge expired history through the function and nothing newer', async () => {
+    const userId = randomUUID();
+    await admin.query('insert into users (id, name, email) values ($1, $2, $3)', [
+      userId,
+      'রিনা',
+      `${userId}@example.test`,
+    ]);
+    try {
+      await admin.query(
+        `insert into account_security_events (id, user_id, event, actor_type, created_at)
+        values ($1, $3, 'password.changed', 'user', now() - interval '3 years'),
+               ($2, $3, 'password.changed', 'user', now() - interval '1 year')`,
+        [randomUUID(), randomUUID(), userId],
+      );
+      await expect(app.query('delete from account_security_events')).rejects.toMatchObject({
+        code: '42501',
+      });
+      await app.query('select purge_account_security_events(1000)');
+      const left = await admin.query(
+        'select count(*)::int as count from account_security_events where user_id = $1',
+        [userId],
+      );
+      expect(left.rows).toEqual([{ count: 1 }]);
+    } finally {
+      await admin.query('delete from account_security_events where user_id = $1', [userId]);
+      await admin.query('delete from users where id = $1', [userId]);
+    }
+  });
+
   it('rejects invalid purge bounds instead of deleting an unbounded batch', async () => {
     for (const limit of [null, 0, -1, 1001]) {
       await expect(
@@ -113,11 +142,10 @@ describe('account security storage (Postgres)', () => {
       client.release();
     }
   });
-  it('denies app updates, deletes and the owner-only purge function', async () => {
+  it('denies app updates and deletes', async () => {
     for (const query of [
       'update account_security_events set event = event',
       'delete from account_security_events',
-      'select purge_account_security_events(1000)',
     ]) {
       await expect(app.query(query)).rejects.toMatchObject({ code: '42501' });
     }
