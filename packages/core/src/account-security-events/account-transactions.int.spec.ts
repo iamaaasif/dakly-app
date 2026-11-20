@@ -19,7 +19,9 @@ const app = createDatabase(process.env.DATABASE_URL!);
 const database = new AccountDatabase(app.db);
 const transaction = new AccountTransaction(database);
 const stores = new StoreTransaction(new TenantDatabase(app.db));
-const service = new AccountSecurityEventsService(new AccountSecurityEventsRepository(database));
+const service = new AccountSecurityEventsService(
+  new AccountSecurityEventsRepository(database, app.db),
+);
 const userId = randomUUID();
 const otherUserId = randomUUID();
 const staffId = randomUUID();

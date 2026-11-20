@@ -484,6 +484,13 @@
       "when": 1795175834553,
       "tag": "0068_drop_audit_month",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1795176726652,
+      "tag": "0069_purge_account_events_by_app",
+      "breakpoints": true
     }
   ]
 }
