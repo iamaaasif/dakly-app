@@ -3383,10 +3383,11 @@ fixture('POST /assistant/messages', async () => {
         responseId: randomUUID(),
         usage,
       };
-    const [{ result }] = JSON.parse(results[1]!) as { result: { orders: number } }[];
+    const [first] = JSON.parse(results[1]!) as { result: { orders: number } }[];
+    const orders = first?.result.orders;
     return {
       kind: 'output',
-      output: { reply: `You had ${result.orders} orders in the last 30 days.` },
+      output: { reply: `You had ${orders} orders in the last 30 days.` },
       model,
       responseId: randomUUID(),
       usage,
