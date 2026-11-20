@@ -34,6 +34,7 @@ import { ResumeCampaignsOnWalletCredited } from '@dakly/core/campaigns/jobs/resu
 import { SendCampaignBatchJob } from '@dakly/core/campaigns/jobs/send-campaign-batch.job';
 import { StartDueCampaignsJob } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-health.module';
+import { MetaPageReconciliationModule } from '@dakly/core/channels/meta-page-reconciliation.module';
 import { MetaWebhookMaintenanceModule } from '@dakly/core/channels/meta-webhook-maintenance.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
 import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
@@ -140,6 +141,7 @@ import { JobSchedulers } from './job-schedulers';
     MetaWebhookMaintenanceModule,
     MessagingModule,
     ChannelTokenHealthModule,
+    MetaPageReconciliationModule,
     ConversationReturnsModule,
     AutomationRunsModule,
     AutomationsModule,

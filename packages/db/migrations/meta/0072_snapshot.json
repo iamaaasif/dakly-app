@@ -1,5 +1,5 @@
 {
-  "id": "24adac3c-c2be-47d9-9a38-4a53bb35e251",
+  "id": "fa3d5a9f-58a2-4b04-8783-b242a679b05c",
   "prevId": "47b06672-88ab-4a73-94fc-7a59f8e2d10b",
   "version": "7",
   "dialect": "postgresql",
@@ -5052,7 +5052,7 @@
         },
         "automation_runs_exit_reason": {
           "name": "automation_runs_exit_reason",
-          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable', 'order_not_awaiting_confirmation')"
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",
@@ -8936,6 +8936,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "linked_page_external_id": {
+          "name": "linked_page_external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "display_name": {
           "name": "display_name",
           "type": "text",
@@ -9092,6 +9098,22 @@
           "method": "btree",
           "with": {}
         },
+        "channel_connections_linked_page_idx": {
+          "name": "channel_connections_linked_page_idx",
+          "columns": [
+            {
+              "expression": "linked_page_external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"channel_connections\".\"status\" <> 'disconnected'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "channel_connections_token_expires_at_idx": {
           "name": "channel_connections_token_expires_at_idx",
           "columns": [
@@ -9165,6 +9187,107 @@
           "value": "\"channel_connections\".\"status\" in ('active', 'needs_reconnect', 'disconnected')"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.meta_page_subscriptions": {
+      "name": "meta_page_subscriptions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "page_external_id": {
+          "name": "page_external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "access_token_ciphertext": {
+          "name": "access_token_ciphertext",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "key_version": {
+          "name": "key_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "meta_page_subscriptions_store_page_key": {
+          "name": "meta_page_subscriptions_store_page_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "page_external_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "meta_page_subscriptions_created_at_idx": {
+          "name": "meta_page_subscriptions_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "meta_page_subscriptions_store_id_stores_id_fk": {
+          "name": "meta_page_subscriptions_store_id_stores_id_fk",
+          "tableFrom": "meta_page_subscriptions",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.sms_sender_ids": {

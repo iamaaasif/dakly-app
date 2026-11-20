@@ -35,6 +35,8 @@ export const channelConnections = pgTable(
       .references(() => stores.id),
     kind: text('kind', { enum: channelConnectionKinds }).notNull(),
     externalAccountId: text('external_account_id').notNull(),
+    // The Facebook Page an Instagram account messages through, so the Page stays subscribed while it is connected.
+    linkedPageExternalId: text('linked_page_external_id'),
     displayName: text('display_name').notNull(),
     accessTokenCiphertext: bytea('access_token_ciphertext'),
     keyVersion: smallint('key_version'),
@@ -59,12 +61,35 @@ export const channelConnections = pgTable(
       .on(table.kind, table.externalAccountId)
       .where(sql`${table.status} <> 'disconnected'`),
     index('channel_connections_store_id_idx').on(table.storeId, table.kind),
+    index('channel_connections_linked_page_idx')
+      .on(table.linkedPageExternalId)
+      .where(sql`${table.status} <> 'disconnected'`),
     index('channel_connections_token_expires_at_idx')
       .on(table.tokenExpiresAt)
       .where(sql`${table.status} = 'active'`),
     index('channel_connections_connected_by_user_id_idx').on(table.connectedByUserId),
     check('channel_connections_kind', isOneOf(table.kind, channelConnectionKinds)),
     check('channel_connections_status', isOneOf(table.status, channelConnectionStatuses)),
+  ],
+);
+
+// A Page Dakly subscribed to at Meta that no active connection backs yet or any more. It holds the
+// Page token so the daily reconciliation can unsubscribe the Page after a crash or a disconnect.
+export const metaPageSubscriptions = pgTable(
+  'meta_page_subscriptions',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    pageExternalId: text('page_external_id').notNull(),
+    accessTokenCiphertext: bytea('access_token_ciphertext').notNull(),
+    keyVersion: smallint('key_version').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('meta_page_subscriptions_store_page_key').on(table.storeId, table.pageExternalId),
+    index('meta_page_subscriptions_created_at_idx').on(table.createdAt),
   ],
 );
 
