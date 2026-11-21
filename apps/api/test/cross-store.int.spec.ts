@@ -3907,6 +3907,62 @@ for (const [path, responder] of [
   });
 }
 
+async function seedComment(shop: Shop, status = 'new') {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into social_comments(id,store_id,channel_connection_id,external_post_id,external_comment_id,author_name,body,status,commented_at)
+     values($1::uuid,$2,$3,'post-1',$1::text,'Rumana Akter','Price koto?',$4,now())`,
+    [id, shop.id, await seedChannel(shop), status],
+  );
+  return id;
+}
+
+fixture('GET /comments', async () => {
+  const { a, b } = await pair();
+  await seedComment(a);
+  const own = await seedComment(b);
+  expect((await f.request(b.owner, 'GET', '/comments')).statusCode).toBe(403);
+  await enableChats(b);
+  const listed = (await success(b, 'GET', '/comments', 200)).json();
+  expect(listed.items).toMatchObject([{ id: own, body: 'Price koto?', status: 'new' }]);
+  await success(b, 'GET', '/comments?limit=0', 400);
+});
+
+for (const path of ['reply', 'private-reply'] as const) {
+  fixture(`POST /comments/:commentId/${path}`, async () => {
+    const { a, b } = await pair();
+    await enableChats(b);
+    const url = (id: string) => `/comments/${id}/${path}`;
+    const foreign = await seedComment(a);
+    await hidden(b, 'POST', url, foreign, () => ({ body: 'Inbox e dilam' }));
+    await success(b, 'POST', url(await seedComment(b)), 400, { body: '   ' });
+    expect(await f.row('social_comments', foreign)).toMatchObject({
+      status: 'new',
+      public_reply_external_id: null,
+      private_replied_at: null,
+    });
+  });
+}
+
+for (const [path, status] of [
+  ['hide', 'hidden'],
+  ['unhide', 'new'],
+] as const) {
+  fixture(`POST /comments/:commentId/${path}`, async () => {
+    const { a, b } = await pair();
+    await enableChats(b);
+    const url = (id: string) => `/comments/${id}/${path}`;
+    const foreign = await seedComment(a, path === 'hide' ? 'new' : 'hidden');
+    await hidden(b, 'POST', url, foreign);
+    // A comment already in the asked state answers without calling Meta.
+    const own = await seedComment(b, status);
+    expect((await success(b, 'POST', url(own), 200)).json()).toMatchObject({ id: own, status });
+    expect(await f.row('social_comments', foreign)).toMatchObject({
+      status: path === 'hide' ? 'new' : 'hidden',
+    });
+  });
+}
+
 fixture('POST /conversations/:conversationId/notes', async () => {
   const { a, b } = await pair();
   await enableChats(b);
