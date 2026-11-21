@@ -24,9 +24,19 @@ test('shows the Owner what changed in the shop', async ({ page, context, baseURL
   const evidence = resolve(process.cwd(), '../../docs/design/evidence/acc-13-audit');
   await mkdir(evidence, { recursive: true });
 
+  // A new shop has no audit rows yet, so make one by saving the extensions as they are.
+  const headers = {
+    Origin: baseURL!,
+    'X-Session-Context': (await (await context.request.get('/api/me/context')).json()).contextTag,
+  };
+  const { extensions } = await (await context.request.get('/api/store')).json();
+  expect(
+    (await context.request.patch('/api/store/extensions', { data: { extensions }, headers })).ok(),
+  ).toBe(true);
+
   await page.goto('/activity');
   await expect(page.getByRole('heading', { name: 'Activity log', level: 1 })).toBeVisible();
-  await expect(page.getByRole('listitem').first()).toBeVisible();
+  await expect(page.getByText('Extensions changed').first()).toBeVisible();
   for (const [width, height] of [
     [1440, 900],
     [360, 800],
