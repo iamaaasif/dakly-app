@@ -33,6 +33,17 @@ describe('sales agent tools', () => {
     ]);
   });
 
+  // OpenAI strict tools need every property listed as required; an optional one fails every call.
+  it('mark every argument required, with null for an empty choice', () => {
+    for (const tool of salesAgentTools) {
+      const { properties = {}, required = [] } = z.toJSONSchema(tool.input, { io: 'input' }) as {
+        properties?: Record<string, unknown>;
+        required?: string[];
+      };
+      expect(required.toSorted(), tool.name).toEqual(Object.keys(properties).toSorted());
+    }
+  });
+
   it('never take a store, customer, conversation, price or amount argument', () => {
     for (const tool of salesAgentTools) {
       const { properties = {} } = z.toJSONSchema(tool.input, { io: 'input' }) as {
