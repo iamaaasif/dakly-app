@@ -6,8 +6,7 @@ import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { TeamModule } from '../team/team.module';
 import { ContactDeletionService } from './contact-deletion.service';
-import { ContactErasureRepository } from './contact-erasure.repository';
-import { ContactErasureService } from './contact-erasure.service';
+import { ContactErasureModule } from './contact-erasure.module';
 import { ContactExportRepository } from './contact-export.repository';
 import { ContactExportService } from './contact-export.service';
 import { ContactIdentitiesRepository } from './contact-identities.repository';
@@ -23,13 +22,11 @@ import { KhataCustomersService } from './khata-customers.service';
 import { OrderContactsRepository } from './order-contacts.repository';
 
 @Module({
-  imports: [AuditModule, CacheModule, ClockModule, OutboxModule, TeamModule],
+  imports: [AuditModule, CacheModule, ClockModule, OutboxModule, TeamModule, ContactErasureModule],
   controllers: [ContactsController, ContactMatchSuggestionsController],
   providers: [
     ContactsService,
     ContactDeletionService,
-    ContactErasureService,
-    ContactErasureRepository,
     KhataCustomersService,
     ContactExportService,
     ContactExportRepository,
