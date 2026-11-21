@@ -109,7 +109,7 @@ Take over (or any reply typed by a person) switches the chat to human mode: the 
 
 ### States and edge cases
 
-- Customer writes only a photo: match against product images; if confidence is high, answer as that product; otherwise ask "কোন প্রোডাক্টটি চাচ্ছেন?" with up to 3 product cards.
+- Customer writes only a photo: the words the vision tier read from the photo (see Inbound attachments) are matched to the shop's products by name, alias and meaning. The match is sure only when one product is named clearly and no other comes close; then the AI answers as that product, and as a size or colour when the photo text names exactly one in stock. When it is not sure, the AI asks "কোন প্রোডাক্টটি চাচ্ছেন?" with up to 3 product cards, in-stock products only. A photo of a product with no stock gets "no stock" and no offer (alternatives are AI-12). A photo that fits nothing gets a request for the product name. The photo itself is not compared to product photos yet; tagged product photos (PROD-8) are the next input.
 - Out-of-stock size: say so, offer other sizes in stock, offer "নতুন স্টক এলে জানাবো?" and add them to the product's restock waiting list.
 - Two team members reply at once: second one sees "Rafiq is replying" and a warning before sending.
 - Meta token expired: all chats on that channel show a banner; incoming messages may be missed until reconnect.
