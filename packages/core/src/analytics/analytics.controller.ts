@@ -4,6 +4,7 @@ import type { FastifyReply } from 'fastify';
 import {
   analyticsExportQuerySchema,
   analyticsQuerySchema,
+  type AnalyticsAiAgentResponse,
   type AnalyticsAutomationsResponse,
   type AnalyticsCampaignsResponse,
   type AnalyticsChannelsResponse,
@@ -18,6 +19,7 @@ import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { AnalyticsAiAgentService } from './analytics-ai-agent.service';
 import { AnalyticsChannelsService } from './analytics-channels.service';
 import { AnalyticsExportService } from './analytics-export.service';
 import { AnalyticsOverviewService } from './analytics-overview.service';
@@ -30,6 +32,7 @@ export class AnalyticsController {
     @Inject(AnalyticsOverviewService) private readonly overview: AnalyticsOverviewService,
     @Inject(AnalyticsTabsService) private readonly tabs: AnalyticsTabsService,
     @Inject(AnalyticsChannelsService) private readonly channelTabs: AnalyticsChannelsService,
+    @Inject(AnalyticsAiAgentService) private readonly aiAgentReport: AnalyticsAiAgentService,
     @Inject(AnalyticsTipService) private readonly tips: AnalyticsTipService,
     @Inject(AnalyticsExportService) private readonly exports: AnalyticsExportService,
   ) {}
@@ -41,6 +44,15 @@ export class AnalyticsController {
     @Query(new ZodValidationPipe(analyticsQuerySchema)) query: AnalyticsQuery,
   ): Promise<AnalyticsOverviewResponse> {
     return this.overview.overview(storeId, query);
+  }
+
+  @Get('ai-agent')
+  @RequirePermission('analytics.view')
+  aiAgent(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(analyticsQuerySchema)) query: AnalyticsQuery,
+  ): Promise<AnalyticsAiAgentResponse> {
+    return this.aiAgentReport.aiAgent(storeId, query);
   }
 
   @Get('campaigns')

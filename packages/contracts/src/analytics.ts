@@ -195,3 +195,23 @@ export type AnalyticsTipResponse = {
     suggestion: string | null;
   } | null;
 };
+
+// What the AI agent did for the shop. Counts are chats the AI replied in during the period; see the
+// glossary for how a chat is put in one of the groups. Cost is in millionths of a US dollar.
+export type AnalyticsAiAgentResponse = {
+  asOf: string;
+  timeZone: string;
+  current: DayRange;
+  previous: DayRange;
+  chats: Count;
+  resolved: Count;
+  // Resolved ÷ chats not still inside 24 hours; null when there are none to divide by.
+  resolutionPercent: { current: number | null; previous: number | null };
+  answeredByPerson: Count;
+  handedOver: Count;
+  stillOpen: number;
+  handoverReasons: { reason: string; chats: number }[];
+  orders: Count;
+  sales: Money;
+  cost: { currentMicroUsd: string; previousMicroUsd: string };
+};
