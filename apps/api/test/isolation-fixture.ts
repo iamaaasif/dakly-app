@@ -227,6 +227,7 @@ export class IsolationFixture {
       'conversations',
       'posts',
       'khata_rows',
+      'khata_imports',
       'khata_pages',
       'due_messages',
       'due_entries',
