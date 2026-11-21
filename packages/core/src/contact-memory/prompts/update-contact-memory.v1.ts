@@ -8,6 +8,7 @@ export const updateContactMemory = {
     'customerSummary: at most 600 characters about the customer across chats. Start from memory.summary and change it only when something new matters.',
     'facts: only new durable facts the customer stated or their own orders show. Allowed kinds: size, colour, style, budget, language, tone, past_issue, delivery_area.',
     'Give each fact the id of the message or order that shows it. Use source customer_message for a message id and own_order for an order id.',
+    'A size, colour or style the customer asks for or says they wear or like is a preference. A limit like "under 1500" is a budget.',
     'Use delivery_area only from an order that has a delivery_area, never from a message.',
     'Never record health, religion, politics, payment details, phone numbers, addresses, or anything about another person such as a gift recipient.',
     'Never record prices, stock or charges. Skip facts already in memory.facts. Return no facts when nothing new is durable.',

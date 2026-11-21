@@ -1,13 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import {
-  contactMemoryExtractionSchema,
-  contactMemorySchema,
-} from '@dakly/contracts/contact-memory';
+import { contactMemoryExtractionSchema } from '@dakly/contracts/contact-memory';
 
 import { AiService } from '../ai/ai.service';
 import { Clock } from '../platform/clock';
 import { mergeMemory } from './contact-memory-merge';
+import { memoryPromptInput } from './contact-memory-prompt-input';
 import { contactMemoryError } from './contact-memory.errors';
 import { ContactMemoryRepository, type MemoryWork } from './contact-memory.repository';
 import { updateContactMemory } from './prompts/update-contact-memory.v1';
@@ -22,8 +20,6 @@ const transientFailures = new Set([
   'LLM_REQUEST_FAILED',
   'LLM_INVALID_RESPONSE',
 ]);
-
-const messageTextLimit = 500;
 
 @Injectable()
 export class ContactMemoryService {
@@ -68,25 +64,14 @@ export class ContactMemoryService {
   }
 
   private async extract(storeId: string, work: MemoryWork) {
-    const messages = work.messages
-      .filter((message) => message.text.trim())
-      .map(({ id, at, text }) => ({ id, at, text: text.slice(0, messageTextLimit) }));
+    const input = memoryPromptInput(work);
     // Nothing to read: the batch is only voice notes that failed or stickers. Move past it.
-    if (!messages.length) return undefined;
+    if (!input.new_customer_messages.length) return undefined;
     const result = await this.ai.run(storeId, {
       tier: 'fast',
       purpose: 'contact_memory',
       prompt: updateContactMemory,
-      input: JSON.stringify({
-        memory: contactMemorySchema.parse(work.memory),
-        new_customer_messages: messages,
-        new_orders: work.orders.map(({ id, at, deliveryArea, items }) => ({
-          id,
-          at,
-          items,
-          ...(deliveryArea ? { delivery_area: deliveryArea } : {}),
-        })),
-      }),
+      input: JSON.stringify(input),
       output: contactMemoryExtractionSchema,
     });
     if (result.kind === 'output') return result.output;
