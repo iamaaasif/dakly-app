@@ -1,20 +1,20 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { verifyCodeSchema, type SignUpInput } from '@dakly/contracts/auth';
 
 import { useRequestCode } from '../api/request-code';
 import { useVerifyCode } from '../api/verify-code';
+import { useResendCountdown } from './use-resend-countdown';
 import { formError } from '@/lib/form-error';
 
 export function useSignUpVerification(
-  account: { registration: SignUpInput; password: string },
-  signupTicket: string | undefined,
-  options: { isRemembered: boolean; onAuthenticated?: () => void },
+  account: { registration: SignUpInput; password?: string },
+  options: { onAuthenticated?: () => void },
 ) {
-  const [seconds, setSeconds] = useState(30);
+  const countdown = useResendCountdown();
   const [challenge, setChallenge] = useState<string>();
   const form = useForm({
     resolver: zodResolver(verifyCodeSchema),
@@ -22,17 +22,11 @@ export function useSignUpVerification(
       purpose: 'sign_up' as const,
       phone: account.registration.phone,
       password: account.password,
-      signupTicket,
       code: '',
-      isRemembered: options.isRemembered,
     },
   });
   const verify = useVerifyCode();
   const request = useRequestCode();
-  useEffect(() => {
-    const interval = setInterval(() => setSeconds((left) => Math.max(0, left - 1)), 1000);
-    return () => clearInterval(interval);
-  }, []);
   function complete() {
     if (options.onAuthenticated) options.onAuthenticated();
     else window.location.replace('/setup');
@@ -50,14 +44,14 @@ export function useSignUpVerification(
   async function resend() {
     try {
       await request.mutateAsync(account.registration);
-      setSeconds(30);
+      countdown.restart();
     } catch (error) {
       formError(error, form.setError);
     }
   }
   return {
     form,
-    seconds,
+    countdown,
     challenge,
     complete,
     submit,

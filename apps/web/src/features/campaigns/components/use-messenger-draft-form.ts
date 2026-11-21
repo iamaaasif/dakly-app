@@ -13,11 +13,13 @@ import {
 import type { ChannelConnection } from '@dakly/contracts/channels';
 
 import { useSaveCampaign } from '../api/save-campaign';
+import { scheduledForOf, scheduleSchema, scheduleValuesOf } from './campaign-schedule';
 import { changedAudience } from './changed-audience';
 
 const draftSchema = campaignDetailsSchema.extend(campaignAudienceSchema.shape).extend({
   channelConnectionId: z.uuid('Choose a Facebook Page.'),
   content: messengerCampaignContentSchema,
+  schedule: scheduleSchema,
 });
 export type DraftInput = z.input<typeof draftSchema>;
 type Draft = z.output<typeof draftSchema>;
@@ -34,6 +36,7 @@ function valuesOf(campaign: CampaignResponse, pageId: string): DraftInput {
     excludeSegmentIds: campaign.excludeSegmentIds,
     channelConnectionId: pageId,
     content: messengerCampaignContentSchema.parse(campaign.content),
+    schedule: scheduleValuesOf(campaign.scheduledFor),
   };
 }
 
@@ -47,6 +50,7 @@ function startingValues(pages: ChannelConnection[], campaign?: CampaignResponse)
       excludeSegmentIds: [],
       channelConnectionId: pages[0]?.id ?? '',
       content: emptyContent,
+      schedule: scheduleValuesOf(null),
     };
   const kept = pages.some(({ id }) => id === campaign.channelConnectionId);
   return valuesOf(campaign, kept ? (campaign.channelConnectionId ?? '') : '');
@@ -87,6 +91,8 @@ export function useMessengerDraftForm(
         ...(dirtyFields.goal && { goal: input.goal }),
         ...(dirtyFields.channelConnectionId && { channelConnectionId: input.channelConnectionId }),
         ...(dirtyFields.content && { content: input.content }),
+        ...(dirtyFields.schedule && { scheduledFor: scheduledForOf(input.schedule) }),
+        ...(dirtyFields.schedule && { scheduledFor: scheduledForOf(input.schedule) }),
         ...changedAudience(campaign, input),
       };
       if (!Object.keys(change).length) return afterSave?.();

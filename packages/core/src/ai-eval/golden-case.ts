@@ -10,6 +10,12 @@ export const goldenCaseSchema = z.strictObject({
   expectedHandover: z.enum(handoverReasons).nullable(),
   // Taka amounts the shop's catalog allows in an answer to this question.
   allowedAmountsTaka: z.array(z.number().nonnegative()),
+  // The answer must name at least one of these: the product asked for, or an in-stock alternative.
+  mentionsAnyOf: z.array(z.string().min(1)).optional(),
+  // Products with no stock. Naming one as an offer fails the run.
+  neverOffer: z.array(z.string().min(1)).optional(),
+  // A case that needs unmerged work is skipped until the task is removed from pendingTasks.
+  dependsOn: z.enum(['AI-10', 'AI-11', 'AI-12']).optional(),
 });
 
 export type GoldenCase = z.infer<typeof goldenCaseSchema>;

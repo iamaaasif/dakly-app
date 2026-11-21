@@ -10,11 +10,12 @@ import {
 } from '@dakly/contracts/campaigns';
 
 import { useSaveCampaign } from '../api/save-campaign';
+import { scheduledForOf, scheduleSchema, scheduleValuesOf } from './campaign-schedule';
 import { changedAudience } from './changed-audience';
 
 const draftSchema = campaignDetailsSchema
   .extend(campaignAudienceSchema.shape)
-  .extend({ content: smsCampaignContentSchema });
+  .extend({ content: smsCampaignContentSchema, schedule: scheduleSchema });
 export type SmsDraftInput = z.input<typeof draftSchema>;
 type SmsDraft = z.output<typeof draftSchema>;
 
@@ -25,6 +26,7 @@ function valuesOf(campaign: CampaignResponse): SmsDraftInput {
     includeSegmentIds: campaign.includeSegmentIds,
     excludeSegmentIds: campaign.excludeSegmentIds,
     content: smsCampaignContentSchema.parse(campaign.content),
+    schedule: scheduleValuesOf(campaign.scheduledFor),
   };
 }
 
@@ -47,6 +49,8 @@ export function useSmsDraftForm(campaign: CampaignResponse, onSaved?: () => void
         ...(dirtyFields.name && { name: input.name }),
         ...(dirtyFields.goal && { goal: input.goal }),
         ...(dirtyFields.content && { content: input.content }),
+        ...(dirtyFields.schedule && { scheduledFor: scheduledForOf(input.schedule) }),
+        ...(dirtyFields.schedule && { scheduledFor: scheduledForOf(input.schedule) }),
         ...changedAudience(campaign, input),
       };
       if (!Object.keys(change).length) return afterSave?.();
