@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const dueEntryKinds = ['baki', 'payment', 'write_off'] as const;
 export const dueEntrySources = ['manual', 'khata_import'] as const;
 export const duePaymentMethods = ['cash', 'bkash', 'nagad', 'rocket', 'card', 'bank'] as const;
-export const dueListFilters = ['all', 'over_30_days'] as const;
+export const dueListFilters = ['all', 'over_30_days', 'never_reminded'] as const;
 
 export type DueEntryKind = (typeof dueEntryKinds)[number];
 export type DueEntrySource = (typeof dueEntrySources)[number];
@@ -84,13 +84,21 @@ export type DueCustomerResponse = DueBalanceResponse & {
   name: string | null;
   phone: string | null;
 };
-export type DueCustomerListResponse = { items: DueCustomerResponse[]; nextCursor: string | null };
+export type DueListCustomerResponse = DueCustomerResponse & {
+  // The last reminder asked for that was not refused; null when the customer was never reminded.
+  lastRemindedAt: string | null;
+};
+export type DueCustomerListResponse = {
+  items: DueListCustomerResponse[];
+  nextCursor: string | null;
+};
 
 export type DueSummaryResponse = {
   totalOwedPoisha: number;
   customersOwing: number;
   overdueOwedPoisha: number;
   overdueCustomers: number;
+  neverRemindedCustomers: number;
   collectedLast7DaysPoisha: number;
 };
 
