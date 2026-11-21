@@ -51,6 +51,7 @@ import { RunProductImport } from '@dakly/core/imports/jobs/run-product-import.jo
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
 import { ReadKhataPage } from '@dakly/core/khata-scans/jobs/read-khata-page.job';
 import { KhataScansModule } from '@dakly/core/khata-scans/khata-scans.module';
+import { KillSwitchesModule } from '@dakly/core/kill-switches/kill-switches.module';
 import { MaintenanceModule } from '@dakly/core/maintenance/maintenance.module';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
 import { ErasedContactFilesModule } from '@dakly/core/messaging/erased-contact-files.module';
@@ -139,6 +140,7 @@ import { JobSchedulers } from './job-schedulers';
   ],
   imports: [
     DiscoveryModule,
+    KillSwitchesModule,
     LoggingModule,
     ErrorReportingModule,
     StaffHistoryModule,

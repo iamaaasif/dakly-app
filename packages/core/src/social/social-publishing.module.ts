@@ -7,6 +7,7 @@ import { MetaGraphPublishingDriver } from '@dakly/providers/social/meta/meta-gra
 
 import { AuditModule } from '../audit/audit.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
+import { KillSwitchesModule } from '../kill-switches/kill-switches.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ClockModule } from '../platform/clock.module';
 import type { Env } from '../platform/config/env';
@@ -36,6 +37,7 @@ import { SocialRepository } from './social.repository';
 
 @Module({
   imports: [
+    KillSwitchesModule,
     AuditModule,
     ClockModule,
     CryptoModule,

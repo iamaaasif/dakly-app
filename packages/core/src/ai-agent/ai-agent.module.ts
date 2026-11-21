@@ -5,6 +5,7 @@ import { AiModule } from '../ai/ai.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { ConsentsModule } from '../consents/consents.module';
 import { ContactsModule } from '../contacts/contacts.module';
+import { KillSwitchesModule } from '../kill-switches/kill-switches.module';
 import { InboxModule } from '../messaging/inbox.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -28,6 +29,7 @@ import { SalesAgentModule } from './sales-agent.module';
     ConsentsModule,
     ContactsModule,
     InboxModule,
+    KillSwitchesModule,
     MessagingModule,
     MetaAuthorizationModule,
     NotificationsModule,

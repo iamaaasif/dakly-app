@@ -15,6 +15,7 @@ import { ChannelConnectionsService } from '../channels/channel-connections.servi
 import { ConsentService } from '../consents/consent.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { KillSwitchesService } from '../kill-switches/kill-switches.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -72,6 +73,7 @@ export class AiAgentService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(KillSwitchesService) private readonly switches: KillSwitchesService,
     @InjectQueue(QUEUES.aiReply) private readonly queue: Queue,
   ) {}
 
@@ -117,6 +119,9 @@ export class AiAgentService {
       await this.schedule(storeId, conversationId, turn.latest.id);
       return;
     }
+    // Staff paused AI replies: hand the chat to people now, so no customer waits for the pause to end.
+    if (await this.switches.isPaused('ai_replies', storeId))
+      return this.handOver(storeId, conversationId, candidate, 'ai_paused');
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
@@ -135,6 +140,15 @@ export class AiAgentService {
     if (composed.kind === 'busy') return this.retryLater();
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
+    return this.checkAndSend(storeId, conversationId, candidate, composed);
+  }
+
+  private async checkAndSend(
+    storeId: string,
+    conversationId: string,
+    candidate: EligibleTurn,
+    composed: Extract<ComposedReply, { kind: 'reply' }>,
+  ) {
     const shop = await this.stores.settings(storeId);
     const checked = checkReplyFacts(composed.text, composed.toolResults, {
       phone: shop.phone,
