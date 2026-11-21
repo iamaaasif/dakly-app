@@ -2,11 +2,13 @@ import { useFormContext } from 'react-hook-form';
 
 import { type SignUpInput } from '@dakly/contracts/auth';
 
+import { PasswordStrength } from './password-strength';
 import { FormField as AuthField } from '@/components/form-field';
 
 export function SignUpFields() {
   const form = useFormContext<SignUpInput & { password: string }>();
   const errors = form.formState.errors;
+  const password = form.watch('password');
   return (
     <>
       <AuthField
@@ -38,6 +40,7 @@ export function SignUpFields() {
         autoComplete="new-password"
         hint="Skip it to sign in with a code each time. A password needs 8 characters and a number."
       />
+      {password ? <PasswordStrength password={password} /> : null}
     </>
   );
 }
