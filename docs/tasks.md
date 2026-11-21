@@ -221,6 +221,16 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ADM-4 | Plans catalogue, refunds, credits, reconciliation queue                       | Todo   | ADM-2, PAY-7 |     |       |
 | ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | Todo   | ADM-2, AI-2  |     |       |
 
+## M13. Khata scan
+
+Release 1 by D46. Baki rows are read and kept, and import once the Due book ships in release 2.
+
+| ID    | Task                                                                                                                                                                       | Status | Depends      | PR  | Notes                                                                          |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------ | --- | ------------------------------------------------------------------------------ |
+| KHT-1 | Khata scan API: page photo upload, vision read job through `AiService` (`vision` tier), rows with confidence, customer match suggestions, `ai_scan` usage per page         | Todo   | CUS-8, AI-2  |     | Feature 13, Khata Scanner rules 1 to 4 and 8. Unreadable pages are not charged |
+| KHT-2 | Khata import: customers (source Khata import, no consent), dated sales as orders with source Khata import, baki rows kept for the Due book, 7-day undo, 30-day photo purge | Todo   | KHT-1, ORD-1 |     | Rules 5 to 7, SHOP-R2 and SHOP-R7                                              |
+| KHT-3 | Web: Scan your khata in Add customers, upload, processing steps, page review table with confidence and merge suggestions, import, past imports                             | Todo   | KHT-2        |     | Khata Scanner and Khata review screens in feature 13                           |
+
 ## Readiness review follow-up
 
 Evidence and acceptance criteria: [development readiness review](reviews/development-readiness.md). These rows identify work missing from the original tracker or changes required before copying its examples. Existing feature tasks still own their implementation; resolve the linked specification findings before starting the affected slice. Proposed resolutions in the review are not approved product decisions.
