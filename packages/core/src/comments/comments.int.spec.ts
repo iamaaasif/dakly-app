@@ -174,6 +174,26 @@ it('replies publicly once and marks the comment replied', async () => {
   ).rejects.toMatchObject({ code: 'COMMENT_ALREADY_REPLIED' });
 });
 
+it('posts one public reply when two staff press at once, and frees it after a refusal', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-public-race');
+  const reply = vi.spyOn(connections, 'replyToMetaComment');
+  const results = await Promise.allSettled([
+    comments.replyPublicly(storeId, staff, comment.id, { body: 'Inbox e dilam' }),
+    comments.replyPublicly(storeId, staff, comment.id, { body: 'Inbox e dilam' }),
+  ]);
+  expect(results.map(({ status }) => status).sort()).toEqual(['fulfilled', 'rejected']);
+  expect(reply).toHaveBeenCalledTimes(1);
+  const other = await stored(storeId, 'c-public-refused');
+  reply.mockRejectedValueOnce(new MetaRequestError('rejected'));
+  await expect(
+    comments.replyPublicly(storeId, staff, other.id, { body: 'Try' }),
+  ).rejects.toMatchObject({ code: 'COMMENT_REJECTED' });
+  await expect(
+    comments.replyPublicly(storeId, staff, other.id, { body: 'Try again' }),
+  ).resolves.toMatchObject({ publicReplied: true });
+});
+
 it('sends one private reply per comment even when two staff press at once', async () => {
   const storeId = await shop();
   const comment = await stored(storeId, 'c-private');

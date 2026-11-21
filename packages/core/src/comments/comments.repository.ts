@@ -129,6 +129,33 @@ export class CommentsRepository {
     return claimed.length > 0;
   }
 
+  // A placeholder id holds the single public reply while Meta answers; markReplied swaps in the real one.
+  async claimPublicReply(storeId: string, id: string, now: Date): Promise<boolean> {
+    const claimed = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(socialComments)
+        .set({ publicReplyExternalId: 'pending', updatedAt: now })
+        .where(
+          and(
+            eq(socialComments.storeId, storeId),
+            eq(socialComments.id, id),
+            isNull(socialComments.publicReplyExternalId),
+          ),
+        )
+        .returning({ id: socialComments.id }),
+    );
+    return claimed.length > 0;
+  }
+
+  async releasePublicReply(storeId: string, id: string, now: Date): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(socialComments)
+        .set({ publicReplyExternalId: null, updatedAt: now })
+        .where(and(eq(socialComments.storeId, storeId), eq(socialComments.id, id))),
+    );
+  }
+
   async releasePrivateReply(storeId: string, id: string, now: Date): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
       tx
