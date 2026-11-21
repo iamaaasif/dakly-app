@@ -412,3 +412,98 @@ it('erases memory when a contact is deleted and never builds it again', async ()
     conversationId,
   });
 });
+
+const staffFact = (value: string) => ({
+  kind: 'size',
+  value,
+  source: 'staff',
+  sourceId: randomUUID(),
+  at: now.toISOString(),
+});
+
+async function memoryRow(storeId: string, contactId: string, facts: object[], summary: string) {
+  await admin.pool.query(
+    'insert into contact_memories (contact_id, store_id, summary, facts, version, built_at) values ($1, $2, $3, $4::jsonb, 2, now())',
+    [contactId, storeId, summary, JSON.stringify(facts)],
+  );
+}
+
+it('drops derived memory on merge, keeps staff facts, and rebuilds from the new owner', async () => {
+  const shopRow = await shop();
+  const kept = await contact(shopRow.storeId);
+  const merged = await contact(shopRow.storeId);
+  const keptChat = await conversation(shopRow, kept);
+  const mergedChat = await conversation(shopRow, merged);
+  const keptMessage = await message(shopRow.storeId, keptChat, 'red chai', 3);
+  const mergedMessage = await message(shopRow.storeId, mergedChat, 'M size lagbe', 3);
+  modelAnswers([
+    { kind: 'colour', value: 'red', source: 'customer_message', sourceId: keptMessage },
+  ]);
+  await service().updateFromConversation(shopRow.storeId, keptChat, false);
+  const own = staffFact('L');
+  await memoryRow(
+    shopRow.storeId,
+    merged,
+    [own, { ...own, source: 'own_order', value: 'S' }],
+    'Old.',
+  );
+  await admin.pool.query('update conversations set contact_id = $1 where id = $2', [
+    kept,
+    mergedChat,
+  ]);
+
+  const adopted = await service().resetForMerge(shopRow.storeId, {
+    keptContactId: kept,
+    mergedContactId: merged,
+  });
+
+  expect(adopted).toEqual([own]);
+  expect(await memoryOf(kept)).toMatchObject({ summary: '', facts: [own], version: 2 });
+  expect(await memoryOf(merged)).toMatchObject({ summary: '', facts: [own], version: 3 });
+  expect((await checkpointOf(keptChat)).id).toBeNull();
+  expect((await checkpointOf(mergedChat)).id).toBeNull();
+  modelAnswers([{ kind: 'size', value: 'M', source: 'customer_message', sourceId: mergedMessage }]);
+  await service().updateFromConversation(shopRow.storeId, mergedChat, false);
+  expect((await memoryOf(kept))?.facts).toEqual([
+    own,
+    expect.objectContaining({ value: 'M', source: 'customer_message' }),
+  ]);
+
+  await service().resetForUndo(
+    shopRow.storeId,
+    { keptContactId: kept, mergedContactId: merged },
+    adopted,
+  );
+  expect((await memoryOf(kept))?.facts).toEqual([]);
+  expect((await memoryOf(merged))?.facts).toEqual([own]);
+});
+
+it('discards a model answer that was running when the contacts merged', async () => {
+  const shopRow = await shop();
+  const kept = await contact(shopRow.storeId);
+  const merged = await contact(shopRow.storeId);
+  const mergedChat = await conversation(shopRow, merged);
+  const messageId = await message(shopRow.storeId, mergedChat, 'M size lagbe', 3);
+  respond.mockImplementation(async () => {
+    await service().resetForMerge(shopRow.storeId, {
+      keptContactId: kept,
+      mergedContactId: merged,
+    });
+    return {
+      kind: 'output',
+      output: {
+        conversationSummary: 'Chat.',
+        customerSummary: 'Size M.',
+        facts: [{ kind: 'size', value: 'M', source: 'customer_message', sourceId: messageId }],
+      },
+      usage,
+      model: 'fake',
+      responseId: 'r',
+    };
+  });
+
+  await expect(
+    service().updateFromConversation(shopRow.storeId, mergedChat, false),
+  ).rejects.toMatchObject({ code: 'CONTACT_MEMORY_CHANGED' });
+  expect((await memoryOf(merged))?.facts).toEqual([]);
+});
