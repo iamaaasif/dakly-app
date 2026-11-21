@@ -20,7 +20,7 @@ export type ParsedQuery = {
 
 // The same colour or garment in Bangla script, Banglish and English. Members are written the way
 // shoppers type them; each one is reduced to its key so spelling variants land on the group too.
-const conceptGroups: string[][] = [
+const colourGroups: string[][] = [
   ['red', 'lal', 'লাল'],
   ['blue', 'nil', 'neel', 'নীল', 'নিল'],
   ['black', 'kalo', 'কালো'],
@@ -35,6 +35,8 @@ const conceptGroups: string[][] = [
   ['maroon', 'মেরুন'],
   ['navy', 'নেভি'],
   ['golden', 'sonali', 'সোনালি'],
+];
+const garmentGroups: string[][] = [
   ['kurti', 'kurta', 'কুর্তি', 'কুর্তা'],
   ['saree', 'sari', 'শাড়ি', 'শাড়ী'],
   ['panjabi', 'punjabi', 'পাঞ্জাবি', 'পাঞ্জাবী'],
@@ -52,7 +54,8 @@ const conceptGroups: string[][] = [
 ];
 
 const conceptByKey = new Map<string, string>();
-for (const [concept, ...members] of conceptGroups) {
+const colourConcepts = new Set(colourGroups.map(([concept]) => concept!));
+for (const [concept, ...members] of [...colourGroups, ...garmentGroups]) {
   for (const member of [concept!, ...members]) {
     const [word] = searchWords(member);
     conceptByKey.set(wordKey(word!), concept!);
@@ -203,4 +206,31 @@ export function rankByWords(documents: SearchDocument[], query: ParsedQuery): st
     .filter(({ score }) => score >= minLexicalScore)
     .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
     .map(({ id }) => id);
+}
+
+const identifyingMatch = 0.9;
+const colourWeight = 0.3;
+
+// How strongly a photo's words name each product. A word every shoe shares says little about which
+// shoe it is, so its credit is split across the products it fits; a colour counts for less than a name.
+export function nameScores(documents: SearchDocument[], words: string[]): Map<string, number> {
+  const scores = new Map<string, number>();
+  const named = documents.map((document) => ({
+    id: document.id,
+    names: fieldOf(1, [document.name, ...document.aliases]),
+    category: fieldOf(1, [document.category]),
+  }));
+  for (const word of words) {
+    const [query] = fieldOf(1, [word]).words;
+    if (!query) continue;
+    const fits = (field: Field) =>
+      field.words.some((stored) => wordMatch(query, stored) >= identifyingMatch);
+    const sharing = named.filter(({ names, category }) => fits(names) || fits(category)).length;
+    if (!sharing) continue;
+    const credit =
+      (query.concept && colourConcepts.has(query.concept) ? colourWeight : 1) / sharing;
+    for (const { id, names } of named)
+      if (fits(names)) scores.set(id, (scores.get(id) ?? 0) + credit);
+  }
+  return scores;
 }
