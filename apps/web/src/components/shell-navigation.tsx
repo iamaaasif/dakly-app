@@ -1,5 +1,6 @@
 'use client';
 import {
+  BookOpen,
   CalendarDays,
   ChartLine,
   House,
@@ -142,6 +143,7 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
         { href: '/products', label: 'Products', icon: Package, visible: store?.canViewProducts },
       ],
     },
+    physicalShopGroup(store),
     {
       heading: 'Marketing',
       links: [
@@ -167,6 +169,15 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
     },
     ...settingsGroups(store),
   ];
+}
+
+function physicalShopGroup(store: SessionContext['currentStore']): NavigationGroup {
+  return {
+    heading: 'Physical shop',
+    links: [
+      { href: '/due-book', label: 'Due book', icon: BookOpen, visible: store?.canViewDueBook },
+    ],
+  };
 }
 
 function socialGroup(store: SessionContext['currentStore']): NavigationGroup {

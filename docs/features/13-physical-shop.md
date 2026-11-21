@@ -87,7 +87,7 @@ What others do: TallyKhata and OkCredit made baki tracking free and sent an SMS 
 
 #### Due book API (DUE-1)
 
-What the code does now; the screens (DUE-3) come later. The SMS notices and reminders are under "Baki notices and reminders (DUE-2)" below.
+What the code does now. The SMS notices and reminders are under "Baki notices and reminders (DUE-2)" below, and the screen is under "Due book screen (DUE-3)".
 
 - Every baki, payment and write-off is a row in `due_entries`. Rows are never edited or deleted by the app; a correction is a new row. The row says who recorded it and when it happened. Edit and delete of an entry, from the "Customer disputes baki" case, are not built yet.
 - The balance is the baki total minus payments and write-offs. A negative balance means the shop owes the customer. Payments and write-offs both settle the oldest baki first, and the oldest debt is the date of the oldest baki that is still open.
@@ -99,15 +99,15 @@ What the code does now; the screens (DUE-3) come later. The SMS notices and remi
 
 Routes (all under the Due book permission: `dueBook.view` to read, `dueBook.edit` to write):
 
-| Route                                              | What it does                                                       |
-| -------------------------------------------------- | ------------------------------------------------------------------ |
-| `GET /due-book/summary`                            | Total owed, customers owing, older than 30 days, collected, 7 days |
-| `GET /due-book/customers?filter=all\|over_30_days` | Customers who owe, with balance and oldest debt, by cursor         |
-| `GET /due-book/customers/:contactId`               | One customer's balance and oldest debt                             |
-| `GET /due-book/customers/:contactId/entries`       | History, newest first, with the balance after each entry           |
-| `POST /due-book/customers/:contactId/baki`         | Add baki: `amountPoisha`, optional `note`, optional `occurredAt`   |
-| `POST /due-book/customers/:contactId/payments`     | Collect: `amountPoisha`, `method`, optional `note`, `occurredAt`   |
-| `POST /due-book/customers/:contactId/write-offs`   | Write off: `amountPoisha`, `reason`. Owner or Admin only           |
+| Route                                                              | What it does                                                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `GET /due-book/summary`                                            | Total owed, customers owing, older than 30 days, never reminded, collected in 7 days |
+| `GET /due-book/customers?filter=all\|over_30_days\|never_reminded` | Customers who owe, with balance, oldest debt and last reminded, by cursor            |
+| `GET /due-book/customers/:contactId`                               | One customer's balance and oldest debt                                               |
+| `GET /due-book/customers/:contactId/entries`                       | History, newest first, with the balance after each entry                             |
+| `POST /due-book/customers/:contactId/baki`                         | Add baki: `amountPoisha`, optional `note`, optional `occurredAt`                     |
+| `POST /due-book/customers/:contactId/payments`                     | Collect: `amountPoisha`, `method`, optional `note`, `occurredAt`                     |
+| `POST /due-book/customers/:contactId/write-offs`                   | Write off: `amountPoisha`, `reason`. Owner or Admin only                             |
 
 #### Baki notices and reminders (DUE-2)
 
@@ -116,7 +116,18 @@ Routes (all under the Due book permission: `dueBook.view` to read, `dueBook.edit
 - **Reminder.** "Remind" is `POST /due-book/customers/:contactId/reminders` and "Remind all over 30 days" is `POST /due-book/reminders/overdue`. Each customer is checked under their own lock, then the reminder is stored and `due.reminder_requested` is published in the same transaction; the subscriber sends it. The text is fixed: "রিনার দোকান: প্রিয় গ্রাহক, আপনার ৳1,750 বাকি আছে। সুবিধামতো পরিশোধ করলে কৃতজ্ঞ থাকব। ধন্যবাদ।" The AI does not rephrase it yet.
 - **Limits (SHOP-R4).** One reminder per customer per 7 days, counting reminders that are queued, sending or sent. Reminders are asked for and sent only from 9 am up to 8 pm in the shop's time zone; a request outside those hours is refused with `DUE_REMINDER_OUTSIDE_HOURS`, and a reminder that was stored just before 8 pm and reached delivery after it is skipped as `outside_hours`. A single Remind that breaks a rule answers 409 with `DUE_REMINDER_TOO_SOON`, `DUE_NOT_OWING`, `DUE_REMINDER_NO_PHONE`, `DUE_REMINDER_BLOCKED` or `DUE_REMINDER_OUTSIDE_HOURS`. Remind all skips such customers and counts them: `{ queued, skippedRecentlyReminded, skippedNoPhone, skippedBlocked }`. One call covers at most the 500 customers with the oldest debt.
 - **Delivery.** Both kinds are transactional (SHOP-R3): no marketing consent is needed, a blocked customer or one with no phone is skipped, and the text has no offer, link or fee. The message uses the shop's SMS credits: the credits for the text's parts are reserved before sending, charged when the provider accepts, and returned when it refuses. A shop with no credits left gets a skipped message with reason `no_credits`. The send is not inside a database transaction. If a job stops after the provider call, the retry sends under the same operation key and settles the credits once.
-- A baki notice or reminder is SMS only. WhatsApp utility messages, the message preview and the "Send thank-you SMS" switch come with DUE-3 and later work.
+- A baki notice or reminder is SMS only. WhatsApp utility messages, the message preview and the "Send thank-you SMS" switch are not built.
+
+#### Due book screen (DUE-3)
+
+Route `/due-book`, in the "Physical shop" group of the menu. It shows for a member with `dueBook.view`; Add baki, Remind, Remind all and Collect show for `dueBook.edit`. The session context carries `canViewDueBook` and `canEditDueBook`.
+
+- Top: three cards (Customers owe you, Older than 30 days, Collected this week) from `GET /due-book/summary`.
+- Filter chips All, Over 30 days and Never reminded, each with its count, kept in the address as `?filter=`. "Never reminded" counts customers with no reminder that was queued, sent or being sent, the same rule as the 7-day limit.
+- Each row: initials, name, phone, "Reminded Oct 28" or "Never reminded", the amount owed, "Oldest N days" (red after 30 days), History, Remind and Collect. The list is oldest debt first, 50 at a time with "Show more".
+- History opens under the row and lists date, note (or the entry kind) and the amount, "+" for baki and "-" for payments and write-offs. There is no write-off screen yet.
+- Add baki takes phone, name, amount and note. The customer with that phone is used; if none has it, one is made with the name. Collect starts with the full balance and takes Cash, bKash or Nagad.
+- Remind sends the fixed Bangla SMS (see DUE-2). The dialog shows no editable text and no WhatsApp tab, because the text is fixed by the server and WhatsApp reminders are not built. "Remind all over 30 days" sends at once and reports how many were queued and how many were left out.
 
 #### Khata Scanner
 

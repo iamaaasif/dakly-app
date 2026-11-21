@@ -19,6 +19,7 @@ import { ProductPhotos } from './product-photos';
 import { ProductReadiness } from './product-readiness';
 import { ProductThumbnail } from './product-thumbnail';
 import { ProductsLoading } from './products-loading';
+import { StockAdjustmentForm } from './stock-adjustment-form';
 import { SessionDialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -141,35 +142,59 @@ function ProductTabs({ product, tab, onTab, change, canEdit }: ProductTabsProps)
         <ProductOverview product={product} change={change} canEdit={canEdit} />
       </TabsContent>
       <TabsContent value="stock" className="space-y-4 pt-0">
-        <ProductStockBreakdown product={product} />
+        <ProductStockBreakdown product={product} canEdit={canEdit} />
       </TabsContent>
     </Tabs>
   );
 }
 
-function ProductStockBreakdown({ product }: { product: ProductResponse }) {
+function ProductStockBreakdown({
+  product,
+  canEdit,
+}: {
+  product: ProductResponse;
+  canEdit: boolean;
+}) {
+  const [adjusting, setAdjusting] = useState<string>();
+  const variant = product.variants.find((item) => item.id === adjusting);
   if (!product.isStockTracked) {
     return <p className="text-sm text-text-muted">Not tracked</p>;
   }
   return (
     <div className="space-y-2">
-      {product.variants.map((variant) => (
+      {product.variants.map((item) => (
         <div
-          key={variant.id}
+          key={item.id}
           className="space-y-1 rounded-lg border border-border bg-surface-muted p-3"
         >
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium text-text">{variant.title}</span>
-            {variant.sku ? (
-              <span className="text-xs text-text-muted">SKU: {variant.sku}</span>
+            <span className="text-sm font-medium text-text">{item.title}</span>
+            {item.sku ? <span className="text-xs text-text-muted">SKU: {item.sku}</span> : null}
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-text-muted">
+              <span className="font-semibold text-text tabular-nums">{item.available}</span>{' '}
+              available · {item.reserved} reserved · {item.onHand} on hand
+            </p>
+            {canEdit ? (
+              <Button
+                variant="secondary"
+                aria-label={`Change stock for ${item.title}`}
+                onClick={() => setAdjusting(item.id)}
+              >
+                Change stock
+              </Button>
             ) : null}
           </div>
-          <p className="text-xs text-text-muted">
-            <span className="font-semibold text-text tabular-nums">{variant.available}</span>{' '}
-            available · {variant.reserved} reserved · {variant.onHand} on hand
-          </p>
         </div>
       ))}
+      {variant ? (
+        <StockAdjustmentForm
+          productName={product.name}
+          variant={variant}
+          onClose={() => setAdjusting(undefined)}
+        />
+      ) : null}
     </div>
   );
 }

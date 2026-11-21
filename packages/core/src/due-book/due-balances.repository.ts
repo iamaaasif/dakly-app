@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { sql, type SQL } from 'drizzle-orm';
 
+import type { DueListFilter } from '@dakly/contracts/due-book';
+
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 export type DueBalance = { balancePoisha: number; oldestDebtAt: Date | null };
@@ -11,6 +13,7 @@ export type DueCustomerRow = {
   phone: string | null;
   balancePoisha: number;
   oldestDebtAt: Date;
+  lastRemindedAt: Date | null;
 };
 
 export type DueTotals = {
@@ -18,6 +21,7 @@ export type DueTotals = {
   customersOwing: number;
   overdueOwedPoisha: number;
   overdueCustomers: number;
+  neverRemindedCustomers: number;
 };
 
 export type DueCustomerCursor = { oldestDebtAt: Date; contactId: string };
@@ -56,7 +60,12 @@ function owing(storeId: string, overdueBefore: Date): SQL {
         sum(open_poisha)::bigint as owed_poisha,
         min(occurred_at) filter (where open_poisha > 0) as oldest_debt_at,
         coalesce(sum(open_poisha) filter (where occurred_at < ${overdueBefore.toISOString()}::timestamptz), 0)::bigint
-          as overdue_poisha
+          as overdue_poisha,
+        -- Counted like the 7-day limit: a refused reminder is not a reminder.
+        (select max(due_messages.created_at) from due_messages
+          where due_messages.store_id = ${storeId} and due_messages.contact_id = open_baki.contact_id
+            and due_messages.kind = 'reminder'
+            and due_messages.status in ('queued', 'sending', 'sent')) as last_reminded_at
       from open_baki
       join contacts on contacts.store_id = ${storeId} and contacts.id = open_baki.contact_id
         and contacts.deleted_at is null
@@ -64,6 +73,12 @@ function owing(storeId: string, overdueBefore: Date): SQL {
       having sum(open_poisha) > 0
     )`;
 }
+
+const DUE_FILTERS: Record<DueListFilter, SQL> = {
+  all: sql`true`,
+  over_30_days: sql`owing.overdue_poisha > 0`,
+  never_reminded: sql`owing.last_reminded_at is null`,
+};
 
 type RawRow = Record<string, string | number | Date | null>;
 
@@ -95,7 +110,8 @@ export class DueBalancesRepository {
         select coalesce(sum(owed_poisha), 0)::bigint as total_owed_poisha,
           count(*) as customers_owing,
           coalesce(sum(overdue_poisha), 0)::bigint as overdue_owed_poisha,
-          count(*) filter (where overdue_poisha > 0) as overdue_customers
+          count(*) filter (where overdue_poisha > 0) as overdue_customers,
+          count(*) filter (where last_reminded_at is null) as never_reminded_customers
         from owing`),
     );
     const row = result.rows[0]!;
@@ -104,6 +120,7 @@ export class DueBalancesRepository {
       customersOwing: Number(row.customers_owing),
       overdueOwedPoisha: Number(row.overdue_owed_poisha),
       overdueCustomers: Number(row.overdue_customers),
+      neverRemindedCustomers: Number(row.never_reminded_customers),
     };
   }
 
@@ -112,18 +129,19 @@ export class DueBalancesRepository {
     storeId: string,
     query: {
       overdueBefore: Date;
-      onlyOverdue: boolean;
+      filter: DueListFilter;
       cursor?: DueCustomerCursor;
       limit: number;
     },
   ): Promise<DueCustomerRow[]> {
-    const { overdueBefore, onlyOverdue, cursor, limit } = query;
+    const { overdueBefore, filter, cursor, limit } = query;
     const result = await this.database.forStore(storeId, (tx) =>
       tx.execute<RawRow>(sql`
         with ${openBaki(storeId)}, ${owing(storeId, overdueBefore)}
-        select owing.contact_id, owing.owed_poisha, owing.oldest_debt_at, owing.name, owing.phone
+        select owing.contact_id, owing.owed_poisha, owing.oldest_debt_at, owing.name, owing.phone,
+          owing.last_reminded_at
         from owing
-        where ${onlyOverdue ? sql`owing.overdue_poisha > 0` : sql`true`}
+        where ${DUE_FILTERS[filter]}
           and ${
             cursor
               ? sql`(owing.oldest_debt_at, owing.contact_id) > (${cursor.oldestDebtAt.toISOString()}::timestamptz, ${cursor.contactId}::uuid)`
@@ -138,6 +156,7 @@ export class DueBalancesRepository {
       phone: row.phone === null ? null : String(row.phone),
       balancePoisha: Number(row.owed_poisha),
       oldestDebtAt: new Date(row.oldest_debt_at!),
+      lastRemindedAt: row.last_reminded_at ? new Date(row.last_reminded_at) : null,
     }));
   }
 

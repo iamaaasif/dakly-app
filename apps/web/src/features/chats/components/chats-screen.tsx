@@ -11,7 +11,7 @@ import { ChatList } from './chat-list';
 
 export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
   const router = useRouter();
-  const withoutAgent = { ...query, agent: undefined };
+  const withoutAgent = { ...query, agent: undefined, feedback: undefined };
   return (
     <main className="flex h-[calc(100dvh-9.25rem)] min-h-[32rem] flex-col gap-4 p-4 md:h-[calc(100dvh-4.25rem)] md:p-8">
       <header className="flex shrink-0 flex-wrap items-start justify-between gap-3">
@@ -41,7 +41,9 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
       </div>
       <AiAgentDrawer
         tab={query.agent}
+        feedbackFilter={query.feedback}
         onTabChange={(agent) => router.push(chatsHref({ ...query, agent }))}
+        onFeedbackFilterChange={(feedback) => router.replace(chatsHref({ ...query, feedback }))}
         onClose={() => router.push(chatsHref(withoutAgent))}
       />
     </main>
