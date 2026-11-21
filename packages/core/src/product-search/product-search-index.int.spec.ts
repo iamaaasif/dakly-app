@@ -47,12 +47,11 @@ describe('ProductSearchIndexService with Postgres', () => {
   beforeAll(async () => {
     await f.setup();
     app = await NestFactory.createApplicationContext(TestModule, { logger: ['error'] });
-    productId = (
-      await f.connection.pool.query(
-        "insert into products(store_id,name,aliases) values($1,'Cotton Kurti','{কুর্তি}') returning id",
-        [f.a],
-      )
-    ).rows[0].id;
+    productId = randomUUID();
+    await f.connection.pool.query(
+      "insert into products(id,store_id,name,aliases) values($1,$2,'Cotton Kurti','{কুর্তি}')",
+      [productId, f.a],
+    );
   });
   afterAll(async () => {
     await app?.close();
