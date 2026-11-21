@@ -39,6 +39,9 @@ import { MetaPageReconciliationModule } from '@dakly/core/channels/meta-page-rec
 import { MetaWebhookMaintenanceModule } from '@dakly/core/channels/meta-webhook-maintenance.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
 import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
+import { DueBookModule } from '@dakly/core/due-book/due-book.module';
+import { SendBakiNoticeOnDueAdded } from '@dakly/core/due-book/jobs/send-baki-notice-on-due-added.job';
+import { SendDueReminderOnRequested } from '@dakly/core/due-book/jobs/send-due-reminder-on-requested.job';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
@@ -123,6 +126,8 @@ import { JobSchedulers } from './job-schedulers';
     ResumeCampaignsOnWalletCredited,
     RecordCampaignTapJob,
     ContinueAutomationRunJob,
+    SendBakiNoticeOnDueAdded,
+    SendDueReminderOnRequested,
     ResumeWorkflowsOnWalletCredited,
     JobSchedulers,
   ],
@@ -157,6 +162,7 @@ import { JobSchedulers } from './job-schedulers';
     AutomationsModule,
     CampaignsModule.forWorker(),
     ClockModule,
+    DueBookModule,
     ImportsModule,
     KhataScansModule,
     ContactStatsRepairModule,

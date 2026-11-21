@@ -16,8 +16,13 @@ import { useSessionContext } from '@/lib/session-context';
 
 const periods = [7, 30, 90] as const;
 
-// The Ask box belongs to the assistant feature, so the page hands it in.
-export function Dashboard({ period, askBox }: DashboardQuery & { askBox: ReactNode }) {
+// The Ask box and the setup guide belong to other features, so the page hands them in.
+export function Dashboard({
+  period,
+  askBox,
+  setupBanner,
+  setupCard,
+}: DashboardQuery & { askBox: ReactNode; setupBanner: ReactNode; setupCard: ReactNode }) {
   const { data: session } = useSessionContext();
   const { data, error, isPending, refetch } = useDashboard(period, Boolean(session?.currentStore));
   if (!session?.currentStore) return null;
@@ -25,7 +30,9 @@ export function Dashboard({ period, askBox }: DashboardQuery & { askBox: ReactNo
   const firstName = session.user.name.trim().split(/\s+/)[0];
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-6 md:p-8">
+      {setupBanner}
       <DashboardHeader data={data} name={firstName} period={period} askBox={askBox} />
+      {setupCard}
       {isPending && (
         <div role="status" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <span className="sr-only">Loading dashboard reports</span>

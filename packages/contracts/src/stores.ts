@@ -59,6 +59,12 @@ export const stockSettingsSchema = z.strictObject({
 });
 type StockSettings = z.infer<typeof stockSettingsSchema>;
 
+// Feature 13 rule 2: the SMS to the customer when baki is added, on unless the shop turns it off.
+export const dueBookSettingsSchema = z.strictObject({
+  bakiNoticeEnabled: z.boolean().default(true),
+});
+type DueBookSettings = z.infer<typeof dueBookSettingsSchema>;
+
 export const createStoreSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
   businessType: z.string().trim().min(1).max(100),
@@ -94,6 +100,7 @@ export const changeStoreSettingsSchema = z
     // The whole section, as GET /store returns it, so a save never resets a part to its default.
     sending: sendingSettingsSchema.required().optional(),
     stock: stockSettingsSchema.required().optional(),
+    dueBook: dueBookSettingsSchema.required().optional(),
   })
   .refine(
     (input) => Object.values(input).some((value) => value !== undefined),
@@ -120,6 +127,7 @@ export type StoreSettingsResponse = StoreResponse & {
   tradeLicenceNumber: string | null;
   sending: SendingSettings;
   stock: StockSettings;
+  dueBook: DueBookSettings;
 };
 
 export const attributionWindowSchema = z.union([z.literal(1), z.literal(3), z.literal(7)]);

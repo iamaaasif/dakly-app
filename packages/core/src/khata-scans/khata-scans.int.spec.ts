@@ -135,7 +135,7 @@ describe('KhataScansService (Postgres)', () => {
 
     const queued = await service.requestRead(storeId, pageId);
     expect(queued.status).toBe('reading');
-    await service.readPage(storeId, pageId);
+    await service.readPage(storeId, pageId, true);
 
     const page = await service.getPage(storeId, pageId);
     expect(page.status).toBe('read');
@@ -161,8 +161,8 @@ describe('KhataScansService (Postgres)', () => {
     const pageId = await uploadedPage(storeId, userId);
     await service.requestRead(storeId, pageId);
 
-    await service.readPage(storeId, pageId);
-    await service.readPage(storeId, pageId);
+    await service.readPage(storeId, pageId, true);
+    await service.readPage(storeId, pageId, true);
 
     expect(read).toHaveBeenCalledTimes(1);
     expect((await service.getPage(storeId, pageId)).rows).toHaveLength(1);
@@ -180,7 +180,7 @@ describe('KhataScansService (Postgres)', () => {
     const pageId = await uploadedPage(storeId, userId);
     await service.requestRead(storeId, pageId);
 
-    await service.readPage(storeId, pageId);
+    await service.readPage(storeId, pageId, true);
 
     expect((await service.getPage(storeId, pageId)).status).toBe('unreadable');
     const used = await admin.pool.query(
@@ -216,7 +216,7 @@ describe('KhataScansService (Postgres)', () => {
     );
     const pageId = await uploadedPage(storeId, userId);
     await service.requestRead(storeId, pageId);
-    await service.readPage(storeId, pageId);
+    await service.readPage(storeId, pageId, true);
     expect(await service.getPage(storeId, pageId)).toMatchObject({
       status: 'failed',
       failureCode: 'model',
@@ -224,8 +224,52 @@ describe('KhataScansService (Postgres)', () => {
 
     modelReads({ pageReadable: true, rows: [baki()] });
     await service.requestRead(storeId, pageId);
-    await service.readPage(storeId, pageId);
+    await service.readPage(storeId, pageId, true);
     expect((await service.getPage(storeId, pageId)).status).toBe('read');
+  });
+
+  it('tries a page again after a model timeout and charges it once', async () => {
+    const { storeId, userId } = await shop(5);
+    storeObject();
+    const respond = vi
+      .spyOn(FakeLlmDriver.prototype, 'respond')
+      .mockRejectedValueOnce(new LlmError('LLM_TIMEOUT'))
+      .mockResolvedValueOnce({
+        kind: 'output',
+        output: { pageReadable: true, rows: [baki()] },
+        usage,
+        model: 'test-vision',
+        responseId: 'r2',
+      });
+    const pageId = await uploadedPage(storeId, userId);
+    await service.requestRead(storeId, pageId);
+
+    await expect(service.readPage(storeId, pageId, false)).rejects.toThrow('tried again');
+    expect((await service.getPage(storeId, pageId)).status).toBe('reading');
+    await service.readPage(storeId, pageId, true);
+
+    expect(respond).toHaveBeenCalledTimes(2);
+    expect((await service.getPage(storeId, pageId)).status).toBe('read');
+    const used = await admin.pool.query(
+      'select count(*)::int as n from usage_events where store_id=$1',
+      [storeId],
+    );
+    expect(used.rows[0].n).toBe(1);
+  });
+
+  it('fails a page at once when the model gives an answer that will not change', async () => {
+    const { storeId, userId } = await shop(5);
+    storeObject();
+    vi.spyOn(FakeLlmDriver.prototype, 'respond').mockRejectedValueOnce(new LlmError('LLM_REFUSED'));
+    const pageId = await uploadedPage(storeId, userId);
+    await service.requestRead(storeId, pageId);
+
+    await service.readPage(storeId, pageId, false);
+
+    expect(await service.getPage(storeId, pageId)).toMatchObject({
+      status: 'failed',
+      failureCode: 'model',
+    });
   });
 
   it('lists the newest pages first with their rows', async () => {

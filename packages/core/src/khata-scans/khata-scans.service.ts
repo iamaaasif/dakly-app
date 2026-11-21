@@ -42,6 +42,13 @@ const PAGES_PER_HOUR = 100;
 const READ_TIMEOUT_MS = 60_000;
 // A reader that has not finished in 5 minutes is gone; the next delivery takes the page over.
 const LEASE_MS = 5 * 60 * 1000;
+const TRANSIENT_MODEL_FAILURES: ReadonlySet<string> = new Set([
+  'LLM_TIMEOUT',
+  'LLM_RATE_LIMITED',
+  'LLM_UNAVAILABLE',
+  'AI_PAUSED',
+  'AI_STORE_BUSY',
+]);
 const MODEL_INSTRUCTION = 'Read the attached khata page.';
 
 type MatchedRow = NewKhataRow;
@@ -133,7 +140,7 @@ export class KhataScansService {
 
   // The job's entry point. A page that is read, unreadable or failed is left alone, so a
   // redelivered job does nothing; one that crashed mid-read is taken over after its lease.
-  async readPage(storeId: string, pageId: string): Promise<void> {
+  async readPage(storeId: string, pageId: string, finalAttempt: boolean): Promise<void> {
     const now = this.clock.now();
     if (!(await this.repository.claim(storeId, pageId, now, new Date(now.getTime() - LEASE_MS))))
       return;
@@ -149,17 +156,13 @@ export class KhataScansService {
       purpose: 'khata_scan',
       prompt: readKhataPage,
       input: MODEL_INSTRUCTION,
-      attachments: [
-        {
-          contentType: page.contentType as 'image/jpeg' | 'image/png' | 'application/pdf',
-          bytes: file.bytes,
-        },
-      ],
+      attachments: [{ contentType: page.contentType, bytes: file.bytes }],
       output: khataModelOutputSchema,
       timeoutMs: READ_TIMEOUT_MS,
     });
     if (result.kind !== 'output') {
-      await this.repository.finish(storeId, pageId, { status: 'failed', failureCode: 'model' });
+      const code = result.kind === 'failure' ? result.code : undefined;
+      await this.handleModelFailure(storeId, pageId, code, finalAttempt);
       return;
     }
     const read = readKhataRows(result.output, this.clock.now());
@@ -170,6 +173,22 @@ export class KhataScansService {
     }
     if (!(await this.charge(storeId, pageId))) return;
     await this.repository.saveRead(storeId, pageId, await this.withMatches(storeId, read));
+  }
+
+  // An outage or a pause passes, so the queue tries the page again and only the last try fails it.
+  // Any other failure would repeat itself, so it fails the page at once.
+  private async handleModelFailure(
+    storeId: string,
+    pageId: string,
+    code: string | undefined,
+    finalAttempt: boolean,
+  ): Promise<void> {
+    const isTransient = code !== undefined && TRANSIENT_MODEL_FAILURES.has(code);
+    if (isTransient && !finalAttempt) {
+      await this.repository.releaseClaim(storeId, pageId);
+      throw new Error(`Khata page read will be tried again: ${code}`);
+    }
+    await this.repository.finish(storeId, pageId, { status: 'failed', failureCode: 'model' });
   }
 
   private async charge(storeId: string, pageId: string): Promise<boolean> {

@@ -13,8 +13,8 @@ import { KhataScansService } from '../khata-scans.service';
 export class ReadKhataPage implements JobHandler {
   constructor(@Inject(KhataScansService) private readonly khataScans: KhataScansService) {}
 
-  async handle(data: unknown) {
+  async handle(data: unknown, finalAttempt: boolean) {
     const { storeId, payload } = khataPageQueuedEventSchema.extend({ id: z.uuid() }).parse(data);
-    await this.khataScans.readPage(storeId, payload.pageId);
+    await this.khataScans.readPage(storeId, payload.pageId, finalAttempt);
   }
 }

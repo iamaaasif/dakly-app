@@ -26,7 +26,16 @@ const groups = [
   ],
   [
     'Channels, customers and chats',
-    ['areas', 'channels', 'contacts', 'imports', 'contact-memory', 'customer-insights', 'chats'],
+    [
+      'areas',
+      'channels',
+      'contacts',
+      'imports',
+      'contact-memory',
+      'customer-insights',
+      'chats',
+      'due-book',
+    ],
   ],
   ['Products, orders and payments', ['products', 'orders', 'payments']],
   ['AI', ['ai', 'khata-scans']],

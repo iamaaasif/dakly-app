@@ -23,6 +23,12 @@ import {
   productImportStartedEventSchema,
   segmentSavedEventSchema,
 } from './contacts';
+import {
+  dueAddedEventSchema,
+  duePaymentRecordedEventSchema,
+  dueReminderRequestedEventSchema,
+  dueWrittenOffEventSchema,
+} from './due-book';
 import { khataPageQueuedEventSchema } from './khata-scans';
 import { knowledgeIndexRequestedEventSchema } from './knowledge';
 import {
@@ -122,6 +128,10 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   paymentFailedEventSchema,
   paymentSucceededEventSchema,
   paymentVerificationRequestedEventSchema,
+  dueAddedEventSchema,
+  duePaymentRecordedEventSchema,
+  dueReminderRequestedEventSchema,
+  dueWrittenOffEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

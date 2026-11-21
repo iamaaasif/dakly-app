@@ -1,11 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
 
-import type {
-  KhataFailureCode,
-  KhataMatchKind,
-  KhataPageStatus,
-  KhataRowKind,
+import {
+  type KhataFailureCode,
+  type KhataMatchKind,
+  type KhataPageContentType,
+  type KhataPageStatus,
+  type KhataRowKind,
+  khataPageContentTypeSchema,
 } from '@dakly/contracts/khata-scans';
 import { khataPages, khataRows } from '@dakly/db/schema/khata-scans';
 import { files } from '@dakly/db/schema/platform';
@@ -18,7 +20,7 @@ export type KhataPage = {
   failureCode: KhataFailureCode | null;
   createdAt: Date;
   objectKey: string;
-  contentType: string;
+  contentType: KhataPageContentType;
   sizeBytes: number;
   photoExpiresAt: Date | null;
 };
@@ -56,6 +58,11 @@ const pageColumns = {
   photoExpiresAt: files.expiresAt,
 };
 
+// The file row stores the type as text; only the upload route writes it, from the same union.
+function toPage(row: Omit<KhataPage, 'contentType'> & { contentType: string }): KhataPage {
+  return { ...row, contentType: khataPageContentTypeSchema.parse(row.contentType) };
+}
+
 @Injectable()
 export class KhataScansRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -83,7 +90,7 @@ export class KhataScansRepository {
   }
 
   async findPage(storeId: string, pageId: string): Promise<KhataPage | undefined> {
-    const [page] = await this.database.forStore(storeId, (tx) =>
+    const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select(pageColumns)
         .from(khataPages)
@@ -93,11 +100,11 @@ export class KhataScansRepository {
         )
         .where(and(eq(khataPages.storeId, storeId), eq(khataPages.id, pageId))),
     );
-    return page;
+    return row && toPage(row);
   }
 
-  listPages(storeId: string, limit: number, cursor?: string): Promise<KhataPage[]> {
-    return this.database.forStore(storeId, (tx) =>
+  async listPages(storeId: string, limit: number, cursor?: string): Promise<KhataPage[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select(pageColumns)
         .from(khataPages)
@@ -109,6 +116,7 @@ export class KhataScansRepository {
         .orderBy(desc(khataPages.id))
         .limit(limit),
     );
+    return rows.map(toPage);
   }
 
   async rowsForPages(storeId: string, pageIds: string[]): Promise<StoredKhataRow[]> {
@@ -163,6 +171,16 @@ export class KhataScansRepository {
         .returning({ id: khataPages.id }),
     );
     return rows.length === 1;
+  }
+
+  // Lets the next delivery of the job take the page without waiting for the lease to run out.
+  async releaseClaim(storeId: string, pageId: string): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(khataPages)
+        .set({ claimedAt: null })
+        .where(and(eq(khataPages.storeId, storeId), eq(khataPages.id, pageId))),
+    );
   }
 
   // A rerun after a crash replaces the rows instead of adding them twice.

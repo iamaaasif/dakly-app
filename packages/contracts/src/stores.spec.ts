@@ -79,6 +79,14 @@ describe('store settings patches', () => {
     ).toBe(false);
   });
 
+  it('turns the baki notice on unless the shop saves it off', () => {
+    expect(contracts.dueBookSettingsSchema.parse({})).toEqual({ bakiNoticeEnabled: true });
+    expect(
+      contracts.changeStoreSettingsSchema.parse({ dueBook: { bakiNoticeEnabled: false } }),
+    ).toEqual({ dueBook: { bakiNoticeEnabled: false } });
+    expect(contracts.changeStoreSettingsSchema.safeParse({ dueBook: {} }).success).toBe(false);
+  });
+
   it('accepts release 1 extensions or an empty selection', () => {
     expect(
       contracts.changeStoreExtensionsSchema.parse({

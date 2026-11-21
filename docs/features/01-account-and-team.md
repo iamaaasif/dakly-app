@@ -1109,4 +1109,12 @@ Each step checks its real condition. "Connect your Facebook Page" needs an activ
 
 `PATCH /setup-checklist` takes either `{ howYouSell }` or `{ hidden: true }`. New answers replace the saved ones, turn on the extensions from ACC-R5 that are still off (never turning one off), bring a hidden guide back, and return the extensions turned on in `turnedOn` for the toast. `hidden: true` is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can change it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`.
 
-The Dashboard banner and card are the next PR in this task.
+### Setup banner and card on the Dashboard (ACC-13, second PR)
+
+The Dashboard shows the "How do you sell?" banner above the greeting card and the "Get started with Dakly" card below it (evidence in `docs/design/evidence/acc-13-setup-checklist/`). The page hands both in, as it does the Ask box.
+
+The banner shows only for a shop with no saved answers, because sign-up asks the question once and the second ask in the prototype was dropped. "Set up Dakly" opens a dialog with the four answers as toggle cards. Saving calls `PATCH /setup-checklist`, then a toast reads "Dakly is set up for how you sell. Turned on: …" and the menu is refreshed when extensions changed.
+
+The card shows "N of M done", one card per step in API order, and only the first open step gets the filled button; a done step shows a green tick and "Done". "Change setup" reopens the dialog with the saved answers. When every step is done the card reads "You're all set" and "Hide guide" hides it for the shop. Members who cannot change extensions (`canChangeExtensions`) see the card without Change setup and Hide guide, and never see the banner. The step titles, texts, buttons and links live in the web app. Teach Dakly opens the AI agent drawer on its Knowledge tab (`/chats?agent=knowledge`).
+
+The design shows three steps for a shop with no answers. Release 1 has no store connection, so such a shop sees two. Steps use the action fill, not the brighter orange in the image, to keep the 4.5:1 text contrast in `docs/design/theme.md`.

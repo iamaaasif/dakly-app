@@ -227,6 +227,42 @@ const examples: DaklyEvent[] = [
     occurredAt,
     payload: { wallet: 'sms_credits', entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae0' },
   },
+  {
+    type: 'due.added',
+    storeId,
+    occurredAt,
+    payload: {
+      contactId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1',
+      entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
+    },
+  },
+  {
+    type: 'due.payment_recorded',
+    storeId,
+    occurredAt,
+    payload: {
+      contactId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1',
+      entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
+    },
+  },
+  {
+    type: 'due.reminder_requested',
+    storeId,
+    occurredAt,
+    payload: {
+      contactId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1',
+      messageId: '019c01ea-cf15-7d31-a7f5-d73d66007ae3',
+    },
+  },
+  {
+    type: 'due.written_off',
+    storeId,
+    occurredAt,
+    payload: {
+      contactId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1',
+      entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
+    },
+  },
 ];
 
 const personalData = {

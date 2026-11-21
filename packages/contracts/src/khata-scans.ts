@@ -4,13 +4,14 @@ import { z } from 'zod';
 export const KHATA_PAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const KHATA_CONFIDENCE_THRESHOLD = 85;
 export const khataPageContentTypes = ['image/jpeg', 'image/png', 'application/pdf'] as const;
+export const khataPageContentTypeSchema = z.enum(khataPageContentTypes);
 export const khataPageStatuses = ['uploaded', 'reading', 'read', 'unreadable', 'failed'] as const;
 export const khataRowKinds = ['sale', 'baki', 'payment'] as const;
 export const khataMatchKinds = ['phone', 'similar_phone'] as const;
 export const khataFailureCodes = ['allowance', 'model'] as const;
 
 export const createKhataPageSchema = z.strictObject({
-  contentType: z.enum(khataPageContentTypes),
+  contentType: khataPageContentTypeSchema,
   sizeBytes: z.number().int().positive().max(KHATA_PAGE_MAX_BYTES),
 });
 export const khataPageListQuerySchema = z.strictObject({
@@ -38,6 +39,7 @@ export const khataModelOutputSchema = z.strictObject({
 export type CreateKhataPageInput = z.infer<typeof createKhataPageSchema>;
 export type KhataPageListQuery = z.infer<typeof khataPageListQuerySchema>;
 export type KhataModelOutput = z.infer<typeof khataModelOutputSchema>;
+export type KhataPageContentType = z.infer<typeof khataPageContentTypeSchema>;
 export type KhataPageStatus = (typeof khataPageStatuses)[number];
 export type KhataRowKind = (typeof khataRowKinds)[number];
 export type KhataMatchKind = (typeof khataMatchKinds)[number];

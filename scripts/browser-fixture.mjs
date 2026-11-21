@@ -78,6 +78,7 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
               'khata_rows',
               'khata_pages',
               'usage_events',
+              'due_entries',
               'contacts',
               'sms_sender_ids',
               'files',
