@@ -141,6 +141,57 @@ export class OrderReportingRepository {
     return { count: row?.count ?? 0, salesPoisha: BigInt(row?.salesPoisha ?? '0') };
   }
 
+  // Marketing orders whose every item has a cost price. An order with an unknown cost is counted apart
+  // and left out of the money, because a missing cost is not zero. Cancelled and returned orders earn nothing.
+  async marketingProfitInputs(
+    storeId: string,
+    { from, through, timeZone }: { from: string; through: string; timeZone: string },
+  ) {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{
+        counted: number;
+        excluded: number;
+        revenue: string;
+        product_cost: string;
+        delivery_cost: string;
+      }>(sql`
+        select (count(*) filter (where is_known))::int as counted,
+          (count(*) filter (where not is_known))::int as excluded,
+          coalesce(sum(attributed_amount_poisha) filter (where is_known), 0)::text as revenue,
+          coalesce(sum(item_cost) filter (where is_known), 0)::text as product_cost,
+          coalesce(sum(coalesce(courier_charge_poisha, 0) + coalesce(cod_fee_poisha, 0))
+            filter (where is_known), 0)::text as delivery_cost
+        from (
+          select o.attributed_amount_poisha, o.courier_charge_poisha, o.cod_fee_poisha,
+            not exists (
+              select 1 from order_items i
+              where i.store_id = o.store_id and i.order_id = o.id and i.unit_cost_poisha is null
+            ) as is_known,
+            (select coalesce(sum(coalesce(i.delivered_quantity, i.quantity) * i.unit_cost_poisha), 0)
+              from order_items i where i.store_id = o.store_id and i.order_id = o.id) as item_cost
+          from orders o
+          where o.store_id = ${storeId} and o.attributed_source_type is not null
+            and o.stage not in ('cancelled', 'returned')
+            and (o.created_at at time zone ${timeZone})::date between ${from}::date and ${through}::date
+        ) marketing`),
+    );
+    // An aggregate always returns one row.
+    const row = rows[0] ?? {
+      counted: 0,
+      excluded: 0,
+      revenue: '0',
+      product_cost: '0',
+      delivery_cost: '0',
+    };
+    return {
+      counted: row.counted,
+      excluded: row.excluded,
+      revenuePoisha: BigInt(row.revenue),
+      productCostPoisha: BigInt(row.product_cost),
+      deliveryCostPoisha: BigInt(row.delivery_cost),
+    };
+  }
+
   async topProducts(
     storeId: string,
     { from, through, timeZone }: { from: string; through: string; timeZone: string },

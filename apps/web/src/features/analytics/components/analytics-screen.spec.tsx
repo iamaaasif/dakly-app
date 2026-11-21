@@ -154,4 +154,17 @@ describe('Analytics screen', () => {
     expect(within(reasons).getByText('Asked for a discount')).toBeTruthy();
     expect(within(reasons).getByText('Refund or exchange')).toBeTruthy();
   });
+
+  it('shows profit, how it adds up and how many orders had no cost price', async () => {
+    show({ tab: 'profit' });
+    expect((await screen.findAllByText('৳1,84,385')).length).toBe(2);
+    expect(
+      screen.getByText(
+        'Excludes 37 orders without a cost price. Add the cost to your products to count them.',
+      ),
+    ).toBeTruthy();
+    const sum = screen.getByRole('heading', { name: 'How profit adds up' }).closest('div')!;
+    expect(within(sum).getByText('−৳2,80,000')).toBeTruthy();
+    expect(within(sum).getByText('From 240 orders with every cost price known.')).toBeTruthy();
+  });
 });

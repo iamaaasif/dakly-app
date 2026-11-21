@@ -3150,6 +3150,57 @@ fixture('GET /analytics/automations', () =>
   expectAnalyticsRoute('automations', { isActive: true, orders: 2, revenuePoisha: '20000' }),
 );
 
+fixture('GET /analytics/profit', async () => {
+  const { a, b } = await pair();
+  for (const [shop, cost] of [
+    [a, 20000],
+    [b, 45000],
+  ] as const) {
+    const [contact, order, product, variant] = [
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+    ];
+    await f.admin.pool.query(
+      "insert into contacts(id,store_id,name,source,kind) values($1,$2,'গ্রাহক','manual','customer')",
+      [contact, shop.id],
+    );
+    await f.admin.pool.query(
+      `insert into orders(id,store_id,number,source,created_by_type,buyer_contact_id,recipient_name,
+         recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha,
+         attributed_source_type,attributed_source_id,attributed_amount_poisha)
+       values($1,$2,1,'messenger','user',$3,'x','01710000009','Mirpur','Dhaka',100000,100000,'campaign',gen_random_uuid(),100000)`,
+      [order, shop.id, contact],
+    );
+    await f.admin.pool.query("insert into products(id,store_id,name) values($1,$2,'পণ্য')", [
+      product,
+      shop.id,
+    ]);
+    await f.admin.pool.query(
+      "insert into product_variants(id,store_id,product_id,title,sku) values($1,$2,$3,'M',$4)",
+      [variant, shop.id, product, `sku-${variant}`],
+    );
+    await f.admin.pool.query(
+      `insert into order_items(id,store_id,order_id,variant_id,product_name,variant_title,quantity,
+         unit_price_poisha,unit_cost_poisha,is_stock_tracked)
+       values(gen_random_uuid(),$1,$2,$3,'পণ্য','M',1,100000,$4,false)`,
+      [shop.id, order, variant, cost],
+    );
+  }
+  for (const [shop, cost] of [
+    [a, '20000'],
+    [b, '45000'],
+  ] as const) {
+    const result = await success(shop, 'GET', '/analytics/profit?period=30', 200);
+    expect(result.json().productCost.currentPoisha).toBe(cost);
+  }
+  expect((await f.request(b.member, 'GET', '/analytics/profit')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', `/analytics/profit?storeId=${b.id}`)).statusCode).toBe(
+    400,
+  );
+});
+
 fixture('GET /analytics/ai-agent', async () => {
   const { a, b } = await pair();
   for (const [shop, cost] of [

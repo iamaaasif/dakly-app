@@ -7,9 +7,9 @@ import { useDownloadAnalytics } from '../api/analytics-attribution';
 
 export function AnalyticsDownloadButton({ view }: { view: AnalyticsView }) {
   const download = useDownloadAnalytics();
-  // The AI agent report has no file yet.
+  // The AI agent and Profit reports have no file yet.
   const { tab, period } = view;
-  if (tab === 'ai-agent') return null;
+  if (tab === 'ai-agent' || tab === 'profit') return null;
   return (
     <div>
       <Button

@@ -10,6 +10,7 @@ import {
   type AnalyticsChannelsResponse,
   type AnalyticsExportQuery,
   type AnalyticsOverviewResponse,
+  type AnalyticsProfitResponse,
   type AnalyticsQuery,
   type AnalyticsSocialPostsResponse,
   type AnalyticsTipResponse,
@@ -23,6 +24,7 @@ import { AnalyticsAiAgentService } from './analytics-ai-agent.service';
 import { AnalyticsChannelsService } from './analytics-channels.service';
 import { AnalyticsExportService } from './analytics-export.service';
 import { AnalyticsOverviewService } from './analytics-overview.service';
+import { AnalyticsProfitService } from './analytics-profit.service';
 import { AnalyticsTabsService } from './analytics-tabs.service';
 import { AnalyticsTipService } from './analytics-tip.service';
 
@@ -32,6 +34,7 @@ export class AnalyticsController {
     @Inject(AnalyticsOverviewService) private readonly overview: AnalyticsOverviewService,
     @Inject(AnalyticsTabsService) private readonly tabs: AnalyticsTabsService,
     @Inject(AnalyticsChannelsService) private readonly channelTabs: AnalyticsChannelsService,
+    @Inject(AnalyticsProfitService) private readonly profits: AnalyticsProfitService,
     @Inject(AnalyticsAiAgentService) private readonly aiAgentReport: AnalyticsAiAgentService,
     @Inject(AnalyticsTipService) private readonly tips: AnalyticsTipService,
     @Inject(AnalyticsExportService) private readonly exports: AnalyticsExportService,
@@ -53,6 +56,15 @@ export class AnalyticsController {
     @Query(new ZodValidationPipe(analyticsQuerySchema)) query: AnalyticsQuery,
   ): Promise<AnalyticsAiAgentResponse> {
     return this.aiAgentReport.aiAgent(storeId, query);
+  }
+
+  @Get('profit')
+  @RequirePermission('analytics.view')
+  profit(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(analyticsQuerySchema)) query: AnalyticsQuery,
+  ): Promise<AnalyticsProfitResponse> {
+    return this.profits.profit(storeId, query);
   }
 
   @Get('campaigns')

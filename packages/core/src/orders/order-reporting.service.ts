@@ -36,6 +36,13 @@ export class OrderReportingService {
     return this.orders.aiOrders(storeId, range);
   }
 
+  marketingProfitInputs(
+    storeId: string,
+    range: { from: string; through: string; timeZone: string },
+  ) {
+    return this.orders.marketingProfitInputs(storeId, range);
+  }
+
   progress(storeId: string, orderId: string) {
     return this.orders.progress(storeId, orderId);
   }

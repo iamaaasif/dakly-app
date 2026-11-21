@@ -8,6 +8,7 @@ import type {
   AnalyticsCampaignRow,
   AnalyticsChannelsResponse,
   AnalyticsOverviewResponse,
+  AnalyticsProfitResponse,
   AnalyticsSocialPostsResponse,
   AnalyticsTipResponse,
   AnalyticsView,
@@ -216,6 +217,21 @@ const aiAgentResponse: AnalyticsAiAgentResponse = {
   cost: { currentPoisha: '184250', previousPoisha: '161000' },
 };
 
+const profitResponse: AnalyticsProfitResponse = {
+  asOf: overview.asOf,
+  timeZone: 'Asia/Dhaka',
+  current: overview.current,
+  previous: overview.previous,
+  revenue: { currentPoisha: '51512400', previousPoisha: '41800000' },
+  productCost: { currentPoisha: '28000000', previousPoisha: '23000000' },
+  deliveryCost: { currentPoisha: '4200000', previousPoisha: '3600000' },
+  messageCost: { currentPoisha: '873900', previousPoisha: '700000' },
+  profit: { currentPoisha: '18438500', previousPoisha: '14500000' },
+  countedOrders: { current: 240, previous: 200 },
+  excludedOrders: { current: 37, previous: 31 },
+  returnPerTaka: { current: 21, previous: 21 },
+};
+
 export type ShowOptions = {
   attribution?: AttributionSettingsResponse;
   canChange?: boolean;
@@ -236,6 +252,7 @@ export function show(view: Partial<AnalyticsView> = {}, options: ShowOptions = {
       '/analytics/channels': channelsResponse,
       '/analytics/social-posts': socialResponse,
       '/analytics/ai-agent': aiAgentResponse,
+      '/analytics/profit': profitResponse,
       '/store/attribution': options.attribution ?? {
         windowDays: 7,
         rebuilding: false,

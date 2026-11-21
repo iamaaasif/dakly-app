@@ -153,6 +153,31 @@ Shown in the AI agent report (Analytics). A period is whole Asia/Dhaka days.
 | Orders from AI chats | Orders created by the AI agent in the period, cancelled ones left out. Money is items after discount, delivery left out (same as Sales). An order a person placed from an AI chat is not counted here.                                                                                                                                                   |
 | AI agent cost        | Vendor cost of the model calls a chat causes: purposes `chat_reply`, `comment_reply`, `classify`, `transcribe`, `describe_image` and `contact_memory`, in poisha, converted at the platform rate in force when each run was saved (staff change it under the AI rate setting; history never moves). Read from the runs themselves, so today is included. |
 
+## Profit metrics
+
+Shown in the Profit tab of Analytics. A period is whole Asia/Dhaka days, counted by the day the order was created.
+
+| Metric                | Definition                                                                                                                                                                                                                                                                                |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profit orders         | Attributed orders that are not cancelled or returned and where every item has a cost price. An order with any item missing its cost price is excluded from every profit figure and counted as "excluded". An unknown cost is never treated as zero.                                       |
+| Cost of goods         | Sum of kept quantity × the cost price copied onto the order item when the order was made (delivered quantity once known). Later product edits do not change it.                                                                                                                           |
+| Delivery and COD fees | Courier charge plus COD fee recorded on the profit orders. A charge not yet recorded counts as ৳0 until the courier is booked.                                                                                                                                                            |
+| Profit from marketing | Money from marketing of the profit orders, minus cost of goods, delivery and COD fees, and the full message cost of the period. It can be negative. Message cost is not limited to the profit orders, so excluded orders can make profit look lower than it is; the screen says how many. |
+| Profit return per ৳1  | Profit ÷ message cost, rounded to whole ৳. Hidden when message cost is ৳0.                                                                                                                                                                                                                |
+
+## Company metrics
+
+Used by the admin panel's company reports (ADM-8). One definition each, so staff, finance and the board read the same number. Amounts are in poisha and use the plan price actually charged, before VAT.
+
+| Metric                    | Definition                                                                                                                                                                                                                                                                             |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monthly recurring revenue | Sum over shops with an active paid subscription at the end of the day: the price of the current period after coupons, divided by the months in it (a yearly plan counts one twelfth). Trials, unpaid and read-only shops count ৳0. Refunds reduce the month they are paid in, not MRR. |
+| New paying shop           | A shop whose first paid period starts in the month.                                                                                                                                                                                                                                    |
+| Churned shop              | A shop that had an active paid subscription at the start of the month and none at the end, with no renewal in the 7 day grace period. A shop that upgrades, downgrades or pauses is not churned.                                                                                       |
+| Monthly churn rate        | Churned shops in the month ÷ shops with an active paid subscription at the start of the month. Hidden when the start count is under 20.                                                                                                                                                |
+| Activated shop            | A shop that, within 14 days of signing up, connected a channel and sent or received its first chat message. Reported as the share of shops that signed up in a month.                                                                                                                  |
+| Trial conversion          | Shops whose first paid period starts within 7 days of their trial ending ÷ shops whose trial ended in the month.                                                                                                                                                                       |
+
 ## Formats
 
 - Money: `৳` then the amount with lakh grouping, no decimals unless the amount has poisha: `৳3,42,800`, `৳1,250.50`. One formatter in the web app does this.
