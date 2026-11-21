@@ -35,7 +35,7 @@ export function OrderRecipientFields({ order }: { order?: OrderDetail }) {
                 {...props}
                 type="tel"
                 autoComplete="tel-national"
-                placeholder={order?.recipientPhone}
+                placeholder={order?.recipientPhone ?? undefined}
                 {...register('recipient.phone', {
                   setValueAs: (value: string) => value.trim() || undefined,
                 })}
@@ -108,7 +108,7 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
         className={order ? 'grid gap-2 sm:grid-cols-3' : 'grid grid-cols-2 gap-2 sm:grid-cols-4'}
       >
         <OrderAreaFields
-          currentDistrict={order?.recipientDistrict}
+          currentDistrict={order?.recipientDistrict ?? undefined}
           onChange={(id) =>
             setValue('recipient.areaId', id ?? (order ? undefined : 0), {
               shouldDirty: true,
