@@ -16,31 +16,25 @@ const consentSchema = z.literal(true, {
   error: 'Read and agree to the Terms and Privacy documents.',
 });
 const accountSchema = signUpSchema.extend({
-  password: passwordSchema,
+  password: z.union([passwordSchema, z.literal('').transform(() => undefined)]),
   consent: consentSchema,
   email: z.union([signUpSchema.shape.email, z.literal('').transform(() => undefined)]),
 });
-// A Google account brings its own verified email and needs no password.
-const googleAccountSchema = signUpSchema
-  .omit({ email: true })
-  .extend({ consent: consentSchema, password: z.undefined(), email: z.undefined() });
 export function SignUpAccount({
   legal,
-  googleEmail,
   onSent,
 }: {
   legal: NonNullable<AuthConfig['legal']>;
-  googleEmail?: string;
   onSent: (account: { registration: SignUpInput; password?: string }) => void;
 }) {
   const form = useForm({
-    resolver: zodResolver(googleEmail ? googleAccountSchema : accountSchema),
+    resolver: zodResolver(accountSchema),
     defaultValues: {
       purpose: 'sign_up' as const,
       name: '',
       phone: '',
-      email: googleEmail ? undefined : '',
-      password: googleEmail ? undefined : '',
+      email: '',
+      password: '',
       termsVersion: legal.termsVersion,
     },
   });
@@ -54,13 +48,13 @@ export function SignUpAccount({
         onSubmit={form.handleSubmit(async ({ password, consent: _consent, ...registration }) => {
           try {
             await request.mutateAsync(registration);
-            onSent({ registration, password: password || undefined });
+            onSent({ registration, password });
           } catch (error) {
             formError(error, form.setError);
           }
         })}
       >
-        <SignUpFields googleEmail={googleEmail} />
+        <SignUpFields />
         <SignUpConsent legal={legal} />
         {errors.root ? (
           <p role="alert" className="text-danger">

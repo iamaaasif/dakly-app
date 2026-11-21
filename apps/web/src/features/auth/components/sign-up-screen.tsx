@@ -11,14 +11,10 @@ import { SignUpVerify } from './sign-up-verify';
 
 export function SignUpScreen({
   config,
-  google,
-  isRemembered = false,
   onAuthenticated,
   onSignIn,
 }: {
   config: AuthConfig;
-  google?: { signupTicket: string; email: string };
-  isRemembered?: boolean;
   onAuthenticated?: () => void;
   onSignIn?: () => void;
 }) {
@@ -53,13 +49,11 @@ export function SignUpScreen({
       {account ? (
         <SignUpVerify
           account={account}
-          signupTicket={google?.signupTicket}
-          isRemembered={isRemembered}
           onBack={() => setAccount(null)}
           onAuthenticated={onAuthenticated}
         />
       ) : (
-        <SignUpAccount legal={config.legal} googleEmail={google?.email} onSent={setAccount} />
+        <SignUpAccount legal={config.legal} onSent={setAccount} />
       )}
       {embedded || onSignIn ? (
         <AuthLink href="/sign-in" onNavigate={onSignIn}>

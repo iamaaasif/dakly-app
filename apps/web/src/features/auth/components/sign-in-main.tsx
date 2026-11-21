@@ -4,6 +4,7 @@ import type { GoogleSignInResponse } from '@dakly/contracts/auth';
 import type { AuthConfig } from '../auth.types';
 import { AuthFrame } from './auth-frame';
 import { AuthLink } from './auth-link';
+import { GoogleConsentNote } from './google-consent-note';
 import { GoogleSignIn } from './google-sign-in';
 import { SignInForm } from './sign-in-form';
 import { SignInNavigation } from './sign-in-navigation';
@@ -53,11 +54,13 @@ export function SignInMain({
               <GoogleSignIn
                 clientId={config.googleClientId}
                 isRemembered={remember}
+                termsVersion={config.legal?.termsVersion}
                 onResult={onResult}
               />
             ) : undefined
           }
         />
+        {config.googleClientId && config.legal ? <GoogleConsentNote legal={config.legal} /> : null}
         {embedded ? (
           <AuthLink
             href="/sign-up"

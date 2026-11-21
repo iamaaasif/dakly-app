@@ -96,7 +96,7 @@ Plan change: upgrades apply now and charge the prorated difference for the rest 
 | ACC-R1  | One mobile number = one user login. A verified email can be added to the same user and used to sign in (D20). One user can belong to several stores with a different role in each.                                                                              |
 | ACC-R2  | Lock sign-in for 15 minutes after 5 wrong passwords or codes in a row; tell the user by SMS, or by email when the user signed in with email.                                                                                                                    |
 | ACC-R3  | "Keep me signed in" lasts 30 days on that device; otherwise the session ends after 12 hours idle. Either way it ends 90 days after sign-in (D38).                                                                                                               |
-| ACC-R4  | Google sign-in links to an existing account only by verified email; a new Google sign-up must still verify a mobile number.                                                                                                                                     |
+| ACC-R4  | Google sign-in links to an existing account only by verified email; a new Google sign-up needs no mobile number, code or password (D48).                                                                                                                        |
 | ACC-R5  | Extensions turned on at sign-up: Sales and Chats if "Facebook or social media" is picked; Sales if "Online store" is picked; Social Auto Post if "Facebook or social media" is picked; Physical Shop if a shop answer is picked (release 2). Core is always on. |
 | ACC-R6  | Only the Owner can change billing or close the business. Every store has exactly one Owner; ownership changes only by transfer (D35).                                                                                                                           |
 | ACC-R7  | Close business requires typing the store name, offers an export of customers, orders and sales first, cancels billing at once and deletes data 30 days later. Can be undone within those 30 days by support.                                                    |
@@ -772,20 +772,15 @@ together; history contains no token, subject or email. All successful paths use
 `completeSignIn`, preserve shared failure counters and enforce disabled-account and
 TOTP checks. Enabled TOTP returns a challenge and postpones sign-in and linking until the second factor passes.
 
-Without an eligible existing account, the response is 202
-`{ status: 'signup_required', signupTicket, email }`, without a session. The web form
-shows `email` as the account email and asks only for name, mobile and consent, with no
-password; the person can add one later in Settings. Request a normal
-`sign_up` phone code, then include `signupTicket` in `POST /auth/code/verify`.
-Only after mobile proof succeeds is the ticket consumed and its server-held subject
-and verified email used for signup. The optional registration email cannot replace
-the ticket email. Successful sessions return 204 with the normal session cookie.
-
-Both ticket kinds contain 32 random bytes, have hashed Valkey keys, expire after
-fifteen minutes and are consumed atomically once. Wrong phone codes do not consume
-signup tickets. Once valid proof is consumed, a later database failure leaves it
-consumed; restart Google sign-in and request new codes, respecting resend limits.
-Parallel signup or newly claimed verified identities cannot create duplicate owners.
+Without an eligible existing account, Google creates one in the same call (D48): the
+new user gets the Google name (or the email's first part), the Google email as a
+verified email, no phone and no password, and a session; the response is 204. The body
+must carry `termsVersion` for this case, otherwise `400 AUTH_TERMS_REQUIRED` and nothing
+is created. The web form shows the Terms and Privacy links beside the Google button.
+A Google address that is not Gmail or Workspace still needs the fresh email code first
+(ADR 0010), then the account is created. Two parallel calls for one subject create one
+account; the second gets `409 AUTH_ACCOUNT_EXISTS`. The person can add a mobile number
+and a password later in Settings.
 
 `GOOGLE_IDENTITY_DRIVER=fake` is allowed only outside production. Its local token
 format is `fake-google:` followed by JSON containing `sub`, `email`,
@@ -966,7 +961,7 @@ The public `/sign-in` screen is a split screen as in the design: brand panel on 
 Keep me signed in, Google identity, and the required authenticator or backup-code
 step. `/forgot-password` requests a reset code and confirms the new password;
 accounts with two-step verification finish that step before receiving a session.
-Google email verification and signup tickets stay in component memory. Keep me signed in
+Google email verification tickets stay in component memory. Keep me signed in
 is ticked by default, as in the design. `/sign-in` and `/sign-up` send a person with a live
 session to the Dashboard.
 

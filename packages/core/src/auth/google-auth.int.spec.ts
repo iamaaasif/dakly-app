@@ -132,18 +132,12 @@ describe('Google authentication over Fastify', () => {
   });
   const token = (subject: string, email: string, claims = {}) =>
     `fake-google:${JSON.stringify({ sub: subject, email, email_verified: true, hd: 'example.test', ...claims })}`;
-  const google = (idToken: string) => post('/auth/google', { idToken });
-  const readTicket = (response: { json(): { signupTicket: string } }) => {
-    const ticket = response.json().signupTicket;
-    tickets.add(ticket);
-    return ticket;
-  };
-  async function registration() {
-    const phone = `018${randomInt(10000000, 99999999)}`;
-    targets.add(phone);
-    const input = { purpose: 'sign_up', phone, name: 'রিনা', termsVersion: '2026-11' };
-    expect((await post('/auth/code', input)).statusCode).toBe(204);
-    return { purpose: 'sign_up', phone, code: codeFor(phone) };
+  const google = (idToken: string, termsVersion: string | null = '2026-11') =>
+    post('/auth/google', { idToken, termsVersion: termsVersion ?? undefined });
+  async function createdBy(subject: string) {
+    const [created] = await admin.db.select().from(users).where(eq(users.googleSubject, subject));
+    if (created) ids.push(created.id);
+    return created;
   }
   it('looks up an existing subject before a different verified email owner', async () => {
     const first = await account();
@@ -176,41 +170,67 @@ describe('Google authentication over Fastify', () => {
     );
     expect(audit.rows).toEqual([{ event: 'google.linked', details: {} }]);
   });
-  it('requires mobile proof, then creates a new account from a single-use server-held ticket', async () => {
+  it('creates a new account from Google alone: no mobile proof, password or ticket', async () => {
     const email = address();
     const subject = randomUUID();
-    const response = await google(token(subject, email));
-    expect(response.statusCode).toBe(202);
-    expect(response.headers['set-cookie']).toBeUndefined();
-    const signupTicket = readTicket(response);
-    const payload = await registration();
-    const wrong = await post('/auth/code/verify', {
-      ...payload,
-      code: payload.code === '000000' ? '999999' : '000000',
-      signupTicket,
-    });
-    expect(wrong.statusCode).toBe(400);
-    expect((await post('/auth/code/verify', { ...payload, signupTicket })).statusCode).toBe(204);
-    const [created] = await admin.db.select().from(users).where(eq(users.phone, payload.phone));
-    ids.push(created!.id);
+    const response = await google(token(subject, email, { name: 'রিনা আক্তার' }));
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['set-cookie']).toBeDefined();
+    const created = await createdBy(subject);
     expect(created).toMatchObject({
-      googleSubject: subject,
+      name: 'রিনা আক্তার',
       email,
       emailVerifiedAt: expect.any(Date),
-      phoneVerifiedAt: expect.any(Date),
+      phone: null,
+      phoneVerifiedAt: null,
+      passwordHash: null,
+      termsVersion: '2026-11',
+      termsAcceptedAt: expect.any(Date),
     });
-    const other = await registration();
-    expect((await post('/auth/code/verify', { ...other, signupTicket })).statusCode).toBe(400);
-    expect(await admin.db.select().from(users).where(eq(users.phone, other.phone))).toHaveLength(0);
+    expect(
+      await admin.db.select().from(sessions).where(eq(sessions.userId, created!.id)),
+    ).toHaveLength(1);
+  });
+  it('names a new account from the email when Google gives no name', async () => {
+    const subject = randomUUID();
+    const email = address();
+    expect((await google(token(subject, email))).statusCode).toBe(204);
+    expect((await createdBy(subject))!.name).toBe(email.split('@')[0]);
+  });
+  it('refuses a new Google account without agreement to the Terms, and creates nothing', async () => {
+    const subject = randomUUID();
+    const response = await google(token(subject, address()), null);
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('AUTH_TERMS_REQUIRED');
+    expect(await createdBy(subject)).toBeUndefined();
+  });
+  it('signs an existing Google account in without a terms version', async () => {
+    const subject = randomUUID();
+    const email = address();
+    expect((await google(token(subject, email))).statusCode).toBe(204);
+    const created = await createdBy(subject);
+    expect((await google(token(subject, email), null)).statusCode).toBe(204);
+    expect(
+      await admin.db.select().from(sessions).where(eq(sessions.userId, created!.id)),
+    ).toHaveLength(2);
+  });
+  it('creates one account when the same Google token signs up twice at once', async () => {
+    const subject = randomUUID();
+    const idToken = token(subject, address());
+    const results = await Promise.all([google(idToken), google(idToken)]);
+    expect(results.map((r) => r.statusCode).sort()).toEqual([204, 409]);
+    const created = await admin.db.select().from(users).where(eq(users.googleSubject, subject));
+    ids.push(...created.map((user) => user.id));
+    expect(created).toHaveLength(1);
   });
   it('never adopts an unverified row', async () => {
     const typed = await account(false);
-    const response = await google(token(randomUUID(), typed.email!));
-    expect(response.statusCode).toBe(202);
-    readTicket(response);
+    const subject = randomUUID();
+    expect((await google(token(subject, typed.email!))).statusCode).toBe(204);
     expect(
       (await admin.db.select().from(users).where(eq(users.id, typed.id)))[0]!.googleSubject,
     ).toBeNull();
+    expect((await createdBy(subject))!.id).not.toBe(typed.id);
   });
   it('refuses an unverified Google email and sanitizes token errors', async () => {
     const owner = await account();
@@ -298,7 +318,7 @@ describe('Google authentication over Fastify', () => {
     targets.add(JSON.stringify([email, JSON.stringify([verificationTicket, subject, email])]));
     return { verificationTicket, code: codeFor(email), subject };
   }
-  it('does not reserve a third-party email until fresh email proof and mobile verification', async () => {
+  it('does not reserve a third-party email until fresh email proof', async () => {
     const email = address();
     const challenge = await thirdParty(email);
     expect(await admin.db.select().from(users).where(eq(users.email, email))).toHaveLength(0);
@@ -306,16 +326,11 @@ describe('Google authentication over Fastify', () => {
       verificationTicket: challenge.verificationTicket,
       code: challenge.code,
     });
-    expect(response.statusCode).toBe(202);
-    const signupTicket = readTicket(response);
-    const payload = await registration();
-    expect((await post('/auth/code/verify', { ...payload, signupTicket })).statusCode).toBe(204);
-    const [created] = await admin.db.select().from(users).where(eq(users.phone, payload.phone));
-    ids.push(created!.id);
-    expect(created).toMatchObject({
+    expect(response.statusCode).toBe(204);
+    expect(await createdBy(challenge.subject)).toMatchObject({
       email,
       emailVerifiedAt: expect.any(Date),
-      googleSubject: challenge.subject,
+      phone: null,
     });
   });
   it.each(['owner_changed', 'owner_appeared', 'subject_linked', 'verification_replaced'])(
@@ -365,35 +380,8 @@ describe('Google authentication over Fastify', () => {
       verificationTicket: first.verificationTicket,
       code: first.code,
     });
-    expect(verified.statusCode).toBe(202);
-    readTicket(verified);
-  });
-  it('expires a signup ticket after fifteen minutes', async () => {
-    const signupTicket = readTicket(await google(token(randomUUID(), address())));
-    const redis = app.get(ValkeyClient).connection;
-    expect(await redis.ttl(authKey('google-ticket', signupTicket))).toBeGreaterThan(890);
-    expect(await redis.ttl(authKey('google-ticket', signupTicket))).toBeLessThanOrEqual(900);
-    await redis.pexpire(authKey('google-ticket', signupTicket), 1);
-    const payload = await registration();
-    expect((await post('/auth/code/verify', { ...payload, signupTicket })).json().error.code).toBe(
-      'AUTH_GOOGLE_TICKET_INVALID',
-    );
-  });
-  it('allows only one phone signup to consume the same ticket concurrently', async () => {
-    const signupTicket = readTicket(await google(token(randomUUID(), address())));
-    const first = await registration();
-    const second = await registration();
-    const results = await Promise.all([
-      post('/auth/code/verify', { ...first, signupTicket }),
-      post('/auth/code/verify', { ...second, signupTicket }),
-    ]);
-    expect(results.map((r) => r.statusCode).sort()).toEqual([204, 400]);
-    const created = await admin.db
-      .select()
-      .from(users)
-      .where(inArray(users.phone, [first.phone, second.phone]));
-    ids.push(...created.map((user) => user.id));
-    expect(created).toHaveLength(1);
+    expect(verified.statusCode).toBe(204);
+    await createdBy(first.subject);
   });
   it('refuses a subject linked elsewhere between lookup and the locked write', async () => {
     const owner = await account();
@@ -425,18 +413,13 @@ describe('Google authentication over Fastify', () => {
       await admin.db.select().from(sessions).where(eq(sessions.userId, owner.id)),
     ).toHaveLength(1);
   });
-  it('keeps a consumed signup ticket consumed after database rollback', async () => {
-    const signupTicket = readTicket(await google(token(randomUUID(), address())));
-    const payload = await registration();
+  it('rolls back a new Google account and its session when account history fails', async () => {
+    const subject = randomUUID();
     vi.spyOn(app.get(AccountSecurityEventsService), 'record').mockRejectedValueOnce(
       new Error('audit unavailable'),
     );
-    expect((await post('/auth/code/verify', { ...payload, signupTicket })).statusCode).toBe(500);
-    expect(await admin.db.select().from(users).where(eq(users.phone, payload.phone))).toHaveLength(
-      0,
-    );
-    const retry = await registration();
-    expect((await post('/auth/code/verify', { ...retry, signupTicket })).statusCode).toBe(400);
+    expect((await google(token(subject, address()))).statusCode).toBe(500);
+    expect(await createdBy(subject)).toBeUndefined();
   });
   it('honors shared account locks and only resets failures after full Google sign-in', async () => {
     const owner = await account();

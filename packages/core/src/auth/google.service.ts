@@ -22,6 +22,7 @@ type GoogleResult =
 type GoogleFinish = {
   identity: GoogleIdentity;
   userId: string | undefined;
+  termsVersion: string | undefined;
   request: SignInRequest;
   expectedEmailVerifiedAt?: string;
   expectedUnlinked?: true;
@@ -61,6 +62,7 @@ export class GoogleService {
         identity,
         expectedOwnerId: owner?.id,
         expectedEmailVerifiedAt: owner?.emailVerifiedAt?.toISOString(),
+        termsVersion: input.termsVersion,
       };
       const verificationTicket = await this.tickets.issue(grant);
       await this.codes.send({
@@ -70,7 +72,12 @@ export class GoogleService {
       });
       return { status: 'email_verification_required', verificationTicket };
     }
-    return this.finish({ identity, userId: owner?.id, request });
+    return this.finish({
+      identity,
+      userId: owner?.id,
+      termsVersion: input.termsVersion,
+      request,
+    });
   }
 
   async verifyEmail(input: VerifyGoogleEmailInput, request: SignInRequest): Promise<GoogleResult> {
@@ -93,6 +100,7 @@ export class GoogleService {
     return this.finish({
       identity: grant.identity,
       userId: owner?.id,
+      termsVersion: grant.termsVersion,
       request,
       expectedEmailVerifiedAt: grant.expectedEmailVerifiedAt,
       expectedUnlinked: true,
@@ -102,6 +110,7 @@ export class GoogleService {
   private async finish({
     identity,
     userId,
+    termsVersion,
     request,
     expectedEmailVerifiedAt,
     expectedUnlinked,
@@ -115,8 +124,22 @@ export class GoogleService {
         },
         request,
       );
-    const signupTicket = await this.tickets.issue({ purpose: 'signup', identity });
-    return { status: 'signup_required', signupTicket, email: identity.email };
+    // Owner decision: a Google account needs no mobile proof or password to sign up.
+    if (!termsVersion) throw authError('AUTH_TERMS_REQUIRED');
+    return this.auth.completeSignIn(
+      {
+        id: this.users.allocateId(),
+        target: identity.email,
+        kind: 'email',
+        registration: {
+          name: identity.name ?? identity.email.split('@')[0]!,
+          email: identity.email,
+          termsVersion,
+        },
+        google: { identity, mode: 'signup' },
+      },
+      request,
+    );
   }
 
   private emailSubject(ticket: string, grant: GoogleGrant) {

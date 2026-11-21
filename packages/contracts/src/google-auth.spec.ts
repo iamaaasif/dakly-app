@@ -10,16 +10,13 @@ describe('Google sign-in contracts', () => {
     ).toBe(false);
     expect(googleSignInSchema.safeParse({ idToken: 'x'.repeat(16385) }).success).toBe(false);
   });
-  it('accepts a ticket only with signup mobile verification', () => {
-    const input = {
-      purpose: 'sign_up',
-      phone: '01712345678',
-      code: '123456',
-      signupTicket: 'x'.repeat(43),
-    };
+  it('accepts a terms version for new accounts and no signup ticket on phone codes', () => {
+    expect(
+      googleSignInSchema.safeParse({ idToken: 'id-token', termsVersion: '2026-11' }).success,
+    ).toBe(true);
+    const input = { purpose: 'sign_up', phone: '01712345678', code: '123456' };
     expect(verifyCodeSchema.safeParse(input).success).toBe(true);
-    expect(verifyCodeSchema.safeParse({ ...input, purpose: 'sign_in' }).success).toBe(false);
-    expect(verifyCodeSchema.safeParse({ ...input, googleSubject: 'client-subject' }).success).toBe(
+    expect(verifyCodeSchema.safeParse({ ...input, signupTicket: 'x'.repeat(43) }).success).toBe(
       false,
     );
   });
