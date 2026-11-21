@@ -45,6 +45,8 @@ afterAll(async () => {
     for (const table of [
       'contact_match_suggestions',
       'restock_requests',
+      'conversations',
+      'channel_connections',
       'stock_movements',
       'outbox_events',
       'audit_log',
@@ -451,6 +453,21 @@ it('does not confirm another customer order or an order of a customer who must p
   });
 });
 
+// The waiting list keeps the conversation the customer asked in, so it must exist.
+async function conversation(storeId: string, contactId: string) {
+  const connectionId = randomUUID();
+  const id = randomUUID();
+  await admin.pool.query(
+    "insert into channel_connections (id, store_id, kind, external_account_id, display_name) values ($1::uuid, $2, 'facebook_page', $1::text, 'Tool test')",
+    [connectionId, storeId],
+  );
+  await admin.pool.query(
+    "insert into conversations (id, store_id, contact_id, channel_connection_id, channel) values ($1, $2, $3, $4, 'messenger')",
+    [id, storeId, contactId, connectionId],
+  );
+  return id;
+}
+
 async function variantOf(storeId: string, productId: string) {
   const {
     rows: [variant],
@@ -485,19 +502,26 @@ it('offers in-stock products of the same category for a sold-out one, never anot
 it('puts a customer on the restock list once, only for a sold-out size, only in a chat', async () => {
   const storeId = await shop();
   const buyer = await contact(storeId);
+  const conversationId = await conversation(storeId, buyer);
+  const inChat = (name: string, args: object) =>
+    tools.run(
+      { storeId, contactId: buyer, chat: { conversationId, channel: 'messenger' } },
+      name,
+      JSON.stringify(args),
+    );
   const soldOut = await variantOf(storeId, await product(storeId, { name: 'স্নিকার্স', stock: 2 }));
   const available = await variantOf(storeId, await product(storeId, { name: 'কুর্তি' }));
   expect(await run(storeId, buyer, 'join_restock_list', { variantId: soldOut })).toEqual({
     error: 'NOT_IN_A_CHAT',
   });
-  expect(await runInChat(storeId, buyer, 'join_restock_list', { variantId: available })).toEqual({
+  expect(await inChat('join_restock_list', { variantId: available })).toEqual({
     error: 'RESTOCK_VARIANT_IN_STOCK',
   });
-  expect(await runInChat(storeId, buyer, 'join_restock_list', { variantId: soldOut })).toEqual({
+  expect(await inChat('join_restock_list', { variantId: soldOut })).toEqual({
     onWaitingList: true,
     variantId: soldOut,
   });
-  await runInChat(storeId, buyer, 'join_restock_list', { variantId: soldOut });
+  await inChat('join_restock_list', { variantId: soldOut });
   const { rows } = await admin.pool.query(
     'select 1 from restock_requests where store_id = $1 and variant_id = $2',
     [storeId, soldOut],
