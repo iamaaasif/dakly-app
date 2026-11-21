@@ -20,6 +20,14 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 - D21: courier provider rows come with the courier release.
 - D22: add a row for SendGrid (transactional email).
 
+## Shops list and detail (ADM-3)
+
+Built: `GET /admin/stores` and `GET /admin/stores/:storeId`, open to every staff role and backed by the report functions `admin_shop_list` and `admin_shop_detail`. They return shop metadata only; phones are masked inside the database function, and nothing reads messages, customers or secrets. Opening a shop writes a `shop.viewed` row to the staff audit log before the data is returned.
+
+The admin app has `/shops` (search box, status filter, table at desktop width and cards on a phone, next page by cursor) and `/shops/:storeId` (Overview tab: plan, owner and team, channels, extensions). There is no design image for these screens, so they follow the shop app's theme tokens and layout. Screenshots at 1440 and 360 are in `docs/design/evidence/adm-3-shops/`.
+
+Search matches store name (partial), slug, store ID, owner phone (full number) and a connected channel account ID. Order and invoice number search, the health score, flags, usage against limits, balances and the CSV export are not built yet, because order numbers repeat across shops and the other sources do not exist yet. The list shows MRR as the monthly price of an active or past due subscription, with yearly plans divided by 12. AI and kill switches (ADM-5), billing (ADM-4) and danger zone actions (ADM-7) get their own tabs on the detail page later.
+
 ## Product requirements
 
 ### What it is for
@@ -361,6 +369,6 @@ staff reason, check outcomes, or document data.
 
 Super admins and ops staff can pause AI replies, campaign sending or social posting for every shop or for one shop. Analysts can read the list. A change needs a reason of at least ten characters and `confirmed: true`; resuming needs a reason too. The staff audit row (`kill_switch.paused` or `kill_switch.resumed`) is inserted first, in the same transaction as the change, so a refused change leaves no audit row. A shop switch also checks the staff member's live session and conflict of interest (ADM-R7).
 
-A paused switch is a row in `kill_switches`; resuming deletes it and `staff_audit_log` keeps the history. Workers read the table through `KillSwitchesService` with a 30 second cache. The reply, campaign batch and post publishing jobs check it first and, while paused, move themselves back by one minute instead of running, so queued work waits and is not dropped. A switch therefore takes effect within a minute across the system. Contacts, orders, inbound messages and owner-written replies are not affected.
+A paused switch is a row in `kill_switches`; resuming deletes it and `staff_audit_log` keeps the history. Workers read the table through `KillSwitchesService` with a 30 second cache. The campaign batch and post publishing jobs check it first and, while paused, move themselves back by one minute instead of running, so queued work waits and is not dropped. A paused AI reply does not wait: the AI reply service hands the chat to people with the reason `ai_paused` and the normal hand-over message, so no customer waits for the pause to end and the AI never answers old messages late. A switch therefore takes effect within a minute across the system. Contacts, orders, inbound messages and owner-written replies are not affected.
 
 Routes: `GET /admin/kill-switches`, `PUT /admin/kill-switches/:feature` and `PUT /admin/stores/:storeId/kill-switches/:feature`.
