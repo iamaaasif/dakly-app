@@ -72,7 +72,6 @@ export type InboundComment = {
   accountExternalId: string;
   externalPostId: string;
   externalCommentId: string;
-  // Set when the comment answers another comment.
   parentExternalCommentId: string | null;
   authorExternalId: string;
   authorName: string | null;

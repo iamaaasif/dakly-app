@@ -37,7 +37,6 @@ export type CommentResponse = {
   isReply: boolean;
   publicReplied: boolean;
   privateRepliedAt: string | null;
-  // False once the private reply was sent or Meta's 7 days have passed.
   canReplyPrivately: boolean;
   commentedAt: string;
 };

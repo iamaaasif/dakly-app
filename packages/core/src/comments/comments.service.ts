@@ -62,7 +62,6 @@ function toResponse(row: CommentRow, now: Date): CommentResponse {
   };
 }
 
-// A failure before Meta answered may have posted anyway, so it is not reported as a refusal.
 function providerError(error: unknown) {
   if (error instanceof MetaRequestError && ['rejected', 'auth_error'].includes(error.code))
     return commentError('COMMENT_REJECTED');
