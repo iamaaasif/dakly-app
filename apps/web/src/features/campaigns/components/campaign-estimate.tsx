@@ -1,4 +1,5 @@
 import { recipientSkipReasons, type CampaignChannel } from '@dakly/contracts/campaigns';
+import { formatCount } from '@dakly/contracts/money';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { useCampaignEstimate } from '../api/campaign-estimate';
@@ -40,20 +41,20 @@ export function CampaignEstimate({
         <div className="flex justify-between gap-3">
           <dt className="text-text-muted">Audience</dt>
           <dd>
-            {data.audienceCount}
+            {formatCount(data.audienceCount)}
             {!data.isComplete && '+'}
           </dd>
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-text-muted">Will receive</dt>
           <dd className="font-semibold">
-            {data.recipientsCount}
+            {formatCount(data.recipientsCount)}
             {!data.isComplete && '+'}
           </dd>
         </div>
         <div className="flex justify-between gap-3">
           <dt className="text-text-muted">Estimated cost</dt>
-          <dd>{channel === 'sms' ? `${data.smsCredits} SMS credits` : 'Free'}</dd>
+          <dd>{channel === 'sms' ? `${formatCount(data.smsCredits)} SMS credits` : 'Free'}</dd>
         </div>
       </dl>
       {(channel === 'messenger' || Object.values(data.skippedByReason).some(Boolean)) && (
@@ -86,7 +87,7 @@ function SkippedList({
     <ul className="list-disc pl-5">
       {skipped.map(({ reason, count }) => (
         <li key={reason}>
-          {count}{' '}
+          {formatCount(count)}{' '}
           {channel === 'sms' && reason === 'no_address'
             ? 'have no phone number'
             : skipLabels[reason]}

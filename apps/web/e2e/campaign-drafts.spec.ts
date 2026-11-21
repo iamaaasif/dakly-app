@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -45,6 +46,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
   const storeId = fixture.storeIds[0];
   const ids: string[] = [];
   const segmentIds: string[] = [];
+  const contactIds: string[] = [];
   try {
     expect((await post('/me/active-store', { storeId })).status()).toBe(204);
     const segment = await post('/segments', {
@@ -56,6 +58,21 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     });
     expect(segment.status()).toBe(201);
     segmentIds.push((await segment.json()).id);
+    // Three Dhaka customers agreed to SMS and one did not, so the estimate shows a skip line.
+    const phoneBase = 1_700_000_000 + Math.floor(Math.random() * 90_000_000);
+    for (const [index, consented] of [true, true, true, false].entries()) {
+      const contactId = randomUUID();
+      contactIds.push(contactId);
+      await database.pool.query(
+        "insert into contacts(id,store_id,name,phone,source,kind,district) values($1,$2,$3,$4,'manual','customer','Dhaka')",
+        [contactId, storeId, `Audience customer ${index + 1}`, `0${phoneBase + index}`],
+      );
+      if (consented)
+        await database.pool.query(
+          "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,'sms','granted','checkout')",
+          [storeId, contactId],
+        );
+    }
     const created = await post('/campaigns', {
       name: 'Puja winback',
       goal: 'win_back',
@@ -195,6 +212,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       .fill('Winter Kurti collection is in. Order today and get free delivery in Dhaka.');
     await expect(page.getByText('Live preview · SMS', { exact: true })).toBeVisible();
     await capture(page, 'sms-content-step');
+    await expect(page.getByText(/ · 1 SMS part\./)).toBeVisible();
     await page.getByRole('link', { name: '3. Audience' }).click();
     await page.getByRole('group', { name: 'Send to' }).getByLabel('Dhaka customers').click();
     const saveAudience = page.waitForRequest(
@@ -209,7 +227,9 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       includeSegmentIds: segmentIds,
     });
     await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Estimate' })).toContainText('SMS credits');
+    const estimateCard = page.getByRole('region', { name: 'Estimate' });
+    await expect(estimateCard).toContainText('3 SMS credits');
+    await expect(estimateCard).toContainText('1 have not agreed to messages');
     await capture(page, 'sms-audience-step');
 
     await page.goto(`/campaigns/${sent.id}`);
@@ -221,6 +241,14 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await database.pool.query('delete from campaigns where store_id=$1 and id=any($2::uuid[])', [
       storeId,
       ids,
+    ]);
+    await database.pool.query(
+      'delete from consents where store_id=$1 and contact_id=any($2::uuid[])',
+      [storeId, contactIds],
+    );
+    await database.pool.query('delete from contacts where store_id=$1 and id=any($2::uuid[])', [
+      storeId,
+      contactIds,
     ]);
     await database.pool.query('delete from segments where store_id=$1 and id=any($2::uuid[])', [
       storeId,

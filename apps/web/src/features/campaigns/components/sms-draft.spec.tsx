@@ -46,11 +46,11 @@ const draft: CampaignResponse = {
 };
 const estimate: CampaignEstimateResponse = {
   isComplete: true,
-  audienceCount: 40,
+  audienceCount: 1840,
   skippedByReason: { no_consent: 6, no_address: 2 },
-  recipientsCount: 32,
+  recipientsCount: 1832,
   smsParts: 1,
-  smsCredits: 32,
+  smsCredits: 1832,
   costPoisha: 0,
 };
 const segments = [
@@ -111,8 +111,8 @@ describe('SMS audience step', () => {
     );
     await user.click(within(leaveOut).getByRole('checkbox', { name: 'Stopped buying' }));
     const card = await screen.findByRole('region', { name: 'Estimate' });
-    expect(card.textContent).toContain('32');
-    expect(card.textContent).toContain('32 SMS credits');
+    expect(card.textContent).toContain('1,840');
+    expect(card.textContent).toContain('1,832 SMS credits');
     expect(card.textContent).toContain('2 have no phone number');
     await user.click(screen.getByRole('button', { name: 'Save draft' }));
     await waitFor(() => expect(patches).toHaveLength(1));

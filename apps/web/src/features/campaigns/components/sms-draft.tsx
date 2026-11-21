@@ -80,11 +80,12 @@ function SmsGoalFields() {
 function SmsContentFields() {
   const { register, control } = useFormContext<SmsDraftInput>();
   const text = useWatch({ control, name: 'content.text' });
+  const partCount = countSmsParts(text);
   return (
     <FormField
       name="content.text"
       label="Message"
-      hint={`${text.length} of 1000 characters · ${countSmsParts(text)} SMS parts. Dakly adds the opt-out link.`}
+      hint={`${text.length} of 1000 characters · ${partCount === 1 ? '1 SMS part' : `${partCount} SMS parts`}. Dakly adds the opt-out link.`}
     >
       {(field) => (
         <Textarea
