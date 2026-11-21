@@ -318,6 +318,8 @@ The model call runs outside the transaction. Before a hand-over, the service che
 
 AI-5 part 3 adds `draft_order` and `confirm_order`. `draft_order` takes variant ids with quantities, the recipient name, the customer's own mobile number, the address and an area name. The area must match one place exactly or be the only match, otherwise the tool answers `DELIVERY_AREA_INVALID` and the model asks the customer. The customer's own phone goes through `ContactMatchSuggestionsService.captureOwnPhone` first, with the conversation as the source, so a number held by another contact shows staff a possible match and never blocks the order. `ChatOrdersService.draft` then creates the order in To confirm with the chat's contact as buyer and recipient, the channel as its source and the creator type `ai`. Prices, the delivery charge and the total come from the order service, and the tool result gives them in taka for the summary. The same chat with the same details returns the order already made. An order for another person is a hand-over. `confirm_order` moves the customer's own order from To confirm to To pack with the confirmation method `chat_reply`. When the delivery phone has a high return risk it answers `ORDER_ADVANCE_REQUIRED` and the model hands over, because a person records the advance first. A practice question has no chat, so both tools answer with an error there. The reply never repeats the customer's own number, because the fact check allows only the shop's.
 
+AI-10 product search (`ProductSearchService`, used by `search_products`): the customer's words are reduced to consonant keys, so "kurti", "kurtii" and "কুর্তি" match, plus a small table of colour and garment words in Bangla, Banglish and English, and a one-edit typo allowance. Price words ("১৩০০ টাকার নিচে", "under 1500", "500 er moddhe") filter by size price. Embedding rank is fused with the word rank; a product both find wins, and one the meaning finds alone must be within a set distance. If the AI call fails, spelling alone answers. Products with stock come before sold-out ones, and each result carries stock per size. The embedding is rebuilt from name, aliases, category, options and description by a job on `product.updated`. The gate is the eval set in `packages/core/src/product-search/product-search-eval-set.ts` (Bangla, Banglish, English and mixed queries, 95 percent first-result rate and no result for products the shop does not sell). AI-11 and AI-12 call the same service.
+
 Agent tools take no store id, contact id or price; those come from the job. Tools: `search_products`, `get_product`, `get_delivery_charge`, `search_knowledge`, `get_my_orders`, `get_order_status`, `draft_order`, `confirm_order`, `create_payment_link`, `send_product_card`, `add_to_restock_list`, `hand_over`.
 
 Each tool is described for the model in `packages/contracts/src/ai-agent-tools.ts` with the words customers use in Bangla, Banglish and English, the unit of every number and the allowed values. Tool results give money in taka, converted from poisha, and stock as a count (null when the shop does not count stock). Product tools return only active products shown in chats. `get_my_orders` and `get_order_status` read only orders whose buyer is the chat's own contact; an order number that belongs to someone else is answered as not found, and no tool looks an order up by phone. `get_delivery_charge` returns up to three areas that start with the typed name. Only when none match, it returns the shop's delivery zones instead, because the area table stops at upazilas and a Dhaka locality has no match of its own. The reply names the place the charge is for. `send_product_card` returns the card text built in code from the product. `hand_over` takes only the reasons the model may choose.
@@ -471,7 +473,10 @@ text is untrusted data. The worker extracts only PDF text and disables PDF.js
 font faces and evaluation.
 
 Indexing uses 512-dimension embeddings in groups of up to 64 chunks.
-`AI_EMBEDDING_MODEL` defaults to `text-embedding-3-small`. An OpenAI model
+`AI_EMBEDDING_MODEL` defaults to `text-embedding-3-large`, at the same 512
+dimensions as the table column. Search only reads chunks made by the configured
+model, so after a model change an item answers again once it is saved or its index is
+queued again. An OpenAI model
 override needs a matching entry in `AI_MODEL_PRICES`. The worker needs the same
 AI settings as other AI callers. The local fake driver uses a fixed vector by
 default so local indexing needs no vendor key.
@@ -527,4 +532,4 @@ These are implementation requirements for CHAT-8. The schema and contracts defin
 
 ## Open questions
 
-Q7 (Inquiry), Q8 (models), Q9 (OpenAI data terms), Q15 (fairness).
+Q7 (Inquiry), Q9 (OpenAI data terms), Q15 (fairness).

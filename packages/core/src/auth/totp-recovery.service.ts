@@ -42,12 +42,16 @@ export class TotpRecoveryService {
     @Inject(TotpRecoveryFinishService) private readonly finish: TotpRecoveryFinishService,
   ) {}
 
-  private async account(phone: string) {
-    const identity = await this.users.findByPhone(phone);
+  private async account({ phone, email }: { phone?: string; email?: string }) {
+    const identity = phone
+      ? await this.users.findByPhone(phone)
+      : await this.users.findByVerifiedEmail(email!);
     if (!identity) throw authError('AUTH_PROOF_REQUIRED');
     const user = await this.totp.current(identity.id);
-    if (!user.totpEnabledAt || !user.phoneVerifiedAt || user.phone !== phone)
-      throw authError('AUTH_PROOF_REQUIRED');
+    const owned = phone
+      ? user.phoneVerifiedAt && user.phone === phone
+      : user.emailVerifiedAt && user.email === email && !user.phoneVerifiedAt;
+    if (!user.totpEnabledAt || !owned) throw authError('AUTH_PROOF_REQUIRED');
     return user;
   }
 
@@ -60,7 +64,7 @@ export class TotpRecoveryService {
     if (method === 'email' && !email) throw authError('AUTH_PROOF_REQUIRED');
     return {
       target: email ?? user.phone!,
-      phone: user.phone!,
+      phone: user.phoneVerifiedAt ? (user.phone ?? undefined) : undefined,
       email,
       userId: user.id,
       binding: user.id,
@@ -68,7 +72,7 @@ export class TotpRecoveryService {
   }
 
   async requestCode(input: TotpRecoveryCodeInput, ip: string) {
-    const user = await this.account(input.phone);
+    const user = await this.account(input);
     await this.codes.send({
       subject: this.subject(user, input.method),
       purpose: input.method === 'phone' ? 'totp_recovery_phone' : 'totp_recovery_email',
@@ -80,18 +84,30 @@ export class TotpRecoveryService {
     });
   }
 
-  async start(input: TotpRecoveryInput, ip: string) {
-    const user = await this.account(input.phone);
-    if ((user.emailVerifiedAt && !input.emailCode) || (user.passwordHash && !input.password))
+  private async verifyProofs(
+    user: Awaited<ReturnType<TotpRecoveryService['account']>>,
+    input: TotpRecoveryInput,
+    ip: string,
+    state: string,
+  ) {
+    const hasPhone = Boolean(user.phoneVerifiedAt);
+    if (
+      (user.emailVerifiedAt && !input.emailCode) ||
+      (hasPhone && !input.phoneCode) ||
+      (user.passwordHash && !input.password)
+    )
       throw authError('AUTH_PROOF_REQUIRED');
-    const state = accountCredentialState(user);
-    const phoneGrant = await this.codes.consume(
-      this.subject(user, 'phone'),
-      'totp_recovery_phone',
-      input.phoneCode,
-      ip,
-    );
-    this.assertProof(phoneGrant, user.id, state);
+    if (hasPhone)
+      this.assertProof(
+        await this.codes.consume(
+          this.subject(user, 'phone'),
+          'totp_recovery_phone',
+          input.phoneCode!,
+          ip,
+        ),
+        user.id,
+        state,
+      );
     if (user.emailVerifiedAt)
       this.assertProof(
         await this.codes.consume(
@@ -109,6 +125,12 @@ export class TotpRecoveryService {
         user.passwordHash,
         await this.passwords.check(this.totp.subject(user), input.password!, ip),
       );
+  }
+
+  async start(input: TotpRecoveryInput, ip: string) {
+    const user = await this.account(input);
+    const state = accountCredentialState(user);
+    await this.verifyProofs(user, input, ip, state);
     const cancelToken = randomBytes(32).toString('base64url');
     const completionToken = randomBytes(32).toString('base64url');
     let noticeIds: string[] = [];
@@ -158,7 +180,9 @@ export class TotpRecoveryService {
   ): SecurityNotice[] {
     const link = `${loadEnv().WEB_ORIGINS[0]}/security/recovery#recoveryId=${id}&cancelToken=${cancelToken}`;
     const text = `Dakly two-step verification recovery was requested. It can finish only seven days after all security notices are delivered. If this was not you, cancel: ${link}`;
-    const deliveries: SecurityNotice[] = [{ channel: 'sms', to: current.phone!, text }];
+    const deliveries: SecurityNotice[] = current.phoneVerifiedAt
+      ? [{ channel: 'sms', to: current.phone!, text }]
+      : [];
     if (current.emailVerifiedAt && current.email)
       deliveries.push({ channel: 'email', to: current.email, text });
     for (const owner of owners) {

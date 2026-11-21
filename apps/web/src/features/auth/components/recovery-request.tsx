@@ -15,16 +15,15 @@ export function RecoveryRequest() {
     <FormProvider {...form}>
       <form method="post" className="space-y-4" onSubmit={submit}>
         <p>
-          Use this if you have lost your authenticator and backup codes. Verify your mobile, your
-          verified email if you have one, and your password if you set one. Recovery waits at least
-          seven days after all security notices are delivered.
+          Use this if you have lost your authenticator and backup codes. Verify your mobile if you
+          have one, your verified email if you have one, and your password if you set one. Recovery
+          waits at least seven days after all security notices are delivered.
         </p>
         <AuthField
-          label="Mobile number"
-          field={form.register('phone')}
-          error={errors.phone}
-          type="tel"
-          autoComplete="tel"
+          label="Mobile number or email"
+          field={form.register('identifier')}
+          error={errors.identifier}
+          autoComplete="username"
         />
         <div className="flex flex-wrap gap-3">
           <Button variant="secondary" loading={pending} onClick={() => send('phone')}>

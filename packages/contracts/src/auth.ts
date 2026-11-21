@@ -46,7 +46,7 @@ export type CodePurpose =
   | 'staff_recovery_phone'
   | 'staff_recovery_email';
 
-const emailSchema = z
+export const emailSchema = z
   .email()
   .max(254)
   .transform((value) => value.toLowerCase());

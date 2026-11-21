@@ -141,8 +141,15 @@ export class ProductsRepository {
   }
 
   // The AI agent may only offer active products the shop shows in chats.
-  searchForChat(storeId: string, text: string, limit: number): Promise<CatalogueProduct[]> {
-    const pattern = `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+  hasForChat(storeId: string): Promise<boolean> {
+    return this.database
+      .forStore(storeId, (tx) =>
+        tx.select({ id: products.id }).from(products).where(chatProductFilter(storeId)).limit(1),
+      )
+      .then((rows) => rows.length > 0);
+  }
+
+  findManyForChat(storeId: string, ids: string[]): Promise<CatalogueProduct[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -151,16 +158,7 @@ export class ProductsRepository {
           photos: photoSnapshot(storeId),
         })
         .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            eq(products.status, 'active'),
-            eq(products.isVisibleInChats, true),
-            sql`(${products.name} ilike ${pattern} or exists (select 1 from unnest(${products.aliases}) alias where alias ilike ${pattern}))`,
-          ),
-        )
-        .orderBy(desc(products.id))
-        .limit(limit),
+        .where(and(chatProductFilter(storeId), inArray(products.id, ids))),
     );
   }
 
@@ -184,14 +182,7 @@ export class ProductsRepository {
           photos: photoSnapshot(storeId),
         })
         .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            eq(products.id, id),
-            eq(products.status, 'active'),
-            eq(products.isVisibleInChats, true),
-          ),
-        ),
+        .where(and(chatProductFilter(storeId), eq(products.id, id))),
     );
     return rows[0];
   }
@@ -409,7 +400,15 @@ export class ProductsRepository {
   }
 }
 
-function variantSnapshot(storeId: string) {
+export function chatProductFilter(storeId: string) {
+  return and(
+    eq(products.storeId, storeId),
+    eq(products.status, 'active'),
+    eq(products.isVisibleInChats, true),
+  );
+}
+
+export function variantSnapshot(storeId: string) {
   return sql<Variant[]>`(select coalesce(jsonb_agg(jsonb_build_object(
     'id', v.id, 'productId', v.product_id, 'title', v.title, 'optionValues', v.option_values,
     'sku', v.sku, 'priceOverridePoisha', v.price_override_poisha, 'costPoisha', v.cost_poisha,

@@ -62,8 +62,21 @@ describe('Public recovery', () => {
     );
     renderRecovery();
     await userEvent.click(screen.getByRole('link', { name: 'Start recovery' }));
-    expect(screen.getByLabelText('Mobile number')).toBeTruthy();
+    expect(screen.getByLabelText('Mobile number or email')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Cancel this recovery request' })).toBeNull();
+  });
+  it('starts recovery with the verified email for an account that has no mobile', async () => {
+    const sent: { url: string; body: unknown }[] = [];
+    vi.stubGlobal('fetch', async (url: string, options: RequestInit) => {
+      sent.push({ url, body: JSON.parse(String(options.body)) });
+      return new Response(null, { status: 204 });
+    });
+    renderRecovery();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Mobile number or email'), 'owner@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send verified email code' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]!.body).toEqual({ email: 'owner@example.com', method: 'email' });
   });
   it('rejects a malformed fragment and never offers cancellation', () => {
     window.history.replaceState(null, '', '/security/recovery#recoveryId=bad&cancelToken=bad');
