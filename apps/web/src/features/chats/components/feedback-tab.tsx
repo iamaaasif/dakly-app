@@ -45,8 +45,8 @@ export function FeedbackTab({ filter, canFix, onFilterChange }: FeedbackTabProps
   return (
     <div className="space-y-4">
       <p className="text-text-muted">
-        Every good or bad rating you give in Chats lands here. Dakly's replies get better when you
-        fix a bad answer once.
+        Every good or bad rating you give in Chats lands here. Fix a bad answer once and Dakly uses
+        the better one from then on.
       </p>
       <FeedbackSummary summary={summary} />
       <div role="group" aria-label="Show" className="flex flex-wrap gap-2">

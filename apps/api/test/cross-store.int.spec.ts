@@ -6,6 +6,10 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
+import { AiService } from '@dakly/core/ai/ai.service';
+import { KnowledgeIndexService } from '@dakly/core/ai/knowledge/knowledge-index.service';
+import { KnowledgeRepository } from '@dakly/core/ai/knowledge/knowledge.repository';
+import { KnowledgeSearchService } from '@dakly/core/ai/knowledge-search.service';
 import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
 import { CampaignApprovalService } from '@dakly/core/campaigns/campaign-approval.service';
 import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-channel-driver';
@@ -4773,6 +4777,45 @@ describe('every production shop route isolates its data', () => {
 
   it('requires an executable fixture or a named boundary proof for every actual Fastify route', () => {
     inventory.assertCovered([...fixtures.keys(), ...isolationBoundaries.keys()]);
+  });
+  it('finds an answer taught from a bad reply for Bangla, Banglish and mixed questions', async () => {
+    const shop = await f.shop();
+    await enableChats(shop);
+    const replyId = await seedAiReply(shop);
+    await success(shop, 'PUT', `/ai-replies/${replyId}/rating`, 204, {
+      rating: 'bad',
+      reason: 'wrong_information',
+    });
+    await success(shop, 'POST', `/ai-replies/${replyId}/fix`, 204, {
+      question: 'Panjabi er kapor ki?',
+      answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+      keywords: ['কাপড়', 'kapor', 'fabric'],
+    });
+    await success(shop, 'POST', '/knowledge-items', 201, {
+      kind: 'policy',
+      question: 'Showroom kothay?',
+      answer: 'ধানমন্ডিতে আমাদের শোরুম।',
+      keywords: ['showroom'],
+    });
+    // The worker indexes after commit; here the same service runs inline.
+    const ai = app.get(AiService, { strict: false });
+    const repository = app.get(KnowledgeRepository, { strict: false });
+    const indexer = new KnowledgeIndexService(repository, undefined as never, ai);
+    const { rows: items } = await f.admin.pool.query(
+      'select id, question, updated_at from knowledge_items where store_id = $1',
+      [shop.id],
+    );
+    for (const item of items)
+      await indexer.index(shop.id, item.id, {
+        revision: item.updated_at.toISOString(),
+        finalAttempt: true,
+      });
+    const taught = items.find((item) => item.question === 'Panjabi er kapor ki?').id;
+    const search = new KnowledgeSearchService(repository, ai);
+    // None of these is the question the customer typed; each reaches the answer by a word the
+    // team added, in Bangla letters, English letters or both.
+    for (const question of ['কাপড়', 'kapor', 'fabric', 'panjabi কাপড়'])
+      expect((await search.search(shop.id, question, 1))[0]?.itemId, question).toBe(taught);
   });
   it('returns the phone limit error to a masked member on contact search, create and edit', async () => {
     const shop = await f.shop();
