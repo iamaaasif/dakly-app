@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@dakly/ui/button';
 
 import { useWriteContent } from '../api/write-content';
+import { CreditsNote } from './credits-note';
 import { requestOf, type GenerateInput, type GenerateValues } from './generate-form-types';
 import { KindPicker } from './kind-picker';
 import { ProductField } from './product-field';
@@ -27,6 +28,9 @@ export function CreateTab() {
       kind: 'facebook_post',
       tone: 'friendly',
       language: 'bn',
+      length: 'medium',
+      hashtags: true,
+      orderLine: true,
       idea: 'New arrival',
       notes: '',
     },
@@ -66,7 +70,7 @@ export function CreateTab() {
           )}
           {submitLabel(Boolean(write.data), write.isError)}
         </Button>
-        <p className="text-center text-sm text-text-muted">Uses 3 AI credits</p>
+        <CreditsNote />
       </form>
       <WrittenOptions result={write.data} asked={asked} form={form} />
     </div>
