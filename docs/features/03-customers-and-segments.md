@@ -120,8 +120,13 @@ The web app has two customer screens.
 - When another contact has the same phone, the profile shows a "Possible same person" note above
   Chat channels. It names the other contact (a link to their profile), shows their phone as the
   API sent it (masked unless the member sees full numbers) and says they have the same phone
-  number. Members with Edit Customers can Dismiss it. Merge waits on CUS-14, so the note has no
-  Merge button. It shows from either contact's profile and is hidden when nothing is open.
+  number. Members with Edit Customers can Merge or Dismiss it. It shows from either contact's
+  profile and is hidden when nothing is open. Merge asks "Merge <name>?", says the older profile
+  stays and the merge can be undone for 7 days, then opens the kept profile. The kept profile
+  shows a "Recent merges" card for each merge that can still be undone, with the time it closes
+  and an Undo merge button; undo opens the restored profile and says how many later changes it
+  left as they were. There is no design for either; both follow the Chat channels card style
+  (evidence at 1440x900 and 360x800 in `docs/design/evidence/cus-14-merge/`).
 - Members with Edit Customers also change the customer from the profile. Edit changes the
   name, the tags (separated by commas) and the phone. The phone field starts empty, because
   the shown phone may be masked, and is sent only when typed. Delete asks "Delete <name>?" and
@@ -387,7 +392,7 @@ The merge transaction locks both contacts in ID order, validates that they still
 
 Consent rows keep their original contact and are never reassigned or rewritten. Merge appends the effective conservative consent decision to the kept contact, with the operation key and source evidence. Undo appends withdrawals to both restored contacts where either has withdrawn since merge, and never grants consent from a before-image. Later explicit opt-in is a separate recorded action. Merge and undo invalidate both customer memories and their conversation checkpoints; an older model response must fail its version guard.
 
-Merge API (CUS-14, built). `POST /contact-merges` with `{ contactId, otherContactId, operationKey }` (needs Edit Customers) merges the two contacts in one transaction: the older contact is kept, the newer one is hidden (`deleted_at`) until the undo window ends, and nothing is published as `contact.deleted`. A retry with the same `operationKey` returns the recorded merge, also after an undo. The kept contact fills its empty fields from the other (a verified time only together with its phone), takes the newer address as one group, combines tags, and takes the stricter kind and a block. The chats, identities, orders (as buyer), tasks and comments of the newer contact move to the kept one, and open match suggestions between the two close as merged. Consent is appended to the kept contact as `manual` rows with the evidence `merge <operationKey>`: a withdrawal on either contact wins, otherwise an agreement on either counts. `POST /contact-merges/:mergeId/undo` undoes one. Undo restores a field only while it still holds what the merge wrote, returns only rows still owned by the kept contact, frees the phone only if nobody else uses it now, passes a later withdrawal to the restored contact and takes back an agreement the merge copied, and names the fields and rows it left alone in `undoConflicts` (`email`, `orders:<id>`). It is refused after seven days (`CONTACT_MERGE_UNDO_CLOSED`), after redaction, and while a later merge involving either contact stands (`CONTACT_MERGE_UNDO_BLOCKED`). Merge is refused with `CONTACT_MERGE_CHAT_CONFLICT` when both contacts have a chat on the same page (one chat per page and customer), and with `CONTACT_MERGE_HAS_DUE` when the newer contact has baki entries, because the ledger cannot change owner. Restock requests, campaign recipients and automation runs stay with the hidden contact.
+Merge API (CUS-14, built). `POST /contact-merges` with `{ contactId, otherContactId, operationKey }` (needs Edit Customers) merges the two contacts in one transaction: the older contact is kept, the newer one is hidden (`deleted_at`) until the undo window ends, and nothing is published as `contact.deleted`. A retry with the same `operationKey` returns the recorded merge, also after an undo. The kept contact fills its empty fields from the other (a verified time only together with its phone), takes the newer address as one group, combines tags, and takes the stricter kind and a block. The chats, identities, orders (as buyer), tasks and comments of the newer contact move to the kept one, and open match suggestions between the two close as merged. Consent is appended to the kept contact as `manual` rows with the evidence `merge <operationKey>`: a withdrawal on either contact wins, otherwise an agreement on either counts. `GET /contact-merges?contactId=` lists the merges of a kept contact that can still be undone, and `POST /contact-merges/:mergeId/undo` undoes one. Undo restores a field only while it still holds what the merge wrote, returns only rows still owned by the kept contact, frees the phone only if nobody else uses it now, passes a later withdrawal to the restored contact and takes back an agreement the merge copied, and names the fields and rows it left alone in `undoConflicts` (`email`, `orders:<id>`). It is refused after seven days (`CONTACT_MERGE_UNDO_CLOSED`), after redaction, and while a later merge involving either contact stands (`CONTACT_MERGE_UNDO_BLOCKED`). Merge is refused with `CONTACT_MERGE_CHAT_CONFLICT` when both contacts have a chat on the same page (one chat per page and customer), and with `CONTACT_MERGE_HAS_DUE` when the newer contact has baki entries, because the ledger cannot change owner. Restock requests, campaign recipients and automation runs stay with the hidden contact.
 
 In the same transaction both memories are reset for the contact that now owns each chat: derived facts and summaries go (a staff-edited summary stays), staff facts stay, the kept contact adopts the newer contact's staff facts and the stricter clear time, every conversation checkpoint resets, and every version moves so a model call already running fails its guard. The memory sweep then rebuilds from each contact's own chats and orders. Undo does the same and removes the staff facts the merge copied. `contact.merged` and `contact.merge_undone` refresh the contact stats of both.
 
@@ -586,9 +591,10 @@ Bugs in the mock: a segment "View" says "Showing 2 of 186" but "Page 1 of 208", 
 
 **Missing design: possible same person.** The prototype has no note for two contacts that share a
 phone (D27). It is built as a card in the profile's main column, in the style of the Chat
-channels card: heading, the other contact's name and phone, and a Dismiss button. Evidence at
-1440x900 and 360x800 is in `docs/design/evidence/cus-4-possible-same-person/`. Merge waits on
-CUS-14.
+channels card: heading, the other contact's name and phone, and Merge and Dismiss buttons.
+Evidence at 1440x900 and 360x800 is in `docs/design/evidence/cus-4-possible-same-person/`. The
+merge dialog and the Recent merges card (CUS-14) have no design either; their evidence is in
+`docs/design/evidence/cus-14-merge/`.
 
 **Also missing on customers.** Duplicate merge (same phone from Shopify and Facebook), delete customer and data-removal requests, and the empty profile state for a customer with no orders yet.
 

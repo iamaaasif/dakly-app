@@ -22,6 +22,11 @@ export function StaffNav({ role }: { role: StaffIdentity['role'] }) {
         </Link>
       ) : null}
       {['super_admin', 'finance', 'analyst'].includes(role) ? (
+        <Link href="/plans" className="text-action underline">
+          Plans and prices
+        </Link>
+      ) : null}
+      {['super_admin', 'finance', 'analyst'].includes(role) ? (
         <Link href="/reconciliation" className="text-action underline">
           Reconciliation
         </Link>

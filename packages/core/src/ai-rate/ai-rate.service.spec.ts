@@ -11,7 +11,7 @@ function build(stored: unknown) {
     read: async () =>
       stored ? { value: stored, updatedAt: new Date('2026-11-01T00:00:00Z') } : undefined,
   } as unknown as AiRateRepository;
-  return new AiRateService(repository, clock);
+  return new AiRateService(repository, clock, 122);
 }
 
 describe('AI rate', () => {

@@ -222,6 +222,11 @@ export class ContactMergeService {
     });
   }
 
+  async listUndoable(storeId: string, contactId: string): Promise<ContactMergeResponse[]> {
+    const rows = await this.repository.listUndoable(storeId, contactId, this.clock.now());
+    return rows.map(({ merge, mergedContactName }) => toMergeResponse(merge, mergedContactName));
+  }
+
   private async restoreConsents(
     storeId: string,
     input: {
