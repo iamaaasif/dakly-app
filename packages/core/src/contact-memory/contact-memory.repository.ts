@@ -127,7 +127,8 @@ export class ContactMemoryRepository {
 
   // Clearing bumps every version so a model call already in flight fails its guard, and moves every
   // checkpoint to the latest message so a rebuild cannot read the cleared history again.
-  clear(storeId: string, contactId: string, userId: string, now: Date): Promise<boolean> {
+  // A null user is a deletion request, which must reach a contact that is already marked deleted.
+  clear(storeId: string, contactId: string, userId: string | null, now: Date): Promise<boolean> {
     return this.database.forStore(storeId, async (tx) => {
       const [contact] = await tx
         .select({ id: contacts.id })
@@ -136,7 +137,7 @@ export class ContactMemoryRepository {
           and(
             eq(contacts.storeId, storeId),
             eq(contacts.id, contactId),
-            isNull(contacts.deletedAt),
+            userId ? isNull(contacts.deletedAt) : undefined,
           ),
         )
         .for('update');
@@ -149,7 +150,7 @@ export class ContactMemoryRepository {
           facts: [],
           clearedAt: now,
           editedByUserId: userId,
-          editedAt: now,
+          editedAt: userId ? now : undefined,
           version: sql`${contactMemories.version} + 1`,
           updatedAt: now,
         })

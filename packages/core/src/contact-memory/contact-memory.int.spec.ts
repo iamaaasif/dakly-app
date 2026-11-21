@@ -16,6 +16,7 @@ import { toRedisConnection } from '../platform/queue/redis-connection';
 import { HOUR_MS } from '../platform/time';
 import { ContactMemoryModule } from './contact-memory.module';
 import { ContactMemoryService } from './contact-memory.service';
+import { EraseMemoryOnContactDeleted } from './jobs/erase-memory-on-contact-deleted.job';
 import { UpdateConversationMemoryJob } from './jobs/update-conversation-memory.job';
 
 class TestModule {}
@@ -376,4 +377,38 @@ it('moves past a conversation the model cannot read without changing facts', asy
   expect(respond).not.toHaveBeenCalled();
   expect(await memoryOf(contactId)).toMatchObject({ summary: '', facts: [] });
   expect((await checkpointOf(conversationId)).id).toBe(messageId);
+});
+
+it('erases memory when a contact is deleted and never builds it again', async () => {
+  const shopRow = await shop();
+  const contactId = await contact(shopRow.storeId);
+  const conversationId = await conversation(shopRow, contactId);
+  const messageId = await message(shopRow.storeId, conversationId, 'M size lagbe', 3);
+  modelAnswers([{ kind: 'size', value: 'M', source: 'customer_message', sourceId: messageId }]);
+  await service().updateFromConversation(shopRow.storeId, conversationId, false);
+  await message(shopRow.storeId, conversationId, 'red colour', 2);
+  await admin.pool.query('update contacts set deleted_at = now() where id = $1', [contactId]);
+  const erase = () =>
+    app.get(EraseMemoryOnContactDeleted).handle(
+      {
+        id: randomUUID(),
+        type: 'contact.deleted',
+        storeId: shopRow.storeId,
+        occurredAt: now.toISOString(),
+        payload: { contactId },
+      },
+      false,
+    );
+
+  await erase();
+  await erase();
+  await service().updateFromConversation(shopRow.storeId, conversationId, false);
+
+  expect(await memoryOf(contactId)).toMatchObject({ summary: '', facts: [] });
+  expect((await memoryOf(contactId))?.cleared_at).not.toBeNull();
+  expect(respond).toHaveBeenCalledTimes(1);
+  expect(await service().dueConversations()).not.toContainEqual({
+    storeId: shopRow.storeId,
+    conversationId,
+  });
 });
