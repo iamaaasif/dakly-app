@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -119,6 +119,25 @@ describe('Sign in', () => {
     expect(
       (screen.getByLabelText('Keep me signed in on this device') as HTMLInputElement).checked,
     ).toBe(false);
+  });
+  it('lets someone ask for a new sign-in code after the 30 second wait', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const sent: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      sent.push(url);
+      return new Response(null, { status: 204 });
+    });
+    show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.type(screen.getByLabelText('Mobile number'), '01712345678');
+    await user.click(screen.getByRole('button', { name: /Get a code by/ }));
+    const resend = await screen.findByRole('button', { name: 'Resend code in 0:30' });
+    expect((resend as HTMLButtonElement).disabled).toBe(true);
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    await user.click(screen.getByRole('button', { name: 'Resend code' }));
+    await screen.findByRole('button', { name: 'Resend code in 0:30' });
+    expect(sent).toEqual(['/api/auth/code', '/api/auth/code']);
+    vi.useRealTimers();
   });
   it('maps API field errors back to the input without leaving the form', async () => {
     vi.stubGlobal('fetch', async () =>

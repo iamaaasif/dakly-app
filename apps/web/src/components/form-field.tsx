@@ -1,6 +1,7 @@
 import { useState, type ComponentProps, type ReactNode } from 'react';
 import type { UseFormRegisterReturn, FieldError } from 'react-hook-form';
 
+import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
 
 type FormFieldProps = {
@@ -21,6 +22,7 @@ export function FormField({
   prefix,
   labelAside,
   type,
+  className,
   ...props
 }: FormFieldProps) {
   const [shown, setShown] = useState(false);
@@ -34,7 +36,7 @@ export function FormField({
       type={type === 'password' && shown ? 'text' : type}
       aria-invalid={Boolean(error)}
       aria-describedby={error ? `${id}-error` : description}
-      className={inputClass(prefix, type)}
+      className={cn(inputClass(prefix, type), className)}
     />
   );
   return (
