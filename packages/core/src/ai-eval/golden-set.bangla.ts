@@ -160,6 +160,42 @@ export const banglaGoldenCases: GoldenCase[] = [
     mentionsAnyOf: ['সবুজ', 'green', 'নেই', 'nai'],
     cardPhoto: null,
   },
+  // A bag photo in one colour: that colour's photo, no offer without stock, no other colour shown.
+  {
+    id: 'photo-bag-red-bn',
+    language: 'bangla',
+    question: 'ছবি: লাল চামড়ার হ্যান্ডব্যাগ, সোনালি ক্ল্যাপ। এটা আছে?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1800],
+    mentionsAnyOf: ['হ্যান্ডব্যাগ', 'ব্যাগ'],
+    cardPhoto: 'bag-red',
+  },
+  {
+    id: 'photo-bag-nil-banglish',
+    language: 'banglish',
+    question: 'photo: nil handbag, lomba strap. eta koto?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1800],
+    mentionsAnyOf: ['হ্যান্ডব্যাগ', 'ব্যাগ', 'handbag', 'bag'],
+    cardPhoto: 'bag-blue',
+  },
+  {
+    id: 'photo-bag-black-oos-mixed',
+    language: 'banglish',
+    question: 'photo: kalo handbag, gold clasp. এটা ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1800],
+    mentionsAnyOf: ['নেই', 'nai', 'স্টক', 'stock'],
+  },
+  {
+    id: 'photo-bag-green-missing-mixed',
+    language: 'banglish',
+    question: 'ছবি: sobuj handbag, eta ache? koto?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1800],
+    mentionsAnyOf: ['নেই', 'nai', 'লাল', 'নীল', 'red', 'blue'],
+    cardPhoto: null,
+  },
   // A size with no stock is named as such, never offered.
   {
     id: 'oos-card-size-banglish',
@@ -319,6 +355,21 @@ export const banglaRecordedOutcomes: Record<string, EvalOutcome> = {
   'photo-colour-missing-mixed': {
     kind: 'reply',
     text: 'কুর্তির সবুজ রঙ নেই। লাল আর নীল আছে, ৳১,৪৫০।',
+    cardPhoto: null,
+  },
+  'photo-bag-red-bn': {
+    kind: 'reply',
+    text: 'এই লাল হ্যান্ডব্যাগটা আছে, দাম ৳১,৮০০।',
+    cardPhoto: 'bag-red',
+  },
+  'photo-bag-nil-banglish': { kind: 'reply', text: 'Nil handbag 1800 tk.', cardPhoto: 'bag-blue' },
+  'photo-bag-black-oos-mixed': {
+    kind: 'reply',
+    text: 'কালো হ্যান্ডব্যাগ এখন স্টকে নেই। লাল আর নীল আছে, ৳১,৮০০। নতুন স্টক এলে জানাবো?',
+  },
+  'photo-bag-green-missing-mixed': {
+    kind: 'reply',
+    text: 'সবুজ রঙের ব্যাগ নেই। লাল আর নীল আছে, ৳১,৮০০।',
     cardPhoto: null,
   },
   'oos-card-size-banglish': { kind: 'reply', text: 'XL stock e nai. M ar L ache, 650 taka.' },
