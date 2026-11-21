@@ -14,6 +14,7 @@ import { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { DAY_MS } from '../platform/time';
 import { planMergeConsents, planUndoConsents } from './contact-merge-consents';
 import { planFieldMerge, planFieldUndo } from './contact-merge-fields';
 import {
@@ -24,7 +25,7 @@ import {
 import { contactError } from './contacts.errors';
 
 // D29: a staff merge can be undone for seven days.
-const UNDO_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const UNDO_WINDOW_MS = 7 * DAY_MS;
 
 const values = z.record(z.string(), z.unknown());
 const afterStateSchema = z.object({
