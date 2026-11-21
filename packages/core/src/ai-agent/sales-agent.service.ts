@@ -30,6 +30,7 @@ export type ComposedReply =
       aiRunId: string;
       cardTexts: string[];
       toolResults: object[];
+      toolNames: string[];
       sources: { tool: string; refs: string[] }[];
     }
   | { kind: 'handover'; reason: Reason }
@@ -76,6 +77,7 @@ export class SalesAgentService {
           aiRunId: attempt.aiRunId,
           cardTexts: cardTexts(results),
           toolResults: results.map(({ result }) => result),
+          toolNames: results.map(({ tool }) => tool),
           sources: sourcesOf(results),
         };
       const answered: { name: string; result: object }[] = [];

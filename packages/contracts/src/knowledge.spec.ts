@@ -39,9 +39,45 @@ describe('knowledge item input', () => {
     expect(changeKnowledgeItemSchema.safeParse({ answer }).success).toBe(false);
   });
 
+  it('takes a question and keywords and trims them', () => {
+    expect(
+      createKnowledgeItemSchema.parse({
+        kind: 'policy',
+        question: ' Showroom kothay? ',
+        answer: 'Dhanmondi.',
+        keywords: [' showroom ', 'dokan'],
+      }),
+    ).toEqual({
+      kind: 'policy',
+      question: 'Showroom kothay?',
+      answer: 'Dhanmondi.',
+      keywords: ['showroom', 'dokan'],
+    });
+    expect(
+      changeKnowledgeItemSchema.parse({
+        question: 'Showroom?',
+        answer: 'Dhanmondi.',
+        keywords: [],
+      }),
+    ).toEqual({ question: 'Showroom?', answer: 'Dhanmondi.', keywords: [] });
+  });
+
+  it.each([
+    { question: ' ' },
+    { keywords: ['ok', ''] },
+    { keywords: Array.from({ length: 11 }, (_, index) => `word${index}`) },
+    { keywords: ['x'.repeat(41)] },
+  ])('rejects an empty question or a bad keyword list', (extra) => {
+    expect(
+      createKnowledgeItemSchema.safeParse({ kind: 'policy', answer: 'Dhanmondi.', ...extra })
+        .success,
+    ).toBe(false);
+  });
+
   it('accepts only PDF or plain text uploads within the file size limit', () => {
     expect(
       knowledgeUploadSchema.safeParse({
+        fileName: 'Size chart.pdf',
         contentType: 'application/pdf',
         sizeBytes: knowledgeFileBytes,
       }).success,
@@ -58,6 +94,15 @@ describe('knowledge item input', () => {
         sizeBytes: 100,
       }).success,
     ).toBe(false);
+  });
+
+  it('needs the name of the uploaded file', () => {
+    const upload = { contentType: 'text/plain', sizeBytes: 10 };
+    expect(knowledgeUploadSchema.safeParse(upload).success).toBe(false);
+    expect(knowledgeUploadSchema.safeParse({ ...upload, fileName: '  ' }).success).toBe(false);
+    expect(knowledgeUploadSchema.parse({ ...upload, fileName: ' Policy.txt ' }).fileName).toBe(
+      'Policy.txt',
+    );
   });
 
   it('defaults to 50 items and rejects a requested page above 100', () => {

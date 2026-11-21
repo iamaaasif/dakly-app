@@ -148,6 +148,7 @@ atomically and retain business data when an extension is disabled.
 | `GET /knowledge-items`, `GET /knowledge-items/:knowledgeItemId`                                                   | `storeSettings`                                                   |
 | `POST /knowledge-items`, `PATCH /knowledge-items/:knowledgeItemId`, `DELETE /knowledge-items/:knowledgeItemId`    | `storeSettings`                                                   |
 | `POST /knowledge-items/uploads` (returns a file ID and signed PUT URL for PDF or plain text)                      | `storeSettings`                                                   |
+| `GET /ai-agent/knowledge-summary` (product and store rule counts for the Knowledge tab)                           | `storeSettings`                                                   |
 | `GET /events/stream`                                                                                              | any member; Server-Sent Events for new messages and notifications |
 
 ## Products and stock (05)

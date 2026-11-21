@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
 
 import type {
   ChangeKnowledgeItemInput,
@@ -14,15 +14,23 @@ import { TenantDatabase } from '../../platform/database/tenant-database';
 const columns = {
   id: knowledgeItems.id,
   kind: knowledgeItems.kind,
+  question: knowledgeItems.question,
   answer: knowledgeItems.answer,
+  keywords: knowledgeItems.keywords,
   fileId: knowledgeItems.fileId,
+  sourceUrl: knowledgeItems.sourceUrl,
   status: knowledgeItems.status,
   factsCount: knowledgeItems.factsCount,
+  timesUsed: knowledgeItems.timesUsed,
   createdAt: knowledgeItems.createdAt,
   updatedAt: knowledgeItems.updatedAt,
 };
 
+// Reads add the file's name; an insert or update cannot join, so the service supplies it.
+const listColumns = { ...columns, fileName: files.fileName };
+
 export type KnowledgeItem = Pick<typeof knowledgeItems.$inferSelect, keyof typeof columns>;
+export type KnowledgeListItem = KnowledgeItem & { fileName: string | null };
 export type KnowledgeChunk = Pick<
   typeof knowledgeChunks.$inferInsert,
   'content' | 'embedding' | 'embeddingModel' | 'tokenCount'
@@ -67,11 +75,15 @@ export class KnowledgeRepository {
     return item!;
   }
 
-  list(storeId: string, query: ListKnowledgeItemsQuery): Promise<KnowledgeItem[]> {
+  list(storeId: string, query: ListKnowledgeItemsQuery): Promise<KnowledgeListItem[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select(columns)
+        .select(listColumns)
         .from(knowledgeItems)
+        .leftJoin(
+          files,
+          and(eq(files.storeId, knowledgeItems.storeId), eq(files.id, knowledgeItems.fileId)),
+        )
         .where(
           and(
             eq(knowledgeItems.storeId, storeId),
@@ -83,11 +95,15 @@ export class KnowledgeRepository {
     );
   }
 
-  async find(storeId: string, itemId: string): Promise<KnowledgeItem | undefined> {
+  async find(storeId: string, itemId: string): Promise<KnowledgeListItem | undefined> {
     const [item] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select(columns)
+        .select(listColumns)
         .from(knowledgeItems)
+        .leftJoin(
+          files,
+          and(eq(files.storeId, knowledgeItems.storeId), eq(files.id, knowledgeItems.fileId)),
+        )
         .where(and(eq(knowledgeItems.storeId, storeId), eq(knowledgeItems.id, itemId))),
     );
     return item;
@@ -119,6 +135,21 @@ export class KnowledgeRepository {
         .returning(columns),
     );
     return item;
+  }
+
+  // Counts one use per lookup in a real chat. The revision column stays
+  // as it is because index writes compare it.
+  async recordUse(storeId: string, itemIds: string[]): Promise<void> {
+    if (!itemIds.length) return;
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(knowledgeItems)
+        .set({
+          timesUsed: sql`${knowledgeItems.timesUsed} + 1`,
+          updatedAt: knowledgeItems.updatedAt,
+        })
+        .where(and(eq(knowledgeItems.storeId, storeId), inArray(knowledgeItems.id, itemIds))),
+    );
   }
 
   async remove(storeId: string, itemId: string): Promise<boolean> {
@@ -194,7 +225,13 @@ export class KnowledgeRepository {
     storeId: string,
     file: Pick<
       typeof files.$inferInsert,
-      'id' | 'objectKey' | 'contentType' | 'sizeBytes' | 'uploadedByUserId' | 'createdAt'
+      | 'id'
+      | 'objectKey'
+      | 'fileName'
+      | 'contentType'
+      | 'sizeBytes'
+      | 'uploadedByUserId'
+      | 'createdAt'
     >,
   ): Promise<void> {
     await this.database.forStore(storeId, (tx) =>
@@ -248,6 +285,7 @@ export class KnowledgeRepository {
       tx
         .select({
           status: files.status,
+          fileName: files.fileName,
           objectKey: files.objectKey,
           contentType: files.contentType,
           sizeBytes: files.sizeBytes,

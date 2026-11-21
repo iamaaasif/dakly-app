@@ -1,10 +1,13 @@
 import type { KnowledgeItemResponse } from '@dakly/contracts/knowledge';
-import { Badge } from '@dakly/ui/badge';
 
+// A line of text under the name, in the colour of its state.
 export function KnowledgeItemStatus({ item }: { item: KnowledgeItemResponse }) {
-  if (item.status === 'processing') return <Badge variant="warning">Reading…</Badge>;
+  if (item.status === 'processing') return <span className="text-sm text-warning">Reading…</span>;
   if (item.status === 'failed')
-    return <Badge variant="danger">{item.failureReason ?? 'Could not read this'}</Badge>;
-  if (item.kind === 'file') return <Badge variant="success">Learned {item.factsCount} facts</Badge>;
-  return <Badge variant="success">Dakly knows this</Badge>;
+    return (
+      <span className="text-sm text-danger">{item.failureReason ?? 'Could not read this'}</span>
+    );
+  if (item.kind === 'file' || item.kind === 'url')
+    return <span className="text-sm text-success">Learned {item.factsCount} facts</span>;
+  return <span className="text-sm text-success">Dakly knows this</span>;
 }
