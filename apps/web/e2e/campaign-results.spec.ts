@@ -11,11 +11,11 @@ type Channel = 'sms' | 'messenger';
 // Seeds one sent campaign with three customers (delivered, failed, delivered and tapped) and
 // removes it afterwards. A Messenger campaign also gets a Page, a cost and one attributed order.
 async function withSentCampaign(
-  context: BrowserContext,
-  baseURL: string,
+  browser: { context: BrowserContext; baseURL: string },
   channel: Channel,
   run: (campaignId: string) => Promise<void>,
 ) {
+  const { context, baseURL } = browser;
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
     token: string;
     storeIds: [string, string];
@@ -140,7 +140,7 @@ test('reads a sent SMS campaign: no cost, failures, customers and copy actions',
   context,
   baseURL,
 }) => {
-  await withSentCampaign(context, baseURL!, 'sms', async (campaignId) => {
+  await withSentCampaign({ context, baseURL: baseURL! }, 'sms', async (campaignId) => {
     await page.goto(`/campaigns/${campaignId}`);
     await expect(page.getByRole('heading', { name: 'Campaign results' })).toBeVisible();
     await expect(page.getByText(/Results final on/)).toBeVisible();
@@ -163,7 +163,7 @@ test('reads a sent Messenger campaign: cost, return, orders and resend', async (
   context,
   baseURL,
 }) => {
-  await withSentCampaign(context, baseURL!, 'messenger', async (campaignId) => {
+  await withSentCampaign({ context, baseURL: baseURL! }, 'messenger', async (campaignId) => {
     await page.goto(`/campaigns/${campaignId}?outcome=ordered`);
     await expect(page.getByText('Return per ৳1', { exact: true })).toBeVisible();
     await expect(page.getByText('৳500', { exact: true })).toBeVisible();
