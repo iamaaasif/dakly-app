@@ -29,6 +29,15 @@ export class CampaignSmsService {
     };
   }
 
+  // What one customer would see, with sample link codes: no tracked link is created for a test.
+  sampleBody(text: string): string {
+    const base = this.links.shortLinkBase();
+    const content = replaceCampaignSmsUrls(text, campaignSmsUrls(text), () =>
+      this.links.sampleRedirectUrl(base),
+    );
+    return withOptOut(content, this.links.sampleOptOutUrl(base));
+  }
+
   async prepare(storeId: string, campaign: SmsCampaign, recipient: RecipientCodes) {
     const { text } = campaign.content;
     const base = campaign.shortLinkBase ?? this.links.shortLinkBase();
