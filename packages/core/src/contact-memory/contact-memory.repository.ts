@@ -52,6 +52,16 @@ export class ContactMemoryRepository {
     return result.rows;
   }
 
+  async read(storeId: string, contactId: string): Promise<ContactMemory | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ summary: contactMemories.summary, facts: contactMemories.facts })
+        .from(contactMemories)
+        .where(and(eq(contactMemories.storeId, storeId), eq(contactMemories.contactId, contactId))),
+    );
+    return row && storedMemory(row);
+  }
+
   // Reads one consistent view of the evidence. Nothing here holds a lock into the model call.
   load(storeId: string, conversationId: string): Promise<MemoryWork | undefined> {
     return this.database.forStore(storeId, async (tx) => {

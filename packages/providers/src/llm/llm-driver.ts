@@ -64,6 +64,8 @@ export type LlmTranscriptionRequest = Pick<LlmRequest, 'model' | 'timeoutMs' | '
 export type LlmTranscription = { model: string; text: string; usage: LlmUsage };
 
 export type LlmDriver = {
+  // The number of tokens this model reads in the text, or undefined when its tokenizer is not known.
+  countTokens(model: string, text: string): Promise<number | undefined>;
   transcribe(request: LlmTranscriptionRequest): Promise<LlmTranscription>;
   embed(request: LlmEmbeddingRequest): Promise<LlmEmbedding>;
   respond(request: LlmRequest): Promise<LlmResult>;
