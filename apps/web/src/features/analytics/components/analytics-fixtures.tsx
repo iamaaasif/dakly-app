@@ -195,7 +195,7 @@ const socialResponse: AnalyticsSocialPostsResponse = {
   totals: { reach: 10330, reactions: 540 },
 };
 
-export const aiAgentResponse: AnalyticsAiAgentResponse = {
+const aiAgentResponse: AnalyticsAiAgentResponse = {
   asOf: overview.asOf,
   timeZone: 'Asia/Dhaka',
   current: overview.current,
