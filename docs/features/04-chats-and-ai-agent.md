@@ -439,7 +439,9 @@ The list shows the contact name on each row. `GET /conversations/counts` returns
 - CHAT-5 part 4: Select with bulk actions, and the header pills.
 - Labels (VIP and the Label button): this doc names Label in the screens and in Edit Chats permission but gives no data model, so labels need an owner decision before a CHAT-5 part 5.
 - Intent tags, "Lead saved" and "Dakly is typing": AI-5 shows them from the AI pipeline.
-- Comments channel: CHAT-6.
+- Comments view in the inbox: CHAT-6 part 2 (web).
+
+Comments on the shop's Facebook Page posts and Instagram media arrive through the Meta webhook as `feed` and `comments` changes and are stored in `social_comments`, once per comment. Comments made before the Page connected, and the shop's own comments, are ignored. `GET /comments` lists them newest first with cursors and filters by status, classification and post. Staff with edit access can reply publicly (`POST /comments/:id/reply`, once per comment), reply privately (`POST /comments/:id/private-reply`), and hide or unhide (`POST /comments/:id/hide` and `/unhide`). Every action goes to Meta first and the comment changes only after Meta accepts it. Meta allows one private reply per comment, within 7 days of the comment: the first request claims it, a refusal gives it back, and an outage keeps it claimed because the reply may have gone out. A private reply to a comment whose author is already a contact goes through the send policy as a staff reply. Hiding a hidden comment does nothing and does not call Meta. Replies are recorded in the audit log. The AI classification and the AI's own comment replies are not built yet (they need a task of their own).
 
 Staff can add internal notes to the inbox thread. A note records its author and time, stays inside Dakly, and leaves the customer preview, reply window and unread count as they were.
 

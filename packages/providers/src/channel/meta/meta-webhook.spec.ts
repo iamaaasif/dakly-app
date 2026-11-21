@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseMetaPostbacks, parseMetaReceipts, parseMetaWebhook } from './meta-webhook';
+import {
+  parseMetaComments,
+  parseMetaPostbacks,
+  parseMetaReceipts,
+  parseMetaWebhook,
+} from './meta-webhook';
 
 const timestamp = 1795053600000;
 const message = {
@@ -259,5 +264,96 @@ describe('Meta webhook postbacks', () => {
     const delivery = { object: 'page', entry: [{ id: '10001', messaging: [tap] }] };
     expect(parseMetaWebhook(delivery)).toEqual([]);
     expect(parseMetaReceipts(delivery)).toEqual([]);
+  });
+});
+
+describe('Meta webhook comments', () => {
+  const facebook = {
+    item: 'comment',
+    verb: 'add',
+    comment_id: '555_1',
+    post_id: '10001_555',
+    parent_id: '10001_555',
+    from: { id: '10003', name: 'Sadia Islam' },
+    message: 'Price koto?',
+    created_time: 1795053600,
+  };
+  const delivery = (value: unknown) => ({
+    object: 'page',
+    entry: [{ id: '10001', time: 1795053601, changes: [{ field: 'feed', value }] }],
+  });
+
+  it('reads a Facebook comment on a post and treats the post as its parent', () => {
+    expect(parseMetaComments(delivery(facebook))).toEqual([
+      {
+        channel: 'messenger',
+        accountExternalId: '10001',
+        externalPostId: '10001_555',
+        externalCommentId: '555_1',
+        parentExternalCommentId: null,
+        authorExternalId: '10003',
+        authorName: 'Sadia Islam',
+        text: 'Price koto?',
+        commentedAt: new Date(1795053600000),
+      },
+    ]);
+  });
+
+  it('keeps the parent of a Facebook reply to another comment', () => {
+    const [reply] = parseMetaComments(delivery({ ...facebook, parent_id: '555_0' }));
+    expect(reply?.parentExternalCommentId).toBe('555_0');
+  });
+
+  it("skips the shop's own comments, edits, removals and other feed items", () => {
+    expect(parseMetaComments(delivery({ ...facebook, from: { id: '10001' } }))).toEqual([]);
+    expect(parseMetaComments(delivery({ ...facebook, verb: 'edited' }))).toEqual([]);
+    expect(parseMetaComments(delivery({ ...facebook, verb: 'remove' }))).toEqual([]);
+    expect(parseMetaComments(delivery({ ...facebook, item: 'reaction' }))).toEqual([]);
+  });
+
+  it('reads an Instagram comment and uses the delivery time for it', () => {
+    const payload = {
+      object: 'instagram',
+      entry: [
+        {
+          id: '20001',
+          time: 1795053601,
+          changes: [
+            {
+              field: 'comments',
+              value: {
+                id: 'ig-1',
+                text: 'Size M ache?',
+                from: { id: '20003', username: 'sadia' },
+                media: { id: 'media-1' },
+              },
+            },
+          ],
+        },
+      ],
+    };
+    expect(parseMetaComments(payload)).toEqual([
+      {
+        channel: 'instagram',
+        accountExternalId: '20001',
+        externalPostId: 'media-1',
+        externalCommentId: 'ig-1',
+        parentExternalCommentId: null,
+        authorExternalId: '20003',
+        authorName: 'sadia',
+        text: 'Size M ache?',
+        commentedAt: new Date(1795053601000),
+      },
+    ]);
+  });
+
+  it('ignores a comment field on the wrong object and malformed entries', () => {
+    expect(
+      parseMetaComments({
+        object: 'instagram',
+        entry: [{ id: '1', time: 1, changes: [{ field: 'feed', value: facebook }] }],
+      }),
+    ).toEqual([]);
+    expect(parseMetaComments({ object: 'page', entry: [{ id: '1', changes: 'bad' }] })).toEqual([]);
   });
 });
