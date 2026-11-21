@@ -7,11 +7,14 @@ import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import type { ChannelConnection } from '@dakly/contracts/channels';
 import { Button } from '@dakly/ui/button';
 
+import { CampaignApproveDialog } from './campaign-approve-dialog';
 import { CampaignAudienceFields } from './campaign-audience-fields';
 import { CampaignDraftShell } from './campaign-draft-shell';
 import { CampaignEstimate } from './campaign-estimate';
 import { CampaignPageHeader } from './campaign-page-header';
-import { useCampaignStep, type CampaignStepId } from './campaign-steps';
+import { isScheduleBlocked } from './campaign-schedule';
+import { CampaignScheduleFields } from './campaign-schedule-fields';
+import { useAfterSave, type CampaignStepId } from './campaign-steps';
 import { MessengerContentFields } from './messenger-content-fields';
 import { MessengerDetailsFields } from './messenger-details-fields';
 import { MessengerPreview } from './messenger-preview';
@@ -26,12 +29,15 @@ export function MessengerDraft({
   campaign?: CampaignResponse;
   onBack?: () => void;
 }) {
-  const { goTo, next } = useCampaignStep();
-  const draft = useMessengerDraftForm(pages, campaign, () => next && goTo(next));
+  const { afterSave, approving, closeApproval } = useAfterSave();
+  const draft = useMessengerDraftForm(pages, campaign, afterSave);
   return (
     <FormProvider {...draft.form}>
       {campaign ? (
-        <SavedDraft pages={pages} campaign={campaign} draft={draft} />
+        <>
+          <SavedDraft pages={pages} campaign={campaign} draft={draft} />
+          {approving && <CampaignApproveDialog campaign={campaign} onClose={closeApproval} />}
+        </>
       ) : (
         <NewDraft pages={pages} draft={draft} onBack={onBack} />
       )}
@@ -51,6 +57,8 @@ function SavedDraft({
   draft: Draft;
 }) {
   const { submit, saveDraft, save, isDirty, opening } = draft;
+  const schedule = useWatch({ control: draft.form.control, name: 'schedule' });
+  const scheduleBlocked = isScheduleBlocked(schedule, 'messenger');
   return (
     <CampaignDraftShell
       title={campaign.name}
@@ -60,12 +68,16 @@ function SavedDraft({
       onSaveDraft={saveDraft}
       saving={save.isPending}
       canSave={isDirty}
+      finishBlocked={scheduleBlocked}
       busy={save.isPending || opening}
       error={save.error?.message}
       message={save.isSuccess && !isDirty ? 'Draft saved.' : undefined}
-      fields={(step) => <Fields step={step} pages={pages} />}
+      fields={(step) => (
+        <Fields step={step} pages={pages} failureCode={campaign.approvalFailureCode} />
+      )}
       side={(step) => {
-        if (step === 'content') return <Side pages={pages} campaign={campaign} />;
+        if (step === 'content' || step === 'schedule')
+          return <Side pages={pages} campaign={campaign} />;
         return (
           step === 'audience' && (
             <CampaignEstimate
@@ -80,9 +92,19 @@ function SavedDraft({
   );
 }
 
-function Fields({ step, pages }: { step: CampaignStepId; pages: ChannelConnection[] }) {
+function Fields({
+  step,
+  pages,
+  failureCode,
+}: {
+  step: CampaignStepId;
+  pages: ChannelConnection[];
+  failureCode: CampaignResponse['approvalFailureCode'];
+}) {
   if (step === 'goal') return <MessengerDetailsFields pages={pages} focusName={false} />;
-  return step === 'content' ? <MessengerContentFields /> : <CampaignAudienceFields />;
+  if (step === 'content') return <MessengerContentFields />;
+  if (step === 'audience') return <CampaignAudienceFields />;
+  return <CampaignScheduleFields channel="messenger" failureCode={failureCode} />;
 }
 
 function NewDraft({

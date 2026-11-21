@@ -22,6 +22,7 @@ type ShellProps = {
   onSaveDraft: () => void;
   saving: boolean;
   canSave: boolean;
+  finishBlocked: boolean;
   busy: boolean;
   error?: string;
   message?: string;
@@ -37,6 +38,7 @@ export function CampaignDraftShell({
   onSaveDraft,
   saving,
   canSave,
+  finishBlocked,
   busy,
   error,
   message,
@@ -74,6 +76,7 @@ export function CampaignDraftShell({
           <StepButtons
             previous={previous && hrefFor(previous)}
             hasNext={Boolean(next)}
+            finishBlocked={finishBlocked}
             saving={saving}
           />
         </form>
@@ -90,10 +93,12 @@ export function CampaignDraftShell({
 function StepButtons({
   previous,
   hasNext,
+  finishBlocked,
   saving,
 }: {
   previous?: string;
   hasNext: boolean;
+  finishBlocked: boolean;
   saving: boolean;
 }) {
   return (
@@ -108,11 +113,9 @@ function StepButtons({
       ) : (
         <span />
       )}
-      {hasNext && (
-        <Button type="submit" loading={saving}>
-          Continue
-        </Button>
-      )}
+      <Button type="submit" loading={saving} disabled={!hasNext && finishBlocked}>
+        {hasNext ? 'Continue' : 'Approve and launch'}
+      </Button>
     </div>
   );
 }
@@ -126,7 +129,7 @@ function SideColumn({
   channel: CampaignChannel;
   children: ReactNode;
 }) {
-  if (step !== 'content') return <div className="min-w-0">{children}</div>;
+  if (step !== 'content' && step !== 'schedule') return <div className="min-w-0">{children}</div>;
   return (
     <div className="min-w-0 space-y-2">
       <p className="text-sm font-medium text-text-muted">

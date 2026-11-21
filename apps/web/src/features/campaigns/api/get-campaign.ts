@@ -18,5 +18,7 @@ export function useCampaign(campaignId: string) {
         throw error;
       }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewCampaigns),
+    // The audience is checked in the background after Approve; the page follows it.
+    refetchInterval: (query) => (query.state.data?.status === 'approving' ? 2000 : false),
   });
 }
