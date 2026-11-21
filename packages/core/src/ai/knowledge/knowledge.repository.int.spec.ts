@@ -178,7 +178,88 @@ describe('KnowledgeRepository', () => {
     const changed = await repository.change(fixture.a, item.id, { answer: 'নতুন তথ্য' }, now);
     const indexer = withFile(Buffer.alloc(0), []);
     await expect(runIndex(indexer, item, true)).resolves.toBeUndefined();
-    await expect(repository.find(fixture.a, item.id)).resolves.toEqual(changed);
+    await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject(changed!);
+  });
+
+  it('keeps the question and keywords and reads the name of a file', async () => {
+    const answer = await repository.create(
+      fixture.a,
+      fixture.userA,
+      {
+        kind: 'policy',
+        question: 'Showroom kothay?',
+        answer: 'House 12, Road 5.',
+        keywords: ['showroom', 'dokan'],
+      },
+      now,
+    );
+    const id = newId();
+    await repository.createFile(fixture.a, {
+      id,
+      fileName: 'Size chart.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 10,
+      objectKey: `stores/${fixture.a}/knowledge/${id}`,
+      uploadedByUserId: fixture.userA,
+      createdAt: now,
+    });
+    const file = await repository.create(
+      fixture.a,
+      fixture.userA,
+      { kind: 'file', fileId: id },
+      now,
+    );
+
+    await expect(repository.find(fixture.a, answer.id)).resolves.toMatchObject({
+      question: 'Showroom kothay?',
+      keywords: ['showroom', 'dokan'],
+      timesUsed: 0,
+      fileName: null,
+    });
+    await expect(repository.find(fixture.a, file.id)).resolves.toMatchObject({
+      fileName: 'Size chart.pdf',
+    });
+    const listed = await repository.list(fixture.a, { limit: 100 });
+    expect(listed.find((item) => item.id === file.id)?.fileName).toBe('Size chart.pdf');
+  });
+
+  it('counts a use for the store that owns the answer and leaves the revision alone', async () => {
+    const item = await repository.create(
+      fixture.a,
+      fixture.userA,
+      { kind: 'policy', answer: 'Open 10 to 10.' },
+      now,
+    );
+    await repository.recordUse(fixture.b, [item.id]);
+    await repository.recordUse(fixture.a, [item.id]);
+    await repository.recordUse(fixture.a, [item.id]);
+    await repository.recordUse(fixture.a, []);
+    await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject({
+      timesUsed: 2,
+      updatedAt: item.updatedAt,
+    });
+  });
+
+  it('indexes the question and keywords with the answer', async () => {
+    const item = await repository.create(
+      fixture.a,
+      fixture.userA,
+      { kind: 'policy', question: 'Showroom kothay?', answer: 'House 12.', keywords: ['dokan'] },
+      now,
+    );
+    const embedded: string[][] = [];
+    const ai = {
+      async embed(_store: string, inputs: readonly string[]) {
+        embedded.push([...inputs]);
+        return {
+          embeddings: inputs.map(() => Array.from({ length: 512 }, () => 0.5)),
+          model: 'test-model',
+          usage: { inputTokens: 4, cachedInputTokens: 0, outputTokens: 0 },
+        };
+      },
+    } as unknown as AiService;
+    await runIndex(new KnowledgeIndexService(repository, {} as FileStorageDriver, ai), item);
+    expect(embedded).toEqual([['Showroom kothay?\nHouse 12.\nKeywords: dokan']]);
   });
 
   it('rejects oversized file metadata before reading the object', async () => {

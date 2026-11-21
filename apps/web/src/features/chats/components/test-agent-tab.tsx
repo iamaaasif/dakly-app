@@ -1,7 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 
-import { askTestSchema, type TestAnswerResponse } from '@dakly/contracts/ai-practice';
+import {
+  askTestSchema,
+  type TestAnswerResponse,
+  type TestAnswerSource,
+} from '@dakly/contracts/ai-practice';
 import type { handoverReasons } from '@dakly/contracts/chats';
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
@@ -28,21 +32,53 @@ const handoverText: Record<(typeof handoverReasons)[number], string> = {
   other: 'Your hand-over rules send this to a person.',
 };
 
-function Result({ answer }: { answer: TestAnswerResponse }) {
-  if (answer.kind === 'reply')
-    return (
-      <section aria-label="Dakly replies" className="space-y-1 rounded-lg border border-border p-3">
-        <p className="text-sm text-text-muted">Dakly would reply</p>
-        <p className="whitespace-pre-wrap">{answer.text}</p>
-      </section>
-    );
+const unknownLine = 'Dakly doesn’t know this yet, so it calls your team.';
+
+function sourceLine(source: TestAnswerSource): string {
+  if (source.kind === 'answer')
+    return source.question
+      ? `Answered from your answer: “${source.question}”`
+      : 'Answered from your answer';
+  if (source.kind === 'file')
+    return source.fileName ? `Answered from ${source.fileName}` : 'Answered from a file';
+  if (source.kind === 'products') return 'Answered from Products and stock';
+  if (source.kind === 'store_rules') return 'Answered from Store rules';
+  return 'General reply';
+}
+
+// What the design shows under a hand-over: the missing answer in red, a rule in green, and
+// nothing when the AI itself was not available.
+function handoverLine(reason: keyof typeof handoverText) {
+  if (reason === 'out_of_scope') return { text: unknownLine, isProblem: true };
+  if (reason === 'ai_unavailable' || reason === 'allowance_used') return null;
+  return { text: 'Hand-off rule', isProblem: false };
+}
+
+function Result({ question, answer }: { question: string; answer: TestAnswerResponse }) {
+  const line =
+    answer.kind === 'reply'
+      ? { text: sourceLine(answer.source), isProblem: false }
+      : handoverLine(answer.reason);
   return (
     <section
-      aria-label="Dakly hands over"
-      className="space-y-1 rounded-lg border border-border p-3"
+      aria-label="Test result"
+      className="flex flex-col gap-2 rounded-lg bg-surface-muted p-3"
     >
-      <p className="text-sm text-text-muted">Dakly would call your team</p>
-      <p>{handoverText[answer.reason]}</p>
+      <p className="max-w-[85%] self-start rounded-lg border border-border bg-surface px-3 py-2">
+        {question}
+      </p>
+      <p className="max-w-[85%] self-end rounded-lg bg-action px-3 py-2 whitespace-pre-wrap text-on-primary">
+        {answer.kind === 'reply'
+          ? answer.text
+          : `(Dakly stops and calls your team: ${handoverText[answer.reason]})`}
+      </p>
+      {line ? (
+        <p
+          className={`self-end text-right text-sm font-semibold ${line.isProblem ? 'text-danger' : 'text-success'}`}
+        >
+          {line.text}
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -56,7 +92,8 @@ export function TestAgentTab({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="space-y-4">
       <p className="text-text-muted">
-        Type a message as a customer would. See what Dakly replies. Nothing is sent.
+        Type a message as a customer would. See exactly what Dakly replies, and where the answer
+        came from. Nothing is sent.
       </p>
       <form onSubmit={submit} aria-label="Test the agent" className="flex gap-3">
         <Input
@@ -88,7 +125,9 @@ export function TestAgentTab({ canEdit }: { canEdit: boolean }) {
           {ask.error.message}
         </p>
       ) : null}
-      {ask.data && !ask.isPending ? <Result answer={ask.data} /> : null}
+      {ask.data && !ask.isPending ? (
+        <Result question={ask.variables.question} answer={ask.data} />
+      ) : null}
     </div>
   );
 }

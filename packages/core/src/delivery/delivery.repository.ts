@@ -56,6 +56,16 @@ export class DeliveryRepository {
     );
   }
 
+  async count(storeId: string): Promise<number> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(deliveryZones)
+        .where(eq(deliveryZones.storeId, storeId)),
+    );
+    return row?.count ?? 0;
+  }
+
   async findById(storeId: string, id: string): Promise<DeliveryZone | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx

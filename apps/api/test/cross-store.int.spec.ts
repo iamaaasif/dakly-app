@@ -978,7 +978,7 @@ fixture('POST /knowledge-items', async () => {
 fixture('POST /knowledge-items/uploads', async () => {
   const { a, b } = await pair();
   const url = '/knowledge-items/uploads';
-  const metadata = { contentType: 'text/plain', sizeBytes: 40 };
+  const metadata = { fileName: 'Return policy.txt', contentType: 'text/plain', sizeBytes: 40 };
   const foreign = (await success(a, 'POST', url, 201, metadata)).json();
   const before = await f.row('files', foreign.fileId);
 
@@ -996,6 +996,7 @@ fixture('POST /knowledge-items/uploads', async () => {
     store_id: b.id,
     object_key: objectKey,
     purpose: 'knowledge_file',
+    file_name: 'Return policy.txt',
     status: 'pending',
   });
   await success(b, 'POST', '/knowledge-items', 201, { kind: 'file', fileId });
@@ -1094,6 +1095,21 @@ fixture('GET /ai-agent/settings', async () => {
     isAutoReplyOn: false,
   });
 });
+fixture('GET /ai-agent/knowledge-summary', async () => {
+  const { a, b } = await pair();
+  await orderVariant(a);
+  await deliveryZone(a);
+  const extraRules = 'No exchange on sale items.';
+  await success(a, 'PUT', '/ai-agent/settings', 200, { ...settingsBody(0, 'bn'), extraRules });
+  expect((await success(a, 'GET', '/ai-agent/knowledge-summary', 200)).json()).toEqual({
+    productsCount: 1,
+    storeRulesCount: 2,
+  });
+  expect((await success(b, 'GET', '/ai-agent/knowledge-summary', 200)).json()).toEqual({
+    productsCount: 0,
+    storeRulesCount: 0,
+  });
+});
 fixture('PUT /ai-agent/test-questions', async () => {
   const { a, b } = await pair();
   const url = '/ai-agent/test-questions';
@@ -1174,6 +1190,7 @@ fixture('POST /ai-agent/test', async () => {
   expect((await success(a, 'POST', url, 200, { question: 'hello' })).json()).toEqual({
     kind: 'reply',
     text: 'Ji bolun',
+    source: { kind: 'general' },
   });
   respond.mockRestore();
   for (const shop of [a, b])
