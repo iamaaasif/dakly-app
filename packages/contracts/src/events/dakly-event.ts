@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 import { attributionOrdersRebuiltEventSchema } from './analytics';
 import {
+  subscriptionPastDueEventSchema,
+  subscriptionReadOnlyEventSchema,
+  subscriptionRenewedEventSchema,
+} from './billing';
+import {
   campaignApprovalStartedEventSchema,
   campaignApprovedEventSchema,
   campaignSentEventSchema,
@@ -138,6 +143,9 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   duePaymentRecordedEventSchema,
   dueReminderRequestedEventSchema,
   dueWrittenOffEventSchema,
+  subscriptionRenewedEventSchema,
+  subscriptionPastDueEventSchema,
+  subscriptionReadOnlyEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

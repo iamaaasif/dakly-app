@@ -29,6 +29,7 @@ import { StartAutomationOnOrderStageChanged } from '@dakly/core/automations/jobs
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
+import { BillingJobsModule } from '@dakly/core/billing/billing-jobs.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { BuildCampaignAudienceJob } from '@dakly/core/campaigns/jobs/build-campaign-audience.job';
 import { QueueAudienceBuildOnApprovalStarted } from '@dakly/core/campaigns/jobs/queue-audience-build-on-approval-started.job';
@@ -187,6 +188,7 @@ import { JobSchedulers } from './job-schedulers';
     ContactStatsRepairModule,
     ContactErasureModule,
     AnalyticsModule,
+    BillingJobsModule,
     PaymentJobsModule,
     MaintenanceModule,
     KnowledgeIndexModule,
