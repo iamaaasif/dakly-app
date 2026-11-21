@@ -17,7 +17,7 @@ function build(now: object, before: object) {
       previous: { from: '2026-10-01', through: '2026-10-31' },
     }),
     aiOrders: async () => ({ count: 2, salesPoisha: 150000n }),
-    aiCostMicroUsd: async () => 2500n,
+    aiCostPoisha: async () => 2500n,
   } as unknown as AnalyticsService;
   const chats = { chats: async () => results.shift() } as unknown as AiChatReportService;
   return new AnalyticsAiAgentService(reports, chats);
@@ -42,7 +42,7 @@ describe('AI agent report', () => {
     expect(report.handedOver).toEqual({ current: 4, previous: 0 });
     expect(report.handoverReasons.map(({ reason }) => reason)).toEqual(['refund', 'discount']);
     expect(report.stillOpen).toBe(2);
-    expect(report.cost).toEqual({ currentMicroUsd: '2500', previousMicroUsd: '2500' });
+    expect(report.cost).toEqual({ currentPoisha: '2500', previousPoisha: '2500' });
     expect(report.sales.currentPoisha).toBe('150000');
   });
 });

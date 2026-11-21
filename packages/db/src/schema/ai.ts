@@ -204,6 +204,8 @@ export const aiRuns = pgTable(
     outputTokens: integer('output_tokens').notNull().default(0),
     // Vendor cost in millionths of a US dollar, so it stays an integer.
     costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull().default(0),
+    // The same cost in poisha at the rate in force when the run was saved, so a later rate change never moves history.
+    costPoisha: poisha('cost_poisha').notNull().default(0),
     toolCalls: jsonb('tool_calls'),
     outcome: text('outcome', { enum: aiRunOutcomes }).notNull(),
     errorCode: text('error_code'),

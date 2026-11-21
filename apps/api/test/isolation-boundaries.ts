@@ -135,6 +135,11 @@ const groups = [
     routes: ['GET /admin/plans', 'PUT /admin/plans/:code'],
   },
   {
+    evidence: 'ai-rate/ai-rate.int.spec.ts',
+    boundary: 'audited staff change of the global AI exchange rate, which holds no shop data',
+    routes: ['GET /admin/ai-rate', 'PUT /admin/ai-rate'],
+  },
+  {
     evidence: 'admin/reconciliation.int.spec.ts',
     boundary: 'audited staff closing of global gateway settlement lines, which hold no shop data',
     routes: ['GET /admin/reconciliation', 'POST /admin/reconciliation/lines/:lineId'],

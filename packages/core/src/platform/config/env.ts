@@ -50,6 +50,8 @@ const envSchema = z.object({
   SENTRY_DSN: z.url().optional(),
   // Per shop and Dhaka day. Unset means no ceiling alerts.
   AI_DAILY_STORE_COST_CEILING_MICRO_USD: z.coerce.number().int().positive().optional(),
+  // Taka per US dollar until staff set a rate; AI cost is shown in taka from it.
+  AI_USD_TO_BDT_RATE: z.coerce.number().positive().default(122),
   SLACK_BOT_TOKEN: z.string().min(1).optional(),
   SLACK_CHANNEL_ID: z
     .string()

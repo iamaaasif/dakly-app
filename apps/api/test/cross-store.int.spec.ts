@@ -3157,8 +3157,8 @@ fixture('GET /analytics/ai-agent', async () => {
     [b, 700],
   ] as const)
     await f.admin.pool.query(
-      `insert into ai_runs(id,store_id,purpose,tier,model,prompt_version,cost_micro_usd,outcome)
-       values(gen_random_uuid(),$1,'chat_reply','reply','m','v1',$2,'completed')`,
+      `insert into ai_runs(id,store_id,purpose,tier,model,prompt_version,cost_micro_usd,cost_poisha,outcome)
+       values(gen_random_uuid(),$1,'chat_reply','reply','m','v1',$2,$2,'completed')`,
       [shop.id, cost],
     );
   for (const [shop, cost] of [
@@ -3166,7 +3166,7 @@ fixture('GET /analytics/ai-agent', async () => {
     [b, '700'],
   ] as const) {
     const result = await success(shop, 'GET', '/analytics/ai-agent?period=30', 200);
-    expect(result.json().cost.currentMicroUsd).toBe(cost);
+    expect(result.json().cost.currentPoisha).toBe(cost);
   }
   expect((await f.request(b.member, 'GET', '/analytics/ai-agent')).statusCode).toBe(403);
   expect((await f.request(a.owner, 'GET', `/analytics/ai-agent?storeId=${b.id}`)).statusCode).toBe(

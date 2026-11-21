@@ -21,7 +21,7 @@ describe('AI cost in a period', () => {
       [f.b, 'chat_reply', 4000, '2026-11-10T05:00:00Z'],
     ] as const)
       await query(
-        `insert into ai_runs(id,store_id,purpose,tier,model,prompt_version,cost_micro_usd,outcome,created_at)
+        `insert into ai_runs(id,store_id,purpose,tier,model,prompt_version,cost_poisha,outcome,created_at)
          values(gen_random_uuid(),$1,$2,'reply','m','v1',$3,'completed',$4)`,
         [store, purpose, cost, at],
       );
@@ -33,7 +33,7 @@ describe('AI cost in a period', () => {
   });
 
   it('adds up only the chat purposes, by the shop day, for one shop', async () => {
-    expect(await analytics.aiCostMicroUsd(f.a, range, ['chat_reply', 'classify'])).toBe(1550n);
-    expect(await analytics.aiCostMicroUsd(f.b, range, ['chat_reply'])).toBe(4000n);
+    expect(await analytics.aiCostPoisha(f.a, range, ['chat_reply', 'classify'])).toBe(1550n);
+    expect(await analytics.aiCostPoisha(f.b, range, ['chat_reply'])).toBe(4000n);
   });
 });

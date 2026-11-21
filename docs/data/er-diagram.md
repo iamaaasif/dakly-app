@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0093_snapshot.json`: **104 tables, 1387 columns, 426 explicit indexes and 328 foreign keys**.
+Built from `packages/db/migrations/meta/0094_snapshot.json`: **104 tables, 1388 columns, 426 explicit indexes and 328 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1293,6 +1293,7 @@ erDiagram
         integer cached_input_tokens "NOT NULL; integer"
         integer output_tokens "NOT NULL; integer"
         bigint cost_micro_usd "NOT NULL; bigint"
+        bigint cost_poisha "NOT NULL; bigint"
         jsonb tool_calls "NULL; jsonb"
         text outcome "NOT NULL; text"
         text error_code "NULL; text"

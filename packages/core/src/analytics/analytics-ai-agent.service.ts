@@ -33,8 +33,8 @@ export class AnalyticsAiAgentService {
         this.chats.chats(storeId, before),
         this.reports.aiOrders(storeId, now),
         this.reports.aiOrders(storeId, before),
-        this.reports.aiCostMicroUsd(storeId, now, AGENT_PURPOSES),
-        this.reports.aiCostMicroUsd(storeId, before, AGENT_PURPOSES),
+        this.reports.aiCostPoisha(storeId, now, AGENT_PURPOSES),
+        this.reports.aiCostPoisha(storeId, before, AGENT_PURPOSES),
       ],
     );
     const handedOver = (rows: typeof chatsNow) =>
@@ -62,7 +62,7 @@ export class AnalyticsAiAgentService {
         currentPoisha: ordersNow.salesPoisha.toString(),
         previousPoisha: ordersBefore.salesPoisha.toString(),
       },
-      cost: { currentMicroUsd: costNow.toString(), previousMicroUsd: costBefore.toString() },
+      cost: { currentPoisha: costNow.toString(), previousPoisha: costBefore.toString() },
     };
   }
 }

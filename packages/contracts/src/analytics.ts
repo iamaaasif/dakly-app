@@ -197,7 +197,7 @@ export type AnalyticsTipResponse = {
 };
 
 // What the AI agent did for the shop. Counts are chats the AI replied in during the period; see the
-// glossary for how a chat is put in one of the groups. Cost is in millionths of a US dollar.
+// glossary for how a chat is put in one of the groups. Cost is in poisha at the rate each run was saved with.
 export type AnalyticsAiAgentResponse = {
   asOf: string;
   timeZone: string;
@@ -213,5 +213,5 @@ export type AnalyticsAiAgentResponse = {
   handoverReasons: { reason: string; chats: number }[];
   orders: Count;
   sales: Money;
-  cost: { currentMicroUsd: string; previousMicroUsd: string };
+  cost: Money;
 };
