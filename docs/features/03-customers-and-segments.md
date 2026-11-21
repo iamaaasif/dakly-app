@@ -111,8 +111,7 @@ The web app has two customer screens.
   not agreed to; the screen lists only the agreed ones. Orders, Spent and Last purchase come
   in CUS-17 part 2, read from `contact_stats`. Members with Edit
   Customers press Add customers and choose Add manually or Import from an Excel or CSV file. The manual
-  form shows a phone the store already has as an error on the phone field. Add by voice, Scan
-  your khata, Connect your store and Connect your POS are not offered until their tasks ship
+  form shows a phone the store already has as an error on the phone field. Scan your khata opens `/customers/khata-scan` (KHT-3, feature 13). Add by voice, Connect your store and Connect your POS are not offered until their tasks ship
   (CUS-10, release 2 and the store and POS connectors).
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
