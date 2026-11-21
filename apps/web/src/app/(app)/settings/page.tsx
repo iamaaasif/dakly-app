@@ -1,3 +1,4 @@
+import { SmsSettings } from '@/features/integrations/components/sms-settings';
 import { SettingsScreen } from '@/features/settings/components/settings-screen';
 import { requireSession } from '@/lib/require-session';
 
@@ -8,5 +9,9 @@ export default async function SettingsPage({
 }) {
   await requireSession();
   const query = await searchParams;
-  return <SettingsScreen tab={query.tab === 'extensions' ? 'extensions' : 'store'} />;
+  return <SettingsScreen tab={settingsTab(query.tab)} sms={<SmsSettings />} />;
+}
+
+function settingsTab(tab: string | undefined) {
+  return tab === 'extensions' || tab === 'sms' ? tab : 'store';
 }

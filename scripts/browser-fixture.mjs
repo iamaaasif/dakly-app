@@ -76,6 +76,8 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
             for (const table of [
               'store_daily_metrics',
               'contacts',
+              'sms_sender_ids',
+              'files',
               'audit_log',
               'memberships',
               'ai_runs',

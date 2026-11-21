@@ -37,6 +37,8 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 
 Balance and "about N Bangla messages"; sender choice between the shared number and approved brand sender IDs; Request a sender ID (3 to 11 English letters, numbers or spaces; upload trade licence and NID; status Requested → Approved or Rejected, typically about 7 days); test SMS; quiet hours (default 21:00–09:00); daily limit (default 2,000).
 
+CHN-7 builds the SMS sender screen at `/settings?tab=sms` (Store settings, SMS settings): a Sender name card that lists every request, newest first, with its status badge, the rejection reason and, for an approved name, Send test SMS; the shared sender row stays below and is highlighted while no brand name is approved. Request a sender name opens a dialog with the name, the trade licence and NID uploads (PDF, JPEG or PNG up to 5 MB, uploaded straight to storage on choosing the file) and the ownership tick; it is disabled while a request is requested, in review or approved. Members without `storeSettings.edit` see the list without buttons. Differences from the prototype: the dialog gains the two uploads the prototype leaves out; the name hint follows the contract (spaces are allowed); the review time reads about 7 days, not 2 to 3 working days; there are no radio buttons, because the approved name is used automatically and no API picks between the shared sender and a brand name; the Sending rules card (night pause and daily limit) and the balance line wait for their own task.
+
 #### Connection screens
 
 | Screen         | Elements                                                                                                          |
@@ -123,7 +125,7 @@ CHN-5 builds the Messaging and social part of this screen at `/integrations`: a 
 
 Connect opens the Facebook window from the URL that `POST /channel-connections/meta/start` returns. Facebook sends the window back to `/integrations/meta`, which hands the code and state to the Integrations tab and closes. The tab lists the accounts, the shop ticks the ones to connect, and `POST /channel-connections/meta` saves them. Reconnect runs the same flow for an account in `needs_reconnect` or whose access ends within 7 days, with that account ticked. Disconnect asks for confirmation first and keeps all chats. Members without `storeSettings.edit` see the cards without buttons. Development and browser tests set `META_CHANNEL_DRIVER=fake` and `META_OAUTH_REDIRECT_URI` to this page.
 
-Left out until their tasks land: the SMS sender request form, test SMS and document uploads (CHN-7), WhatsApp connect (CHN-3), and the expiry banner on Chats and Social (their screens).
+Left out until their tasks land: WhatsApp connect (CHN-3), and the expiry banner on Chats and Social (their screens).
 
 The prototype's WhatsApp connect is a one-click stub. The real flow is Meta Embedded Signup, which is not designed yet. POS cards show demo partners; release 1 is CSV only (D6).
 
