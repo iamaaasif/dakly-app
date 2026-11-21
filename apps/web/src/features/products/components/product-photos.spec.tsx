@@ -323,4 +323,34 @@ describe('Product photos', () => {
     await waitFor(() => expect(confirmingContext).toBe('verified'));
     expect(screen.queryByRole('img')).toBeNull();
   });
+
+  it('uploads a photo for one variant through the variant routes', async () => {
+    const variantId = '019c01ea-cf15-7d31-a7f5-d73d66007ae9';
+    const paths: string[] = [];
+    vi.stubGlobal('fetch', async (path: string) => {
+      paths.push(path);
+      if (path.endsWith('/upload-url'))
+        return reply({ fileId: firstId, uploadUrl: 'https://uploads.example.test/photo' });
+      if (path.startsWith('https://uploads.')) return new Response(null, { status: 200 });
+      return reply(empty);
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(sessionContextKey, context);
+    render(
+      <QueryClientProvider client={client}>
+        <ProductPhotos product={empty} variant={{ id: variantId, title: 'Red', photos: [] }} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText('No photos. The product photos show instead.')).toBeTruthy();
+    await userEvent.upload(
+      screen.getByLabelText('Add photo'),
+      new File(['png'], 'red.png', { type: 'image/png' }),
+    );
+    await waitFor(() =>
+      expect(paths.filter((path) => path.includes('/variants/'))).toEqual([
+        `/api/products/${productId}/variants/${variantId}/photos/upload-url`,
+        `/api/products/${productId}/variants/${variantId}/photos/confirm`,
+      ]),
+    );
+  });
 });

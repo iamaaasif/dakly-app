@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0086_snapshot.json`: **102 tables, 1375 columns, 422 explicit indexes and 324 foreign keys**.
+Built from `packages/db/migrations/meta/0086_snapshot.json`: **102 tables, 1376 columns, 423 explicit indexes and 325 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1005,9 +1005,9 @@ erDiagram
         uuid created_by_user_id FK "NULL; uuid"
         boolean is_recipient_buyer "NOT NULL; boolean"
         text recipient_name "NOT NULL; text"
-        text recipient_phone "NOT NULL; text"
-        text recipient_address "NOT NULL; text"
-        text recipient_district "NOT NULL; text"
+        text recipient_phone "NULL; text"
+        text recipient_address "NULL; text"
+        text recipient_district "NULL; text"
         integer recipient_bd_area_id FK "NULL; integer"
         uuid delivery_zone_id FK "NULL; uuid"
         text stage "NOT NULL; text"
@@ -1206,6 +1206,7 @@ erDiagram
     khata_imports |o..o{ khata_rows : "store_id, import_id"
     contacts |o..o{ khata_rows : "store_id, contact_id"
     due_entries |o..o{ khata_rows : "store_id, due_entry_id"
+    orders |o..o{ khata_rows : "store_id, order_id"
     ai_agent_settings {
         uuid store_id PK,FK "NOT NULL; uuid"
         boolean is_auto_reply_on "NOT NULL; boolean"
@@ -1335,6 +1336,7 @@ erDiagram
         uuid contact_id FK "NULL; uuid"
         boolean is_contact_created "NOT NULL; boolean"
         uuid due_entry_id FK "NULL; uuid"
+        uuid order_id FK "NULL; uuid"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
@@ -2196,6 +2198,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `khata_rows_import_id_store_fk`                                      | `khata_rows(store_id, import_id)`                         | `khata_imports(store_id, id)`               | no action |
 | `khata_rows_contact_id_store_fk`                                     | `khata_rows(store_id, contact_id)`                        | `contacts(store_id, id)`                    | no action |
 | `khata_rows_due_entry_id_store_fk`                                   | `khata_rows(store_id, due_entry_id)`                      | `due_entries(store_id, id)`                 | no action |
+| `khata_rows_order_id_store_fk`                                       | `khata_rows(store_id, order_id)`                          | `orders(store_id, id)`                      | no action |
 | `delivery_zones_store_id_stores_id_fk`                               | `delivery_zones(store_id)`                                | `stores(id)`                                | no action |
 | `discount_codes_store_id_stores_id_fk`                               | `discount_codes(store_id)`                                | `stores(id)`                                | no action |
 | `discount_codes_contact_id_contacts_id_fk`                           | `discount_codes(contact_id)`                              | `contacts(id)`                              | set null  |

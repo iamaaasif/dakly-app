@@ -53,6 +53,7 @@ import {
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
   orderEditedEventSchema,
+  orderImportedEventSchema,
   orderStageChangedEventSchema,
 } from './orders';
 import {
@@ -118,6 +119,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   orderCodCollectedEventSchema,
   orderConfirmedEventSchema,
   orderCreatedEventSchema,
+  orderImportedEventSchema,
   orderEditedEventSchema,
   attributionCreatedEventSchema,
   attributionRemovedEventSchema,

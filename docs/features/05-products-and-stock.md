@@ -246,6 +246,13 @@ else the product's). The AI tool `send_product_card` takes an optional `variantI
 `photoFileId` to show (the variant's own, else the product's first); cards are still sent as text until the
 reply sender can attach images. Photo search (AI-11) should index variant photos with their variant.
 
+On the web, the product sheet's Overview tab shows **Photos for each variant** under the product photos
+whenever the product has options. Each variant has the same add, move earlier and remove controls as the
+product photos, and says that the product photos show instead while it has none. The Restock dialog shows
+each size's first photo (else the product's), and the order editor shows the same thumbnail beside the
+price of the chosen variant. The design images have no variant photo screen, so these follow the product
+sheet's photo controls.
+
 PROD-8 tags each photo for the AI. Confirming a product or variant photo raises `product.photo_added`;
 `TagProductPhotoJob` (queue `inbound`) sends the photo to the `vision` tier with the prompt
 `tag-product-photo.v1` and saves a short English description and up to 12 tags, colour first, in English

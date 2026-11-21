@@ -146,10 +146,11 @@ export const orders = pgTable(
     // not change it. Return risk is keyed on recipient_phone. When the recipient is the buyer (the default) the
     // buyer's own phone is also saved on their contact when free (D27).
     isRecipientBuyer: boolean('is_recipient_buyer').notNull().default(true),
+    // Only a khata import sale has no recipient: it is a past counter sale with nothing to deliver.
     recipientName: text('recipient_name').notNull(),
-    recipientPhone: text('recipient_phone').notNull(),
-    recipientAddress: text('recipient_address').notNull(),
-    recipientDistrict: text('recipient_district').notNull(),
+    recipientPhone: text('recipient_phone'),
+    recipientAddress: text('recipient_address'),
+    recipientDistrict: text('recipient_district'),
     recipientBdAreaId: integer('recipient_bd_area_id').references(() => bdAreas.id),
     deliveryZoneId: uuid('delivery_zone_id').references(() => deliveryZones.id),
     stage: text('stage', { enum: orderStages }).notNull().default('to_confirm'),
@@ -393,6 +394,10 @@ function orderChecks(
     check(
       'orders_money',
       sql`${table.itemsSubtotalPoisha} >= 0 and ${table.orderDiscountPoisha} >= 0 and ${table.deliveryChargePoisha} >= 0 and ${table.advancePaidPoisha} >= 0 and ${table.codAmountPoisha} >= 0`,
+    ),
+    check(
+      'orders_recipient_required',
+      sql`${table.source} = 'khata_import' or (${table.recipientPhone} is not null and ${table.recipientAddress} is not null and ${table.recipientDistrict} is not null)`,
     ),
     check('orders_number', sql`${table.number} > 0`),
   ];

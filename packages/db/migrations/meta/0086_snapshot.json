@@ -1,6 +1,6 @@
 {
-  "id": "dc0c6682-276a-4be4-b961-f3ed4deda3c2",
-  "prevId": "56a82e22-ac8e-4cbc-a6a0-8198b21eb31a",
+  "id": "9615ccdf-4f33-4e52-bc70-9537bbc4f518",
+  "prevId": "d40b6a3b-acd8-4e8b-abd2-9492c8ca68be",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -15664,6 +15664,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "order_id": {
+          "name": "order_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -15690,6 +15696,21 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_rows_order_id_idx": {
+          "name": "khata_rows_order_id_idx",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -15863,6 +15884,21 @@
           "columnsFrom": [
             "store_id",
             "due_entry_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "khata_rows_order_id_store_fk": {
+          "name": "khata_rows_order_id_store_fk",
+          "tableFrom": "khata_rows",
+          "tableTo": "orders",
+          "columnsFrom": [
+            "store_id",
+            "order_id"
           ],
           "columnsTo": [
             "store_id",
@@ -16787,19 +16823,19 @@
           "name": "recipient_phone",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "recipient_address": {
           "name": "recipient_address",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "recipient_district": {
           "name": "recipient_district",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "recipient_bd_area_id": {
           "name": "recipient_bd_area_id",
@@ -17656,7 +17692,7 @@
       "checkConstraints": {
         "orders_source": {
           "name": "orders_source",
-          "value": "\"orders\".\"source\" in ('messenger', 'instagram', 'whatsapp', 'comment', 'order_link', 'manual', 'pos_csv', 'shopify', 'woocommerce')"
+          "value": "\"orders\".\"source\" in ('messenger', 'instagram', 'whatsapp', 'comment', 'order_link', 'manual', 'pos_csv', 'shopify', 'woocommerce', 'khata_import')"
         },
         "orders_created_by_type": {
           "name": "orders_created_by_type",
@@ -17697,6 +17733,10 @@
         "orders_money": {
           "name": "orders_money",
           "value": "\"orders\".\"items_subtotal_poisha\" >= 0 and \"orders\".\"order_discount_poisha\" >= 0 and \"orders\".\"delivery_charge_poisha\" >= 0 and \"orders\".\"advance_paid_poisha\" >= 0 and \"orders\".\"cod_amount_poisha\" >= 0"
+        },
+        "orders_recipient_required": {
+          "name": "orders_recipient_required",
+          "value": "\"orders\".\"source\" = 'khata_import' or (\"orders\".\"recipient_phone\" is not null and \"orders\".\"recipient_address\" is not null and \"orders\".\"recipient_district\" is not null)"
         },
         "orders_number": {
           "name": "orders_number",

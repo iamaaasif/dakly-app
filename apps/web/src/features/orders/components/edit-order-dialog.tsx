@@ -142,7 +142,7 @@ function orderDraft(order: OrderDetail): EditOrderValues {
     recipient: {
       name: order.recipientName,
       phone: bdMobileSchema.safeParse(order.recipientPhone).data,
-      address: order.recipientAddress,
+      address: order.recipientAddress ?? undefined,
       isBuyer: order.isRecipientBuyer,
     },
     items: order.items.map(({ variantId, quantity, lineDiscountPoisha }) => ({

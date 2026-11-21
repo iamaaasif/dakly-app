@@ -8,6 +8,7 @@ import { ContactStatsService } from './contact-stats.service';
 import { RefreshContactStatsOnContactCreated } from './jobs/refresh-contact-stats-on-contact-created.job';
 import { RefreshContactStatsOnOrderCodCollected } from './jobs/refresh-contact-stats-on-order-cod-collected.job';
 import { RefreshContactStatsOnOrderCreated } from './jobs/refresh-contact-stats-on-order-created.job';
+import { RefreshContactStatsOnOrderImported } from './jobs/refresh-contact-stats-on-order-imported.job';
 import { RefreshContactStatsOnOrderStageChanged } from './jobs/refresh-contact-stats-on-order-stage-changed.job';
 
 @Module({
@@ -17,6 +18,7 @@ import { RefreshContactStatsOnOrderStageChanged } from './jobs/refresh-contact-s
     ContactStatsService,
     RefreshContactStatsOnContactCreated,
     RefreshContactStatsOnOrderCreated,
+    RefreshContactStatsOnOrderImported,
     RefreshContactStatsOnOrderStageChanged,
     RefreshContactStatsOnOrderCodCollected,
   ],
