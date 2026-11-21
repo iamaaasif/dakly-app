@@ -40,6 +40,7 @@ describe('StoresService', () => {
       quietHours: { startHour: 22, endHour: 8 },
       frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
       onlyOwnersAndAdminsApprove: true,
+      sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
     });
   });
 
@@ -49,6 +50,7 @@ describe('StoresService', () => {
       quietHours: { startHour: 21, endHour: 9 },
       frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
       onlyOwnersAndAdminsApprove: true,
+      sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
     });
   });
 });

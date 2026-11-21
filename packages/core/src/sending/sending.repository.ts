@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, inArray, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, count, eq, gt, inArray, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
 
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import { automationRunSteps } from '@dakly/db/schema/automations';
@@ -16,7 +16,8 @@ export type MarketingSend = {
 
 type SendWindow = {
   storeId: string;
-  contactIds: string[];
+  contactIds?: string[];
+  channel?: MarketingSend['channel'];
   after: Date;
   until: Date;
   dispatch?: boolean;
@@ -40,10 +41,30 @@ export class SendingRepository {
     );
   }
 
+  // The whole shop's marketing sends on one channel, for the daily limit. It takes no lock, so
+  // two workers sending at once can pass the limit by a few messages.
+  async countChannelSends(
+    storeId: string,
+    channel: MarketingSend['channel'],
+    range: Pick<SendWindow, 'after' | 'until'>,
+  ): Promise<number> {
+    const window = { storeId, channel, dispatch: true, ...range };
+    return this.database.forStore(storeId, async (tx) => {
+      // The database counts the rows; a big campaign day would be thousands to read here.
+      const [campaign] = await tx
+        .select({ sends: count() })
+        .from(campaignSends(tx, window).as('campaign_sends'));
+      const [workflow] = await tx
+        .select({ sends: count() })
+        .from(workflowSends(tx, window).as('workflow_sends'));
+      return (campaign?.sends ?? 0) + (workflow?.sends ?? 0);
+    });
+  }
+
   listMarketingSends(
     storeId: string,
     contactIds: string[],
-    range: Omit<SendWindow, 'storeId' | 'contactIds'>,
+    range: Omit<SendWindow, 'storeId' | 'contactIds' | 'channel'>,
   ): Promise<MarketingSend[]> {
     const window = { storeId, contactIds, ...range };
     return this.database.forStore(storeId, async (tx) => {
@@ -60,7 +81,7 @@ export class SendingRepository {
 }
 
 function campaignSends(tx: Transaction, window: SendWindow) {
-  const { storeId, contactIds, after, until } = window;
+  const { storeId, contactIds, channel, after, until } = window;
   const { dispatch, excludeCampaignRecipientId, includeCommittedFuture } = window;
   const live = dispatch || includeCommittedFuture;
   const pending = eq(campaignRecipients.status, 'sending');
@@ -92,7 +113,8 @@ function campaignSends(tx: Transaction, window: SendWindow) {
     .where(
       and(
         eq(campaignRecipients.storeId, storeId),
-        inArray(campaignRecipients.contactId, contactIds),
+        contactIds ? inArray(campaignRecipients.contactId, contactIds) : undefined,
+        channel ? eq(campaigns.channel, channel) : undefined,
         excludeCampaignRecipientId
           ? ne(campaignRecipients.id, excludeCampaignRecipientId)
           : undefined,
@@ -116,8 +138,8 @@ function campaignSends(tx: Transaction, window: SendWindow) {
 
 // Uncertain submissions count too: the provider may have accepted them; definite refusals do not.
 function workflowSends(tx: Transaction, window: SendWindow) {
-  const { storeId, contactIds, after, until, excludeWorkflowStepId, includeCommittedFuture } =
-    window;
+  const { storeId, contactIds, channel, after, until } = window;
+  const { excludeWorkflowStepId, includeCommittedFuture } = window;
   return tx
     .select({
       contactId: automationRunSteps.contactId,
@@ -128,7 +150,8 @@ function workflowSends(tx: Transaction, window: SendWindow) {
     .where(
       and(
         eq(automationRunSteps.storeId, storeId),
-        inArray(automationRunSteps.contactId, contactIds),
+        contactIds ? inArray(automationRunSteps.contactId, contactIds) : undefined,
+        channel ? eq(automationRunSteps.channel, channel) : undefined,
         gt(automationRunSteps.sentAt, after),
         includeCommittedFuture ? undefined : lte(automationRunSteps.sentAt, until),
         isNotNull(automationRunSteps.channel),
