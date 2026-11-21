@@ -62,6 +62,6 @@ ${body}
 }
 
 // Product names and addresses are typed by shops and buyers.
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }

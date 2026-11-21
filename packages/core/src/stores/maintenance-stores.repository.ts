@@ -23,4 +23,12 @@ export class MaintenanceStoresRepository {
     );
     return rows;
   }
+
+  // A public link names no store, so a SECURITY DEFINER function finds an active shop by slug.
+  async findPublicBySlug(slug: string) {
+    const { rows } = await this.database.execute<{ id: string; name: string }>(
+      sql`select store_id as id, store_name as name from public_store_for_slug(${slug})`,
+    );
+    return rows[0];
+  }
 }

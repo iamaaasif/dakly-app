@@ -193,6 +193,16 @@ export class DeliveryRepository {
     );
   }
 
+  listDistricts(storeId: string): Promise<AreaResponse[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(areaColumns)
+        .from(bdAreas)
+        .where(eq(bdAreas.kind, 'district'))
+        .orderBy(asc(bdAreas.name)),
+    );
+  }
+
   findAreasByName(storeId: string, name: string, limit: number): Promise<AreaResponse[]> {
     const pattern = `${name.replace(/[\\%_]/g, '\\$&')}%`;
     return this.database.forStore(storeId, (tx) =>

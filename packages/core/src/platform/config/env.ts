@@ -36,6 +36,9 @@ const envSchema = z.object({
   AI_EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-large'),
   AI_MODEL_PRICES: z.string().default('{}'),
   AI_EVAL_STORE_ID: z.uuid().optional(),
+  // Cloudflare Turnstile on the public order link. Both keys unset: fake check outside production, link closed in production.
+  TURNSTILE_SITE_KEY: z.string().min(1).optional(),
+  TURNSTILE_SECRET_KEY: z.string().min(1).optional(),
   SMS_DRIVER: z.literal('mailpit').optional(),
   MAILPIT_SMTP_HOST: z.string().min(1).default('127.0.0.1'),
   MAILPIT_SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(1025),
@@ -137,6 +140,8 @@ function parseEnv(source: NodeJS.ProcessEnv): Env {
     throw new Error('Fake Google identity is not allowed in production');
   if (env.GOOGLE_IDENTITY_DRIVER === 'google' && !env.GOOGLE_CLIENT_ID)
     throw new Error('GOOGLE_CLIENT_ID is required for Google identity');
+  if (Boolean(env.TURNSTILE_SITE_KEY) !== Boolean(env.TURNSTILE_SECRET_KEY))
+    throw new Error('TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY are set together');
   if (env.NODE_ENV === 'production' && env.CLOUDFLARE_ACCESS_DEVELOPMENT_JWKS)
     throw new Error('Development Access keys are not allowed in production');
   return {
