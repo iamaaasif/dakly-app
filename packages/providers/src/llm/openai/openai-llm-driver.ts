@@ -10,6 +10,7 @@ import {
   type LlmTranscription,
   type LlmTranscriptionRequest,
 } from '../llm-driver';
+import { countOpenAiTokens } from './token-counter';
 
 const unsupportedSchemaKeywords = [
   'allOf',
@@ -79,6 +80,10 @@ export class OpenAiLlmDriver implements LlmDriver {
     private readonly apiKey: string,
     private readonly request: typeof fetch = fetch,
   ) {}
+
+  countTokens(model: string, text: string) {
+    return countOpenAiTokens(model, text);
+  }
 
   async respond(request: LlmRequest): Promise<LlmResult> {
     return decodeResponse(await this.post('responses', responseRequestBody(request), request));

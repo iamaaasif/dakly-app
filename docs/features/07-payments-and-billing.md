@@ -414,6 +414,16 @@ Staff with `orders.edit` make a link for an order with `POST /orders/:orderId/pa
 - When a payment is verified, the `payment.succeeded` event runs a job that sets the order's received money to verified minus refunded across the order's live intents. Running it twice changes nothing. Sandbox payments never count. A fully paid order is `paid`, a partly paid one `advance_paid`, and an order cancelled meanwhile shows `refund_due`. If more than the order total arrives, the order keeps the total and the extra stays visible on the payment for a refund (PAY-R9).
 - The link address is `SHORT_LINK_BASE_URL/p/<short code>`. The page behind it, the gateway start and refunds follow in the next PAY-6 parts.
 
+### Subscription renewal (PAY-7)
+
+`SubscriptionRenewalService` in `packages/core/src/billing/` moves a store's one subscription through its periods. A job sweeps due stores every day at 10:00 Asia/Dhaka and queues one `renew-subscription` job per store.
+
+- A due free plan, or one a coupon makes free, rolls into the next period by itself. A paid plan with no payment becomes `past_due` with `past_due_since` set to the due date. A cancellation scheduled for period end sets `cancelled`.
+- Dunning steps count from the due date: retries on day 1, 3 and 5, then `read_only` on day 8. Each step publishes `subscription.past_due` with the attempt number, and day 8 publishes `subscription.read_only`. Reminders and the guard read these.
+- A succeeded billing payment with purpose `subscription` starts the next period at once (from the due date when paid early, otherwise from now), clears past-due and read-only state, and publishes `subscription.renewed`. The payment id is kept in `last_payment_intent_id`, so the same payment applies once. A payment below the next period's price is not applied: staff get an alert with the store, payment and amounts to settle it by hand, and the job ends without retrying.
+- The next period's plan and price come from a scheduled plan change, or a price change whose 30-day notice has passed (ADM-R10), less a coupon that still runs. They are catalogue data, never constants.
+- Agreement charges, reminders and the read-only guard are added in later PAY-7 parts.
+
 ### Rules
 
 The PRD's payment rules apply in full. The ones code must make impossible to break:

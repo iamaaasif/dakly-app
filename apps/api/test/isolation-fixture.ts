@@ -237,6 +237,7 @@ export class IsolationFixture {
       'contact_identities',
       'meta_page_subscriptions',
       'channel_connections',
+      'contact_merges',
       'contacts',
       'stock_movements',
       'delivery_zones',

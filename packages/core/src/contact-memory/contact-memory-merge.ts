@@ -7,7 +7,7 @@ import {
 
 import type { MemoryWork } from './contact-memory.repository';
 
-const maxFacts = 40;
+export const maxFacts = 40;
 
 function sameFact(left: ContactMemoryFact, right: ContactMemoryFact): boolean {
   return left.kind === right.kind && left.value.toLowerCase() === right.value.toLowerCase();

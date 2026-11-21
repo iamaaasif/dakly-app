@@ -8,6 +8,26 @@ const CONTACT_ERRORS = {
     message: 'A contact with this phone number already exists',
   },
   MATCH_SUGGESTION_NOT_FOUND: { status: 404, message: 'Possible match not found' },
+  CONTACT_MERGE_SAME_CONTACT: { status: 400, message: 'Choose two different customers to merge' },
+  // Two chats on one page cannot share a customer yet, so neither is changed.
+  CONTACT_MERGE_CHAT_CONFLICT: {
+    status: 409,
+    message: 'Both customers have a chat on the same page. Merge is not available for them yet',
+  },
+  // The newer customer would disappear with its baki, which cannot move to the other one.
+  CONTACT_MERGE_HAS_DUE: {
+    status: 409,
+    message: 'The newer customer has baki entries. Merge is not available for them yet',
+  },
+  CONTACT_MERGE_NOT_FOUND: { status: 404, message: 'Merge not found' },
+  CONTACT_MERGE_UNDO_CLOSED: {
+    status: 409,
+    message: 'This merge can no longer be undone',
+  },
+  CONTACT_MERGE_UNDO_BLOCKED: {
+    status: 409,
+    message: 'Undo the later merge of these customers first',
+  },
   CONTACT_SEARCH_TOO_SHORT: { status: 400, message: 'Type at least 3 letters to search by name' },
   CONTACT_PHONE_RATE_LIMITED: {
     status: 429,

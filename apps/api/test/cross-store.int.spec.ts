@@ -572,6 +572,44 @@ fixture('POST /contact-match-suggestions/:suggestionId/dismiss', async () => {
     decided_by_user_id: b.owner.id,
   });
 });
+async function merged(shop: Shop) {
+  const [first, second] = [await contact(shop), await contact(shop)];
+  const result = await success(shop, 'POST', '/contact-merges', 200, {
+    contactId: first,
+    otherContactId: second,
+    operationKey: randomUUID(),
+  });
+  return { first, second, mergeId: result.json().id as string };
+}
+fixture('POST /contact-merges', async () => {
+  const { a, b } = await pair(),
+    foreign = await contact(a),
+    own = await contact(b);
+  const before = await f.row('contacts', foreign);
+  const merge = (other: string) =>
+    f.request(b.owner, 'POST', '/contact-merges', {
+      contactId: own,
+      otherContactId: other,
+      operationKey: randomUUID(),
+    });
+  const refused = await merge(foreign);
+  const missing = await merge(randomUUID());
+  expect(refused.statusCode, refused.body).toBe(404);
+  expect(refused.json()).toEqual(missing.json());
+  expect(await f.row('contacts', foreign)).toEqual(before);
+  const done = await merged(b);
+  expect((await f.row('contacts', done.second)).deleted_at).not.toBeNull();
+});
+fixture('POST /contact-merges/:mergeId/undo', async () => {
+  const { a, b } = await pair(),
+    foreign = await merged(a),
+    own = await merged(b);
+  const before = await f.row('contact_merges', foreign.mergeId);
+  await hidden(b, 'POST', (id) => `/contact-merges/${id}/undo`, foreign.mergeId);
+  expect(await f.row('contact_merges', foreign.mergeId)).toEqual(before);
+  await success(b, 'POST', `/contact-merges/${own.mergeId}/undo`, 200);
+  expect((await f.row('contacts', own.second)).deleted_at).toBeNull();
+});
 for (const method of ['PATCH', 'DELETE'] as const)
   fixture(`${method} /contacts/:contactId`, async () => {
     const positive = await f.shop(),
@@ -2424,6 +2462,7 @@ const shopSending = {
   quietHours: { startHour: 22, endHour: 8 },
   frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
   onlyOwnersAndAdminsApprove: false,
+  sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
 };
 for (const [path, payload, expected] of [
   [

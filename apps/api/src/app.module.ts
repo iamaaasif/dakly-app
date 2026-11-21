@@ -14,6 +14,7 @@ import { MetaAuthorizationModule } from '@dakly/core/channels/meta-authorization
 import { MetaWebhooksModule } from '@dakly/core/channels/meta-webhooks.module';
 import { CommentsModule } from '@dakly/core/comments/comments.module';
 import { ConsentsModule } from '@dakly/core/consents/consents.module';
+import { ContactMergeModule } from '@dakly/core/contacts/contact-merge.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { ContentModule } from '@dakly/core/content/content.module';
 import { DashboardModule } from '@dakly/core/dashboard/dashboard.module';
@@ -50,6 +51,7 @@ import { HealthController } from './health.controller';
     AuthModule,
     SessionsModule,
     ContactsModule,
+    ContactMergeModule,
     ContentModule,
     AnalyticsOverviewModule,
     AssistantModule,

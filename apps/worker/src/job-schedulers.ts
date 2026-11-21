@@ -10,6 +10,7 @@ import { SWEEP_ANALYTICS } from '@dakly/core/analytics/jobs/sweep-analytics.job'
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SWEEP_AUTOMATION_BIRTHDAYS } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WAKE_DUE_RUNS } from '@dakly/core/automations/jobs/wake-due-runs.job';
+import { SWEEP_SUBSCRIPTION_RENEWALS } from '@dakly/core/billing/jobs/sweep-subscription-renewals.job';
 import { START_DUE_CAMPAIGNS } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { PURGE_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/purge-webhook-events.job';
 import { QUEUE_CHANNEL_TOKEN_CHECKS } from '@dakly/core/channels/jobs/queue-channel-token-checks.job';
@@ -78,6 +79,10 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.bulk, QUEUE_CONVERSATION_MEMORIES, 10 * MINUTE_MS),
       scheduleJob(this.payments, RECOVER_PAYMENT_CALLBACKS, MINUTE_MS),
       scheduleJob(this.payments, SWEEP_PAYMENT_CHECKS),
+      scheduleJob(this.payments, SWEEP_SUBSCRIPTION_RENEWALS, {
+        pattern: '0 10 * * *',
+        tz: 'Asia/Dhaka',
+      }),
       scheduleJob(this.payments, SWEEP_PAYMENT_SETTLEMENTS, {
         pattern: '0 0 * * *',
         tz: 'Asia/Dhaka',

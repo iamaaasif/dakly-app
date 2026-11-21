@@ -119,6 +119,7 @@ describe('Worker job schedulers', () => {
     expect(payments.schedulers).toEqual([
       scheduler('recover-payment-callbacks', 60000),
       scheduler('sweep-payment-checks'),
+      scheduler('sweep-subscription-renewals', { pattern: '0 10 * * *', tz: 'Asia/Dhaka' }),
       scheduler('sweep-payment-settlements', { pattern: '0 0 * * *', tz: 'Asia/Dhaka' }),
       scheduler('recover-payment-callbacks', 60000),
       scheduler('sweep-payment-checks'),

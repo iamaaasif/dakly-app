@@ -79,6 +79,12 @@ export class AiService {
     );
   }
 
+  // Counts with the tokenizer of the model this tier runs on. undefined means no tokenizer is
+  // known, and the caller must leave the text out rather than guess.
+  countTokens(tier: AiTier, text: string): Promise<number | undefined> {
+    return this.runs.countTokens(this.config.models[tier], text);
+  }
+
   get embeddingModel(): string {
     return this.config.embeddingModel;
   }
