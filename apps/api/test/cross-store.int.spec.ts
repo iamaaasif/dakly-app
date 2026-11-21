@@ -392,6 +392,78 @@ fixture('POST /orders/:orderId/cod-collected', async () => {
   expect(await f.row('orders', foreign)).toEqual(before);
 });
 
+async function paymentCredential(shop: Shop) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into payment_gateway_credentials (id,store_id,gateway,mode,account_label,ciphertext,key_version)
+     values ($1,$2,'bkash','live','Shop merchant','\\x00',1)`,
+    [id, shop.id],
+  );
+  return id;
+}
+
+fixture('POST /orders/:orderId/payment-links', async () => {
+  const { a, b } = await pair();
+  const foreign = await order(a);
+  const own = await order(b);
+  const credentialId = await paymentCredential(b);
+  const url = (id: string) => `/orders/${id}/payment-links`;
+  const input = { gateway: 'bkash', credentialId, kind: 'advance', amountPoisha: 3000 };
+  const before = await f.row('orders', foreign);
+  expect((await success(b, 'POST', url(own), 201, input)).json()).toMatchObject({
+    amountPoisha: 3000,
+    kind: 'advance',
+    status: 'created',
+  });
+  await hidden(b, 'POST', url, foreign, () => input);
+  expect(await f.row('orders', foreign)).toEqual(before);
+  const other = await f.request(b.owner, 'POST', url(own), {
+    ...input,
+    credentialId: randomUUID(),
+  });
+  expect(other.statusCode, other.body).toBe(409);
+});
+
+fixture('GET /orders/:orderId/payment-links', async () => {
+  const { a, b } = await pair();
+  const id = await order(a);
+  const credentialId = await paymentCredential(a);
+  await success(a, 'POST', `/orders/${id}/payment-links`, 201, {
+    gateway: 'bkash',
+    credentialId,
+    kind: 'full',
+  });
+  const own = await success(a, 'GET', `/orders/${id}/payment-links`, 200);
+  expect(own.json()).toMatchObject([{ amountPoisha: 9000, kind: 'full' }]);
+  expect((await success(b, 'GET', `/orders/${id}/payment-links`, 200)).json()).toEqual([]);
+});
+
+fixture('POST /orders/:orderId/payment-links/:intentId/void', async () => {
+  const { a, b } = await pair();
+  const foreign = await order(a);
+  const own = await order(b);
+  const foreignCredential = await paymentCredential(a);
+  const ownCredential = await paymentCredential(b);
+  const make = async (shop: Shop, orderId: string, credentialId: string) =>
+    (
+      await success(shop, 'POST', `/orders/${orderId}/payment-links`, 201, {
+        gateway: 'bkash',
+        credentialId,
+        kind: 'full',
+      })
+    ).json().id as string;
+  const foreignLink = await make(a, foreign, foreignCredential);
+  const ownLink = await make(b, own, ownCredential);
+  await success(b, 'POST', `/orders/${own}/payment-links/${ownLink}/void`, 204);
+  expect((await success(b, 'GET', `/orders/${own}/payment-links`, 200)).json()[0].isVoided).toBe(
+    true,
+  );
+  await hidden(b, 'POST', (value) => `/orders/${foreign}/payment-links/${value}/void`, foreignLink);
+  expect(
+    (await success(a, 'GET', `/orders/${foreign}/payment-links`, 200)).json()[0].isVoided,
+  ).toBe(false);
+});
+
 fixture('POST /orders/:orderId/stage', async () => {
   const { a, b } = await pair();
   const foreignId = await order(a);
