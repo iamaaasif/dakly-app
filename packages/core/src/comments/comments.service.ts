@@ -139,6 +139,8 @@ export class CommentsService {
       row.channelConnectionId,
       channel,
     );
+    if (!(await this.repository.claimPublicReply(storeId, id, this.clock.now())))
+      throw commentError('COMMENT_ALREADY_REPLIED');
     let externalReplyId: string;
     try {
       ({ externalReplyId } = await this.connections.replyToMetaComment(prepared, {
@@ -147,6 +149,9 @@ export class CommentsService {
         text: input.body,
       }));
     } catch (error) {
+      // Only a refusal proves nothing was posted; after an outage the reply may be on the page.
+      if (error instanceof MetaRequestError && error.code !== 'unavailable')
+        await this.repository.releasePublicReply(storeId, id, this.clock.now());
       throw providerError(error);
     }
     await this.transaction.run(storeId, async () => {
