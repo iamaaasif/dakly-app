@@ -101,6 +101,10 @@ export class TeamService {
     return this.repository.accountOwnerContacts(userId);
   }
 
+  storeExtensions(storeId: string): Promise<string[]> {
+    return this.repository.extensions(storeId);
+  }
+
   storeContext(userId: string, storeId?: string) {
     return this.repository.storeContext(userId, storeId);
   }

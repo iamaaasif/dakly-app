@@ -215,7 +215,7 @@ function settingsGroups(store: SessionContext['currentStore']): NavigationGroup[
       heading: 'Configuration',
       links: [
         {
-          href: '/settings?tab=extensions',
+          href: '/extensions',
           label: 'Extensions',
           icon: Puzzle,
           visible: store?.canViewStoreSettings,

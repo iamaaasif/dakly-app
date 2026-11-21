@@ -4,7 +4,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AccountSecurityEvent } from '@dakly/contracts/account-security-events';
 import type { CreateSessionInput, Session, SessionContext } from '@dakly/contracts/sessions';
-import type { StoreAccess } from '@dakly/contracts/team';
+import type { PermissionArea, StoreAccess } from '@dakly/contracts/team';
 
 import { AccountSecurityEventsService } from '../account-security-events/account-security-events.service';
 import { UsersService } from '../auth/users.service';
@@ -43,6 +43,9 @@ export class SessionsService {
       this.users.profile(userId),
       this.team.storeContext(userId, storeId),
     ]);
+    // Turned-off extensions hide their pages from the menu; the data stays.
+    const extensions =
+      metadata.storeId && access ? await this.team.storeExtensions(metadata.storeId) : [];
     const selected =
       metadata.storeId && metadata.name ? { storeId: metadata.storeId, name: metadata.name } : null;
     return {
@@ -52,37 +55,45 @@ export class SessionsService {
         selected && access
           ? {
               ...selected,
-              canViewProducts: this.team.canAccess(access, 'products', 'view'),
-              canEditProducts: this.team.canAccess(access, 'products', 'edit'),
-              canViewOrders: this.team.canAccess(access, 'orders', 'view'),
-              canEditOrders: this.team.canAccess(access, 'orders', 'edit'),
-              canViewDueBook: this.team.canAccess(access, 'dueBook', 'view'),
-              canEditDueBook: this.team.canAccess(access, 'dueBook', 'edit'),
-              canViewCampaigns: this.team.canAccess(access, 'campaigns', 'view'),
-              canViewAnalytics: this.team.canAccess(access, 'analytics', 'view'),
-              canChangeAttributionWindow: this.team.canChangeAttributionWindow(access),
-              canEditCampaigns: this.team.canAccess(access, 'campaigns', 'edit'),
-              canViewSocial: this.team.canAccess(access, 'social', 'view'),
-              canEditSocial: this.team.canAccess(access, 'social', 'edit'),
-              canViewAutomations: this.team.canAccess(access, 'automations', 'view'),
-              canEditAutomations: this.team.canAccess(access, 'automations', 'edit'),
-              canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
-              canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
-              canExportCustomers: this.team.canExportCustomers(access),
-              canViewChats: this.team.canAccess(access, 'chats', 'view'),
-              canEditChats: this.team.canAccess(access, 'chats', 'edit'),
-              canViewSegments: this.team.canAccess(access, 'segments', 'view'),
-              canEditSegments: this.team.canAccess(access, 'segments', 'edit'),
-              canApproveSupport: this.team.canApproveSupport(access),
-              canViewStoreSettings: this.team.canAccess(access, 'storeSettings', 'view'),
-              canEditStoreSettings: this.team.canAccess(access, 'storeSettings', 'edit'),
-              canChangeExtensions: this.team.canChangeExtensions(access),
-              canViewTeam: this.team.canAccess(access, 'team', 'view'),
-              canEditTeam: this.team.canAccess(access, 'team', 'edit'),
-              canTransferOwnership: this.team.canTransferOwnership(access),
+              ...this.storeFlags(access, extensions),
             }
           : null,
       contextTag: sessionContextTag(sessionId, storeId, access),
+    };
+  }
+
+  private storeFlags(access: StoreAccess, extensions: string[]) {
+    const can = (extension: string, area: PermissionArea, level: 'view' | 'edit') =>
+      extensions.includes(extension) && this.team.canAccess(access, area, level);
+    return {
+      canViewProducts: can('sales', 'products', 'view'),
+      canEditProducts: can('sales', 'products', 'edit'),
+      canViewOrders: can('sales', 'orders', 'view'),
+      canEditOrders: can('sales', 'orders', 'edit'),
+      canViewDueBook: can('physical_shop', 'dueBook', 'view'),
+      canEditDueBook: can('physical_shop', 'dueBook', 'edit'),
+      canViewCampaigns: this.team.canAccess(access, 'campaigns', 'view'),
+      canViewAnalytics: this.team.canAccess(access, 'analytics', 'view'),
+      canChangeAttributionWindow: this.team.canChangeAttributionWindow(access),
+      canEditCampaigns: this.team.canAccess(access, 'campaigns', 'edit'),
+      canViewSocial: can('social_auto_post', 'social', 'view'),
+      canEditSocial: can('social_auto_post', 'social', 'edit'),
+      canViewAutomations: this.team.canAccess(access, 'automations', 'view'),
+      canEditAutomations: this.team.canAccess(access, 'automations', 'edit'),
+      canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
+      canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
+      canExportCustomers: this.team.canExportCustomers(access),
+      canViewChats: can('chats', 'chats', 'view'),
+      canEditChats: can('chats', 'chats', 'edit'),
+      canViewSegments: this.team.canAccess(access, 'segments', 'view'),
+      canEditSegments: this.team.canAccess(access, 'segments', 'edit'),
+      canApproveSupport: this.team.canApproveSupport(access),
+      canViewStoreSettings: this.team.canAccess(access, 'storeSettings', 'view'),
+      canEditStoreSettings: this.team.canAccess(access, 'storeSettings', 'edit'),
+      canChangeExtensions: this.team.canChangeExtensions(access),
+      canViewTeam: this.team.canAccess(access, 'team', 'view'),
+      canEditTeam: this.team.canAccess(access, 'team', 'edit'),
+      canTransferOwnership: this.team.canTransferOwnership(access),
     };
   }
 

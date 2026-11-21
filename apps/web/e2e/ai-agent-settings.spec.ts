@@ -20,9 +20,10 @@ test('opens the AI agent drawer, saves a switch and keeps it after a reload', as
   const [storeId] = fixture.storeIds;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   try {
-    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
-      storeId,
-    ]);
+    await database.pool.query(
+      "update stores set extensions = array['sales', 'chats', 'social_auto_post', 'physical_shop'] where id = $1",
+      [storeId],
+    );
     await context.addCookies([
       {
         name: 'dakly_session',
@@ -93,9 +94,10 @@ test('shows practice mode, keeps the person informed during Go live and survives
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const connectionId = randomUUID();
   try {
-    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
-      storeId,
-    ]);
+    await database.pool.query(
+      "update stores set extensions = array['sales', 'chats', 'social_auto_post', 'physical_shop'] where id = $1",
+      [storeId],
+    );
     await database.pool.query(
       `insert into channel_connections (id, store_id, kind, external_account_id, display_name)
        values ($1::uuid, $2, 'facebook_page', $1::text, 'Dhaka Threads')`,
@@ -179,9 +181,10 @@ test('shows the Knowledge counts, answers and files, and adds an answer', async 
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const fileId = randomUUID();
   try {
-    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
-      storeId,
-    ]);
+    await database.pool.query(
+      "update stores set extensions = array['sales', 'chats', 'social_auto_post', 'physical_shop'] where id = $1",
+      [storeId],
+    );
     await database.pool.query(
       `insert into files (id, store_id, purpose, object_key, file_name, content_type, size_bytes, status)
        values ($1, $2, 'knowledge_file', $3, 'Return policy.pdf', 'application/pdf', 20480, 'ready')`,
@@ -282,9 +285,10 @@ test('tests the agent with a customer message and shows a reply and a hand-over'
   const [storeId] = fixture.storeIds;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   try {
-    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
-      storeId,
-    ]);
+    await database.pool.query(
+      "update stores set extensions = array['sales', 'chats', 'social_auto_post', 'physical_shop'] where id = $1",
+      [storeId],
+    );
     await context.addCookies([
       {
         name: 'dakly_session',
@@ -386,9 +390,10 @@ test('shows the rated replies in the Feedback tab and filters them', async ({
     })),
   ].map((person) => ({ ...person, contactId: randomUUID(), conversationId: randomUUID() }));
   try {
-    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
-      storeId,
-    ]);
+    await database.pool.query(
+      "update stores set extensions = array['sales', 'chats', 'social_auto_post', 'physical_shop'] where id = $1",
+      [storeId],
+    );
     await database.pool.query(
       `insert into channel_connections(id,store_id,kind,external_account_id,display_name,status)
        values($1::uuid,$2,'facebook_page',$1::text,'Dhaka Threads','active')`,
