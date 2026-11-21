@@ -81,6 +81,11 @@ export function canApproveSends(access: StoreAccess): boolean {
   return hasStoreAdminRole(access);
 }
 
+// A custom role with Due book edit can add baki and collect, but never write a debt off.
+export function canWriteOffDue(access: StoreAccess): boolean {
+  return hasStoreAdminRole(access);
+}
+
 export function canApproveSupport(access: StoreAccess): boolean {
   return access.role === 'owner';
 }

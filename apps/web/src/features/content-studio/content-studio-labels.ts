@@ -8,11 +8,12 @@ import {
 } from 'lucide-react';
 
 import type { ContentPiece } from '@dakly/contracts/content';
-import type { contentTones } from '@dakly/contracts/content-writing';
+import type { contentLengths, contentTones } from '@dakly/contracts/content-writing';
 
 type Kind = ContentPiece['kind'];
 type Language = ContentPiece['language'];
 type Tone = (typeof contentTones)[number];
+type Length = (typeof contentLengths)[number];
 
 // Email subject lines stay hidden until Email ships.
 export const kindChoices: {
@@ -65,6 +66,12 @@ export const languageChoices: { value: Language; label: string }[] = [
   { value: 'banglish', label: 'Banglish' },
 ];
 
+export const lengthChoices: { value: Length; label: string }[] = [
+  { value: 'short', label: 'Short' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'long', label: 'Long' },
+];
+
 export const toneChoices: { value: Tone; label: string }[] = [
   { value: 'friendly', label: 'Friendly' },
   { value: 'festive', label: 'Festive' },
@@ -112,3 +119,6 @@ export const startIdeas: {
 ];
 
 export const kindLabel = (kind: Kind) => kindChoices.find(({ value }) => value === kind)!.label;
+
+// Only these two can become a social post.
+export const postKinds: Kind[] = ['facebook_post', 'instagram_caption'];

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, ilike, isNull, lt, sql } from 'drizzle-orm';
 
 import type {
   CampaignApprovalFailureCode,
@@ -7,6 +7,7 @@ import type {
   CampaignGoal,
   CampaignListQuery,
   campaignPauseReasons,
+  CampaignSourceOutcome,
   CampaignStatus,
   recipientSkipReasons,
   CampaignContent,
@@ -25,6 +26,8 @@ export type Campaign = {
   channelConnectionId: string | null;
   includeSegmentIds: string[];
   excludeSegmentIds: string[];
+  sourceCampaignId: string | null;
+  sourceOutcome: CampaignSourceOutcome | null;
   scheduledFor: Date | null;
   status: CampaignStatus;
   approvalCheckedCount: number;
@@ -53,6 +56,9 @@ export type CampaignDraft = Pick<
   | 'excludeSegmentIds'
   | 'scheduledFor'
 >;
+// A resend or follow-up draft; its audience is the source campaign's, so it has no segments.
+export type SourcedCampaignDraft = CampaignDraft &
+  Pick<Campaign, 'sourceCampaignId' | 'sourceOutcome'>;
 
 export type FrozenRecipient = {
   contactId: string;
@@ -102,6 +108,8 @@ export const campaignColumns = {
   channelConnectionId: campaigns.channelConnectionId,
   includeSegmentIds: campaigns.includeSegmentIds,
   excludeSegmentIds: campaigns.excludeSegmentIds,
+  sourceCampaignId: campaigns.sourceCampaignId,
+  sourceOutcome: campaigns.sourceOutcome,
   scheduledFor: campaigns.scheduledFor,
   status: campaigns.status,
   approvalCheckedCount: campaigns.approvalCheckedCount,
@@ -157,35 +165,6 @@ export class CampaignsRepository {
     return rows;
   }
 
-  attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .select({
-          id: campaigns.id,
-          sourceId: campaigns.id,
-          channel: campaigns.channel,
-          sentAt: campaignRecipients.sentAt,
-        })
-        .from(campaignRecipients)
-        .innerJoin(
-          campaigns,
-          and(eq(campaigns.storeId, storeId), eq(campaigns.id, campaignRecipients.campaignId)),
-        )
-        .where(
-          and(
-            eq(campaignRecipients.storeId, storeId),
-            eq(campaignRecipients.contactId, buyer.id),
-            inArray(campaignRecipients.campaignId, ids),
-            inArray(campaignRecipients.status, ['sent', 'delivered', 'read']),
-            or(
-              ne(campaigns.channel, 'sms'),
-              eq(campaignRecipients.destinationAddress, buyer.phone),
-            ),
-          ),
-        ),
-    );
-  }
-
   async find(storeId: string, id: string): Promise<Campaign | undefined> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -210,7 +189,10 @@ export class CampaignsRepository {
 
   async insert(
     storeId: string,
-    draft: CampaignDraft & { channel: CampaignChannel; createdByUserId: string | null },
+    draft: (CampaignDraft | SourcedCampaignDraft) & {
+      channel: CampaignChannel;
+      createdByUserId: string | null;
+    },
   ): Promise<Campaign> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx

@@ -28,6 +28,7 @@ const selected = {
   canEditAutomations: false,
   canViewCustomers: true,
   canCreateCustomer: true,
+  canExportCustomers: true,
   canViewChats: true,
   canEditChats: true,
   canViewSegments: true,

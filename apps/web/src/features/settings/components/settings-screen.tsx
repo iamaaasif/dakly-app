@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 import { cn } from '@dakly/ui/cn';
 
@@ -8,7 +9,14 @@ import { useSessionContext } from '@/lib/session-context';
 
 type SettingsLink = { href: string; label: string; current?: boolean };
 
-export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
+// The SMS tab's content comes from the integrations feature, so the page passes it in.
+export function SettingsScreen({
+  tab,
+  sms,
+}: {
+  tab: 'store' | 'sms' | 'extensions';
+  sms?: ReactNode;
+}) {
   const { data } = useSessionContext();
   const access = data?.currentStore;
   const account: SettingsLink[] = [
@@ -19,13 +27,15 @@ export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
   ];
   const store: SettingsLink[] = [
     { href: '/settings?tab=store', label: 'Store information', current: tab === 'store' },
+    { href: '/settings?tab=sms', label: 'SMS settings', current: tab === 'sms' },
     { href: '/settings?tab=extensions', label: 'Extensions', current: tab === 'extensions' },
   ];
-  const title = tab === 'store' ? 'Store settings' : 'Extensions';
-  const subtitle =
-    tab === 'store'
-      ? 'Your store details, shown on messages and invoices.'
-      : 'Turn store features on and off for your store.';
+  const title = tab === 'extensions' ? 'Extensions' : 'Store settings';
+  const subtitle = {
+    store: 'Your store details, shown on messages and invoices.',
+    sms: 'Your store details and how Dakly sends SMS, WhatsApp and email for you.',
+    extensions: 'Turn store features on and off for your store.',
+  }[tab];
 
   return (
     <main className="space-y-6 p-4 md:p-8">
@@ -39,15 +49,20 @@ export function SettingsScreen({ tab }: { tab: 'store' | 'extensions' }) {
           {access?.canViewStoreSettings ? <SettingsGroup heading="Store" links={store} /> : null}
         </nav>
         <div className="max-w-4xl">
-          {access?.canViewStoreSettings ? (
-            <SettingsContent tab={tab} />
-          ) : (
-            <p role="status">Store details need Store settings access.</p>
-          )}
+          <SettingsBody tab={tab} sms={sms} />
         </div>
       </div>
     </main>
   );
+}
+
+function SettingsBody({ tab, sms }: { tab: 'store' | 'sms' | 'extensions'; sms: ReactNode }) {
+  const { data } = useSessionContext();
+  const access = data?.currentStore;
+  if (!access?.canViewStoreSettings)
+    return <p role="status">Store details need Store settings access.</p>;
+  if (tab === 'sms') return sms;
+  return <SettingsContent tab={tab} />;
 }
 
 function SettingsGroup({ heading, links }: { heading: string; links: SettingsLink[] }) {

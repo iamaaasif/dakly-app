@@ -119,6 +119,10 @@ export const contactListQuerySchema = z.strictObject({
   search: z.string().trim().min(1).max(120).optional(),
 });
 
+// The export takes the list's filters and everything they match, so it has no cursor or limit.
+export const contactExportQuerySchema = contactListQuerySchema.omit({ cursor: true, limit: true });
+export const MAX_EXPORT_ROWS = 50_000;
+
 export const matchSuggestionListQuerySchema = z.strictObject({ contactId: z.uuid() });
 
 // A file column the mapping can name; the reader keeps no cells past this.
@@ -196,6 +200,7 @@ export const startImportSchema = z.strictObject({
 
 export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type UpdateContactInput = z.infer<typeof updateContactSchema>;
+export type ContactExportQuery = z.infer<typeof contactExportQuerySchema>;
 export type ContactListQuery = z.infer<typeof contactListQuerySchema>;
 export type ContactImportMapping = z.infer<typeof contactImportMappingSchema>;
 export type ContactImportRow = z.infer<typeof contactImportRowSchema>;
@@ -216,6 +221,18 @@ export type ContactResponse = {
   kind: ContactKind;
   tags: string[];
   createdAt: string;
+};
+
+// The list adds the columns its Columns picker can show; the profile and the other routes keep the short shape.
+export type ContactListItemResponse = ContactResponse & {
+  // Masked like `phone` for members without See full phone numbers.
+  whatsappPhone: string | null;
+  email: string | null;
+  // The Location column.
+  district: string | null;
+  source: ContactSource;
+  // Channels the customer agreed to receive marketing on, in `consentChannels` order.
+  consentedChannels: ConsentChannel[];
 };
 
 export type ImportUploadResponse = { importId: string; uploadUrl: string };
@@ -252,7 +269,7 @@ export type ContactIdentityResponse = {
 };
 
 export type ContactDetailResponse = ContactResponse & { identities: ContactIdentityResponse[] };
-export type ContactListResponse = { items: ContactResponse[]; nextCursor: string | null };
+export type ContactListResponse = { items: ContactListItemResponse[]; nextCursor: string | null };
 
 export type ConsentChannel = (typeof consentChannels)[number];
 export type ConsentStatus = (typeof consentStatuses)[number];

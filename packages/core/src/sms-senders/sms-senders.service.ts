@@ -38,7 +38,14 @@ export class SmsSendersService {
     input: RequestSmsSenderIdInput,
     actor: { kind: 'user'; userId: string },
   ): Promise<SmsSenderIdResponse> {
-    const created = await this.repository.insert(storeId, input.senderName, actor.userId);
+    const documentIds = [input.tradeLicenceFileId, input.nidFileId];
+    // Each document is a different file the store confirmed for this purpose.
+    if (
+      new Set(documentIds).size !== 2 ||
+      (await this.repository.countDocuments(storeId, documentIds)) !== 2
+    )
+      throw smsSenderError('SMS_SENDER_DOCUMENT_INVALID');
+    const created = await this.repository.insert(storeId, input, actor.userId);
     if (!created) throw smsSenderError('SMS_SENDER_ID_ALREADY_ACTIVE');
     return toSmsSenderIdResponse(created);
   }

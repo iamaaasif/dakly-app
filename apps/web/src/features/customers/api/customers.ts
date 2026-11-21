@@ -16,7 +16,8 @@ export function useCustomers(query: ContactListQuery) {
   });
 }
 
-export function customersSearch(query: Partial<ContactListQuery>) {
+// `columns` shapes the screen only, so it is in the address but never in the API request.
+export function customersSearch(query: Partial<ContactListQuery> & { columns?: string }) {
   const params = new URLSearchParams();
   for (const [name, value] of Object.entries(query))
     if (value !== undefined) params.set(name, String(value));

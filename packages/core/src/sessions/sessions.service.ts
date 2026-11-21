@@ -66,6 +66,7 @@ export class SessionsService {
               canEditAutomations: this.team.canAccess(access, 'automations', 'edit'),
               canViewCustomers: this.team.canAccess(access, 'customers', 'view'),
               canCreateCustomer: this.team.canAccess(access, 'customers', 'edit'),
+              canExportCustomers: this.team.canExportCustomers(access),
               canViewChats: this.team.canAccess(access, 'chats', 'view'),
               canEditChats: this.team.canAccess(access, 'chats', 'edit'),
               canViewSegments: this.team.canAccess(access, 'segments', 'view'),
