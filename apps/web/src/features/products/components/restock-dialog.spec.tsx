@@ -21,6 +21,8 @@ const size = (id: string, title: string, available: number) => ({
   sku: null,
   costPoisha: null,
   priceOverridePoisha: null,
+  imageFileIds: [],
+  photos: [],
   pricePoisha: 245000,
   isDefault: false,
   onHand: available,
@@ -31,6 +33,7 @@ const product = {
   id: productId,
   name: 'Cotton Panjabi',
   isStockTracked: true,
+  photos: [],
   variants: [size(medium, 'M', 4), size(large, 'L', 2), size(extraLarge, 'XL', 0)],
 } as unknown as ProductResponse;
 

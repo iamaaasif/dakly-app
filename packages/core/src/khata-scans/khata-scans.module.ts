@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { DueBookModule } from '../due-book/due-book.module';
+import { OrdersModule } from '../orders/orders.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
@@ -21,6 +22,7 @@ import { KhataScansService } from './khata-scans.service';
     ContactsModule,
     DueBookModule,
     FileStorageModule,
+    OrdersModule,
     OutboxModule,
     UsageModule,
   ],

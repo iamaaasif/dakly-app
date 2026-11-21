@@ -11,6 +11,7 @@ import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 
 import { useRestockWaiting } from '../api/get-restock-waiting';
+import { ProductThumbnail } from './product-thumbnail';
 import { useRestockSubmit } from './restock-submit';
 
 type RestockDialogProps = { product: ProductResponse; onClose: () => void };
@@ -38,6 +39,7 @@ export function RestockDialog({ product, onClose }: RestockDialogProps) {
             {product.variants.map((variant) => (
               <RestockSize
                 key={variant.id}
+                product={product}
                 variant={variant}
                 waiting={waitingBySize.get(variant.id) ?? 0}
               />
@@ -68,12 +70,22 @@ export function RestockDialog({ product, onClose }: RestockDialogProps) {
   );
 }
 
-type RestockSizeProps = { variant: ProductResponse['variants'][number]; waiting: number };
+type RestockSizeProps = {
+  product: Pick<ProductResponse, 'name' | 'photos'>;
+  variant: ProductResponse['variants'][number];
+  waiting: number;
+};
 
-function RestockSize({ variant, waiting }: RestockSizeProps) {
+function RestockSize({ product, variant, waiting }: RestockSizeProps) {
   const { register } = useFormContext<RestockStockInput>();
   return (
     <li className="flex items-center gap-3">
+      <ProductThumbnail
+        product={{
+          name: variant.title,
+          photos: variant.photos.length ? variant.photos : product.photos,
+        }}
+      />
       <Label
         htmlFor={`restock-${variant.id}`}
         className="max-w-[30%] min-w-8 font-semibold break-all"

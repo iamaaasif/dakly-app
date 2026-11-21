@@ -238,7 +238,10 @@ export class OrdersService {
     const timeline = await orderStageHistory(storeId, orderId, this.audit);
     return {
       ...order,
-      recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
+      recipientPhone:
+        access.seeFullPhone || !order.recipientPhone
+          ? order.recipientPhone
+          : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
       hasRecipientPhoneMatch: await this.contacts.hasOrderPhoneMatch(storeId, order, access),
       createdAt: order.createdAt.toISOString(),
