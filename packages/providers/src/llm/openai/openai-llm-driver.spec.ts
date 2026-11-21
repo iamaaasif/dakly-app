@@ -47,6 +47,34 @@ describe('OpenAiLlmDriver', () => {
     });
   });
 
+  it('sends a photo and a PDF beside the text as base64 data', async () => {
+    const driver = new OpenAiLlmDriver('test-key', async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      expect(body.input).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'দাম কত?' },
+            { type: 'input_image', image_url: 'data:image/jpeg;base64,AQID', detail: 'high' },
+            {
+              type: 'input_file',
+              filename: 'page.pdf',
+              file_data: 'data:application/pdf;base64,BAUG',
+            },
+          ],
+        },
+      ]);
+      return Response.json(fixtures.reply);
+    });
+    await driver.respond({
+      ...request,
+      images: [
+        { contentType: 'image/jpeg', bytes: new Uint8Array([1, 2, 3]) },
+        { contentType: 'application/pdf', bytes: new Uint8Array([4, 5, 6]) },
+      ],
+    });
+  });
+
   it.each([
     [{ index: 0, embedding: [0.1, 0.2] }],
     [{ index: 'invalid', embedding: [0.1, 0.2] }],

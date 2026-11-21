@@ -4,6 +4,8 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { ApiError } from '@dakly/ui/api-client';
+
 import { useSessionVerification } from './use-session-verification';
 
 const { getClient } = vi.hoisted(() => ({ getClient: vi.fn() }));
@@ -83,6 +85,24 @@ describe('session verification cache disposal', () => {
       }
     },
   );
+});
+
+describe('expired session', () => {
+  it('flags the expiry and keeps cached screens until sign-in works again', async () => {
+    const verification = await acceptedAccount();
+    client.setQueryDefaults(contextKey, {
+      queryFn: async () => {
+        throw new ApiError('AUTH_REQUIRED', 'Sign in', undefined, 401);
+      },
+    });
+    await act(() => verification.current.verify());
+    expect(verification.current.expired).toBe(true);
+    expect(verification.current.available).toBe(true);
+    expect(client.getQueryData(historyKey)).toEqual({ privateHistory: 'Account A' });
+    client.setQueryDefaults(contextKey, { queryFn: async () => accountA });
+    await act(() => verification.current.verify());
+    expect(verification.current.expired).toBe(false);
+  });
 });
 
 function deferred() {

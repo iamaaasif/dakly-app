@@ -44,6 +44,7 @@ success, or 202 `{ status: "totp_required", challengeId }` without a cookie.
 | `GET /me/sessions`                  | Optional `before` UUID; `{ items, nextCursor }`, up to 100 active devices                        |
 | `DELETE /me/sessions/:sessionId`    | Owned UUID; 204, clears the cookie when deleting the current session                             |
 | `POST /me/sessions/sign-out-others` | 204; retains only the current session                                                            |
+| `POST /me/sessions/sign-out-all`    | 204; ends every session including this one and clears the cookie                                 |
 | `POST /me/totp/proof`               | 204; sends a fresh setup proof code                                                              |
 | `POST /me/totp/setup`               | `{ currentPassword }` or `{ proofCode }`; 200 `{ setupId, uri }`                                 |
 | `POST /me/totp/confirm`             | `{ setupId, code }`; 200 `{ backupCodes }`, ten codes shown once                                 |

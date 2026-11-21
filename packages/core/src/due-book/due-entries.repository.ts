@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 
 import type { DueEntryKind, DueEntrySource, DuePaymentMethod } from '@dakly/contracts/due-book';
 import { dueEntries } from '@dakly/db/schema/due-book';
@@ -50,6 +50,26 @@ export class DueEntriesRepository {
         .returning(dueEntryColumns),
     );
     return rows[0]!;
+  }
+
+  async deleteByIds(storeId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .delete(dueEntries)
+        .where(and(eq(dueEntries.storeId, storeId), inArray(dueEntries.id, ids))),
+    );
+  }
+
+  async contactsWithEntries(storeId: string, contactIds: string[]): Promise<Set<string>> {
+    if (contactIds.length === 0) return new Set();
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .selectDistinct({ contactId: dueEntries.contactId })
+        .from(dueEntries)
+        .where(and(eq(dueEntries.storeId, storeId), inArray(dueEntries.contactId, contactIds))),
+    );
+    return new Set(rows.map((row) => row.contactId));
   }
 
   async findById(storeId: string, id: string): Promise<DueEntry | undefined> {

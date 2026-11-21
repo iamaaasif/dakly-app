@@ -20,6 +20,7 @@ import { DashboardModule } from '@dakly/core/dashboard/dashboard.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { DueBookModule } from '@dakly/core/due-book/due-book.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
+import { KhataScansModule } from '@dakly/core/khata-scans/khata-scans.module';
 import { LinksModule } from '@dakly/core/links/links.module';
 import { AiReplyFeedbackModule } from '@dakly/core/messaging/ai-reply-feedback.module';
 import { InboxModule } from '@dakly/core/messaging/inbox.module';
@@ -65,6 +66,7 @@ import { HealthController } from './health.controller';
     ConsentsModule,
     DueBookModule,
     ImportsModule,
+    KhataScansModule,
     AiAgentSettingsModule,
     AiPracticeModule,
     KnowledgeModule,

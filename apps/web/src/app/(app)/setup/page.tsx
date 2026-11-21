@@ -15,5 +15,5 @@ export default async function SetupPage() {
         </Link>
       </main>
     );
-  return <SetupScreen />;
+  return <SetupScreen userId={session.user.id} />;
 }
