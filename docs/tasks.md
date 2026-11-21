@@ -211,6 +211,19 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 | ADM-3 | Shops list and detail through report functions                                | Todo   | ADM-2       |     |       |
 | ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | Todo   | ADM-2, AI-2 |     |       |
 
+## M13. Due book and Khata scan
+
+Release 1 by D46. Shop sales (Pocket Sales) stays release 2.
+
+| ID    | Task                                                                                                                                                                                         | Status | Depends      | PR  | Notes                                                                       |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------ | --- | --------------------------------------------------------------------------- |
+| DUE-1 | Due book data and API: baki, payment and write-off entries with `store_id` and RLS, balance per customer with payments settling the oldest baki first, add baki, collect, write off, history | Todo   | CUS-2, ORD-1 |     | Feature 13, Due book rules 1, 5 to 7, SHOP-R5                               |
+| DUE-2 | Baki notices and due reminders by SMS: per-store notice switch, Remind and Remind all over 30 days, 1 per customer per 7 days, 9 am to 8 pm, fixed template                                  | Todo   | DUE-1, MSG-1 |     | Rules 2 to 4, D11, SHOP-R3, SHOP-R4. Transactional, so no marketing consent |
+| DUE-3 | Web: Due book screen, add baki, collect, remind and the history drawer                                                                                                                       | Todo   | DUE-2        |     | Due book screens in feature 13                                              |
+| KHT-1 | Khata scan API: page photo upload, vision read job through `AiService` (`vision` tier), rows with confidence, customer match suggestions, `ai_scan` usage per page                           | Todo   | CUS-8, AI-2  |     | Khata Scanner rules 1 to 4 and 8. Unreadable pages are not charged          |
+| KHT-2 | Khata import: customers (source Khata import, no consent), dated sales as orders with source Khata import, baki rows as Due book entries, 7-day undo, 30-day photo purge                     | Todo   | KHT-1, DUE-1 |     | Rules 5 to 7, SHOP-R2 and SHOP-R7                                           |
+| KHT-3 | Web: Scan your khata in Add customers, upload, processing steps, page review table with confidence and merge suggestions, import, past imports                                               | Todo   | KHT-2        |     | Khata Scanner and Khata review screens in feature 13                        |
+
 ## Readiness review follow-up
 
 Evidence and acceptance criteria: [development readiness review](reviews/development-readiness.md). These rows identify work missing from the original tracker or changes required before copying its examples. Existing feature tasks still own their implementation; resolve the linked specification findings before starting the affected slice. Proposed resolutions in the review are not approved product decisions.

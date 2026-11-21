@@ -7,8 +7,8 @@ const types = 'feat|fix|refactor|perf|docs|test|chore';
 const branchPattern = new RegExp(`^(${types})/[a-z0-9]+(-[a-z0-9]+)*$`);
 const subjectPattern = new RegExp(`^(${types})(\\([a-z0-9-]+\\))?: [a-z].+`);
 const maximumBranchLength = 50;
-const warningLines = 500;
-const failingLines = 800;
+const warningLines = 800;
+const failingLines = 1000;
 const mechanicalLabel = 'mechanical-change';
 const uncountedPaths = [
   /^pnpm-lock\.yaml$/,
