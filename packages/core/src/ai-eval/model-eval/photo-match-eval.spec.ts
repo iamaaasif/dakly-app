@@ -21,6 +21,12 @@ describe('photo match over the eval shop', () => {
     expect(result.products.map(({ name }) => name)).toEqual(['কুর্তি']);
   });
 
+  it('answers a mixed Bangla and Banglish photo of a kurti as the kurti', () => {
+    const result = match('Photo: লাল kurti, fuler noksha\nSearch words: lal, কুর্তি. eta koto?');
+    expect(result.photoMatch).toBe('sure');
+    expect(result.products.map(({ name }) => name)).toEqual(['কুর্তি']);
+  });
+
   it('answers an English photo of canvas shoes as that product', () => {
     const result = match('photo: white canvas shoes, lace-up, rubber sole. How much?');
     expect(result.photoMatch).toBe('sure');
