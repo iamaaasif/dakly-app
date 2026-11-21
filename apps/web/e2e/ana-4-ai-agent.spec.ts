@@ -122,6 +122,15 @@ test('shows what the AI agent did from chats, orders and AI runs', async ({
     await database.pool.query('delete from orders where store_id=$1 and number >= 9000', [shop]);
     await database.pool.query('delete from messages where store_id=$1', [shop]);
     await database.pool.query('delete from conversations where store_id=$1', [shop]);
+    // Other specs count every contact in the shop, so leave none of these behind.
+    await database.pool.query(
+      "delete from contacts where store_id=$1 and kind='chat_only' and source='messenger'",
+      [shop],
+    );
+    await database.pool.query(
+      "delete from channel_connections where store_id=$1 and kind='facebook_page' and display_name='Page'",
+      [shop],
+    );
     await database.pool.end();
   }
 });
