@@ -20,6 +20,7 @@ const ORDER_ERRORS = {
     status: 400,
     message: 'Enter a valid delivered quantity for every item',
   },
+  ORDER_NOT_PAYABLE: { status: 409, message: 'This order cannot take a payment link' },
   ORDER_COD_NOT_COLLECTABLE: { status: 409, message: 'COD cannot be recorded for this order' },
   ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
   ORDER_CONFIRMATION_RATE_LIMITED: {

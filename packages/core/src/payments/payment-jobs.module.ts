@@ -6,6 +6,7 @@ import { CryptoModule } from '../platform/crypto/crypto.module';
 import { QUEUES } from '../platform/queue/queues';
 import { StoresModule } from '../stores/stores.module';
 import { ReconcilePaymentSettlementsJob } from './jobs/reconcile-payment-settlements.job';
+import { RecordOrderAdvanceOnPayment } from './jobs/record-order-advance-on-payment.job';
 import { RecoverPaymentCallbacksJob } from './jobs/recover-payment-callbacks.job';
 import { SweepPaymentChecksJob } from './jobs/sweep-payment-checks.job';
 import { SweepPaymentSettlementsJob } from './jobs/sweep-payment-settlements.job';
@@ -29,6 +30,7 @@ import { PaymentsModule } from './payments.module';
     PaymentJobsService,
     PaymentSettlementsRepository,
     ReconcilePaymentSettlementsJob,
+    RecordOrderAdvanceOnPayment,
     RecoverPaymentCallbacksJob,
     SweepPaymentChecksJob,
     SweepPaymentSettlementsJob,

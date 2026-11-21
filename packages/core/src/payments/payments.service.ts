@@ -34,7 +34,7 @@ export class PaymentsService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
-  create(storeId: string, input: CreatePaymentIntent) {
+  create(storeId: string, input: CreatePaymentIntent, createdByUserId?: string) {
     return this.transaction.run(storeId, async () => {
       const now = this.clock.now();
       if (input.expiresAt <= now)
@@ -53,6 +53,7 @@ export class PaymentsService {
         merchantReference: `DK-${randomUUID()}`,
         shortCode: input.flow === 'shop' ? randomUUID() : null,
         isSandbox: credential?.mode === 'sandbox',
+        createdByUserId,
         nextCheckAt: input.expiresAt,
         createdAt: now,
         updatedAt: now,
