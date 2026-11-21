@@ -755,7 +755,7 @@ with `google-auth-library`. A missing or unverified email is refused. The Google
 subject is the primary identity; its existing account wins even if Google's email
 now differs from the account's email.
 
-For an unmatched subject, verified Gmail or Workspace (`hd`) claims can establish
+For an unmatched subject, verified Gmail, Googlemail or Workspace (`hd`) claims can establish
 email ownership. Other addresses that match an existing verified account require a
 fresh mailbox code before linking, because Google's
 `email_verified` claim can describe former ownership ([ADR 0010](../adr/0010-google-email-authority.md)).

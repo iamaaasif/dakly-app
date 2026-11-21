@@ -7,7 +7,7 @@
 
 ACC-R4 links Google identities by verified email. Google documents that an
 `email_verified` claim can refer to old ownership of a third-party address.
-Google is authoritative for Gmail addresses, or verified Workspace addresses
+Google is authoritative for Gmail and Googlemail addresses, or verified Workspace addresses
 with an `hd` claim. Automatically linking any other address could take over an
 existing account after that mailbox changes hands.
 

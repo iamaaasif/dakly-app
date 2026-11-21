@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull } from 'drizzle-orm';
 
 import type { ProductPhotoTags } from '@dakly/contracts/products';
 import { files } from '@dakly/db/schema/platform';
@@ -38,5 +38,26 @@ export class ProductPhotoTagsRepository {
         .set({ photoDescription: description, photoTags: tags })
         .where(and(eq(files.storeId, storeId), eq(files.id, fileId))),
     );
+  }
+
+  // Walks by file id so a photo the model cannot read is passed once instead of forever.
+  async untaggedPhotoIds(storeId: string, after: string | null, limit: number) {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: files.id })
+        .from(files)
+        .where(
+          and(
+            eq(files.storeId, storeId),
+            eq(files.purpose, 'product_image'),
+            eq(files.status, 'ready'),
+            isNull(files.photoTags),
+            after ? gt(files.id, after) : undefined,
+          ),
+        )
+        .orderBy(asc(files.id))
+        .limit(limit),
+    );
+    return rows.map((row) => row.id);
   }
 }

@@ -264,7 +264,11 @@ already has tags is skipped. The AI tools list every photo of a product and its 
 optional `photoId`. When no photo matches the colour asked for, the AI sets `withoutPhoto` so the card goes
 out as text and says that colour is unavailable. A card for an out-of-stock variant ends with
 "স্টক নেই (out of stock)" and the result carries `outOfStock: true`. That is how a product with no variants but a red and a blue photo still shows the red
-one when the customer asks for red. Existing photos are not tagged retroactively.
+one when the customer asks for red. Photos uploaded before PROD-8 are tagged by PROD-10: once per queue lifetime
+`StartProductPhotoTagBackfillJob` queues a `BackfillProductPhotoTagsJob` (queue `bulk`) for every store. Each run
+tags up to 10 untagged product and variant photos in file id order, then queues the next run after the last
+id with a ten second pause. A photo the model cannot read is passed once. A model outage fails the run and
+the queue retries it from the same id. It uses the same `tag` code, tier and allowance rule as new uploads.
 
 PROD-9 sends the chosen photo in chat. When `send_product_card` returns a `photoFileId`, the sales
 agent resolves it to the stored file (`ProductsService.chatPhotoFile` accepts only a photo of a product
