@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, gt, inArray, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, count, eq, gt, inArray, isNotNull, lte, ne, or, sql } from 'drizzle-orm';
 
 import type { campaignChannels } from '@dakly/contracts/campaigns';
 import { automationRunSteps } from '@dakly/db/schema/automations';
@@ -50,8 +50,14 @@ export class SendingRepository {
   ): Promise<number> {
     const window = { storeId, channel, dispatch: true, ...range };
     return this.database.forStore(storeId, async (tx) => {
-      const sends = [...(await campaignSends(tx, window)), ...(await workflowSends(tx, window))];
-      return sends.length;
+      // The database counts the rows; a big campaign day would be thousands to read here.
+      const [campaign] = await tx
+        .select({ sends: count() })
+        .from(campaignSends(tx, window).as('campaign_sends'));
+      const [workflow] = await tx
+        .select({ sends: count() })
+        .from(workflowSends(tx, window).as('workflow_sends'));
+      return (campaign?.sends ?? 0) + (workflow?.sends ?? 0);
     });
   }
 
