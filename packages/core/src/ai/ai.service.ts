@@ -85,6 +85,10 @@ export class AiService {
     return this.runs.countTokens(this.config.models[tier], text);
   }
 
+  get embeddingModel(): string {
+    return this.config.embeddingModel;
+  }
+
   async embed(storeId: string, input: readonly string[], signal?: AbortSignal) {
     if (hasDatabaseTransactionScope()) throw aiError('AI_INSIDE_TRANSACTION');
     const permit = await this.gate.acquire(storeId);

@@ -9,6 +9,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   smallint,
   text,
   uniqueIndex,
@@ -415,4 +416,19 @@ export const killSwitches = pgTable(
     check('kill_switches_feature', isOneOf(table.feature, killSwitchFeatures)),
     check('kill_switches_reason_length', sql`char_length(${table.reason}) >= 10`),
   ],
+);
+
+// One row per shop and Dhaka day once staff were told the shop passed the daily AI cost ceiling,
+// so the 15 minute check does not repeat the alert. Dakly's own data, so no row security.
+export const aiCostAlerts = pgTable(
+  'ai_cost_alerts',
+  {
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id, { onDelete: 'cascade' }),
+    day: date('day').notNull(),
+    costMicroUsd: bigint('cost_micro_usd', { mode: 'number' }).notNull(),
+    alertedAt: createdAt(),
+  },
+  (table) => [primaryKey({ columns: [table.storeId, table.day] })],
 );

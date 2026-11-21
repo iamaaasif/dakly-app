@@ -10,6 +10,8 @@ import { StaffAlertsModule } from '@dakly/core/admin/staff-alerts.module';
 import { StaffHistoryModule } from '@dakly/core/admin/staff-history.module';
 import { KnowledgeIndexModule } from '@dakly/core/ai/knowledge/knowledge-index.module';
 import { AiAgentModule } from '@dakly/core/ai-agent/ai-agent.module';
+import { AiCostModule } from '@dakly/core/ai-cost/ai-cost.module';
+import { CheckAiCostCeilingJob } from '@dakly/core/ai-cost/jobs/check-ai-cost-ceiling.job';
 import { AiEvalModule } from '@dakly/core/ai-eval/ai-eval.module';
 import { AnalyticsModule } from '@dakly/core/analytics/analytics.module';
 import { SendDueSecurityNoticesJob } from '@dakly/core/auth/jobs/send-due-security-notices.job';
@@ -84,6 +86,8 @@ import {
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
+import { BackfillProductPhotoTagsJob } from '@dakly/core/products/jobs/backfill-product-photo-tags.job';
+import { StartProductPhotoTagBackfillJob } from '@dakly/core/products/jobs/start-product-photo-tag-backfill.job';
 import { TagProductPhotoJob } from '@dakly/core/products/jobs/tag-product-photo.job';
 import { ProductPhotoTagsModule } from '@dakly/core/products/product-photo-tags.module';
 import { SocialPublishingModule } from '@dakly/core/social/social-publishing.module';
@@ -101,6 +105,7 @@ import { JobSchedulers } from './job-schedulers';
     SyncJobDispatcher,
     TransactionalJobDispatcher,
     WorkflowJobDispatcher,
+    CheckAiCostCeilingJob,
     StaffAuditExportJob,
     StaffAuditMaintenanceJob,
     StaffAlertDeliveryJob,
@@ -115,6 +120,8 @@ import { JobSchedulers } from './job-schedulers';
     ReadKhataPage,
     RunProductImport,
     TagProductPhotoJob,
+    BackfillProductPhotoTagsJob,
+    StartProductPhotoTagBackfillJob,
     UndoContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
@@ -141,6 +148,7 @@ import { JobSchedulers } from './job-schedulers';
   imports: [
     DiscoveryModule,
     KillSwitchesModule,
+    AiCostModule,
     LoggingModule,
     ErrorReportingModule,
     StaffHistoryModule,

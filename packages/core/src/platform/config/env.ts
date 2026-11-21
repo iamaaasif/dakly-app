@@ -40,6 +40,8 @@ const envSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().min(1).optional(),
   R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   SENTRY_DSN: z.url().optional(),
+  // Per shop and Dhaka day. Unset means no ceiling alerts.
+  AI_DAILY_STORE_COST_CEILING_MICRO_USD: z.coerce.number().int().positive().optional(),
   SLACK_BOT_TOKEN: z.string().min(1).optional(),
   SLACK_CHANNEL_ID: z
     .string()
