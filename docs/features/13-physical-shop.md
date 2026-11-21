@@ -27,8 +27,8 @@ Many Dakly shops also sell over a counter, and most of those keep a paper khata 
 | Part                      | What it does                                                                               | Release                                                                                    |
 | ------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | Shop sales (Pocket Sales) | A fast counter till on phone or tablet: tap products, pick payment, done. Works offline.   | Release 2 (Physical Shop extension)                                                        |
-| Due book                  | Who owes how much, since when; remind and collect.                                         | Release 2 (Physical Shop extension)                                                        |
-| Khata Scanner             | Photograph notebook pages; AI reads names, phones, amounts and creates customers and baki. | Release 1 (D46): customers and sales. Baki rows import with the Due book in release 2.     |
+| Due book                  | Who owes how much, since when; remind and collect.                                         | Release 1 (D46)                                                                            |
+| Khata Scanner             | Photograph notebook pages; AI reads names, phones, amounts and creates customers and baki. | Release 1 (D46)                                                                            |
 | POS connections           | Bring sales and customers from an existing POS.                                            | Release 1: Excel or CSV upload only. Release 2: API key, webhook and named POS connectors. |
 
 Decisions applied: Due book reminders use the shop's SMS credits (or WhatsApp utility messages from the ৳ balance if the shop picks WhatsApp). Walk-in sales count in sales numbers but never create customers or receive messages.
@@ -91,7 +91,7 @@ What others do: TallyKhata and OkCredit made baki tracking free and sent an SMS 
 2. Processing steps shown live: Straighten photo, Read handwriting, Match customers. Bangla and English handwriting, Bangla and English digits.
 3. Each row gets fields and a confidence score. Rows under 85% are yellow and must be checked; the import button stays off until every yellow row is confirmed or skipped.
 4. Matching: phone exact match first, then name plus similar phone (one digit different) is offered as "Merge with Mitu Akter 01556-781230?". Never merged automatically.
-5. Import creates customers (source "Khata import", no marketing consent), sales (orders with source Khata import, dated from the page) and baki entries. In release 1 (D46) baki rows are kept with the import and become Due book entries when the Due book ships. Rows without a phone become walk-in sales and are not linked.
+5. Import creates customers (source "Khata import", no marketing consent), sales (orders with source Khata import, dated from the page) and baki entries. Rows without a phone become walk-in sales and are not linked.
 6. Past imports can be undone within 7 days, removing every record they created that hasn't been changed since.
 7. Photos are stored for 30 days for review, then deleted; the extracted rows stay.
 8. Each page counts as one AI scan in usage.
