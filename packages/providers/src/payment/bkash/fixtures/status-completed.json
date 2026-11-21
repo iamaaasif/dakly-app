@@ -1,0 +1,11 @@
+{
+  "paymentID": "TR0011abc",
+  "trxID": "BK1234XYZ",
+  "transactionStatus": "Completed",
+  "amount": "120",
+  "currency": "BDT",
+  "intent": "sale",
+  "merchantInvoiceNumber": "inv-1",
+  "statusCode": "0000",
+  "statusMessage": "Successful"
+}

@@ -1,0 +1,16 @@
+{
+  "statusCode": "0000",
+  "statusMessage": "Successful",
+  "paymentID": "TR0011abc",
+  "bkashURL": "https://sandbox.payment.bkash.com/?paymentId=TR0011abc",
+  "callbackURL": "https://api.dakly.test/cb",
+  "successCallbackURL": "https://api.dakly.test/cb?paymentID=TR0011abc&status=success",
+  "failureCallbackURL": "https://api.dakly.test/cb?paymentID=TR0011abc&status=failure",
+  "cancelledCallbackURL": "https://api.dakly.test/cb?paymentID=TR0011abc&status=cancel",
+  "amount": "120.00",
+  "intent": "sale",
+  "currency": "BDT",
+  "paymentCreateTime": "2026-11-21T10:00:00:000 GMT+0600",
+  "transactionStatus": "Initiated",
+  "merchantInvoiceNumber": "inv-1"
+}

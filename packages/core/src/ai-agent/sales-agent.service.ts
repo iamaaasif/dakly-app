@@ -4,6 +4,7 @@ import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
 import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 
 import { AiService } from '../ai/ai.service';
+import { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import { InboxService } from '../messaging/inbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
@@ -58,6 +59,7 @@ export class SalesAgentService {
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(ContactMemoryService) private readonly memory: ContactMemoryService,
   ) {}
 
   async compose(input: ComposeInput): Promise<ComposedReply> {
@@ -147,6 +149,7 @@ export class SalesAgentService {
   // Stable parts first so the provider's prompt cache can reuse them.
   private async context(input: ComposeInput, candidates: ToolResult | undefined) {
     const shop = await this.stores.settings(input.storeId);
+    const memory = await this.memory.contextFor(input.storeId, input.contactId);
     // A practice question has no saved conversation, so the question itself is the whole history.
     const history = input.chat
       ? await this.inbox.messages(input.storeId, input.chat.conversationId, {
@@ -164,6 +167,7 @@ export class SalesAgentService {
       : input.customerTexts.map((text) => ({ from: 'customer', text: text.slice(0, 2000) }));
     return [
       `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
+      ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
       `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
       `<product_candidates>${JSON.stringify(candidates?.result ?? { products: [] })}</product_candidates>`,
     ].join('\n');
