@@ -1,8 +1,19 @@
-import { Body, Controller, HttpCode, Inject, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 
 import {
   type ContactMergeResponse,
   type MergeContactsInput,
+  contactMergeListQuerySchema,
   mergeContactsSchema,
 } from '@dakly/contracts/contacts';
 
@@ -25,6 +36,16 @@ export class ContactMergeController {
     @Body(new ZodValidationPipe(mergeContactsSchema)) input: MergeContactsInput,
   ): Promise<ContactMergeResponse> {
     return this.merges.merge(storeId, userId, input);
+  }
+
+  // Merges of this customer that can still be undone.
+  @Get()
+  @RequirePermission('customers.view')
+  list(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(contactMergeListQuerySchema)) query: { contactId: string },
+  ): Promise<ContactMergeResponse[]> {
+    return this.merges.listUndoable(storeId, query.contactId);
   }
 
   @Post(':mergeId/undo')
