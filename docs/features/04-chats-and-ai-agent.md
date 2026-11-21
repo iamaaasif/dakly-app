@@ -470,7 +470,10 @@ text is untrusted data. The worker extracts only PDF text and disables PDF.js
 font faces and evaluation.
 
 Indexing uses 512-dimension embeddings in groups of up to 64 chunks.
-`AI_EMBEDDING_MODEL` defaults to `text-embedding-3-small`. An OpenAI model
+`AI_EMBEDDING_MODEL` defaults to `text-embedding-3-large`, at the same 512
+dimensions as the table column. Search only reads chunks made by the configured
+model, so after a model change an item answers again once it is saved or its index is
+queued again. An OpenAI model
 override needs a matching entry in `AI_MODEL_PRICES`. The worker needs the same
 AI settings as other AI callers. The local fake driver uses a fixed vector by
 default so local indexing needs no vendor key.
@@ -526,4 +529,4 @@ These are implementation requirements for CHAT-8. The schema and contracts defin
 
 ## Open questions
 
-Q7 (Inquiry), Q8 (models), Q9 (OpenAI data terms), Q15 (fairness).
+Q7 (Inquiry), Q9 (OpenAI data terms), Q15 (fairness).
