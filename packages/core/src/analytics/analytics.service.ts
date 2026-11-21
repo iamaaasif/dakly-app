@@ -229,6 +229,18 @@ export class AnalyticsService {
     return { total: BigInt(totals?.value ?? 0), points: fillDays(period, points) };
   }
 
+  aiCostMicroUsd(
+    storeId: string,
+    period: ReportPeriod & { timeZone: string },
+    purposes: readonly string[],
+  ) {
+    return this.repository.aiCostMicroUsd(storeId, period, purposes);
+  }
+
+  aiOrders(storeId: string, period: ReportPeriod & { timeZone: string }) {
+    return this.orderReports.aiOrders(storeId, period);
+  }
+
   // The maintenance job calls this for every store and finished Dhaka day; a rerun gives the same rows.
   rollUpAiRunDay(storeId: string, day: string) {
     return this.repository.rollUpAiRunDay(storeId, day);
