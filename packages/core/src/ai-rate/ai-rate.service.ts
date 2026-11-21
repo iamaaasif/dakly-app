@@ -4,12 +4,12 @@ import { z } from 'zod';
 import type { AiRateResponse } from '@dakly/contracts/ai-rate';
 
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
 import { newId } from '../platform/database/new-id';
 import { AiRateRepository } from './ai-rate.repository';
 
 // Every saved AI run reads this, so a 60 second cache keeps it off the database.
 const CACHE_MS = 60_000;
+export const AI_DEFAULT_BDT_PER_USD = Symbol('AI_DEFAULT_BDT_PER_USD');
 const storedValue = z.object({ poishaPerUsd: z.number().int().positive() });
 
 @Injectable()
@@ -19,6 +19,7 @@ export class AiRateService {
   constructor(
     @Inject(AiRateRepository) private readonly repository: AiRateRepository,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(AI_DEFAULT_BDT_PER_USD) private readonly defaultBdtPerUsd: number,
   ) {}
 
   async current(): Promise<AiRateResponse> {
@@ -33,7 +34,7 @@ export class AiRateService {
           updatedAt: row?.updatedAt.toISOString() ?? null,
         }
       : {
-          poishaPerUsd: Math.round(loadEnv().AI_USD_TO_BDT_RATE * 100),
+          poishaPerUsd: Math.round(this.defaultBdtPerUsd * 100),
           isSet: false,
           updatedAt: null,
         };
