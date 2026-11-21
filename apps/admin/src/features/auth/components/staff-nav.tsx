@@ -21,6 +21,11 @@ export function StaffNav({ role }: { role: StaffIdentity['role'] }) {
           Operations
         </Link>
       ) : null}
+      {['super_admin', 'finance', 'analyst'].includes(role) ? (
+        <Link href="/reconciliation" className="text-action underline">
+          Reconciliation
+        </Link>
+      ) : null}
       {role === 'super_admin' ? (
         <Link href="/audit" className="text-action underline">
           Staff audit history

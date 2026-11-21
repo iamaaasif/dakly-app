@@ -130,6 +130,11 @@ const groups = [
     ],
   },
   {
+    evidence: 'admin/reconciliation.int.spec.ts',
+    boundary: 'audited staff closing of global gateway settlement lines, which hold no shop data',
+    routes: ['GET /admin/reconciliation', 'POST /admin/reconciliation/lines/:lineId'],
+  },
+  {
     evidence: 'admin/ops-reports.int.spec.ts',
     boundary: 'staff reads of provider health and AI cost through definer functions, counts only',
     routes: ['GET /admin/provider-health', 'GET /admin/ai-cost'],
