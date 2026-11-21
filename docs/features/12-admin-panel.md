@@ -372,3 +372,15 @@ Super admins and ops staff can pause AI replies, campaign sending or social post
 A paused switch is a row in `kill_switches`; resuming deletes it and `staff_audit_log` keeps the history. Workers read the table through `KillSwitchesService` with a 30 second cache. The campaign batch and post publishing jobs check it first and, while paused, move themselves back by one minute instead of running, so queued work waits and is not dropped. A paused AI reply does not wait: the AI reply service hands the chat to people with the reason `ai_paused` and the normal hand-over message, so no customer waits for the pause to end and the AI never answers old messages late. A switch therefore takes effect within a minute across the system. Contacts, orders, inbound messages and owner-written replies are not affected.
 
 Routes: `GET /admin/kill-switches`, `PUT /admin/kill-switches/:feature` and `PUT /admin/stores/:storeId/kill-switches/:feature`.
+
+### Provider health and AI cost
+
+`GET /admin/provider-health` (super admin, ops, analyst) shows attempts and failures over the last hour and day for each vendor path Dakly records outcomes for: each AI model (failed and timed out runs from `ai_runs`, with average latency), SMS sent outside chats, and outbound chat messages per channel. Queued rows are not attempts. Balances, credential expiry and the SMS backup switch are not covered yet because no data records them.
+
+`GET /admin/ai-cost?day=YYYY-MM-DD` (super admin, ops, finance, analyst) lists the 20 shops with the highest AI cost for a Dhaka day, with runs, failed runs and whether the shop passed the ceiling. Both reads go through `SECURITY DEFINER` report functions (`admin_ai_cost_by_store`, `admin_provider_health`), so no shop row, message text or customer data is returned.
+
+The daily ceiling is one platform value, `AI_DAILY_STORE_COST_CEILING_MICRO_USD`, applied to every shop; with no value there are no alerts. A worker job runs every 15 minutes and sends one Slack notice per shop and Dhaka day to the staff alert channel, recorded in `ai_cost_alerts`. It does not pause the shop's AI; staff do that with the kill switch. The owner-set `daily_cost_ceiling_poisha` on `ai_agent_settings` is a separate, unenforced field and needs a currency rate before it can be compared with vendor cost.
+
+### Operations screen
+
+`/operations` in the admin app shows the three kill switches with a pause or resume form each (reason and a confirmation box), the shops paused on their own, a form to pause one shop by ID, the provider health table and AI cost per shop for a chosen Dhaka day. Super admins and ops can change switches; analysts see the same page without the forms. There is no admin design image, so it follows the shop app theme tokens, as the other staff screens do. Finance can read the AI cost route but has no link yet, because the page also loads provider health.

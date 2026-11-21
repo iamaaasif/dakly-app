@@ -53,10 +53,14 @@ const garmentGroups: string[][] = [
   ['watch', 'ghori', 'ঘড়ি'],
 ];
 
+// English names are matched as written: their consonant key can equal a Banglish word's ("yellow"
+// and "lal" both reduce to "ll"), so only the Banglish and Bangla members are matched by key.
+const conceptByWord = new Map<string, string>();
 const conceptByKey = new Map<string, string>();
 const colourConcepts = new Set(colourGroups.map(([concept]) => concept!));
 for (const [concept, ...members] of [...colourGroups, ...garmentGroups]) {
-  for (const member of [concept!, ...members]) {
+  conceptByWord.set(concept!, concept!);
+  for (const member of members) {
     const [word] = searchWords(member);
     conceptByKey.set(wordKey(word!), concept!);
   }
@@ -127,7 +131,9 @@ function fieldOf(weight: number, texts: (string | null)[]): Field {
     weight,
     words: words.map((word) => {
       const key = wordKey(word);
-      return { word, key, concept: word.length >= 3 ? conceptByKey.get(key) : undefined };
+      const concept =
+        word.length >= 3 ? (conceptByWord.get(word) ?? conceptByKey.get(key)) : undefined;
+      return { word, key, concept };
     }),
   };
 }
@@ -206,6 +212,16 @@ export function rankByWords(documents: SearchDocument[], query: ParsedQuery): st
     .filter(({ score }) => score >= minLexicalScore)
     .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
     .map(({ id }) => id);
+}
+
+// The first colour a list of words names, so "red kurti with white flowers" is red. Ordered
+// words, most specific first, as tags and photo readings are written.
+export function mainColour(words: string[]): string | undefined {
+  for (const word of words) {
+    const [query] = fieldOf(1, [word]).words;
+    if (query?.concept && colourConcepts.has(query.concept)) return query.concept;
+  }
+  return undefined;
 }
 
 const identifyingMatch = 0.9;

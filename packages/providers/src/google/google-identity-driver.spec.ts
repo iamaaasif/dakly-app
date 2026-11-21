@@ -38,6 +38,7 @@ describe('GoogleTokenDriver', () => {
   it.each([
     [{}, false],
     [{ email: 'Person@gmail.com' }, true],
+    [{ email: 'Person@googlemail.com' }, true],
     [{ hd: 'example.test' }, true],
   ])('returns verified identity and email authority', async (claims, authoritative) => {
     expect(await driver().verify(token(claims))).toEqual({
