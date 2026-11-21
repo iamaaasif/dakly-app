@@ -17,6 +17,6 @@ import { ProductPhotoTagsService } from './product-photo-tags.service';
     BullModule.registerQueue({ name: QUEUES.bulk }),
   ],
   providers: [ProductPhotoTagsRepository, ProductPhotoTagsService, ProductPhotoTagBackfillService],
-  exports: [ProductPhotoTagsService],
+  exports: [ProductPhotoTagsService, ProductPhotoTagBackfillService],
 })
 export class ProductPhotoTagsModule {}
