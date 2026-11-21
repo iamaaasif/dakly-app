@@ -7,7 +7,7 @@ import {
   type PhotoReading,
 } from '@dakly/contracts/chats';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
-import type { LlmImage } from '@dakly/providers/llm/llm-driver';
+import type { LlmImage, LlmTranscriptionRequest } from '@dakly/providers/llm/llm-driver';
 
 import { AiService } from '../ai/ai.service';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
@@ -74,7 +74,10 @@ export class InboundMediaReadingService {
       : this.describe(storeId, media, caption);
   }
 
-  private async transcribe(storeId: string, audio: LlmImage): Promise<Reading> {
+  private async transcribe(
+    storeId: string,
+    audio: LlmTranscriptionRequest['audio'],
+  ): Promise<Reading> {
     const result = await this.ai.transcribe(storeId, { audio, hint: transcribeVoiceNoteHint });
     if (result.kind === 'failure') return failed(result.code);
     return { kind: 'read', text: result.text ? `Voice note: ${result.text}` : undefined };
@@ -99,8 +102,9 @@ function failed(code: string | undefined): Reading {
 }
 
 // Plain text, so the inbox shows it as is and a product search can match on the words.
-function photoText({ description, searchWords, visibleText }: PhotoReading): string {
-  const lines = [`Photo: ${description}`];
+function photoText({ subject, description, searchWords, visibleText }: PhotoReading): string {
+  const label = subject === 'payment_screenshot' ? 'Payment screenshot' : 'Photo';
+  const lines = [`${label}: ${description}`];
   if (searchWords.length) lines.push(`Search words: ${searchWords.join(', ')}`);
   if (visibleText) lines.push(`Text in photo: ${visibleText}`);
   return lines.join('\n');

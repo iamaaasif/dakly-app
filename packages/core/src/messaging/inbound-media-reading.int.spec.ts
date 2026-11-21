@@ -209,6 +209,30 @@ it('describes a customer photo for a product search and reads it only once', asy
   ]);
 });
 
+it('labels a payment screenshot and keeps the transaction id it shows', async () => {
+  const shopA = await shop();
+  const id = await receive(shopA, null, photo);
+  download.mockResolvedValue(downloaded('image/png'));
+  respond.mockResolvedValue({
+    kind: 'output',
+    output: {
+      subject: 'payment_screenshot',
+      description: 'A bKash payment confirmation.',
+      searchWords: [],
+      visibleText: 'TrxID 9K3L2M1N, Tk 1,250',
+    },
+    usage,
+    model: 'fake',
+    responseId: 'r2',
+  });
+
+  await run(shopA.storeId, id);
+
+  expect((await messageRow(id)).media_text).toBe(
+    'Payment screenshot: A bKash payment confirmation.\nText in photo: TrxID 9K3L2M1N, Tk 1,250',
+  );
+});
+
 it('transcribes a Banglish voice note onto the message', async () => {
   const shopA = await shop();
   const id = await receive(shopA, null, voice);
