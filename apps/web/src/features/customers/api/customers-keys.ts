@@ -15,3 +15,9 @@ export const matchSuggestionsKeys = {
   forContact: (tag: string | undefined, contactId: string) =>
     ['contact-match-suggestions', tag, contactId] as const,
 };
+
+export const mergesKeys = {
+  all: ['contact-merges'] as const,
+  forContact: (tag: string | undefined, contactId: string) =>
+    ['contact-merges', tag, contactId] as const,
+};
