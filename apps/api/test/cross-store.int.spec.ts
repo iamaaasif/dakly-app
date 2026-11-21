@@ -1243,7 +1243,7 @@ fixture('POST /khata-scans/pages/:pageId/read', async () => {
   const storage = app.get<{
     getObjectMetadata(key: string): Promise<{ contentType: string; sizeBytes: number } | null>;
   }>(FILE_STORAGE_DRIVER);
-  vi.spyOn(storage, 'getObjectMetadata').mockResolvedValue(khataPage);
+  const metadata = vi.spyOn(storage, 'getObjectMetadata').mockResolvedValue(khataPage);
   try {
     const queued = await success(a, 'POST', `/khata-scans/pages/${own}/read`, 202);
     expect(queued.json()).toMatchObject({ id: own, status: 'reading' });
@@ -1252,7 +1252,7 @@ fixture('POST /khata-scans/pages/:pageId/read', async () => {
     expect(await f.row('khata_pages', foreign)).toEqual(before);
   } finally {
     await f.admin.pool.query("update plans set limits=limits - 'ai_scan' where id=$1", [f.plan]);
-    vi.restoreAllMocks();
+    metadata.mockRestore();
   }
 });
 fixture('GET /khata-scans/pages/:pageId', async () => {
