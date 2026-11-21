@@ -1,5 +1,6 @@
 'use client';
-import Link from 'next/link';
+import { Phone } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { FormProvider } from 'react-hook-form';
 
 import type { SignInResponse } from '@dakly/contracts/auth';
@@ -15,8 +16,16 @@ type SignInFormProps = {
   isRemembered: boolean;
   onResult: (result: SignInResponse) => void;
   onRemember: (remember: boolean) => void;
+  // The Google button, placed beside Get a code.
+  alternative?: ReactNode;
 };
-export function SignInForm({ method, isRemembered, onResult, onRemember }: SignInFormProps) {
+export function SignInForm({
+  method,
+  isRemembered,
+  onResult,
+  onRemember,
+  alternative,
+}: SignInFormProps) {
   const { form, password, pending, codeTarget, setCodeTarget, requestCode } = useSignInForm(
     method,
     isRemembered,
@@ -51,21 +60,50 @@ export function SignInForm({ method, isRemembered, onResult, onRemember }: SignI
             {errors.root.message}
           </p>
         ) : null}
-        <div className="flex flex-wrap gap-3">
-          <Button type="submit" loading={pending}>
-            Sign in
-          </Button>
-          <Button variant="secondary" loading={pending} onClick={requestCode}>
-            Get a code
-          </Button>
-        </div>
-        <Link
-          href="/forgot-password"
-          className="inline-flex min-h-10 items-center text-action underline"
-        >
-          Forgot password?
-        </Link>
+        <SignInActions
+          method={method}
+          pending={pending}
+          onRequestCode={requestCode}
+          alternative={alternative}
+        />
       </form>
     </FormProvider>
+  );
+}
+
+function SignInActions({
+  method,
+  pending,
+  onRequestCode,
+  alternative,
+}: {
+  method: 'phone' | 'email';
+  pending: boolean;
+  onRequestCode: () => void;
+  alternative?: ReactNode;
+}) {
+  return (
+    <>
+      <Button type="submit" loading={pending} className="w-full">
+        Sign in
+      </Button>
+      <div className="flex items-center gap-3 text-sm text-text-muted">
+        <span className="h-px flex-1 bg-border" />
+        or
+        <span className="h-px flex-1 bg-border" />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Button
+          variant="secondary"
+          loading={pending}
+          onClick={onRequestCode}
+          className={alternative ? undefined : 'sm:col-span-2'}
+        >
+          <Phone aria-hidden="true" size={16} />
+          Get a code by {method === 'phone' ? 'SMS' : 'email'}
+        </Button>
+        {alternative}
+      </div>
+    </>
   );
 }

@@ -234,6 +234,30 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await expect(estimateCard).toContainText('1 have not agreed to messages');
     await capture(page, 'sms-audience-step', true);
 
+    await page.getByRole('link', { name: '4. Schedule' }).click();
+    await expect(page.getByRole('heading', { name: 'When should it go out?' })).toBeVisible();
+    await page.getByRole('radio', { name: /Schedule for later/ }).check();
+    const sendDay = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await page.getByLabel('Date', { exact: true }).fill(sendDay);
+    await page.getByLabel('Time', { exact: true }).fill('09:00');
+    const saveTime = page.waitForRequest(
+      (request) =>
+        request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
+    );
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    expect((await saveTime).postDataJSON()).toEqual({
+      scheduledFor: new Date(`${sendDay}T09:00:00+06:00`).toISOString(),
+    });
+    await capture(page, 'sms-schedule-step', true);
+    await page.getByRole('button', { name: 'Approve and launch' }).click();
+    const approveDialog = page.getByRole('dialog', { name: 'Approve this campaign?' });
+    await expect(approveDialog).toContainText('3 SMS credits');
+    await expect(
+      approveDialog.getByRole('button', { name: 'Approve and schedule' }),
+    ).toBeDisabled();
+    await capture(page, 'sms-approve-dialog');
+    await approveDialog.getByRole('button', { name: 'Cancel' }).click();
+
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
     await expect(page.getByText('Come back this week for our Puja collection.')).toBeVisible();

@@ -17,7 +17,12 @@ export function SettingsScreen({ tab, sms }: { tab: 'store' | 'sms'; sms?: React
     { href: '/security?tab=profile', label: 'My profile' },
     { href: '/security?tab=two-step', label: 'Security' },
     { href: '/team/ownership', label: 'Ownership transfer' },
-    ...(access?.canApproveSupport ? [{ href: '/support-access', label: 'Support access' }] : []),
+    ...(access?.canApproveSupport
+      ? [
+          { href: '/support-access', label: 'Support access' },
+          { href: '/activity', label: 'Activity log' },
+        ]
+      : []),
   ];
   const store: SettingsLink[] = [
     { href: '/settings?tab=store', label: 'Store information', current: tab === 'store' },

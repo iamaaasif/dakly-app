@@ -18,7 +18,12 @@ import { AiRunsService, type AiAttempt } from './ai-runs.service';
 import { AI_CONFIG, aiTimeoutMs, type AiConfig, type AiTier } from './ai.config';
 import { aiError } from './ai.errors';
 
-const usageUnits = { content: 'ai_content', ask: 'ai_ask' } as const;
+// Reading a customer's photo or voice note draws from the chat allowance, one unit each.
+const usageUnits = {
+  content: 'ai_content',
+  ask: 'ai_ask',
+  describe_image: 'ai_conversation',
+} as const;
 type BillablePurpose = keyof typeof usageUnits;
 type AiPurpose = (typeof aiRunPurposes)[number];
 
@@ -32,7 +37,7 @@ export type AiRequest<T> = {
   signal?: AbortSignal;
 } & (
   | { purpose: 'content'; usageReference: string; usageQuantity: number }
-  | { purpose: 'ask'; usageReference: string }
+  | { purpose: 'ask' | 'describe_image'; usageReference: string }
   | { purpose: Exclude<AiPurpose, BillablePurpose>; usageReference?: never }
 );
 
@@ -93,7 +98,10 @@ export class AiService {
 
   async transcribe(
     storeId: string,
-    request: Pick<LlmTranscriptionRequest, 'audio' | 'hint'> & { signal?: AbortSignal },
+    request: Pick<LlmTranscriptionRequest, 'audio' | 'hint'> & {
+      usageReference: string;
+      signal?: AbortSignal;
+    },
   ): Promise<
     { kind: 'output'; text: string } | { kind: 'failure'; code: GateFailure | LlmErrorCode }
   > {
@@ -103,23 +111,32 @@ export class AiService {
     if (permit.kind === 'paused') return { kind: 'failure', code: 'AI_PAUSED' };
     if (permit.kind === 'busy') return { kind: 'failure', code: 'AI_STORE_BUSY' };
     const model = this.config.transcribeModel;
+    const { usageReference, ...llmRequest } = request;
+    let result;
     try {
-      return await this.runs.transcribe(
+      result = await this.runs.transcribe(
         storeId,
-        { ...request, model, timeoutMs: aiTimeoutMs },
+        { ...llmRequest, model, timeoutMs: aiTimeoutMs },
         Object.hasOwn(this.config.prices, model) ? this.config.prices[model] : undefined,
       );
     } finally {
       await this.gate.release(storeId, permit.ticket);
     }
+    if (result.kind !== 'output') return result;
+    return this.billOutput(
+      storeId,
+      { unit: 'ai_conversation', reference: usageReference, quantity: 1 },
+      result,
+      request.signal,
+    );
   }
 
-  private async billOutput<T>(
+  private async billOutput<R>(
     storeId: string,
     usage: ConsumeUsageInput,
-    result: AiResult<T>,
+    result: R,
     signal?: AbortSignal,
-  ): Promise<AiResult<T>> {
+  ): Promise<R | { kind: 'failure'; code: GateFailure }> {
     if (signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
     try {
       await this.usage.consume(storeId, usage);

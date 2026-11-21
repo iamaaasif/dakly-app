@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 
 import type { AuditEntry, AuditHistoryQuery } from '@dakly/contracts/audit';
 import { auditLog } from '@dakly/db/schema/platform';
+import { memberships } from '@dakly/db/schema/team';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
@@ -33,6 +34,36 @@ export class AuditRepository {
           ),
         )
         .orderBy(auditLog.createdAt, auditLog.id),
+    );
+  }
+
+  // Newest first. UUID v7 ids sort by time, so the id is the cursor.
+  list(storeId: string, { before, limit }: { before?: string; limit: number }) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: auditLog.id,
+          action: auditLog.action,
+          entityType: auditLog.entityType,
+          entityId: auditLog.entityId,
+          after: auditLog.after,
+          actorType: auditLog.actorType,
+          actorUserId: auditLog.actorUserId,
+          actorRole: memberships.builtInRole,
+          reason: auditLog.reason,
+          createdAt: auditLog.createdAt,
+        })
+        .from(auditLog)
+        .leftJoin(
+          memberships,
+          and(
+            eq(memberships.storeId, auditLog.storeId),
+            eq(memberships.userId, auditLog.actorUserId),
+          ),
+        )
+        .where(and(eq(auditLog.storeId, storeId), before ? lt(auditLog.id, before) : undefined))
+        .orderBy(desc(auditLog.id))
+        .limit(limit),
     );
   }
 

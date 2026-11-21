@@ -96,7 +96,7 @@ Plan change: upgrades apply now and charge the prorated difference for the rest 
 | ACC-R1  | One mobile number = one user login. A verified email can be added to the same user and used to sign in (D20). One user can belong to several stores with a different role in each.                                                                              |
 | ACC-R2  | Lock sign-in for 15 minutes after 5 wrong passwords or codes in a row; tell the user by SMS, or by email when the user signed in with email.                                                                                                                    |
 | ACC-R3  | "Keep me signed in" lasts 30 days on that device; otherwise the session ends after 12 hours idle. Either way it ends 90 days after sign-in (D38).                                                                                                               |
-| ACC-R4  | Google sign-in links to an existing account only by verified email; a new Google sign-up must still verify a mobile number.                                                                                                                                     |
+| ACC-R4  | Google sign-in links to an existing account only by verified email; a new Google sign-up needs no mobile number, code or password (D48).                                                                                                                        |
 | ACC-R5  | Extensions turned on at sign-up: Sales and Chats if "Facebook or social media" is picked; Sales if "Online store" is picked; Social Auto Post if "Facebook or social media" is picked; Physical Shop if a shop answer is picked (release 2). Core is always on. |
 | ACC-R6  | Only the Owner can change billing or close the business. Every store has exactly one Owner; ownership changes only by transfer (D35).                                                                                                                           |
 | ACC-R7  | Close business requires typing the store name, offers an export of customers, orders and sales first, cancels billing at once and deletes data 30 days later. Can be undone within those 30 days by support.                                                    |
@@ -772,18 +772,15 @@ together; history contains no token, subject or email. All successful paths use
 `completeSignIn`, preserve shared failure counters and enforce disabled-account and
 TOTP checks. Enabled TOTP returns a challenge and postpones sign-in and linking until the second factor passes.
 
-Without an eligible existing account, the response is 202
-`{ status: 'signup_required', signupTicket }`, without a session. Request a normal
-`sign_up` phone code, then include `signupTicket` in `POST /auth/code/verify`.
-Only after mobile proof succeeds is the ticket consumed and its server-held subject
-and verified email used for signup. The optional registration email cannot replace
-the ticket email. Successful sessions return 204 with the normal session cookie.
-
-Both ticket kinds contain 32 random bytes, have hashed Valkey keys, expire after
-fifteen minutes and are consumed atomically once. Wrong phone codes do not consume
-signup tickets. Once valid proof is consumed, a later database failure leaves it
-consumed; restart Google sign-in and request new codes, respecting resend limits.
-Parallel signup or newly claimed verified identities cannot create duplicate owners.
+Without an eligible existing account, Google creates one in the same call (D48): the
+new user gets the Google name (or the email's first part), the Google email as a
+verified email, no phone and no password, and a session; the response is 204. The body
+must carry `termsVersion` for this case, otherwise `400 AUTH_TERMS_REQUIRED` and nothing
+is created. The web form shows the Terms and Privacy links beside the Google button.
+A Google address that is not Gmail or Workspace still needs the fresh email code first
+(ADR 0010), then the account is created. Two parallel calls for one subject create one
+account; the second gets `409 AUTH_ACCOUNT_EXISTS`. The person can add a mobile number
+and a password later in Settings.
 
 `GOOGLE_IDENTITY_DRIVER=fake` is allowed only outside production. Its local token
 format is `fake-google:` followed by JSON containing `sub`, `email`,
@@ -959,11 +956,13 @@ boundaries. RLS and repository predicates are tested independently; see
 
 ### Sign-in and setup screens (ACC-8, first PR)
 
-The public `/sign-in` screen supports phone or email with a password or a code,
+The public `/sign-in` screen is a split screen as in the design: brand panel on wide screens, Mobile number and Email tabs, +880 prefix, Show inside the password field, Forgot password? beside its label, Get a code by SMS (or email) beside Continue with Google. The Google button is Google's own rendered button (outline theme, G mark, Google's font, as its brand rules require), sized to the grid cell, so its font differs from the SMS button; it is left out when `WEB_GOOGLE_CLIENT_ID` is not set. The design's prototype note and its Rocket line are not copied. Code screens show where the code went and offer Resend code after 0:30; sign-up shows a three-step password strength meter once a password is typed. The screen supports phone or email with a password or a code,
 Keep me signed in, Google identity, and the required authenticator or backup-code
 step. `/forgot-password` requests a reset code and confirms the new password;
 accounts with two-step verification finish that step before receiving a session.
-Google email verification and signup tickets stay in component memory.
+Google email verification tickets stay in component memory. Keep me signed in
+is ticked by default, as in the design. `/sign-in` and `/sign-up` send a person with a live
+session to the Dashboard.
 
 `/sign-up` has account and SMS verification steps. `/setup` resumes the verified
 account at business details and plan choice. The final `POST /stores` commits the
@@ -1107,6 +1106,14 @@ Steps follow the table under Setup checklist, with three differences for release
 Each step checks its real condition. "Connect your Facebook Page" needs an active Page connection. "Teach Dakly AI your answers" needs one active knowledge item. "Add your products" needs a product the AI can show in chats. "Turn chats into orders" needs an order from Messenger, Instagram or WhatsApp. "Set up WhatsApp and SMS" needs an active WhatsApp connection or an approved SMS sender, because WhatsApp connect (CHN-3) is blocked. "Send your first campaign" needs a campaign that has started sending.
 
 `PATCH /setup-checklist` takes either `{ howYouSell }` or `{ hidden: true }`. New answers replace the saved ones, turn on the extensions from ACC-R5 that are still off (never turning one off), bring a hidden guide back, and return the extensions turned on in `turnedOn` for the toast. `hidden: true` is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can change it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`.
+
+### Owner audit log API (ACC-13, fourth PR)
+
+`GET /audit-log?before=&limit=` lists the shop's audit rows newest first, 50 a page by default and 100 at most; `before` is the last id of the previous page. Only the Owner can read it (`AUDIT_LOG_DENIED`), checked in the service. Each row has the action, entity type and id, the field names that changed, the reason if one was given, the time, and the actor as a kind (user, staff, customer, system or ai), whether it is the caller, and the person's role in the shop. Names are not returned because they belong to accounts, not shops; before and after values never leave the database, only field names.
+
+### Activity log screen (ACC-13, fifth PR)
+
+`/activity` shows the audit API as a list of cards, newest first: the action in plain words, who (You and role, a role, Dakly support, Dakly, Dakly AI or a customer) with the Dhaka time, the changed field names and the reason when there is one. "Older activity" and "Latest activity" move through pages with `before` in the URL. Only the Owner opens it (the same flag as Support access, `canApproveSupport`); others see the no-access note. Settings lists it as "Activity log" for the Owner. There is no design image for this screen, so it reuses the card list of the Security history; evidence is in `docs/design/evidence/acc-13-audit/`. Actions without a plain label show their code as words.
 
 ### Setup banner and card on the Dashboard (ACC-13, second PR)
 
