@@ -1113,6 +1113,14 @@ Each step checks its real condition. "Connect your Facebook Page" needs an activ
 
 `PATCH /setup-checklist` takes either `{ howYouSell }` or `{ hidden: true }`. New answers replace the saved ones, turn on the extensions from ACC-R5 that are still off (never turning one off), bring a hidden guide back, and return the extensions turned on in `turnedOn` for the toast. `hidden: true` is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can change it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`.
 
+### Owner audit log API (ACC-13, fourth PR)
+
+`GET /audit-log?before=&limit=` lists the shop's audit rows newest first, 50 a page by default and 100 at most; `before` is the last id of the previous page. Only the Owner can read it (`AUDIT_LOG_DENIED`), checked in the service. Each row has the action, entity type and id, the field names that changed, the reason if one was given, the time, and the actor as a kind (user, staff, customer, system or ai), whether it is the caller, and the person's role in the shop. Names are not returned because they belong to accounts, not shops; before and after values never leave the database, only field names.
+
+### Activity log screen (ACC-13, fifth PR)
+
+`/activity` shows the audit API as a list of cards, newest first: the action in plain words, who (You and role, a role, Dakly support, Dakly, Dakly AI or a customer) with the Dhaka time, the changed field names and the reason when there is one. "Older activity" and "Latest activity" move through pages with `before` in the URL. Only the Owner opens it (the same flag as Support access, `canApproveSupport`); others see the no-access note. Settings lists it as "Activity log" for the Owner. There is no design image for this screen, so it reuses the card list of the Security history; evidence is in `docs/design/evidence/acc-13-audit/`. Actions without a plain label show their code as words.
+
 ### Setup banner and card on the Dashboard (ACC-13, second PR)
 
 The Dashboard shows the "How do you sell?" banner above the greeting card and the "Get started with Dakly" card below it (evidence in `docs/design/evidence/acc-13-setup-checklist/`). The page hands both in, as it does the Ask box.

@@ -377,6 +377,8 @@ Production rejects the fake driver. Selecting `LLM_DRIVER=openai` requires
 The live responder asks the real practice pipeline of the shop in `AI_EVAL_STORE_ID`, which holds the catalog the cases assume. The nightly `run-golden-eval` job (20:00 UTC) calls `GoldenEvalService.runNightly()`. When the thresholds are missed it logs the report and sends a Slack staff notice, and it returns normally, because a thrown job is retried and would run the whole eval again. Only real errors throw. It does nothing when the variable is unset.
 CI replays saved outcomes and makes no network call. The starter set is in `ai-eval/golden-set.sample.ts`; the 200 beta chats replace it at M7.
 
+The Bangla and Banglish set is in `ai-eval/golden-set.bangla.ts`: product search ("kurti" must find "কুর্তি"), photo match, out-of-stock replies and Banglish hand-overs. Its header lists the exact catalog the eval shop must hold. A case may carry `mentionsAnyOf` (the answer names the product or an in-stock alternative; at least 90% must) and `neverOffer` (products with no stock; any offer fails the run, so the count must be 0). A Latin term matches as a whole word, a Bangla term as text, because Bangla words take suffixes. Cases with `dependsOn` need AI-10, AI-11 or AI-12; the nightly run skips them while the task is in `pendingTasks` in `golden-set.sample.ts`. Remove the task from that list in the PR that merges it. Khata handwriting cases wait for the Khata scan feature.
+
 ### Shared AI service
 
 Features pass a tier, versioned prompt and output schema to `AiService`.

@@ -6,6 +6,7 @@ import { AiAgentSettingsModule } from '@dakly/core/ai-agent/ai-agent-settings.mo
 import { AiPracticeModule } from '@dakly/core/ai-agent/ai-practice.module';
 import { AnalyticsOverviewModule } from '@dakly/core/analytics/analytics-overview.module';
 import { AssistantModule } from '@dakly/core/assistant/assistant.module';
+import { AuditLogModule } from '@dakly/core/audit/audit-log.module';
 import { AuthModule } from '@dakly/core/auth/auth.module';
 import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
@@ -41,6 +42,7 @@ import { HealthController } from './health.controller';
 @Module({
   imports: [
     AdminModule,
+    AuditLogModule,
     LoggingModule,
     DatabaseModule,
     AuthModule,
