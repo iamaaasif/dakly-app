@@ -185,6 +185,9 @@ export const files = pgTable(
     objectKey: text('object_key').notNull(),
     // The name the person chose the file under, shown in lists; the object key is never shown.
     fileName: text('file_name'),
+    // What the vision tier saw in a product photo; null until it has been read (PROD-8).
+    photoDescription: text('photo_description'),
+    photoTags: text('photo_tags').array(),
     contentType: text('content_type').notNull(),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
     sha256: bytea('sha256'),

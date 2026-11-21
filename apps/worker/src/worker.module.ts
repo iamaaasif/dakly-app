@@ -40,6 +40,7 @@ import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-hea
 import { MetaPageReconciliationModule } from '@dakly/core/channels/meta-page-reconciliation.module';
 import { MetaWebhookMaintenanceModule } from '@dakly/core/channels/meta-webhook-maintenance.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
+import { ContactMemoryModule } from '@dakly/core/contact-memory/contact-memory.module';
 import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
 import { DueBookModule } from '@dakly/core/due-book/due-book.module';
 import { SendBakiNoticeOnDueAdded } from '@dakly/core/due-book/jobs/send-baki-notice-on-due-added.job';
@@ -83,6 +84,8 @@ import {
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
+import { TagProductPhotoJob } from '@dakly/core/products/jobs/tag-product-photo.job';
+import { ProductPhotoTagsModule } from '@dakly/core/products/product-photo-tags.module';
 import { SocialPublishingModule } from '@dakly/core/social/social-publishing.module';
 
 import { JobSchedulers } from './job-schedulers';
@@ -112,6 +115,7 @@ import { JobSchedulers } from './job-schedulers';
     RunContactImport,
     ReadKhataPage,
     RunProductImport,
+    TagProductPhotoJob,
     UndoContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
@@ -163,6 +167,7 @@ import { JobSchedulers } from './job-schedulers';
     InboundAttachmentsModule,
     ChannelTokenHealthModule,
     MetaPageReconciliationModule,
+    ContactMemoryModule,
     ConversationReturnsModule,
     AutomationRunsModule,
     AutomationsModule,
@@ -170,6 +175,7 @@ import { JobSchedulers } from './job-schedulers';
     ClockModule,
     DueBookModule,
     ImportsModule,
+    ProductPhotoTagsModule,
     KhataScansModule,
     ContactStatsRepairModule,
     AnalyticsModule,

@@ -6,6 +6,7 @@ import type { ChatProduct } from '../../products/products.service';
 // The eval shop of golden-set.bangla.ts, as plain data. Aliases stand in for the names an owner
 // adds to a product, and search matches them the way ProductsRepository.searchForChat does.
 type EvalVariant = { variantId: string; title: string; priceTaka: number; stock: number };
+type EvalPhoto = { photoId: string; key: string; description: string; tags: string[] };
 export type EvalProduct = {
   productId: string;
   name: string;
@@ -13,15 +14,24 @@ export type EvalProduct = {
   description: string;
   aliases: string[];
   variants: EvalVariant[];
+  photos: EvalPhoto[];
 };
 
-type ProductInput = Omit<EvalProduct, 'productId' | 'variants'> & {
+type ProductInput = Omit<EvalProduct, 'productId' | 'variants' | 'photos'> & {
   variants: [title: string, priceTaka: number, stock: number][];
+  // Tagged photos as the vision tier would tag them: key, description and tags.
+  photos?: [key: string, description: string, tags: string[]][];
 };
 
-const product = ({ variants, ...fields }: ProductInput): EvalProduct => ({
+const product = ({ variants, photos = [], ...fields }: ProductInput): EvalProduct => ({
   ...fields,
   productId: randomUUID(),
+  photos: photos.map(([key, description, tags]) => ({
+    photoId: randomUUID(),
+    key,
+    description,
+    tags,
+  })),
   variants: variants.map(([title, priceTaka, stock]) => ({
     variantId: randomUUID(),
     title,
@@ -43,6 +53,10 @@ export const evalProducts: EvalProduct[] = [
     variants: [
       ['M', 1450, 12],
       ['L', 1450, 8],
+    ],
+    photos: [
+      ['kurti-red', 'A red kurti with a white flower print.', ['red', 'লাল', 'kurti', 'কুর্তি']],
+      ['kurti-blue', 'A blue plain cotton kurti.', ['blue', 'নীল', 'kurti', 'কুর্তি']],
     ],
   }),
   product({
@@ -137,7 +151,24 @@ export const productResult = ({
   category,
   description,
   variants,
-}: EvalProduct) => ({ productId, name, category, description, variants });
+  photos,
+}: EvalProduct) => ({
+  productId,
+  name,
+  category,
+  description,
+  photos: photos.map(({ photoId, description: seen, tags }) => ({
+    photoId,
+    variantId: null,
+    description: seen,
+    tags,
+  })),
+  variants,
+});
+
+export const evalPhotoKey = (photoId: unknown) =>
+  evalProducts.flatMap(({ photos }) => photos).find((photo) => photo.photoId === photoId)?.key ??
+  null;
 
 // The eval shop in the shapes the photo match reads.
 export const evalSearchDocuments: SearchDocument[] = evalProducts.map((item) => ({
@@ -156,6 +187,12 @@ export const evalChatProducts: ChatProduct[] = evalProducts.map((item) => ({
   isStockTracked: true,
   description: item.description,
   category: item.category,
+  photos: item.photos.map(({ photoId, description, tags }) => ({
+    id: photoId,
+    variantId: null,
+    description,
+    tags,
+  })),
   variants: item.variants.map((variant, index) => ({
     id: variant.variantId,
     title: variant.title,

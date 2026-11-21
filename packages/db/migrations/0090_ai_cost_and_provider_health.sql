@@ -6,7 +6,8 @@ CREATE TABLE "ai_cost_alerts" (
 	CONSTRAINT "ai_cost_alerts_store_id_day_pk" PRIMARY KEY("store_id","day")
 );
 --> statement-breakpoint
-ALTER TABLE "ai_cost_alerts" ADD CONSTRAINT "ai_cost_alerts_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "ai_cost_alerts" ADD CONSTRAINT "ai_cost_alerts_store_id_stores_id_fk" FOREIGN KEY ("store_id") REFERENCES "public"."stores"("id") ON DELETE cascade ON UPDATE no action;
+--> statement-breakpoint
 GRANT SELECT, INSERT ON "ai_cost_alerts" TO dakly_app;--> statement-breakpoint
 -- Staff report functions (ADR 0005): counts and cost per shop, never message text or customers.
 CREATE FUNCTION admin_ai_cost_by_store(p_from timestamptz, p_to timestamptz, p_min_cost_micro_usd bigint, p_limit integer) RETURNS TABLE(store_id uuid, name text, runs integer, failed_runs integer, cost_micro_usd bigint)
