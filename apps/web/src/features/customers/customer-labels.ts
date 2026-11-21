@@ -14,6 +14,7 @@ export const channelLabels = {
   sms: 'SMS',
   messenger: 'Messenger',
   instagram: 'Instagram',
+  email: 'Email',
 } as const;
 
 // The API sends a masked phone to members without See full phone numbers; show it as sent.

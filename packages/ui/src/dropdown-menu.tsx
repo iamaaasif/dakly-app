@@ -1,5 +1,6 @@
 'use client';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { Check } from 'lucide-react';
 import type { ComponentProps } from 'react';
 
 import { cn } from './cn';
@@ -52,5 +53,38 @@ export function DropdownMenuSeparator({ className, ...props }: DropdownMenuSepar
       {...props}
       className={cn('-mx-1 my-1 h-px bg-border', className)}
     />
+  );
+}
+
+export type DropdownMenuCheckboxItemProps = ComponentProps<
+  typeof DropdownMenuPrimitive.CheckboxItem
+>;
+
+// The menu stays open after a choice, so several can be changed in one visit.
+export function DropdownMenuCheckboxItem({
+  className,
+  children,
+  onSelect,
+  ...props
+}: DropdownMenuCheckboxItemProps) {
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      {...props}
+      onSelect={(event) => {
+        event.preventDefault();
+        onSelect?.(event);
+      }}
+      className={cn(
+        'flex min-h-10 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm outline-none select-none data-[highlighted]:bg-primary-soft',
+        className,
+      )}
+    >
+      <span className="flex size-4 shrink-0 items-center justify-center rounded-sm border border-input-border bg-surface text-on-primary [[data-state=checked]_&]:border-primary [[data-state=checked]_&]:bg-primary">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <Check aria-hidden="true" size={12} strokeWidth={2.5} />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.CheckboxItem>
   );
 }
