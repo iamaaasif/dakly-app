@@ -26,6 +26,7 @@ const draft: CampaignResponse = {
   includeSegmentIds: [],
   excludeSegmentIds: [],
   scheduledFor: null,
+  source: null,
   status: 'draft',
   approval: null,
   approvalFailureCode: null,
