@@ -2644,6 +2644,32 @@ fixture('PATCH /setup-checklist', async () => {
   expect(reopened.json().hidden).toBe(false);
 });
 
+fixture('GET /audit-log', async () => {
+  const { a, b } = await pair();
+  const insert = (storeId: string, action: string) =>
+    f.admin.pool.query(
+      "insert into audit_log(id,store_id,actor_type,action,entity_type,entity_id) values (gen_random_uuid(),$1,'system',$2,'store',$1)",
+      [storeId, action],
+    );
+  await insert(a.id, 'store.settings_changed');
+  await insert(a.id, 'store.extensions_changed');
+  await insert(b.id, 'store.foreign_change');
+  const page = await success(a, 'GET', '/audit-log?limit=1', 200);
+  expect(page.json().items).toHaveLength(1);
+  expect(page.json().nextCursor).toBe(page.json().items[0].id);
+  const rest = await success(a, 'GET', `/audit-log?before=${page.json().nextCursor}`, 200);
+  const actions = [...page.json().items, ...rest.json().items].map(
+    ({ action }: { action: string }) => action,
+  );
+  expect(actions).not.toContain('store.foreign_change');
+  expect(actions).toEqual(expect.arrayContaining(['store.settings_changed']));
+  const staff = await f.request(a.member, 'GET', '/audit-log');
+  expect(staff.statusCode, staff.body).toBe(403);
+  expect(staff.json().error.code).toBe('AUDIT_LOG_DENIED');
+  expect((await f.request(a.owner, 'GET', '/audit-log?limit=0')).statusCode).toBe(400);
+  expect((await f.request(a.owner, 'GET', `/audit-log?storeId=${b.id}`)).statusCode).toBe(400);
+});
+
 fixture('GET /dashboard', async () => {
   const { a, b } = await pair();
   const reports = app.get(AnalyticsService);

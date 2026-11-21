@@ -773,7 +773,9 @@ together; history contains no token, subject or email. All successful paths use
 TOTP checks. Enabled TOTP returns a challenge and postpones sign-in and linking until the second factor passes.
 
 Without an eligible existing account, the response is 202
-`{ status: 'signup_required', signupTicket }`, without a session. Request a normal
+`{ status: 'signup_required', signupTicket, email }`, without a session. The web form
+shows `email` as the account email and asks only for name, mobile and consent, with no
+password; the person can add one later in Settings. Request a normal
 `sign_up` phone code, then include `signupTicket` in `POST /auth/code/verify`.
 Only after mobile proof succeeds is the ticket consumed and its server-held subject
 and verified email used for signup. The optional registration email cannot replace
@@ -964,7 +966,9 @@ The public `/sign-in` screen supports phone or email with a password or a code,
 Keep me signed in, Google identity, and the required authenticator or backup-code
 step. `/forgot-password` requests a reset code and confirms the new password;
 accounts with two-step verification finish that step before receiving a session.
-Google email verification and signup tickets stay in component memory.
+Google email verification and signup tickets stay in component memory. Keep me signed in
+is ticked by default, as in the design. `/sign-in` and `/sign-up` send a person with a live
+session to the Dashboard.
 
 `/sign-up` has account and SMS verification steps. `/setup` resumes the verified
 account at business details and plan choice. The final `POST /stores` commits the
@@ -1108,6 +1112,14 @@ Steps follow the table under Setup checklist, with three differences for release
 Each step checks its real condition. "Connect your Facebook Page" needs an active Page connection. "Teach Dakly AI your answers" needs one active knowledge item. "Add your products" needs a product the AI can show in chats. "Turn chats into orders" needs an order from Messenger, Instagram or WhatsApp. "Set up WhatsApp and SMS" needs an active WhatsApp connection or an approved SMS sender, because WhatsApp connect (CHN-3) is blocked. "Send your first campaign" needs a campaign that has started sending.
 
 `PATCH /setup-checklist` takes either `{ howYouSell }` or `{ hidden: true }`. New answers replace the saved ones, turn on the extensions from ACC-R5 that are still off (never turning one off), bring a hidden guide back, and return the extensions turned on in `turnedOn` for the toast. `hidden: true` is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can change it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`.
+
+### Owner audit log API (ACC-13, fourth PR)
+
+`GET /audit-log?before=&limit=` lists the shop's audit rows newest first, 50 a page by default and 100 at most; `before` is the last id of the previous page. Only the Owner can read it (`AUDIT_LOG_DENIED`), checked in the service. Each row has the action, entity type and id, the field names that changed, the reason if one was given, the time, and the actor as a kind (user, staff, customer, system or ai), whether it is the caller, and the person's role in the shop. Names are not returned because they belong to accounts, not shops; before and after values never leave the database, only field names.
+
+### Activity log screen (ACC-13, fifth PR)
+
+`/activity` shows the audit API as a list of cards, newest first: the action in plain words, who (You and role, a role, Dakly support, Dakly, Dakly AI or a customer) with the Dhaka time, the changed field names and the reason when there is one. "Older activity" and "Latest activity" move through pages with `before` in the URL. Only the Owner opens it (the same flag as Support access, `canApproveSupport`); others see the no-access note. Settings lists it as "Activity log" for the Owner. There is no design image for this screen, so it reuses the card list of the Security history; evidence is in `docs/design/evidence/acc-13-audit/`. Actions without a plain label show their code as words.
 
 ### Setup banner and card on the Dashboard (ACC-13, second PR)
 

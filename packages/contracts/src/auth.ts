@@ -111,7 +111,7 @@ export const verifyGoogleEmailSchema = z.strictObject({
 export type GoogleSignInInput = z.infer<typeof googleSignInSchema>;
 export type VerifyGoogleEmailInput = z.infer<typeof verifyGoogleEmailSchema>;
 export type GoogleSignInPending =
-  | { status: 'signup_required'; signupTicket: string }
+  | { status: 'signup_required'; signupTicket: string; email: string }
   | { status: 'email_verification_required'; verificationTicket: string };
 
 export type SignInResponse = void | { status: 'totp_required'; challengeId: string };

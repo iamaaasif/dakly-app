@@ -56,7 +56,7 @@ export class DueRemindersService {
     while (seen < REMIND_OVERDUE_LIMIT) {
       const page = await this.balances.listOwing(storeId, {
         overdueBefore: new Date(this.clock.now().getTime() - OVERDUE_DAYS * DAY_MS),
-        onlyOverdue: true,
+        filter: 'over_30_days',
         cursor,
         limit: PAGE_SIZE,
       });

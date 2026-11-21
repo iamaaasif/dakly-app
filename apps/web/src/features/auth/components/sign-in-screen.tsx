@@ -26,7 +26,7 @@ export function SignInScreen({
   onNavigate,
 }: SignInScreenProps) {
   const [pending, setPending] = useState<GoogleSignInResponse>();
-  const [remember, setRemember] = useState(false);
+  const [remember, setRemember] = useState(true);
   const complete = onAuthenticated ?? (() => window.location.replace('/dashboard'));
   const result = (value: GoogleSignInResponse) => (value ? setPending(value) : complete());
   function returnToSignIn() {
@@ -37,7 +37,7 @@ export function SignInScreen({
     return (
       <SignUpScreen
         config={config}
-        signupTicket={pending.signupTicket}
+        google={{ signupTicket: pending.signupTicket, email: pending.email }}
         isRemembered={remember}
         onAuthenticated={onAuthenticated}
         onSignIn={onNavigate ? returnToSignIn : undefined}

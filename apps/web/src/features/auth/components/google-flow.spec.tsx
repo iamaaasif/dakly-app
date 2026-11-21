@@ -67,6 +67,7 @@ describe('Google identity transitions', () => {
             challengeId: 'a'.repeat(43),
             verificationTicket: 'b'.repeat(43),
             signupTicket: 'd'.repeat(43),
+            email: 'rina@example.test',
           },
           { status: 202 },
         );
@@ -77,12 +78,13 @@ describe('Google identity transitions', () => {
         </QueryClientProvider>,
       );
       const user = userEvent.setup();
-      await user.click(screen.getByLabelText('Keep me signed in on this device'));
       await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
       if (status === 'signup_required') {
         await user.type(await screen.findByLabelText('Full name'), 'Rina');
         await user.type(screen.getByLabelText('Mobile number'), '01712345678');
-        await user.type(screen.getByLabelText('Password'), 'password123');
+        expect(screen.queryByLabelText('Password')).toBeNull();
+        expect(screen.queryByLabelText('Email (optional)')).toBeNull();
+        expect(screen.getByText(/Signed in with Google as rina@example.test/)).toBeTruthy();
         await user.click(screen.getByLabelText('I agree to the Terms and Privacy documents.'));
         await user.click(screen.getByRole('button', { name: 'Send verification code' }));
         await user.type(await screen.findByLabelText('Verification code'), '123456');
@@ -90,6 +92,7 @@ describe('Google identity transitions', () => {
         await screen.findByLabelText('Authenticator or backup code');
         expect(sent.at(-1)?.input.isRemembered).toBe(true);
         expect(sent.at(-1)?.input.signupTicket).toBe('d'.repeat(43));
+        expect(sent.at(-1)?.input.password).toBeUndefined();
       } else {
         if (status === 'email_verification_required') {
           await user.type(await screen.findByLabelText('Email verification code'), '123456');

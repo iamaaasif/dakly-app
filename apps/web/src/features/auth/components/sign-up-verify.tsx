@@ -13,7 +13,7 @@ export function SignUpVerify({
   onBack,
   onAuthenticated,
 }: {
-  account: { registration: SignUpInput; password: string };
+  account: { registration: SignUpInput; password?: string };
   signupTicket?: string;
   isRemembered: boolean;
   onBack: () => void;

@@ -116,7 +116,7 @@ export class GoogleService {
         request,
       );
     const signupTicket = await this.tickets.issue({ purpose: 'signup', identity });
-    return { status: 'signup_required', signupTicket };
+    return { status: 'signup_required', signupTicket, email: identity.email };
   }
 
   private emailSubject(ticket: string, grant: GoogleGrant) {

@@ -1,11 +1,13 @@
 'use client';
 import { Sparkles } from 'lucide-react';
 
+import type { AiFeedbackQuery } from '@dakly/contracts/ai-feedback';
 import { Sheet } from '@dakly/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { agentTabs, type AgentTab } from '../agent-tabs';
 import { AgentSettingsTab } from './agent-settings-tab';
+import { FeedbackTab } from './feedback-tab';
 import { GoLivePanel } from './go-live-panel';
 import { KnowledgeTab } from './knowledge-tab';
 import { TestAgentTab } from './test-agent-tab';
@@ -14,16 +16,25 @@ import { useSessionContext } from '@/lib/session-context';
 const tabLabels: Record<AgentTab, string> = {
   settings: 'Settings',
   knowledge: 'Knowledge',
+  feedback: 'Feedback',
   test: 'Test the agent',
 };
 
 type AiAgentDrawerProps = {
   tab: AgentTab | undefined;
+  feedbackFilter: AiFeedbackQuery['filter'] | undefined;
+  onFeedbackFilterChange: (filter: AiFeedbackQuery['filter']) => void;
   onTabChange: (tab: AgentTab) => void;
   onClose: () => void;
 };
 
-export function AiAgentDrawer({ tab, onTabChange, onClose }: AiAgentDrawerProps) {
+export function AiAgentDrawer({
+  tab,
+  feedbackFilter,
+  onFeedbackFilterChange,
+  onTabChange,
+  onClose,
+}: AiAgentDrawerProps) {
   const { data } = useSessionContext();
   const canEdit = Boolean(data?.currentStore?.canEditStoreSettings);
   return (
@@ -53,6 +64,9 @@ export function AiAgentDrawer({ tab, onTabChange, onClose }: AiAgentDrawerProps)
         </TabsContent>
         <TabsContent value="knowledge">
           <KnowledgeTab canEdit={canEdit} />
+        </TabsContent>
+        <TabsContent value="feedback">
+          <FeedbackTab filter={feedbackFilter ?? 'bad'} onFilterChange={onFeedbackFilterChange} />
         </TabsContent>
         <TabsContent value="test">
           <TestAgentTab canEdit={canEdit} />

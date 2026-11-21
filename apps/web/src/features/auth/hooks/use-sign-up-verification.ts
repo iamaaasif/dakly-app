@@ -10,7 +10,7 @@ import { useVerifyCode } from '../api/verify-code';
 import { formError } from '@/lib/form-error';
 
 export function useSignUpVerification(
-  account: { registration: SignUpInput; password: string },
+  account: { registration: SignUpInput; password?: string },
   signupTicket: string | undefined,
   options: { isRemembered: boolean; onAuthenticated?: () => void },
 ) {
