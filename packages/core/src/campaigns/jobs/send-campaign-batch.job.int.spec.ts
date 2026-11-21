@@ -7,6 +7,7 @@ import { DiscoveryModule, NestFactory } from '@nestjs/core';
 import type { Queue } from 'bullmq';
 import { describe, expect, it, vi } from 'vitest';
 
+import { BillingService } from '../../billing/billing.service';
 import { KillSwitchesService } from '../../kill-switches/kill-switches.service';
 import { loadEnv } from '../../platform/config/env';
 import { ErrorReporter } from '../../platform/logging/error-reporter';
@@ -35,6 +36,7 @@ async function openQueue(
       CampaignJobDispatcher,
       SendCampaignBatchJob,
       { provide: CampaignBatchService, useValue: { sendStoreBatch } },
+      { provide: BillingService, useValue: { deferIfReadOnly: async () => undefined } },
       { provide: KillSwitchesService, useValue: { deferIfPaused: async () => undefined } },
       { provide: ErrorReporter, useValue: new ErrorReporter(undefined) },
     ],

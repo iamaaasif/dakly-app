@@ -3,6 +3,7 @@ import { Inject } from '@nestjs/common';
 import type { JobsOptions, Queue } from 'bullmq';
 import { z } from 'zod';
 
+import { BillingService } from '../../billing/billing.service';
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
 import type { RunClaim } from '../automation-runs.repository';
@@ -43,11 +44,14 @@ export class ContinueAutomationRunJob implements JobHandler {
   constructor(
     @Inject(AutomationRunsService) private readonly runs: AutomationRunsService,
     @InjectQueue(QUEUES.workflow) private readonly queue: Queue,
+    @Inject(BillingService) private readonly billing: BillingService,
   ) {}
 
   // A run that goes straight on queues its next step here, after the step committed.
   async handle(data: unknown) {
     const { storeId, automationRunId, stepKey, claimedAt } = payload.parse(data);
+    // The step keeps its claim; the sweep offers it again once the plan is paid.
+    if (await this.billing.isReadOnly(storeId)) return;
     const claim = { runId: automationRunId, stepKey, claimedAt: new Date(claimedAt) };
     const next = await this.runs.continueRun(storeId, claim, { kind: 'system' });
     if (!next) return;

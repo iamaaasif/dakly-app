@@ -1,0 +1,2 @@
+ALTER TABLE "conversations" DROP CONSTRAINT "conversations_handover_reason";--> statement-breakpoint
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_handover_reason" CHECK ("conversations"."handover_reason" in ('asked_for_person', 'complaint', 'refund', 'discount', 'angry', 'out_of_scope', 'ready_to_buy', 'ai_unavailable', 'allowance_used', 'ai_paused', 'store_read_only', 'other'));

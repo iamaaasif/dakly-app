@@ -15,6 +15,7 @@ import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-drive
 import { type SmsMessage, SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
 import { runApprovalJob } from '../../test/approve-campaign';
+import { BillingModule } from '../billing/billing.module';
 import { KillSwitchesModule } from '../kill-switches/kill-switches.module';
 import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
@@ -45,6 +46,7 @@ Module({
   imports: [
     DatabaseModule,
     CampaignsModule.forWorker(),
+    BillingModule,
     KillSwitchesModule,
     BullModule.registerQueue({ name: QUEUES.campaign }),
     BullModule.forRoot({
