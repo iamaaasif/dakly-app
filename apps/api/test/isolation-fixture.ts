@@ -225,6 +225,7 @@ export class IsolationFixture {
       'messages',
       'conversations',
       'posts',
+      'due_messages',
       'due_entries',
       'contact_identities',
       'meta_page_subscriptions',

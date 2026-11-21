@@ -7,7 +7,7 @@ import { FormField } from '@/components/form-field';
 import { initialsOf } from '@/lib/initials';
 
 type StoreField = {
-  name: Exclude<keyof ChangeStoreSettingsInput, 'sending' | 'stock'>;
+  name: Exclude<keyof ChangeStoreSettingsInput, 'sending' | 'stock' | 'dueBook'>;
   label: string;
   type?: 'text' | 'email' | 'tel';
   wide?: boolean;

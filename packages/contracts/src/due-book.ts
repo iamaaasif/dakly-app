@@ -93,3 +93,34 @@ export type DueSummaryResponse = {
   overdueCustomers: number;
   collectedLast7DaysPoisha: number;
 };
+
+export const dueMessageKinds = ['baki_notice', 'reminder'] as const;
+export const dueMessageStatuses = ['queued', 'sending', 'sent', 'skipped', 'failed'] as const;
+// Why a message was not sent. `no_credits` is the shop's SMS balance being too low.
+export const dueMessageSkipReasons = [
+  'not_owing',
+  'outside_hours',
+  'no_address',
+  'blocked',
+  'no_credits',
+] as const;
+
+export type DueMessageKind = (typeof dueMessageKinds)[number];
+export type DueMessageStatus = (typeof dueMessageStatuses)[number];
+export type DueMessageSkipReason = (typeof dueMessageSkipReasons)[number];
+
+// Feature 13 rule 4 (SHOP-R4): a customer gets at most one reminder in this many days, and
+// only between these local hours.
+export const REMINDER_INTERVAL_DAYS = 7;
+export const REMINDER_FIRST_HOUR = 9;
+export const REMINDER_LAST_HOUR = 20;
+
+export type RemindResponse = { messageId: string };
+
+// Customers left out of "Remind all over 30 days", by reason, so the dialog can say why.
+export type RemindOverdueResponse = {
+  queued: number;
+  skippedRecentlyReminded: number;
+  skippedNoPhone: number;
+  skippedBlocked: number;
+};

@@ -52,6 +52,16 @@ export class DueEntriesRepository {
     return rows[0]!;
   }
 
+  async findById(storeId: string, id: string): Promise<DueEntry | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select(dueEntryColumns)
+        .from(dueEntries)
+        .where(and(eq(dueEntries.storeId, storeId), eq(dueEntries.id, id))),
+    );
+    return row;
+  }
+
   // Newest first. The running balance is each row's effect added up over every earlier row, so it
   // is computed before the cursor and the limit cut the list.
   history(

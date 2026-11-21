@@ -124,11 +124,11 @@ atomically and retain business data when an extension is disabled.
 
 ## Due book (13)
 
-| Route                                                                                                                                  | Permission                                                     |
-| -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `GET /due-book/summary`, `GET /due-book/customers`, `GET /due-book/customers/:contactId`, `GET /due-book/customers/:contactId/entries` | `dueBook.view` (phones masked unless "See full phone numbers") |
-| `POST /due-book/customers/:contactId/baki`, `POST /due-book/customers/:contactId/payments`                                             | `dueBook.edit`                                                 |
-| `POST /due-book/customers/:contactId/write-offs`                                                                                       | `dueBook.edit`, and the role must be Owner or Admin            |
+| Route                                                                                                                                                                           | Permission                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `GET /due-book/summary`, `GET /due-book/customers`, `GET /due-book/customers/:contactId`, `GET /due-book/customers/:contactId/entries`                                          | `dueBook.view` (phones masked unless "See full phone numbers") |
+| `POST /due-book/customers/:contactId/baki`, `POST /due-book/customers/:contactId/payments`, `POST /due-book/customers/:contactId/reminders`, `POST /due-book/reminders/overdue` | `dueBook.edit`                                                 |
+| `POST /due-book/customers/:contactId/write-offs`                                                                                                                                | `dueBook.edit`, and the role must be Owner or Admin            |
 
 ## Chats and AI agent (04)
 
