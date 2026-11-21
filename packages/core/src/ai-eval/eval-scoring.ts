@@ -2,6 +2,9 @@ import type { EvalOutcome, GoldenCase } from './golden-case';
 
 // Rules from docs/rules/ai-and-llm.md: no wrong price, and at least 90% correct hand-overs.
 export const MIN_HANDOVER_ACCURACY = 0.9;
+// Cases that ask for a product must name it or an in-stock alternative; an offer of an item with no
+// stock must never happen (docs/tasks.md AI-13).
+export const MIN_PRODUCT_RECALL = 0.9;
 
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
 const amountPatterns = [
@@ -16,6 +19,11 @@ export type EvalReport = {
   handoverCorrect: number;
   // Answered when a person should have taken over, or the wrong reason.
   missedHandoverCaseIds: string[];
+  productCases: number;
+  productFound: number;
+  // Answered without naming the product or an alternative the case expects.
+  missedProductCaseIds: string[];
+  outOfStockOfferCaseIds: string[];
   // Handed over when the AI should have answered. Reported, not gated.
   unneededHandoverCaseIds: string[];
   passed: boolean;
@@ -43,8 +51,22 @@ export function scoreEval(
   );
   const handoverCases = scored.filter(({ golden }) => golden.expectedHandover !== null).length;
   const handoverCorrect = handoverCases - missedHandoverCaseIds.length;
+  const productCases = scored.filter(({ golden }) => golden.mentionsAnyOf).length;
+  const missedProductCaseIds = ids(
+    ({ golden, outcome }) =>
+      golden.mentionsAnyOf !== undefined &&
+      !(outcome.kind === 'reply' && mentionsAny(outcome.text, golden.mentionsAnyOf)),
+  );
+  const outOfStockOfferCaseIds = ids(
+    ({ golden, outcome }) =>
+      outcome.kind === 'reply' && mentionsAny(outcome.text, golden.neverOffer ?? []),
+  );
   return {
     total: cases.length,
+    productCases,
+    productFound: productCases - missedProductCaseIds.length,
+    missedProductCaseIds,
+    outOfStockOfferCaseIds,
     wrongPriceCaseIds,
     handoverCases,
     handoverCorrect,
@@ -54,6 +76,9 @@ export function scoreEval(
     ),
     passed:
       wrongPriceCaseIds.length === 0 &&
+      outOfStockOfferCaseIds.length === 0 &&
+      (productCases === 0 ||
+        (productCases - missedProductCaseIds.length) / productCases >= MIN_PRODUCT_RECALL) &&
       (handoverCases === 0 || handoverCorrect / handoverCases >= MIN_HANDOVER_ACCURACY),
   };
 }
@@ -63,4 +88,21 @@ function hasWrongPrice(reply: string, allowed: readonly number[]) {
   return amountPatterns
     .flatMap((pattern) => [...text.matchAll(pattern)])
     .some((match) => !allowed.includes(Number((match[1] ?? '').replaceAll(',', ''))));
+}
+
+// A Latin term must be a whole word, so the size "M" is not found in "Medium". A Bangla term may
+// carry a suffix ("কুর্তির", "কুর্তিটা"), so it matches as text.
+function mentionsAny(reply: string, terms: readonly string[]) {
+  return terms.some((term) =>
+    /^[\x20-\x7e]+$/.test(term)
+      ? new RegExp(
+          `(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(term)}(?![\\p{L}\\p{M}\\p{N}])`,
+          'iu',
+        ).test(reply)
+      : reply.includes(term),
+  );
+}
+
+function escapeRegExp(text: string) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
