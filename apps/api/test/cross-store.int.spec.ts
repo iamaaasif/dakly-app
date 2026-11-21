@@ -1047,7 +1047,7 @@ fixture('POST /knowledge-items', async () => {
 fixture('POST /knowledge-items/uploads', async () => {
   const { a, b } = await pair();
   const url = '/knowledge-items/uploads';
-  const metadata = { contentType: 'text/plain', sizeBytes: 40 };
+  const metadata = { fileName: 'Return policy.txt', contentType: 'text/plain', sizeBytes: 40 };
   const foreign = (await success(a, 'POST', url, 201, metadata)).json();
   const before = await f.row('files', foreign.fileId);
 
@@ -1065,6 +1065,7 @@ fixture('POST /knowledge-items/uploads', async () => {
     store_id: b.id,
     object_key: objectKey,
     purpose: 'knowledge_file',
+    file_name: 'Return policy.txt',
     status: 'pending',
   });
   await success(b, 'POST', '/knowledge-items', 201, { kind: 'file', fileId });
@@ -1163,6 +1164,21 @@ fixture('GET /ai-agent/settings', async () => {
     isAutoReplyOn: false,
   });
 });
+fixture('GET /ai-agent/knowledge-summary', async () => {
+  const { a, b } = await pair();
+  await orderVariant(a);
+  await deliveryZone(a);
+  const extraRules = 'No exchange on sale items.';
+  await success(a, 'PUT', '/ai-agent/settings', 200, { ...settingsBody(0, 'bn'), extraRules });
+  expect((await success(a, 'GET', '/ai-agent/knowledge-summary', 200)).json()).toEqual({
+    productsCount: 1,
+    storeRulesCount: 2,
+  });
+  expect((await success(b, 'GET', '/ai-agent/knowledge-summary', 200)).json()).toEqual({
+    productsCount: 0,
+    storeRulesCount: 0,
+  });
+});
 fixture('PUT /ai-agent/test-questions', async () => {
   const { a, b } = await pair();
   const url = '/ai-agent/test-questions';
@@ -1243,6 +1259,7 @@ fixture('POST /ai-agent/test', async () => {
   expect((await success(a, 'POST', url, 200, { question: 'hello' })).json()).toEqual({
     kind: 'reply',
     text: 'Ji bolun',
+    source: { kind: 'general' },
   });
   respond.mockRestore();
   for (const shop of [a, b])
@@ -3594,6 +3611,99 @@ fixture('GET /conversations', async () => {
   await hidden(b, 'PATCH', url, removed, () => ({ status: 'later' }));
   await hidden(b, 'POST', (id) => `${url(id)}/take-over`, removed);
   await hidden(b, 'POST', (id) => `${url(id)}/return-to-ai`, removed);
+});
+
+async function seedAiReply(shop: Shop) {
+  const conversationId = await seedConversation(shop);
+  const identityId = randomUUID();
+  await f.admin.pool.query(
+    `insert into contact_identities(id,store_id,contact_id,channel_connection_id,channel,external_id)
+     select $1::uuid,store_id,contact_id,channel_connection_id,channel,$1::text
+     from conversations where store_id=$2 and id=$3`,
+    [identityId, shop.id, conversationId],
+  );
+  const replyId = randomUUID();
+  await f.admin.pool.query(
+    `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at,sender_identity_id)
+     values(gen_random_uuid(),$1,$2,'in','customer','text','Kurti M size ache?','received','2026-11-18T10:00:00Z',$4),
+     ($3,$1,$2,'out','ai','text','Ji, M size ache.','sent','2026-11-18T10:00:05Z',null)`,
+    [shop.id, conversationId, replyId, identityId],
+  );
+  return replyId;
+}
+
+fixture('PUT /ai-replies/:messageId/rating', async () => {
+  const { a, b } = await pair();
+  const foreign = await seedAiReply(a);
+  const own = await seedAiReply(b);
+  const url = (id: string) => `/ai-replies/${id}/rating`;
+  expect((await f.request(b.owner, 'PUT', url(own), { rating: 'good' })).statusCode).toBe(403);
+  await enableChats(b);
+  await hidden(b, 'PUT', url, foreign, () => ({ rating: 'good' }));
+  const { rows: customerMessages } = await f.admin.pool.query(
+    `select id from messages where store_id = $1 and author_type = 'customer' and conversation_id = (select conversation_id from messages where id = $2)`,
+    [b.id, own],
+  );
+  // Only the agent's own replies can be rated, not what the customer wrote.
+  await success(b, 'PUT', url(customerMessages[0].id), 404, { rating: 'good' });
+  await success(b, 'PUT', url(own), 400, { rating: 'bad' });
+  await success(b, 'PUT', url(own), 400, { rating: 'good', reason: 'too_long' });
+  await success(b, 'PUT', url(own), 400, { rating: 'good', storeId: a.id });
+  await success(b, 'PUT', url(own), 204, { rating: 'bad', reason: 'wrong_price_or_stock' });
+  expect(await f.row('messages', own)).toMatchObject({
+    ai_rating: 'bad',
+    ai_rating_reason: 'wrong_price_or_stock',
+    rated_by_user_id: b.owner.id,
+  });
+  expect(await f.row('messages', foreign)).toMatchObject({ ai_rating: null });
+  await success(b, 'PUT', url(own), 204, { rating: 'good' });
+  expect(await f.row('messages', own)).toMatchObject({ ai_rating: 'good', ai_rating_reason: null });
+  const { rows } = await f.admin.pool.query(
+    'select action, actor_user_id, "after" from audit_log where store_id = $1 and entity_id = $2 and action = \'ai_reply.rated\' order by created_at',
+    [b.id, own],
+  );
+  expect(rows.map((row) => row.after)).toEqual([{ state: 'bad' }, { state: 'good' }]);
+});
+
+fixture('GET /ai-replies/feedback', async () => {
+  const { a, b } = await pair();
+  const foreign = await seedAiReply(a);
+  const own = await seedAiReply(b);
+  const praised = await seedAiReply(b);
+  expect((await f.request(b.owner, 'GET', '/ai-replies/feedback')).statusCode).toBe(403);
+  await enableChats(a);
+  await enableChats(b);
+  await success(a, 'PUT', `/ai-replies/${foreign}/rating`, 204, { rating: 'good' });
+  await success(b, 'PUT', `/ai-replies/${own}/rating`, 204, {
+    rating: 'bad',
+    reason: 'missed_the_question',
+  });
+  await success(b, 'PUT', `/ai-replies/${praised}/rating`, 204, { rating: 'good' });
+  await success(b, 'GET', '/ai-replies/feedback?filter=other', 400);
+  const result = await success(b, 'GET', '/ai-replies/feedback', 200);
+  expect(result.json()).toEqual({
+    summary: {
+      helpfulPercent: 50,
+      goodCount: 1,
+      badCount: 1,
+      commonProblems: [{ reason: 'missed_the_question', count: 1 }],
+    },
+    items: [
+      {
+        messageId: own,
+        rating: 'bad',
+        reason: 'missed_the_question',
+        customerName: expect.any(String),
+        customerQuestion: 'Kurti M size ache?',
+        replyText: 'Ji, M size ache.',
+        ratedAt: expect.any(String),
+      },
+    ],
+  });
+  const good = (await success(b, 'GET', '/ai-replies/feedback?filter=good', 200)).json();
+  expect(good.items.map((item: { messageId: string }) => item.messageId)).toEqual([praised]);
+  const all = (await success(b, 'GET', '/ai-replies/feedback?filter=all', 200)).json();
+  expect(all.items).toHaveLength(2);
 });
 
 fixture('GET /conversations/:conversationId', async () => {

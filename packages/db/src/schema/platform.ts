@@ -183,6 +183,8 @@ export const files = pgTable(
     storeId: uuid('store_id').references(() => stores.id),
     purpose: text('purpose', { enum: filePurposes }).notNull(),
     objectKey: text('object_key').notNull(),
+    // The name the person chose the file under, shown in lists; the object key is never shown.
+    fileName: text('file_name'),
     contentType: text('content_type').notNull(),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
     sha256: bytea('sha256'),

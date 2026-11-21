@@ -126,9 +126,11 @@ export class SalesAgentToolsService {
     };
   }
 
-  private async searchKnowledge({ storeId }: ToolScope, raw: unknown) {
+  private async searchKnowledge({ storeId, chat }: ToolScope, raw: unknown) {
     const { question } = searchKnowledgeTool.input.parse(raw);
     const hits = await this.knowledge.search(storeId, question, KNOWLEDGE_LIMIT);
+    // Only a real chat counts as a use; a practice question would inflate the number on the screen.
+    if (chat) await this.knowledge.recordUse(storeId, [...new Set(hits.map((hit) => hit.itemId))]);
     return { passages: hits.map(({ itemId, content }) => ({ itemId, content })) };
   }
 

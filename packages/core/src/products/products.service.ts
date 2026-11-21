@@ -137,6 +137,10 @@ export class ProductsService {
     return this.repository.hasForChat(storeId);
   }
 
+  countForChat(storeId: string): Promise<number> {
+    return this.repository.countForChat(storeId);
+  }
+
   async getForChat(storeId: string, id: string): Promise<ChatProduct> {
     const product = await this.repository.findForChat(storeId, id);
     if (!product) throw productError('PRODUCT_NOT_FOUND');

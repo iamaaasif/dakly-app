@@ -5,6 +5,7 @@ import {
   knowledgeUploadSchema,
   type KnowledgeItemListResponse,
   type KnowledgeItemResponse,
+  type KnowledgeSummaryResponse,
   type KnowledgeUploadResponse,
 } from '@dakly/contracts/knowledge';
 
@@ -26,25 +27,38 @@ export function useKnowledgeItems() {
   });
 }
 
+export function useKnowledgeSummary() {
+  const { request, contextTag } = useStoreRequest();
+  return useQuery({
+    queryKey: aiAgentKeys.knowledgeSummary(contextTag),
+    enabled: Boolean(contextTag),
+    retry: false,
+    queryFn: ({ signal }) =>
+      request<KnowledgeSummaryResponse>('/ai-agent/knowledge-summary', { signal }),
+  });
+}
+
 function useRefreshKnowledge() {
   const { contextTag } = useStoreRequest();
   const client = useQueryClient();
   return () => client.invalidateQueries({ queryKey: aiAgentKeys.knowledge(contextTag) });
 }
 
+type KnowledgeAnswerFields = { question: string; answer: string; keywords: string[] };
+
 export function useSaveKnowledgeAnswer() {
   const { request } = useStoreRequest();
   const refresh = useRefreshKnowledge();
   return useMutation({
-    mutationFn: ({ id, answer }: { id: string | null; answer: string }) =>
+    mutationFn: ({ id, ...fields }: KnowledgeAnswerFields & { id: string | null }) =>
       id
         ? request<KnowledgeItemResponse>(`/knowledge-items/${id}`, {
             method: 'PATCH',
-            body: { answer },
+            body: fields,
           })
         : request<KnowledgeItemResponse>('/knowledge-items', {
             method: 'POST',
-            body: { kind: 'policy', answer },
+            body: { kind: 'policy', ...fields },
           }),
     onSuccess: refresh,
   });
@@ -66,6 +80,7 @@ export function useUploadKnowledgeFile() {
     gcTime: 0,
     mutationFn: async (file: File) => {
       const parsed = knowledgeUploadSchema.safeParse({
+        fileName: file.name,
         contentType: file.type,
         sizeBytes: file.size,
       });
