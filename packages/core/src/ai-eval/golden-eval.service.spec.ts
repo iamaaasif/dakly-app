@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StaffAlertsService } from '../admin/staff-alerts.service';
 import type { AiPracticeService } from '../ai-agent/ai-practice.service';
 import { GoldenEvalService } from './golden-eval.service';
-import { sampleGoldenCases, sampleRecordedOutcomes } from './golden-set.sample';
+import { activeGoldenCases, allRecordedOutcomes } from './golden-set.sample';
 
 const env = vi.hoisted(() => ({ AI_EVAL_STORE_ID: undefined as string | undefined }));
 vi.mock('../platform/config/env', () => ({ loadEnv: () => env }));
 
-const answerFrom = (outcomes: typeof sampleRecordedOutcomes) => {
+const answerFrom = (outcomes: typeof allRecordedOutcomes) => {
   const ask = vi.fn(async (_storeId: string, question: string) => {
-    const golden = sampleGoldenCases.find((item) => item.question === question)!;
+    const golden = activeGoldenCases.find((item) => item.question === question)!;
     return outcomes[golden.id]!;
   });
   return { ask } as unknown as AiPracticeService;
@@ -27,20 +27,20 @@ describe('GoldenEvalService.runNightly', () => {
 
   it('does nothing without an eval shop', async () => {
     env.AI_EVAL_STORE_ID = undefined;
-    const service = new GoldenEvalService(answerFrom(sampleRecordedOutcomes), alerts);
+    const service = new GoldenEvalService(answerFrom(allRecordedOutcomes), alerts);
     await expect(service.runNightly()).resolves.toBeUndefined();
     expect(notify).not.toHaveBeenCalled();
   });
 
   it('returns a passing report without an alert', async () => {
-    const service = new GoldenEvalService(answerFrom(sampleRecordedOutcomes), alerts);
+    const service = new GoldenEvalService(answerFrom(allRecordedOutcomes), alerts);
     await expect(service.runNightly()).resolves.toMatchObject({ passed: true });
     expect(notify).not.toHaveBeenCalled();
   });
 
   it('alerts staff and returns normally when a price is wrong', async () => {
     const service = new GoldenEvalService(
-      answerFrom({ ...sampleRecordedOutcomes, 'price-bn': { kind: 'reply', text: '৳999' } }),
+      answerFrom({ ...allRecordedOutcomes, 'price-bn': { kind: 'reply', text: '৳999' } }),
       alerts,
     );
     await expect(service.runNightly()).resolves.toMatchObject({ passed: false });
@@ -51,7 +51,7 @@ describe('GoldenEvalService.runNightly', () => {
   it('still returns normally when the alert cannot be sent', async () => {
     notify.mockRejectedValue(new Error('slack down'));
     const service = new GoldenEvalService(
-      answerFrom({ ...sampleRecordedOutcomes, 'price-bn': { kind: 'reply', text: '৳999' } }),
+      answerFrom({ ...allRecordedOutcomes, 'price-bn': { kind: 'reply', text: '৳999' } }),
       alerts,
     );
     await expect(service.runNightly()).resolves.toMatchObject({ passed: false });
