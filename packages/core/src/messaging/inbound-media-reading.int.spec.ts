@@ -30,6 +30,7 @@ Module({
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const fixtures: string[] = [];
+const plans: string[] = [];
 const sentAt = new Date('2026-11-19T03:00:00Z');
 const usage = { inputTokens: 900, cachedInputTokens: 0, outputTokens: 60 };
 const reading = {
@@ -78,6 +79,8 @@ afterAll(async () => {
     await app?.close();
     for (const table of [
       'ai_runs',
+      'usage_events',
+      'subscriptions',
       'outbox_events',
       'messages',
       'conversations',
@@ -87,6 +90,7 @@ afterAll(async () => {
     ])
       await admin.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [fixtures]);
     await admin.pool.query('delete from stores where id = any($1::uuid[])', [fixtures]);
+    await admin.pool.query('delete from plans where id = any($1::uuid[])', [plans]);
   } finally {
     await admin.pool.end();
     vi.restoreAllMocks();
@@ -95,8 +99,9 @@ afterAll(async () => {
   }
 });
 
-async function shop() {
+async function shop(allowance = 100) {
   const storeId = randomUUID();
+  const planId = randomUUID();
   const connectionId = randomUUID();
   await admin.pool.query('insert into stores (id, name, extensions) values ($1, $2, $3)', [
     storeId,
@@ -104,6 +109,15 @@ async function shop() {
     [],
   ]);
   fixtures.push(storeId);
+  plans.push(planId);
+  await admin.pool.query(
+    "insert into plans (id, code, name, monthly_price_poisha, yearly_price_poisha, limits, is_public) values ($1::uuid, $1::text, 'Media fixture', 0, 0, $2, false)",
+    [planId, { ai_conversation: allowance }],
+  );
+  await admin.pool.query(
+    "insert into subscriptions (id, store_id, plan_id, status, current_period_price_poisha, current_period_start, current_period_end) values (gen_random_uuid(), $1, $2, 'active', 0, now(), now() + interval '1 month')",
+    [storeId, planId],
+  );
   const secret = app
     .get(EnvelopeEncryption)
     .encrypt(
@@ -180,6 +194,14 @@ async function aiRuns(storeId: string) {
 const downloaded = (contentType: string) =>
   ({ kind: 'downloaded', bytes: new Uint8Array([1, 2, 3]), contentType }) as const;
 
+async function usageRows(storeId: string) {
+  const { rows } = await admin.pool.query(
+    'select unit, quantity from usage_events where store_id = $1',
+    [storeId],
+  );
+  return rows;
+}
+
 it('describes a customer photo for a product search and reads it only once', async () => {
   const shopA = await shop();
   const id = await receive(shopA, 'এইটা আছে?', photo);
@@ -207,6 +229,7 @@ it('describes a customer photo for a product search and reads it only once', asy
   expect(await aiRuns(shopA.storeId)).toEqual([
     { tier: 'vision', purpose: 'describe_image', outcome: 'completed' },
   ]);
+  expect(await usageRows(shopA.storeId)).toEqual([{ unit: 'ai_conversation', quantity: 1 }]);
 });
 
 it('labels a payment screenshot and keeps the transaction id it shows', async () => {
@@ -253,6 +276,34 @@ it('transcribes a Banglish voice note onto the message', async () => {
   expect(await aiRuns(shopA.storeId)).toEqual([
     { tier: 'transcribe', purpose: 'transcribe', outcome: 'completed' },
   ]);
+  expect(await usageRows(shopA.storeId)).toEqual([{ unit: 'ai_conversation', quantity: 1 }]);
+});
+
+it('does not read or bill a voice note when the allowance is used up', async () => {
+  const shopA = await shop(0);
+  const id = await receive(shopA, null, voice);
+  download.mockResolvedValue(downloaded('audio/ogg'));
+
+  await run(shopA.storeId, id);
+
+  expect(transcribe).not.toHaveBeenCalled();
+  expect(await messageRow(id)).toMatchObject({
+    media_text: null,
+    attachments: [{ read: 'failed' }],
+  });
+  expect(await usageRows(shopA.storeId)).toEqual([]);
+});
+
+it('bills nothing when the model fails', async () => {
+  const shopA = await shop();
+  const id = await receive(shopA, null, voice);
+  download.mockResolvedValue(downloaded('audio/ogg'));
+  transcribe.mockRejectedValue(new LlmError('LLM_REQUEST_FAILED'));
+
+  await run(shopA.storeId, id, true);
+
+  expect(await usageRows(shopA.storeId)).toEqual([]);
+  await app.get(ValkeyClient).connection.del(`${loadEnv().QUEUE_PREFIX}:{ai}:errors`);
 });
 
 it('retries after a model outage, then gives up on the last attempt', async () => {
