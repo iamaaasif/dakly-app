@@ -523,4 +523,4 @@ These are implementation requirements for CHAT-8. The schema and contracts defin
 
 ## Open questions
 
-Q7 (Inquiry), Q8 (models), Q9 (OpenAI data terms), Q15 (fairness).
+Q7 (Inquiry), Q9 (OpenAI data terms), Q15 (fairness).
