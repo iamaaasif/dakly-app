@@ -13,6 +13,7 @@ import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
 import { FakeMetaChannelDriver } from '@dakly/providers/channel/meta/fake-meta-channel-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 
+import { BillingModule } from '../billing/billing.module';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
@@ -31,6 +32,7 @@ Module({
     DatabaseModule,
     AutomationRunsModule,
     AutomationsModule,
+    BillingModule,
     BullModule.forRoot({
       connection: toRedisConnection(loadEnv().REDIS_URL),
       prefix: `${loadEnv().QUEUE_PREFIX}-workflow-messenger-${randomUUID()}`,

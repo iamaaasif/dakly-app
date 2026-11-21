@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { AiModule } from '../ai/ai.module';
+import { BillingModule } from '../billing/billing.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { ConsentsModule } from '../consents/consents.module';
 import { ContactsModule } from '../contacts/contacts.module';
@@ -23,6 +24,7 @@ import { SalesAgentModule } from './sales-agent.module';
 
 @Module({
   imports: [
+    BillingModule,
     BullModule.registerQueue({ name: QUEUES.aiReply }),
     AiModule,
     ClockModule,

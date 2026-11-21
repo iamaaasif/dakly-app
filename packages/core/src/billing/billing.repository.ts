@@ -156,6 +156,17 @@ export class BillingRepository {
     return input;
   }
 
+  async subscriptionStatus(storeId: string) {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ status: subscriptions.status })
+        .from(subscriptions)
+        .where(eq(subscriptions.storeId, storeId))
+        .limit(1),
+    );
+    return row?.status;
+  }
+
   async currentLimits(storeId: string): Promise<Record<string, number> | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
