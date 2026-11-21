@@ -142,7 +142,7 @@ Route `/due-book`, in the "Physical shop" group of the menu. It shows for a memb
 
 ##### Khata scan API (KHT-1)
 
-Every route needs `customers.edit` and works on one page at a time. Listing past pages comes with the screens in KHT-3.
+Every route needs `customers.edit` and works on one page at a time. The list of past imports is in KHT-2's table below (added in KHT-3).
 
 | Route                              | What it does                                                                                                                |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -158,11 +158,12 @@ Every route needs `customers.edit` and works on one page at a time. Listing past
 
 ##### Khata import (KHT-2)
 
-Both routes need `customers.edit`.
+All three routes need `customers.edit`.
 
 | Route                                | What it does                                                                                                                     |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | `POST /khata-scans/pages/:id/import` | Takes one decision per row (`import` or `skip`, `isChecked`, optional `mergeContactId`) and imports the page in one transaction. |
+| `GET /khata-scans/imports`           | The shop's 20 latest imports, newest first, with rows read, imported, new customers, status and the undo deadline.               |
 | `POST /khata-scans/imports/:id/undo` | Removes what the import made, within 7 days of the import.                                                                       |
 
 - Every row on the page needs a decision, so the owner never imports a row by leaving it out. A row under 85% is imported only with `isChecked: true` (SHOP-R7); otherwise nothing is saved.
