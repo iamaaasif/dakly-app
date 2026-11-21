@@ -57,28 +57,36 @@ export class GoogleService {
       );
     const owner = await this.users.findByVerifiedEmail(identity.email);
     // A code is only needed to link into an existing account; a new account has nothing to take over.
-    if (owner && !identity.emailIsAuthoritative) {
-      const grant: GoogleGrant = {
-        purpose: 'email',
-        identity,
-        expectedOwnerId: owner?.id,
-        expectedEmailVerifiedAt: owner?.emailVerifiedAt?.toISOString(),
-        termsVersion: input.termsVersion,
-      };
-      const verificationTicket = await this.tickets.issue(grant);
-      await this.codes.send({
-        subject: this.emailSubject(verificationTicket, grant),
-        purpose: 'google_email',
-        ip: request.ip,
-      });
-      return { status: 'email_verification_required', verificationTicket };
-    }
+    if (owner && !identity.emailIsAuthoritative)
+      return this.requireEmailProof(identity, owner, input.termsVersion, request);
     return this.finish({
       identity,
       userId: owner?.id,
       termsVersion: input.termsVersion,
       request,
     });
+  }
+
+  private async requireEmailProof(
+    identity: GoogleIdentity,
+    owner: { id: string; emailVerifiedAt: Date | null },
+    termsVersion: string | undefined,
+    request: SignInRequest,
+  ): Promise<GoogleResult> {
+    const grant: GoogleGrant = {
+      purpose: 'email',
+      identity,
+      expectedOwnerId: owner.id,
+      expectedEmailVerifiedAt: owner.emailVerifiedAt?.toISOString(),
+      termsVersion,
+    };
+    const verificationTicket = await this.tickets.issue(grant);
+    await this.codes.send({
+      subject: this.emailSubject(verificationTicket, grant),
+      purpose: 'google_email',
+      ip: request.ip,
+    });
+    return { status: 'email_verification_required', verificationTicket };
   }
 
   async verifyEmail(input: VerifyGoogleEmailInput, request: SignInRequest): Promise<GoogleResult> {
