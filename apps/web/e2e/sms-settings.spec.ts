@@ -87,7 +87,7 @@ test('requests a sender name with a trade licence and an NID, and shows its stat
       [storeId],
     );
     await page.reload();
-    await expect(page.getByText('Brand name · customers see DHAKA WEAR')).toBeVisible();
+    await expect(page.getByText('Brand name · customers see Dhaka Wear')).toBeVisible();
     await capture(page, 'approved');
   } finally {
     await database.pool.query('delete from sms_sender_ids where store_id=$1', [storeId]);

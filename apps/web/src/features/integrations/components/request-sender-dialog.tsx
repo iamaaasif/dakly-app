@@ -160,7 +160,7 @@ function SenderNameField({ form }: { form: UseFormReturn<RequestForm> }) {
           {...form.register('senderName')}
           maxLength={11}
           placeholder="e.g. URBANTREND"
-          className="font-mono uppercase"
+          className="font-mono"
         />
       )}
     </FormField>

@@ -92,6 +92,7 @@ it('waits for approval and blocks a second request', async () => {
   show([sender({})]);
 
   expect(await screen.findByText('Requested')).toBeTruthy();
+  expect(screen.getByText('Urban Trend')).toBeTruthy();
   expect(
     screen.getByRole('button', { name: 'Request a sender name' }).hasAttribute('disabled'),
   ).toBe(true);

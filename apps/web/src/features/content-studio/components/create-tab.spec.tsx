@@ -14,7 +14,15 @@ const aiRunId = '00000000-0000-4000-8000-000000000001';
 const editRunId = '00000000-0000-4000-8000-000000000002';
 const requests: { method: string; url: string; body?: unknown }[] = [];
 
-function show() {
+function show(brand: object = {}) {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
     const body = init.body ? JSON.parse(init.body as string) : undefined;
     requests.push({ method: init.method ?? 'GET', url, body });
@@ -28,6 +36,7 @@ function show() {
       );
     if (url.endsWith('/content-pieces'))
       return Response.json({ id: '11111111-1111-4111-8111-111111111111' }, { headers });
+    if (url.endsWith('/brand-profile')) return Response.json(brand, { headers });
     return Response.json({ items: [], nextCursor: null }, { headers });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -40,6 +49,11 @@ function show() {
       <CreateTab />
     </QueryClientProvider>,
   );
+}
+
+// The brand row reads the profile, so only writes count as requests the form made.
+function posted() {
+  return requests.filter(({ method }) => method !== 'GET');
 }
 
 beforeEach(() => {
@@ -65,8 +79,35 @@ it('asks for the chosen settings and shows three options', async () => {
     kind: 'facebook_post',
     tone: 'festive',
     language: 'en',
+    length: 'medium',
+    hashtags: true,
+    orderLine: true,
     topic: 'New arrival: Winter kurtis',
   });
+});
+
+it('sends the chosen length and leaves out hashtags and the order line when unticked', async () => {
+  const user = userEvent.setup();
+  show();
+  await user.type(screen.getByLabelText(/Anything else Dakly should know/), 'Winter kurtis');
+  await user.click(screen.getByRole('radio', { name: 'Short' }));
+  await user.click(screen.getByRole('checkbox', { name: 'Add your hashtags' }));
+  await user.click(screen.getByRole('checkbox', { name: 'End with how to order' }));
+  await user.click(screen.getByRole('button', { name: /Write 3 options/ }));
+  await screen.findByRole('list', { name: 'Written options' });
+  expect(requests.find(({ url }) => url.endsWith('/generate'))?.body).toMatchObject({
+    length: 'short',
+    hashtags: false,
+    orderLine: false,
+  });
+});
+
+it('shows the saved brand voice with a link to edit it', async () => {
+  show({ voice: 'Friendly, Warm' });
+  expect(await screen.findByText('Friendly, Warm')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Edit' }).getAttribute('href')).toBe(
+    '/content-studio?tab=brand',
+  );
 });
 
 it('asks for a topic before writing and sends nothing', async () => {
@@ -77,7 +118,7 @@ it('asks for a topic before writing and sends nothing', async () => {
   expect((await screen.findByRole('alert')).textContent).toBe(
     'Enter a topic or choose a saved product',
   );
-  expect(requests).toHaveLength(0);
+  expect(posted()).toHaveLength(0);
 });
 
 it('asks for a saved product when writing a product description', async () => {
@@ -158,7 +199,7 @@ it('rewrites one option with a Make it tool and saves it with the new AI run', a
   const [first] = await screen.findAllByRole('article');
   await user.click(within(first!).getByRole('button', { name: 'To English' }));
   expect(await within(first!).findByText('Edited option')).toBeTruthy();
-  expect(requests.at(-1)?.body).toEqual({
+  expect(posted().at(-1)?.body).toEqual({
     operation: 'translate',
     kind: 'facebook_post',
     tone: 'friendly',
@@ -168,7 +209,7 @@ it('rewrites one option with a Make it tool and saves it with the new AI run', a
   expect(within(first!).getByRole('button', { name: 'To Bangla' })).toBeTruthy();
   await user.click(within(first!).getByRole('button', { name: 'Save' }));
   await vi.waitFor(() =>
-    expect(requests.at(-1)?.body).toEqual({
+    expect(posted().at(-1)?.body).toEqual({
       kind: 'facebook_post',
       language: 'en',
       body: 'Edited option',

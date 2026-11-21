@@ -96,7 +96,7 @@ function SenderRow({ sender, editable }: { sender: SmsSenderIdResponse; editable
       )}
     >
       <div className="min-w-48 flex-1">
-        <p className="font-mono font-semibold">{sender.senderName.toUpperCase()}</p>
+        <p className="font-mono font-semibold">{sender.senderName}</p>
         <p className="text-sm text-text-muted">{senderNote(sender)}</p>
         {test.isSuccess ? (
           <p role="status" className="text-sm">
@@ -120,8 +120,7 @@ function SenderRow({ sender, editable }: { sender: SmsSenderIdResponse; editable
 }
 
 function senderNote(sender: SmsSenderIdResponse) {
-  if (sender.status === 'approved')
-    return `Brand name · customers see ${sender.senderName.toUpperCase()}`;
+  if (sender.status === 'approved') return `Brand name · customers see ${sender.senderName}`;
   if (sender.status === 'rejected')
     return `Not approved${sender.rejectionReason ? `: ${sender.rejectionReason}` : '.'}`;
   return 'Brand name · waiting for the mobile operators, about 7 days. SMS keep going out from the shared sender.';

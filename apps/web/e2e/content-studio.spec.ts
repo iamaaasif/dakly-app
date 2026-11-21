@@ -72,6 +72,25 @@ test('writes options, saves one to the library and opens it in Create post', asy
        values ($1,$2,'content','writer','test','test','completed')`,
       [aiRunId, storeId],
     );
+    await page.route('**/api/brand-profile', (route) =>
+      route.fulfill({
+        headers: { 'x-session-context': contextTag },
+        json: {
+          voice: 'Friendly, Warm',
+          audience: null,
+          preferredWords: [],
+          wordsToAvoid: [],
+          callToActionBn: null,
+          callToActionEn: null,
+        },
+      }),
+    );
+    await page.route('**/api/content-pieces/credits', (route) =>
+      route.fulfill({
+        headers: { 'x-session-context': contextTag },
+        json: { allowance: 1000, remaining: 580, resetsAt: '2026-12-01T04:00:00.000Z' },
+      }),
+    );
     await page.route('**/api/content-pieces/generate', (route) =>
       route.fulfill({
         headers: { 'x-session-context': contextTag },
@@ -88,8 +107,10 @@ test('writes options, saves one to the library and opens it in Create post', asy
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/content-studio');
     await expect(page.getByRole('heading', { name: 'AI Content Studio', level: 1 })).toBeVisible();
+    await expect(page.getByText('580 AI credits left').first()).toBeVisible();
+    await expect(page.getByText('Uses 3 AI credits · 580 AI credits left')).toBeVisible();
     await capture(page, 'create');
-    await capture(page, 'create-style', page.getByRole('button', { name: /Write 3 options/ }));
+    await capture(page, 'create-style', page.getByText('Use my Brand Profile'));
 
     await page.getByLabel(/Anything else Dakly should know/).fill('New winter kurtis, 15% off');
     await page.getByRole('button', { name: /Write 3 options/ }).click();

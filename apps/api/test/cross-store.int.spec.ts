@@ -3984,6 +3984,30 @@ async function contentCharges(shop: Shop) {
   return result.rows.map(({ quantity }) => quantity);
 }
 
+fixture('GET /content-pieces/credits', async () => {
+  const { a, b } = await pair();
+  await allowContentCredits(10);
+  const model = scriptWriter(() => ['One scarf', 'Two scarves', 'Three scarves']);
+  try {
+    await success(a, 'POST', '/content-pieces/generate', 200, {
+      operation: 'generate',
+      kind: 'facebook_post',
+      topic: 'Cotton scarves',
+      tone: 'friendly',
+      language: 'en',
+    });
+    const credits = async (shop: Shop) =>
+      (await success(shop, 'GET', '/content-pieces/credits', 200)).json();
+    expect(await credits(a)).toMatchObject({ allowance: 10, remaining: 7 });
+    expect(await credits(b)).toMatchObject({ allowance: 10, remaining: 10 });
+    expect(new Date((await credits(a)).resetsAt).getTime()).toBeGreaterThan(Date.now());
+    expect((await f.request(a.member, 'GET', '/content-pieces/credits')).statusCode).toBe(403);
+  } finally {
+    await f.admin.pool.query("update plans set limits=limits - 'ai_content' where id=$1", [f.plan]);
+    model.mockRestore();
+  }
+});
+
 fixture('POST /content-pieces/generate', async () => {
   const { a, b } = await pair();
   await success(a, 'PUT', '/brand-profile', 200, brandProfile);
