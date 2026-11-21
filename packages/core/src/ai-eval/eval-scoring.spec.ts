@@ -106,6 +106,14 @@ describe('Bangla and Banglish set', () => {
       'search-kurti-banglish': { kind: 'reply', text: 'শাড়ি আছে।' },
     });
     expect(report.missedProductCaseIds).toEqual(['search-kurti-bn', 'search-kurti-banglish']);
+  });
+
+  it('fails when the card carries another colour than the one asked for', () => {
+    const report = scoreEval(banglaGoldenCases, {
+      ...banglaRecordedOutcomes,
+      'photo-colour-red-bn': { kind: 'reply', text: 'কুর্তি আছে।', cardPhoto: 'kurti-blue' },
+    });
+    expect(report.wrongPhotoCaseIds).toEqual(['photo-colour-red-bn']);
     expect(report.passed).toBe(false);
   });
 

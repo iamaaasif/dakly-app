@@ -5,7 +5,6 @@ import type { FileStorageDriver } from '@dakly/providers/file-storage/file-stora
 
 import { AiService } from '../ai/ai.service';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
-import { UsageService } from '../usage/usage.service';
 import { ProductPhotoTagsRepository } from './product-photo-tags.repository';
 import { tagProductPhoto } from './prompts/tag-product-photo.v1';
 
@@ -28,27 +27,20 @@ export class ProductPhotoTagsService {
   constructor(
     @Inject(ProductPhotoTagsRepository) private readonly repository: ProductPhotoTagsRepository,
     @Inject(AiService) private readonly ai: AiService,
-    @Inject(UsageService) private readonly usage: UsageService,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
   ) {}
 
-  // Runs outside any transaction. One chat allowance unit per photo, charged after the model
-  // answers under a fixed reference, so a retry is free. A photo with no allowance stays untagged.
+  // Runs outside any transaction. Tagging is the shop's own catalogue setup, so it does not draw
+  // from the chat allowance and still runs when that is used up; the run and its cost are
+  // recorded as `tag_product_photo`. Working assumption until the scan allowance is set.
   async tag(storeId: string, fileId: string): Promise<TagResult> {
     const file = await this.repository.find(storeId, fileId);
     if (!file || file.isTagged) return 'skipped';
-    const usageReference = `product-photo:${fileId}`;
-    if (
-      !(await this.usage.isConsumed(storeId, 'ai_conversation', usageReference)) &&
-      !(await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
-    )
-      return 'skipped';
     const bytes = await this.storage.readBytes(file.objectKey, MAX_PHOTO_BYTES);
     if (bytes.kind !== 'found') return 'skipped';
     const result = await this.ai.run(storeId, {
       tier: 'vision',
-      purpose: 'describe_image',
-      usageReference,
+      purpose: 'tag_product_photo',
       prompt: tagProductPhoto,
       input: '{}',
       images: [{ contentType: file.contentType, bytes: bytes.bytes }],

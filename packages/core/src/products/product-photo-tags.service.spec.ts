@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AiService } from '../ai/ai.service';
-import type { UsageService } from '../usage/usage.service';
 import type { ProductPhotoTagsRepository } from './product-photo-tags.repository';
 import { ProductPhotoTagsService } from './product-photo-tags.service';
 
@@ -10,7 +9,6 @@ const tags = { description: 'A red cotton kurti.', tags: ['red', 'লাল', 'k
 
 function setup(options: {
   tagged?: boolean;
-  hasAllowance?: boolean;
   reply?: { kind: 'output'; output: typeof tags } | { kind: 'failure'; code: string };
 }) {
   const saved: unknown[] = [];
@@ -26,10 +24,6 @@ function setup(options: {
         return options.reply ?? { kind: 'output', output: tags };
       },
     } as unknown as AiService,
-    {
-      isConsumed: async () => false,
-      hasAllowance: async () => options.hasAllowance ?? true,
-    } as unknown as UsageService,
     { readBytes: async () => ({ kind: 'found', bytes: new Uint8Array([1]) }) } as never,
   );
   return { service, saved, calls: () => modelCalls };
@@ -46,12 +40,6 @@ describe('product photo tags', () => {
     const { service, calls } = setup({ tagged: true });
     expect(await service.tag('store', fileId)).toBe('skipped');
     expect(calls()).toBe(0);
-  });
-
-  it('leaves the photo untagged and makes no model call without allowance', async () => {
-    const { service, calls, saved } = setup({ hasAllowance: false });
-    expect(await service.tag('store', fileId)).toBe('skipped');
-    expect([calls(), saved]).toEqual([0, []]);
   });
 
   it('asks the queue to retry a model outage but not a refused photo', async () => {

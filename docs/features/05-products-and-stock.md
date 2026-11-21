@@ -249,12 +249,14 @@ reply sender can attach images. Photo search (AI-11) should index variant photos
 PROD-8 tags each photo for the AI. Confirming a product or variant photo raises `product.photo_added`;
 `TagProductPhotoJob` (queue `inbound`) sends the photo to the `vision` tier with the prompt
 `tag-product-photo.v1` and saves a short English description and up to 12 tags, colour first, in English
-and Bangla (`red, লাল, kurti, কুর্তি`) on the `files` row (`photo_description`, `photo_tags`). Each photo
-uses one unit of the Chats AI allowance (`ai_conversation`) under the reference `product-photo:<fileId>`,
-so a retry is free; with no allowance the photo stays untagged and is still shown normally. A photo that
+and Bangla (`red, লাল, kurti, কুর্তি`) on the `files` row (`photo_description`, `photo_tags`). The run is recorded
+as `tag_product_photo` and does not use the Chats AI allowance; this is a working assumption until the
+scan allowance is set. A photo that does not get tags is still shown normally. A photo that
 already has tags is skipped. The AI tools list every photo of a product and its variants with its tags
 (`photos` in `search_products`, `get_product` and `send_product_card`), and `send_product_card` takes an
-optional `photoId`. That is how a product with no variants but a red and a blue photo still shows the red
+optional `photoId`. When no photo matches the colour asked for, the AI sets `withoutPhoto` so the card goes
+out as text and says that colour is unavailable. A card for an out-of-stock variant ends with
+"স্টক নেই (out of stock)" and the result carries `outOfStock: true`. That is how a product with no variants but a red and a blue photo still shows the red
 one when the customer asks for red. Existing photos are not tagged retroactively.
 
 Adjust opening stock after saving through the list. The low-stock threshold
