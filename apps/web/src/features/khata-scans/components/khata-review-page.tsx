@@ -155,7 +155,7 @@ function PagePhoto({ page }: { page: KhataPageResponse }) {
   );
 }
 
-const unreadableText: Record<string, string> = {
+const failureText = {
   allowance: 'Your plan has no khata pages left for this period.',
   model: 'Dakly could not read this page just now. Try again.',
 };
@@ -165,7 +165,7 @@ export function KhataPageProblem({ page }: { page: KhataPageResponse }) {
   const message =
     page.status === 'unreadable'
       ? 'Dakly could not find any rows on this page. Retake it in good light, with the whole page in view.'
-      : (unreadableText[page.failureCode ?? 'model'] ?? unreadableText.model);
+      : failureText[page.failureCode ?? 'model'];
   return (
     <div
       role="alert"

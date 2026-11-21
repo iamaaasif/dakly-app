@@ -108,32 +108,25 @@ function Field({ children, flagged = false }: { children: ReactNode; flagged?: b
   );
 }
 
-const kindNotes = {
-  sale: { text: () => 'Paid', className: 'text-success' },
-  payment: { text: () => 'Payment received', className: 'text-success' },
-  baki: {
-    text: (row: KhataRowResponse) => `Due ${formatWholeTaka(BigInt(row.amountPoisha))}`,
-    className: 'text-danger',
-  },
-};
+const kindNotes = { sale: 'Paid', payment: 'Payment received', baki: 'Due' };
 
 // An import records what already happened: a sale is paid, a baki is owed.
 function KindNote({ row }: { row: KhataRowResponse }) {
-  const note = kindNotes[row.kind];
+  const owed = row.kind === 'baki';
+  const walkIn = row.kind === 'sale';
   return (
     <>
-      <span className={cn('font-semibold whitespace-nowrap', note.className)}>
-        {note.text(row)}
+      <span
+        className={cn('font-semibold whitespace-nowrap', owed ? 'text-danger' : 'text-success')}
+      >
+        {kindNotes[row.kind]}
+        {owed ? ` ${formatWholeTaka(BigInt(row.amountPoisha))}` : ''}
       </span>
-      {row.phone ? null : <NoPhoneNote kind={row.kind} />}
+      {row.phone ? null : (
+        <span className={walkIn ? 'text-text-muted' : 'text-danger'}>
+          {walkIn ? 'No phone · saved as walk-in sale' : 'No phone: link a customer or skip'}
+        </span>
+      )}
     </>
-  );
-}
-
-function NoPhoneNote({ kind }: { kind: KhataRowResponse['kind'] }) {
-  return kind === 'sale' ? (
-    <span className="text-text-muted">No phone · saved as walk-in sale</span>
-  ) : (
-    <span className="text-danger">No phone: link a customer or skip</span>
   );
 }
