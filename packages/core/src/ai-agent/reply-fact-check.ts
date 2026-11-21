@@ -1,9 +1,12 @@
+import { leaksInstructions, offerWords } from '@dakly/contracts/reply-wording';
+
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
 const number = String.raw`(\d[\d,]*(?:\.\d+)?)`;
 const amountPatterns = [
   new RegExp(String.raw`৳\s*${number}`, 'giu'),
   new RegExp(String.raw`${number}\s*(?:৳|tk\b|taka\b|টাকা)`, 'giu'),
+  new RegExp(String.raw`\b(?:tk\.?|bdt|taka|rs\.?)\s*${number}`, 'giu'),
 ];
 const stockWord = String.raw`(?:in stock|stock|available|আছে|ache|বাকি|baki|স্টক)`;
 const stockPatterns = [
@@ -17,7 +20,8 @@ const phonePattern = /(?:\+?880|0)1[3-9](?:[\s-]?\d){8}/g;
 const linkPattern =
   /(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+\.(?:com|net|org|io|me|ly|link|bd|co|app|shop|xyz)\b\S*/giu;
 
-export type FactCheckFailure = 'empty' | 'too_long' | 'amount' | 'stock' | 'phone' | 'link';
+export type FactCheckFailure =
+  'empty' | 'too_long' | 'amount' | 'stock' | 'phone' | 'link' | 'offer' | 'leak';
 
 type Shop = { phone: string | null; linkBaseUrl: string };
 
@@ -29,17 +33,31 @@ export function checkReplyFacts(
   const text = toAsciiDigits(reply);
   if (!text.trim()) return { isSafe: false, failure: 'empty' };
   if ([...text].length > MAX_REPLY_LENGTH) return { isSafe: false, failure: 'too_long' };
-  if ((text.match(linkPattern) ?? []).some((link) => !link.startsWith(`${shop.linkBaseUrl}/`)))
-    return { isSafe: false, failure: 'link' };
-  const shopPhone = shop.phone && digitsOnly(shop.phone);
-  if ((text.match(phonePattern) ?? []).some((phone) => digitsOnly(phone) !== shopPhone))
-    return { isSafe: false, failure: 'phone' };
+  const contact = contactFailure(text, shop);
+  if (contact) return { isSafe: false, failure: contact };
+  const wording = wordingFailure(text, toolResults);
+  if (wording) return { isSafe: false, failure: wording };
   const known = numbersIn(toolResults);
   if (claimedNumbers(text, amountPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'amount' };
   if (claimedNumbers(text, stockPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'stock' };
   return { isSafe: true };
+}
+
+function contactFailure(text: string, shop: Shop) {
+  if ((text.match(linkPattern) ?? []).some((link) => !link.startsWith(`${shop.linkBaseUrl}/`)))
+    return 'link';
+  const shopPhone = shop.phone && digitsOnly(shop.phone);
+  return (text.match(phonePattern) ?? []).some((phone) => digitsOnly(phone) !== shopPhone)
+    ? 'phone'
+    : undefined;
+}
+
+function wordingFailure(text: string, toolResults: readonly unknown[]) {
+  if (leaksInstructions(text)) return 'leak';
+  const policyText = JSON.stringify(toolResults).toLowerCase();
+  return offerWords(text).some((word) => !policyText.includes(word)) ? 'offer' : undefined;
 }
 
 function claimedNumbers(text: string, patterns: RegExp[]) {
