@@ -1,4 +1,9 @@
-export type GoogleIdentity = { subject: string; email: string; emailIsAuthoritative: boolean };
+export type GoogleIdentity = {
+  subject: string;
+  email: string;
+  emailIsAuthoritative: boolean;
+  name?: string;
+};
 export type GoogleIdentityDriver = { verify(idToken: string): Promise<GoogleIdentity> };
 
 export class GoogleIdentityError extends Error {
@@ -12,11 +17,16 @@ export class GoogleIdentityError extends Error {
   }
 }
 
+function displayName(claim: unknown): string | undefined {
+  return typeof claim === 'string' ? claim.trim().slice(0, 120) || undefined : undefined;
+}
+
 export function googleIdentity(claims: {
   sub?: unknown;
   email?: unknown;
   email_verified?: unknown;
   hd?: unknown;
+  name?: unknown;
 }): GoogleIdentity {
   if (
     typeof claims.sub !== 'string' ||
@@ -31,6 +41,7 @@ export function googleIdentity(claims: {
   return {
     subject: claims.sub,
     email,
+    name: displayName(claims.name),
     emailIsAuthoritative:
       email.endsWith('@gmail.com') || (typeof claims.hd === 'string' && claims.hd.length > 0),
   };

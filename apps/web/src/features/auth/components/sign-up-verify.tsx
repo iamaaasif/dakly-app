@@ -8,21 +8,16 @@ import { FormField as AuthField } from '@/components/form-field';
 
 export function SignUpVerify({
   account,
-  signupTicket,
-  isRemembered,
   onBack,
   onAuthenticated,
 }: {
   account: { registration: SignUpInput; password?: string };
-  signupTicket?: string;
-  isRemembered: boolean;
   onBack: () => void;
   onAuthenticated?: () => void;
 }) {
   const { form, seconds, challenge, complete, submit, resend, pending } = useSignUpVerification(
     account,
-    signupTicket,
-    { isRemembered, onAuthenticated },
+    { onAuthenticated },
   );
   if (challenge) return <TotpStep challengeId={challenge} onSuccess={complete} />;
   return (

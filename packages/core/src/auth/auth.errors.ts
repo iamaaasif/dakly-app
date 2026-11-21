@@ -26,6 +26,10 @@ const AUTH_ERRORS = {
     status: 503,
     message: 'Google sign-in is unavailable. Try again later',
   },
+  AUTH_TERMS_REQUIRED: {
+    status: 400,
+    message: 'Agree to the Terms and Privacy documents to create an account',
+  },
   AUTH_GOOGLE_CONFLICT: { status: 409, message: 'This Google identity cannot be linked' },
   AUTH_GOOGLE_TICKET_INVALID: {
     status: 400,
