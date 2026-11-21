@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import type {
+  AnalyticsAiAgentResponse,
   AnalyticsAutomationsResponse,
   AnalyticsCampaignsResponse,
   AnalyticsChannelsResponse,
@@ -35,7 +36,7 @@ export function useAnalyticsOverview(period: AnalyticsView['period']) {
 }
 
 function useAnalyticsTab<Response>(
-  tab: 'campaigns' | 'automations' | 'channels' | 'social-posts',
+  tab: 'campaigns' | 'automations' | 'channels' | 'social-posts' | 'ai-agent',
   period: AnalyticsView['period'],
 ) {
   const { contextTag, request } = useStoreRequest();
@@ -58,3 +59,6 @@ export const useAnalyticsChannels = (period: AnalyticsView['period']) =>
 
 export const useAnalyticsSocialPosts = (period: AnalyticsView['period']) =>
   useAnalyticsTab<AnalyticsSocialPostsResponse>('social-posts', period);
+
+export const useAnalyticsAiAgent = (period: AnalyticsView['period']) =>
+  useAnalyticsTab<AnalyticsAiAgentResponse>('ai-agent', period);

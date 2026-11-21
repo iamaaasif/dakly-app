@@ -25,3 +25,18 @@ export const channelTiles = {
   sms: { icon: MessageSquare, tile: 'bg-ai-soft text-ai' },
   messenger: { icon: MessagesSquare, tile: 'bg-info-soft text-info' },
 } as const;
+
+// Short names for the hand-over reasons the AI agent report counts (the feature doc lists them).
+export const handoverReasonLabels: Record<string, string> = {
+  asked_for_person: 'Asked for a person',
+  complaint: 'Complaint',
+  refund: 'Refund or exchange',
+  discount: 'Asked for a discount',
+  angry: 'Upset customer',
+  out_of_scope: 'Not in Knowledge',
+  ready_to_buy: 'Ready to buy',
+  ai_unavailable: 'AI unavailable',
+  allowance_used: 'AI replies used up',
+  ai_paused: 'AI paused by Dakly',
+  other: 'Other',
+};

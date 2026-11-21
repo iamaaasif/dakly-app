@@ -139,4 +139,19 @@ describe('Analytics screen', () => {
       '/social/posts',
     );
   });
+
+  it('shows what the AI agent did, how chats ended and why they were handed over', async () => {
+    show({ tab: 'ai-agent' });
+    const figures = await screen.findByRole('list', { name: 'Key figures' });
+    expect(within(figures).getByText('412')).toBeTruthy();
+    expect(within(figures).getByText('78.2%')).toBeTruthy();
+    expect(within(figures).getByText(/27 replied in the last day are left out/)).toBeTruthy();
+    expect(within(figures).getByText('৳1,842.50')).toBeTruthy();
+    expect(within(figures).getByText('৳81,250 in orders the AI placed.')).toBeTruthy();
+    const reasons = screen
+      .getByRole('heading', { name: 'Why chats were handed over' })
+      .closest('div')!;
+    expect(within(reasons).getByText('Asked for a discount')).toBeTruthy();
+    expect(within(reasons).getByText('Refund or exchange')).toBeTruthy();
+  });
 });

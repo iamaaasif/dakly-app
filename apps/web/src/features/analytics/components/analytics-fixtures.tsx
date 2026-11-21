@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import type {
+  AnalyticsAiAgentResponse,
   AnalyticsAutomationRow,
   AnalyticsCampaignRow,
   AnalyticsChannelsResponse,
@@ -194,6 +195,27 @@ const socialResponse: AnalyticsSocialPostsResponse = {
   totals: { reach: 10330, reactions: 540 },
 };
 
+const aiAgentResponse: AnalyticsAiAgentResponse = {
+  asOf: overview.asOf,
+  timeZone: 'Asia/Dhaka',
+  current: overview.current,
+  previous: overview.previous,
+  chats: { current: 412, previous: 360 },
+  resolved: { current: 301, previous: 250 },
+  resolutionPercent: { current: 78.2, previous: 75.8 },
+  answeredByPerson: { current: 40, previous: 38 },
+  handedOver: { current: 44, previous: 52 },
+  stillOpen: 27,
+  handoverReasons: [
+    { reason: 'discount', chats: 19 },
+    { reason: 'refund', chats: 15 },
+    { reason: 'asked_for_person', chats: 10 },
+  ],
+  orders: { current: 63, previous: 51 },
+  sales: { currentPoisha: '8125000', previousPoisha: '6240000' },
+  cost: { currentPoisha: '184250', previousPoisha: '161000' },
+};
+
 export type ShowOptions = {
   attribution?: AttributionSettingsResponse;
   canChange?: boolean;
@@ -213,6 +235,7 @@ export function show(view: Partial<AnalyticsView> = {}, options: ShowOptions = {
       '/analytics/automations': { current: overview.current, automations },
       '/analytics/channels': channelsResponse,
       '/analytics/social-posts': socialResponse,
+      '/analytics/ai-agent': aiAgentResponse,
       '/store/attribution': options.attribution ?? {
         windowDays: 7,
         rebuilding: false,

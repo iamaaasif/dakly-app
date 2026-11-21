@@ -7,12 +7,15 @@ import { useDownloadAnalytics } from '../api/analytics-attribution';
 
 export function AnalyticsDownloadButton({ view }: { view: AnalyticsView }) {
   const download = useDownloadAnalytics();
+  // The AI agent report has no file yet.
+  const { tab, period } = view;
+  if (tab === 'ai-agent') return null;
   return (
     <div>
       <Button
         variant="secondary"
         loading={download.isPending}
-        onClick={() => download.mutate({ tab: view.tab, period: view.period })}
+        onClick={() => download.mutate({ tab, period })}
       >
         <Download aria-hidden="true" size={16} strokeWidth={1.75} />
         Download
