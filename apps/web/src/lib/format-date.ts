@@ -154,3 +154,21 @@ export function dhakaTimeOfDay(value: string): string {
     hourCycle: 'h23',
   }).format(new Date(value));
 }
+
+// A calendar day written on a khata page, as "Nov 2".
+export function formatMonthDay(dayKey: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${dayKey}T00:00:00Z`));
+}
+
+// The Dhaka calendar day of an instant, as "Oct 29".
+export function formatDhakaMonthDay(value: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'Asia/Dhaka',
+  }).format(new Date(value));
+}
