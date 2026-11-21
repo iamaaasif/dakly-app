@@ -1,6 +1,6 @@
 # Pull requests
 
-- One purpose per PR, under about 500 changed lines. Split by layer when needed: schema + migration, then service, then UI.
+- One purpose per PR, under about 800 changed lines (1,000 at most). Split by layer when needed: schema + migration, then service, then UI.
 - Branch names say what the branch does: `<type>/<task-id>-<what-it-does>`, lower case, words joined by hyphens, at most 50 characters. The type matches the commit type (`feat`, `fix`, `refactor`, `perf`, `docs`, `test`, `chore`). Example: `feat/acc-3-sessions`, `fix/rev-3-foundation-review-fixes`. Work outside a task drops the id: `fix/order-total-rounding`. Never `codex/...`, `patch-1`, `update`, `wip` or a date; rename such a branch before opening the PR. When a plan in [plans/](../plans/core.md) names the branch, use that name.
 - PR titles and commit subjects: `<type>(<task-id>): <summary>`, starting the summary in lower case, such as `feat(acc-7): add staff roles`. The scope is optional for work outside a task: `fix: round order totals`.
 - Review your own diff before you open the PR. Run `pnpm check`, `pnpm test:int`, and `pnpm test:e2e` when the change touches `apps/web` or sign-in, then review the diff in a fresh context (`/code-review` and `/security-review`, or a new agent that has not seen the work) against these rules, and fix what it finds. The reviewer should find nothing the author could have found.
@@ -23,6 +23,7 @@ The full suites are slow, and CI runs all of them on every push, so run them onc
 - Do not end your session while you have an open PR or an unfinished task. A status report is not a reason to stop.
 - When nothing else can move, wait in a loop: every 5 minutes, list your open PRs (`gh pr list --author @me --state open`) and read the comments and review comments posted since your last check, including on your PRs merged in the last day. Use `sleep 300` between checks.
 - A review comment that asks for a change is a decision, not an open question. Make the change; do not wait for anyone to confirm it. If you disagree, reply once with the reason, then follow the reviewer's answer.
+- The reviewer fixes small items itself with new commits on your branch: copy, formatting, task rows and evidence notes. Pull before you push again, and keep those commits. Defects in behaviour, data or design still come back to you as review comments.
 - Never rewrite a pushed branch: no rebase, amend or force-push. Fixes go in new commits, and `main` comes in as a merge commit, so the reviewer can read only what changed since the last review.
 - When `main` moves and your PR conflicts, merge `main` at once. GitHub runs no CI on a PR with conflicts. When the PR your branch is stacked on merges, merge `main` and retarget your PR to `main` in the same step.
 - While one PR waits, work on the next task that does not depend on it, within the open-PR limit your task sets.
@@ -34,9 +35,9 @@ The `pr-rules` job runs `scripts/check-pull-request.mjs` on every pull request. 
 
 - The branch name does not match `^(feat|fix|refactor|perf|docs|test|chore)/[a-z0-9]+(-[a-z0-9]+)*$` or is over 50 characters.
 - The PR title or a commit subject does not match `^(feat|fix|refactor|perf|docs|test|chore)(\([a-z0-9-]+\))?: [a-z].+`. Merge commits from updating the branch are skipped.
-- The PR changes more than 800 lines.
+- The PR changes more than 1,000 lines.
 
-Changed lines are added plus deleted lines from `git diff --numstat base...head`, not counting `pnpm-lock.yaml`, `docs/`, Markdown files, `*.spec.ts`, `*.spec.tsx`, `test/` folders, `apps/web/e2e/`, `packages/db/migrations/meta/` and `.sql` files in `packages/db/migrations/`. Over 500 lines prints a warning. A PR labelled `mechanical-change` only gets the warning above 800 lines; use the label only for changes made entirely by a formatter or autofix.
+Changed lines are added plus deleted lines from `git diff --numstat base...head`, not counting `pnpm-lock.yaml`, `docs/`, Markdown files, `*.spec.ts`, `*.spec.tsx`, `test/` folders, `apps/web/e2e/`, `packages/db/migrations/meta/` and `.sql` files in `packages/db/migrations/`. Over 800 lines prints a warning. A PR labelled `mechanical-change` only gets the warning above 1,000 lines; use the label only for changes made entirely by a formatter or autofix.
 
 Reviewers reject a PR that:
 
