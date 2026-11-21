@@ -93,6 +93,7 @@ export class KhataScansService {
   // rather than after a model call.
   async requestRead(storeId: string, pageId: string): Promise<KhataPageResponse> {
     const page = await this.findPage(storeId, pageId);
+    if (!page.objectKey) throw khataScanError('KHATA_PAGE_NOT_UPLOADED');
     const stored = await this.storage.getObjectMetadata(page.objectKey);
     if (!stored || stored.contentType !== page.contentType || stored.sizeBytes !== page.sizeBytes)
       throw khataScanError('KHATA_PAGE_NOT_UPLOADED');
@@ -124,8 +125,8 @@ export class KhataScansService {
     if (!(await this.repository.claim(storeId, pageId, now, new Date(now.getTime() - LEASE_MS))))
       return;
     const page = await this.findPage(storeId, pageId);
-    const file = await this.storage.readBytes(page.objectKey, KHATA_PAGE_MAX_BYTES);
-    if (file.kind !== 'found') {
+    const photo = await this.readPhoto(page);
+    if (!photo) {
       await this.repository.finish(storeId, pageId, { status: 'failed', failureCode: 'model' });
       return;
     }
@@ -135,7 +136,7 @@ export class KhataScansService {
       purpose: 'khata_scan',
       prompt: readKhataPage,
       input: MODEL_INSTRUCTION,
-      images: [{ contentType: page.contentType, bytes: file.bytes }],
+      images: [photo],
       output: khataModelOutputSchema,
     });
     if (result.kind !== 'output') {
@@ -151,6 +152,13 @@ export class KhataScansService {
     }
     if (!(await this.charge(storeId, pageId))) return;
     await this.repository.saveRead(storeId, pageId, await this.withMatches(storeId, read));
+  }
+
+  // Undefined when the photo is gone or was purged.
+  private async readPhoto(page: KhataPage) {
+    if (!page.objectKey || !page.contentType) return undefined;
+    const file = await this.storage.readBytes(page.objectKey, KHATA_PAGE_MAX_BYTES);
+    return file.kind === 'found' ? { contentType: page.contentType, bytes: file.bytes } : undefined;
   }
 
   // An outage or a pause passes, so the queue tries the page again and only the last try fails it.
@@ -218,14 +226,17 @@ export class KhataScansService {
   }
 
   private toResponse(page: KhataPage, rows: StoredKhataRow[]): KhataPageResponse {
-    const photoKept = page.photoExpiresAt !== null && page.photoExpiresAt > this.clock.now();
+    const { objectKey } = page;
+    const photoKept =
+      objectKey !== null && page.photoExpiresAt !== null && page.photoExpiresAt > this.clock.now();
     return {
       id: page.id,
       status: page.status,
       failureCode: page.failureCode,
-      photoUrl: photoKept
-        ? this.storage.createDownloadUrl(page.objectKey, PHOTO_LINK_SECONDS)
-        : null,
+      photoUrl:
+        photoKept && objectKey
+          ? this.storage.createDownloadUrl(objectKey, PHOTO_LINK_SECONDS)
+          : null,
       createdAt: page.createdAt.toISOString(),
       rows: rows.map((row) => ({
         id: row.id,

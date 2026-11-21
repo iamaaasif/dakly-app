@@ -1,5 +1,5 @@
 {
-  "id": "26da581c-cb30-4d55-a6a0-06abd672ce8c",
+  "id": "56a82e22-ac8e-4cbc-a6a0-8198b21eb31a",
   "prevId": "cd0d99a1-4e9f-4666-88b4-c2076567b97d",
   "version": "7",
   "dialect": "postgresql",
@@ -3017,7 +3017,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'khata_scan')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'khata_scan')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -13552,7 +13552,7 @@
         },
         "contacts_source": {
           "name": "contacts_source",
-          "value": "\"contacts\".\"source\" in ('messenger', 'instagram', 'whatsapp', 'comment', 'order_link', 'manual', 'voice', 'import', 'shopify', 'woocommerce', 'pos')"
+          "value": "\"contacts\".\"source\" in ('messenger', 'instagram', 'whatsapp', 'comment', 'order_link', 'manual', 'voice', 'import', 'shopify', 'woocommerce', 'pos', 'khata_import')"
         },
         "contacts_kind": {
           "name": "contacts_kind",
@@ -15129,6 +15129,224 @@
       },
       "isRLSEnabled": false
     },
+    "public.khata_imports": {
+      "name": "khata_imports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "page_id": {
+          "name": "page_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'done'"
+        },
+        "rows_read": {
+          "name": "rows_read",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rows_imported": {
+          "name": "rows_imported",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rows_skipped": {
+          "name": "rows_skipped",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "customers_created": {
+          "name": "customers_created",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "undone_at": {
+          "name": "undone_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "khata_imports_store_id_id_key": {
+          "name": "khata_imports_store_id_id_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_imports_page_id_done_key": {
+          "name": "khata_imports_page_id_done_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "page_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"khata_imports\".\"status\" = 'done'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_imports_store_id_created_at_idx": {
+          "name": "khata_imports_store_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_imports_created_by_user_id_idx": {
+          "name": "khata_imports_created_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "created_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "khata_imports_store_id_stores_id_fk": {
+          "name": "khata_imports_store_id_stores_id_fk",
+          "tableFrom": "khata_imports",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "khata_imports_created_by_user_id_users_id_fk": {
+          "name": "khata_imports_created_by_user_id_users_id_fk",
+          "tableFrom": "khata_imports",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "khata_imports_page_id_store_fk": {
+          "name": "khata_imports_page_id_store_fk",
+          "tableFrom": "khata_imports",
+          "tableTo": "khata_pages",
+          "columnsFrom": [
+            "store_id",
+            "page_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "khata_imports_status": {
+          "name": "khata_imports_status",
+          "value": "\"khata_imports\".\"status\" in ('done', 'undone')"
+        },
+        "khata_imports_undone": {
+          "name": "khata_imports_undone",
+          "value": "(\"khata_imports\".\"status\" = 'undone') = (\"khata_imports\".\"undone_at\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.khata_pages": {
       "name": "khata_pages",
       "schema": "",
@@ -15149,7 +15367,7 @@
           "name": "file_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -15415,6 +15633,37 @@
           "primaryKey": false,
           "notNull": false
         },
+        "import_id": {
+          "name": "import_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_id": {
+          "name": "contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_contact_created": {
+          "name": "is_contact_created",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "due_entry_id": {
+          "name": "due_entry_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -15441,6 +15690,57 @@
             }
           ],
           "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_rows_import_id_idx": {
+          "name": "khata_rows_import_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "import_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_rows_contact_id_idx": {
+          "name": "khata_rows_contact_id_idx",
+          "columns": [
+            {
+              "expression": "contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_rows_due_entry_id_idx": {
+          "name": "khata_rows_due_entry_id_idx",
+          "columns": [
+            {
+              "expression": "due_entry_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -15525,6 +15825,51 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "khata_rows_import_id_store_fk": {
+          "name": "khata_rows_import_id_store_fk",
+          "tableFrom": "khata_rows",
+          "tableTo": "khata_imports",
+          "columnsFrom": [
+            "store_id",
+            "import_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "khata_rows_contact_id_store_fk": {
+          "name": "khata_rows_contact_id_store_fk",
+          "tableFrom": "khata_rows",
+          "tableTo": "contacts",
+          "columnsFrom": [
+            "store_id",
+            "contact_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "khata_rows_due_entry_id_store_fk": {
+          "name": "khata_rows_due_entry_id_store_fk",
+          "tableFrom": "khata_rows",
+          "tableTo": "due_entries",
+          "columnsFrom": [
+            "store_id",
+            "due_entry_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -15538,6 +15883,10 @@
         "khata_rows_match_kind": {
           "name": "khata_rows_match_kind",
           "value": "\"khata_rows\".\"match_kind\" in ('phone', 'similar_phone')"
+        },
+        "khata_rows_outcome": {
+          "name": "khata_rows_outcome",
+          "value": "\"khata_rows\".\"outcome\" in ('imported', 'skipped')"
         },
         "khata_rows_confidence": {
           "name": "khata_rows_confidence",
@@ -19070,18 +19419,6 @@
         "file_name": {
           "name": "file_name",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "photo_description": {
-          "name": "photo_description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "photo_tags": {
-          "name": "photo_tags",
-          "type": "text[]",
           "primaryKey": false,
           "notNull": false
         },

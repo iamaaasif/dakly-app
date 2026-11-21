@@ -24,13 +24,14 @@ export function AppShell({ actions, children }: { actions: ReactNode; children: 
     <>
       {blocked ? (
         <SessionVerificationStatus
+          expired={boundary.expired}
           failure={boundary.failure}
           error={error}
           onRetry={boundary.verify}
         />
       ) : null}
       <SessionInteraction.Provider value={blocked}>
-        <div hidden={blocked} inert={blocked}>
+        <div hidden={blocked && !boundary.expired} inert={blocked}>
           {boundary.available && data ? (
             <ShellFrame
               key={`${data.contextTag}:${boundary.generation}`}

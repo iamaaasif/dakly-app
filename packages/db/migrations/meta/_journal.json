@@ -593,8 +593,15 @@
     {
       "idx": 84,
       "version": "7",
-      "when": 1795254355574,
-      "tag": "0084_product_photo_tags",
+      "when": 1795256193944,
+      "tag": "0084_khata_imports",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1795258835066,
+      "tag": "0086_product_photo_tags",
       "breakpoints": true
     }
   ]

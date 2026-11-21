@@ -86,7 +86,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
   page.on('pageerror', (error) => pageErrors.push(error.name));
   try {
     await page.goto('/customers');
-    await expect(page).toHaveURL(`${baseURL}/sign-in`);
+    await expect(page).toHaveURL(`${baseURL}/sign-in?next=%2Fcustomers`);
     await context.addCookies([
       {
         name: 'dakly_session',

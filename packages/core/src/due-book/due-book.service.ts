@@ -116,6 +116,15 @@ export class DueBookService {
     });
   }
 
+  // Only a khata import's undo removes entries; the ledger is otherwise never edited.
+  removeKhataEntries(storeId: string, entryIds: string[]): Promise<void> {
+    return this.entries.deleteByIds(storeId, entryIds);
+  }
+
+  contactsWithEntries(storeId: string, contactIds: string[]): Promise<Set<string>> {
+    return this.entries.contactsWithEntries(storeId, contactIds);
+  }
+
   async customer(storeId: string, contactId: string, access: Access): Promise<DueCustomerResponse> {
     const contact = await this.contacts.getById(storeId, contactId, access);
     const balance = await this.balances.balanceOf(storeId, contactId);
