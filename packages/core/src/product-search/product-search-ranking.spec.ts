@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  mainColour,
   fitsPrice,
   fuseRanks,
   parseQuery,
@@ -72,5 +73,14 @@ describe('rankByWords', () => {
 describe('fuseRanks', () => {
   it('ranks a product both lists found above one only a list found', () => {
     expect(fuseRanks(['a', 'b'], ['c', 'b'])).toEqual(['b', 'a', 'c']);
+  });
+});
+
+describe('mainColour', () => {
+  it('reads the first colour in Bangla, Banglish and English', () => {
+    expect(mainColour(['লাল', 'চামড়ার'])).toBe('red');
+    expect(mainColour(['kurti', 'lal'])).toBe('red');
+    expect(mainColour(['yellow', 'red'])).toBe('yellow');
+    expect(mainColour(['saree'])).toBeUndefined();
   });
 });

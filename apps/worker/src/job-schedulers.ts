@@ -4,6 +4,7 @@ import type { Queue } from 'bullmq';
 
 import { STAFF_ALERT_RELAY } from '@dakly/core/admin/jobs/staff-alert-relay.job';
 import { STAFF_AUDIT_MAINTENANCE } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
+import { CHECK_AI_COST_CEILING } from '@dakly/core/ai-cost/jobs/check-ai-cost-ceiling.job';
 import { RUN_GOLDEN_EVAL } from '@dakly/core/ai-eval/jobs/run-golden-eval.job';
 import { SWEEP_ANALYTICS } from '@dakly/core/analytics/jobs/sweep-analytics.job';
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
@@ -32,6 +33,7 @@ import {
 import { scheduleJob } from '@dakly/core/platform/queue/job-schedule';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { DAY_MS, MINUTE_MS } from '@dakly/core/platform/time';
+import { START_PRODUCT_PHOTO_TAG_BACKFILL } from '@dakly/core/products/jobs/start-product-photo-tag-backfill.job';
 import { QUEUE_POST_METRICS_REFRESHES } from '@dakly/core/social/jobs/queue-post-metrics-refreshes.job';
 import { RECOVER_POST_TARGETS } from '@dakly/core/social/jobs/recover-post-targets.job';
 
@@ -62,6 +64,7 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.transactional, WAKE_SNOOZED_NOTIFICATIONS),
       scheduleJob(this.transactional, RECOVER_WEBHOOK_EVENTS, MINUTE_MS),
       scheduleJob(this.bulk, STAFF_AUDIT_MAINTENANCE),
+      scheduleJob(this.bulk, CHECK_AI_COST_CEILING, 15 * MINUTE_MS),
       scheduleJob(this.workflow, WAKE_DUE_RUNS, MINUTE_MS),
       scheduleJob(this.campaign, START_DUE_CAMPAIGNS, MINUTE_MS),
       scheduleJob(this.bulk, FAIL_STUCK_IMPORTS),
@@ -83,6 +86,19 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.bulk, RUN_GOLDEN_EVAL, { pattern: '0 20 * * *', tz: 'UTC' }),
       // 19:00 UTC is 01:00 in Dhaka, after the Dhaka day the rollups need has finished.
       scheduleJob(this.bulk, RUN_MAINTENANCE, { pattern: '0 19 * * *', tz: 'UTC' }),
+      // A fixed job id that is kept after it finishes, so the backfill runs once, not on every
+      // worker start. A flushed queue runs it again, which only tags photos still untagged.
+      this.bulk.add(
+        START_PRODUCT_PHOTO_TAG_BACKFILL,
+        {},
+        {
+          jobId: START_PRODUCT_PHOTO_TAG_BACKFILL,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 60_000 },
+          removeOnComplete: false,
+          removeOnFail: false,
+        },
+      ),
     ]);
   }
 }

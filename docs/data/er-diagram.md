@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0089_snapshot.json`: **103 tables, 1382 columns, 426 explicit indexes and 327 foreign keys**.
+Built from `packages/db/migrations/meta/0090_snapshot.json`: **104 tables, 1386 columns, 426 explicit indexes and 328 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -57,6 +57,7 @@ erDiagram
     staff_audit_log ||--o| staff_alert_deliveries : "audit_id"
     stores |o..o{ kill_switches : "store_id"
     staff_users ||..o{ kill_switches : "paused_by_staff_id"
+    stores ||--o{ ai_cost_alerts : "store_id"
     stores ||--o{ staff_recovery_history : "store_id"
     staff_audit_log ||--o{ staff_recovery_history : "audit_id"
     stores {
@@ -375,6 +376,12 @@ erDiagram
         uuid store_id FK "NULL; uuid"
         text reason "NOT NULL; text"
         uuid paused_by_staff_id FK "NOT NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    ai_cost_alerts {
+        uuid store_id PK,FK "NOT NULL; uuid"
+        date day PK "NOT NULL; date"
+        bigint cost_micro_usd "NOT NULL; bigint"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     staff_recovery_history {
@@ -1994,6 +2001,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `account_security_events_actor_staff_id_staff_users_id_fk`           | `account_security_events(actor_staff_id)`                 | `staff_users(id)`                           | no action |
 | `abuse_reports_reported_by_staff_id_staff_users_id_fk`               | `abuse_reports(reported_by_staff_id)`                     | `staff_users(id)`                           | no action |
 | `abuse_reports_handled_by_staff_id_staff_users_id_fk`                | `abuse_reports(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
+| `ai_cost_alerts_store_id_stores_id_fk`                               | `ai_cost_alerts(store_id)`                                | `stores(id)`                                | cascade   |
 | `kill_switches_store_id_stores_id_fk`                                | `kill_switches(store_id)`                                 | `stores(id)`                                | cascade   |
 | `kill_switches_paused_by_staff_id_staff_users_id_fk`                 | `kill_switches(paused_by_staff_id)`                       | `staff_users(id)`                           | no action |
 | `platform_settings_updated_by_staff_id_staff_users_id_fk`            | `platform_settings(updated_by_staff_id)`                  | `staff_users(id)`                           | no action |
