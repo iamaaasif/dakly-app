@@ -1,4 +1,5 @@
 import { Plus } from 'lucide-react';
+import Image from 'next/image';
 import { useId, useState } from 'react';
 import type { FieldArrayWithId, UseFormRegister } from 'react-hook-form';
 
@@ -16,6 +17,7 @@ export type VariantChoice = {
   label: string;
   price: number;
   stock: number | null;
+  photoUrl?: string | null;
 };
 
 type ProductFieldsProps = {
@@ -139,6 +141,7 @@ export function orderVariantChoices(
                 label: variant.isDefault ? product.name : `${product.name} · ${variant.title}`,
                 price: variant.pricePoisha,
                 stock: product.isStockTracked ? variant.available : null,
+                photoUrl: variant.photoUrl,
               },
             ] as const,
         ),
@@ -364,9 +367,21 @@ function OrderProductLine({
 
 function OrderVariantPrice({ variant }: { variant: VariantChoice }) {
   return (
-    <p className="text-text-muted">
-      {formatMoney(variant.price)}
-      {variant.stock !== null ? ` · ${variant.stock} in stock` : ''}
-    </p>
+    <div className="mt-1 flex items-center gap-2 text-text-muted">
+      {variant.photoUrl ? (
+        <Image
+          src={variant.photoUrl}
+          alt=""
+          width={32}
+          height={32}
+          unoptimized
+          className="size-8 shrink-0 rounded-md object-cover"
+        />
+      ) : null}
+      <p>
+        {formatMoney(variant.price)}
+        {variant.stock !== null ? ` · ${variant.stock} in stock` : ''}
+      </p>
+    </div>
   );
 }

@@ -224,6 +224,19 @@ function ProductOverview({ product, change, canEdit }: ProductOverviewProps) {
   return (
     <>
       <ProductPhotos product={product} />
+      {product.variants.some((variant) => !variant.isDefault) ? (
+        <section className="space-y-4" aria-label="Photos for each variant">
+          <div className="space-y-0.5">
+            <h2 className="text-sm font-semibold text-text">Photos for each variant</h2>
+            <p className="text-xs text-text-muted">
+              Optional. A variant without photos shows the product photos.
+            </p>
+          </div>
+          {product.variants.map((variant) => (
+            <ProductPhotos key={variant.id} product={product} variant={variant} />
+          ))}
+        </section>
+      ) : null}
       <section className="space-y-1.5">
         <h3 className="text-sm font-semibold text-text">Description</h3>
         <p className="text-sm wrap-anywhere whitespace-pre-wrap text-text-muted">
