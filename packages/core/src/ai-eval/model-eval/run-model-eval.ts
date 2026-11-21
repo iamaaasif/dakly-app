@@ -37,9 +37,8 @@ const { values } = parseArgs({
     jobs: { type: 'string' },
     models: { type: 'string' },
     'max-usd': { type: 'string', default: '4' },
-    // AI-12 stock replies are not built, so its cases would fail for every model. Pass "none" to
-    // run them anyway.
-    pending: { type: 'string', default: 'AI-12' },
+    // Skips the cases of tasks that are not built yet, such as "AI-12".
+    pending: { type: 'string', default: '' },
     verbose: { type: 'boolean', default: false },
   },
 });

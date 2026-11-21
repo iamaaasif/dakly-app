@@ -6,11 +6,13 @@ import { ZodError } from 'zod';
 import {
   confirmOrderTool,
   draftOrderTool,
+  findAlternativesTool,
   getDeliveryChargeTool,
   getMyOrdersTool,
   getOrderStatusTool,
   getProductTool,
   handOverTool,
+  joinRestockListTool,
   salesAgentTools,
   searchKnowledgeTool,
   searchProductsTool,
@@ -27,6 +29,7 @@ import { ChatOrdersService } from '../orders/chat-orders.service';
 import { AppError } from '../platform/errors/app-error';
 import { type PhotoMatch, ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
+import { RestockRequestsService } from '../products/restock-requests.service';
 
 // The agent job supplies both ids. No tool argument can name another store or customer.
 export type ToolScope = {
@@ -63,6 +66,8 @@ export class SalesAgentToolsService {
     [getMyOrdersTool.name]: (scope, raw) => this.getMyOrders(scope, raw),
     [getOrderStatusTool.name]: (scope, raw) => this.getOrderStatus(scope, raw),
     [sendProductCardTool.name]: (scope, raw) => this.sendProductCard(scope, raw),
+    [findAlternativesTool.name]: (scope, raw) => this.findAlternatives(scope, raw),
+    [joinRestockListTool.name]: (scope, raw) => this.joinRestockList(scope, raw),
     [draftOrderTool.name]: (scope, raw) => this.draftOrder(scope, raw),
     [confirmOrderTool.name]: (scope, raw) => this.confirmOrder(scope, raw),
     [handOverTool.name]: (_scope, raw) => this.handOver(raw),
@@ -71,6 +76,7 @@ export class SalesAgentToolsService {
   constructor(
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(ProductSearchService) private readonly productSearch: ProductSearchService,
+    @Inject(RestockRequestsService) private readonly restock: RestockRequestsService,
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(KnowledgeSearchService) private readonly knowledge: KnowledgeSearchService,
     @Inject(BuyerOrdersService) private readonly orders: BuyerOrdersService,
@@ -100,10 +106,33 @@ export class SalesAgentToolsService {
 
   // The customer sent a photo: say which product it shows, or that the shop cannot tell.
   async matchPhoto({ storeId }: ToolScope, photoText: string): Promise<object> {
-    return describePhotoMatch(
-      await this.productSearch.matchPhoto(storeId, photoText),
+    const match = await this.productSearch.matchPhoto(storeId, photoText);
+    const alternatives =
+      match.kind === 'sold_out'
+        ? await this.productSearch.alternativesFor(storeId, match.product)
+        : [];
+    return describePhotoMatch(match, productResult, alternatives);
+  }
+
+  private async findAlternatives({ storeId }: ToolScope, raw: unknown) {
+    const { productId } = findAlternativesTool.input.parse(raw);
+    const product = await this.products.getForChat(storeId, productId);
+    return describeAlternatives(
+      product,
+      await this.productSearch.alternativesFor(storeId, product),
       productResult,
     );
+  }
+
+  // Only a real chat has a customer to put on the list; the service refuses a size that has stock.
+  private async joinRestockList({ storeId, contactId, chat }: ToolScope, raw: unknown) {
+    const { variantId } = joinRestockListTool.input.parse(raw);
+    if (!chat) return { error: 'NOT_IN_A_CHAT' };
+    await this.restock.addToWaitingList(storeId, variantId, {
+      contactId,
+      conversationId: chat.conversationId,
+    });
+    return { onWaitingList: true, variantId };
   }
 
   private async getProduct({ storeId }: ToolScope, raw: unknown) {
@@ -262,6 +291,7 @@ function draftKey(
 export function describePhotoMatch(
   match: PhotoMatch,
   present: (product: ChatProduct) => object,
+  alternatives: ChatProduct[],
 ): object {
   if (match.kind === 'sure')
     return {
@@ -280,12 +310,35 @@ export function describePhotoMatch(
     return {
       photoMatch: 'sold_out',
       rule: 'The photo shows this product and it has no stock. Say so. Do not offer it or take an order for it.',
-      products: [present(match.product)],
+      ...describeAlternatives(match.product, alternatives, present),
     };
   return {
     photoMatch: 'none',
     rule: 'No product fits the photo. Do not guess. Ask for the product name or a clearer photo.',
     products: [],
+  };
+}
+
+const alternativesRule =
+  'Say the product or size is out of stock. Offer only the in-stock sizes and alternatives listed here, with their listed prices. If there are none, say there is nothing similar in stock now. Then ask "নতুন স্টক এলে জানাবো?". Call join_restock_list with a soldOutVariants variantId only after the customer says yes.';
+
+// What the model may offer in place of a sold-out product, and what the customer can wait for.
+export function describeAlternatives(
+  product: ChatProduct,
+  alternatives: ChatProduct[],
+  present: (product: ChatProduct) => object,
+): object {
+  const soldOut = product.isStockTracked
+    ? product.variants.filter((variant) => variant.available === 0)
+    : [];
+  return {
+    rule: alternativesRule,
+    products: [present(product)],
+    inStockSizes: product.variants
+      .filter((variant) => !product.isStockTracked || variant.available > 0)
+      .map((variant) => ({ variantId: variant.id, title: variant.title })),
+    soldOutVariants: soldOut.map((variant) => ({ variantId: variant.id, title: variant.title })),
+    alternatives: alternatives.map(present),
   };
 }
 

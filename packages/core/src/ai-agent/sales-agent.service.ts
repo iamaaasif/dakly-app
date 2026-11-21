@@ -6,7 +6,7 @@ import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { AiService } from '../ai/ai.service';
 import { InboxService } from '../messaging/inbox.service';
 import { StoresService } from '../stores/stores.service';
-import { chatReply } from './prompts/chat-reply.v1';
+import { chatReply } from './prompts/chat-reply.v2';
 import {
   type ToolScope,
   SalesAgentToolsService,

@@ -72,6 +72,8 @@ async function scoreReplyModel(context: JobContext, model: string, reasons: Reas
     outcomes[golden.id] = reason
       ? { kind: 'handover', reason }
       : await composeReply(run, golden.question, note);
+    const outcome = outcomes[golden.id];
+    if (outcome?.kind === 'reply') note(`reply: ${outcome.text}`);
   }
   return scoreEval(context.cases, outcomes);
 }
@@ -98,7 +100,7 @@ export async function reportReply(context: JobContext, models: string[], fastMod
     ]);
     if (context.verbose)
       say(
-        `${model} missed products: ${report.missedProductCaseIds}; needless hand-overs: ${report.unneededHandoverCaseIds}`,
+        `${model} wrong price: ${report.wrongPriceCaseIds}; oos offers: ${report.outOfStockOfferCaseIds}; missed products: ${report.missedProductCaseIds}; needless hand-overs: ${report.unneededHandoverCaseIds}`,
       );
   }
   printTable(
