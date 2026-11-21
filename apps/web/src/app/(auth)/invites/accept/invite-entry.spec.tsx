@@ -87,11 +87,6 @@ function transport() {
           })
         : anonymous();
     }
-    if (path === '/api/auth/google')
-      return Response.json(
-        { status: 'signup_required', signupTicket: 'b'.repeat(43), email: 'rina@example.test' },
-        { status: 202 },
-      );
     if (path.endsWith('/code/verify'))
       return Response.json(
         { status: 'totp_required', challengeId: 'c'.repeat(43) },
@@ -104,7 +99,8 @@ function transport() {
         { headers: { 'x-session-context': 'verified' } },
       );
     }
-    if (path === '/api/auth/totp' || path === '/api/auth/password') signedIn = true;
+    if (['/api/auth/totp', '/api/auth/password', '/api/auth/google'].includes(path))
+      signedIn = true;
     return new Response(null, { status: 204 });
   });
   return {
@@ -129,7 +125,6 @@ it.each(['signup', 'phone', 'email'])(
     if (view === 'signup') {
       await user.type(await screen.findByLabelText('Full name'), 'Rina');
       await user.type(screen.getByLabelText('Mobile number'), '01712345678');
-      await user.type(screen.getByLabelText('Password'), 'password123');
       await user.click(screen.getByLabelText('I agree to the Terms and Privacy documents.'));
       await user.click(screen.getByRole('button', { name: 'Send verification code' }));
     } else {
@@ -190,7 +185,7 @@ it.each(['signup', 'phone', 'email'])(
     expect(localStorage.length + sessionStorage.length).toBe(0);
   },
 );
-it('returns from Google signup to visible phone sign-in and retains explicit invitation acceptance', async () => {
+it('signs an invited recipient in with Google and retains explicit invitation acceptance', async () => {
   const network = transport();
   Object.defineProperty(window, 'google', {
     configurable: true,
@@ -214,13 +209,6 @@ it('returns from Google signup to visible phone sign-in and retains explicit inv
   show('phone');
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
-  await screen.findByLabelText('Full name');
-  await user.click(screen.getByRole('link', { name: 'Already have an account? Sign in' }));
-  await screen.findByRole('heading', { name: /^Sign in/ });
-  expect(screen.queryByLabelText('Full name')).toBeNull();
-  await user.type(screen.getByLabelText('Mobile number'), '01712345678');
-  await user.type(screen.getByLabelText('Password'), 'password123');
-  await user.click(screen.getByRole('button', { name: /^Sign in/ }));
   await screen.findByRole('button', { name: 'Accept invitation' });
   expect(network.accepted).toEqual([]);
   await user.click(screen.getByRole('button', { name: 'Accept invitation' }));
