@@ -45,3 +45,13 @@ export function useScanKhataPages() {
     },
   });
 }
+
+export function useReadKhataPageAgain(pageId: string) {
+  const { request, contextTag } = useStoreRequest();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      request<KhataPageResponse>(`/khata-scans/pages/${pageId}/read`, { method: 'POST' }),
+    onSuccess: (page) => client.setQueryData(khataKeys.page(contextTag, pageId), page),
+  });
+}
