@@ -4,14 +4,14 @@ import type { AiCostResponse } from '@dakly/contracts/ops-reports';
 
 import { StaffAlertsService } from '../admin/staff-alerts.service';
 import { Clock } from '../platform/clock';
+import { DAY_MS, HOUR_MS } from '../platform/time';
 import { AiCostRepository } from './ai-cost.repository';
 
 export const AI_DAILY_COST_CEILING = Symbol('AI_DAILY_COST_CEILING');
 const SHOP_LIMIT = 20;
 const ALERT_LIMIT = 200;
-const DAY_MS = 86_400_000;
 // Bangladesh has no daylight saving, so a fixed offset gives the shop's calendar day.
-const DHAKA_OFFSET_MS = 6 * 3_600_000;
+const DHAKA_OFFSET_MS = 6 * HOUR_MS;
 
 @Injectable()
 export class AiCostService {

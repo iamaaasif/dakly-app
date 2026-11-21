@@ -13,7 +13,7 @@ describe('contact erasure (Postgres)', () => {
   const owner = fixture.connection.pool;
   // The app role cannot delete consents, so the test proves the cascade does it.
   const app = createDatabase(process.env.DATABASE_URL!);
-  const repository = new ContactErasureRepository(new TenantDatabase(app.db));
+  const repository = new ContactErasureRepository(new TenantDatabase(app.db), app.db);
   const contactId = randomUUID();
   const otherId = randomUUID();
   const connectionId = randomUUID();
@@ -41,9 +41,13 @@ describe('contact erasure (Postgres)', () => {
       [conversationId, fixture.a, contactId, connectionId],
     );
     await owner.query(
-      `insert into messages (id,store_id,conversation_id,direction,author_type,kind,body,status)
-       values (gen_random_uuid(),$1,$2,'out','system','text','hello','sent')`,
-      [fixture.a, conversationId],
+      `insert into messages (id,store_id,conversation_id,direction,author_type,kind,body,status,attachments)
+       values (gen_random_uuid(),$1,$2,'out','system','text','hello','sent',$3::jsonb)`,
+      [
+        fixture.a,
+        conversationId,
+        JSON.stringify([{ objectKey: `stores/${fixture.a}/files/photo.jpg` }]),
+      ],
     );
     await owner.query(
       `insert into consents (id,store_id,contact_id,channel,status,source)
@@ -71,6 +75,7 @@ describe('contact erasure (Postgres)', () => {
     expect(await repository.erase(fixture.a, contactId)).toEqual({
       found: true,
       conversationIds: [conversationId],
+      attachmentKeys: [`stores/${fixture.a}/files/photo.jpg`],
     });
 
     expect(await count('contacts')).toBe(1);
@@ -97,10 +102,26 @@ describe('contact erasure (Postgres)', () => {
     expect(await repository.erase(fixture.a, contactId)).toEqual({
       found: false,
       conversationIds: [],
+      attachmentKeys: [],
     });
     expect(await repository.erase(fixture.b, otherId)).toEqual({
       found: false,
       conversationIds: [],
+      attachmentKeys: [],
     });
+  });
+
+  it('lists customers deleted more than 30 days ago as due', async () => {
+    const old = randomUUID();
+    const recent = randomUUID();
+    await owner.query(
+      `insert into contacts (id,store_id,name,source,kind,deleted_at) values
+         ($1,$3,'পুরনো','manual','customer', now() - interval '31 days'),
+         ($2,$3,'নতুন','manual','customer', now() - interval '2 days')`,
+      [old, recent, fixture.a],
+    );
+    const due = await repository.dueDeleted(1000);
+    expect(due).toContainEqual({ storeId: fixture.a, contactId: old });
+    expect(due).not.toContainEqual({ storeId: fixture.a, contactId: recent });
   });
 });

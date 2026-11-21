@@ -175,6 +175,14 @@ All three routes need `customers.edit`.
 
 - Read quality is gated in `khata-row-reading.spec.ts`: a set of Bangla, Banglish and mixed lines, with Bangla and English digits, that must all convert correctly. It tests what the code does with the model's text. How well the model reads real handwriting needs a set of real page photos, which is open until the shop owner supplies them.
 
+##### Khata Scanner screen (KHT-3)
+
+Route `/customers/khata-scan` for a member with `customers.edit` (`canCreateCustomer`). The design is the Khata Scanner screen of the prototype.
+
+- **Start.** Two cards (Add the last 1–3 months, Digitize old notebooks slowly) and "Past imports". "Start from today" in the design points at Shop sales, which is not built, so it is not offered.
+- **Add pages.** Take photo (phone camera) or Upload photos or PDF, up to 10 pages at a time, JPG, PNG or PDF, 10 MB each. "Read N pages" uploads each page to its link, queues the read and puts the page ids in the address (`?pages=`). Reading and review are in the next change.
+- **Past imports.** From `GET /khata-scans/imports`: date, "1 page", rows imported of rows read, new customers, and Undo while the 7 days last. Undo asks first, then calls `POST /khata-scans/imports/:id/undo`.
+
 #### POS connections
 
 Release 1, CSV or Excel:
