@@ -528,6 +528,15 @@ fixture('POST /contact-merges', async () => {
   const done = await merged(b);
   expect((await f.row('contacts', done.second)).deleted_at).not.toBeNull();
 });
+fixture('GET /contact-merges', async () => {
+  const { a, b } = await pair(),
+    foreign = await merged(a),
+    own = await merged(b);
+  const read = async (contactId: string) =>
+    (await success(b, 'GET', `/contact-merges?contactId=${contactId}`, 200)).json();
+  expect(await read(own.first)).toMatchObject([{ id: own.mergeId }]);
+  expect(await read(foreign.first)).toEqual([]);
+});
 fixture('POST /contact-merges/:mergeId/undo', async () => {
   const { a, b } = await pair(),
     foreign = await merged(a),

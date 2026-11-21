@@ -6,6 +6,8 @@ import { StoresModule } from '../stores/stores.module';
 import { ContactStatsRepository } from './contact-stats.repository';
 import { ContactStatsService } from './contact-stats.service';
 import { RefreshContactStatsOnContactCreated } from './jobs/refresh-contact-stats-on-contact-created.job';
+import { RefreshContactStatsOnContactMergeUndone } from './jobs/refresh-contact-stats-on-contact-merge-undone.job';
+import { RefreshContactStatsOnContactMerged } from './jobs/refresh-contact-stats-on-contact-merged.job';
 import { RefreshContactStatsOnOrderCodCollected } from './jobs/refresh-contact-stats-on-order-cod-collected.job';
 import { RefreshContactStatsOnOrderCreated } from './jobs/refresh-contact-stats-on-order-created.job';
 import { RefreshContactStatsOnOrderImported } from './jobs/refresh-contact-stats-on-order-imported.job';
@@ -17,6 +19,8 @@ import { RefreshContactStatsOnOrderStageChanged } from './jobs/refresh-contact-s
     ContactStatsRepository,
     ContactStatsService,
     RefreshContactStatsOnContactCreated,
+    RefreshContactStatsOnContactMerged,
+    RefreshContactStatsOnContactMergeUndone,
     RefreshContactStatsOnOrderCreated,
     RefreshContactStatsOnOrderImported,
     RefreshContactStatsOnOrderStageChanged,

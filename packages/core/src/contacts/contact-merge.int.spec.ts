@@ -219,7 +219,11 @@ describe('contact merge (Postgres)', () => {
     const first = await merges.merge(storeId, userId, input);
     const second = await merges.merge(storeId, userId, input);
     expect(second.id).toBe(first.id);
+    expect(await merges.listUndoable(storeId, older)).toMatchObject([
+      { id: first.id, mergedContactName: 'Rina A' },
+    ]);
     await merges.undo(storeId, userId, first.id);
+    expect(await merges.listUndoable(storeId, older)).toEqual([]);
     expect((await merges.merge(storeId, userId, input)).undoneAt).not.toBeNull();
     const back = await one('select deleted_at from contacts where id = $1', [newer]);
     expect(back.deleted_at).toBeNull();
