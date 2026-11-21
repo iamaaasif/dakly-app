@@ -168,7 +168,24 @@ Readiness labels are computed from the effective variant prices, confirmed photo
 ids, visibility and available stock. `settings.stock.lowStockThreshold` defaults to
 3 and can be changed through Store settings. Lists accept the `running_low` filter.
 A `variant.restocked` event means availability crossed from zero or less to positive;
-notification sending still waits for PROD-6.
+PROD-6 sends the approved notification.
+
+PROD-6 adds the restock waiting list on `restock_requests`. `POST /variants/:variantId/restock-requests`
+(needs `chats.edit`) adds a contact, with the conversation it asked in. A size that still has stock is
+refused, and asking again returns the same waiting row. A person who was cancelled can ask again.
+`RestockRequestsService.addToWaitingList` is the call the AI tool `add_to_restock_list` and the
+out-of-stock alternatives (AI-12) use; it takes the store, variant and contact from the job and
+returns the waiting row. `GET /restock-requests` (status, variant and cursor filters),
+`GET /products/:productId/restock-waiting` (waiting count per size) and
+`DELETE /restock-requests/:id` (cancel) need `products.view` and `products.edit`.
+
+`POST /variants/:variantId/restock-notifications` (needs `products.edit`) is the owner's approval. It
+refuses a size that is still out of stock. It then queues one transactional Messenger message for each
+waiting person, oldest first, up to 50 a call, through core messaging, so the consent, window and send
+checks run when the message is dispatched. Each message has the key `restock-request:<id>`, and a
+request is marked `notified` only after its message is queued, so a retry never sends twice. People
+with no chat on a Page stay waiting. The response gives `queued` and `waiting`, and the owner approves
+again for the rest. WhatsApp and SMS delivery wait for those channels' send paths.
 
 PROD-3 adds photo upload, confirmation, reorder and removal. Upload URLs last five
 minutes and sign the declared content type and exact byte length. Only JPEG, PNG

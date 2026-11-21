@@ -658,6 +658,74 @@ fixture('POST /variants/:variantId/stock-adjustments', async () => {
     ).statusCode,
   ).toBe(403);
 });
+async function waitingRequest(shop: Shop) {
+  const created = (
+    await success(shop, 'POST', '/products', 201, { name: 'Restock fixture', pricePoisha: 10000 })
+  ).json();
+  const variantId = created.variants[0].id as string;
+  const contactId = await contact(shop);
+  const request = (
+    await success(shop, 'POST', `/variants/${variantId}/restock-requests`, 201, { contactId })
+  ).json();
+  return { productId: created.id as string, variantId, contactId, id: request.id as string };
+}
+fixture('POST /variants/:variantId/restock-requests', async () => {
+  const { a, b } = await pair(),
+    { variantId, contactId, id } = await waitingRequest(a);
+  expect((await f.row('restock_requests', id)).store_id).toBe(a.id);
+  const again = await success(a, 'POST', `/variants/${variantId}/restock-requests`, 201, {
+    contactId,
+  });
+  expect(again.json().id).toBe(id);
+  await hidden(
+    b,
+    'POST',
+    (value) => `/variants/${value}/restock-requests`,
+    variantId,
+    () => ({ contactId: randomUUID() }),
+  );
+});
+fixture('GET /restock-requests', async () => {
+  const { a, b } = await pair(),
+    { id } = await waitingRequest(a);
+  const own = (await success(a, 'GET', '/restock-requests', 200)).json();
+  expect(own.items.map((item: { id: string }) => item.id)).toEqual([id]);
+  expect((await success(b, 'GET', '/restock-requests', 200)).json().items).toEqual([]);
+});
+fixture('GET /products/:productId/restock-waiting', async () => {
+  const { a, b } = await pair(),
+    { productId, variantId } = await waitingRequest(a);
+  expect(
+    (await success(a, 'GET', `/products/${productId}/restock-waiting`, 200)).json().items,
+  ).toEqual([{ variantId, waiting: 1 }]);
+  expect(
+    (await success(b, 'GET', `/products/${productId}/restock-waiting`, 200)).json().items,
+  ).toEqual([]);
+});
+fixture('DELETE /restock-requests/:id', async () => {
+  const { a, b } = await pair(),
+    { id } = await waitingRequest(a);
+  await hidden(b, 'DELETE', (value) => `/restock-requests/${value}`, id);
+  expect((await f.row('restock_requests', id)).status).toBe('waiting');
+  await success(a, 'DELETE', `/restock-requests/${id}`, 204);
+  expect((await f.row('restock_requests', id)).status).toBe('cancelled');
+  expect((await f.request(a.member, 'DELETE', `/restock-requests/${id}`)).statusCode).toBe(403);
+});
+fixture('POST /variants/:variantId/restock-notifications', async () => {
+  const { a, b } = await pair(),
+    { variantId, id } = await waitingRequest(a);
+  await success(a, 'POST', `/variants/${variantId}/restock-notifications`, 409);
+  await f.admin.pool.query('update product_variants set on_hand=3 where id=$1', [variantId]);
+  // The contact has no chat, so nobody is messaged and the request keeps waiting.
+  expect(
+    (await success(a, 'POST', `/variants/${variantId}/restock-notifications`, 200)).json(),
+  ).toEqual({ queued: 0, waiting: 1 });
+  expect((await f.row('restock_requests', id)).status).toBe('waiting');
+  await hidden(b, 'POST', (value) => `/variants/${value}/restock-notifications`, variantId);
+  expect(
+    (await f.request(a.member, 'POST', `/variants/${variantId}/restock-notifications`)).statusCode,
+  ).toBe(403);
+});
 async function deliveryZone(shop: Shop) {
   const result = await success(shop, 'POST', '/delivery-zones', 201, {
     name: 'Outside Dhaka',
