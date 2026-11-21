@@ -12,7 +12,7 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useSmsSenderIds } from '../api/sms-sender-ids';
 import { useSendTestSms } from '../api/sms-sender-requests';
 import { RequestSenderDialog } from './request-sender-dialog';
-import { SmsBalanceCard } from './sms-balance-card';
+import { SmsBalanceLine } from './sms-balance-line';
 import { useSessionContext } from '@/lib/session-context';
 
 const statusBadge = {
@@ -26,7 +26,6 @@ const statusBadge = {
 export function SmsSettings({ rules }: { rules?: ReactNode }) {
   return (
     <div className="space-y-6">
-      <SmsBalanceCard />
       <SenderName />
       {rules}
     </div>
@@ -63,6 +62,7 @@ function SenderName() {
           </Button>
         ) : null}
       </div>
+      <SmsBalanceLine />
       {senders.isPending ? <Skeleton className="h-16 w-full" /> : null}
       {senders.error ? (
         <QueryError message={senders.error.message} onRetry={() => void senders.refetch()} />

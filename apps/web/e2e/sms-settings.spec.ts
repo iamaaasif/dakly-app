@@ -128,7 +128,7 @@ test('shows the SMS balance and saves the sending rules', async ({ page, context
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/settings?tab=sms');
     await expect(page.getByText('12,400 SMS')).toBeVisible();
-    await expect(page.getByText('About 6,200 Bangla messages')).toBeVisible();
+    await expect(page.getByText(/About 6,200 Bangla messages/)).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Sending rules', level: 2 })).toBeVisible();
     await expect(page.getByLabel('Pause from')).toHaveValue('21:00');
     await expect(page.getByLabel('Start again at')).toHaveValue('09:00');

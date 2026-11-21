@@ -159,7 +159,7 @@ it('hides the request button without edit access', async () => {
 it('shows the SMS balance, flags a low one, and leaves it out without billing access', async () => {
   show([], true, 12400);
   expect(await screen.findByText('12,400 SMS')).toBeTruthy();
-  expect(screen.getByText('About 6,200 Bangla messages')).toBeTruthy();
+  expect(screen.getByText(/About 6,200 Bangla messages/)).toBeTruthy();
   expect(screen.queryByText('Low')).toBeNull();
   cleanup();
   show([], true, 320);
@@ -168,5 +168,5 @@ it('shows the SMS balance, flags a low one, and leaves it out without billing ac
   cleanup();
   show([], true, null);
   await screen.findByText('Sending rules');
-  expect(screen.queryByText('SMS balance')).toBeNull();
+  expect(screen.queryByText(/SMS balance/)).toBeNull();
 });
