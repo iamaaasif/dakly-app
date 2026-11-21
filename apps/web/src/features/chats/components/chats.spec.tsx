@@ -56,6 +56,8 @@ function show(query = defaults) {
       canEditProducts: false,
       canViewOrders: false,
       canEditOrders: false,
+      canViewDueBook: false,
+      canEditDueBook: false,
       canViewCampaigns: false,
       canViewAnalytics: false,
       canChangeAttributionWindow: false,

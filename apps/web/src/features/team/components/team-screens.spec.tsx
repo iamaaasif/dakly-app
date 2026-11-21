@@ -28,6 +28,8 @@ function show(child: ReactNode, edit = false) {
       canEditProducts: false,
       canViewOrders: false,
       canEditOrders: false,
+      canViewDueBook: false,
+      canEditDueBook: false,
       canViewCampaigns: false,
       canViewAnalytics: false,
       canChangeAttributionWindow: false,

@@ -286,6 +286,7 @@ describe('DueBookService (Postgres)', () => {
         // 60,000 of the 70,000 baki from 45 days ago is still open after the 10,000 payment.
         overdueOwedPoisha: 60000,
         overdueCustomers: 1,
+        neverRemindedCustomers: 2,
         // The 12,000 and 10,000 payments count; the 5,000 one is dated 10 days ago.
         collectedLast7DaysPoisha: 22000,
       });
@@ -297,6 +298,7 @@ describe('DueBookService (Postgres)', () => {
         customersOwing: 0,
         overdueOwedPoisha: 0,
         overdueCustomers: 0,
+        neverRemindedCustomers: 0,
         collectedLast7DaysPoisha: 0,
       });
       expect(
