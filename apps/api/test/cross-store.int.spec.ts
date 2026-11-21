@@ -527,6 +527,17 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('contacts', foreignId)).toEqual(before);
   });
+fixture('POST /contacts/:contactId/erase', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a),
+    own = await contact(b);
+  await hidden(b, 'POST', (value) => `/contacts/${value}/erase`, id);
+  expect((await f.row('contacts', id)).store_id).toBe(a.id);
+  await success(b, 'POST', `/contacts/${own}/erase`, 204);
+  const { rows } = await f.admin.pool.query('select 1 from contacts where id = $1', [own]);
+  expect(rows).toHaveLength(0);
+  expect((await f.row('contacts', id)).store_id).toBe(a.id);
+});
 async function product(shop: Shop) {
   const result = await success(shop, 'POST', '/products', 201, {
     name: 'পাঞ্জাবি',
@@ -1413,6 +1424,22 @@ fixture('POST /khata-scans/imports/:importId/undo', async () => {
   ).toBe(403);
   const undone = await success(a, 'POST', `/khata-scans/imports/${importId}/undo`, 200);
   expect(undone.json()).toMatchObject({ id: importId, status: 'undone' });
+});
+fixture('GET /khata-scans/imports', async () => {
+  const { a, b } = await pair(),
+    page = await readKhataPage(a);
+  const imported = await success(
+    a,
+    'POST',
+    `/khata-scans/pages/${page.id}/import`,
+    201,
+    page.decisions,
+  );
+  const own = await success(a, 'GET', '/khata-scans/imports', 200);
+  expect(own.json().map((item: { id: string }) => item.id)).toEqual([imported.json().id]);
+  const foreign = await success(b, 'GET', '/khata-scans/imports', 200);
+  expect(foreign.json()).toEqual([]);
+  expect((await f.request(a.member, 'GET', '/khata-scans/imports')).statusCode).toBe(403);
 });
 async function dueEntries(shop: Shop, contactId: string) {
   await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {

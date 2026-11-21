@@ -24,6 +24,7 @@ import {
 
 // Rule 6: a past import can be undone for 7 days.
 const UNDO_DAYS = 7;
+const PAST_IMPORTS_LIMIT = 20;
 
 type Decision = ImportKhataPageInput['rows'][number];
 
@@ -82,6 +83,11 @@ export class KhataImportsService {
       });
       return toResponse(saved);
     });
+  }
+
+  async listImports(storeId: string): Promise<KhataImportResponse[]> {
+    const found = await this.repository.listImports(storeId, PAST_IMPORTS_LIMIT);
+    return found.map(toResponse);
   }
 
   // Undo removes what the import made. A customer someone has edited or given another baki since
