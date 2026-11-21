@@ -101,7 +101,7 @@ export function TestAgentTab({ canEdit }: { canEdit: boolean }) {
           placeholder="e.g. Showroom kothay?"
           {...form.register('question')}
         />
-        <Button type="submit" loading={ask.isPending}>
+        <Button type="submit" className="bg-inverse hover:bg-inverse/90" loading={ask.isPending}>
           Test
         </Button>
       </form>
@@ -110,6 +110,7 @@ export function TestAgentTab({ canEdit }: { canEdit: boolean }) {
           <Button
             key={example}
             variant="secondary"
+            className="min-h-8 rounded-full px-3 py-1 text-sm"
             onClick={() => {
               form.setValue('question', example);
               ask.mutate({ question: example });

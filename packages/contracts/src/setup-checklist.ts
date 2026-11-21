@@ -11,14 +11,15 @@ export const setupStepIds = [
   'send_first_campaign',
 ] as const;
 
+export const howYouSellAnswersSchema = z
+  .array(z.enum(howYouSellOptions))
+  .min(1, 'Choose at least one way you sell')
+  .max(4)
+  .refine((values) => new Set(values).size === values.length, 'Choose each answer once');
+
 export const changeSetupChecklistSchema = z
   .strictObject({
-    howYouSell: z
-      .array(z.enum(howYouSellOptions))
-      .min(1)
-      .max(4)
-      .refine((values) => new Set(values).size === values.length, 'Choose each answer once')
-      .optional(),
+    howYouSell: howYouSellAnswersSchema.optional(),
     hidden: z.literal(true).optional(),
   })
   .refine(
