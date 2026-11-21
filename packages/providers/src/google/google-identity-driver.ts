@@ -43,6 +43,8 @@ export function googleIdentity(claims: {
     email,
     name: displayName(claims.name),
     emailIsAuthoritative:
-      email.endsWith('@gmail.com') || (typeof claims.hd === 'string' && claims.hd.length > 0),
+      email.endsWith('@gmail.com') ||
+      email.endsWith('@googlemail.com') ||
+      (typeof claims.hd === 'string' && claims.hd.length > 0),
   };
 }
