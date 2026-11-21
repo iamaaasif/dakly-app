@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0080_snapshot.json`: **99 tables, 1332 columns, 408 explicit indexes and 312 foreign keys**.
+Built from `packages/db/migrations/meta/0081_snapshot.json`: **99 tables, 1333 columns, 408 explicit indexes and 312 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -737,6 +737,7 @@ erDiagram
         text ai_rating_reason "NULL; text"
         uuid rated_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone rated_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone ai_fixed_at "NULL; timestamp with time zone"
         timestamp_with_time_zone sent_at "NULL; timestamp with time zone"
         timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
         timestamp_with_time_zone read_at "NULL; timestamp with time zone"

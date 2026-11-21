@@ -4,6 +4,7 @@ import {
   MetaRequestError,
   type ChannelCredentials,
   type ChannelDriver,
+  type CommentDriver,
   type MediaDownload,
   type MetaAuthorizationDriver,
   type MetaPage,
@@ -156,7 +157,8 @@ export class MetaGraphChannelDriver
   implements
     MetaAuthorizationDriver,
     MetaTokenHealthDriver,
-    Pick<ChannelDriver, 'send' | 'downloadMedia'>
+    Pick<ChannelDriver, 'send' | 'downloadMedia'>,
+    Omit<CommentDriver, 'parseComments'>
 {
   constructor(private readonly app: MetaApp) {}
 
@@ -290,6 +292,65 @@ export class MetaGraphChannelDriver
       { method: 'POST', accessToken, signal: AbortSignal.timeout(requestTimeoutMs), body },
     );
     return { externalMessageId: response.message_id };
+  }
+
+  async replyToComment(
+    { accessToken }: ChannelCredentials,
+    comment: Parameters<CommentDriver['replyToComment']>[1],
+  ) {
+    const edge = comment.channel === 'messenger' ? 'comments' : 'replies';
+    const response = await this.request(
+      `${encodeURIComponent(comment.externalCommentId)}/${edge}`,
+      {},
+      z.object({ id: z.string().min(1) }),
+      {
+        method: 'POST',
+        accessToken,
+        signal: AbortSignal.timeout(requestTimeoutMs),
+        body: JSON.stringify({ message: comment.text }),
+      },
+    );
+    return { externalReplyId: response.id };
+  }
+
+  async sendPrivateReply(
+    { accessToken, accountExternalId }: ChannelCredentials,
+    comment: Parameters<CommentDriver['sendPrivateReply']>[1],
+  ) {
+    const endpoint = comment.channel === 'messenger' ? encodeURIComponent(accountExternalId) : 'me';
+    const response = await this.request(
+      `${endpoint}/messages`,
+      {},
+      z.object({ message_id: z.string().min(1), recipient_id: z.string().min(1) }),
+      {
+        method: 'POST',
+        accessToken,
+        signal: AbortSignal.timeout(requestTimeoutMs),
+        body: JSON.stringify({
+          recipient: { comment_id: comment.externalCommentId },
+          message: { text: comment.text },
+        }),
+      },
+    );
+    return { externalMessageId: response.message_id, recipientExternalId: response.recipient_id };
+  }
+
+  async setCommentHidden(
+    { accessToken }: ChannelCredentials,
+    comment: Parameters<CommentDriver['setCommentHidden']>[1],
+  ) {
+    const flag = comment.channel === 'messenger' ? 'is_hidden' : 'hide';
+    await this.request(
+      encodeURIComponent(comment.externalCommentId),
+      {},
+      z.object({ success: z.literal(true) }),
+      {
+        method: 'POST',
+        accessToken,
+        signal: AbortSignal.timeout(requestTimeoutMs),
+        body: JSON.stringify({ [flag]: comment.hidden }),
+      },
+    );
   }
 
   async downloadMedia(accessToken: string, url: string, maxBytes: number): Promise<MediaDownload> {

@@ -37,6 +37,7 @@ export function AiAgentDrawer({
 }: AiAgentDrawerProps) {
   const { data } = useSessionContext();
   const canEdit = Boolean(data?.currentStore?.canEditStoreSettings);
+  const canEditChats = Boolean(data?.currentStore?.canEditChats);
   return (
     <Sheet
       open={tab !== undefined}
@@ -66,7 +67,11 @@ export function AiAgentDrawer({
           <KnowledgeTab canEdit={canEdit} />
         </TabsContent>
         <TabsContent value="feedback">
-          <FeedbackTab filter={feedbackFilter ?? 'bad'} onFilterChange={onFeedbackFilterChange} />
+          <FeedbackTab
+            filter={feedbackFilter ?? 'bad'}
+            canFix={canEditChats}
+            onFilterChange={onFeedbackFilterChange}
+          />
         </TabsContent>
         <TabsContent value="test">
           <TestAgentTab canEdit={canEdit} />
