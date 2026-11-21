@@ -120,8 +120,13 @@ The web app has two customer screens.
 - When another contact has the same phone, the profile shows a "Possible same person" note above
   Chat channels. It names the other contact (a link to their profile), shows their phone as the
   API sent it (masked unless the member sees full numbers) and says they have the same phone
-  number. Members with Edit Customers can Dismiss it. Merge waits on CUS-14, so the note has no
-  Merge button. It shows from either contact's profile and is hidden when nothing is open.
+  number. Members with Edit Customers can Merge or Dismiss it. It shows from either contact's
+  profile and is hidden when nothing is open. Merge asks "Merge <name>?", says the older profile
+  stays and the merge can be undone for 7 days, then opens the kept profile. The kept profile
+  shows a "Recent merges" card for each merge that can still be undone, with the time it closes
+  and an Undo merge button; undo opens the restored profile and says how many later changes it
+  left as they were. There is no design for either; both follow the Chat channels card style
+  (evidence at 1440x900 and 360x800 in `docs/design/evidence/cus-14-merge/`).
 - Members with Edit Customers also change the customer from the profile. Edit changes the
   name, the tags (separated by commas) and the phone. The phone field starts empty, because
   the shown phone may be masked, and is sent only when typed. Delete asks "Delete <name>?" and
@@ -586,9 +591,10 @@ Bugs in the mock: a segment "View" says "Showing 2 of 186" but "Page 1 of 208", 
 
 **Missing design: possible same person.** The prototype has no note for two contacts that share a
 phone (D27). It is built as a card in the profile's main column, in the style of the Chat
-channels card: heading, the other contact's name and phone, and a Dismiss button. Evidence at
-1440x900 and 360x800 is in `docs/design/evidence/cus-4-possible-same-person/`. Merge waits on
-CUS-14.
+channels card: heading, the other contact's name and phone, and Merge and Dismiss buttons.
+Evidence at 1440x900 and 360x800 is in `docs/design/evidence/cus-4-possible-same-person/`. The
+merge dialog and the Recent merges card (CUS-14) have no design either; their evidence is in
+`docs/design/evidence/cus-14-merge/`.
 
 **Also missing on customers.** Duplicate merge (same phone from Shopify and Facebook), delete customer and data-removal requests, and the empty profile state for a customer with no orders yet.
 
