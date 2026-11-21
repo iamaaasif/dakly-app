@@ -266,6 +266,13 @@ out as text and says that colour is unavailable. A card for an out-of-stock vari
 "স্টক নেই (out of stock)" and the result carries `outOfStock: true`. That is how a product with no variants but a red and a blue photo still shows the red
 one when the customer asks for red. Existing photos are not tagged retroactively.
 
+PROD-9 sends the chosen photo in chat. When `send_product_card` returns a `photoFileId`, the sales
+agent resolves it to the stored file (`ProductsService.chatPhotoFile` accepts only a photo of a product
+that is active and shown in chats) and queues the card with that image. The message keeps the image as a
+stored image attachment, and the dispatcher gives Messenger or Instagram a ten-minute signed link, sending
+the photo before the card text. A photo Meta refuses does not stop the text. Instagram image sending is new
+for the driver; campaigns still send images on Messenger only.
+
 Adjust opening stock after saving through the list. The low-stock threshold
 belongs to the shop.
 

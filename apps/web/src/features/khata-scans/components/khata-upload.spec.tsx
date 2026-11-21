@@ -41,7 +41,7 @@ function show() {
     contextTag: 'verified',
     hasMemberships: true,
   } as SessionContext);
-  return render(<KhataScanScreen />, {
+  return render(<KhataScanScreen pageIds={[]} activePage={1} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     ),
@@ -69,7 +69,9 @@ describe('Khata Scanner upload', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Read 1 page' }));
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith(`/customers/khata-scan?pages=${pageId}`));
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(`/customers/khata-scan?pages=${pageId}&page=1`),
+    );
     expect(sent.map((call) => `${call.method} ${call.path.replace('/api', '')}`)).toEqual(
       expect.arrayContaining([
         'POST /khata-scans/pages',

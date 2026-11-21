@@ -51,7 +51,8 @@ export type OutboundMessage = {
   operationKey: string;
   humanAgent?: boolean;
 } & (
-  { channel: 'instagram' } | { channel: 'messenger'; imageUrl?: string; buttons?: OutboundButton[] }
+  | { channel: 'instagram'; imageUrl?: string }
+  | { channel: 'messenger'; imageUrl?: string; buttons?: OutboundButton[] }
 );
 
 // An expired link is a final answer; an outage is not, so the driver throws for that.

@@ -115,7 +115,7 @@ function Tips() {
         </p>
       ))}
       <p className="mt-1 text-sm text-text-muted">
-        Dakly reads Bangla and English handwriting and numbers. It won’t be perfect — you’ll check
+        Dakly reads Bangla and English handwriting and numbers. It won’t be perfect. You’ll check
         anything it’s unsure about.
       </p>
     </section>
