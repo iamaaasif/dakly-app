@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0083_snapshot.json`: **101 tables, 1357 columns, 415 explicit indexes and 318 foreign keys**.
+Built from `packages/db/migrations/meta/0084_snapshot.json`: **102 tables, 1373 columns, 422 explicit indexes and 324 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1196,10 +1196,16 @@ erDiagram
     users ||..o{ assistant_messages : "user_id"
     stores ||..o{ khata_pages : "store_id"
     users |o..o{ khata_pages : "created_by_user_id"
-    files ||..o{ khata_pages : "store_id, file_id"
+    files |o..o{ khata_pages : "store_id, file_id"
+    stores ||..o{ khata_imports : "store_id"
+    users |o..o{ khata_imports : "created_by_user_id"
+    khata_pages ||..o{ khata_imports : "store_id, page_id"
     stores ||..o{ khata_rows : "store_id"
     khata_pages ||..o{ khata_rows : "store_id, page_id"
     contacts |o..o{ khata_rows : "store_id, matched_contact_id"
+    khata_imports |o..o{ khata_rows : "store_id, import_id"
+    contacts |o..o{ khata_rows : "store_id, contact_id"
+    due_entries |o..o{ khata_rows : "store_id, due_entry_id"
     ai_agent_settings {
         uuid store_id PK,FK "NOT NULL; uuid"
         boolean is_auto_reply_on "NOT NULL; boolean"
@@ -1289,13 +1295,26 @@ erDiagram
     khata_pages {
         uuid id PK "NOT NULL; uuid"
         uuid store_id FK "NOT NULL; uuid"
-        uuid file_id FK "NOT NULL; uuid"
+        uuid file_id FK "NULL; uuid"
         text status "NOT NULL; text"
         text failure_code "NULL; text"
         timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
         uuid created_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    khata_imports {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid page_id FK "NOT NULL; uuid"
+        text status "NOT NULL; text"
+        integer rows_read "NOT NULL; integer"
+        integer rows_imported "NOT NULL; integer"
+        integer rows_skipped "NOT NULL; integer"
+        integer customers_created "NOT NULL; integer"
+        uuid created_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone undone_at "NULL; timestamp with time zone"
     }
     khata_rows {
         uuid id PK "NOT NULL; uuid"
@@ -1311,6 +1330,11 @@ erDiagram
         smallint confidence "NOT NULL; smallint"
         uuid matched_contact_id FK "NULL; uuid"
         text match_kind "NULL; text"
+        uuid import_id FK "NULL; uuid"
+        text outcome "NULL; text"
+        uuid contact_id FK "NULL; uuid"
+        boolean is_contact_created "NOT NULL; boolean"
+        uuid due_entry_id FK "NULL; uuid"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
@@ -2158,12 +2182,18 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `imports_started_by_user_id_users_id_fk`                             | `imports(started_by_user_id)`                             | `users(id)`                                 | no action |
 | `imports_file_id_store_fk`                                           | `imports(store_id, file_id)`                              | `files(store_id, id)`                       | no action |
 | `imports_report_file_id_store_fk`                                    | `imports(store_id, report_file_id)`                       | `files(store_id, id)`                       | no action |
+| `khata_imports_store_id_stores_id_fk`                                | `khata_imports(store_id)`                                 | `stores(id)`                                | no action |
+| `khata_imports_created_by_user_id_users_id_fk`                       | `khata_imports(created_by_user_id)`                       | `users(id)`                                 | no action |
+| `khata_imports_page_id_store_fk`                                     | `khata_imports(store_id, page_id)`                        | `khata_pages(store_id, id)`                 | no action |
 | `khata_pages_store_id_stores_id_fk`                                  | `khata_pages(store_id)`                                   | `stores(id)`                                | no action |
 | `khata_pages_created_by_user_id_users_id_fk`                         | `khata_pages(created_by_user_id)`                         | `users(id)`                                 | no action |
 | `khata_pages_file_id_store_fk`                                       | `khata_pages(store_id, file_id)`                          | `files(store_id, id)`                       | no action |
 | `khata_rows_store_id_stores_id_fk`                                   | `khata_rows(store_id)`                                    | `stores(id)`                                | no action |
 | `khata_rows_page_id_store_fk`                                        | `khata_rows(store_id, page_id)`                           | `khata_pages(store_id, id)`                 | cascade   |
 | `khata_rows_matched_contact_id_store_fk`                             | `khata_rows(store_id, matched_contact_id)`                | `contacts(store_id, id)`                    | no action |
+| `khata_rows_import_id_store_fk`                                      | `khata_rows(store_id, import_id)`                         | `khata_imports(store_id, id)`               | no action |
+| `khata_rows_contact_id_store_fk`                                     | `khata_rows(store_id, contact_id)`                        | `contacts(store_id, id)`                    | no action |
+| `khata_rows_due_entry_id_store_fk`                                   | `khata_rows(store_id, due_entry_id)`                      | `due_entries(store_id, id)`                 | no action |
 | `delivery_zones_store_id_stores_id_fk`                               | `delivery_zones(store_id)`                                | `stores(id)`                                | no action |
 | `discount_codes_store_id_stores_id_fk`                               | `discount_codes(store_id)`                                | `stores(id)`                                | no action |
 | `discount_codes_contact_id_contacts_id_fk`                           | `discount_codes(contact_id)`                              | `contacts(id)`                              | set null  |

@@ -30,6 +30,17 @@ const unreferenced = sql.join(
 export class FilePurgeRepository {
   constructor(@Inject(TenantDatabase) private readonly tenant: TenantDatabase) {}
 
+  // Rule 7 of the Khata Scanner: a page whose photo has expired lets go of it, so the delete below
+  // can take the file. The rows stay.
+  async releaseExpiredKhataPhotos(storeId: string): Promise<void> {
+    await this.tenant.forStore(storeId, (tx) =>
+      tx.execute(sql`
+        update khata_pages set file_id = null
+        where store_id = ${storeId} and file_id in (
+          select id from files where store_id = ${storeId} and expires_at < now())`),
+    );
+  }
+
   // Returns the object keys of the rows it deleted. Files that something still points at stay:
   // their owner clears the reference first. Leaving them out also keeps one such file from filling
   // every batch.

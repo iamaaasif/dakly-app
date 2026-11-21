@@ -78,6 +78,7 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
             for (const table of [
               'store_daily_metrics',
               'khata_rows',
+              'khata_imports',
               'khata_pages',
               'usage_events',
               'due_entries',
