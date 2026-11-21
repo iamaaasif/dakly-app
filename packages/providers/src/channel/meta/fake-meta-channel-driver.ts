@@ -4,6 +4,7 @@ import {
   MetaRequestError,
   type ChannelCredentials,
   type ChannelDriver,
+  type CommentDriver,
   type MediaDownload,
   type MetaAuthorizationDriver,
   type MetaPage,
@@ -28,11 +29,16 @@ const pages: MetaPage[] = [
   },
 ];
 
+function fingerprint(...parts: string[]) {
+  return createHash('sha256').update(JSON.stringify(parts)).digest('hex').slice(0, 24);
+}
+
 export class FakeMetaChannelDriver
   implements
     MetaAuthorizationDriver,
     MetaTokenHealthDriver,
-    Pick<ChannelDriver, 'send' | 'downloadMedia'>
+    Pick<ChannelDriver, 'send' | 'downloadMedia'>,
+    Omit<CommentDriver, 'parseComments'>
 {
   constructor(private readonly redirectUri: string) {}
 
@@ -76,6 +82,45 @@ export class FakeMetaChannelDriver
     const reference = JSON.stringify([message.channel, accountExternalId, message.operationKey]);
     const externalMessageId = `fake-${createHash('sha256').update(reference).digest('hex')}`;
     return { externalMessageId };
+  }
+
+  async replyToComment(
+    credentials: ChannelCredentials,
+    comment: Parameters<CommentDriver['replyToComment']>[1],
+  ) {
+    this.requireConnected(comment.channel, credentials);
+    return {
+      externalReplyId: `fake-reply-${fingerprint(comment.externalCommentId, comment.text)}`,
+    };
+  }
+
+  async sendPrivateReply(
+    credentials: ChannelCredentials,
+    comment: Parameters<CommentDriver['sendPrivateReply']>[1],
+  ) {
+    this.requireConnected(comment.channel, credentials);
+    return {
+      externalMessageId: `fake-private-${fingerprint(comment.externalCommentId, comment.text)}`,
+      recipientExternalId: `fake-author-${fingerprint(comment.externalCommentId)}`,
+    };
+  }
+
+  async setCommentHidden(
+    credentials: ChannelCredentials,
+    comment: Parameters<CommentDriver['setCommentHidden']>[1],
+  ) {
+    this.requireConnected(comment.channel, credentials);
+  }
+
+  private requireConnected(
+    channel: 'messenger' | 'instagram',
+    { accountExternalId, accessToken }: ChannelCredentials,
+  ) {
+    const connected = pages.some((page) => {
+      const account = channel === 'messenger' ? page.id : page.instagram?.id;
+      return account === accountExternalId && page.accessToken === accessToken;
+    });
+    if (!connected) throw new MetaRequestError('auth_error');
   }
 
   // Development has no Meta CDN: a link containing "expired" behaves like an old one.

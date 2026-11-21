@@ -159,7 +159,7 @@ type RecoveryFixture = {
 };
 async function requestRecovery(page: Page, fixture: RecoveryFixture) {
   await page.goto('/security/recovery');
-  await privateInput(page, 'phone', fixture.phone);
+  await privateInput(page, 'identifier', fixture.phone);
   await expect
     .poll(
       async () => {

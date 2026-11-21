@@ -6,6 +6,10 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
+import { AiService } from '@dakly/core/ai/ai.service';
+import { KnowledgeIndexService } from '@dakly/core/ai/knowledge/knowledge-index.service';
+import { KnowledgeRepository } from '@dakly/core/ai/knowledge/knowledge.repository';
+import { KnowledgeSearchService } from '@dakly/core/ai/knowledge-search.service';
 import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
 import { CampaignApprovalService } from '@dakly/core/campaigns/campaign-approval.service';
 import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-channel-driver';
@@ -3733,6 +3737,7 @@ fixture('GET /ai-replies/feedback', async () => {
       helpfulPercent: 50,
       goodCount: 1,
       badCount: 1,
+      fixedCount: 0,
       commonProblems: [{ reason: 'missed_the_question', count: 1 }],
     },
     items: [
@@ -3743,6 +3748,7 @@ fixture('GET /ai-replies/feedback', async () => {
         customerName: expect.any(String),
         customerQuestion: 'Kurti M size ache?',
         replyText: 'Ji, M size ache.',
+        fixedAt: null,
         ratedAt: expect.any(String),
       },
     ],
@@ -3751,6 +3757,62 @@ fixture('GET /ai-replies/feedback', async () => {
   expect(good.items.map((item: { messageId: string }) => item.messageId)).toEqual([praised]);
   const all = (await success(b, 'GET', '/ai-replies/feedback?filter=all', 200)).json();
   expect(all.items).toHaveLength(2);
+});
+
+fixture('POST /ai-replies/:messageId/fix', async () => {
+  const { a, b } = await pair();
+  const foreign = await seedAiReply(a);
+  const own = await seedAiReply(b);
+  const url = (id: string) => `/ai-replies/${id}/fix`;
+  // Banglish question, Bangla answer: both are kept exactly as typed.
+  const body = () => ({
+    question: 'Panjabi er kapor ki?',
+    answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+    keywords: ['kapor', 'কাপড়'],
+  });
+  expect((await f.request(b.owner, 'POST', url(own), body())).statusCode).toBe(403);
+  await enableChats(a);
+  await enableChats(b);
+  await hidden(b, 'POST', url, foreign, body);
+  // Not rated yet, then rated good: only a bad reply can be fixed.
+  await success(b, 'POST', url(own), 409, body());
+  await success(b, 'PUT', `/ai-replies/${own}/rating`, 204, { rating: 'good' });
+  await success(b, 'POST', url(own), 409, body());
+  await success(b, 'PUT', `/ai-replies/${own}/rating`, 204, {
+    rating: 'bad',
+    reason: 'wrong_information',
+  });
+  await success(b, 'POST', url(own), 400, { ...body(), question: '' });
+  await success(b, 'POST', url(own), 400, { ...body(), storeId: a.id });
+  await success(b, 'POST', url(own), 400, { answer: 'Ji.' });
+  const needs = (await success(b, 'GET', '/ai-replies/feedback?filter=needs_fixing', 200)).json();
+  expect(needs.items).toHaveLength(1);
+  await success(b, 'POST', url(own), 204, body());
+  const { rows: taught } = await f.admin.pool.query(
+    'select kind, question, answer, keywords from knowledge_items where store_id = $1',
+    [b.id],
+  );
+  expect(taught).toEqual([
+    {
+      kind: 'policy',
+      question: 'Panjabi er kapor ki?',
+      answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+      keywords: ['kapor', 'কাপড়'],
+    },
+  ]);
+  expect(await f.row('messages', own)).toMatchObject({ ai_fixed_at: expect.any(String) });
+  // Fixing twice would teach the same answer twice.
+  await success(b, 'POST', url(own), 409, body());
+  const after = (await success(b, 'GET', '/ai-replies/feedback?filter=needs_fixing', 200)).json();
+  expect(after.items).toEqual([]);
+  expect(after.summary).toMatchObject({ badCount: 1, fixedCount: 1 });
+  const bad = (await success(b, 'GET', '/ai-replies/feedback?filter=bad', 200)).json();
+  expect(bad.items).toMatchObject([{ messageId: own, fixedAt: expect.any(String) }]);
+  const { rows: audited } = await f.admin.pool.query(
+    "select actor_user_id from audit_log where store_id = $1 and entity_id = $2 and action = 'ai_reply.fixed'",
+    [b.id, own],
+  );
+  expect(audited).toEqual([{ actor_user_id: b.owner.id }]);
 });
 
 fixture('GET /conversations/:conversationId', async () => {
@@ -3905,6 +3967,62 @@ for (const [path, responder] of [
       expect(handBack.json()).toMatchObject({ responder: 'ai', aiResumesAt: null });
     }
     expect(await f.row('conversations', foreign)).toMatchObject({ responder: 'ai' });
+  });
+}
+
+async function seedComment(shop: Shop, status = 'new') {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into social_comments(id,store_id,channel_connection_id,external_post_id,external_comment_id,author_name,body,status,commented_at)
+     values($1::uuid,$2,$3,'post-1',$1::text,'Rumana Akter','Price koto?',$4,now())`,
+    [id, shop.id, await seedChannel(shop), status],
+  );
+  return id;
+}
+
+fixture('GET /comments', async () => {
+  const { a, b } = await pair();
+  await seedComment(a);
+  const own = await seedComment(b);
+  expect((await f.request(b.owner, 'GET', '/comments')).statusCode).toBe(403);
+  await enableChats(b);
+  const listed = (await success(b, 'GET', '/comments', 200)).json();
+  expect(listed.items).toMatchObject([{ id: own, body: 'Price koto?', status: 'new' }]);
+  await success(b, 'GET', '/comments?limit=0', 400);
+});
+
+for (const path of ['reply', 'private-reply'] as const) {
+  fixture(`POST /comments/:commentId/${path}`, async () => {
+    const { a, b } = await pair();
+    await enableChats(b);
+    const url = (id: string) => `/comments/${id}/${path}`;
+    const foreign = await seedComment(a);
+    await hidden(b, 'POST', url, foreign, () => ({ body: 'Inbox e dilam' }));
+    await success(b, 'POST', url(await seedComment(b)), 400, { body: '   ' });
+    expect(await f.row('social_comments', foreign)).toMatchObject({
+      status: 'new',
+      public_reply_external_id: null,
+      private_replied_at: null,
+    });
+  });
+}
+
+for (const [path, status] of [
+  ['hide', 'hidden'],
+  ['unhide', 'new'],
+] as const) {
+  fixture(`POST /comments/:commentId/${path}`, async () => {
+    const { a, b } = await pair();
+    await enableChats(b);
+    const url = (id: string) => `/comments/${id}/${path}`;
+    const foreign = await seedComment(a, path === 'hide' ? 'new' : 'hidden');
+    await hidden(b, 'POST', url, foreign);
+    // A comment already in the asked state answers without calling Meta.
+    const own = await seedComment(b, status);
+    expect((await success(b, 'POST', url(own), 200)).json()).toMatchObject({ id: own, status });
+    expect(await f.row('social_comments', foreign)).toMatchObject({
+      status: path === 'hide' ? 'new' : 'hidden',
+    });
   });
 }
 
@@ -4852,6 +4970,45 @@ describe('every production shop route isolates its data', () => {
 
   it('requires an executable fixture or a named boundary proof for every actual Fastify route', () => {
     inventory.assertCovered([...fixtures.keys(), ...isolationBoundaries.keys()]);
+  });
+  it('finds an answer taught from a bad reply for Bangla, Banglish and mixed questions', async () => {
+    const shop = await f.shop();
+    await enableChats(shop);
+    const replyId = await seedAiReply(shop);
+    await success(shop, 'PUT', `/ai-replies/${replyId}/rating`, 204, {
+      rating: 'bad',
+      reason: 'wrong_information',
+    });
+    await success(shop, 'POST', `/ai-replies/${replyId}/fix`, 204, {
+      question: 'Panjabi er kapor ki?',
+      answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+      keywords: ['কাপড়', 'kapor', 'fabric'],
+    });
+    await success(shop, 'POST', '/knowledge-items', 201, {
+      kind: 'policy',
+      question: 'Showroom kothay?',
+      answer: 'ধানমন্ডিতে আমাদের শোরুম।',
+      keywords: ['showroom'],
+    });
+    // The worker indexes after commit; here the same service runs inline.
+    const ai = app.get(AiService, { strict: false });
+    const repository = app.get(KnowledgeRepository, { strict: false });
+    const indexer = new KnowledgeIndexService(repository, undefined as never, ai);
+    const { rows: items } = await f.admin.pool.query(
+      'select id, question, updated_at from knowledge_items where store_id = $1',
+      [shop.id],
+    );
+    for (const item of items)
+      await indexer.index(shop.id, item.id, {
+        revision: item.updated_at.toISOString(),
+        finalAttempt: true,
+      });
+    const taught = items.find((item) => item.question === 'Panjabi er kapor ki?').id;
+    const search = new KnowledgeSearchService(repository, ai);
+    // None of these is the question the customer typed; each reaches the answer by a word the
+    // team added, in Bangla letters, English letters or both.
+    for (const question of ['কাপড়', 'kapor', 'fabric', 'panjabi কাপড়'])
+      expect((await search.search(shop.id, question, 1))[0]?.itemId, question).toBe(taught);
   });
   it('returns the phone limit error to a masked member on contact search, create and edit', async () => {
     const shop = await f.shop();

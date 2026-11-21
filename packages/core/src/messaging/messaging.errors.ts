@@ -3,6 +3,8 @@ import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 const MESSAGING_ERRORS = {
   CHATS_DISABLED: { status: 403, message: 'Enable Chats to open the inbox' },
   AI_REPLY_NOT_FOUND: { status: 404, message: 'AI reply not found' },
+  AI_REPLY_NOT_BAD: { status: 409, message: 'Only a reply rated bad can be fixed' },
+  AI_REPLY_ALREADY_FIXED: { status: 409, message: 'This reply is already fixed' },
   CONVERSATION_NOT_FOUND: { status: 404, message: 'Conversation not found' },
   CONVERSATION_ASSIGNEE_INVALID: { status: 400, message: 'Choose an active team member' },
   MESSAGING_PREPARATION_FAILED: { status: 503, message: 'The message could not be prepared' },

@@ -25,6 +25,7 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { BuyerOrdersService } from '../orders/buyer-orders.service';
 import { ChatOrdersService } from '../orders/chat-orders.service';
 import { AppError } from '../platform/errors/app-error';
+import { ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 
 // The agent job supplies both ids. No tool argument can name another store or customer.
@@ -69,6 +70,7 @@ export class SalesAgentToolsService {
 
   constructor(
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(ProductSearchService) private readonly productSearch: ProductSearchService,
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(KnowledgeSearchService) private readonly knowledge: KnowledgeSearchService,
     @Inject(BuyerOrdersService) private readonly orders: BuyerOrdersService,
@@ -92,7 +94,7 @@ export class SalesAgentToolsService {
 
   private async searchProducts({ storeId }: ToolScope, raw: unknown) {
     const { query } = searchProductsTool.input.parse(raw);
-    const found = await this.products.searchForChat(storeId, query, SEARCH_PRODUCT_LIMIT);
+    const found = await this.productSearch.search(storeId, query, SEARCH_PRODUCT_LIMIT);
     return { products: found.map(productResult) };
   }
 
