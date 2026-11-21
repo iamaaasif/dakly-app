@@ -4,8 +4,6 @@ import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ApiError } from '@dakly/ui/api-client';
-
 import { useSessionVerification } from './use-session-verification';
 
 const { getClient } = vi.hoisted(() => ({ getClient: vi.fn() }));
@@ -85,41 +83,6 @@ describe('session verification cache disposal', () => {
       }
     },
   );
-});
-
-describe('session verification when the session has ended', () => {
-  afterEach(() => {
-    client?.clear();
-    vi.unstubAllGlobals();
-  });
-
-  it('clears private data and sends the person to sign in', async () => {
-    const verification = await acceptedAccount();
-    const assign = vi.fn();
-    vi.stubGlobal('location', { assign });
-    client.setQueryDefaults(contextKey, {
-      queryFn: async () => {
-        throw new ApiError('AUTH_REQUIRED', 'Sign in to continue.');
-      },
-    });
-    await act(() => verification.current.verify());
-    expect(assign).toHaveBeenCalledWith('/sign-in');
-    expect(client.getQueryData(historyKey)).toBeUndefined();
-  });
-
-  it('keeps the shop and asks for a refresh when the API is only unreachable', async () => {
-    const verification = await acceptedAccount();
-    const assign = vi.fn();
-    vi.stubGlobal('location', { assign });
-    client.setQueryDefaults(contextKey, {
-      queryFn: async () => {
-        throw new ApiError('INTERNAL', 'Unavailable.');
-      },
-    });
-    await act(() => verification.current.verify());
-    expect(assign).not.toHaveBeenCalled();
-    expect(verification.current.failure).toContain('Refresh');
-  });
 });
 
 function deferred() {

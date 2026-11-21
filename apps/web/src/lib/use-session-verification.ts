@@ -49,7 +49,8 @@ export function useSessionVerification() {
       setFailure('');
     } catch (error) {
       if (revision.current !== current) return;
-      await failVerification(error, discard, setFailure);
+      if (error instanceof ApiError && error.code === 'AUTH_REQUIRED') await discard();
+      setFailure('Could not verify your account and shop. Refresh to continue.');
     }
   }, [client, pause, discard]);
   return {
@@ -65,18 +66,4 @@ export function useSessionVerification() {
     verify,
     switching,
   };
-}
-
-async function failVerification(
-  error: unknown,
-  discard: () => Promise<void>,
-  setFailure: (message: string) => void,
-) {
-  if (error instanceof ApiError && error.code === 'AUTH_REQUIRED') {
-    // Expired, signed out in another tab or revoked from the devices list.
-    await discard();
-    window.location.assign('/sign-in');
-    return;
-  }
-  setFailure('Could not verify your account and shop. Refresh to continue.');
 }
