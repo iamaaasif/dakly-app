@@ -84,6 +84,7 @@ describe('Worker job schedulers', () => {
       ...bulkIntervals,
       scheduler('sweep-contact-stats', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('sweep-automation-birthdays', { pattern: '0 * * * *', tz: 'UTC' }),
+      scheduler('queue-conversation-memories', 600000),
       scheduler('sweep-analytics', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('purge-webhook-events', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('run-golden-eval', { pattern: '0 20 * * *', tz: 'UTC' }),
