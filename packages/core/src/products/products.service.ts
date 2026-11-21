@@ -124,6 +124,7 @@ export class ProductsService {
 
   // Keeps the order of `ids`; an id that is no longer offerable is left out.
   async getManyForChat(storeId: string, ids: string[]): Promise<ChatProduct[]> {
+    if (!ids.length) return [];
     const found = new Map(
       (await this.repository.findManyForChat(storeId, ids)).map((row) => [row.id, row]),
     );

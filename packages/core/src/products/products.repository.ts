@@ -141,15 +141,15 @@ export class ProductsRepository {
   }
 
   // The AI agent may only offer active products the shop shows in chats.
-  async hasForChat(storeId: string): Promise<boolean> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx.select({ id: products.id }).from(products).where(chatProductFilter(storeId)).limit(1),
-    );
-    return rows.length > 0;
+  hasForChat(storeId: string): Promise<boolean> {
+    return this.database
+      .forStore(storeId, (tx) =>
+        tx.select({ id: products.id }).from(products).where(chatProductFilter(storeId)).limit(1),
+      )
+      .then((rows) => rows.length > 0);
   }
 
   findManyForChat(storeId: string, ids: string[]): Promise<CatalogueProduct[]> {
-    if (!ids.length) return Promise.resolve([]);
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -182,14 +182,7 @@ export class ProductsRepository {
           photos: photoSnapshot(storeId),
         })
         .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            eq(products.id, id),
-            eq(products.status, 'active'),
-            eq(products.isVisibleInChats, true),
-          ),
-        ),
+        .where(and(chatProductFilter(storeId), eq(products.id, id))),
     );
     return rows[0];
   }
