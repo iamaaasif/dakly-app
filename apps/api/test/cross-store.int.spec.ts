@@ -273,6 +273,7 @@ fixture('GET /orders/catalogue', async () => {
             isDefault: true,
             pricePoisha: 125000,
             available: 0,
+            photoUrl: null,
           },
         ],
       },
@@ -4192,6 +4193,142 @@ fixture('DELETE /products/:productId/photos/:fileId', async () => {
     foreignProduct,
   );
   await hidden(b, 'DELETE', (id) => `/products/${own}/photos/${id}`, foreignPhoto.fileId);
+  expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
+});
+
+async function productWithVariant(shop: Shop) {
+  const result = await success(shop, 'POST', '/products', 201, {
+    name: 'পাঞ্জাবি',
+    pricePoisha: 125000,
+  });
+  return { id: result.json().id as string, variantId: result.json().variants[0].id as string };
+}
+async function uploadedVariantPhoto(shop: Shop, ids: { id: string; variantId: string }) {
+  const base = `/products/${ids.id}/variants/${ids.variantId}/photos`;
+  const issued = (await success(shop, 'POST', `${base}/upload-url`, 200, photoInput)).json();
+  const response = await fetch(issued.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': photoInput.contentType },
+    body: new Uint8Array([137, 80, 78, 71]),
+  });
+  expect(response.status).toBe(200);
+  return { ...photoInput, fileId: issued.fileId as string };
+}
+fixture('POST /products/:productId/variants/:variantId/photos/upload-url', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const issued = (
+    await success(
+      b,
+      'POST',
+      `/products/${own.id}/variants/${own.variantId}/photos/upload-url`,
+      200,
+      photoInput,
+    )
+  ).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/products/${issued.fileId}`,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/upload-url`,
+    foreign.id,
+    () => photoInput,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${own.id}/variants/${id}/photos/upload-url`,
+    foreign.variantId,
+    () => photoInput,
+  );
+  const base = `/products/${own.id}/variants/${own.variantId}/photos/upload-url`;
+  expect((await f.request(b.member, 'POST', base, photoInput)).statusCode).toBe(403);
+});
+fixture('POST /products/:productId/variants/:variantId/photos/confirm', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const photo = await uploadedVariantPhoto(b, own);
+  const confirmed = (
+    await success(
+      b,
+      'POST',
+      `/products/${own.id}/variants/${own.variantId}/photos/confirm`,
+      201,
+      photo,
+    )
+  ).json();
+  expect(confirmed.variants[0].imageFileIds).toEqual([photo.fileId]);
+  expect(confirmed.imageFileIds).toEqual([]);
+  expect((await f.row('files', photo.fileId)).store_id).toBe(b.id);
+  const before = await f.row('product_variants', foreign.variantId);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/confirm`,
+    foreign.id,
+    () => photo,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${own.id}/variants/${id}/photos/confirm`,
+    foreign.variantId,
+    () => photo,
+  );
+  expect(await f.row('product_variants', foreign.variantId)).toEqual(before);
+});
+fixture('PATCH /products/:productId/variants/:variantId/photos', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const base = `/products/${own.id}/variants/${own.variantId}/photos`;
+  const first = await uploadedVariantPhoto(b, own),
+    second = await uploadedVariantPhoto(b, own);
+  await success(b, 'POST', `${base}/confirm`, 201, first);
+  await success(b, 'POST', `${base}/confirm`, 201, second);
+  const payload = { fileIds: [second.fileId, first.fileId] };
+  const changed = (await success(b, 'PATCH', base, 200, payload)).json();
+  expect(changed.variants[0].imageFileIds).toEqual(payload.fileIds);
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/${id}/variants/${own.variantId}/photos`,
+    foreign.id,
+    () => payload,
+  );
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/${own.id}/variants/${id}/photos`,
+    foreign.variantId,
+    () => payload,
+  );
+});
+fixture('DELETE /products/:productId/variants/:variantId/photos/:fileId', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const foreignPhoto = await uploadedVariantPhoto(a, foreign),
+    photo = await uploadedVariantPhoto(b, own);
+  const foreignBase = `/products/${foreign.id}/variants/${foreign.variantId}/photos`;
+  const base = `/products/${own.id}/variants/${own.variantId}/photos`;
+  await success(a, 'POST', `${foreignBase}/confirm`, 201, foreignPhoto);
+  await success(b, 'POST', `${base}/confirm`, 201, photo);
+  const before = await f.row('files', foreignPhoto.fileId);
+  await success(b, 'DELETE', `${base}/${photo.fileId}`, 204);
+  expect((await f.row('product_variants', own.variantId)).image_file_ids).toEqual([]);
+  expect((await f.row('files', photo.fileId)).expires_at).not.toBeNull();
+  await hidden(
+    b,
+    'DELETE',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/${foreignPhoto.fileId}`,
+    foreign.id,
+  );
+  await hidden(b, 'DELETE', (id) => `${base}/${id}`, foreignPhoto.fileId);
   expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
 });
 
