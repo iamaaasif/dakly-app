@@ -38,7 +38,7 @@ const groups = [
     ],
   ],
   ['Products, orders and payments', ['products', 'orders', 'payments']],
-  ['AI', ['ai']],
+  ['AI', ['ai', 'khata-scans']],
   ['Content, campaigns and automations', ['social', 'campaigns', 'automations']],
   ['Billing', ['billing']],
   ['Platform and reporting', ['platform', 'data-requests', 'analytics', 'tasks']],
