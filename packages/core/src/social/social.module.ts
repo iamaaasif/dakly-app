@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuditModule } from '../audit/audit.module';
+import { BillingModule } from '../billing/billing.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
@@ -21,6 +22,7 @@ import { SocialService } from './social.service';
 
 @Module({
   imports: [
+    BillingModule,
     AuditModule,
     ClockModule,
     FileStorageModule,

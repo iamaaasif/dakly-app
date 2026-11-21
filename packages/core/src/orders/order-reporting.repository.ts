@@ -116,6 +116,31 @@ export class OrderReportingRepository {
     );
   }
 
+  // Orders the AI agent created itself, cancelled ones left out; money is after discount, delivery left out.
+  async aiOrders(
+    storeId: string,
+    { from, through, timeZone }: { from: string; through: string; timeZone: string },
+  ) {
+    const day = sql`(${orders.createdAt} at time zone ${timeZone})::date`;
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          count: sql<number>`count(*)::int`,
+          salesPoisha: sql<string>`coalesce(sum(${orders.itemsSubtotalPoisha} - ${orders.orderDiscountPoisha}), 0)::text`,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.createdByType, 'ai'),
+            ne(orders.stage, 'cancelled'),
+            sql`${day} >= ${from}::date and ${day} <= ${through}::date`,
+          ),
+        ),
+    );
+    return { count: row?.count ?? 0, salesPoisha: BigInt(row?.salesPoisha ?? '0') };
+  }
+
   async topProducts(
     storeId: string,
     { from, through, timeZone }: { from: string; through: string; timeZone: string },

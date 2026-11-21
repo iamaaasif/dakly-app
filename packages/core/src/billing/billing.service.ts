@@ -1,12 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AdminPlan, UpdatePlanInput } from '@dakly/contracts/admin-plans';
 import type { PublicPlan, UsageUnit, billingCycles } from '@dakly/contracts/billing';
 
 import { Clock } from '../platform/clock';
-import { DAY_MS } from '../platform/time';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { billingError } from './billing.errors';
 import { BillingRepository } from './billing.repository';
 import { nextPeriodEnd } from './subscription-renewal';
+
+const READ_ONLY_RECHECK_MS = 5 * MINUTE_MS;
 
 @Injectable()
 export class BillingService {
@@ -28,6 +31,20 @@ export class BillingService {
     );
   }
 
+  async catalogue(): Promise<AdminPlan[]> {
+    return (await this.repository.allPlans()).map(toAdminPlan);
+  }
+
+  async updatePlan(input: {
+    auditId: string;
+    staffUserId: string;
+    code: string;
+    change: UpdatePlanInput;
+    ip: string;
+  }): Promise<AdminPlan> {
+    return toAdminPlan(await this.repository.updatePlan(input));
+  }
+
   async seatLimit(storeId: string): Promise<number> {
     return (await this.repository.currentLimits(storeId))?.seats ?? 0;
   }
@@ -41,6 +58,21 @@ export class BillingService {
       periodStart: period.currentPeriodStart,
       periodEnd: period.currentPeriodEnd,
     };
+  }
+
+  async isReadOnly(storeId: string): Promise<boolean> {
+    return (await this.repository.subscriptionStatus(storeId)) === 'read_only';
+  }
+
+  // Reading stays open; anything that sends, posts or automates calls this first.
+  async assertWritable(storeId: string): Promise<void> {
+    if (await this.isReadOnly(storeId)) throw billingError('STORE_READ_ONLY');
+  }
+
+  // Background work waits and tries again, so it resumes as soon as the plan is paid.
+  async deferIfReadOnly(storeId: string): Promise<{ delayUntil: number } | undefined> {
+    if (!(await this.isReadOnly(storeId))) return undefined;
+    return { delayUntil: this.clock.now().getTime() + READ_ONLY_RECHECK_MS };
   }
 
   async startPlan(storeId: string, code: string, cycle: (typeof billingCycles)[number]) {
@@ -60,4 +92,18 @@ export class BillingService {
       currentPeriodEnd: trialEndsAt ?? nextPeriodEnd(now, cycle),
     });
   }
+}
+
+function toAdminPlan(plan: Awaited<ReturnType<BillingRepository['allPlans']>>[number]): AdminPlan {
+  return {
+    code: plan.code,
+    kind: plan.kind,
+    name: plan.name,
+    trialDays: plan.trialDays,
+    monthlyPricePoisha: plan.monthlyPricePoisha,
+    yearlyPricePoisha: plan.yearlyPricePoisha,
+    limits: plan.limits,
+    isPublic: plan.isPublic,
+    updatedAt: plan.updatedAt.toISOString(),
+  };
 }

@@ -112,6 +112,26 @@ export class AnalyticsRepository {
     );
   }
 
+  // Read from the runs, not the daily totals, which only hold finished days.
+  async aiCostMicroUsd(
+    storeId: string,
+    { from, through, timeZone }: ReportPeriod & { timeZone: string },
+    purposes: readonly string[],
+  ) {
+    const { rows } = await this.database.forStore(storeId, (tx) =>
+      tx.execute<{ cost: string }>(sql`
+        select coalesce(sum(cost_micro_usd), 0)::text as cost
+        from ai_runs
+        where store_id = ${storeId} and purpose in (${sql.join(
+          purposes.map((purpose) => sql`${purpose}`),
+          sql`, `,
+        )})
+          and created_at >= (${from}::date)::timestamp at time zone ${timeZone}
+          and created_at < (${through}::date + 1)::timestamp at time zone ${timeZone}`),
+    );
+    return BigInt(rows[0]?.cost ?? '0');
+  }
+
   // People delivered to and people who tapped, per channel, over campaign sends and workflow send steps.
   async channelPeople(
     storeId: string,

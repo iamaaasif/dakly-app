@@ -3,6 +3,7 @@ import { Module, type DynamicModule } from '@nestjs/common';
 
 import { AnalyticsReportsModule } from '../analytics/analytics-reports.module';
 import { UsersModule } from '../auth/users.module';
+import { BillingModule } from '../billing/billing.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
@@ -49,6 +50,7 @@ import { CampaignsService } from './campaigns.service';
 
 @Module({
   imports: [
+    BillingModule,
     AnalyticsReportsModule,
     CacheModule,
     ClockModule,

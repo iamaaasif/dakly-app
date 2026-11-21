@@ -11,6 +11,7 @@ import {
 
 import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
+import { BillingService } from '../billing/billing.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ConsentService } from '../consents/consent.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
@@ -65,6 +66,7 @@ export class AiAgentService {
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
+    @Inject(BillingService) private readonly billing: BillingService,
     @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
     @Inject(ConsentService) private readonly consent: ConsentService,
     @Inject(UsageService) private readonly usage: UsageService,
@@ -110,6 +112,14 @@ export class AiAgentService {
       await this.inbox.restartReturnAfterStaffReply(storeId, messageId, settings.returnToAiMinutes);
   }
 
+  // Either way the customer is handed to a person now, so nobody waits for the stop to end.
+  private async stoppedReason(
+    storeId: string,
+  ): Promise<'store_read_only' | 'ai_paused' | undefined> {
+    if (await this.billing.isReadOnly(storeId)) return 'store_read_only';
+    return (await this.switches.isPaused('ai_replies', storeId)) ? 'ai_paused' : undefined;
+  }
+
   async reply(storeId: string, conversationId: string, messageId: string) {
     const candidate = await this.eligibleTurn(storeId, conversationId);
     if (!candidate) return;
@@ -119,9 +129,8 @@ export class AiAgentService {
       await this.schedule(storeId, conversationId, turn.latest.id);
       return;
     }
-    // Staff paused AI replies: hand the chat to people now, so no customer waits for the pause to end.
-    if (await this.switches.isPaused('ai_replies', storeId))
-      return this.handOver(storeId, conversationId, candidate, 'ai_paused');
+    const stopped = await this.stoppedReason(storeId);
+    if (stopped) return this.handOver(storeId, conversationId, candidate, stopped);
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
