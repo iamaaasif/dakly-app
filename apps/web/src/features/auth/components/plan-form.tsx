@@ -14,8 +14,13 @@ import { BillingCycle } from './billing-cycle';
 import { PlanChoice } from './plan-choice';
 import { formError } from '@/lib/form-error';
 
-type PlanFormProps = { draft: BusinessDraft; onBack: () => void; plans: PlansResponse };
-export function PlanForm({ draft, onBack, plans }: PlanFormProps) {
+type PlanFormProps = {
+  draft: BusinessDraft;
+  onBack: () => void;
+  onCreated: () => void;
+  plans: PlansResponse;
+};
+export function PlanForm({ draft, onBack, onCreated, plans }: PlanFormProps) {
   const create = useCreateStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -36,6 +41,7 @@ export function PlanForm({ draft, onBack, plans }: PlanFormProps) {
       onSubmit={form.handleSubmit(async (input) => {
         try {
           await create.mutateAsync(input);
+          onCreated();
           window.location.replace('/dashboard');
         } catch (error) {
           if (error instanceof ApiError && error.code === 'PLAN_NEEDS_PAYMENT')

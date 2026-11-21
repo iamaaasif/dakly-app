@@ -436,6 +436,29 @@ describe('Session boundary over Fastify and Postgres', () => {
       }
     },
   );
+  it('signs out every session, including the current one, and clears the cookie', async () => {
+    const [other] = await admin.db
+      .insert(users)
+      .values({ name: 'Sign out everywhere', email: crypto.randomUUID() + '@example.test' })
+      .returning({ id: users.id });
+    const otherId = other!.id;
+    try {
+      const current = await service.create(otherId, { isRemembered: false });
+      const another = await service.create(otherId, { isRemembered: true });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/me/sessions/sign-out-all',
+        headers: { cookie: `dakly_session=${current.token}`, origin },
+      });
+      expect(response.statusCode).toBe(204);
+      expect(String(response.headers['set-cookie'])).toContain('Expires=Thu, 01 Jan 1970');
+      expect(await service.resolve(current.token)).toBeUndefined();
+      expect(await service.resolve(another.token)).toBeUndefined();
+    } finally {
+      await admin.db.execute(sql`delete from account_security_events where user_id = ${otherId}`);
+      await admin.db.delete(users).where(eq(users.id, otherId));
+    }
+  });
   it('keeps account-only context usable and drops selected access after removal', async () => {
     const created = await service.create(userId, { isRemembered: false });
     const headers = { cookie: `dakly_session=${created.token}` };

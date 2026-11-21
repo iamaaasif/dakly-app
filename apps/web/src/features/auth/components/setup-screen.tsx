@@ -2,12 +2,17 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { BusinessDraft } from '../auth.types';
+import { clearSetupDraft, loadSetupDraft, saveSetupDraft } from '../setup-draft';
 import { BusinessDetails } from './business-details';
 import { PlanPicker } from './plan-picker';
 
-export function SetupScreen() {
+export function SetupScreen({ userId }: { userId: string }) {
   const [draft, setDraft] = useState<BusinessDraft>();
   const [planning, setPlanning] = useState(false);
+  useEffect(() => {
+    const saved = loadSetupDraft(userId);
+    if (saved) setDraft(saved);
+  }, [userId]);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     heading.current?.focus();
@@ -18,16 +23,22 @@ export function SetupScreen() {
         {planning ? 'Pick a plan · Step 4 of 4' : 'Business details · Step 3 of 4'}
       </h1>
       <p>
-        Your account is ready. Your shop is saved only when you finish choosing a plan. Reloading
-        clears unfinished business details; sign in again to resume here.
+        Your account is ready. Your shop is saved only when you finish choosing a plan. Your
+        business details stay in this tab if you reload; you can sign in again to resume.
       </p>
       {planning && draft ? (
-        <PlanPicker draft={draft} onBack={() => setPlanning(false)} />
+        <PlanPicker
+          draft={draft}
+          onBack={() => setPlanning(false)}
+          onCreated={() => clearSetupDraft(userId)}
+        />
       ) : (
         <BusinessDetails
+          key={draft ? 'saved' : 'new'}
           draft={draft}
           onNext={(values) => {
             setDraft(values);
+            saveSetupDraft(userId, values);
             setPlanning(true);
           }}
         />

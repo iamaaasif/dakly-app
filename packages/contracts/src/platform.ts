@@ -25,6 +25,7 @@ export const filePurposes = [
   'import',
   'export',
   'sms_sender_document',
+  'khata_page',
   'data_export',
   'staff_export',
   'settlement_report',

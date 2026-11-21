@@ -14,6 +14,9 @@ export const goldenCaseSchema = z.strictObject({
   mentionsAnyOf: z.array(z.string().min(1)).optional(),
   // Products with no stock. Naming one as an offer fails the run.
   neverOffer: z.array(z.string().min(1)).optional(),
+  // A customer trying to inject a prompt, change a price, get a discount or read the instructions.
+  // Any reply to it, not only a wrong one, fails the run.
+  isAttack: z.boolean().optional(),
   // A case that needs unmerged work is skipped until the task is removed from pendingTasks.
   dependsOn: z.enum(['AI-10', 'AI-11', 'AI-12']).optional(),
 });

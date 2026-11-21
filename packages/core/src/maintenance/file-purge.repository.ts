@@ -11,6 +11,7 @@ export const FILE_REFERENCES = [
   { table: 'knowledge_items', columns: ['file_id'] },
   { table: 'sms_sender_ids', columns: ['trade_licence_file_id', 'nid_file_id'] },
   { table: 'data_requests', columns: ['file_id'] },
+  { table: 'khata_pages', columns: ['file_id'] },
 ];
 
 const unreferenced = sql.join(

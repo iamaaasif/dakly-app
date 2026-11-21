@@ -23,6 +23,7 @@ const groups = [
       'GET /me/sessions',
       'DELETE /me/sessions/:sessionId',
       'POST /me/sessions/sign-out-others',
+      'POST /me/sessions/sign-out-all',
       'POST /auth/sign-out',
       'POST /stores',
       'POST /invites/accept',
