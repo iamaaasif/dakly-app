@@ -200,6 +200,8 @@ export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   id: string;
   title: string;
   isDefault: boolean;
+  imageFileIds: string[];
+  photos: ProductPhotoResponse[];
   pricePoisha: number;
   onHand: number;
   reserved: number;

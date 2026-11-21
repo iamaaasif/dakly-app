@@ -1,4 +1,14 @@
-import { deliveryZones, evalProducts, productResult, searchEvalProducts } from './eval-catalog';
+import { describePhotoMatch } from '../../ai-agent/sales-agent-tools.service';
+import { decidePhotoMatch } from '../../product-search/product-photo-match';
+import { nameScores, parseQuery } from '../../product-search/product-search-ranking';
+import {
+  deliveryZones,
+  evalChatProducts,
+  evalProducts,
+  evalSearchDocuments,
+  productResult,
+  searchEvalProducts,
+} from './eval-catalog';
 
 const SEARCH_LIMIT = 3;
 type Args = Record<string, unknown>;
@@ -36,4 +46,16 @@ const handlers: Record<string, (args: Args) => object> = {
 export function runFixtureTool(name: string, argumentsJson: string): object {
   const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
   return handler ? handler(parse(argumentsJson)) : { error: 'UNKNOWN_TOOL' };
+}
+
+// The same decision as ProductSearchService.matchPhoto, over the eval shop.
+export function matchEvalPhoto(photoText: string): object {
+  const { words } = parseQuery(photoText);
+  const scores = nameScores(evalSearchDocuments, words);
+  const named = evalChatProducts.filter(({ id }) => scores.has(id));
+  const match = decidePhotoMatch(named, scores, words);
+  return describePhotoMatch(match, (product) => {
+    const found = evalProducts.find(({ productId }) => productId === product.id);
+    return found ? productResult(found) : {};
+  });
 }
