@@ -213,12 +213,12 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M12. Admin panel
 
-| ID    | Task                                                                          | Status      | Depends     | PR               | Notes |
-| ----- | ----------------------------------------------------------------------------- | ----------- | ----------- | ---------------- | ----- |
-| ADM-1 | `apps/admin`, staff users, passkey or TOTP, staff sessions, Cloudflare Access | Done        | WEB-1       | #30              |       |
-| ADM-2 | Staff audit log; support grants with owner approval                           | Done        | ADM-1       | #31              |       |
-| ADM-3 | Shops list and detail through report functions                                | Done        | ADM-2       | #429, #430       |       |
-| ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | In progress | ADM-2, AI-2 | #432, #434, #435 |       |
+| ID    | Task                                                                          | Status | Depends     | PR               | Notes |
+| ----- | ----------------------------------------------------------------------------- | ------ | ----------- | ---------------- | ----- |
+| ADM-1 | `apps/admin`, staff users, passkey or TOTP, staff sessions, Cloudflare Access | Done   | WEB-1       | #30              |       |
+| ADM-2 | Staff audit log; support grants with owner approval                           | Done   | ADM-1       | #31              |       |
+| ADM-3 | Shops list and detail through report functions                                | Done   | ADM-2       | #429, #430       |       |
+| ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | Done   | ADM-2, AI-2 | #432, #434, #435 |       |
 
 ## M13. Due book and Khata scan
 
