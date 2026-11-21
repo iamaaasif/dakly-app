@@ -19,8 +19,8 @@ export const campaignSorts = [
   'return',
 ] as const;
 export type AnalyticsTab = (typeof analyticsTabs)[number];
-// The AI agent tab has no CSV download yet, so it is a screen tab only.
-export const analyticsViewTabs = [...analyticsTabs, 'ai-agent'] as const;
+// The AI agent and Profit tabs have no CSV download yet, so it is a screen tab only.
+export const analyticsViewTabs = [...analyticsTabs, 'ai-agent', 'profit'] as const;
 
 // ANA-R8: no period over 12 months in release 1.
 const periodDays = { '30': 30, '90': 90, '365': 365 } as const;
@@ -216,4 +216,22 @@ export type AnalyticsAiAgentResponse = {
   orders: Count;
   sales: Money;
   cost: Money;
+};
+
+// Money from marketing minus what the goods, delivery and messages cost. Orders with an unknown cost price
+// are left out of every figure and counted in excludedOrders. Profit can be negative.
+export type AnalyticsProfitResponse = {
+  asOf: string;
+  timeZone: string;
+  current: DayRange;
+  previous: DayRange;
+  revenue: Money;
+  productCost: Money;
+  deliveryCost: Money;
+  messageCost: Money;
+  profit: Money;
+  countedOrders: Count;
+  excludedOrders: Count;
+  // Profit ÷ message cost, whole ৳; null when no message cost.
+  returnPerTaka: { current: number | null; previous: number | null };
 };

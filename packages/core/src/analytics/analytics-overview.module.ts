@@ -11,6 +11,7 @@ import { AnalyticsAiAgentService } from './analytics-ai-agent.service';
 import { AnalyticsChannelsService } from './analytics-channels.service';
 import { AnalyticsExportService } from './analytics-export.service';
 import { AnalyticsOverviewService } from './analytics-overview.service';
+import { AnalyticsProfitService } from './analytics-profit.service';
 import { AnalyticsReportsModule } from './analytics-reports.module';
 import { AnalyticsTabsService } from './analytics-tabs.service';
 import { AnalyticsTipService } from './analytics-tip.service';
@@ -34,6 +35,7 @@ import { AnalyticsController } from './analytics.controller';
     AnalyticsChannelsService,
     AnalyticsExportService,
     AnalyticsOverviewService,
+    AnalyticsProfitService,
     AnalyticsTabsService,
     AnalyticsTipService,
   ],

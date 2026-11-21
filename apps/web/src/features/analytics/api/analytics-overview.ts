@@ -6,6 +6,7 @@ import type {
   AnalyticsCampaignsResponse,
   AnalyticsChannelsResponse,
   AnalyticsOverviewResponse,
+  AnalyticsProfitResponse,
   AnalyticsSocialPostsResponse,
   AnalyticsView,
 } from '@dakly/contracts/analytics';
@@ -36,7 +37,7 @@ export function useAnalyticsOverview(period: AnalyticsView['period']) {
 }
 
 function useAnalyticsTab<Response>(
-  tab: 'campaigns' | 'automations' | 'channels' | 'social-posts' | 'ai-agent',
+  tab: 'campaigns' | 'automations' | 'channels' | 'social-posts' | 'ai-agent' | 'profit',
   period: AnalyticsView['period'],
 ) {
   const { contextTag, request } = useStoreRequest();
@@ -62,3 +63,6 @@ export const useAnalyticsSocialPosts = (period: AnalyticsView['period']) =>
 
 export const useAnalyticsAiAgent = (period: AnalyticsView['period']) =>
   useAnalyticsTab<AnalyticsAiAgentResponse>('ai-agent', period);
+
+export const useAnalyticsProfit = (period: AnalyticsView['period']) =>
+  useAnalyticsTab<AnalyticsProfitResponse>('profit', period);

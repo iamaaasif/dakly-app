@@ -237,6 +237,10 @@ export class AnalyticsService {
     return this.repository.aiCostPoisha(storeId, period, purposes);
   }
 
+  marketingProfitInputs(storeId: string, period: ReportPeriod & { timeZone: string }) {
+    return this.orderReports.marketingProfitInputs(storeId, period);
+  }
+
   aiOrders(storeId: string, period: ReportPeriod & { timeZone: string }) {
     return this.orderReports.aiOrders(storeId, period);
   }

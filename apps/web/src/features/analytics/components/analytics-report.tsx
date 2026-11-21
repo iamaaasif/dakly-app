@@ -9,6 +9,7 @@ import { AnalyticsChannelsTab } from './analytics-channels-tab';
 import { AnalyticsHeadline } from './analytics-headline';
 import { AnalyticsKeyFigures } from './analytics-key-figures';
 import { AnalyticsOverviewTab } from './analytics-overview-tab';
+import { AnalyticsProfitTab } from './analytics-profit-tab';
 import { AnalyticsRecalculatingBanner } from './analytics-recalculating-banner';
 import { AnalyticsSocialTab } from './analytics-social-tab';
 import { AnalyticsTabs } from './analytics-tabs';
@@ -46,6 +47,7 @@ function TabContent({ data, view }: Pick<Props, 'data' | 'view'>) {
   if (view.tab === 'automations') return <AnalyticsAutomationsTab view={view} />;
   if (view.tab === 'channels') return <AnalyticsChannelsTab view={view} />;
   if (view.tab === 'ai-agent') return <AnalyticsAiAgentTab view={view} />;
+  if (view.tab === 'profit') return <AnalyticsProfitTab view={view} />;
   if (view.tab === 'social') return <AnalyticsSocialTab view={view} timeZone={data.timeZone} />;
   return <AnalyticsOverviewTab data={data} view={view} />;
 }

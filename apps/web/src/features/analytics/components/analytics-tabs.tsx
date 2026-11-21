@@ -1,6 +1,6 @@
 'use client';
 
-import { Bot, CalendarDays, ChartLine, Layers, Megaphone, Zap } from 'lucide-react';
+import { Bot, CalendarDays, ChartLine, Layers, Megaphone, PiggyBank, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 
@@ -16,6 +16,7 @@ const tabs = [
   { id: 'channels', label: 'Channels', icon: Layers },
   { id: 'social', label: 'Social posts', icon: CalendarDays },
   { id: 'ai-agent', label: 'AI agent', icon: Bot },
+  { id: 'profit', label: 'Profit', icon: PiggyBank },
 ] as const;
 
 export function AnalyticsTabs({ view }: { view: AnalyticsView }) {
