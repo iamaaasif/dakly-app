@@ -33,6 +33,7 @@ import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
+import { RequireWritableStore } from '../platform/tenancy/writable-store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { CampaignDuplicateService } from './campaign-duplicate.service';
 import { CampaignResultsService } from './campaign-results.service';
@@ -162,6 +163,7 @@ export class CampaignsController {
   }
 
   @Post(':campaignId/approve')
+  @RequireWritableStore()
   @HttpCode(200)
   @RequirePermission('campaigns.edit')
   approve(
@@ -177,6 +179,7 @@ export class CampaignsController {
   }
 
   @Post(':campaignId/test-send')
+  @RequireWritableStore()
   @HttpCode(204)
   @RequirePermission('campaigns.edit')
   testSend(
@@ -221,6 +224,7 @@ export class CampaignsController {
   }
 
   @Post(':campaignId/resume')
+  @RequireWritableStore()
   @HttpCode(200)
   @RequirePermission('campaigns.edit')
   resume(

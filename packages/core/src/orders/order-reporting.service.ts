@@ -32,6 +32,10 @@ export class OrderReportingService {
     };
   }
 
+  aiOrders(storeId: string, range: { from: string; through: string; timeZone: string }) {
+    return this.orders.aiOrders(storeId, range);
+  }
+
   progress(storeId: string, orderId: string) {
     return this.orders.progress(storeId, orderId);
   }

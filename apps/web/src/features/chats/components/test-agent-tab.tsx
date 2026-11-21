@@ -30,6 +30,7 @@ const handoverText: Record<(typeof handoverReasons)[number], string> = {
   ai_unavailable: 'The AI could not answer right now. Try again in a minute.',
   allowance_used: 'This month’s AI replies are used up.',
   ai_paused: 'Dakly staff have paused AI replies for now, so a person will reply.',
+  store_read_only: 'Your plan is unpaid, so AI replies are off and a person will reply.',
   other: 'Your hand-over rules send this to a person.',
 };
 

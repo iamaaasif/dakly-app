@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AnalyticsReportsModule } from '../analytics/analytics-reports.module';
+import { BillingModule } from '../billing/billing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ClockModule } from '../platform/clock.module';
 import { SegmentsModule } from '../segments/segments.module';
@@ -16,6 +17,7 @@ import { AutomationsService } from './automations.service';
 
 @Module({
   imports: [
+    BillingModule,
     AnalyticsReportsModule,
     ClockModule,
     NotificationsModule,

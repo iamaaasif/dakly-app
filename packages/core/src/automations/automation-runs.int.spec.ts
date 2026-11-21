@@ -15,6 +15,7 @@ import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 import { SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
+import { BillingModule } from '../billing/billing.module';
 import { ConsentService } from '../consents/consent.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { MessagingService } from '../messaging/messaging.service';
@@ -71,6 +72,7 @@ async function worker() {
       DatabaseModule,
       AutomationRunsModule,
       AutomationsModule,
+      BillingModule,
       BullModule.forRoot({
         connection: toRedisConnection(loadEnv().REDIS_URL),
         prefix: `${loadEnv().QUEUE_PREFIX}-${randomUUID()}`,
