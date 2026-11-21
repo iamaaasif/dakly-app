@@ -43,6 +43,7 @@ export type RowOutcome = {
   contactId: string | null;
   isContactCreated: boolean;
   dueEntryId: string | null;
+  orderId: string | null;
 };
 export type NewKhataPage = {
   id: string;
@@ -276,6 +277,7 @@ export class KhataScansRepository {
             contactId: outcome.contactId,
             isContactCreated: outcome.isContactCreated,
             dueEntryId: outcome.dueEntryId,
+            orderId: outcome.orderId,
           })
           .where(and(eq(khataRows.storeId, storeId), eq(khataRows.id, outcome.rowId)));
       const [saved] = await tx
@@ -324,6 +326,7 @@ export class KhataScansRepository {
           contactId: null,
           isContactCreated: false,
           dueEntryId: null,
+          orderId: null,
         })
         .where(and(eq(khataRows.storeId, storeId), eq(khataRows.pageId, pageId))),
     );
