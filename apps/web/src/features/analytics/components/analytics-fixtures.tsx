@@ -217,7 +217,7 @@ const aiAgentResponse: AnalyticsAiAgentResponse = {
   cost: { currentPoisha: '184250', previousPoisha: '161000' },
 };
 
-export const profitResponse: AnalyticsProfitResponse = {
+const profitResponse: AnalyticsProfitResponse = {
   asOf: overview.asOf,
   timeZone: 'Asia/Dhaka',
   current: overview.current,
