@@ -111,7 +111,6 @@ export class CommentsRepository {
     return row;
   }
 
-  // The claim is what keeps two staff from using the single private reply Meta allows.
   async claimPrivateReply(storeId: string, id: string, now: Date): Promise<boolean> {
     const claimed = await this.database.forStore(storeId, (tx) =>
       tx
