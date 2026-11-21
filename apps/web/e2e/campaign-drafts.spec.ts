@@ -7,7 +7,8 @@ import { expect, test, type Page } from '@playwright/test';
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
 
-async function capture(page: Page, screen: string) {
+// A full-page shot at 360 px shows a long screen below the fold, such as the estimate card.
+async function capture(page: Page, screen: string, fullPage = false) {
   const evidence = process.env.CAMP4_SCREENSHOT_DIR;
   if (evidence) await mkdir(evidence, { recursive: true });
   for (const [width, height] of [
@@ -18,7 +19,8 @@ async function capture(page: Page, screen: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    if (evidence) await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`) });
+    if (evidence)
+      await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`), fullPage });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 }
@@ -230,7 +232,7 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     const estimateCard = page.getByRole('region', { name: 'Estimate' });
     await expect(estimateCard).toContainText('3 SMS credits');
     await expect(estimateCard).toContainText('1 have not agreed to messages');
-    await capture(page, 'sms-audience-step');
+    await capture(page, 'sms-audience-step', true);
 
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();

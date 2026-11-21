@@ -7,7 +7,8 @@ import { expect, test, type Page } from '@playwright/test';
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
 
-async function capture(page: Page, screen: string) {
+// A full-page shot at 360 px shows a long screen below the fold, such as the estimate card.
+async function capture(page: Page, screen: string, fullPage = false) {
   const evidence = process.env.CAMP7_SCREENSHOT_DIR;
   if (evidence) await mkdir(evidence, { recursive: true });
   for (const [width, height] of [
@@ -18,7 +19,8 @@ async function capture(page: Page, screen: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    if (evidence) await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`) });
+    if (evidence)
+      await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`), fullPage });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 }
@@ -115,7 +117,7 @@ test('builds a Messenger draft with an image and buttons', async ({ page, contex
     const estimate = page.getByRole('region', { name: 'Estimate' });
     await expect(estimate).toContainText('Will receive');
     await expect(estimate).toContainText('Messenger only allows a message');
-    await capture(page, 'audience-step');
+    await capture(page, 'audience-step', true);
     await page.getByRole('link', { name: '2. Content' }).click();
     await expect(estimate).toContainText('Will receive');
     await page.getByLabel(/Image link/).fill('https://shop.example/eid.jpg');
