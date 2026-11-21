@@ -75,6 +75,7 @@ export function browserTeam(database, mailpitUrl) {
       const userIds = [ownerId, emailUserId, ...joined.rows.map((row) => row.id)];
       for (const table of [
         'ownership_transfers',
+        'store_daily_metrics',
         'audit_log',
         'memberships',
         'roles',
