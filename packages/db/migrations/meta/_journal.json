@@ -547,6 +547,13 @@
       "when": 1795213547250,
       "tag": "0077_campaign_audience_source",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1795223458115,
+      "tag": "0078_khata_scans",
+      "breakpoints": true
     }
   ]
 }

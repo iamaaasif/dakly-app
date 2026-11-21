@@ -225,6 +225,8 @@ export class IsolationFixture {
       'messages',
       'conversations',
       'posts',
+      'khata_rows',
+      'khata_pages',
       'contact_identities',
       'meta_page_subscriptions',
       'channel_connections',

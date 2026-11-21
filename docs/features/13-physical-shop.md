@@ -96,6 +96,24 @@ What others do: TallyKhata and OkCredit made baki tracking free and sent an SMS 
 7. Photos are stored for 30 days for review, then deleted; the extracted rows stay.
 8. Each page counts as one AI scan in usage.
 
+##### Khata scan API (KHT-1)
+
+Every route needs `customers.edit` and works on one page at a time.
+
+| Route                              | What it does                                                                                                                |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `POST /khata-scans/pages`          | Takes the content type and size, returns `pageId` and a 15 minute upload URL. At most 100 pages an hour per shop.           |
+| `POST /khata-scans/pages/:id/read` | Checks the photo is stored and the plan has a page left, then queues the read. Retries a page that failed.                  |
+| `GET /khata-scans/pages/:id`       | Status, a 15 minute photo link while the photo is kept, and the rows with confidence, `needsCheck` and the suggested match. |
+| `GET /khata-scans/pages`           | Newest pages first with their rows, by cursor.                                                                              |
+
+- Page status: `uploaded`, `reading`, `read`, `unreadable`, `failed` (code `allowance` or `model`).
+- The read goes through `AiService` on the `vision` tier, so the model is whatever `AI_VISION_MODEL` names. The model returns each name, phone, date and amount as written. Code then converts Bangla and English digits, `৳`, `Tk`, `/-` and lakh grouping into poisha, validates the phone and date, and caps any row it could not fully place at 84 so it stays yellow (SHOP-R7). A row with no name or no readable amount is dropped.
+- Names are kept in the script they were written in. Matching never compares scripts: an exact phone is matched first, then the same phone with one digit different counts only if the contact shares a word with the row's name. A match is a suggestion, never a merge.
+- One scan is charged per page that gives at least one row, as `ai_scan` usage with the page id as the reference, so a rerun is free. A page the model cannot read is `unreadable` and costs nothing. The allowance is the `ai_scan` number in the plan's limits, set in the plan catalogue; a plan without it allows no scans.
+- The photo's file expires after 30 days. Deleting the stored object and the file row is the file purge's job, and the rows stay.
+- Read quality is gated in `khata-row-reading.spec.ts`: a set of Bangla, Banglish and mixed lines, with Bangla and English digits, that must all convert correctly. It tests what the code does with the model's text. How well the model reads real handwriting needs a set of real page photos, which is open until the shop owner supplies them.
+
 #### POS connections
 
 Release 1, CSV or Excel:

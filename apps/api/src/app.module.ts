@@ -17,6 +17,7 @@ import { ContentModule } from '@dakly/core/content/content.module';
 import { DashboardModule } from '@dakly/core/dashboard/dashboard.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
+import { KhataScansModule } from '@dakly/core/khata-scans/khata-scans.module';
 import { LinksModule } from '@dakly/core/links/links.module';
 import { InboxModule } from '@dakly/core/messaging/inbox.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
@@ -58,6 +59,7 @@ import { HealthController } from './health.controller';
     PaymentsModule,
     ConsentsModule,
     ImportsModule,
+    KhataScansModule,
     AiAgentSettingsModule,
     AiPracticeModule,
     KnowledgeModule,

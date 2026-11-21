@@ -8,10 +8,17 @@ export type LlmTool = {
 
 type LlmToolCall = { id: string; name: string; argumentsJson: string };
 
+// A photo or PDF the model reads beside the text input.
+export type LlmAttachment = {
+  contentType: 'image/jpeg' | 'image/png' | 'application/pdf';
+  bytes: Uint8Array;
+};
+
 export type LlmRequest = {
   model: string;
   instructions: string;
   input: string;
+  attachments?: readonly LlmAttachment[];
   output: ZodType;
   tools?: readonly LlmTool[];
   timeoutMs: number;

@@ -134,6 +134,12 @@ const examples: DaklyEvent[] = [
     payload: { importId: '019c01ea-cf15-7d31-a7f5-d73d66007ae1' },
   },
   {
+    type: 'khata_page.queued',
+    storeId,
+    occurredAt,
+    payload: { pageId: '019c01ea-cf15-7d31-a7f5-d73d66007ae3' },
+  },
+  {
     type: 'product_import.started',
     storeId,
     occurredAt,

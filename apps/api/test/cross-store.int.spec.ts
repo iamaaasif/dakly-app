@@ -16,6 +16,7 @@ import { ValkeyClient } from '@dakly/core/platform/cache/valkey-client';
 import { loadEnv, resetEnvForTests } from '@dakly/core/platform/config/env';
 import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
+import { FILE_STORAGE_DRIVER } from '@dakly/core/platform/file-storage/file-storage.provider';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies, SESSION_COOKIE } from '@dakly/core/platform/http/session-cookie';
 import { SessionsService } from '@dakly/core/sessions/sessions.service';
@@ -1212,6 +1213,68 @@ fixture('POST /contacts/:contactId/consents', async () => {
     [id],
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
+});
+const khataPage = { contentType: 'image/jpeg', sizeBytes: 2_000_000 };
+async function newKhataPage(shop: Shop) {
+  const created = await success(shop, 'POST', '/khata-scans/pages', 201, khataPage);
+  expect(created.json().uploadUrl).toContain(`/khata/${shop.id}/`);
+  return created.json().pageId as string;
+}
+async function allowKhataPages(quantity = 10) {
+  await f.admin.pool.query('update plans set limits=limits || $2::jsonb where id=$1', [
+    f.plan,
+    JSON.stringify({ ai_scan: quantity }),
+  ]);
+}
+fixture('POST /khata-scans/pages', async () => {
+  const { a, b } = await pair(),
+    id = await newKhataPage(a),
+    before = await f.row('khata_pages', id);
+  const own = await newKhataPage(b);
+  expect((await f.row('khata_pages', own)).store_id).toBe(b.id);
+  expect(await f.row('khata_pages', id)).toEqual(before);
+  expect((await f.request(a.member, 'POST', '/khata-scans/pages', khataPage)).statusCode).toBe(403);
+});
+fixture('POST /khata-scans/pages/:pageId/read', async () => {
+  const { a, b } = await pair(),
+    own = await newKhataPage(a),
+    foreign = await newKhataPage(a);
+  await allowKhataPages();
+  const storage = app.get<{
+    getObjectMetadata(key: string): Promise<{ contentType: string; sizeBytes: number } | null>;
+  }>(FILE_STORAGE_DRIVER);
+  vi.spyOn(storage, 'getObjectMetadata').mockResolvedValue(khataPage);
+  try {
+    const queued = await success(a, 'POST', `/khata-scans/pages/${own}/read`, 202);
+    expect(queued.json()).toMatchObject({ id: own, status: 'reading' });
+    const before = await f.row('khata_pages', foreign);
+    await hidden(b, 'POST', (id) => `/khata-scans/pages/${id}/read`, foreign);
+    expect(await f.row('khata_pages', foreign)).toEqual(before);
+  } finally {
+    await f.admin.pool.query("update plans set limits=limits - 'ai_scan' where id=$1", [f.plan]);
+    vi.restoreAllMocks();
+  }
+});
+fixture('GET /khata-scans/pages/:pageId', async () => {
+  const { a, b } = await pair(),
+    id = await newKhataPage(a);
+  expect((await success(a, 'GET', `/khata-scans/pages/${id}`, 200)).json()).toMatchObject({
+    id,
+    status: 'uploaded',
+    rows: [],
+  });
+  await hidden(b, 'GET', (value) => `/khata-scans/pages/${value}`, id);
+});
+fixture('GET /khata-scans/pages', async () => {
+  const { a, b } = await pair(),
+    first = await newKhataPage(a),
+    second = await newKhataPage(b);
+  const ids = async (shop: Shop) =>
+    (await success(shop, 'GET', '/khata-scans/pages', 200))
+      .json()
+      .items.map((page: { id: string }) => page.id);
+  expect(await ids(a)).toEqual([first]);
+  expect(await ids(b)).toEqual([second]);
 });
 async function customerImport(shop: Shop) {
   const result = await success(shop, 'POST', '/imports', 201, { sizeBytes: 120 });

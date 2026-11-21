@@ -14,6 +14,7 @@ const unitNames: Record<UsageUnit, string> = {
   ai_conversation: 'AI conversations',
   ai_content: 'AI content drafts',
   ai_ask: 'Ask Dakly AI answers',
+  ai_scan: 'Khata pages read',
 };
 const PURGE_BATCH = 5000;
 const thresholdPercents = [80, 100] as const;

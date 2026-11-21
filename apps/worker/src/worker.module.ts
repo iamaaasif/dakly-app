@@ -44,6 +44,8 @@ import { FailStuckImportsJob } from '@dakly/core/imports/jobs/fail-stuck-imports
 import { RunContactImport } from '@dakly/core/imports/jobs/run-contact-import.job';
 import { RunProductImport } from '@dakly/core/imports/jobs/run-product-import.job';
 import { UndoContactImport } from '@dakly/core/imports/jobs/undo-contact-import.job';
+import { ReadKhataPage } from '@dakly/core/khata-scans/jobs/read-khata-page.job';
+import { KhataScansModule } from '@dakly/core/khata-scans/khata-scans.module';
 import { MaintenanceModule } from '@dakly/core/maintenance/maintenance.module';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
 import { InboundAttachmentsModule } from '@dakly/core/messaging/inbound-attachments.module';
@@ -101,6 +103,7 @@ import { JobSchedulers } from './job-schedulers';
     CopyMessageAttachmentsJob,
     FailStuckImportsJob,
     RunContactImport,
+    ReadKhataPage,
     RunProductImport,
     UndoContactImport,
     StreamNotificationOnCreated,
@@ -155,6 +158,7 @@ import { JobSchedulers } from './job-schedulers';
     CampaignsModule.forWorker(),
     ClockModule,
     ImportsModule,
+    KhataScansModule,
     ContactStatsRepairModule,
     AnalyticsModule,
     PaymentJobsModule,

@@ -135,7 +135,7 @@ function responseRequestBody(request: LlmRequest): string {
     return JSON.stringify({
       model: request.model,
       instructions: request.instructions,
-      input: request.input,
+      input: request.attachments?.length ? attachedInput(request) : request.input,
       store: false,
       text: {
         format: {
@@ -156,6 +156,16 @@ function responseRequestBody(request: LlmRequest): string {
   } catch {
     throw new LlmError('LLM_INVALID_SCHEMA');
   }
+}
+
+function attachedInput(request: LlmRequest) {
+  const content = (request.attachments ?? []).map((file) => {
+    const data = `data:${file.contentType};base64,${Buffer.from(file.bytes).toString('base64')}`;
+    return file.contentType === 'application/pdf'
+      ? { type: 'input_file', filename: 'page.pdf', file_data: data }
+      : { type: 'input_image', image_url: data };
+  });
+  return [{ role: 'user', content: [{ type: 'input_text', text: request.input }, ...content] }];
 }
 
 function responseError(error: unknown, signal: AbortSignal, deadline: AbortSignal): LlmError {

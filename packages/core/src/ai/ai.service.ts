@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ZodType } from 'zod';
 
 import type { aiRunPurposes } from '@dakly/contracts/ai';
-import type { LlmTool } from '@dakly/providers/llm/llm-driver';
+import type { LlmAttachment, LlmTool } from '@dakly/providers/llm/llm-driver';
 
 import { Clock } from '../platform/clock';
 import { hasDatabaseTransactionScope } from '../platform/database/scoped-transactions';
@@ -21,9 +21,12 @@ export type AiRequest<T> = {
   tier: AiTier;
   prompt: { version: string; instructions: string };
   input: string;
+  attachments?: readonly LlmAttachment[];
   output: ZodType<T>;
   tools?: readonly LlmTool[];
   signal?: AbortSignal;
+  // Reading a photographed page takes longer than a chat reply.
+  timeoutMs?: number;
 } & (
   | { purpose: 'content'; usageReference: string; usageQuantity: number }
   | { purpose: 'ask'; usageReference: string }
@@ -47,7 +50,7 @@ export class AiService {
   async run<T>(storeId: string, request: AiRequest<T>): Promise<AiResult<T>> {
     if (hasDatabaseTransactionScope()) throw aiError('AI_INSIDE_TRANSACTION');
     if (request.signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
-    const deadline = this.clock.now().getTime() + aiTimeoutMs;
+    const deadline = this.clock.now().getTime() + (request.timeoutMs ?? aiTimeoutMs);
     const permit = await this.gate.acquire(storeId);
     if (permit.kind === 'paused') return { kind: 'failure', code: 'AI_PAUSED' };
     if (permit.kind === 'busy') return { kind: 'failure', code: 'AI_STORE_BUSY' };
@@ -130,6 +133,7 @@ export class AiService {
         model,
         instructions: request.prompt.instructions,
         input: request.input,
+        attachments: request.attachments,
         output: request.output,
         tools: request.tools,
         signal: request.signal,

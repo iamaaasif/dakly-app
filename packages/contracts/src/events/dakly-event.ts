@@ -23,6 +23,7 @@ import {
   productImportStartedEventSchema,
   segmentSavedEventSchema,
 } from './contacts';
+import { khataPageQueuedEventSchema } from './khata-scans';
 import { knowledgeIndexRequestedEventSchema } from './knowledge';
 import {
   conversationHandedOverEventSchema,
@@ -84,6 +85,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   productImportStartedEventSchema,
   importUndoRequestedEventSchema,
   knowledgeIndexRequestedEventSchema,
+  khataPageQueuedEventSchema,
   campaignApprovalStartedEventSchema,
   campaignApprovedEventSchema,
   campaignSentEventSchema,

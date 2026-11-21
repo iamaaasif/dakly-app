@@ -201,6 +201,8 @@ function planRow(code: string, name: string, monthly: number, yearly: number, po
     ai_conversation: [0, 300, 1_500, 5_000][position],
     ai_content: [20, 100, 400, 1_500][position],
     ai_ask: [20, 100, 400, 1_500][position],
+    // Placeholder for local data; the real per-plan page quota is set in the plan catalogue.
+    ai_scan: [10, 50, 200, 800][position],
   };
   return {
     code,
