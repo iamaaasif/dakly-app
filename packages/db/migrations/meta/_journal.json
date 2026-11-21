@@ -610,6 +610,13 @@
       "when": 1795260833413,
       "tag": "0086_kill_switches",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1795261343159,
+      "tag": "0087_ai_cost_and_provider_health",
+      "breakpoints": true
     }
   ]
 }

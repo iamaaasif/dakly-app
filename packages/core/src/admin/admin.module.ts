@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 
 import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
+import { AiCostModule } from '../ai-cost/ai-cost.module';
 import { AuditModule } from '../audit/audit.module';
 import { CodesModule } from '../auth/codes.module';
 import { SecurityNoticesModule } from '../auth/security-notices.module';
@@ -12,6 +13,7 @@ import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { CryptoModule } from '../platform/crypto/crypto.module';
 import { TotpCredentials } from '../platform/crypto/totp-credentials';
+import { ProviderHealthModule } from '../provider-health/provider-health.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SmsModule } from '../sms/sms.module';
 import { SmsSendersModule } from '../sms-senders/sms-senders.module';
@@ -21,6 +23,7 @@ import { BreakGlassController } from './break-glass.controller';
 import { BreakGlassService } from './break-glass.service';
 import { KillSwitchAdminService } from './kill-switch-admin.service';
 import { KillSwitchController } from './kill-switch.controller';
+import { OpsReportsController } from './ops-reports.controller';
 import { OwnerRecoveryHistoryController } from './owner-recovery-history.controller';
 import { OwnerSupportController } from './owner-support.controller';
 import { RiskyActionConfirmation } from './risky-action-confirmation';
@@ -75,6 +78,8 @@ import { WalletCreditService } from './wallet-credit.service';
     WalletsModule,
     SmsSendersModule,
     KillSwitchesModule,
+    AiCostModule,
+    ProviderHealthModule,
   ],
   controllers: [
     StaffRecoveryController,
@@ -89,6 +94,7 @@ import { WalletCreditService } from './wallet-credit.service';
     WalletCreditController,
     SmsSenderReviewController,
     KillSwitchController,
+    OpsReportsController,
   ],
   providers: [
     StaffRecoveryService,

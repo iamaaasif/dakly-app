@@ -4,6 +4,7 @@ import type { Queue } from 'bullmq';
 
 import { STAFF_ALERT_RELAY } from '@dakly/core/admin/jobs/staff-alert-relay.job';
 import { STAFF_AUDIT_MAINTENANCE } from '@dakly/core/admin/jobs/staff-audit-maintenance.job';
+import { CHECK_AI_COST_CEILING } from '@dakly/core/ai-cost/jobs/check-ai-cost-ceiling.job';
 import { RUN_GOLDEN_EVAL } from '@dakly/core/ai-eval/jobs/run-golden-eval.job';
 import { SWEEP_ANALYTICS } from '@dakly/core/analytics/jobs/sweep-analytics.job';
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
@@ -60,6 +61,7 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.transactional, WAKE_SNOOZED_NOTIFICATIONS),
       scheduleJob(this.transactional, RECOVER_WEBHOOK_EVENTS, MINUTE_MS),
       scheduleJob(this.bulk, STAFF_AUDIT_MAINTENANCE),
+      scheduleJob(this.bulk, CHECK_AI_COST_CEILING, 15 * MINUTE_MS),
       scheduleJob(this.workflow, WAKE_DUE_RUNS, MINUTE_MS),
       scheduleJob(this.campaign, START_DUE_CAMPAIGNS, MINUTE_MS),
       scheduleJob(this.bulk, FAIL_STUCK_IMPORTS),

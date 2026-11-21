@@ -31,6 +31,7 @@ const globalTables = [
   'abuse_reports',
   'platform_settings',
   'kill_switches',
+  'ai_cost_alerts',
 ];
 
 describe('store isolation (Postgres)', () => {
