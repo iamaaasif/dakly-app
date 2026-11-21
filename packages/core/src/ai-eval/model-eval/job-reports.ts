@@ -76,7 +76,7 @@ async function scoreReplyModel(context: JobContext, model: string, reasons: Reas
     };
     outcomes[golden.id] = reason
       ? { kind: 'handover', reason }
-      : await composeReply(run, golden.question, note);
+      : await composeReply(run, golden.question, note, golden.memory);
     const outcome = outcomes[golden.id];
     if (outcome?.kind === 'reply') note(`reply: ${outcome.text}`);
   }

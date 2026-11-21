@@ -9,13 +9,17 @@ import { WorkerModule } from '../src/worker.module';
 
 function recordingQueue() {
   const schedulers: unknown[][] = [];
+  const added: unknown[][] = [];
   const queue = {
+    add: async (...args: unknown[]) => {
+      added.push(args);
+    },
     getJobScheduler: async (name: string) => schedulers.findLast(([id]) => id === name)?.[1],
     upsertJobScheduler: async (...args: unknown[]) => {
       schedulers.push(args);
     },
   } as unknown as Queue;
-  return { queue, schedulers };
+  return { queue, schedulers, added };
 }
 
 const scheduler = (name: string, schedule: number | { pattern: string; tz: string } = 30000) => [
@@ -71,6 +75,12 @@ describe('Worker job schedulers', () => {
     );
     await schedulers.onApplicationBootstrap();
     await schedulers.onApplicationBootstrap();
+    // The same fixed id both times, so the queue keeps one backfill start.
+    expect(
+      bulk.added.map(([name, , options]) => [name, (options as { jobId: string }).jobId]),
+    ).toEqual(
+      Array(2).fill(['start-product-photo-tag-backfill', 'start-product-photo-tag-backfill']),
+    );
     const sweeps = [
       scheduler('send-due-security-notices'),
       scheduler('staff-alert-relay'),
@@ -94,6 +104,7 @@ describe('Worker job schedulers', () => {
       scheduler('purge-webhook-events', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('run-golden-eval', { pattern: '0 20 * * *', tz: 'UTC' }),
       scheduler('run-maintenance', { pattern: '0 19 * * *', tz: 'UTC' }),
+      scheduler('start-product-search-backfill', { pattern: '0 21 * * *', tz: 'UTC' }),
       ...bulkIntervals,
       scheduler('queue-conversation-memories', 600000),
     ]);
@@ -108,6 +119,7 @@ describe('Worker job schedulers', () => {
     expect(payments.schedulers).toEqual([
       scheduler('recover-payment-callbacks', 60000),
       scheduler('sweep-payment-checks'),
+      scheduler('sweep-subscription-renewals', { pattern: '0 10 * * *', tz: 'Asia/Dhaka' }),
       scheduler('sweep-payment-settlements', { pattern: '0 0 * * *', tz: 'Asia/Dhaka' }),
       scheduler('recover-payment-callbacks', 60000),
       scheduler('sweep-payment-checks'),

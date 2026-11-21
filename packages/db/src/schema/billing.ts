@@ -142,6 +142,9 @@ export const subscriptions = pgTable(
     renewalAttempts: smallint('renewal_attempts').notNull().default(0),
     nextRenewalAttemptAt: timestamptz('next_renewal_attempt_at'),
     readOnlySince: timestamptz('read_only_since'),
+    // The last payment applied to this subscription; applying the same payment twice does nothing.
+    // No foreign key: payment_intents already depends on this file.
+    lastPaymentIntentId: uuid('last_payment_intent_id'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

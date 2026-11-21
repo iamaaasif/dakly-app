@@ -10,6 +10,7 @@ import { SWEEP_ANALYTICS } from '@dakly/core/analytics/jobs/sweep-analytics.job'
 import { SEND_DUE_SECURITY_NOTICES } from '@dakly/core/auth/jobs/send-due-security-notices.job';
 import { SWEEP_AUTOMATION_BIRTHDAYS } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WAKE_DUE_RUNS } from '@dakly/core/automations/jobs/wake-due-runs.job';
+import { SWEEP_SUBSCRIPTION_RENEWALS } from '@dakly/core/billing/jobs/sweep-subscription-renewals.job';
 import { START_DUE_CAMPAIGNS } from '@dakly/core/campaigns/jobs/start-due-campaigns.job';
 import { PURGE_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/purge-webhook-events.job';
 import { QUEUE_CHANNEL_TOKEN_CHECKS } from '@dakly/core/channels/jobs/queue-channel-token-checks.job';
@@ -33,6 +34,8 @@ import {
 import { scheduleJob } from '@dakly/core/platform/queue/job-schedule';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { DAY_MS, MINUTE_MS } from '@dakly/core/platform/time';
+import { START_PRODUCT_SEARCH_BACKFILL } from '@dakly/core/product-search/jobs/start-product-search-backfill.job';
+import { START_PRODUCT_PHOTO_TAG_BACKFILL } from '@dakly/core/products/jobs/start-product-photo-tag-backfill.job';
 import { QUEUE_POST_METRICS_REFRESHES } from '@dakly/core/social/jobs/queue-post-metrics-refreshes.job';
 import { RECOVER_POST_TARGETS } from '@dakly/core/social/jobs/recover-post-targets.job';
 
@@ -76,6 +79,10 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.bulk, QUEUE_CONVERSATION_MEMORIES, 10 * MINUTE_MS),
       scheduleJob(this.payments, RECOVER_PAYMENT_CALLBACKS, MINUTE_MS),
       scheduleJob(this.payments, SWEEP_PAYMENT_CHECKS),
+      scheduleJob(this.payments, SWEEP_SUBSCRIPTION_RENEWALS, {
+        pattern: '0 10 * * *',
+        tz: 'Asia/Dhaka',
+      }),
       scheduleJob(this.payments, SWEEP_PAYMENT_SETTLEMENTS, {
         pattern: '0 0 * * *',
         tz: 'Asia/Dhaka',
@@ -85,6 +92,22 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.bulk, RUN_GOLDEN_EVAL, { pattern: '0 20 * * *', tz: 'UTC' }),
       // 19:00 UTC is 01:00 in Dhaka, after the Dhaka day the rollups need has finished.
       scheduleJob(this.bulk, RUN_MAINTENANCE, { pattern: '0 19 * * *', tz: 'UTC' }),
+      // Daily, so products saved before search embeddings and a changed embed model are both
+      // picked up; a store with nothing stale costs one query.
+      scheduleJob(this.bulk, START_PRODUCT_SEARCH_BACKFILL, { pattern: '0 21 * * *', tz: 'UTC' }),
+      // A fixed job id that is kept after it finishes, so the backfill runs once, not on every
+      // worker start. A flushed queue runs it again, which only tags photos still untagged.
+      this.bulk.add(
+        START_PRODUCT_PHOTO_TAG_BACKFILL,
+        {},
+        {
+          jobId: START_PRODUCT_PHOTO_TAG_BACKFILL,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 60_000 },
+          removeOnComplete: false,
+          removeOnFail: false,
+        },
+      ),
     ]);
   }
 }

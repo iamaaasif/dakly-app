@@ -47,6 +47,10 @@ export class AiRunsService {
     @Inject(AiGate) private readonly gate: AiGate,
   ) {}
 
+  countTokens(model: string, text: string) {
+    return this.driver.countTokens(model, text);
+  }
+
   async hasCompletedContentRun(storeId: string, id: string): Promise<boolean> {
     const run = await this.repository.find(storeId, id);
     return run?.purpose === 'content' && run.outcome === 'completed';

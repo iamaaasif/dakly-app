@@ -26,6 +26,11 @@ export class FakeLlmDriver implements LlmDriver {
     this.responses = [...responses];
   }
 
+  // One token per character: never fewer than a real tokenizer finds, so caps hold in tests.
+  async countTokens(_model: string, text: string) {
+    return Array.from(text).length;
+  }
+
   async embed(request: LlmEmbeddingRequest): Promise<LlmEmbedding> {
     if (request.signal?.aborted) throw new LlmError('LLM_ABORTED');
     if (!this.embeddings)
