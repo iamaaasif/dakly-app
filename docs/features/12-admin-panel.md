@@ -354,3 +354,13 @@ audit page. The person's `/security` page already displays “Recovered by Dakly
 support”, date and reason type through `GET /me/security-history`; ACC-8 will
 integrate it into the full Security screen. Neither endpoint exposes the free-text
 staff reason, check outcomes, or document data.
+
+## ADM-5 implementation
+
+### Kill switches
+
+Super admins and ops staff can pause AI replies, campaign sending or social posting for every shop or for one shop. Analysts can read the list. A change needs a reason of at least ten characters and `confirmed: true`; resuming needs a reason too. The staff audit row (`kill_switch.paused` or `kill_switch.resumed`) is inserted first, in the same transaction as the change, so a refused change leaves no audit row. A shop switch also checks the staff member's live session and conflict of interest (ADM-R7).
+
+A paused switch is a row in `kill_switches`; resuming deletes it and `staff_audit_log` keeps the history. Workers read the table through `KillSwitchesService` with a 30 second cache. The reply, campaign batch and post publishing jobs check it first and, while paused, move themselves back by one minute instead of running, so queued work waits and is not dropped. A switch therefore takes effect within a minute across the system. Contacts, orders, inbound messages and owner-written replies are not affected.
+
+Routes: `GET /admin/kill-switches`, `PUT /admin/kill-switches/:feature` and `PUT /admin/stores/:storeId/kill-switches/:feature`.

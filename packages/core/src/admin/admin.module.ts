@@ -7,6 +7,7 @@ import { CodesModule } from '../auth/codes.module';
 import { SecurityNoticesModule } from '../auth/security-notices.module';
 import { UsersModule } from '../auth/users.module';
 import { ContactsModule } from '../contacts/contacts.module';
+import { KillSwitchesModule } from '../kill-switches/kill-switches.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { CryptoModule } from '../platform/crypto/crypto.module';
@@ -18,6 +19,8 @@ import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { BreakGlassController } from './break-glass.controller';
 import { BreakGlassService } from './break-glass.service';
+import { KillSwitchAdminService } from './kill-switch-admin.service';
+import { KillSwitchController } from './kill-switch.controller';
 import { OwnerRecoveryHistoryController } from './owner-recovery-history.controller';
 import { OwnerSupportController } from './owner-support.controller';
 import { RiskyActionConfirmation } from './risky-action-confirmation';
@@ -71,6 +74,7 @@ import { WalletCreditService } from './wallet-credit.service';
     ClockModule,
     WalletsModule,
     SmsSendersModule,
+    KillSwitchesModule,
   ],
   controllers: [
     StaffRecoveryController,
@@ -84,6 +88,7 @@ import { WalletCreditService } from './wallet-credit.service';
     StaffHistoryController,
     WalletCreditController,
     SmsSenderReviewController,
+    KillSwitchController,
   ],
   providers: [
     StaffRecoveryService,
@@ -94,6 +99,7 @@ import { WalletCreditService } from './wallet-credit.service';
     BreakGlassService,
     WalletCreditService,
     SmsSenderReviewService,
+    KillSwitchAdminService,
     SupportService,
     SupportOwnerService,
     SupportAuditService,

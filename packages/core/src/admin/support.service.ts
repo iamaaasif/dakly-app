@@ -18,7 +18,12 @@ import { StaffIdentityService } from './staff-identity.service';
 import { SupportAuditService } from './support-audit.service';
 import { supportGrantResponse, supportGrantStatus } from './support-grant';
 import { SupportOwnerService } from './support-owner.service';
-import { smsSenderReviewRoles, supportRoles, walletCreditRoles } from './support-roles';
+import {
+  killSwitchRoles,
+  smsSenderReviewRoles,
+  supportRoles,
+  walletCreditRoles,
+} from './support-roles';
 import { supportContextTag, assertSupportContext } from './support-session';
 import { assertSupportStaff } from './support-staff-checks';
 import { supportError, isSupportCodeUnavailable } from './support.errors';
@@ -52,6 +57,10 @@ export class SupportService {
   // Live staff role, status, session and conflict of interest, inside the store's transaction.
   async authorizeSmsSenderReview(storeId: string, staff: Staff) {
     await this.lockStaff(storeId, staff.id, staff.sessionId, smsSenderReviewRoles);
+  }
+
+  async authorizeKillSwitch(storeId: string, staff: Staff) {
+    await this.lockStaff(storeId, staff.id, staff.sessionId, killSwitchRoles);
   }
 
   targets(staff: Staff, query: string) {

@@ -30,6 +30,7 @@ const globalTables = [
   'staff_audit_log',
   'abuse_reports',
   'platform_settings',
+  'kill_switches',
 ];
 
 describe('store isolation (Postgres)', () => {
