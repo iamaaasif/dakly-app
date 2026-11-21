@@ -38,6 +38,7 @@ function show(child: ReactNode, edit = false) {
       canEditAutomations: false,
       canViewCustomers: false,
       canCreateCustomer: false,
+      canExportCustomers: false,
       canViewChats: false,
       canEditChats: false,
       canViewSegments: false,

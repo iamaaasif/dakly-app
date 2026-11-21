@@ -27,6 +27,7 @@ const draft: CampaignResponse = {
   channelConnectionId: pageId,
   includeSegmentIds: [],
   excludeSegmentIds: [],
+  source: null,
   scheduledFor: null,
   status: 'draft',
   approval: null,

@@ -30,6 +30,7 @@ import { CampaignAnalyticsRepository } from './campaign-analytics.repository';
 import { CampaignApprovalRepository } from './campaign-approval.repository';
 import {
   audienceDecisionTime,
+  audiencePartCount,
   CampaignAudienceService,
   MESSENGER_CAMPAIGN_WINDOW_MS,
 } from './campaign-audience.service';
@@ -115,7 +116,7 @@ export class CampaignsService {
   }
 
   attributionSources(storeId: string, buyer: { id: string; phone: string }, ids: string[]) {
-    return ids.length ? this.repository.attributionSources(storeId, buyer, ids) : [];
+    return ids.length ? this.analyticsRepository.attributionSources(storeId, buyer, ids) : [];
   }
 
   async get(storeId: string, campaignId: string): Promise<CampaignResponse> {
@@ -162,9 +163,12 @@ export class CampaignsService {
   private async checkChangeFitsChannel(
     storeId: string,
     campaignId: string,
-    { content, channelConnectionId }: Pick<ChangeCampaignInput, 'content' | 'channelConnectionId'>,
+    change: ChangeCampaignInput,
   ) {
-    const { channel } = await this.find(storeId, campaignId);
+    const { content, channelConnectionId, includeSegmentIds, excludeSegmentIds } = change;
+    const { channel, sourceCampaignId } = await this.find(storeId, campaignId);
+    if (sourceCampaignId && (includeSegmentIds ?? excludeSegmentIds) !== undefined)
+      throw campaignError('CAMPAIGN_AUDIENCE_FIXED');
     const messenger = channel === 'messenger';
     const contentFits =
       content === undefined ||
@@ -205,7 +209,7 @@ export class CampaignsService {
       if (!campaign.content.text) throw campaignError('CAMPAIGN_TEXT_EMPTY');
       const now = this.clock.now();
       assertSendTime(campaign, now);
-      const estimatedTotal = await this.segmentSize(storeId, campaign);
+      const estimatedTotal = await this.audience.estimatedSize(storeId, campaign);
       if (estimatedTotal === 0) throw campaignError('CAMPAIGN_NO_RECIPIENTS');
       const approving = await this.approvals.markApproving(storeId, campaignId, {
         approvedByUserId: approver.actor.kind === 'user' ? approver.actor.userId : null,
@@ -365,23 +369,12 @@ export class CampaignsService {
     throw await this.refusal(storeId, campaignId, refused);
   }
 
-  // The upper bound shown as progress: segments can overlap and exclusions apply. A segment id
-  // that does not exist is refused here.
-  private async segmentSize(storeId: string, campaign: Campaign): Promise<number> {
-    let total = 0;
-    for (const segmentId of campaign.includeSegmentIds)
-      total += await this.segments.contactCount(storeId, segmentId);
-    for (const segmentId of campaign.excludeSegmentIds)
-      await this.segments.assertExists(storeId, segmentId);
-    return total;
-  }
-
   private async sampleAudience(storeId: string, campaign: Campaign) {
     const recipients = new Map<string, FrozenRecipient>();
     let cursor = { segmentIndex: 0, contactId: null as string | null };
     let checked = 0;
     const at = audienceDecisionTime(campaign, this.clock.now());
-    while (cursor.segmentIndex < campaign.includeSegmentIds.length) {
+    while (cursor.segmentIndex < audiencePartCount(campaign)) {
       const page = await this.audience.page(storeId, campaign, cursor, at);
       for (const recipient of page.recipients)
         if (!recipients.has(recipient.contactId)) recipients.set(recipient.contactId, recipient);

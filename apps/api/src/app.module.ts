@@ -16,6 +16,7 @@ import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { ContentModule } from '@dakly/core/content/content.module';
 import { DashboardModule } from '@dakly/core/dashboard/dashboard.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
+import { DueBookModule } from '@dakly/core/due-book/due-book.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { LinksModule } from '@dakly/core/links/links.module';
 import { AiReplyFeedbackModule } from '@dakly/core/messaging/ai-reply-feedback.module';
@@ -29,6 +30,7 @@ import { ProductsModule } from '@dakly/core/products/products.module';
 import { SavedRepliesModule } from '@dakly/core/saved-replies/saved-replies.module';
 import { SegmentsModule } from '@dakly/core/segments/segments.module';
 import { SessionsModule } from '@dakly/core/sessions/sessions.module';
+import { SetupChecklistModule } from '@dakly/core/setup-checklist/setup-checklist.module';
 import { SmsSendersModule } from '@dakly/core/sms-senders/sms-senders.module';
 import { SocialModule } from '@dakly/core/social/social.module';
 import { StoresModule } from '@dakly/core/stores/stores.module';
@@ -48,6 +50,7 @@ import { HealthController } from './health.controller';
     AnalyticsOverviewModule,
     AssistantModule,
     DashboardModule,
+    SetupChecklistModule,
     MetaWebhooksModule,
     MetaAuthorizationModule,
     DeliveryModule,
@@ -57,6 +60,7 @@ import { HealthController } from './health.controller';
     OrdersModule,
     PaymentsModule,
     ConsentsModule,
+    DueBookModule,
     ImportsModule,
     AiAgentSettingsModule,
     AiPracticeModule,
