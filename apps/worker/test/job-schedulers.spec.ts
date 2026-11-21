@@ -79,7 +79,11 @@ describe('Worker job schedulers', () => {
       scheduler('recover-webhook-events', 60000),
     ];
     expect(transactional.schedulers).toEqual([...sweeps, ...sweeps]);
-    const bulkIntervals = [scheduler('staff-audit-maintenance'), scheduler('fail-stuck-imports')];
+    const bulkIntervals = [
+      scheduler('staff-audit-maintenance'),
+      scheduler('check-ai-cost-ceiling', 900000),
+      scheduler('fail-stuck-imports'),
+    ];
     expect(bulk.schedulers).toEqual([
       ...bulkIntervals,
       scheduler('queue-conversation-memories', 600000),
