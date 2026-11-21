@@ -229,12 +229,12 @@ export class AnalyticsService {
     return { total: BigInt(totals?.value ?? 0), points: fillDays(period, points) };
   }
 
-  aiCostMicroUsd(
+  aiCostPoisha(
     storeId: string,
     period: ReportPeriod & { timeZone: string },
     purposes: readonly string[],
   ) {
-    return this.repository.aiCostMicroUsd(storeId, period, purposes);
+    return this.repository.aiCostPoisha(storeId, period, purposes);
   }
 
   aiOrders(storeId: string, period: ReportPeriod & { timeZone: string }) {

@@ -4,6 +4,7 @@ import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
 import type { LlmDriver } from '@dakly/providers/llm/llm-driver';
 import { OpenAiLlmDriver } from '@dakly/providers/llm/openai/openai-llm-driver';
 
+import { AiRateModule } from '../ai-rate/ai-rate.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
@@ -16,7 +17,7 @@ import { aiError } from './ai.errors';
 import { AiService } from './ai.service';
 
 @Module({
-  imports: [CacheModule, ClockModule, UsageModule],
+  imports: [AiRateModule, CacheModule, ClockModule, UsageModule],
   providers: [
     AiGate,
     AiRunsRepository,

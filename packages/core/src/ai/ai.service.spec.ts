@@ -14,6 +14,7 @@ import { ScopedTransactions, type Transaction } from '../platform/database/scope
 import type { ConsumeUsageInput, UsageService } from '../usage/usage.service';
 import type { AiGate } from './ai-gate';
 import type { AiRun, AiRunsRepository } from './ai-runs.repository';
+import type { AiRateService } from '../ai-rate/ai-rate.service';
 import { AiRunsService } from './ai-runs.service';
 import type { AiConfig } from './ai.config';
 import { AiService, type AiRequest } from './ai.service';
@@ -299,7 +300,9 @@ function fixture(
   const clock = { now: () => new Date('2026-11-18T15:00:00Z') };
   const driver = new FakeLlmDriver(script, options.embeddings, options.transcriptions);
   const service = new AiService(
-    new AiRunsService(driver, repo, clock, gate),
+    new AiRunsService(driver, repo, clock, gate, {
+      toPoisha: async (micro: number) => Math.round(micro * 0.0122),
+    } as unknown as AiRateService),
     gate,
     usageService,
     config,

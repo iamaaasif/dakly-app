@@ -113,14 +113,14 @@ export class AnalyticsRepository {
   }
 
   // Read from the runs, not the daily totals, which only hold finished days.
-  async aiCostMicroUsd(
+  async aiCostPoisha(
     storeId: string,
     { from, through, timeZone }: ReportPeriod & { timeZone: string },
     purposes: readonly string[],
   ) {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<{ cost: string }>(sql`
-        select coalesce(sum(cost_micro_usd), 0)::text as cost
+        select coalesce(sum(cost_poisha), 0)::text as cost
         from ai_runs
         where store_id = ${storeId} and purpose in (${sql.join(
           purposes.map((purpose) => sql`${purpose}`),

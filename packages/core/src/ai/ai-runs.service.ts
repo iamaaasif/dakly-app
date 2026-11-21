@@ -12,6 +12,7 @@ import {
   type LlmTranscriptionRequest,
 } from '@dakly/providers/llm/llm-driver';
 
+import { AiRateService } from '../ai-rate/ai-rate.service';
 import { Clock } from '../platform/clock';
 import { AiGate } from './ai-gate';
 import { AiRunsRepository, type AiRun } from './ai-runs.repository';
@@ -45,6 +46,7 @@ export class AiRunsService {
     @Inject(AiRunsRepository) private readonly repository: AiRunsRepository,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(AiGate) private readonly gate: AiGate,
+    @Inject(AiRateService) private readonly rate: AiRateService,
   ) {}
 
   countTokens(model: string, text: string) {
@@ -137,7 +139,7 @@ export class AiRunsService {
     }
   }
 
-  private record(
+  private async record(
     storeId: string,
     { price, ...context }: RunContext,
     {
@@ -152,13 +154,15 @@ export class AiRunsService {
       code?: AttemptFailureCode;
     },
   ): Promise<string> {
+    const costMicroUsd = cost(usage, price);
     return this.repository.insert(storeId, {
       ...context,
       model,
       createdAt: startedAt,
       latencyMs: Math.max(0, this.clock.now().getTime() - startedAt.getTime()),
       ...usage,
-      costMicroUsd: cost(usage, price),
+      costMicroUsd,
+      costPoisha: await this.rate.toPoisha(costMicroUsd),
       outcome: code ? failureOutcome(code) : 'completed',
       errorCode: code ?? null,
     });

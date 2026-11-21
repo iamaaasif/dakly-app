@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 
 import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
+import { AiRateController } from './ai-rate.controller';
+import { AiRateModule } from '../ai-rate/ai-rate.module';
 import { AiCostModule } from '../ai-cost/ai-cost.module';
 import { AuditModule } from '../audit/audit.module';
 import { CodesModule } from '../auth/codes.module';
@@ -84,10 +86,12 @@ import { WalletCreditService } from './wallet-credit.service';
     SmsSendersModule,
     KillSwitchesModule,
     AiCostModule,
+    AiRateModule,
     ProviderHealthModule,
     ReconciliationModule,
   ],
   controllers: [
+    AiRateController,
     StaffRecoveryController,
     OwnerRecoveryHistoryController,
     StaffAuthController,
