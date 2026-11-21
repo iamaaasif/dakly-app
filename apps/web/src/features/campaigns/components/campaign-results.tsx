@@ -94,12 +94,10 @@ function resultCards(campaign: CampaignResponse, results?: CampaignResultsRespon
   ];
   if (!results) return cards;
   const { costPoisha, returnPerTaka } = results;
+  // An SMS has no poisha rate yet, so its cost is unknown, not free.
+  const cost = channel === 'sms' ? '—' : formatMoney(BigInt(costPoisha));
   const returned = returnPerTaka === null ? '—' : formatMoney(BigInt(returnPerTaka) * 100n);
-  return [
-    ...cards,
-    { label: 'Cost', value: formatMoney(BigInt(costPoisha)) },
-    { label: 'Return per ৳1', value: returned },
-  ];
+  return [...cards, { label: 'Cost', value: cost }, { label: 'Return per ৳1', value: returned }];
 }
 
 function whenSent({ status, startedAt, finishedAt, createdAt }: CampaignResponse) {

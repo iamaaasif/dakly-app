@@ -69,8 +69,7 @@ function CustomerList({ campaignId, outcome }: { campaignId: string; outcome: Ca
       />
     );
   const items = customers.data.pages.flatMap((page) => page.items);
-  if (items.length === 0)
-    return <p className="text-text-muted">No one yet in {outcomeLabels[outcome]}.</p>;
+  if (items.length === 0) return <p className="text-text-muted">No customers in this list yet.</p>;
   return (
     <div className="space-y-3">
       <ul className="divide-y divide-border rounded-lg border border-border bg-surface">

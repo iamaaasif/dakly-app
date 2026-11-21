@@ -99,7 +99,8 @@ describe('Campaign detail', () => {
     show(base, true);
     expect(await screen.findByText('Return per ৳1')).toBeTruthy();
     expect(await screen.findByText('৳7')).toBeTruthy();
-    expect(screen.getByText('৳500')).toBeTruthy();
+    // An SMS has no poisha rate, so cost is unknown rather than ৳0.
+    expect(screen.queryByText('৳500')).toBeNull();
     expect(screen.getByText(/Results final on/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Create follow-up' })).toBeTruthy();
