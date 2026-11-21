@@ -24,6 +24,7 @@ import {
   supportGrantAccess,
   supportGrantStatuses,
 } from '@dakly/contracts/admin';
+import { killSwitchFeatures } from '@dakly/contracts/kill-switches';
 
 import { users } from './auth';
 import { bytea, citext, createdAt, id, inet, isOneOf, timestamptz, updatedAt } from './columns';
@@ -386,5 +387,32 @@ export const staffAlertDeliveries = pgTable(
       sql`${table.status} in ('pending','delivered','failed')`,
     ),
     check('staff_alert_deliveries_attempts', sql`${table.attempts} between 0 and 5`),
+  ],
+);
+
+// A row means the feature is paused, for every shop (no store) or for one shop. Resuming deletes
+// the row; staff_audit_log keeps the history. Workers read it with a 30 second cache.
+export const killSwitches = pgTable(
+  'kill_switches',
+  {
+    id: id(),
+    feature: text('feature', { enum: killSwitchFeatures }).notNull(),
+    storeId: uuid('store_id').references(() => stores.id, { onDelete: 'cascade' }),
+    reason: text('reason').notNull(),
+    pausedByStaffId: uuid('paused_by_staff_id')
+      .notNull()
+      .references(() => staffUsers.id),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('kill_switches_global_key')
+      .on(table.feature)
+      .where(sql`${table.storeId} is null`),
+    uniqueIndex('kill_switches_store_key')
+      .on(table.feature, table.storeId)
+      .where(sql`${table.storeId} is not null`),
+    index('kill_switches_paused_by_staff_id_idx').on(table.pausedByStaffId),
+    check('kill_switches_feature', isOneOf(table.feature, killSwitchFeatures)),
+    check('kill_switches_reason_length', sql`char_length(${table.reason}) >= 10`),
   ],
 );

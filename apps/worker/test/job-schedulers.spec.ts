@@ -83,6 +83,7 @@ describe('Worker job schedulers', () => {
     expect(bulk.schedulers).toEqual([
       ...bulkIntervals,
       scheduler('queue-conversation-memories', 600000),
+      scheduler('erase-deleted-contacts', { pattern: '30 1 * * *', tz: 'UTC' }),
       scheduler('sweep-contact-stats', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('sweep-automation-birthdays', { pattern: '0 * * * *', tz: 'UTC' }),
       scheduler('sweep-analytics', { pattern: '0 0 * * *', tz: 'UTC' }),

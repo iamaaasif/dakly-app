@@ -141,6 +141,34 @@ export const confirmOrderTool = {
   units: {},
 } satisfies AiToolDefinition;
 
+export const findAlternativesTool = {
+  name: 'find_alternatives',
+  description:
+    'Use it when a product or a size is out of stock. Returns the product’s sizes that are in stock, up to 3 similar products that are in stock (same category, close price), and the sold-out variants the customer can wait for. Offer only what it returns; never offer an item with stock 0.',
+  aliases: ['নেই', 'স্টক নেই', 'stock nai', 'nai', 'sold out', 'out of stock', 'onno kichu ache?'],
+  input: z.strictObject({ productId: z.uuid() }),
+  units: {
+    priceTaka: 'taka, converted from poisha',
+    stock: 'count of pieces left; null when the shop does not count stock',
+  },
+} satisfies AiToolDefinition;
+
+export const joinRestockListTool = {
+  name: 'join_restock_list',
+  description:
+    'Put this customer on the waiting list of a sold-out variant so the shop can tell them when it is back. Call it only after the customer said yes to “নতুন স্টক এলে জানাবো?”. Use a variantId from find_alternatives or get_product whose stock is 0. It sends nothing now and promises no date.',
+  aliases: [
+    'স্টক এলে জানাবেন',
+    'কবে আসবে',
+    'kobe asbe',
+    'stock ale janaben',
+    'notify me',
+    'restock',
+  ],
+  input: z.strictObject({ variantId: z.uuid() }),
+  units: {},
+} satisfies AiToolDefinition;
+
 export const handOverReasons = handoverReasons.filter(
   (reason) => reason !== 'ai_unavailable' && reason !== 'allowance_used',
 );
@@ -169,6 +197,8 @@ export const salesAgentTools = [
   getMyOrdersTool,
   getOrderStatusTool,
   sendProductCardTool,
+  findAlternativesTool,
+  joinRestockListTool,
   draftOrderTool,
   confirmOrderTool,
   handOverTool,

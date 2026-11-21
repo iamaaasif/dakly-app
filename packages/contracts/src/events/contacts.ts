@@ -16,6 +16,18 @@ export const contactDeletedEventSchema = z.strictObject({
   payload: z.strictObject({ contactId: z.uuid() }),
 });
 
+// The ids and object keys a later job needs to delete the stored files; they hold no personal data.
+export const contactErasedEventSchema = z.strictObject({
+  type: z.literal('contact.erased'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({
+    contactId: z.uuid(),
+    conversationIds: z.array(z.uuid()),
+    attachmentKeys: z.array(z.string().min(1)),
+  }),
+});
+
 export const contactStatsRepairedEventSchema = z.strictObject({
   type: z.literal('contact_stats.repaired'),
   storeId: z.uuid(),

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 
 import {
   type KhataFailureCode,
@@ -297,6 +297,18 @@ export class KhataScansRepository {
         .where(and(eq(khataImports.storeId, storeId), eq(khataImports.id, importId))),
     );
     return row;
+  }
+
+  // The shop's latest imports, newest first. One import is one page.
+  listImports(storeId: string, limit: number): Promise<KhataImport[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(importColumns)
+        .from(khataImports)
+        .where(eq(khataImports.storeId, storeId))
+        .orderBy(desc(khataImports.createdAt), desc(khataImports.id))
+        .limit(limit),
+    );
   }
 
   // Rows of an import that made something. Skipped rows made nothing.

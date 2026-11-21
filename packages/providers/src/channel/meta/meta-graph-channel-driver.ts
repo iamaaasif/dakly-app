@@ -256,7 +256,7 @@ export class MetaGraphChannelDriver
     // first. Only the text message carries the operation key, so one send echoes one key.
     // A refused image does not stop the text, but an uncertain one does: it may have gone out.
     let imageRejected = false;
-    if (message.channel === 'messenger' && message.imageUrl) {
+    if (message.imageUrl) {
       try {
         await this.post(credentials, message, {
           attachment: { type: 'image', payload: { url: message.imageUrl } },

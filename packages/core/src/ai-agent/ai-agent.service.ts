@@ -15,6 +15,7 @@ import { ChannelConnectionsService } from '../channels/channel-connections.servi
 import { ConsentService } from '../consents/consent.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { KillSwitchesService } from '../kill-switches/kill-switches.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -32,7 +33,7 @@ import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v1';
 import { checkReplyFacts } from './reply-fact-check';
-import { type ComposedReply, SalesAgentService } from './sales-agent.service';
+import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
@@ -72,6 +73,7 @@ export class AiAgentService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(KillSwitchesService) private readonly switches: KillSwitchesService,
     @InjectQueue(QUEUES.aiReply) private readonly queue: Queue,
   ) {}
 
@@ -117,6 +119,9 @@ export class AiAgentService {
       await this.schedule(storeId, conversationId, turn.latest.id);
       return;
     }
+    // Staff paused AI replies: hand the chat to people now, so no customer waits for the pause to end.
+    if (await this.switches.isPaused('ai_replies', storeId))
+      return this.handOver(storeId, conversationId, candidate, 'ai_paused');
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
@@ -135,6 +140,15 @@ export class AiAgentService {
     if (composed.kind === 'busy') return this.retryLater();
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
+    return this.checkAndSend(storeId, conversationId, candidate, composed);
+  }
+
+  private async checkAndSend(
+    storeId: string,
+    conversationId: string,
+    candidate: EligibleTurn,
+    composed: Extract<ComposedReply, { kind: 'reply' }>,
+  ) {
     const shop = await this.stores.settings(storeId);
     const checked = checkReplyFacts(composed.text, composed.toolResults, {
       phone: shop.phone,
@@ -272,14 +286,19 @@ export class AiAgentService {
     before: EligibleTurn,
     composed: Extract<ComposedReply, { kind: 'reply' }>,
   ) {
-    const { aiRunId, cardTexts, sources, text } = composed;
+    const { aiRunId, cards, sources, text } = composed;
     let isSaved = false;
     try {
       await this.transaction.runLocked(storeId, async () => {
         const current = await this.lockCurrent(storeId, conversationId, before);
         if (!current) return;
         const latestId = current.turn.latest.id;
-        const send = (content: string, key: string, aiSources?: typeof sources) =>
+        const send = (
+          content: string,
+          key: string,
+          aiSources?: typeof sources,
+          image?: ProductCard['image'],
+        ) =>
           this.messaging.queueChannelMessage(storeId, {
             ...current.target,
             category: 'staff_reply',
@@ -287,8 +306,10 @@ export class AiAgentService {
             content,
             operationKey: `ai-reply:${latestId}:${key}`,
             aiSources,
+            image,
           });
-        for (const [index, card] of cardTexts.entries()) await send(card, `card-${index}`);
+        for (const [index, card] of cards.entries())
+          await send(card.text, `card-${index}`, undefined, card.image);
         await send(text, 'reply', sources);
         // After queuing, so the window starts at the earliest saved AI reply.
         await this.usage.consume(storeId, {

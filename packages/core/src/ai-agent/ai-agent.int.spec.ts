@@ -16,8 +16,10 @@ import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
 import type { LlmResult } from '@dakly/providers/llm/llm-driver';
 
 import { AiService } from '../ai/ai.service';
+import { KillSwitchesService } from '../kill-switches/kill-switches.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
+import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
@@ -297,6 +299,41 @@ it('hands over an exhausted allowance without calling the model or spending a un
   });
 });
 
+it('hands a chat to people without calling the model while staff pause AI replies', async () => {
+  const active = await shop();
+  const staffId = randomUUID();
+  await admin.pool.query(
+    'insert into staff_users(id,name,email,role,access_subject,enrolled_at) values($1::uuid,$2,$3,$4,$1::uuid::text,now())',
+    [staffId, 'Karim', `${staffId}@example.test`, 'ops'],
+  );
+  await admin.pool.query(
+    "insert into kill_switches(id,feature,reason,paused_by_staff_id) values(gen_random_uuid(),'ai_replies','Model answering wrong prices',$1)",
+    [staffId],
+  );
+  // The switch is cached for 30 seconds; move the clock past it so this read sees the new row.
+  const realNow = Clock.prototype.now;
+  vi.spyOn(Clock.prototype, 'now').mockImplementation(function (this: Clock) {
+    return new Date(realNow.call(this).getTime() + 60_000);
+  });
+  try {
+    const message = await receive(active, 'Hello');
+    await agent.reply(active.storeId, message.conversation_id, message.id);
+    expect(await observe(active)).toMatchObject({
+      conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'ai_paused' }],
+      runs: [],
+      usage: [],
+    });
+  } finally {
+    await admin.pool.query('delete from kill_switches where paused_by_staff_id = $1', [staffId]);
+    await admin.pool.query('delete from staff_users where id = $1', [staffId]);
+    // Load the empty table into the cache now, so later tests do not see the cached pause.
+    vi.mocked(Clock.prototype.now).mockImplementation(function (this: Clock) {
+      return new Date(realNow.call(this).getTime() + 120_000);
+    });
+    await app.get(KillSwitchesService).isPaused('ai_replies', active.storeId);
+  }
+});
+
 it('keeps human control when a person takes over during classification', async () => {
   const active = await shop();
   const message = await receive(active, 'Please get a person');
@@ -535,9 +572,9 @@ it('answers price and delivery from tool results, saves the run and sources, and
     runs: [
       { purpose: 'classify' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v2' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v3' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v2' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v3' },
     ],
     usage: [{ id: expect.any(String) }],
   });

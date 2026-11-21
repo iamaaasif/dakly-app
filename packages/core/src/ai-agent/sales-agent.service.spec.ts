@@ -3,6 +3,7 @@ import { expect, it, vi } from 'vitest';
 import type { AiService } from '../ai/ai.service';
 import type { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import type { InboxService } from '../messaging/inbox.service';
+import type { ProductsService } from '../products/products.service';
 import type { StoresService } from '../stores/stores.service';
 import type { SalesAgentToolsService } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
@@ -23,10 +24,16 @@ function build(memoryText: string | undefined = undefined) {
   const stores = {
     settings: vi.fn().mockResolvedValue({ name: 'Shop', phone: '0171', district: 'Dhaka' }),
   } as unknown as StoresService;
+  const products = { chatPhotoFile: vi.fn() } as unknown as ProductsService;
   const memory = {
     contextFor: vi.fn().mockResolvedValue(memoryText),
   } as unknown as ContactMemoryService;
-  return { service: new SalesAgentService(ai, tools, inbox, stores, memory), run, inbox, memory };
+  return {
+    service: new SalesAgentService(ai, tools, inbox, stores, products, memory),
+    run,
+    inbox,
+    memory,
+  };
 }
 
 it('puts a practice question, which has no saved chat, into the model conversation', async () => {

@@ -236,7 +236,7 @@ The attribution record is kept on the order. It stores the winning evidence ID a
 - Campaign and workflow delivery and read evidence waits on CAMP-3 results and ACC-14 delivery receipts.
 - Post taps and chat referrals wait on buyer linkage in SOC-3 and CHAT-1.
 
-The order-created subscriber uses the buyer's contact. For self-delivery the order phone must match the buyer profile. For gifts it uses the buyer's own phone and leaves the recipient's phone out of attribution. Erasure of identifying attribution fields waits on CUS-11. The initial worker reads committed evidence. The window rebuild can pick up an earlier tap that was still being recorded when the order was processed.
+The order-created subscriber uses the buyer's contact. For self-delivery the order phone must match the buyer profile. For gifts it uses the buyer's own phone and leaves the recipient's phone out of attribution. Erasing a customer (CUS-11) clears the attribution fields on their orders. The initial worker reads committed evidence. The window rebuild can pick up an earlier tap that was still being recorded when the order was processed.
 
 The Owner changes the window through `PATCH /store/attribution` with 1, 3 or 7 days. A change records the old and new window in the audit log and starts a rebuild. `GET /store/attribution` shows the current window, whether the rebuild is running and how many orders it has processed. The banner and window control are part of ANA-3.
 

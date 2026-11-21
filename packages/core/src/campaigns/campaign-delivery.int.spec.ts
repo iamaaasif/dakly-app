@@ -15,6 +15,7 @@ import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-drive
 import { type SmsMessage, SmsSendRefused } from '@dakly/providers/sms/sms-driver';
 
 import { runApprovalJob } from '../../test/approve-campaign';
+import { KillSwitchesModule } from '../kill-switches/kill-switches.module';
 import { LinksService } from '../links/links.service';
 import { Clock } from '../platform/clock';
 import { loadEnv, resetEnvForTests } from '../platform/config/env';
@@ -44,6 +45,7 @@ Module({
   imports: [
     DatabaseModule,
     CampaignsModule.forWorker(),
+    KillSwitchesModule,
     BullModule.registerQueue({ name: QUEUES.campaign }),
     BullModule.forRoot({
       connection: toRedisConnection(loadEnv().REDIS_URL),

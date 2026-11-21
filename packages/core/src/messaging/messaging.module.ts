@@ -4,6 +4,7 @@ import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { ConsentsModule } from '../consents/consents.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { ClockModule } from '../platform/clock.module';
+import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { SendingModule } from '../sending/sending.module';
 import { SmsModule } from '../sms/sms.module';
@@ -22,6 +23,7 @@ import { OutboundMessagingRepository } from './outbound-messaging.repository';
     ConsentsModule,
     ClockModule,
     OutboxModule,
+    FileStorageModule,
     SendingModule,
     StoresModule,
     MetaAuthorizationModule,

@@ -60,7 +60,7 @@ Rules that come with this plan:
 
 ## R2 archives
 
-Archived `audit_log` months and archived messages are kept in R2 for the life of the store (D39). When a store is purged, 30 days after it closes, its archive objects are deleted with the rest of its data. A customer's deletion request also reaches the archive: that customer's archived messages are removed or anonymised, as they are in Postgres. Message objects are named by conversation (`stores/<storeId>/archive/messages/<yyyy-mm>/<conversationId>.jsonl.gz`), so the erasure task (CUS-11) finds them from the customer's conversations. The job does not do this yet.
+Archived `audit_log` months and archived messages are kept in R2 for the life of the store (D39). When a store is purged, 30 days after it closes, its archive objects are deleted with the rest of its data. A customer's deletion request also reaches the archive: that customer's archived messages are removed or anonymised, as they are in Postgres. Message objects are named by conversation (`stores/<storeId>/archive/messages/<yyyy-mm>/<conversationId>.jsonl.gz`), so the erasure of a customer (CUS-11) finds them from the customer's conversations and deletes them after the erasure commits.
 
 ## Link visits without personal data
 

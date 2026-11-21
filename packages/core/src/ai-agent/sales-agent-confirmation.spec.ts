@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AiService } from '../ai/ai.service';
 import type { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import type { InboxService } from '../messaging/inbox.service';
+import type { ProductsService } from '../products/products.service';
 import type { StoresService } from '../stores/stores.service';
 import type { SalesAgentToolsService } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
@@ -35,6 +36,7 @@ function agent(steps: Step[], customerTexts: string[]) {
     {
       settings: async () => ({ name: 'Shop', phone: null, district: null }),
     } as unknown as StoresService,
+    { chatPhotoFile: async () => undefined } as unknown as ProductsService,
     { contextFor: async () => undefined } as unknown as ContactMemoryService,
   );
   return { run, compose: () => service.compose({ storeId: 's', contactId: 'c', customerTexts }) };

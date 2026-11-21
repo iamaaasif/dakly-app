@@ -14,6 +14,7 @@ const permissionFlags = ['seeFullPhone', 'exportLists', 'refund'] as const;
 const ownerActions: readonly OwnerAction[] = [
   'attribution.window.edit',
   'billing.edit',
+  'customer.erase',
   'store.close',
   'ownership.transfer',
 ];
