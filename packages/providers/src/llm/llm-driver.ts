@@ -8,10 +8,13 @@ export type LlmTool = {
 
 type LlmToolCall = { id: string; name: string; argumentsJson: string };
 
+export type LlmImage = { contentType: string; bytes: Uint8Array };
+
 export type LlmRequest = {
   model: string;
   instructions: string;
   input: string;
+  images?: readonly LlmImage[];
   output: ZodType;
   tools?: readonly LlmTool[];
   timeoutMs: number;
@@ -53,7 +56,15 @@ export type LlmEmbeddingRequest = Pick<LlmRequest, 'model' | 'timeoutMs' | 'sign
 };
 export type LlmEmbedding = { model: string; embeddings: number[][]; usage: LlmUsage };
 
+export type LlmTranscriptionRequest = Pick<LlmRequest, 'model' | 'timeoutMs' | 'signal'> & {
+  audio: { contentType: string; bytes: Uint8Array };
+  // Words the speech is likely to contain, so shop and product names are spelled right.
+  hint: string;
+};
+export type LlmTranscription = { model: string; text: string; usage: LlmUsage };
+
 export type LlmDriver = {
+  transcribe(request: LlmTranscriptionRequest): Promise<LlmTranscription>;
   embed(request: LlmEmbeddingRequest): Promise<LlmEmbedding>;
   respond(request: LlmRequest): Promise<LlmResult>;
 };
