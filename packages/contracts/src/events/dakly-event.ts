@@ -23,6 +23,11 @@ import {
   productImportStartedEventSchema,
   segmentSavedEventSchema,
 } from './contacts';
+import {
+  dueAddedEventSchema,
+  duePaymentRecordedEventSchema,
+  dueWrittenOffEventSchema,
+} from './due-book';
 import { knowledgeIndexRequestedEventSchema } from './knowledge';
 import {
   conversationHandedOverEventSchema,
@@ -120,6 +125,9 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   paymentFailedEventSchema,
   paymentSucceededEventSchema,
   paymentVerificationRequestedEventSchema,
+  dueAddedEventSchema,
+  duePaymentRecordedEventSchema,
+  dueWrittenOffEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

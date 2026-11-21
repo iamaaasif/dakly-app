@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0077_snapshot.json`: **97 tables, 1307 columns, 401 explicit indexes and 305 foreign keys**.
+Built from `packages/db/migrations/meta/0078_snapshot.json`: **98 tables, 1318 columns, 405 explicit indexes and 308 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -375,7 +375,7 @@ erDiagram
 
 ## Channels, customers and chats
 
-Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`.
+Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`, `due-book.ts`.
 
 ```mermaid
 erDiagram
@@ -463,6 +463,9 @@ erDiagram
     users |o..o{ sms_messages : "created_by_user_id"
     contacts |o..o{ sms_messages : "store_id, contact_id"
     sms_sender_ids |o..o{ sms_messages : "store_id, sender_id_id"
+    stores ||..o{ due_entries : "store_id"
+    users |o..o{ due_entries : "recorded_by_user_id"
+    contacts ||..o{ due_entries : "store_id, contact_id"
     bd_areas {
         integer id PK "NOT NULL; integer"
         text kind "NOT NULL; text"
@@ -785,6 +788,19 @@ erDiagram
         timestamp_with_time_zone sent_at "NULL; timestamp with time zone"
         timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
         timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    due_entries {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid contact_id FK "NOT NULL; uuid"
+        text kind "NOT NULL; text"
+        bigint amount_poisha "NOT NULL; bigint"
+        timestamp_with_time_zone occurred_at "NOT NULL; timestamp with time zone"
+        text method "NULL; text"
+        text note "NULL; text"
+        text source "NOT NULL; text"
+        uuid recorded_by_user_id FK "NULL; uuid"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
@@ -2073,6 +2089,9 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `data_requests_file_id_files_id_fk`                                  | `data_requests(file_id)`                                  | `files(id)`                                 | no action |
 | `data_requests_contact_id_store_fk`                                  | `data_requests(store_id, contact_id)`                     | `contacts(store_id, id)`                    | no action |
 | `data_requests_file_id_store_fk`                                     | `data_requests(store_id, file_id)`                        | `files(store_id, id)`                       | no action |
+| `due_entries_store_id_stores_id_fk`                                  | `due_entries(store_id)`                                   | `stores(id)`                                | no action |
+| `due_entries_recorded_by_user_id_users_id_fk`                        | `due_entries(recorded_by_user_id)`                        | `users(id)`                                 | no action |
+| `due_entries_contact_id_store_fk`                                    | `due_entries(store_id, contact_id)`                       | `contacts(store_id, id)`                    | cascade   |
 | `imports_store_id_stores_id_fk`                                      | `imports(store_id)`                                       | `stores(id)`                                | no action |
 | `imports_file_id_files_id_fk`                                        | `imports(file_id)`                                        | `files(id)`                                 | no action |
 | `imports_report_file_id_files_id_fk`                                 | `imports(report_file_id)`                                 | `files(id)`                                 | no action |

@@ -314,6 +314,12 @@ export class ContactsService {
     if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
   }
 
+  // Due book entries for one customer wait for each other, so a payment is always settled
+  // against the baki that was there when it was recorded.
+  async lockForDueBook(storeId: string, id: string): Promise<void> {
+    await this.lockForConsent(storeId, [id]);
+  }
+
   async lockConsentHistory(storeId: string, ids: string[]): Promise<void> {
     const locked = await this.importContacts.lockConsentHistory(storeId, ids);
     if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
