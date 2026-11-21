@@ -124,6 +124,8 @@ test('shows profit from marketing orders and leaves out orders without a cost pr
     await query("delete from campaigns where store_id=$1 and name='Eid offer'", [shop]);
     await query('delete from product_variants where store_id=$1', [shop]);
     await query('delete from products where store_id=$1', [shop]);
+    // Other specs count every contact in the shop, so leave none of these behind.
+    await query("delete from contacts where store_id=$1 and name in ('নিপা','রিনা')", [shop]);
     await database.pool.end();
   }
 });
