@@ -14,3 +14,6 @@ export const aiCostViewRoles: StaffIdentity['role'][] = [
   'finance',
   'analyst',
 ];
+// Feature 12: finance and super admins edit plans and prices; analysts only read them.
+export const planEditRoles: StaffIdentity['role'][] = ['super_admin', 'finance'];
+export const planViewRoles: StaffIdentity['role'][] = ['super_admin', 'finance', 'analyst'];

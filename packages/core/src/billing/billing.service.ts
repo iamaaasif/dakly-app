@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AdminPlan, UpdatePlanInput } from '@dakly/contracts/admin-plans';
 import type { PublicPlan, UsageUnit, billingCycles } from '@dakly/contracts/billing';
 
 import { Clock } from '../platform/clock';
@@ -25,6 +26,20 @@ export class BillingService {
         limits,
       }),
     );
+  }
+
+  async catalogue(): Promise<AdminPlan[]> {
+    return (await this.repository.allPlans()).map(toAdminPlan);
+  }
+
+  async updatePlan(input: {
+    auditId: string;
+    staffUserId: string;
+    code: string;
+    change: UpdatePlanInput;
+    ip: string;
+  }): Promise<AdminPlan> {
+    return toAdminPlan(await this.repository.updatePlan(input));
   }
 
   async seatLimit(storeId: string): Promise<number> {
@@ -67,4 +82,18 @@ function nextPeriod(start: Date, cycle: (typeof billingCycles)[number]): Date {
   const lastDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0)).getUTCDate();
   end.setUTCDate(Math.min(start.getUTCDate(), lastDay));
   return end;
+}
+
+function toAdminPlan(plan: Awaited<ReturnType<BillingRepository['allPlans']>>[number]): AdminPlan {
+  return {
+    code: plan.code,
+    kind: plan.kind,
+    name: plan.name,
+    trialDays: plan.trialDays,
+    monthlyPricePoisha: plan.monthlyPricePoisha,
+    yearlyPricePoisha: plan.yearlyPricePoisha,
+    limits: plan.limits,
+    isPublic: plan.isPublic,
+    updatedAt: plan.updatedAt.toISOString(),
+  };
 }
