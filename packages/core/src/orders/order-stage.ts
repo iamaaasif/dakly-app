@@ -91,8 +91,9 @@ export function requireStageChange(
     throw orderError('ORDER_STAGE_NOT_ALLOWED');
 }
 
+// Orders written by another system or by a khata import are records: nobody edits, moves or ships them.
 export function isSyncedOrder(source: OrderDetail['source']): boolean {
-  return source === 'shopify' || source === 'woocommerce';
+  return source === 'shopify' || source === 'woocommerce' || source === 'khata_import';
 }
 
 export function requireEditableOrder(

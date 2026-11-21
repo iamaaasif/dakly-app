@@ -193,7 +193,7 @@ export class ContactsService {
     }: Pick<OrderDetail, 'buyerContactId' | 'recipientPhone' | 'isRecipientBuyer'>,
     { seeFullPhone }: Access,
   ): Promise<boolean> {
-    if (!isRecipientBuyer || !buyerContactId || !seeFullPhone) return false;
+    if (!isRecipientBuyer || !buyerContactId || !seeFullPhone || !recipientPhone) return false;
     const [match] = await this.orderContacts.findOpenPhoneMatch(
       storeId,
       buyerContactId,

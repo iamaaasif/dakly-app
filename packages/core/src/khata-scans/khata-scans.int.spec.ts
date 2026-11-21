@@ -44,6 +44,7 @@ afterAll(async () => {
       'khata_rows',
       'khata_imports',
       'khata_pages',
+      'orders',
       'due_entries',
       'consents',
       'contacts',
@@ -51,6 +52,9 @@ afterAll(async () => {
       'subscriptions',
     ])
       await admin.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [storeIds]);
+    await admin.pool.query('delete from store_counters where store_id = any($1::uuid[])', [
+      storeIds,
+    ]);
     await admin.pool.query('delete from stores where id = any($1::uuid[])', [storeIds]);
     await admin.pool.query('delete from plans where id = any($1::uuid[])', [planIds]);
     await admin.pool.query('delete from users where id = any($1::uuid[])', [userIds]);
@@ -67,6 +71,7 @@ async function shop(pagesAllowed: number) {
   planIds.push(planId);
   userIds.push(userId);
   await admin.pool.query('insert into stores(id,name) values($1,$2)', [storeId, 'রিনার দোকান']);
+  await admin.pool.query('insert into store_counters(store_id) values($1)', [storeId]);
   await admin.pool.query(
     'insert into users(id,name,phone,phone_verified_at) values($1,$2,$3,now())',
     [userId, 'রিনা', `018${randomInt(10000000, 99999999)}`],
@@ -453,6 +458,76 @@ describe('KhataImportsService (Postgres)', () => {
     const again = await service.getPage(storeId, page.id);
     expect(again.status).toBe('read');
     await imports.importPage(storeId, userId, page.id, importAll(again));
+  });
+
+  it('imports a sale as a delivered order and a sale with no phone as a walk-in sale', async () => {
+    const { storeId, userId } = await shop(5);
+    const page = await readPageOf(storeId, userId, [
+      baki({ kind: 'sale', amountText: '৳১,২০০' }),
+      baki({ kind: 'sale', nameText: 'Walk in', phoneText: null, amountText: '300' }),
+    ]);
+
+    const result = await imports.importPage(storeId, userId, page.id, importAll(page));
+
+    expect(result).toMatchObject({ rowsImported: 2, customersCreated: 1 });
+    const sales = await admin.pool.query(
+      `select o.source, o.stage, o.payment_status, o.items_subtotal_poisha::int as items_subtotal_poisha, o.cod_amount_poisha::int as cod_amount_poisha,
+              o.recipient_phone, o.buyer_contact_id is not null as linked,
+              to_char(o.created_at at time zone 'Asia/Dhaka', 'YYYY-MM-DD') as day
+       from orders o where o.store_id=$1 order by o.items_subtotal_poisha desc`,
+      [storeId],
+    );
+    expect(sales.rows).toEqual([
+      {
+        source: 'khata_import',
+        stage: 'delivered',
+        payment_status: 'paid',
+        items_subtotal_poisha: 120_000,
+        cod_amount_poisha: 0,
+        recipient_phone: null,
+        linked: true,
+        day: '2026-11-12',
+      },
+      expect.objectContaining({ items_subtotal_poisha: 30_000, linked: false }),
+    ]);
+    const events = await admin.pool.query(
+      "select type from outbox_events where store_id=$1 and type like 'order.%' order by type",
+      [storeId],
+    );
+    expect(events.rows.map((row) => row.type)).toEqual(['order.imported', 'order.imported']);
+  });
+
+  it('undoes imported sales that were not changed and keeps one that was', async () => {
+    const { storeId, userId } = await shop(5);
+    const page = await readPageOf(storeId, userId, [
+      baki({ kind: 'sale', amountText: '1200' }),
+      baki({ kind: 'sale', nameText: 'Walk in', phoneText: null, amountText: '300' }),
+    ]);
+    const result = await imports.importPage(storeId, userId, page.id, importAll(page));
+    await admin.pool.query(
+      'update orders set updated_at = now() where store_id=$1 and items_subtotal_poisha = 30000',
+      [storeId],
+    );
+
+    await imports.undo(storeId, result.id);
+
+    const left = await admin.pool.query(
+      'select items_subtotal_poisha::int as items_subtotal_poisha from orders where store_id=$1',
+      [storeId],
+    );
+    expect(left.rows).toEqual([{ items_subtotal_poisha: 30_000 }]);
+  });
+
+  it('lets only a khata import order go without a recipient phone, address and district', async () => {
+    const { storeId } = await shop(5);
+    const insert = (source: string) =>
+      admin.pool.query(
+        `insert into orders(id,store_id,number,source,created_by_type,recipient_name,items_subtotal_poisha,cod_amount_poisha)
+         values(gen_random_uuid(),$1,$3,$2,'user','Rahim',100,100)`,
+        [storeId, source, source === 'manual' ? 5001 : 5002],
+      );
+    await expect(insert('manual')).rejects.toThrow(/orders_recipient_required/);
+    await expect(insert('khata_import')).resolves.toBeDefined();
   });
 
   it('does not undo an import after 7 days', async () => {

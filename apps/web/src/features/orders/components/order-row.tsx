@@ -33,6 +33,7 @@ const sourceStyles: Record<OrderSummary['source'], SourceStyle> = {
   pos_csv: { icon: ClipboardList, bgClass: 'bg-surface-muted', textClass: 'text-text' },
   shopify: { icon: ShoppingBag, bgClass: 'bg-surface-muted', textClass: 'text-text' },
   woocommerce: { icon: ShoppingBag, bgClass: 'bg-surface-muted', textClass: 'text-text' },
+  khata_import: { icon: ShoppingBag, bgClass: 'bg-surface-muted', textClass: 'text-text' },
 };
 
 type OrderRowProps = { order: OrderListItem; href: string; canEdit: boolean };

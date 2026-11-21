@@ -32,10 +32,6 @@ const KHATA_SCAN_ERRORS = {
     status: 422,
     message: 'A baki or payment needs a phone number to link it to a customer',
   },
-  KHATA_SALE_IMPORT_UNAVAILABLE: {
-    status: 409,
-    message: 'Sale rows cannot be imported yet. Skip them',
-  },
   KHATA_MERGE_CONTACT_NOT_FOUND: { status: 404, message: 'Customer to merge with not found' },
   KHATA_CUSTOMER_PHONE_TAKEN: {
     status: 409,
