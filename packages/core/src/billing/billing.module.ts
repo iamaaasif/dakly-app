@@ -7,6 +7,6 @@ import { BillingService } from './billing.service';
 @Module({
   imports: [ClockModule],
   providers: [BillingRepository, BillingService],
-  exports: [BillingService],
+  exports: [BillingRepository, BillingService],
 })
 export class BillingModule {}

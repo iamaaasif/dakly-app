@@ -638,6 +638,13 @@
       "when": 1795263373154,
       "tag": "0090_ai_cost_and_provider_health",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1795269617871,
+      "tag": "0091_subscription_renewal",
+      "breakpoints": true
     }
   ]
 }
