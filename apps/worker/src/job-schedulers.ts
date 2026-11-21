@@ -32,6 +32,7 @@ import {
 import { scheduleJob } from '@dakly/core/platform/queue/job-schedule';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { DAY_MS, MINUTE_MS } from '@dakly/core/platform/time';
+import { START_PRODUCT_PHOTO_TAG_BACKFILL } from '@dakly/core/products/jobs/start-product-photo-tag-backfill.job';
 import { QUEUE_POST_METRICS_REFRESHES } from '@dakly/core/social/jobs/queue-post-metrics-refreshes.job';
 import { RECOVER_POST_TARGETS } from '@dakly/core/social/jobs/recover-post-targets.job';
 
@@ -83,6 +84,19 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.bulk, RUN_GOLDEN_EVAL, { pattern: '0 20 * * *', tz: 'UTC' }),
       // 19:00 UTC is 01:00 in Dhaka, after the Dhaka day the rollups need has finished.
       scheduleJob(this.bulk, RUN_MAINTENANCE, { pattern: '0 19 * * *', tz: 'UTC' }),
+      // A fixed job id that is kept after it finishes, so the backfill runs once, not on every
+      // worker start. A flushed queue runs it again, which only tags photos still untagged.
+      this.bulk.add(
+        START_PRODUCT_PHOTO_TAG_BACKFILL,
+        {},
+        {
+          jobId: START_PRODUCT_PHOTO_TAG_BACKFILL,
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 60_000 },
+          removeOnComplete: false,
+          removeOnFail: false,
+        },
+      ),
     ]);
   }
 }

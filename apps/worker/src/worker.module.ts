@@ -84,6 +84,8 @@ import {
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
+import { BackfillProductPhotoTagsJob } from '@dakly/core/products/jobs/backfill-product-photo-tags.job';
+import { StartProductPhotoTagBackfillJob } from '@dakly/core/products/jobs/start-product-photo-tag-backfill.job';
 import { TagProductPhotoJob } from '@dakly/core/products/jobs/tag-product-photo.job';
 import { ProductPhotoTagsModule } from '@dakly/core/products/product-photo-tags.module';
 import { SocialPublishingModule } from '@dakly/core/social/social-publishing.module';
@@ -115,6 +117,8 @@ import { JobSchedulers } from './job-schedulers';
     ReadKhataPage,
     RunProductImport,
     TagProductPhotoJob,
+    BackfillProductPhotoTagsJob,
+    StartProductPhotoTagBackfillJob,
     UndoContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
