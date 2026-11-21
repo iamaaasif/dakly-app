@@ -8,6 +8,7 @@ import { buttonVariants } from '@dakly/ui/button';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
 import { ChatList } from './chat-list';
+import { CommentsView } from './comments-view';
 
 export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
   const router = useRouter();
@@ -18,7 +19,8 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
         <div>
           <h1 className="text-xl font-bold">Chats</h1>
           <p className="text-base text-text-muted">
-            Messenger, WhatsApp and Instagram in one place. Turn each chat into an order.
+            Messenger, WhatsApp, Instagram and post comments in one place. Turn each chat into an
+            order.
           </p>
         </div>
         <Link
@@ -30,14 +32,20 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
         </Link>
       </header>
       <div className="grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-surface lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
-        <ChatList query={query} />
-        <section
-          aria-label="Conversation"
-          className="hidden flex-col items-center justify-center gap-2 border-l border-border p-6 text-center text-text-muted lg:flex"
-        >
-          <MessageSquare aria-hidden="true" size={28} strokeWidth={1.5} />
-          <p>Choose a chat to read it.</p>
-        </section>
+        {query.channel === 'comments' ? (
+          <CommentsView query={query} />
+        ) : (
+          <>
+            <ChatList query={query} />
+            <section
+              aria-label="Conversation"
+              className="hidden flex-col items-center justify-center gap-2 border-l border-border p-6 text-center text-text-muted lg:flex"
+            >
+              <MessageSquare aria-hidden="true" size={28} strokeWidth={1.5} />
+              <p>Choose a chat to read it.</p>
+            </section>
+          </>
+        )}
       </div>
       <AiAgentDrawer
         tab={query.agent}

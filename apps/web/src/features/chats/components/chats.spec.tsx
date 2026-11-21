@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
+import type { CommentResponse } from '@dakly/contracts/comments';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { chatScreenQuerySchema } from '../chat-filters';
@@ -131,5 +133,64 @@ describe('Chat list', () => {
     show();
     expect(await screen.findByText('Chats is not turned on')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Retry chats' })).toBeTruthy();
+  });
+});
+
+const kurtiComment: CommentResponse = {
+  id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e70',
+  channel: 'messenger',
+  externalPostId: 'post-1',
+  postCaption: 'Women’s Kurti ৳850',
+  authorName: 'Rumana Akter',
+  body: 'Price koto?',
+  classification: null,
+  status: 'new',
+  isReply: false,
+  publicReplied: false,
+  privateRepliedAt: null,
+  canReplyPrivately: true,
+  commentedAt: '2026-11-19T04:00:00.000000Z',
+};
+
+describe('Comments view', () => {
+  function respondWithComments(items: CommentResponse[]) {
+    const calls: { path: string; method: string }[] = [];
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      calls.push({ path, method: init?.method ?? 'GET' });
+      const headers = { 'x-session-context': 'verified' };
+      if (path.startsWith('/api/comments/') && init?.method === 'POST')
+        return Response.json({ ...items[0], status: 'hidden' }, { headers });
+      return Response.json({ items, nextCursor: null }, { headers });
+    });
+    return calls;
+  }
+  const commentsQuery = chatScreenQuerySchema.parse({ channel: 'comments', post: 'post-1' });
+
+  it('lists the posts with how many comments wait, and opens one post with its comments', async () => {
+    respondWithComments([kurtiComment, { ...kurtiComment, id: 'second', status: 'replied' }]);
+    show(commentsQuery);
+    expect(await screen.findByText('2 comments')).toBeTruthy();
+    expect(screen.getByText('To answer:').parentElement?.textContent).toBe('To answer: 1');
+    expect(screen.getAllByText('Rumana Akter')).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: 'Women’s Kurti ৳850' })).toBeTruthy();
+  });
+
+  it('hides a comment through the API', async () => {
+    const calls = respondWithComments([kurtiComment]);
+    show(commentsQuery);
+    await userEvent.click(await screen.findByRole('button', { name: 'Hide comment' }));
+    await waitFor(() =>
+      expect(calls).toContainEqual({
+        path: `/api/comments/${kurtiComment.id}/hide`,
+        method: 'POST',
+      }),
+    );
+  });
+
+  it('turns the private reply off once Meta would refuse it', async () => {
+    respondWithComments([{ ...kurtiComment, canReplyPrivately: false }]);
+    show(commentsQuery);
+    const button = await screen.findByRole('button', { name: /Send price by Messenger/ });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 });
