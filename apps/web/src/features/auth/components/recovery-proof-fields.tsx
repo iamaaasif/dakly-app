@@ -1,16 +1,15 @@
 import { useFormContext } from 'react-hook-form';
 
-import type { TotpRecoveryInput } from '@dakly/contracts/totp';
-
+import type { RecoveryFormInput } from '../hooks/use-recovery-request';
 import { FormField as AuthField } from '@/components/form-field';
 
 export function RecoveryProofFields() {
-  const form = useFormContext<TotpRecoveryInput>();
+  const form = useFormContext<RecoveryFormInput>();
   const errors = form.formState.errors;
   return (
     <>
       <AuthField
-        label="Mobile code"
+        label="Mobile code (if you have a mobile)"
         field={form.register('phoneCode')}
         error={errors.phoneCode}
         inputMode="numeric"

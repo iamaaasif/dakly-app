@@ -572,8 +572,15 @@
     {
       "idx": 81,
       "version": "7",
-      "when": 1795232333995,
-      "tag": "0081_khata_scans",
+      "when": 1795233492907,
+      "tag": "0081_ai_reply_fix",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1795251621528,
+      "tag": "0082_khata_scans",
       "breakpoints": true
     }
   ]

@@ -223,6 +223,7 @@ export class IsolationFixture {
       'segments',
       'orders',
       'messages',
+      'social_comments',
       'conversations',
       'posts',
       'khata_rows',

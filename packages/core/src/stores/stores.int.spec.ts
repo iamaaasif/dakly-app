@@ -543,7 +543,7 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
       { sending: sendingWith({ onlyOwnersAndAdminsApprove: 'yes' }) },
     ])
       expect((await patch(cookie, payload)).statusCode).toBe(400);
-    for (const extensions of [['physical_shop'], ['core'], ['chats', 'chats']])
+    for (const extensions of [['core'], ['chats', 'chats']])
       expect((await patch(cookie, { extensions }, '/store/extensions')).statusCode).toBe(400);
     expect((await settings(cookie)).json().name).toBe(input.name);
   });

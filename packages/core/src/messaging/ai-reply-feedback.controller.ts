@@ -5,6 +5,7 @@ import {
   HttpCode,
   Inject,
   Param,
+  Post,
   ParseUUIDPipe,
   Put,
   Query,
@@ -12,9 +13,11 @@ import {
 
 import {
   aiFeedbackQuerySchema,
+  fixAiReplySchema,
   rateAiReplySchema,
   type AiFeedbackQuery,
   type AiFeedbackResponse,
+  type FixAiReplyInput,
   type RateAiReplyInput,
 } from '@dakly/contracts/ai-feedback';
 
@@ -47,5 +50,17 @@ export class AiReplyFeedbackController {
     @Body(new ZodValidationPipe(rateAiReplySchema)) input: RateAiReplyInput,
   ): Promise<void> {
     return this.feedback.rate(storeId, { kind: 'user', userId }, messageId, input);
+  }
+
+  @Post(':messageId/fix')
+  @HttpCode(204)
+  @RequirePermission('chats.edit')
+  fix(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('messageId', ParseUUIDPipe) messageId: string,
+    @Body(new ZodValidationPipe(fixAiReplySchema)) input: FixAiReplyInput,
+  ): Promise<void> {
+    return this.feedback.fix(storeId, { kind: 'user', userId }, messageId, input);
   }
 }

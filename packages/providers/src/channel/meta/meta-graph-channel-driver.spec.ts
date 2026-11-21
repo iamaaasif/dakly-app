@@ -219,6 +219,64 @@ describe('MetaGraphChannelDriver', () => {
     ).resolves.toEqual({ externalMessageId: 'm_staff_reply' });
   });
 
+  it("replies to a Facebook comment and an Instagram comment on each one's own edge", async () => {
+    const paths: string[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      paths.push(url.pathname);
+      expect(await new Request(url, init).json()).toEqual({ message: 'ইনবক্সে দাম জানিয়েছি' });
+      return Response.json({ id: 'reply-1' });
+    });
+    const text = 'ইনবক্সে দাম জানিয়েছি';
+    await driver.replyToComment(pageCredentials, {
+      channel: 'messenger',
+      externalCommentId: 'c1',
+      text,
+    });
+    await driver.replyToComment(pageCredentials, {
+      channel: 'instagram',
+      externalCommentId: 'c2',
+      text,
+    });
+    expect(paths).toEqual(['/v27.0/c1/comments', '/v27.0/c2/replies']);
+  });
+
+  it('sends a private reply addressed to the comment and returns the opened chat', async () => {
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      expect(url.pathname).toMatch(/\/123\/messages$/);
+      expect(await new Request(url, init).json()).toEqual({
+        recipient: { comment_id: 'c1' },
+        message: { text: 'Price 850 taka' },
+      });
+      return Response.json({ message_id: 'm_private', recipient_id: '999' });
+    });
+    await expect(
+      driver.sendPrivateReply(pageCredentials, {
+        channel: 'messenger',
+        externalCommentId: 'c1',
+        text: 'Price 850 taka',
+      }),
+    ).resolves.toEqual({ externalMessageId: 'm_private', recipientExternalId: '999' });
+  });
+
+  it('hides a comment with the flag each platform names', async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      bodies.push(await new Request(url, init).json());
+      return Response.json({ success: true });
+    });
+    await driver.setCommentHidden(pageCredentials, {
+      channel: 'messenger',
+      externalCommentId: 'c1',
+      hidden: true,
+    });
+    await driver.setCommentHidden(pageCredentials, {
+      channel: 'instagram',
+      externalCommentId: 'c2',
+      hidden: false,
+    });
+    expect(bodies).toEqual([{ is_hidden: true }, { hide: false }]);
+  });
+
   it('opens Facebook Login for Business with a server-selected redirect and state', () => {
     const url = new URL(driver.authorizationUrl('login-state'));
     expect(url.hostname).toBe('www.facebook.com');
