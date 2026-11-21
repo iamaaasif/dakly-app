@@ -78,10 +78,16 @@ export class BillingRepository {
 
   async currentPeriod(
     storeId: string,
-  ): Promise<{ limits: Record<string, number>; currentPeriodStart: Date } | undefined> {
+  ): Promise<
+    { limits: Record<string, number>; currentPeriodStart: Date; currentPeriodEnd: Date } | undefined
+  > {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx
-        .select({ limits: plans.limits, currentPeriodStart: subscriptions.currentPeriodStart })
+        .select({
+          limits: plans.limits,
+          currentPeriodStart: subscriptions.currentPeriodStart,
+          currentPeriodEnd: subscriptions.currentPeriodEnd,
+        })
         .from(subscriptions)
         .innerJoin(plans, eq(plans.id, subscriptions.planId))
         .where(eq(subscriptions.storeId, storeId))

@@ -84,17 +84,23 @@ describe('BillingService', () => {
       code: 'PLAN_NOT_FOUND',
     });
   });
-  it('reads the unit allowance and current period start, with 0 for a unit the plan omits', async () => {
+  it('reads the unit allowance and the current period, with 0 for a unit the plan omits', async () => {
     const currentPeriodStart = new Date('2028-01-15T04:00:00Z');
+    const currentPeriodEnd = new Date('2028-02-15T04:00:00Z');
     const billing = new BillingService(
       {
-        currentPeriod: async () => ({ limits: { ai_ask: 100 }, currentPeriodStart }),
+        currentPeriod: async () => ({
+          limits: { ai_ask: 100 },
+          currentPeriodStart,
+          currentPeriodEnd,
+        }),
       } as unknown as BillingRepository,
       new Clock(),
     );
     expect(await billing.currentAllowance('store-id', 'ai_ask')).toEqual({
       allowance: 100,
       periodStart: currentPeriodStart,
+      periodEnd: currentPeriodEnd,
     });
     expect(await billing.currentAllowance('store-id', 'ai_content')).toMatchObject({
       allowance: 0,

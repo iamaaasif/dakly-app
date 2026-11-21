@@ -17,6 +17,7 @@ import {
   canChangeExtensions,
   canDo,
   canReviewSocialPosts,
+  canWriteOffDue,
   hasStoreAdminRole,
 } from './permissions';
 import { TeamRepository } from './team.repository';
@@ -37,6 +38,11 @@ export class TeamService {
     return canApproveSends(access);
   }
 
+  // The route also needs View Customers, so the screen shows the button only with both.
+  canExportCustomers(access: StoreAccess): boolean {
+    return access.exportLists && canAccess(access, 'customers', 'view');
+  }
+
   canChangeAttributionWindow(access: StoreAccess): boolean {
     return canDo(access, 'attribution.window.edit');
   }
@@ -47,6 +53,10 @@ export class TeamService {
 
   canChangeExtensions(access: StoreAccess): boolean {
     return canChangeExtensions(access);
+  }
+
+  canWriteOffDue(access: StoreAccess): boolean {
+    return canWriteOffDue(access);
   }
 
   canManageChannelConnections(access: StoreAccess): boolean {

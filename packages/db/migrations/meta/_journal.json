@@ -547,6 +547,20 @@
       "when": 1795213547250,
       "tag": "0077_campaign_audience_source",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1795223483502,
+      "tag": "0078_due_book_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1795226468930,
+      "tag": "0079_due_messages",
+      "breakpoints": true
     }
   ]
 }

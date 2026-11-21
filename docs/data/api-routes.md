@@ -122,6 +122,14 @@ atomically and retain business data when an extension is disabled.
 | `POST /segments`, `PATCH /segments/:segmentId`, `DELETE /segments/:segmentId`                                                   | `segments.edit`                                                  |
 | `GET /tasks`, `POST /tasks`, `PATCH /tasks/:taskId`                                                                             | `customers`                                                      |
 
+## Due book (13)
+
+| Route                                                                                                                                                                           | Permission                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `GET /due-book/summary`, `GET /due-book/customers`, `GET /due-book/customers/:contactId`, `GET /due-book/customers/:contactId/entries`                                          | `dueBook.view` (phones masked unless "See full phone numbers") |
+| `POST /due-book/customers/:contactId/baki`, `POST /due-book/customers/:contactId/payments`, `POST /due-book/customers/:contactId/reminders`, `POST /due-book/reminders/overdue` | `dueBook.edit`                                                 |
+| `POST /due-book/customers/:contactId/write-offs`                                                                                                                                | `dueBook.edit`, and the role must be Owner or Admin            |
+
 ## Chats and AI agent (04)
 
 | Route                                                                                                             | Permission                                                        |
@@ -152,6 +160,10 @@ atomically and retain business data when an extension is disabled.
 | `POST /variants/:variantId/stock-adjustments`                                            | `products` |
 | `GET /variants/:variantId/stock-movements`                                               | `products` |
 | `GET /restock-requests`                                                                  | `products` |
+| `POST /variants/:variantId/restock-requests`                                             | `products` |
+| `DELETE /restock-requests/:id`                                                           | `products` |
+| `GET /products/:productId/restock-waiting`                                               | `products` |
+| `POST /variants/:variantId/restock-notifications`                                        | `products` |
 | `POST /products/:productId/photos/upload-url`                                            | `products` |
 | `POST /products/:productId/photos/confirm`                                               | `products` |
 | `PATCH /products/:productId/photos`                                                      | `products` |

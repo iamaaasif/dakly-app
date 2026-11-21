@@ -4,11 +4,25 @@ import type { smsSenderIdStatuses } from './channels';
 import { supportReasonSchema } from './support';
 
 // Operators accept up to 11 letters, numbers and spaces for a masking name (feature 02).
+// Operators ask for the trade licence and the owner's NID before they register a name.
+export const smsSenderDocumentUploadSchema = z.strictObject({
+  contentType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  sizeBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(5 * 1024 * 1024),
+});
+export const confirmSmsSenderDocumentSchema = smsSenderDocumentUploadSchema.extend({
+  fileId: z.uuid(),
+});
 export const requestSmsSenderIdSchema = z.strictObject({
   senderName: z
     .string()
     .trim()
     .regex(/^[A-Za-z0-9 ]{3,11}$/, 'Use 3 to 11 English letters, numbers or spaces'),
+  tradeLicenceFileId: z.uuid(),
+  nidFileId: z.uuid(),
 });
 export const smsSenderIdListQuerySchema = z.strictObject({
   cursor: z.uuid().optional(),
@@ -17,6 +31,9 @@ export const smsSenderIdListQuerySchema = z.strictObject({
 export const smsSenderIdDecisionSchema = z.strictObject({ reason: supportReasonSchema });
 export const smsSenderIdDecisionPathSchema = z.enum(['approve', 'reject']);
 
+export type SmsSenderDocumentUploadInput = z.infer<typeof smsSenderDocumentUploadSchema>;
+export type ConfirmSmsSenderDocumentInput = z.infer<typeof confirmSmsSenderDocumentSchema>;
+export type SmsSenderDocumentUploadResponse = { fileId: string; uploadUrl: string };
 export type RequestSmsSenderIdInput = z.infer<typeof requestSmsSenderIdSchema>;
 export type SmsSenderIdListQuery = z.infer<typeof smsSenderIdListQuerySchema>;
 export type SmsSenderIdDecisionInput = z.infer<typeof smsSenderIdDecisionSchema>;

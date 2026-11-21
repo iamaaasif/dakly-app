@@ -13,6 +13,11 @@ const CONTACT_ERRORS = {
     status: 429,
     message: 'Too many phone searches or changes. Try again later',
   },
+  CONTACT_EXPORT_NOT_ALLOWED: { status: 403, message: 'You cannot download customer lists' },
+  CONTACT_EXPORT_TOO_LARGE: {
+    status: 422,
+    message: 'Too many customers to download at once. Narrow the filters',
+  },
 } as const satisfies ErrorCatalog;
 
 export function contactError(code: keyof typeof CONTACT_ERRORS): AppError {

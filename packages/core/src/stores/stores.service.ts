@@ -5,6 +5,7 @@ import type { PlansResponse } from '@dakly/contracts/billing';
 import {
   sendingSettingsSchema,
   stockSettingsSchema,
+  dueBookSettingsSchema,
   type CreateStoreInput,
   attributionWindowSchema,
   type AttributionSettingsResponse,
@@ -327,6 +328,7 @@ function toSettingsResponse(store: StoreSettingsRow): StoreSettingsResponse {
     ...store,
     sending: parseSending(store.sending),
     stock: stockSettingsSchema.parse(store.stock ?? {}),
+    dueBook: dueBookSettingsSchema.parse(store.dueBook ?? {}),
   };
 }
 

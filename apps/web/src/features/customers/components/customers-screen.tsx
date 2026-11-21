@@ -1,27 +1,27 @@
 'use client';
-import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import type { ContactListQuery } from '@dakly/contracts/contacts';
 import { ApiError } from '@dakly/ui/api-client';
 import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { customersSearch, useCustomers } from '../api/customers';
+import { type CustomerColumn, customerColumnsParam } from '../customer-columns';
 import { AddCustomersChooser } from './add-customers-chooser';
 import { CustomerFilters } from './customer-filters';
 import { CustomerList } from './customer-list';
+import { CustomersHeader } from './customers-header';
 import { ImportCustomersDialog } from './import-customers-dialog';
 import { NewCustomerForm } from './new-customer-form';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
 
-type CustomersScreenProps = { query: ContactListQuery };
+type CustomersScreenProps = { query: ContactListQuery; columns: CustomerColumn[] };
 
-export function CustomersScreen({ query }: CustomersScreenProps) {
+export function CustomersScreen({ query, columns }: CustomersScreenProps) {
   const [adding, setAdding] = useState<'choose' | 'manual' | 'import' | null>(null);
   const [added, setAdded] = useState(false);
   const customers = useCustomers(query);
@@ -35,14 +35,7 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-bold">All customers</h1>
-        {canCreate ? (
-          <Button onClick={() => setAdding('choose')} className="gap-2">
-            <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add customers
-          </Button>
-        ) : null}
-      </div>
+      <CustomersHeader query={query} canCreate={canCreate} onAdd={() => setAdding('choose')} />
 
       {added ? (
         <p role="status">
@@ -53,9 +46,15 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
       <CustomerFilters
         key={`${query.kind}|${query.search}|${query.tag}`}
         query={query}
+        columns={columns}
         searchError={searchError}
       />
-      <CustomerResults query={query} customers={customers} hideError={Boolean(searchError)} />
+      <CustomerResults
+        query={query}
+        columns={columns}
+        customers={customers}
+        hideError={Boolean(searchError)}
+      />
 
       {adding === 'choose' ? (
         <AddCustomersChooser onChoose={setAdding} onClose={() => setAdding(null)} />
@@ -78,11 +77,12 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
 
 type CustomerResultsProps = {
   query: ContactListQuery;
+  columns: CustomerColumn[];
   customers: ReturnType<typeof useCustomers>;
   hideError: boolean;
 };
 
-function CustomerResults({ query, customers, hideError }: CustomerResultsProps) {
+function CustomerResults({ query, columns, customers, hideError }: CustomerResultsProps) {
   if (customers.error && !hideError)
     return (
       <QueryError
@@ -103,10 +103,10 @@ function CustomerResults({ query, customers, hideError }: CustomerResultsProps) 
   const { items, nextCursor } = customers.data;
   if (!items.length) return <p>{emptyMessage(query)}</p>;
   const pageHref = (cursor?: string) =>
-    `/customers?${customersSearch({ kind: query.kind, search: query.search, tag: query.tag, cursor })}`;
+    `/customers?${customersSearch({ kind: query.kind, search: query.search, tag: query.tag, columns: customerColumnsParam(columns), cursor })}`;
   return (
     <>
-      <CustomerList customers={items} />
+      <CustomerList customers={items} columns={columns} />
       <nav aria-label="Customer pages" className="flex gap-4">
         {query.cursor ? (
           <Link

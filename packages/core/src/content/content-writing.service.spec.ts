@@ -97,6 +97,85 @@ describe('ContentService writing', () => {
     });
   });
 
+  it('passes the length, hashtag and order line choices to the model', async () => {
+    let input = '';
+    const service = writing((request) => {
+      input = request.input;
+      return modelResponse(request, ['One', 'Two', 'Three']);
+    });
+    await service.write(storeId, access, {
+      ...topic,
+      length: 'short',
+      hashtags: false,
+      orderLine: false,
+    });
+    expect(JSON.parse(input).request).toMatchObject({
+      length: 'short',
+      hashtags: false,
+      orderLine: false,
+    });
+  });
+
+  it('rejects a draft longer than the chosen length', async () => {
+    const long = 'a'.repeat(301);
+    const service = writing((request) => modelResponse(request, [long, 'Two', 'Three']));
+    await expect(
+      service.write(storeId, access, { ...topic, length: 'short' }),
+    ).rejects.toMatchObject({ code: 'CONTENT_INVALID' });
+    await expect(service.write(storeId, access, topic)).resolves.toMatchObject({
+      options: [long, 'Two', 'Three'],
+    });
+  });
+
+  it('rejects a hashtag when hashtags are switched off', async () => {
+    const service = writing((request) =>
+      modelResponse(request, ['New scarves #winter', 'Two', 'Three']),
+    );
+    await expect(
+      service.write(storeId, access, { ...topic, hashtags: false }),
+    ).rejects.toMatchObject({ code: 'CONTENT_INVALID' });
+    await expect(service.write(storeId, access, topic)).resolves.toMatchObject({
+      options: ['New scarves #winter', 'Two', 'Three'],
+    });
+  });
+
+  it('rejects the brand call to action when the order line is switched off', async () => {
+    const service = writing((request) =>
+      modelResponse(request, ['New scarves. Send a message to order.', 'Two', 'Three']),
+    );
+    await expect(
+      service.write(storeId, access, { ...topic, orderLine: false }),
+    ).rejects.toMatchObject({ code: 'CONTENT_INVALID' });
+    await expect(service.write(storeId, access, topic)).resolves.toMatchObject({
+      options: ['New scarves. Send a message to order.', 'Two', 'Three'],
+    });
+  });
+
+  it('reports the credits left and when they reset', async () => {
+    const periodEnd = new Date('2028-02-15T04:00:00Z');
+    const service = new ContentService(
+      {} as ContentRepository,
+      new Clock(),
+      {} as StoreTransaction,
+      {} as AuditService,
+      {} as AiService,
+      {} as ProductsService,
+      {
+        summary: async (store: string, unit: string) =>
+          store === storeId && unit === 'ai_content'
+            ? { allowance: 100, remaining: 64, periodEnd }
+            : undefined,
+      } as unknown as UsageService,
+      {} as TeamService,
+      {} as AiRunsService,
+    );
+    await expect(service.credits(storeId)).resolves.toEqual({
+      allowance: 100,
+      remaining: 64,
+      resetsAt: '2028-02-15T04:00:00.000Z',
+    });
+  });
+
   it('returns one option for an edit', async () => {
     const service = writing((request) => modelResponse(request, ['New scarves']));
     await expect(

@@ -14,12 +14,19 @@ const otherStoreId = '01890000-0000-7000-8000-0000000000b2';
 const userId = '01890000-0000-7000-8000-0000000000c3';
 const staff = { kind: 'staff', staffUserId: '01890000-0000-7000-8000-0000000000d4' } as const;
 const now = new Date('2026-11-16T10:00:00.000Z');
+const tradeLicenceFileId = '01890000-0000-7000-8000-0000000000e5';
+const nidFileId = '01890000-0000-7000-8000-0000000000f6';
+const confirmedFileIds = new Set([tradeLicenceFileId, nidFileId]);
 
 // Holds one store's rows and applies the same guards as the SQL: one active sender, guarded update.
 class FakeSmsSendersRepository {
   readonly rows = new Map<string, SmsSender & { storeId: string }>();
 
-  async insert(store: string, senderName: string) {
+  async countDocuments(_store: string, fileIds: string[]) {
+    return fileIds.filter((fileId) => confirmedFileIds.has(fileId)).length;
+  }
+
+  async insert(store: string, input: { senderName: string }) {
     const active = [...this.rows.values()].some(
       (row) => row.storeId === store && row.status !== 'rejected',
     );
@@ -28,7 +35,7 @@ class FakeSmsSendersRepository {
     const row = {
       id,
       storeId: store,
-      senderName,
+      senderName: input.senderName,
       status: 'requested' as const,
       rejectionReason: null,
       createdAt: now,
@@ -80,14 +87,25 @@ function setup(member = { phone: '01712345678' as string | null, isPhoneVerified
     { now: () => now } as Clock,
     limiter as unknown as RateLimiter,
   );
-  const request = (store = storeId) =>
-    service.request(store, { senderName: 'Nusrat Fab' }, { kind: 'user', userId });
+  const request = (store = storeId, documents = { tradeLicenceFileId, nidFileId }) =>
+    service.request(store, { senderName: 'Nusrat Fab', ...documents }, { kind: 'user', userId });
   const decide = (id: string, status: 'approved' | 'rejected', store = storeId) =>
     service.decideRequest(store, id, { status, reason: 'Trade licence name differs' }, staff);
   return { service, sent, request, decide };
 }
 
 describe('SmsSendersService', () => {
+  it('refuses a request whose documents are missing or the same file twice', async () => {
+    const { request } = setup();
+
+    await expect(
+      request(storeId, { tradeLicenceFileId, nidFileId: '01890000-0000-7000-8000-0000000000a7' }),
+    ).rejects.toMatchObject({ code: 'SMS_SENDER_DOCUMENT_INVALID' });
+    await expect(
+      request(storeId, { tradeLicenceFileId, nidFileId: tradeLicenceFileId }),
+    ).rejects.toMatchObject({ code: 'SMS_SENDER_DOCUMENT_INVALID' });
+  });
+
   it('refuses a second request while the first is pending', async () => {
     const { request } = setup();
     await request();
