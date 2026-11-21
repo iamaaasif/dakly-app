@@ -2352,6 +2352,7 @@ const shopSending = {
   quietHours: { startHour: 22, endHour: 8 },
   frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
   onlyOwnersAndAdminsApprove: false,
+  sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
 };
 for (const [path, payload, expected] of [
   [
