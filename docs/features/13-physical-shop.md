@@ -82,8 +82,32 @@ What others do: TallyKhata and OkCredit made baki tracking free and sent an SMS 
 3. Remind sends one reminder. "Remind all over 30 days" sends to every customer with debt older than 30 days who was not reminded in the last 7 days. Reminder text is polite and fixed by template (the AI may rephrase within the template, never add threats or late fees).
 4. Limits: maximum 1 reminder per customer per 7 days, and only between 9 am and 8 pm. Reminders are sent to people who owe money only and are classed as transactional.
 5. Collect records a payment, lowers the balance, and optionally sends a thank-you SMS. Overpaying creates store credit shown as a negative balance "Shop owes ৳200".
-6. Writing off a debt (Owner only) closes it with a reason and keeps it in history.
+6. Writing off a debt (Owner or Admin) closes it with a reason and keeps it in history.
 7. Due book money is not "Total spent" until paid; the order counts as an order straight away.
+
+#### Due book API (DUE-1)
+
+What the code does now; the SMS notices and reminders (DUE-2) and the screens (DUE-3) come later.
+
+- Every baki, payment and write-off is a row in `due_entries`. Rows are never edited or deleted by the app; a correction is a new row. The row says who recorded it and when it happened. Edit and delete of an entry, from the "Customer disputes baki" case, are not built yet.
+- The balance is the baki total minus payments and write-offs. A negative balance means the shop owes the customer. Payments and write-offs both settle the oldest baki first, and the oldest debt is the date of the oldest baki that is still open.
+- A payment needs a method (cash, bKash, Nagad, Rocket, card or bank). A write-off needs a reason and cannot be more than the balance. Only an Owner or Admin can write off; the Due book permission alone is not enough.
+- Baki and payments can carry a past date, for entries copied from a paper khata. A date in the future is refused. A write-off is always dated now.
+- "Collected this week" is the payments of the last 7 days, and "Older than 30 days" counts only the part of each baki that is still open.
+- The list shows customers who owe, oldest debt first, and leaves out customers who were removed from the customer list.
+- Each entry publishes `due.added`, `due.payment_recorded` or `due.written_off` in the same transaction. The khata import (KHT-2) calls `DueBookService.recordBaki` and `collectPayment` with source `khata_import` and the date from the page.
+
+Routes (all under the Due book permission: `dueBook.view` to read, `dueBook.edit` to write):
+
+| Route                                              | What it does                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| `GET /due-book/summary`                            | Total owed, customers owing, older than 30 days, collected, 7 days |
+| `GET /due-book/customers?filter=all\|over_30_days` | Customers who owe, with balance and oldest debt, by cursor         |
+| `GET /due-book/customers/:contactId`               | One customer's balance and oldest debt                             |
+| `GET /due-book/customers/:contactId/entries`       | History, newest first, with the balance after each entry           |
+| `POST /due-book/customers/:contactId/baki`         | Add baki: `amountPoisha`, optional `note`, optional `occurredAt`   |
+| `POST /due-book/customers/:contactId/payments`     | Collect: `amountPoisha`, `method`, optional `note`, `occurredAt`   |
+| `POST /due-book/customers/:contactId/write-offs`   | Write off: `amountPoisha`, `reason`. Owner or Admin only           |
 
 #### Khata Scanner
 

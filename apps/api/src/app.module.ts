@@ -16,6 +16,7 @@ import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { ContentModule } from '@dakly/core/content/content.module';
 import { DashboardModule } from '@dakly/core/dashboard/dashboard.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
+import { DueBookModule } from '@dakly/core/due-book/due-book.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { LinksModule } from '@dakly/core/links/links.module';
 import { InboxModule } from '@dakly/core/messaging/inbox.module';
@@ -57,6 +58,7 @@ import { HealthController } from './health.controller';
     OrdersModule,
     PaymentsModule,
     ConsentsModule,
+    DueBookModule,
     ImportsModule,
     AiAgentSettingsModule,
     AiPracticeModule,

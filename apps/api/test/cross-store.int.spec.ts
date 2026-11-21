@@ -1213,6 +1213,134 @@ fixture('POST /contacts/:contactId/consents', async () => {
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
 });
+async function dueEntries(shop: Shop, contactId: string) {
+  await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {
+    amountPoisha: 95000,
+  });
+  return success(shop, 'POST', `/due-book/customers/${contactId}/payments`, 201, {
+    amountPoisha: 20000,
+    method: 'cash',
+  });
+}
+async function dueEntryId(shop: Shop, contactId: string) {
+  const result = await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {
+    amountPoisha: 1000,
+  });
+  return result.json().entry.id as string;
+}
+fixture('GET /due-book/summary', async () => {
+  const { a, b } = await pair();
+  await dueEntries(a, await contact(a));
+  await success(b, 'POST', `/due-book/customers/${await contact(b)}/baki`, 201, {
+    amountPoisha: 5000,
+  });
+  expect((await success(a, 'GET', '/due-book/summary', 200)).json()).toMatchObject({
+    totalOwedPoisha: 75000,
+    customersOwing: 1,
+    collectedLast7DaysPoisha: 20000,
+  });
+  expect((await success(b, 'GET', '/due-book/summary', 200)).json()).toMatchObject({
+    totalOwedPoisha: 5000,
+    customersOwing: 1,
+    collectedLast7DaysPoisha: 0,
+  });
+  expect((await f.request(a.member, 'GET', '/due-book/summary')).statusCode).toBe(403);
+});
+fixture('GET /due-book/customers', async () => {
+  const { a, b } = await pair(),
+    aId = await contact(a),
+    bId = await contact(b);
+  await dueEntries(a, aId);
+  await dueEntries(b, bId);
+  for (const [shop, own, foreign] of [
+    [a, aId, bId],
+    [b, bId, aId],
+  ] as const) {
+    const ids = (await success(shop, 'GET', '/due-book/customers', 200))
+      .json()
+      .items.map((item: { contactId: string }) => item.contactId);
+    expect(ids).toEqual([own]);
+    expect(ids).not.toContain(foreign);
+  }
+  expect((await f.request(a.member, 'GET', '/due-book/customers')).statusCode).toBe(403);
+});
+fixture('GET /due-book/customers/:contactId', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  await dueEntries(a, id);
+  expect((await success(a, 'GET', `/due-book/customers/${id}`, 200)).json()).toMatchObject({
+    contactId: id,
+    balancePoisha: 75000,
+  });
+  await hidden(b, 'GET', (value) => `/due-book/customers/${value}`, id);
+});
+fixture('GET /due-book/customers/:contactId/entries', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  await dueEntries(a, id);
+  const own = await success(a, 'GET', `/due-book/customers/${id}/entries`, 200);
+  expect(own.json().items.map((item: { kind: string }) => item.kind)).toEqual(['payment', 'baki']);
+  await hidden(b, 'GET', (value) => `/due-book/customers/${value}/entries`, id);
+});
+fixture('POST /due-book/customers/:contactId/baki', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  const input = { amountPoisha: 95000, note: 'দুটি শাড়ি' };
+  const own = await success(a, 'POST', `/due-book/customers/${id}/baki`, 201, input);
+  expect(own.json().balance).toMatchObject({ contactId: id, balancePoisha: 95000 });
+  await hidden(
+    b,
+    'POST',
+    (value) => `/due-book/customers/${value}/baki`,
+    id,
+    () => input,
+  );
+  const rows = await f.admin.pool.query('select store_id from due_entries where contact_id=$1', [
+    id,
+  ]);
+  expect(rows.rows).toEqual([{ store_id: a.id }]);
+  expect(
+    (await f.request(a.member, 'POST', `/due-book/customers/${id}/baki`, input)).statusCode,
+  ).toBe(403);
+  const body = { ...input, storeId: b.id };
+  expect(
+    (await f.request(a.owner, 'POST', `/due-book/customers/${id}/baki`, body)).statusCode,
+  ).toBe(400);
+});
+fixture('POST /due-book/customers/:contactId/payments', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  await success(a, 'POST', `/due-book/customers/${id}/baki`, 201, { amountPoisha: 95000 });
+  const input = { amountPoisha: 50000, method: 'bkash' };
+  const own = await success(a, 'POST', `/due-book/customers/${id}/payments`, 201, input);
+  expect(own.json().balance.balancePoisha).toBe(45000);
+  await hidden(
+    b,
+    'POST',
+    (value) => `/due-book/customers/${value}/payments`,
+    id,
+    () => input,
+  );
+  const rows = await f.admin.pool.query('select kind from due_entries where contact_id=$1', [id]);
+  expect(rows.rows).toHaveLength(2);
+});
+fixture('POST /due-book/customers/:contactId/write-offs', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  await success(a, 'POST', `/due-book/customers/${id}/baki`, 201, { amountPoisha: 95000 });
+  const input = { amountPoisha: 25000, reason: 'দোকান বন্ধ করে চলে গেছেন' };
+  const own = await success(a, 'POST', `/due-book/customers/${id}/write-offs`, 201, input);
+  expect(own.json().balance.balancePoisha).toBe(70000);
+  await hidden(
+    b,
+    'POST',
+    (value) => `/due-book/customers/${value}/write-offs`,
+    id,
+    () => input,
+  );
+  const rows = await f.admin.pool.query('select kind from due_entries where contact_id=$1', [id]);
+  expect(rows.rows).toHaveLength(2);
+});
 async function customerImport(shop: Shop) {
   const result = await success(shop, 'POST', '/imports', 201, { sizeBytes: 120 });
   expect(result.json().uploadUrl).toContain(`/imports/${shop.id}/`);
@@ -4372,6 +4500,7 @@ describe('every production shop route isolates its data', () => {
   });
   it('returns own rows and hides foreign rows without repository filters under every route policy', async () => {
     const { a, b } = await pair();
+    const [contactA, contactB] = [await contact(a), await contact(b)];
     const rows: [string, string, string, string][] = [
       ['stores', 'id', a.id, b.id],
       ['memberships', 'id', a.membership, b.membership],
@@ -4381,7 +4510,7 @@ describe('every production shop route isolates its data', () => {
         await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।'),
         await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।'),
       ],
-      ['contacts', 'id', await contact(a), await contact(b)],
+      ['contacts', 'id', contactA, contactB],
       ['roles', 'id', await role(a), await role(b)],
       ['segments', 'id', await segment(a), await segment(b)],
       ['campaigns', 'id', await campaign(a), await campaign(b)],
@@ -4390,6 +4519,7 @@ describe('every production shop route isolates its data', () => {
       ['staff_recovery_history', 'audit_id', await f.recovery(a), await f.recovery(b)],
       ['wallet_ledger', 'id', await smsCredits(a, 10), await smsCredits(b, 20)],
       ['sms_sender_ids', 'id', await smsSender(a), await smsSender(b)],
+      ['due_entries', 'id', await dueEntryId(a, contactA), await dueEntryId(b, contactB)],
     ];
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);
     const client = await connection.pool.connect();

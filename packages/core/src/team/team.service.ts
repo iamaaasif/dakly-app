@@ -17,6 +17,7 @@ import {
   canChangeExtensions,
   canDo,
   canReviewSocialPosts,
+  canWriteOffDue,
   hasStoreAdminRole,
 } from './permissions';
 import { TeamRepository } from './team.repository';
@@ -52,6 +53,10 @@ export class TeamService {
 
   canChangeExtensions(access: StoreAccess): boolean {
     return canChangeExtensions(access);
+  }
+
+  canWriteOffDue(access: StoreAccess): boolean {
+    return canWriteOffDue(access);
   }
 
   canManageChannelConnections(access: StoreAccess): boolean {
