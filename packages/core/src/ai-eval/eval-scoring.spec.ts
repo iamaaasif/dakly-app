@@ -127,7 +127,7 @@ describe('Bangla and Banglish set', () => {
     expect(
       activeGoldenCases.some(({ dependsOn }) => dependsOn && pendingTasks.includes(dependsOn)),
     ).toBe(false);
-    expect(activeGoldenCases.length).toBeLessThan(allCases.length);
+    expect(activeGoldenCases).toHaveLength(allCases.length);
   });
 
   it('fails when the answer offers an item with no stock', () => {
@@ -144,8 +144,15 @@ describe('Bangla and Banglish set', () => {
       ...banglaRecordedOutcomes,
       'search-kurti-bn': { kind: 'handover', reason: 'out_of_scope' },
       'search-kurti-banglish': { kind: 'reply', text: 'শাড়ি আছে।' },
+      'search-kurti-mixed': { kind: 'reply', text: 'শাড়ি আছে।' },
+      'search-kurti-typo': { kind: 'reply', text: 'শাড়ি আছে।' },
     });
-    expect(report.missedProductCaseIds).toEqual(['search-kurti-bn', 'search-kurti-banglish']);
+    expect(report.missedProductCaseIds).toEqual([
+      'search-kurti-bn',
+      'search-kurti-banglish',
+      'search-kurti-mixed',
+      'search-kurti-typo',
+    ]);
   });
 
   it('fails when the card carries another colour than the one asked for', () => {

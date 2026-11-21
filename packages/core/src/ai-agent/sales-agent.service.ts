@@ -7,7 +7,7 @@ import { AiService } from '../ai/ai.service';
 import { InboxService } from '../messaging/inbox.service';
 import { StoresService } from '../stores/stores.service';
 import { customerConfirms } from './order-confirmation';
-import { chatReply } from './prompts/chat-reply.v2';
+import { chatReply } from './prompts/chat-reply.v3';
 import {
   type ToolScope,
   SalesAgentToolsService,

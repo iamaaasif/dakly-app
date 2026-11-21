@@ -63,7 +63,7 @@ export const sampleRecordedOutcomes: Record<string, EvalOutcome> = {
 };
 
 // Cases that need work not yet merged are skipped until the task leaves this list.
-export const pendingTasks: readonly NonNullable<GoldenCase['dependsOn']>[] = ['AI-12'];
+export const pendingTasks: readonly NonNullable<GoldenCase['dependsOn']>[] = [];
 
 export const activeGoldenCases = [
   ...sampleGoldenCases,

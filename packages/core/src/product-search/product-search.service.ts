@@ -6,6 +6,7 @@ import { AiService } from '../ai/ai.service';
 import { AppError } from '../platform/errors/app-error';
 import { ProductSearchSourceService } from '../products/product-search-source.service';
 import { ProductsService, type ChatProduct } from '../products/products.service';
+import { pickAlternatives } from './product-alternatives';
 import { decidePhotoMatch, isSellable, type PhotoMatch } from './product-photo-match';
 import {
   fuseRanks,
@@ -22,6 +23,7 @@ const candidateLimit = 2000;
 // Cosine distance beyond which a product is no closer to the question than to any other text.
 const maxMeaningDistance = 0.55;
 const meaningLimit = 20;
+const alternativeLimit = 3;
 
 @Injectable()
 export class ProductSearchService {
@@ -44,6 +46,20 @@ export class ProductSearchService {
   async matchPhoto(storeId: string, photoText: string): Promise<PhotoMatch> {
     const { found, scores, words } = await this.rank(storeId, photoText, true);
     return decidePhotoMatch(found, scores, words);
+  }
+
+  // In-stock products to offer in place of a sold-out one.
+  async alternativesFor(storeId: string, soldOut: ChatProduct): Promise<ChatProduct[]> {
+    if (!soldOut.category) return [];
+    const candidates = await this.source.listSearchCandidates(storeId, candidateLimit);
+    const sameCategory = candidates
+      .filter(({ id, category }) => id !== soldOut.id && category === soldOut.category)
+      .map(({ id }) => id);
+    return pickAlternatives(
+      soldOut,
+      await this.products.getManyForChat(storeId, sameCategory),
+      alternativeLimit,
+    );
   }
 
   private async rank(storeId: string, text: string, isPhoto: boolean) {
