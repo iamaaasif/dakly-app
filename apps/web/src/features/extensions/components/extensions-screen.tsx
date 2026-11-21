@@ -1,18 +1,16 @@
 'use client';
 import { useState } from 'react';
 
-import type { ChangeStoreExtensionsInput } from '@dakly/contracts/stores';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 import { useToast } from '@dakly/ui/toast';
 
 import { useChangeExtensions, useStoreExtensions } from '../api/extensions';
 import { ExtensionCard } from './extension-card';
-import { extensionCards } from './extension-catalog';
+import { extensionCards, type ExtensionCard as ExtensionCardData } from './extension-catalog';
 import { useSessionContext } from '@/lib/session-context';
 
-type ChangeableName = ChangeStoreExtensionsInput['extensions'][number];
-const changeable: ChangeableName[] = ['sales', 'chats', 'social_auto_post'];
+type ChangeableName = ExtensionCardData['name'];
 
 export function ExtensionsScreen() {
   const { data: session } = useSessionContext();
@@ -55,7 +53,7 @@ function ExtensionGrid(props: {
   const { enabled, canChange, saving, onToggle } = props;
   return (
     <>
-      <div className="grid max-w-5xl gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         {extensionCards.map((card) => (
           <ExtensionCard
             key={card.name}
@@ -63,9 +61,7 @@ function ExtensionGrid(props: {
             on={enabled.has(card.name)}
             canChange={canChange}
             saving={saving}
-            onToggle={(on) => {
-              if (card.name !== 'physical_shop') onToggle(card.name, on);
-            }}
+            onToggle={(on) => onToggle(card.name, on)}
           />
         ))}
       </div>
@@ -101,7 +97,9 @@ function useToggleExtension(enabled: Set<string>) {
   const [failure, setFailure] = useState<string | null>(null);
 
   async function toggle(name: ChangeableName, on: boolean) {
-    const next = changeable.filter((item) => (item === name ? on : enabled.has(item)));
+    const next = extensionCards
+      .map((card) => card.name)
+      .filter((item) => (item === name ? on : enabled.has(item)));
     setFailure(null);
     try {
       await change.mutateAsync({ extensions: next });

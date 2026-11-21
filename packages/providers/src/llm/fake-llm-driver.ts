@@ -5,6 +5,8 @@ import {
   type LlmEmbeddingRequest,
   type LlmRequest,
   type LlmResult,
+  type LlmTranscription,
+  type LlmTranscriptionRequest,
 } from './llm-driver';
 
 export class FakeLlmDriver implements LlmDriver {
@@ -12,10 +14,14 @@ export class FakeLlmDriver implements LlmDriver {
 
   private readonly embeddings?: (LlmEmbedding | Error)[];
 
+  private readonly transcriptions: (LlmTranscription | Error)[];
+
   constructor(
     responses: readonly (LlmResult | Error)[],
     embeddings?: readonly (LlmEmbedding | Error)[],
+    transcriptions: readonly (LlmTranscription | Error)[] = [],
   ) {
+    this.transcriptions = [...transcriptions];
     this.embeddings = embeddings && [...embeddings];
     this.responses = [...responses];
   }
@@ -32,6 +38,14 @@ export class FakeLlmDriver implements LlmDriver {
     if (embedding instanceof Error) throw embedding;
     if (!embedding) throw new Error('No scripted embedding left');
     return embedding;
+  }
+
+  async transcribe(request: LlmTranscriptionRequest): Promise<LlmTranscription> {
+    if (request.signal?.aborted) throw new LlmError('LLM_ABORTED');
+    const transcription = this.transcriptions.shift();
+    if (transcription instanceof Error) throw transcription;
+    if (!transcription) throw new Error('No scripted transcription left');
+    return transcription;
   }
 
   async respond(request: LlmRequest): Promise<LlmResult> {

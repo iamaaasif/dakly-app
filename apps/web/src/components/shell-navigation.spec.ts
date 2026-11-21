@@ -35,6 +35,7 @@ describe('navigationGroups', () => {
     canViewOrders?: boolean;
     canViewProducts?: boolean;
     canViewSocial?: boolean;
+    canViewDueBook?: boolean;
   }): SessionContext {
     return {
       user: { id: 'user-1', name: 'Test User' },
@@ -46,6 +47,8 @@ describe('navigationGroups', () => {
         canEditProducts: false,
         canViewOrders: permissions.canViewOrders ?? false,
         canEditOrders: false,
+        canViewDueBook: permissions.canViewDueBook ?? false,
+        canEditDueBook: false,
         canViewCampaigns: false,
         canViewAnalytics: false,
         canChangeAttributionWindow: false,
@@ -102,6 +105,7 @@ describe('navigationGroups', () => {
       'Workspace',
       'Customers',
       'Sales',
+      'Physical shop',
       'Marketing',
       'Social auto post',
       'Intelligence',
@@ -117,6 +121,16 @@ describe('navigationGroups', () => {
         ?.links.filter((link) => link.visible)
         .map((link) => link.href);
     expect(links(true)).toEqual(['/social', '/social/posts', '/content-studio']);
+    expect(links(false)).toEqual([]);
+  });
+
+  it('shows Due book under Physical shop only to people who can view it', () => {
+    const links = (canViewDueBook: boolean) =>
+      navigationGroups(makeSession({ canViewDueBook }))
+        .find((group) => group.heading === 'Physical shop')
+        ?.links.filter((link) => link.visible)
+        .map((link) => link.href);
+    expect(links(true)).toEqual(['/due-book']);
     expect(links(false)).toEqual([]);
   });
 

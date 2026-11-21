@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { restockRequestStatuses } from './products';
+import { MAX_STOCK_QUANTITY, restockRequestStatuses } from './products';
 
 export const MAX_RESTOCK_NOTIFICATIONS_PER_APPROVAL = 50;
 
@@ -15,6 +15,18 @@ export const restockRequestListQuerySchema = z.strictObject({
   variantId: z.uuid().optional(),
   status: z.enum(restockRequestStatuses).default('waiting'),
 });
+
+// The restock dialog: pieces that arrived for each size, and whether to message the waiting people.
+export const restockStockSchema = z
+  .strictObject({
+    quantities: z.record(z.uuid(), z.number().int().min(0).max(MAX_STOCK_QUANTITY)),
+    notify: z.boolean(),
+  })
+  .refine((input) => Object.values(input.quantities).some((quantity) => quantity > 0), {
+    message: 'Enter how many pieces arrived for at least one size',
+    path: ['quantities'],
+  });
+export type RestockStockInput = z.infer<typeof restockStockSchema>;
 
 export type AddRestockRequestInput = z.infer<typeof addRestockRequestSchema>;
 export type RestockRequestListQuery = z.infer<typeof restockRequestListQuerySchema>;

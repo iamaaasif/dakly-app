@@ -169,6 +169,8 @@ export class InboxRepository {
           id: messages.id,
           senderIdentityId: messages.senderIdentityId,
           body: messages.body,
+          mediaText: messages.mediaText,
+          attachments: messages.attachments,
           createdAt: messages.createdAt,
         })
         .from(messages)

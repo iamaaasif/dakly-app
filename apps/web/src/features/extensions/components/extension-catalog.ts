@@ -1,16 +1,12 @@
 import { MessageSquare, Send, ShoppingBag, Store, type LucideIcon } from 'lucide-react';
 
-type ExtensionName = 'sales' | 'chats' | 'physical_shop' | 'social_auto_post';
-
 export type ExtensionCard = {
-  name: ExtensionName;
+  name: 'sales' | 'chats' | 'physical_shop' | 'social_auto_post';
   title: string;
   description: string;
   adds: string;
   href: string;
   icon: LucideIcon;
-  // Physical Shop arrives in release 2, so its switch stays off and locked.
-  comingSoon?: boolean;
 };
 
 export const extensionCards: ExtensionCard[] = [
@@ -36,10 +32,9 @@ export const extensionCards: ExtensionCard[] = [
     name: 'physical_shop',
     title: 'Physical Shop',
     description: 'Shop sales and Due book. Sell at the counter in seconds and keep track of baki.',
-    adds: 'Shop sales · Due book',
-    href: '/extensions',
+    adds: 'Due book',
+    href: '/due-book',
     icon: Store,
-    comingSoon: true,
   },
   {
     name: 'social_auto_post',

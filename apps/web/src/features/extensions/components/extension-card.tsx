@@ -36,13 +36,13 @@ export function ExtensionCard({
             <h2 id={titleId} className="text-md font-semibold">
               {card.title}
             </h2>
-            <StatusBadge comingSoon={card.comingSoon} on={on} />
+            <StatusBadge on={on} />
           </div>
           <p className="mt-1 text-sm text-text-muted">{card.description}</p>
         </div>
         <Switch
           checked={on}
-          disabled={card.comingSoon || !canChange || saving}
+          disabled={!canChange || saving}
           onCheckedChange={onToggle}
           id={`${titleId}-switch`}
           aria-labelledby={titleId}
@@ -50,14 +50,13 @@ export function ExtensionCard({
       </div>
       <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-4">
         <p className="text-sm text-text-muted">Adds: {card.adds}</p>
-        {card.comingSoon ? null : <OpenLink href={card.href} enabled={on} />}
+        <OpenLink href={card.href} enabled={on} />
       </div>
     </Card>
   );
 }
 
-function StatusBadge({ comingSoon, on }: { comingSoon?: boolean; on: boolean }) {
-  if (comingSoon) return <Badge>Coming soon</Badge>;
+function StatusBadge({ on }: { on: boolean }) {
   return on ? <Badge variant="success">On</Badge> : <Badge>Off</Badge>;
 }
 

@@ -29,7 +29,9 @@ test('turns an extension off and on from its card', async ({ page, context, base
   await expect(sales).toBeVisible();
   if ((await sales.getAttribute('aria-checked')) !== 'true') await sales.click();
   await expect(sales).toHaveAttribute('aria-checked', 'true');
-  await expect(page.getByRole('switch', { name: 'Physical Shop' })).toBeDisabled();
+  const physical = page.getByRole('switch', { name: 'Physical Shop', exact: true });
+  if ((await physical.getAttribute('aria-checked')) !== 'true') await physical.click();
+  await expect(physical).toHaveAttribute('aria-checked', 'true');
   for (const [width, height] of [
     [1440, 900],
     [360, 800],

@@ -37,7 +37,7 @@ export class KnowledgeIndexService {
     if (!isCurrentRevision(item, attempt.revision)) return;
     const source: FileText = item.fileId
       ? await this.fileText(storeId, item.fileId)
-      : { text: item.answer ?? '' };
+      : { text: policyText(item) };
     const rejection = 'rejection' in source ? source.rejection : 'knowledge_file_empty';
     const passages =
       'text' in source ? splitKnowledgeText(source.text.replaceAll('\u0000', '')) : [];
@@ -106,6 +106,12 @@ export class KnowledgeIndexService {
       return { rejection: 'knowledge_file_invalid', sha256 };
     }
   }
+}
+
+// The question and keywords are searched with the answer, so a customer's wording finds it.
+function policyText(item: KnowledgeItem): string {
+  const keywords = item.keywords.length ? `Keywords: ${item.keywords.join(', ')}` : null;
+  return [item.question, item.answer, keywords].filter(Boolean).join('\n');
 }
 
 function isCurrentRevision(

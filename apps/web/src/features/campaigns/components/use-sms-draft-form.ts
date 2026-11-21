@@ -3,14 +3,18 @@ import { useForm } from 'react-hook-form';
 import { type z } from 'zod';
 
 import {
+  campaignAudienceSchema,
   campaignDetailsSchema,
   smsCampaignContentSchema,
   type CampaignResponse,
 } from '@dakly/contracts/campaigns';
 
 import { useSaveCampaign } from '../api/save-campaign';
+import { changedAudience } from './changed-audience';
 
-const draftSchema = campaignDetailsSchema.extend({ content: smsCampaignContentSchema });
+const draftSchema = campaignDetailsSchema
+  .extend(campaignAudienceSchema.shape)
+  .extend({ content: smsCampaignContentSchema });
 export type SmsDraftInput = z.input<typeof draftSchema>;
 type SmsDraft = z.output<typeof draftSchema>;
 
@@ -18,6 +22,8 @@ function valuesOf(campaign: CampaignResponse): SmsDraftInput {
   return {
     name: campaign.name,
     goal: campaign.goal,
+    includeSegmentIds: campaign.includeSegmentIds,
+    excludeSegmentIds: campaign.excludeSegmentIds,
     content: smsCampaignContentSchema.parse(campaign.content),
   };
 }
@@ -41,6 +47,7 @@ export function useSmsDraftForm(campaign: CampaignResponse, onSaved?: () => void
         ...(dirtyFields.name && { name: input.name }),
         ...(dirtyFields.goal && { goal: input.goal }),
         ...(dirtyFields.content && { content: input.content }),
+        ...changedAudience(campaign, input),
       };
       if (!Object.keys(change).length) return afterSave?.();
       save.mutate(

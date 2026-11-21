@@ -24,5 +24,13 @@ export type SaveTestersInput = z.infer<typeof saveTestersSchema>;
 export type TestersResponse = { contactIds: string[] };
 export type AskTestInput = z.infer<typeof askTestSchema>;
 export type TestQuestionsResponse = { questions: TestQuestion[] };
+// Where a practice reply came from, so the owner knows what to change when it is wrong.
+export type TestAnswerSource =
+  | { kind: 'answer'; question: string | null }
+  | { kind: 'file'; fileName: string | null }
+  | { kind: 'products' }
+  | { kind: 'store_rules' }
+  | { kind: 'general' };
 export type TestAnswerResponse =
-  { kind: 'reply'; text: string } | { kind: 'handover'; reason: (typeof handoverReasons)[number] };
+  | { kind: 'reply'; text: string; source: TestAnswerSource }
+  | { kind: 'handover'; reason: (typeof handoverReasons)[number] };

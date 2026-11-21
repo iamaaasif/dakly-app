@@ -48,15 +48,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('shows the count, the four cards and locks Physical Shop', async () => {
+it('shows the count and the four cards, Physical Shop included', async () => {
   show(['sales', 'chats']);
   expect(await screen.findByText('2 of 4 on')).toBeTruthy();
   expect(screen.getByRole('switch', { name: 'Sales' }).getAttribute('aria-checked')).toBe('true');
   expect(
     screen.getByRole('switch', { name: 'Social Auto Post' }).getAttribute('aria-checked'),
   ).toBe('false');
-  expect(screen.getByRole('switch', { name: 'Physical Shop' }).matches(':disabled')).toBe(true);
-  expect(screen.getByText('Coming soon')).toBeTruthy();
+  expect(screen.getByRole('switch', { name: 'Physical Shop' }).matches(':disabled')).toBe(false);
 });
 
 it('turns one extension off and keeps the others', async () => {
@@ -73,4 +72,16 @@ it('does not let a member without the extension permission change anything', asy
   show(['sales'], false);
   expect((await screen.findByRole('switch', { name: 'Sales' })).matches(':disabled')).toBe(true);
   expect(screen.getByText('Only the Owner or an Admin can change extensions.')).toBeTruthy();
+});
+
+it('turns Physical Shop on and sends its Open link to the Due book', async () => {
+  const writes = show(['sales']);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('switch', { name: 'Physical Shop' }));
+  await waitFor(() => expect(writes).toEqual([{ extensions: ['sales', 'physical_shop'] }]), {
+    timeout: 3000,
+  });
+  const card = await screen.findByRole('group', { name: 'Physical Shop' });
+  await within(card).findByText('On');
+  expect(within(card).getByRole('link', { name: 'Open' }).getAttribute('href')).toBe('/due-book');
 });

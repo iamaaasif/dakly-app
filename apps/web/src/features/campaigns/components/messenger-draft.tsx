@@ -7,12 +7,13 @@ import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import type { ChannelConnection } from '@dakly/contracts/channels';
 import { Button } from '@dakly/ui/button';
 
+import { CampaignAudienceFields } from './campaign-audience-fields';
 import { CampaignDraftShell } from './campaign-draft-shell';
+import { CampaignEstimate } from './campaign-estimate';
 import { CampaignPageHeader } from './campaign-page-header';
-import { useCampaignStep } from './campaign-steps';
+import { useCampaignStep, type CampaignStepId } from './campaign-steps';
 import { MessengerContentFields } from './messenger-content-fields';
 import { MessengerDetailsFields } from './messenger-details-fields';
-import { MessengerEstimate } from './messenger-estimate';
 import { MessengerPreview } from './messenger-preview';
 import { useMessengerDraftForm, type DraftInput } from './use-messenger-draft-form';
 
@@ -62,16 +63,26 @@ function SavedDraft({
       busy={save.isPending || opening}
       error={save.error?.message}
       message={save.isSuccess && !isDirty ? 'Draft saved.' : undefined}
-      fields={(step) =>
-        step === 'goal' ? (
-          <MessengerDetailsFields pages={pages} focusName={false} />
-        ) : (
-          <MessengerContentFields />
-        )
-      }
-      side={(step) => step === 'content' && <Side pages={pages} campaign={campaign} />}
+      fields={(step) => <Fields step={step} pages={pages} />}
+      side={(step) => {
+        if (step === 'content') return <Side pages={pages} campaign={campaign} />;
+        return (
+          step === 'audience' && (
+            <CampaignEstimate
+              channel="messenger"
+              campaignId={campaign.id}
+              savedAt={campaign.updatedAt}
+            />
+          )
+        );
+      }}
     />
   );
+}
+
+function Fields({ step, pages }: { step: CampaignStepId; pages: ChannelConnection[] }) {
+  if (step === 'goal') return <MessengerDetailsFields pages={pages} focusName={false} />;
+  return step === 'content' ? <MessengerContentFields /> : <CampaignAudienceFields />;
 }
 
 function NewDraft({
@@ -153,7 +164,7 @@ function Side({ pages, campaign }: { pages: ChannelConnection[]; campaign: Campa
           buttons: content.buttons,
         }}
       />
-      <MessengerEstimate campaignId={campaign.id} savedAt={campaign.updatedAt} />
+      <CampaignEstimate channel="messenger" campaignId={campaign.id} savedAt={campaign.updatedAt} />
     </aside>
   );
 }

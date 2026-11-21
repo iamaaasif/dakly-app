@@ -17,7 +17,11 @@ import { StoreTransaction } from '../../platform/database/store-transaction';
 import { FILE_STORAGE_DRIVER } from '../../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../../platform/outbox/outbox.service';
 import { knowledgeError } from './knowledge.errors';
-import { KnowledgeRepository, type KnowledgeItem } from './knowledge.repository';
+import {
+  KnowledgeRepository,
+  type KnowledgeItem,
+  type KnowledgeListItem,
+} from './knowledge.repository';
 
 type UserActor = { kind: 'user'; userId: string };
 
@@ -55,11 +59,11 @@ export class KnowledgeService {
     input: CreateKnowledgeItemInput,
   ): Promise<KnowledgeItemResponse> {
     return this.transaction.run(storeId, async () => {
-      if (input.kind === 'file') await this.requireFile(storeId, input.fileId);
+      const file = input.kind === 'file' ? await this.requireFile(storeId, input.fileId) : null;
       const now = this.clock.now();
       const item = await this.repository.create(storeId, actor.userId, input, now);
       await this.requestIndex(storeId, item);
-      return toResponse(item);
+      return toResponse({ ...item, fileName: file?.fileName ?? null });
     });
   }
 
@@ -85,12 +89,12 @@ export class KnowledgeService {
     _actor: UserActor,
   ): Promise<KnowledgeItemResponse> {
     return this.transaction.run(storeId, async () => {
-      if ('fileId' in input) await this.requireFile(storeId, input.fileId);
+      const file = 'fileId' in input ? await this.requireFile(storeId, input.fileId) : null;
       const now = this.clock.now();
       const item = await this.repository.change(storeId, itemId, input, now);
       if (!item) throw knowledgeError('KNOWLEDGE_ITEM_NOT_FOUND');
       await this.requestIndex(storeId, item);
-      return toResponse(item);
+      return toResponse({ ...item, fileName: file?.fileName ?? null });
     });
   }
 
@@ -100,9 +104,10 @@ export class KnowledgeService {
     }
   }
 
-  private async requireFile(storeId: string, fileId: string): Promise<void> {
+  private async requireFile(storeId: string, fileId: string) {
     const file = await this.repository.findFile(storeId, fileId);
     if (!file || file.status === 'rejected') throw knowledgeError('KNOWLEDGE_FILE_NOT_FOUND');
+    return file;
   }
 
   private requestIndex(storeId: string, item: KnowledgeItem): Promise<void> {
@@ -116,7 +121,7 @@ export class KnowledgeService {
   }
 }
 
-function toResponse(item: KnowledgeItem): KnowledgeItemResponse {
+function toResponse(item: KnowledgeListItem): KnowledgeItemResponse {
   return {
     ...item,
     failureReason:

@@ -816,9 +816,8 @@ and trade licence allow 100 characters, legal name 200, address 1,000 and email 
 flag continues to govern customer records.
 
 `PATCH /store/extensions` replaces the selection with a unique `extensions`
-array containing only `chats`, `sales` and `social_auto_post`. An empty array
-turns all three off. Core is implicit and stays on; `core` and `physical_shop`
-are rejected in release 1. Only Owner and Admin may change extensions, through
+array containing `chats`, `sales`, `social_auto_post` and `physical_shop`. An empty array
+turns all four off. Core is implicit and stays on; `core` is rejected. Physical Shop became selectable in ACC-13 once the Due book shipped. Only Owner and Admin may change extensions, through
 the pure team permission policy exposed by `TeamService`; a custom role with
 settings edit access cannot change them.
 
@@ -1123,4 +1122,4 @@ The design shows three steps for a shop with no answers. Release 1 has no store 
 
 `/extensions` is its own page, reached from Configuration in the menu (evidence in `docs/design/evidence/acc-13-extensions/`). The old Extensions tab in Settings now redirects here. The header shows "N of 4 on". Each card has the extension's icon, an On or Off badge, what it adds, a switch and an Open link to its first page; Open is disabled while the extension is off.
 
-A switch saves at once with `PATCH /store/extensions`, sending the full selection with the one change, then shows a toast ("Chats turned off. Your data is kept."). The menu refreshes because the session changes. Only members with `canChangeExtensions` can switch; others see the cards locked and a line saying so. Physical Shop shows "Coming soon" with a locked switch until release 2, so the count there stays out of reach and the card never offers an unfinished page.
+A switch saves at once with `PATCH /store/extensions`, sending the full selection with the one change, then shows a toast ("Chats turned off. Your data is kept."). The menu refreshes because the session changes. Only members with `canChangeExtensions` can switch; others see the cards locked and a line saying so. Physical Shop is an ordinary card. Its Open link goes to `/due-book` and "Adds" names only the Due book, because Shop sales is not built yet.

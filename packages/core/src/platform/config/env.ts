@@ -27,6 +27,7 @@ const envSchema = z.object({
   AI_FAST_MODEL: z.string().min(1).default('gpt-6-luna'),
   AI_VISION_MODEL: z.string().min(1).default('gpt-6.1-terra'),
   AI_WRITER_MODEL: z.string().min(1).default('gpt-6.1-terra'),
+  AI_TRANSCRIBE_MODEL: z.string().min(1).default('gpt-4o-transcribe'),
   AI_EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-small'),
   AI_MODEL_PRICES: z.string().default('{}'),
   AI_EVAL_STORE_ID: z.uuid().optional(),

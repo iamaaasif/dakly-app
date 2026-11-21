@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type { CampaignEstimateResponse } from '@dakly/contracts/campaigns';
 
@@ -12,6 +12,8 @@ export function useCampaignEstimate(campaignId: string, savedAt: string) {
   return useQuery({
     queryKey: [...campaignKeys.estimate(contextTag, campaignId), savedAt],
     enabled: Boolean(contextTag),
+    // The old counts stay up while a saved change is counted again.
+    placeholderData: keepPreviousData,
     queryFn: ({ signal }) =>
       request<CampaignEstimateResponse>(`/campaigns/${campaignId}/estimate`, { signal }),
   });

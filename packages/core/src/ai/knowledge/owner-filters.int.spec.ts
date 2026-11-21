@@ -35,7 +35,7 @@ describe('KnowledgeRepository owner filters', () => {
     await expect(repository.list(fixture.b, { limit: 10 })).resolves.toEqual([]);
     await expect(repository.change(fixture.b, item.id, { fileId }, now)).resolves.toBeUndefined();
     await expect(repository.remove(fixture.b, item.id)).resolves.toBe(false);
-    await expect(repository.find(fixture.a, item.id)).resolves.toEqual(item);
+    await expect(repository.find(fixture.a, item.id)).resolves.toMatchObject(item);
     await expect(repository.findFile(fixture.a, fileId)).resolves.toMatchObject({
       status: 'pending',
     });

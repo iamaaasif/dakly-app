@@ -34,6 +34,7 @@ const billedRequest: AiRequest<z.infer<typeof schema>> = {
 
 const config: AiConfig = {
   embeddingModel: 'test-embedding',
+  transcribeModel: 'test-transcribe',
   models: { reply: model, writer: model, vision: model, fast: 'gpt-6-luna' },
   prices: {
     [model]: { input: 2_000_000, cachedInput: 250_000, output: 8_000_000 },
