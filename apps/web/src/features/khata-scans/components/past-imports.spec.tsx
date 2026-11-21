@@ -43,7 +43,7 @@ function show() {
     contextTag: 'verified',
     hasMemberships: true,
   } as SessionContext);
-  return render(<KhataScanScreen />, {
+  return render(<KhataScanScreen pageIds={[]} activePage={1} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     ),

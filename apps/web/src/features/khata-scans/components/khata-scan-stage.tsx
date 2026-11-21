@@ -10,10 +10,15 @@ import { KhataDoneStep } from './khata-done-step';
 import { KhataReadingStep } from './khata-reading-step';
 import { KhataPageProblem, KhataReviewPage, type PageImport } from './khata-review-page';
 
-type ScanStageProps = { pageIds: string[]; onScanMore: () => void };
+type ScanStageProps = {
+  pageIds: string[];
+  activePage: number;
+  onActivePage: (page: number) => void;
+  onScanMore: () => void;
+};
 
 // One stage covers reading, review and the result, because they all follow from what the pages say.
-export function KhataScanStage({ pageIds, onScanMore }: ScanStageProps) {
+export function KhataScanStage({ pageIds, activePage, onActivePage, onScanMore }: ScanStageProps) {
   const queries = useKhataPages(pageIds);
   const [imported, setImported] = useState<Record<string, PageImport>>({});
   const failed = queries.find((query) => query.isError);
@@ -31,6 +36,8 @@ export function KhataScanStage({ pageIds, onScanMore }: ScanStageProps) {
   return (
     <PageTabs
       pages={pages}
+      active={Math.min(activePage, pages.length) - 1}
+      onActive={(index) => onActivePage(index + 1)}
       imported={imported}
       onImported={(pageId, done) => setImported((current) => ({ ...current, [pageId]: done }))}
     />
@@ -39,12 +46,13 @@ export function KhataScanStage({ pageIds, onScanMore }: ScanStageProps) {
 
 type PageTabsProps = {
   pages: KhataPageResponse[];
+  active: number;
+  onActive: (index: number) => void;
   imported: Record<string, PageImport>;
   onImported: (pageId: string, done: PageImport) => void;
 };
 
-function PageTabs({ pages, imported, onImported }: PageTabsProps) {
-  const [active, setActive] = useState(0);
+function PageTabs({ pages, active, onActive, imported, onImported }: PageTabsProps) {
   const tabs =
     pages.length > 1 ? (
       <div className="flex flex-wrap gap-1.5">
@@ -53,7 +61,7 @@ function PageTabs({ pages, imported, onImported }: PageTabsProps) {
             key={page.id}
             type="button"
             aria-pressed={index === active}
-            onClick={() => setActive(index)}
+            onClick={() => onActive(index)}
             className={cn(
               'min-h-7 rounded-md border px-2.5 text-sm font-semibold',
               index === active

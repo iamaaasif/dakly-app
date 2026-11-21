@@ -1,16 +1,23 @@
 'use client';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { KhataPagesStep } from './khata-pages-step';
 import { KhataScanStage } from './khata-scan-stage';
 import { KhataStartStep } from './khata-start-step';
 
-type Stage = { kind: 'start' } | { kind: 'pick' } | { kind: 'scan'; pageIds: string[] };
+const khataScanPath = '/customers/khata-scan';
 
-export function KhataScanScreen() {
-  const [stage, setStage] = useState<Stage>({ kind: 'start' });
+type KhataScanScreenProps = { pageIds: string[]; activePage: number };
+
+export function KhataScanScreen({ pageIds, activePage }: KhataScanScreenProps) {
+  const router = useRouter();
+  const [picking, setPicking] = useState(false);
+  const scanning = pageIds.length > 0;
+  const showPages = (ids: string[], tab = 1) =>
+    `${khataScanPath}?${new URLSearchParams({ pages: ids.join(','), page: String(tab) })}`;
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-4 p-4 md:p-8">
       <Link
@@ -26,20 +33,23 @@ export function KhataScanScreen() {
           Turn your handwritten sales records into digital customer data.
         </p>
       </div>
-      {stage.kind === 'start' ? (
-        <KhataStartStep onStart={() => setStage({ kind: 'pick' })} />
-      ) : null}
-      {stage.kind === 'pick' ? (
+      {!scanning && !picking ? <KhataStartStep onStart={() => setPicking(true)} /> : null}
+      {!scanning && picking ? (
         <KhataPagesStep
-          onBack={() => setStage({ kind: 'start' })}
-          onRead={(pageIds) => setStage({ kind: 'scan', pageIds })}
+          onBack={() => setPicking(false)}
+          onRead={(ids) => router.push(showPages(ids))}
         />
       ) : null}
-      {stage.kind === 'scan' ? (
+      {scanning ? (
         <KhataScanStage
-          key={stage.pageIds.join()}
-          pageIds={stage.pageIds}
-          onScanMore={() => setStage({ kind: 'pick' })}
+          key={pageIds.join()}
+          pageIds={pageIds}
+          activePage={activePage}
+          onActivePage={(tab) => router.replace(showPages(pageIds, tab))}
+          onScanMore={() => {
+            setPicking(true);
+            router.push(khataScanPath);
+          }}
         />
       ) : null}
     </main>

@@ -14,9 +14,12 @@ import type { SessionContext } from '@dakly/contracts/sessions';
 import { KhataScanScreen } from './khata-scan-screen';
 import { sessionContextKey } from '@/lib/session-context';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const push = vi.fn();
+const replace = vi.fn();
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }) }));
 
 const pageId = '0193a3c0-7b1e-7c3a-9f00-0000000000a1';
+const pageId2 = '0193a3c0-7b1e-7c3a-9f00-0000000000a2';
 const mituId = '0193a3c0-7b1e-7c3a-9f00-0000000000b1';
 const rowIds = [1, 2, 3].map((n) => `0193a3c0-7b1e-7c3a-9f00-00000000010${n}`);
 
@@ -87,7 +90,7 @@ function respond(imports: KhataImportResponse[] = []) {
   });
 }
 
-function show() {
+function show(pageIds: string[] = [], activePage = 1) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
     user: { id: 'member', name: 'Member' },
@@ -95,7 +98,7 @@ function show() {
     contextTag: 'verified',
     hasMemberships: true,
   } as SessionContext);
-  return render(<KhataScanScreen />, {
+  return render(<KhataScanScreen pageIds={pageIds} activePage={activePage} />, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     ),
@@ -104,6 +107,8 @@ function show() {
 
 beforeEach(() => {
   sent = [];
+  push.mockClear();
+  replace.mockClear();
   HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
     this.open = true;
   };
@@ -118,17 +123,17 @@ afterEach(() => {
 
 type User = ReturnType<typeof userEvent.setup>;
 
-// Reads one page and returns the row of the unsure line, "Hasan".
-async function reviewHasan(user: User) {
-  await readOnePage(user);
-  return (await screen.findByText('Hasan')).closest('li')!;
-}
-
 async function readOnePage(user: User) {
   await user.click(screen.getByRole('button', { name: /Add the last 1–3 months/ }));
   const photo = new File(['x'], 'page.jpg', { type: 'image/jpeg' });
   await user.upload(screen.getByLabelText('Upload photos or PDF'), photo);
   await user.click(screen.getByRole('button', { name: 'Read 1 page' }));
+}
+
+// Opens the review of one page, as the address `?pages=` does, and returns the row of "Hasan".
+async function reviewHasan() {
+  show([pageId]);
+  return (await screen.findByText('Hasan')).closest('li')!;
 }
 
 describe('Khata Scanner', () => {
@@ -138,7 +143,9 @@ describe('Khata Scanner', () => {
     show();
     await readOnePage(user);
 
-    expect(await screen.findByText('Hasan')).toBeTruthy();
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith(`/customers/khata-scan?pages=${pageId}&page=1`),
+    );
     expect(sent.map((call) => `${call.method} ${call.path.replace('/api', '')}`)).toEqual(
       expect.arrayContaining([
         'POST /khata-scans/pages',
@@ -155,8 +162,7 @@ describe('Khata Scanner', () => {
   it('keeps Import off until the yellow row is checked or skipped, then sends one decision per row', async () => {
     respond();
     const user = userEvent.setup();
-    show();
-    const hasan = await reviewHasan(user);
+    const hasan = await reviewHasan();
 
     expect(
       (screen.getByRole('button', { name: 'Import 3 rows' }) as HTMLButtonElement).disabled,
@@ -181,8 +187,7 @@ describe('Khata Scanner', () => {
   it('leaves a skipped row out of the import and the count on the button', async () => {
     respond();
     const user = userEvent.setup();
-    show();
-    const hasan = await reviewHasan(user);
+    const hasan = await reviewHasan();
 
     await user.click(within(hasan).getByRole('button', { name: 'Skip' }));
 
@@ -198,11 +203,25 @@ describe('Khata Scanner', () => {
   it('offers a similar-phone customer and merges only when the owner says yes', async () => {
     respond();
     const user = userEvent.setup();
-    show();
-    await readOnePage(user);
+    show([pageId]);
 
     expect(await screen.findByText(/Same person as Mitu Akter\?/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Yes, link' }));
     expect(screen.getByText(/Linked to Mitu Akter/)).toBeTruthy();
+  });
+
+  it('opens the review from the address after a reload, with the page tab from the address', async () => {
+    respond();
+    const user = userEvent.setup();
+    show([pageId, pageId2], 2);
+
+    expect(await screen.findAllByText('Hasan')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Page 2' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    await user.click(screen.getByRole('button', { name: 'Page 1' }));
+    expect(replace).toHaveBeenCalledWith(
+      `/customers/khata-scan?pages=${pageId}%2C${pageId2}&page=1`,
+    );
   });
 });
