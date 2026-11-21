@@ -72,9 +72,10 @@ type Run = { driver: LlmDriver; meter: EvalMeter; model: string };
 type Note = (note: string) => void;
 type ToolCall = { name: string; argumentsJson: string };
 
-function replyContext(question: string, candidates: object) {
+function replyContext(question: string, candidates: object, memory?: string) {
   return [
     `<shop>${JSON.stringify(evalShop)}</shop>`,
+    ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
     `<conversation untrusted="true">${JSON.stringify([{ from: 'customer', text: question }])}</conversation>`,
     `<product_candidates>${JSON.stringify(candidates)}</product_candidates>`,
   ].join('\n');
@@ -127,11 +128,12 @@ export async function composeReply(
   { driver, meter, model }: Run,
   question: string,
   note: Note = () => undefined,
+  memory?: string,
 ): Promise<EvalOutcome> {
   const toolResults: object[] = [];
   const candidates = replyCandidates(question);
   if (candidates) toolResults.push(candidates);
-  const context = replyContext(question, candidates ?? { products: [] });
+  const context = replyContext(question, candidates ?? { products: [] }, memory);
   let transcript = '';
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {

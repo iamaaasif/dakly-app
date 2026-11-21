@@ -10,6 +10,7 @@ import { Clock } from '../platform/clock';
 import { mergeMemory } from './contact-memory-merge';
 import { ContactMemoryOwnersRepository } from './contact-memory-owners.repository';
 import { memoryPromptInput } from './contact-memory-prompt-input';
+import { renderContactMemory } from './contact-memory-render';
 import { contactMemoryError } from './contact-memory.errors';
 import { ContactMemoryRepository, type MemoryWork } from './contact-memory.repository';
 import { updateContactMemory } from './prompts/update-contact-memory.v1';
@@ -59,6 +60,14 @@ export class ContactMemoryService {
       builtAt: this.clock.now(),
     });
     if (!saved && !finalAttempt) throw contactMemoryError('CONTACT_MEMORY_CHANGED');
+  }
+
+  // The memory as text for the reply prompt, inside the byte and token caps, measured with the
+  // tokenizer of the reply model. undefined when there is nothing to say or the cap cannot be checked.
+  async contextFor(storeId: string, contactId: string): Promise<string | undefined> {
+    const memory = await this.repository.read(storeId, contactId);
+    if (!memory) return undefined;
+    return renderContactMemory(memory, (text) => this.ai.countTokens('reply', text));
   }
 
   // Staff clear and a customer's deletion request both end here. Output of a call already running
