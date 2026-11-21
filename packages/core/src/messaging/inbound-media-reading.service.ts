@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import {
   inboundAttachmentLimits,
+  photoReadingLabel,
   photoReadingSchema,
   type MessageAttachment,
   type PhotoReading,
@@ -127,7 +128,7 @@ function failed(code: string | undefined): Reading {
 
 // Plain text, so the inbox shows it as is and a product search can match on the words.
 function photoText({ subject, description, searchWords, visibleText }: PhotoReading): string {
-  const label = subject === 'payment_screenshot' ? 'Payment screenshot' : 'Photo';
+  const label = subject === 'payment_screenshot' ? 'Payment screenshot' : photoReadingLabel;
   const lines = [`${label}: ${description}`];
   if (searchWords.length) lines.push(`Search words: ${searchWords.join(', ')}`);
   if (visibleText) lines.push(`Text in photo: ${visibleText}`);

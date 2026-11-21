@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
+import type { SearchDocument } from '../../product-search/product-search-ranking';
+import type { ChatProduct } from '../../products/products.service';
+
 // The eval shop of golden-set.bangla.ts, as plain data. Aliases stand in for the names an owner
 // adds to a product, and search matches them the way ProductsRepository.searchForChat does.
 type EvalVariant = { variantId: string; title: string; priceTaka: number; stock: number };
@@ -166,3 +169,37 @@ export const productResult = ({
 export const evalPhotoKey = (photoId: unknown) =>
   evalProducts.flatMap(({ photos }) => photos).find((photo) => photo.photoId === photoId)?.key ??
   null;
+
+// The eval shop in the shapes the photo match reads.
+export const evalSearchDocuments: SearchDocument[] = evalProducts.map((item) => ({
+  id: item.productId,
+  name: item.name,
+  aliases: item.aliases,
+  category: item.category,
+  description: item.description,
+  optionValues: item.variants.map(({ title }) => title),
+  pricesPoisha: item.variants.map(({ priceTaka }) => priceTaka * 100),
+}));
+
+export const evalChatProducts: ChatProduct[] = evalProducts.map((item) => ({
+  id: item.productId,
+  name: item.name,
+  isStockTracked: true,
+  description: item.description,
+  category: item.category,
+  photos: item.photos.map(({ photoId, description, tags }) => ({
+    id: photoId,
+    variantId: null,
+    description,
+    tags,
+  })),
+  variants: item.variants.map((variant, index) => ({
+    id: variant.variantId,
+    title: variant.title,
+    isDefault: index === 0,
+    pricePoisha: variant.priceTaka * 100,
+    available: variant.stock,
+    photoUrl: null,
+    photoFileId: null,
+  })),
+}));

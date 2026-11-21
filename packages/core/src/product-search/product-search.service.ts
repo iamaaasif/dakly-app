@@ -6,7 +6,16 @@ import { AiService } from '../ai/ai.service';
 import { AppError } from '../platform/errors/app-error';
 import { ProductSearchSourceService } from '../products/product-search-source.service';
 import { ProductsService, type ChatProduct } from '../products/products.service';
-import { fuseRanks, fitsPrice, parseQuery, rankByWords } from './product-search-ranking';
+import { decidePhotoMatch, isSellable, type PhotoMatch } from './product-photo-match';
+import {
+  fuseRanks,
+  fitsPrice,
+  nameScores,
+  parseQuery,
+  rankByWords,
+} from './product-search-ranking';
+
+export type { PhotoMatch };
 
 // A shop's catalogue is ranked in memory; a store past this size needs the ranking moved into SQL.
 const candidateLimit = 2000;
@@ -24,6 +33,20 @@ export class ProductSearchService {
 
   // Finds what a customer asks for in Bangla, Banglish or English. Products the shop can sell now come first.
   async search(storeId: string, text: string, limit: number): Promise<ChatProduct[]> {
+    const { found } = await this.rank(storeId, text, false);
+    return [...found.filter(isSellable), ...found.filter((product) => !isSellable(product))].slice(
+      0,
+      limit,
+    );
+  }
+
+  // Matches the words and meaning of a customer's photo, as CHAT-7 read them, to the shop's products.
+  async matchPhoto(storeId: string, photoText: string): Promise<PhotoMatch> {
+    const { found, scores, words } = await this.rank(storeId, photoText, true);
+    return decidePhotoMatch(found, scores, words);
+  }
+
+  private async rank(storeId: string, text: string, isPhoto: boolean) {
     const query = parseQuery(text);
     const candidates = await this.source.listSearchCandidates(storeId, candidateLimit);
     const byWords = rankByWords(candidates, query);
@@ -31,16 +54,16 @@ export class ProductSearchService {
       candidates.filter((candidate) => fitsPrice(candidate, query)).map(({ id }) => id),
     );
     const byMeaning = query.words.length ? await this.rankByMeaning(storeId, text) : [];
-    const ids = fuseRanks(
+    const scores = nameScores(candidates, query.words);
+    const fused = fuseRanks(
       byWords,
       byMeaning.filter((id) => priced.has(id)),
     );
+    // A photo's text is long, so a named product's share of its words can fall under the spelling cut.
+    const ids = isPhoto ? [...new Set([...fused, ...scores.keys()])] : fused;
     // Hydrate every match so the sold-out ones can be moved behind the rest before the cut.
     const found = await this.products.getManyForChat(storeId, ids);
-    return [...found.filter(isSellable), ...found.filter((product) => !isSellable(product))].slice(
-      0,
-      limit,
-    );
+    return { found, scores, words: query.words };
   }
 
   // Embedding the question costs a call; when the AI is paused or failing, spelling alone still answers.
@@ -62,10 +85,6 @@ export class ProductSearchService {
       throw error;
     }
   }
-}
-
-function isSellable(product: ChatProduct): boolean {
-  return !product.isStockTracked || product.variants.some((variant) => variant.available > 0);
 }
 
 // A paused or busy AI is expected; any other AppError, such as a call inside a transaction, is a bug.
