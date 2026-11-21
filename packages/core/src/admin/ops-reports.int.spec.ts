@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
