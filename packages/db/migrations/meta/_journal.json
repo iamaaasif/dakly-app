@@ -645,6 +645,13 @@
       "when": 1795269617871,
       "tag": "0091_subscription_renewal",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1795270670641,
+      "tag": "0092_store_read_only_handover",
+      "breakpoints": true
     }
   ]
 }

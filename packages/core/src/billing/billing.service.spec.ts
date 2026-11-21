@@ -117,3 +117,26 @@ describe('BillingService', () => {
     });
   });
 });
+
+describe('BillingService read-only mode', () => {
+  function withStatus(status: string | undefined) {
+    return new BillingService(
+      { subscriptionStatus: async () => status } as unknown as BillingRepository,
+      { now: () => now } as Clock,
+    );
+  }
+  it('refuses writes with STORE_READ_ONLY only when the plan is read-only', async () => {
+    await expect(withStatus('read_only').assertWritable('store-id')).rejects.toMatchObject({
+      code: 'STORE_READ_ONLY',
+      status: 402,
+    });
+    for (const status of ['active', 'trialing', 'past_due', 'cancelled', undefined])
+      await expect(withStatus(status).assertWritable('store-id')).resolves.toBeUndefined();
+  });
+  it('defers background work five minutes while read-only and not otherwise', async () => {
+    expect(await withStatus('read_only').deferIfReadOnly('store-id')).toEqual({
+      delayUntil: now.getTime() + 5 * 60 * 1000,
+    });
+    expect(await withStatus('past_due').deferIfReadOnly('store-id')).toBeUndefined();
+  });
+});

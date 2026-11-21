@@ -8,6 +8,10 @@ const BILLING_ERRORS = {
     status: 409,
     message: 'The payment is less than the plan price',
   },
+  STORE_READ_ONLY: {
+    status: 402,
+    message: 'Your store is read-only because the plan is unpaid. Pay now to start again',
+  },
 } as const satisfies ErrorCatalog;
 export function billingError(code: keyof typeof BILLING_ERRORS): AppError {
   return new AppError(code, BILLING_ERRORS[code]);
