@@ -10,7 +10,7 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
-import { HOUR_MS } from '../platform/time';
+import { DAY_MS, HOUR_MS } from '../platform/time';
 import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
 import { type MarketingSend, SendingRepository } from './sending.repository';
 
@@ -274,7 +274,7 @@ export class SendPolicyService {
     });
     return {
       left: sms.dailyLimit.perDay - sent,
-      resetsAt: new Date(dayStart.getTime() + 24 * HOUR_MS),
+      resetsAt: new Date(dayStart.getTime() + DAY_MS),
     };
   }
 

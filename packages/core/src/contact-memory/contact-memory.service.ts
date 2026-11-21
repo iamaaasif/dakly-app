@@ -1,11 +1,16 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { contactMemoryExtractionSchema } from '@dakly/contracts/contact-memory';
+import {
+  contactMemoryExtractionSchema,
+  type ContactMemoryFact,
+} from '@dakly/contracts/contact-memory';
 
 import { AiService } from '../ai/ai.service';
 import { Clock } from '../platform/clock';
 import { mergeMemory } from './contact-memory-merge';
+import { ContactMemoryOwnersRepository } from './contact-memory-owners.repository';
 import { memoryPromptInput } from './contact-memory-prompt-input';
+import { renderContactMemory } from './contact-memory-render';
 import { contactMemoryError } from './contact-memory.errors';
 import { ContactMemoryRepository, type MemoryWork } from './contact-memory.repository';
 import { updateContactMemory } from './prompts/update-contact-memory.v1';
@@ -25,6 +30,7 @@ const transientFailures = new Set([
 export class ContactMemoryService {
   constructor(
     @Inject(ContactMemoryRepository) private readonly repository: ContactMemoryRepository,
+    @Inject(ContactMemoryOwnersRepository) private readonly owners: ContactMemoryOwnersRepository,
     @Inject(AiService) private readonly ai: AiService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
@@ -56,6 +62,14 @@ export class ContactMemoryService {
     if (!saved && !finalAttempt) throw contactMemoryError('CONTACT_MEMORY_CHANGED');
   }
 
+  // The memory as text for the reply prompt, inside the byte and token caps, measured with the
+  // tokenizer of the reply model. undefined when there is nothing to say or the cap cannot be checked.
+  async contextFor(storeId: string, contactId: string): Promise<string | undefined> {
+    const memory = await this.repository.read(storeId, contactId);
+    if (!memory) return undefined;
+    return renderContactMemory(memory, (text) => this.ai.countTokens('reply', text));
+  }
+
   // Staff clear and a customer's deletion request both end here. Output of a call already running
   // fails its guard, and old messages and orders are never read again.
   async clear(storeId: string, contactId: string, userId: string): Promise<void> {
@@ -67,6 +81,36 @@ export class ContactMemoryService {
   // cleared checkpoints stop any later job from building it again.
   async eraseForDeletedContact(storeId: string, contactId: string): Promise<void> {
     await this.repository.clear(storeId, contactId, null, this.clock.now());
+  }
+
+  // Merge: both memories rebuild for the contact that now owns each chat. The kept contact also
+  // takes the staff facts of the merged one. Call inside the merge transaction.
+  async resetForMerge(
+    storeId: string,
+    ids: { keptContactId: string; mergedContactId: string },
+  ): Promise<ContactMemoryFact[]> {
+    const adopted = await this.owners.adoptStaffFacts(storeId, ids);
+    await this.owners.invalidateForOwners(
+      storeId,
+      [ids.keptContactId, ids.mergedContactId],
+      this.clock.now(),
+    );
+    return adopted;
+  }
+
+  // Undo: the chats are back with their owners, so both rebuild again and the other buyer's staff
+  // facts leave the kept contact.
+  async resetForUndo(
+    storeId: string,
+    ids: { keptContactId: string; mergedContactId: string },
+    adopted: ContactMemoryFact[],
+  ): Promise<void> {
+    await this.owners.removeAdoptedFacts(storeId, ids.keptContactId, adopted);
+    await this.owners.invalidateForOwners(
+      storeId,
+      [ids.keptContactId, ids.mergedContactId],
+      this.clock.now(),
+    );
   }
 
   private async extract(storeId: string, work: MemoryWork) {

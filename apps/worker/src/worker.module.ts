@@ -29,6 +29,7 @@ import { StartAutomationOnOrderStageChanged } from '@dakly/core/automations/jobs
 import { StartAutomationOnTagAdded } from '@dakly/core/automations/jobs/start-automation-on-tag-added.job';
 import { SweepAutomationBirthdaysJob } from '@dakly/core/automations/jobs/sweep-automation-birthdays.job';
 import { WakeDueRunsJob } from '@dakly/core/automations/jobs/wake-due-runs.job';
+import { BillingJobsModule } from '@dakly/core/billing/billing-jobs.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { BuildCampaignAudienceJob } from '@dakly/core/campaigns/jobs/build-campaign-audience.job';
 import { QueueAudienceBuildOnApprovalStarted } from '@dakly/core/campaigns/jobs/queue-audience-build-on-approval-started.job';
@@ -86,6 +87,8 @@ import {
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
+import { BackfillProductPhotoTagsJob } from '@dakly/core/products/jobs/backfill-product-photo-tags.job';
+import { StartProductPhotoTagBackfillJob } from '@dakly/core/products/jobs/start-product-photo-tag-backfill.job';
 import { TagProductPhotoJob } from '@dakly/core/products/jobs/tag-product-photo.job';
 import { ProductPhotoTagsModule } from '@dakly/core/products/product-photo-tags.module';
 import { SocialPublishingModule } from '@dakly/core/social/social-publishing.module';
@@ -118,6 +121,8 @@ import { JobSchedulers } from './job-schedulers';
     ReadKhataPage,
     RunProductImport,
     TagProductPhotoJob,
+    BackfillProductPhotoTagsJob,
+    StartProductPhotoTagBackfillJob,
     UndoContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
@@ -183,6 +188,7 @@ import { JobSchedulers } from './job-schedulers';
     ContactStatsRepairModule,
     ContactErasureModule,
     AnalyticsModule,
+    BillingJobsModule,
     PaymentJobsModule,
     MaintenanceModule,
     KnowledgeIndexModule,
