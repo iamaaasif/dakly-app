@@ -167,9 +167,13 @@ export class SalesAgentToolsService {
   }
 
   private async sendProductCard({ storeId }: ToolScope, raw: unknown) {
-    const { productId } = sendProductCardTool.input.parse(raw);
+    const { productId, variantId } = sendProductCardTool.input.parse(raw);
     const product = await this.products.getForChat(storeId, productId);
-    return { cardText: productCardText(product), ...productResult(product) };
+    const variant = variantId ? product.variants.find(({ id }) => id === variantId) : undefined;
+    if (variantId && !variant) return { error: 'PRODUCT_VARIANT_NOT_FOUND' };
+    // The variant's own photo, else the product's first one; sending it is up to the reply sender.
+    const photoFileId = variant?.photoFileId ?? product.variants[0]?.photoFileId ?? null;
+    return { cardText: productCardText(product, variant), photoFileId, ...productResult(product) };
   }
 
   private async draftOrder({ storeId, contactId, chat }: ToolScope, raw: unknown) {
@@ -265,8 +269,8 @@ function productResult(product: ChatProduct) {
   };
 }
 
-function productCardText(product: ChatProduct) {
-  const lines = product.variants.map(
+function productCardText(product: ChatProduct, only?: ChatProduct['variants'][number]) {
+  const lines = (only ? [only] : product.variants).map(
     (variant) => `${variant.title}: ${formatMoney(variant.pricePoisha)}`,
   );
   return [product.name, ...lines].join('\n');

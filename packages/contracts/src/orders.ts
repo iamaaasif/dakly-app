@@ -182,10 +182,10 @@ export const orderCatalogueQuerySchema = productListQuerySchema.pick({
 });
 export type OrderCatalogueQuery = z.infer<typeof orderCatalogueQuerySchema>;
 export type OrderCatalogueProduct = Pick<ProductResponse, 'id' | 'name' | 'isStockTracked'> & {
-  variants: Pick<
+  variants: (Pick<
     ProductVariantResponse,
     'id' | 'title' | 'isDefault' | 'pricePoisha' | 'available'
-  >[];
+  > & { photoUrl: string | null })[];
 };
 export type OrderCataloguePage = { items: OrderCatalogueProduct[]; nextCursor: string | null };
 

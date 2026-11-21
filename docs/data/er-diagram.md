@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0082_snapshot.json`: **101 tables, 1356 columns, 415 explicit indexes and 318 foreign keys**.
+Built from `packages/db/migrations/meta/0083_snapshot.json`: **101 tables, 1357 columns, 415 explicit indexes and 318 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -929,6 +929,7 @@ erDiagram
         integer on_hand "NOT NULL; integer"
         integer reserved "NOT NULL; integer"
         integer low_stock_threshold "NULL; integer"
+        uuid__ image_file_ids "NOT NULL; uuid[]"
         boolean is_default "NOT NULL; boolean"
         smallint position "NOT NULL; smallint"
         text status "NOT NULL; text"
