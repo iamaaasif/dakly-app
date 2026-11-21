@@ -5,6 +5,7 @@ import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 
 import { AiService } from '../ai/ai.service';
 import { InboxService } from '../messaging/inbox.service';
+import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { customerConfirms } from './order-confirmation';
 import { chatReply } from './prompts/chat-reply.v3';
@@ -32,13 +33,19 @@ export type ComposedReply =
       kind: 'reply';
       text: string;
       aiRunId: string;
-      cardTexts: string[];
+      cards: ProductCard[];
       toolResults: object[];
       toolNames: string[];
       sources: { tool: string; refs: string[] }[];
     }
   | { kind: 'handover'; reason: Reason }
   | { kind: 'busy' };
+
+// The photo is sent before the text; a card with no photo is text only.
+export type ProductCard = {
+  text: string;
+  image?: { objectKey: string; contentType: string; sizeBytes: number };
+};
 
 export type ComposeInput = ToolScope & { customerTexts: string[] };
 
@@ -50,6 +57,7 @@ export class SalesAgentService {
     @Inject(SalesAgentToolsService) private readonly tools: SalesAgentToolsService,
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(ProductsService) private readonly products: ProductsService,
   ) {}
 
   async compose(input: ComposeInput): Promise<ComposedReply> {
@@ -79,7 +87,7 @@ export class SalesAgentService {
           kind: 'reply',
           text: attempt.output.reply,
           aiRunId: attempt.aiRunId,
-          cardTexts: cardTexts(results),
+          cards: await this.cards(storeId, results),
           toolResults: results.map(({ result }) => result),
           toolNames: results.map(({ tool }) => tool),
           sources: sourcesOf(results),
@@ -89,6 +97,23 @@ export class SalesAgentService {
       transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
     }
     return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  private async cards(storeId: string, results: ToolResult[]): Promise<ProductCard[]> {
+    const cards: ProductCard[] = [];
+    for (const { tool, result } of results) {
+      if (tool !== CARD_TOOL || !('cardText' in result)) continue;
+      const { productId, photoFileId } = result as {
+        productId?: string;
+        photoFileId?: string | null;
+      };
+      const image =
+        productId && photoFileId
+          ? await this.products.chatPhotoFile(storeId, productId, photoFileId)
+          : undefined;
+      cards.push({ text: String(result.cardText), image });
+    }
+    return cards;
   }
 
   private async answerToolCalls(
@@ -169,11 +194,6 @@ function isUnconfirmed(
   );
   return drafted;
 }
-
-const cardTexts = (results: ToolResult[]) =>
-  results.flatMap(({ tool, result }) =>
-    tool === CARD_TOOL && 'cardText' in result ? [String(result.cardText)] : [],
-  );
 
 function sourcesOf(results: ToolResult[]) {
   return results

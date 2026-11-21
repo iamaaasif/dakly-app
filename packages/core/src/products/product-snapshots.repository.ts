@@ -15,6 +15,8 @@ export type Variant = CreateProductInput['variants'][number] & {
 export type PhotoRef = {
   id: string;
   objectKey: string;
+  contentType: string;
+  sizeBytes: number;
   description: string | null;
   tags: string[];
 };
@@ -30,7 +32,7 @@ export function variantSnapshot(storeId: string) {
     'sku', v.sku, 'priceOverridePoisha', v.price_override_poisha, 'costPoisha', v.cost_poisha,
     'onHand', v.on_hand, 'reserved', v.reserved, 'isDefault', v.is_default,
     'imageFileIds', v.image_file_ids,
-    'photos', (select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'objectKey', f.object_key, 'description', f.photo_description, 'tags', coalesce(to_jsonb(f.photo_tags), '[]'::jsonb))
+    'photos', (select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'objectKey', f.object_key, 'contentType', f.content_type, 'sizeBytes', f.size_bytes, 'description', f.photo_description, 'tags', coalesce(to_jsonb(f.photo_tags), '[]'::jsonb))
       order by array_position(v.image_file_ids, f.id)), '[]'::jsonb)
       from ${files} f where f.store_id = ${storeId} and f.id = any(v.image_file_ids)
       and f.purpose = 'product_image' and f.status = 'ready')
@@ -41,7 +43,7 @@ export function variantSnapshot(storeId: string) {
 
 export function photoSnapshot(storeId: string) {
   return sql<PhotoRef[]>`(select coalesce(jsonb_agg(
-    jsonb_build_object('id', f.id, 'objectKey', f.object_key, 'description', f.photo_description, 'tags', coalesce(to_jsonb(f.photo_tags), '[]'::jsonb))
+    jsonb_build_object('id', f.id, 'objectKey', f.object_key, 'contentType', f.content_type, 'sizeBytes', f.size_bytes, 'description', f.photo_description, 'tags', coalesce(to_jsonb(f.photo_tags), '[]'::jsonb))
     order by array_position(${productImagesColumn}, f.id)), '[]'::jsonb)
     from ${files} f where f.store_id = ${storeId} and f.id = any(${productImagesColumn})
     and f.purpose = 'product_image' and f.status = 'ready')`;

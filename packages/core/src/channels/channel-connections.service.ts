@@ -42,8 +42,8 @@ type MetaMessage = Omit<Extract<OutboundMessage, { channel: 'messenger' }>, 'cha
 
 function toOutbound(channel: OutboundMessage['channel'], message: MetaMessage): OutboundMessage {
   if (channel === 'messenger') return { ...message, channel };
-  const { externalConversationId, text, operationKey, humanAgent } = message;
-  return { channel, externalConversationId, text, operationKey, humanAgent };
+  const { externalConversationId, text, operationKey, humanAgent, imageUrl } = message;
+  return { channel, externalConversationId, text, operationKey, humanAgent, imageUrl };
 }
 
 @Injectable()

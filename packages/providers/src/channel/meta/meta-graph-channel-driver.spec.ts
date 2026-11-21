@@ -104,6 +104,25 @@ describe('MetaGraphChannelDriver', () => {
     ]);
   });
 
+  it('sends the image before the text on Instagram too', async () => {
+    const bodies: { message: unknown }[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      bodies.push(await new Request(url, init).json());
+      return Response.json({ message_id: `mid.${bodies.length}` });
+    });
+    await expect(
+      driver.send(pageCredentials, {
+        ...messengerReply,
+        channel: 'instagram',
+        imageUrl: 'https://cdn.example.test/red.jpg',
+      }),
+    ).resolves.toEqual({ externalMessageId: 'mid.2' });
+    expect(bodies[0]!.message).toEqual({
+      attachment: { type: 'image', payload: { url: 'https://cdn.example.test/red.jpg' } },
+    });
+    expect(bodies[1]!.message).toMatchObject({ text: messengerReply.text });
+  });
+
   it('still sends the text when Meta refuses the image and reports it', async () => {
     const bodies: { message: { text?: string } }[] = [];
     vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
