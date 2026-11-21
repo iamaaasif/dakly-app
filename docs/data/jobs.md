@@ -6,12 +6,13 @@ A store job that loses its Valkey entry is found again by a sweep. Store sweeps 
 
 ## inbound
 
-| Job                         | Started by                          | Payload                     | Makes a rerun harmless                                                           |
-| --------------------------- | ----------------------------------- | --------------------------- | -------------------------------------------------------------------------------- |
-| `process-webhook-event`     | Webhook intake after saving the row | `webhookEventId`            | Job id is the webhook row id. The worker checks the event status.                |
-| `record-delivery-status`    | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                                        |
-| `process-comment`           | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)`            |
-| `CopyMessageAttachmentsJob` | `message.attachments_requested`     | `storeId`, `messageId`      | Settles only attachments still `pending`; the object key is fixed per attachment |
+| Job                         | Started by                          | Payload                     | Makes a rerun harmless                                                               |
+| --------------------------- | ----------------------------------- | --------------------------- | ------------------------------------------------------------------------------------ |
+| `process-webhook-event`     | Webhook intake after saving the row | `webhookEventId`            | Job id is the webhook row id. The worker checks the event status.                    |
+| `record-delivery-status`    | Delivery or read receipt            | `storeId`, `webhookEventId` | Status only moves forward                                                            |
+| `process-comment`           | Comment webhook                     | `storeId`, `webhookEventId` | Unique `social_comments (channel_connection_id, external_comment_id)`                |
+| `CopyMessageAttachmentsJob` | `message.attachments_requested`     | `storeId`, `messageId`      | Settles only attachments still `pending`; the object key is fixed per attachment     |
+| `TagProductPhotoJob`        | `product.photo_added`               | `storeId`, `fileId`         | Skips a photo that already has tags; the usage reference is `product-photo:<fileId>` |
 
 `process-webhook-event` has no `storeId`. The worker resolves the store for each event, and one delivery can cover several stores. Jobs started after that lookup carry `storeId`. Meta delivery receipts use `process-webhook-event` to apply status within each resolved store. The job retries a receipt while the recipient has an unconfirmed send. If the final attempt throws, the worker marks the webhook row `failed` for the seven-day purge and reports the job failure.
 
@@ -223,6 +224,7 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `conversation.handed_over`      | AI-4, `AiAgentService` hands over a conversation                  | `conversationId`, `reason`                                              | None yet                                                            |
 | `campaign.sent`                 | CAMP-3, campaign sender                                           | `campaignId`                                                            | None yet                                                            |
 | `message.attachments_requested` | CHAT-7, `MessagingService.receiveInboundMessage` with attachments | `messageId`                                                             | CHAT-7 `CopyMessageAttachmentsJob` on `inbound`                     |
+| `product.photo_added`           | PROD-8, a product or variant photo is confirmed                   | `productId`, `fileId`                                                   | PROD-8 `TagProductPhotoJob` on `inbound`                            |
 | `message.send_requested`        | CHAT-2, `MessagingService` queues a channel message               | `messageId`                                                             | CHAT-2 `SendMessageJob` on `outbound`                               |
 | `message.sent`                  | CHAT-2, the channel provider accepts a message                    | `messageId`, `conversationId`, `contactId`, `channel`                   | None yet                                                            |
 | `message.delivered`             | CHAT-2, `MessagingService` on a delivery receipt                  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 `refresh-contact-stats`; ACC-14 campaign receipts             |

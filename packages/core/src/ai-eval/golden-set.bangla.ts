@@ -112,6 +112,63 @@ export const banglaGoldenCases: GoldenCase[] = [
     allowedAmountsTaka: [2100, 1500],
     neverOffer: ['স্নিকার্স', 'sneakers'],
   },
+  // Colour photos. The kurti has a red and a blue photo, tagged in English and Bangla. The card
+  // must carry the photo of the colour asked for, and a colour the shop does not have must not
+  // be shown with another colour's photo.
+  {
+    id: 'photo-colour-red-bn',
+    language: 'bangla',
+    question: 'কুর্তির লাল টা দেখান',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি'],
+    cardPhoto: 'kurti-red',
+  },
+  {
+    id: 'photo-colour-blue-bn',
+    language: 'bangla',
+    question: 'কুর্তির নীল টার ছবি দিন',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি'],
+    cardPhoto: 'kurti-blue',
+  },
+  {
+    id: 'photo-colour-red-banglish',
+    language: 'banglish',
+    question: 'kurti r lal ta dekhan',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+    cardPhoto: 'kurti-red',
+  },
+  {
+    id: 'photo-colour-red-mixed',
+    language: 'banglish',
+    question: 'kurti red colour er pic din',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+    cardPhoto: 'kurti-red',
+  },
+  {
+    id: 'photo-colour-missing-mixed',
+    language: 'banglish',
+    question: 'kurti green colour er pic din',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['সবুজ', 'green', 'নেই', 'nai'],
+    cardPhoto: null,
+  },
+  // A size with no stock is named as such, never offered.
+  {
+    id: 'oos-card-size-banglish',
+    language: 'banglish',
+    question: 'polo shirt XL er pic den',
+    expectedHandover: null,
+    allowedAmountsTaka: [650],
+    mentionsAnyOf: ['নেই', 'nai', 'out of stock', 'M', 'L'],
+  },
   // Out of stock: other sizes, in-stock alternatives and the restock list.
   {
     id: 'oos-size-bn',
@@ -239,6 +296,32 @@ export const banglaRecordedOutcomes: Record<string, EvalOutcome> = {
   'photo-kurti-bn': { kind: 'reply', text: 'এই কুর্তিটা আছে, দাম ৳১,৪৫০।' },
   'photo-canvas-english': { kind: 'reply', text: 'এই ক্যানভাস জুতাটা ৳১,৫০০।' },
   'photo-loafer-banglish': { kind: 'reply', text: 'এই লোফারটা এখন স্টকে নেই।' },
+  'photo-colour-red-bn': {
+    kind: 'reply',
+    text: 'কুর্তির লাল রঙের ছবি দিলাম। দাম ৳১,৪৫০।',
+    cardPhoto: 'kurti-red',
+  },
+  'photo-colour-blue-bn': {
+    kind: 'reply',
+    text: 'কুর্তির নীল রঙের ছবি দিলাম, ৳১,৪৫০।',
+    cardPhoto: 'kurti-blue',
+  },
+  'photo-colour-red-banglish': {
+    kind: 'reply',
+    text: 'লাল কুর্তির ছবি দিলাম, 1450 টাকা।',
+    cardPhoto: 'kurti-red',
+  },
+  'photo-colour-red-mixed': {
+    kind: 'reply',
+    text: 'Red kurti er pic dilam, 1450 taka.',
+    cardPhoto: 'kurti-red',
+  },
+  'photo-colour-missing-mixed': {
+    kind: 'reply',
+    text: 'কুর্তির সবুজ রঙ নেই। লাল আর নীল আছে, ৳১,৪৫০।',
+    cardPhoto: null,
+  },
+  'oos-card-size-banglish': { kind: 'reply', text: 'XL stock e nai. M ar L ache, 650 taka.' },
   'oos-size-bn': { kind: 'reply', text: 'XL এখন নেই। M আর L সাইজ আছে, ৳৬৫০।' },
   'oos-size-banglish': { kind: 'reply', text: 'XL nai. M ar L ache, 650 taka.' },
   'oos-product-bn': {

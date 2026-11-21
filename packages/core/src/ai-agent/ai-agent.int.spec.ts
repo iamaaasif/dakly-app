@@ -564,7 +564,10 @@ it('sends a product card before the reply', async () => {
   const message = await receive(active, 'panjabi dekhan');
   scriptSequence(
     classified,
-    toolCalls(['send_product_card', { productId: active.productId, variantId: null }]),
+    toolCalls([
+      'send_product_card',
+      { productId: active.productId, variantId: null, photoId: null, withoutPhoto: null },
+    ]),
     replyText('Eta dekhun, ৳1,200.'),
   );
   await agent.reply(active.storeId, message.conversation_id, message.id);

@@ -7,6 +7,7 @@ import { QUEUES } from '../platform/queue/queues';
 import { ContactMemoryRepository } from './contact-memory.repository';
 import { ContactMemoryService } from './contact-memory.service';
 import { ConversationMemoriesSweepService } from './conversation-memories-sweep.service';
+import { EraseMemoryOnContactDeleted } from './jobs/erase-memory-on-contact-deleted.job';
 import { QueueConversationMemoriesJob } from './jobs/queue-conversation-memories.job';
 import { UpdateConversationMemoryJob } from './jobs/update-conversation-memory.job';
 
@@ -16,6 +17,7 @@ import { UpdateConversationMemoryJob } from './jobs/update-conversation-memory.j
     ContactMemoryRepository,
     ContactMemoryService,
     ConversationMemoriesSweepService,
+    EraseMemoryOnContactDeleted,
     QueueConversationMemoriesJob,
     UpdateConversationMemoryJob,
   ],

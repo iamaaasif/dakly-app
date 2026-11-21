@@ -47,6 +47,10 @@ export class TeamService {
     return canDo(access, 'attribution.window.edit');
   }
 
+  canEraseCustomers(access: StoreAccess): boolean {
+    return canDo(access, 'customer.erase');
+  }
+
   canTransferOwnership(access: StoreAccess): boolean {
     return canDo(access, 'ownership.transfer');
   }

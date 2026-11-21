@@ -12,7 +12,7 @@ import { classifyChat } from '../../ai-agent/prompts/classify-chat.v1';
 import { checkReplyFacts } from '../../ai-agent/reply-fact-check';
 import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
 import type { EvalOutcome } from '../golden-case';
-import { evalShop } from './eval-catalog';
+import { evalPhotoKey, evalShop } from './eval-catalog';
 import type { EvalMeter } from './eval-meter';
 import { matchEvalPhoto, runFixtureTool } from './fixture-tools';
 
@@ -80,12 +80,19 @@ function replyContext(question: string, candidates: object) {
   ].join('\n');
 }
 
+// The key of the photo on the last product card the run sent, or null for a card with no photo.
+function sentCardPhoto(toolResults: object[]) {
+  const cards = toolResults.filter((result) => 'cardText' in result && 'photoFileId' in result);
+  const last = cards.at(-1) as { photoFileId?: unknown } | undefined;
+  return last ? evalPhotoKey(last.photoFileId) : undefined;
+}
+
 function checkedReply(reply: string, toolResults: object[], note: Note): EvalOutcome {
   const checked = checkReplyFacts(reply, toolResults, {
     phone: evalShop.phone,
     linkBaseUrl: 'https://dkl.example',
   });
-  if (checked.isSafe) return { kind: 'reply', text: reply };
+  if (checked.isSafe) return { kind: 'reply', text: reply, cardPhoto: sentCardPhoto(toolResults) };
   note(`fact check ${checked.failure}: ${reply}`);
   return { kind: 'handover', reason: 'out_of_scope' };
 }
