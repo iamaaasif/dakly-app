@@ -91,34 +91,6 @@ export class ContactMergeRepository {
     });
   }
 
-  listUndoable(storeId: string, contactId: string, now: Date) {
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .select({
-          merge: contactMerges,
-          mergedContactName: contacts.name,
-        })
-        .from(contactMerges)
-        .leftJoin(
-          contacts,
-          and(
-            eq(contacts.storeId, contactMerges.storeId),
-            eq(contacts.id, contactMerges.mergedContactId),
-          ),
-        )
-        .where(
-          and(
-            eq(contactMerges.storeId, storeId),
-            eq(contactMerges.keptContactId, contactId),
-            isNull(contactMerges.undoneAt),
-            isNull(contactMerges.evidenceRedactedAt),
-            gt(contactMerges.undoUntil, now),
-          ),
-        )
-        .orderBy(desc(contactMerges.createdAt)),
-    );
-  }
-
   insertMerge(storeId: string, values: Omit<typeof contactMerges.$inferInsert, 'storeId'>) {
     return this.database.forStore(storeId, async (tx) => {
       const [row] = await tx
