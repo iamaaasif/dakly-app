@@ -162,5 +162,7 @@ export const evalChatProducts: ChatProduct[] = evalProducts.map((item) => ({
     isDefault: index === 0,
     pricePoisha: variant.priceTaka * 100,
     available: variant.stock,
+    photoUrl: null,
+    photoFileId: null,
   })),
 }));
