@@ -187,6 +187,8 @@ request is marked `notified` only after its message is queued, so a retry never 
 with no chat on a Page stay waiting. The response gives `queued` and `waiting`, and the owner approves
 again for the rest. WhatsApp and SMS delivery wait for those channels' send paths.
 
+The Restock dialog on the Products list lists every size of the product with its available stock, how many people wait for it (`GET /products/:productId/restock-waiting`) and a box for the pieces that arrived. Save stock adds each filled size with one stock adjustment (reason Restock). The "Message the people who were waiting for these sizes" box shows only when someone is waiting, starts ticked, and calls the approval route for each restocked size that has people waiting. Stock is saved first, and the dialog shows the error if a later call fails, so reopening it shows the new counts. The dialog only adds stock; a stock decrease has no screen yet.
+
 PROD-3 adds photo upload, confirmation, reorder and removal. Upload URLs last five
 minutes and sign the declared content type and exact byte length. Only JPEG, PNG
 and WebP are accepted, up to 5,242,880 bytes. Keys are
