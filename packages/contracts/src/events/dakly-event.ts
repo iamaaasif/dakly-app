@@ -62,6 +62,7 @@ import {
   paymentVerificationRequestedEventSchema,
 } from './payments';
 import {
+  productPhotoAddedEventSchema,
   productUpdatedEventSchema,
   stockChangedEventSchema,
   variantRestockedEventSchema,
@@ -84,6 +85,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   productUpdatedEventSchema,
+  productPhotoAddedEventSchema,
   stockChangedEventSchema,
   variantRestockedEventSchema,
   consentChangedEventSchema,

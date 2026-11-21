@@ -110,7 +110,7 @@ describe('permission policy', () => {
     expect(canAccess(customAccess, 'orders', 'view')).toBe(false);
   });
 
-  it.each(['billing.edit', 'store.close', 'ownership.transfer'] as const)(
+  it.each(['billing.edit', 'customer.erase', 'store.close', 'ownership.transfer'] as const)(
     'reserves %s for the Owner regardless of stored permissions',
     (action) => {
       expect(canDo(builtInRoleAccess.owner, action)).toBe(true);
