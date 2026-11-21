@@ -108,8 +108,8 @@ The web app has two customer screens.
   set. Location is the district. Consent shows a green tag for each channel the customer
   agreed to; a customer who agreed to none shows "None". An empty cell says what is missing
   (No email, No location, No tags). The design also strikes through channels the customer has
-  not agreed to; the screen lists only the agreed ones. Orders, Spent and Last purchase wait
-  for order totals on the list. Members with Edit
+  not agreed to; the screen lists only the agreed ones. Orders, Spent and Last purchase come
+  in CUS-17 part 2, read from `contact_stats`. Members with Edit
   Customers press Add customers and choose Add manually or Import from an Excel or CSV file. The manual
   form shows a phone the store already has as an error on the phone field. Add by voice, Scan
   your khata, Connect your store and Connect your POS are not offered until their tasks ship

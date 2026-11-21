@@ -31,7 +31,7 @@ export const contactSourceLabels: Record<ContactSource, string> = {
   comment: 'Comment',
   order_link: 'Order link',
   manual: 'Added by hand',
-  voice: 'Add by voice',
+  voice: 'Added by voice',
   import: 'Import',
   shopify: 'Shopify',
   woocommerce: 'WooCommerce',
