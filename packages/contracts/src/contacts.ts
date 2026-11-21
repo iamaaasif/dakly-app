@@ -126,6 +126,26 @@ export const MAX_EXPORT_ROWS = 50_000;
 
 export const matchSuggestionListQuerySchema = z.strictObject({ contactId: z.uuid() });
 
+// The client makes the key once per merge attempt and sends it again on a retry (D29).
+export const mergeContactsSchema = z.strictObject({
+  contactId: z.uuid(),
+  otherContactId: z.uuid(),
+  operationKey: z.uuid(),
+});
+export type MergeContactsInput = z.infer<typeof mergeContactsSchema>;
+
+// The older contact is kept, so the screen opens that profile after a merge.
+export type ContactMergeResponse = {
+  id: string;
+  keptContactId: string;
+  mergedContactId: string;
+  mergedContactName: string | null;
+  mergedAt: string;
+  undoUntil: string;
+  undoneAt: string | null;
+  undoConflicts: string[];
+};
+
 // A file column the mapping can name; the reader keeps no cells past this.
 export const MAX_IMPORT_COLUMNS = 200;
 const importColumn = z
