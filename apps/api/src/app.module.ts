@@ -19,6 +19,7 @@ import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { DueBookModule } from '@dakly/core/due-book/due-book.module';
 import { ImportsModule } from '@dakly/core/imports/imports.module';
 import { LinksModule } from '@dakly/core/links/links.module';
+import { AiReplyFeedbackModule } from '@dakly/core/messaging/ai-reply-feedback.module';
 import { InboxModule } from '@dakly/core/messaging/inbox.module';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
 import { OrdersModule } from '@dakly/core/orders/orders.module';
@@ -55,6 +56,7 @@ import { HealthController } from './health.controller';
     DeliveryModule,
     ProductsModule,
     SavedRepliesModule,
+    AiReplyFeedbackModule,
     OrdersModule,
     PaymentsModule,
     ConsentsModule,
