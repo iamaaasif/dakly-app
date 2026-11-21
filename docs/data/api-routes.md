@@ -152,6 +152,10 @@ atomically and retain business data when an extension is disabled.
 | `POST /variants/:variantId/stock-adjustments`                                            | `products` |
 | `GET /variants/:variantId/stock-movements`                                               | `products` |
 | `GET /restock-requests`                                                                  | `products` |
+| `POST /variants/:variantId/restock-requests`                                             | `products` |
+| `DELETE /restock-requests/:id`                                                           | `products` |
+| `GET /products/:productId/restock-waiting`                                               | `products` |
+| `POST /variants/:variantId/restock-notifications`                                        | `products` |
 | `POST /products/:productId/photos/upload-url`                                            | `products` |
 | `POST /products/:productId/photos/confirm`                                               | `products` |
 | `PATCH /products/:productId/photos`                                                      | `products` |
