@@ -30,6 +30,7 @@ import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
+import { RequireWritableStore } from '../platform/tenancy/writable-store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { AutomationPreviewService } from './automation-preview.service';
 import { AutomationsService } from './automations.service';
@@ -99,6 +100,7 @@ export class AutomationsController {
   }
 
   @Post(':automationId/publish')
+  @RequireWritableStore()
   @HttpCode(200)
   @RequirePermission('automations.edit')
   publish(
@@ -114,6 +116,7 @@ export class AutomationsController {
   }
 
   @Post(':automationId/enable')
+  @RequireWritableStore()
   @HttpCode(200)
   @RequirePermission('automations.edit')
   enable(

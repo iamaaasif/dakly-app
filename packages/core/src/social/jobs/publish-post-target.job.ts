@@ -2,6 +2,7 @@ import { Inject } from '@nestjs/common';
 
 import { scheduledPostTargetSchema } from '@dakly/contracts/social';
 
+import { BillingService } from '../../billing/billing.service';
 import { KillSwitchesService } from '../../kill-switches/kill-switches.service';
 import { HandlesJob, type JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
@@ -14,12 +15,15 @@ export class PublishPostTargetJob implements JobHandler {
   constructor(
     @Inject(SocialPublishingService) private readonly publishing: SocialPublishingService,
     @Inject(KillSwitchesService) private readonly switches: KillSwitchesService,
+    @Inject(BillingService) private readonly billing: BillingService,
   ) {}
 
   async handle(data: unknown, finalAttempt: boolean) {
     const { storeId, ...target } = scheduledPostTargetSchema.parse(data);
     const paused = await this.switches.deferIfPaused('social_posting', storeId);
     if (paused) return paused;
+    const readOnly = await this.billing.deferIfReadOnly(storeId);
+    if (readOnly) return readOnly;
     await this.publishing.publishTarget(storeId, target, finalAttempt);
   }
 }
