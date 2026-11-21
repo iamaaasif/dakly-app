@@ -2,6 +2,11 @@ import { z } from 'zod';
 
 import { attributionOrdersRebuiltEventSchema } from './analytics';
 import {
+  subscriptionPastDueEventSchema,
+  subscriptionReadOnlyEventSchema,
+  subscriptionRenewedEventSchema,
+} from './billing';
+import {
   campaignApprovalStartedEventSchema,
   campaignApprovedEventSchema,
   campaignSentEventSchema,
@@ -17,6 +22,8 @@ import {
   contactCreatedEventSchema,
   contactDeletedEventSchema,
   contactErasedEventSchema,
+  contactMergedEventSchema,
+  contactMergeUndoneEventSchema,
   contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   importStartedEventSchema,
@@ -84,6 +91,8 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   contactCreatedEventSchema,
   contactDeletedEventSchema,
   contactErasedEventSchema,
+  contactMergedEventSchema,
+  contactMergeUndoneEventSchema,
   contactStatsRepairedEventSchema,
   contactTagAddedEventSchema,
   productUpdatedEventSchema,
@@ -138,6 +147,9 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   duePaymentRecordedEventSchema,
   dueReminderRequestedEventSchema,
   dueWrittenOffEventSchema,
+  subscriptionRenewedEventSchema,
+  subscriptionPastDueEventSchema,
+  subscriptionReadOnlyEventSchema,
 ]);
 
 export type DaklyEvent = z.infer<typeof daklyEventSchema>;

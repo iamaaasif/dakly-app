@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0091_snapshot.json`: **104 tables, 1386 columns, 426 explicit indexes and 328 foreign keys**.
+Built from `packages/db/migrations/meta/0093_snapshot.json`: **104 tables, 1387 columns, 426 explicit indexes and 328 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1762,6 +1762,7 @@ erDiagram
         smallint renewal_attempts "NOT NULL; smallint"
         timestamp_with_time_zone next_renewal_attempt_at "NULL; timestamp with time zone"
         timestamp_with_time_zone read_only_since "NULL; timestamp with time zone"
+        uuid last_payment_intent_id "NULL; uuid"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }

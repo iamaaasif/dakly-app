@@ -10,7 +10,7 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
-import { HOUR_MS } from '../platform/time';
+import { DAY_MS, HOUR_MS } from '../platform/time';
 import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
 import { type MarketingSend, SendingRepository } from './sending.repository';
 
@@ -108,8 +108,10 @@ export class SendPolicyService {
 
     // Quiet hours come before the cap, so a deferred message is counted when it is sent.
     const settings = await this.stores.sendingSettings(storeId);
-    const quietUntil = quietHoursEnd(request.at, settings.quietHours, settings.timeZone);
+    const quietUntil = quietEnd(request.channel, request.at, settings);
     if (quietUntil) return { action: 'defer', until: quietUntil };
+    const limit = await this.smsLimitLeft(storeId, request.channel, request.at, settings);
+    if (limit && limit.left <= 0) return { action: 'defer', until: limit.resetsAt };
     await this.repository.lockContact(storeId, request.contactId);
     const sends = await this.listWeekOfSends(storeId, [request.contactId], request.at, {
       dispatch: true,
@@ -150,7 +152,7 @@ export class SendPolicyService {
       workflowStepId,
       campaignRecipientId,
       channel,
-      settings: { quietHours, timeZone, frequencyCap },
+      settings,
     }: {
       contactId: string;
       channel: SendRequest['channel'];
@@ -160,15 +162,19 @@ export class SendPolicyService {
     },
   ) {
     this.requireTransaction();
+    const { frequencyCap } = settings;
     const sends = await this.listWeekOfSends(storeId, [contactId], this.clock.now(), {
       excludeWorkflowStepId: workflowStepId,
       excludeCampaignRecipientId: campaignRecipientId,
       includeCommittedFuture: true,
     });
+    const limit = await this.smsLimitLeft(storeId, channel, this.clock.now(), settings);
     return (): { decision: SendDecision; at: Date } => {
       const at = this.clock.now();
-      const until = quietHoursEnd(at, quietHours, timeZone);
+      const until = quietEnd(channel, at, settings);
       if (until) return { decision: { action: 'defer', until }, at };
+      if (limit && limit.left <= 0)
+        return { decision: { action: 'defer', until: limit.resetsAt }, at };
       const weekStart = new Date(at.getTime() - WEEK_MS);
       const counted = sends.filter((send) => send.sentAt > weekStart);
       const reached = capReached(counted, { channel, at }, frequencyCap);
@@ -234,18 +240,42 @@ export class SendPolicyService {
     capRead?: CapReadOptions,
   ): Promise<(contactId: string) => SendDecision> {
     const settings = await this.stores.sendingSettings(storeId);
-    const quietUntil = quietHoursEnd(at, settings.quietHours, settings.timeZone);
+    const quietUntil = quietEnd(channel, at, settings);
     if (quietUntil) return () => ({ action: 'defer', until: quietUntil });
+    const limit = await this.smsLimitLeft(storeId, channel, at, settings);
+    let left = limit?.left ?? Infinity;
     const sendsOf = new Map<string, MarketingSend[]>();
     for (const send of await this.listWeekOfSends(storeId, contactIds, at, capRead)) {
       const own = sendsOf.get(send.contactId);
       if (own) own.push(send);
       else sendsOf.set(send.contactId, [send]);
     }
-    return (contactId) =>
-      capReached(sendsOf.get(contactId) ?? [], { channel, at }, settings.frequencyCap)
-        ? skip('frequency_cap')
-        : SEND;
+    return (contactId) => {
+      if (capReached(sendsOf.get(contactId) ?? [], { channel, at }, settings.frequencyCap))
+        return skip('frequency_cap');
+      // Each recipient that would be sent uses one of the day's remaining messages.
+      if (left-- <= 0 && limit) return { action: 'defer', until: limit.resetsAt };
+      return SEND;
+    };
+  }
+
+  // How many marketing SMS the shop may still send today, and when the count starts again.
+  private async smsLimitLeft(
+    storeId: string,
+    channel: SendChannel,
+    at: Date,
+    { sms, timeZone }: StoreSendingSettings,
+  ): Promise<{ left: number; resetsAt: Date } | undefined> {
+    if (channel !== 'sms' || !sms.dailyLimit.on) return undefined;
+    const dayStart = localDayStart(at, timeZone);
+    const sent = await this.repository.countChannelSends(storeId, 'sms', {
+      after: new Date(dayStart.getTime() - 1),
+      until: at,
+    });
+    return {
+      left: sms.dailyLimit.perDay - sent,
+      resetsAt: new Date(dayStart.getTime() + DAY_MS),
+    };
   }
 
   // Live checks count committed rows even if another worker's clock was ahead.
@@ -302,6 +332,21 @@ function capReached(
     (send) => send.channel === channel && send.sentAt > dayStart,
   ).length;
   return onChannelToday >= perChannelPerDay || sends.length >= perSevenDays;
+}
+
+function quietEnd(
+  channel: SendChannel,
+  at: Date,
+  { quietHours, timeZone, sms }: StoreSendingSettings,
+): Date | undefined {
+  if (channel === 'sms' && !sms.quietHoursOn) return undefined;
+  return quietHoursEnd(at, quietHours, timeZone);
+}
+
+function localDayStart(at: Date, timeZone: string): Date {
+  const local = localClock(at, timeZone);
+  const intoDay = ((local.hour * 60 + local.minute) * 60 + local.second) * 1000;
+  return new Date(at.getTime() - intoDay - at.getUTCMilliseconds());
 }
 
 // Quiet hours always span midnight.

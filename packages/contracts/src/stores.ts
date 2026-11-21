@@ -34,6 +34,17 @@ export const notificationPreferencesSchema = z.strictObject({
 });
 export type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
 
+const smsDailyLimitSchema = z.strictObject({
+  on: z.boolean().default(true),
+  perDay: z.number().int().min(1).max(1_000_000).default(2000),
+});
+// SMS rules from the SMS settings tab. Off for quiet hours only frees marketing SMS; the other
+// channels keep their hours. The limit counts marketing SMS sent since local midnight.
+const smsSendingSchema = z.strictObject({
+  quietHoursOn: z.boolean().default(true),
+  dailyLimit: smsDailyLimitSchema.default({ on: true, perDay: 2000 }),
+});
+
 // The settings.sending section. Quiet hours are whole hours in store time and always span
 // midnight (feature 09 allows 8-10 pm to 8-10 am); the cap follows CAMP-R3 and D41.
 export const sendingSettingsSchema = z.strictObject({
@@ -51,6 +62,7 @@ export const sendingSettingsSchema = z.strictObject({
     .default({ perChannelPerDay: 1, perSevenDays: 3 }),
   // Feature 09: while on, only an Owner or Admin approves a campaign.
   onlyOwnersAndAdminsApprove: z.boolean().default(true),
+  sms: smsSendingSchema.default({ quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } }),
 });
 export type SendingSettings = z.infer<typeof sendingSettingsSchema>;
 
@@ -98,7 +110,12 @@ export const changeStoreSettingsSchema = z
       .optional(),
     tradeLicenceNumber: z.string().trim().min(1).max(100).nullable().optional(),
     // The whole section, as GET /store returns it, so a save never resets a part to its default.
-    sending: sendingSettingsSchema.required().optional(),
+    sending: sendingSettingsSchema
+      .required()
+      .extend({
+        sms: smsSendingSchema.required().extend({ dailyLimit: smsDailyLimitSchema.required() }),
+      })
+      .optional(),
     stock: stockSettingsSchema.required().optional(),
     dueBook: dueBookSettingsSchema.required().optional(),
   })

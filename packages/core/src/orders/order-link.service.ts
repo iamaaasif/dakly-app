@@ -10,6 +10,8 @@ import type { BotCheckDriver } from '@dakly/providers/bot-check/bot-check-driver
 import { DeliveryService } from '../delivery/delivery.service';
 import { RateLimiter } from '../platform/cache/rate-limiter';
 import { hashToken } from '../platform/crypto/token-hash';
+import { AppError } from '../platform/errors/app-error';
+import { DAY_MS, HOUR_MS } from '../platform/time';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { BOT_CHECK_DRIVER } from './order-link-provider';
@@ -19,8 +21,8 @@ import { OrdersService } from './orders.service';
 const VIEWS_PER_IP_PER_MINUTE = 120;
 const ORDERS_PER_IP_PER_HOUR = 30;
 const ORDERS_PER_PHONE_PER_DAY = 5;
-const HOUR = 60 * 60;
-const DAY = 24 * HOUR;
+const HOUR = HOUR_MS / 1000;
+const DAY = DAY_MS / 1000;
 const noPhone = { seeFullPhone: false };
 
 export type OrderLinkView = {
@@ -117,8 +119,10 @@ export class OrderLinkService {
 
   // A variant with no price is not offered, so the page never shows a price the order would refuse.
   private async offered(storeId: string, productId: string): Promise<OrderCatalogueProduct> {
-    const product = await this.products.getForOrderLink(storeId, productId).catch(() => {
-      throw orderError('ORDER_LINK_NOT_FOUND');
+    const product = await this.products.getForOrderLink(storeId, productId).catch((error) => {
+      throw error instanceof AppError && error.code === 'PRODUCT_NOT_FOUND'
+        ? orderError('ORDER_LINK_NOT_FOUND')
+        : error;
     });
     const variants = product.variants.filter(({ pricePoisha }) => pricePoisha > 0);
     if (!variants.length) throw orderError('ORDER_LINK_NOT_FOUND');

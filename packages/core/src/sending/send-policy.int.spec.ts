@@ -307,6 +307,24 @@ describe('SendPolicyService (Postgres)', () => {
     });
   });
 
+  it('defers marketing SMS for the whole shop once the saved day limit is used', async () => {
+    await admin.pool.query(
+      `update stores set settings='{"sending":{"quietHours":{"startHour":22,"endHour":8},"sms":{"dailyLimit":{"on":true,"perDay":2}}}}' where id=$1`,
+      [storeB],
+    );
+    const first = await consentedContact(storeB);
+    const second = await consentedContact(storeB);
+    const third = await consentedContact(storeB);
+    // Two other contacts sent a marketing SMS today; the third contact has no sends of its own.
+    await campaignSend(storeB, first, new Date(evening.getTime() - 2 * HOUR));
+    await workflowSend(storeB, second, new Date(evening.getTime() - 3 * HOUR), { outcome: 'sent' });
+
+    expect(await check(storeB, third, { at: evening })).toEqual({
+      action: 'defer',
+      until: new Date('2026-11-16T18:00:00Z'),
+    });
+  });
+
   it('reads the cap from the step category, not the workflow flag', async () => {
     const contactId = await consentedContact(storeA);
     await workflowSend(storeA, contactId, hoursBefore(1), { outcome: 'sending' });

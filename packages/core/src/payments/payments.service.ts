@@ -68,6 +68,17 @@ export class PaymentsService {
     });
   }
 
+  // Billing reads a plan payment only through this: the amount Dakly verified, never a request.
+  async succeededSubscriptionPayment(storeId: string, intentId: string) {
+    const intent = await this.repository.find(storeId, intentId);
+    const isPaid =
+      intent?.flow === 'billing' &&
+      intent.purpose === 'subscription' &&
+      intent.status === 'succeeded' &&
+      !intent.isSandbox;
+    return isPaid ? { amountPoisha: intent.amountPoisha } : undefined;
+  }
+
   redirected(storeId: string, intentId: string, gatewayPaymentId: string) {
     return this.transaction.run(storeId, async () => {
       const intent = await this.lockIntent(storeId, intentId);

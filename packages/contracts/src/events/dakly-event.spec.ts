@@ -116,6 +116,18 @@ const examples: DaklyEvent[] = [
     },
   },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
+  {
+    type: 'contact.merged',
+    storeId,
+    occurredAt,
+    payload: { keptContactId: contactId, mergedContactId: storeId },
+  },
+  {
+    type: 'contact.merge_undone',
+    storeId,
+    occurredAt,
+    payload: { keptContactId: contactId, mergedContactId: storeId },
+  },
   { type: 'contact.deleted', storeId, occurredAt, payload: { contactId } },
   {
     type: 'contact.erased',
@@ -242,6 +254,19 @@ const examples: DaklyEvent[] = [
     storeId,
     occurredAt,
     payload: { wallet: 'sms_credits', entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae0' },
+  },
+  { type: 'subscription.renewed', storeId, occurredAt, payload: { subscriptionId: connectionId } },
+  {
+    type: 'subscription.past_due',
+    storeId,
+    occurredAt,
+    payload: { subscriptionId: connectionId, attempt: 1 },
+  },
+  {
+    type: 'subscription.read_only',
+    storeId,
+    occurredAt,
+    payload: { subscriptionId: connectionId },
   },
   {
     type: 'due.added',
