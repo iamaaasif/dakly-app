@@ -1,4 +1,10 @@
-import type { AiFeedbackQuery } from '@dakly/contracts/ai-feedback';
+import { useState } from 'react';
+
+import type {
+  AiFeedbackItem,
+  AiFeedbackQuery,
+  AiFeedbackResponse,
+} from '@dakly/contracts/ai-feedback';
 import { formatCount } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 import { QueryError } from '@dakly/ui/query-error';
@@ -7,23 +13,31 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useAiFeedback } from '../api/ai-feedback';
 import { FeedbackItemCard } from './feedback-item-card';
 import { feedbackReasonLabels } from './feedback-reasons';
+import { FixReplyDialog } from './fix-reply-dialog';
 
 type Filter = AiFeedbackQuery['filter'];
 const filterLabels: Record<Filter, string> = {
+  needs_fixing: 'Needs fixing',
   bad: 'Bad answers',
   good: 'Good answers',
   all: 'All',
 };
 const emptyText: Record<Filter, string> = {
+  needs_fixing: 'Every bad answer is fixed.',
   bad: 'No bad answers rated yet.',
   good: 'No good answers rated yet.',
   all: 'Nothing is rated yet. Rate an AI reply in a chat with the thumbs buttons.',
 };
 
-type FeedbackTabProps = { filter: Filter; onFilterChange: (filter: Filter) => void };
+type FeedbackTabProps = {
+  filter: Filter;
+  canFix: boolean;
+  onFilterChange: (filter: Filter) => void;
+};
 
-export function FeedbackTab({ filter, onFilterChange }: FeedbackTabProps) {
+export function FeedbackTab({ filter, canFix, onFilterChange }: FeedbackTabProps) {
   const feedback = useAiFeedback(filter);
+  const [fixing, setFixing] = useState<AiFeedbackItem | null>(null);
   if (feedback.isPending) return <Skeleton className="h-96 w-full" />;
   if (feedback.isError)
     return <QueryError message={feedback.error.message} onRetry={() => void feedback.refetch()} />;
@@ -34,25 +48,7 @@ export function FeedbackTab({ filter, onFilterChange }: FeedbackTabProps) {
         Every good or bad rating you give in Chats lands here. Dakly's replies get better when you
         fix a bad answer once.
       </p>
-      <dl className="grid grid-cols-3 gap-3">
-        <Stat
-          label="Helpful"
-          value={summary.helpfulPercent === null ? '–' : `${summary.helpfulPercent}%`}
-          tone="text-success"
-        />
-        <Stat label="Good answers" value={formatCount(summary.goodCount)} tone="text-text" />
-        <Stat label="Bad answers" value={formatCount(summary.badCount)} tone="text-danger" />
-      </dl>
-      {summary.commonProblems.length > 0 ? (
-        <p className="flex flex-wrap items-center gap-2 text-sm">
-          Most common problems:
-          {summary.commonProblems.map((problem) => (
-            <Badge key={problem.reason} variant="danger">
-              {feedbackReasonLabels[problem.reason]} {problem.count}×
-            </Badge>
-          ))}
-        </p>
-      ) : null}
+      <FeedbackSummary summary={summary} />
       <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
         {(Object.keys(filterLabels) as Filter[]).map((name) => (
           <button
@@ -71,11 +67,43 @@ export function FeedbackTab({ filter, onFilterChange }: FeedbackTabProps) {
       ) : (
         <ul className="space-y-3">
           {items.map((item) => (
-            <FeedbackItemCard key={item.messageId} item={item} />
+            <FeedbackItemCard
+              key={item.messageId}
+              item={item}
+              onFix={canFix ? setFixing : undefined}
+            />
           ))}
         </ul>
       )}
+      {fixing ? <FixReplyDialog item={fixing} onDone={() => setFixing(null)} /> : null}
     </div>
+  );
+}
+
+function FeedbackSummary({ summary }: { summary: AiFeedbackResponse['summary'] }) {
+  return (
+    <>
+      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat
+          label="Helpful"
+          value={summary.helpfulPercent === null ? '–' : `${summary.helpfulPercent}%`}
+          tone="text-success"
+        />
+        <Stat label="Good answers" value={formatCount(summary.goodCount)} tone="text-text" />
+        <Stat label="Bad answers" value={formatCount(summary.badCount)} tone="text-danger" />
+        <Stat label="Fixed and learned" value={formatCount(summary.fixedCount)} tone="text-info" />
+      </dl>
+      {summary.commonProblems.length > 0 ? (
+        <p className="flex flex-wrap items-center gap-2 text-sm">
+          Most common problems:
+          {summary.commonProblems.map((problem) => (
+            <Badge key={problem.reason} variant="danger">
+              {feedbackReasonLabels[problem.reason]} {problem.count}×
+            </Badge>
+          ))}
+        </p>
+      ) : null}
+    </>
   );
 }
 

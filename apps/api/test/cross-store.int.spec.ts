@@ -3686,6 +3686,7 @@ fixture('GET /ai-replies/feedback', async () => {
       helpfulPercent: 50,
       goodCount: 1,
       badCount: 1,
+      fixedCount: 0,
       commonProblems: [{ reason: 'missed_the_question', count: 1 }],
     },
     items: [
@@ -3696,6 +3697,7 @@ fixture('GET /ai-replies/feedback', async () => {
         customerName: expect.any(String),
         customerQuestion: 'Kurti M size ache?',
         replyText: 'Ji, M size ache.',
+        fixedAt: null,
         ratedAt: expect.any(String),
       },
     ],
@@ -3704,6 +3706,62 @@ fixture('GET /ai-replies/feedback', async () => {
   expect(good.items.map((item: { messageId: string }) => item.messageId)).toEqual([praised]);
   const all = (await success(b, 'GET', '/ai-replies/feedback?filter=all', 200)).json();
   expect(all.items).toHaveLength(2);
+});
+
+fixture('POST /ai-replies/:messageId/fix', async () => {
+  const { a, b } = await pair();
+  const foreign = await seedAiReply(a);
+  const own = await seedAiReply(b);
+  const url = (id: string) => `/ai-replies/${id}/fix`;
+  // Banglish question, Bangla answer: both are kept exactly as typed.
+  const body = () => ({
+    question: 'Panjabi er kapor ki?',
+    answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+    keywords: ['kapor', 'কাপড়'],
+  });
+  expect((await f.request(b.owner, 'POST', url(own), body())).statusCode).toBe(403);
+  await enableChats(a);
+  await enableChats(b);
+  await hidden(b, 'POST', url, foreign, body);
+  // Not rated yet, then rated good: only a bad reply can be fixed.
+  await success(b, 'POST', url(own), 409, body());
+  await success(b, 'PUT', `/ai-replies/${own}/rating`, 204, { rating: 'good' });
+  await success(b, 'POST', url(own), 409, body());
+  await success(b, 'PUT', `/ai-replies/${own}/rating`, 204, {
+    rating: 'bad',
+    reason: 'wrong_information',
+  });
+  await success(b, 'POST', url(own), 400, { ...body(), question: '' });
+  await success(b, 'POST', url(own), 400, { ...body(), storeId: a.id });
+  await success(b, 'POST', url(own), 400, { answer: 'Ji.' });
+  const needs = (await success(b, 'GET', '/ai-replies/feedback?filter=needs_fixing', 200)).json();
+  expect(needs.items).toHaveLength(1);
+  await success(b, 'POST', url(own), 204, body());
+  const { rows: taught } = await f.admin.pool.query(
+    'select kind, question, answer, keywords from knowledge_items where store_id = $1',
+    [b.id],
+  );
+  expect(taught).toEqual([
+    {
+      kind: 'policy',
+      question: 'Panjabi er kapor ki?',
+      answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+      keywords: ['kapor', 'কাপড়'],
+    },
+  ]);
+  expect(await f.row('messages', own)).toMatchObject({ ai_fixed_at: expect.any(String) });
+  // Fixing twice would teach the same answer twice.
+  await success(b, 'POST', url(own), 409, body());
+  const after = (await success(b, 'GET', '/ai-replies/feedback?filter=needs_fixing', 200)).json();
+  expect(after.items).toEqual([]);
+  expect(after.summary).toMatchObject({ badCount: 1, fixedCount: 1 });
+  const bad = (await success(b, 'GET', '/ai-replies/feedback?filter=bad', 200)).json();
+  expect(bad.items).toMatchObject([{ messageId: own, fixedAt: expect.any(String) }]);
+  const { rows: audited } = await f.admin.pool.query(
+    "select actor_user_id from audit_log where store_id = $1 and entity_id = $2 and action = 'ai_reply.fixed'",
+    [b.id, own],
+  );
+  expect(audited).toEqual([{ actor_user_id: b.owner.id }]);
 });
 
 fixture('GET /conversations/:conversationId', async () => {
