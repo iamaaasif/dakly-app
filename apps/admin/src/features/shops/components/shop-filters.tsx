@@ -28,7 +28,7 @@ export function ShopFilters() {
         <Input
           name="search"
           defaultValue={params.get('search') ?? ''}
-          placeholder="Name, slug, shop ID, owner phone or page ID"
+          placeholder="Name, phone, shop ID or page ID"
         />
       </label>
       <label className="space-y-1">

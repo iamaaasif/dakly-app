@@ -36,7 +36,10 @@ function TeamCard({ team }: { team: AdminShopDetail['team'] }) {
       <ul className="space-y-1">
         {team.map((member) => (
           <li key={`${member.name}-${member.phoneMasked}`}>
-            {member.name} <span className="text-muted">{member.role ?? 'custom role'}</span>{' '}
+            {member.name}{' '}
+            <span className="text-muted">
+              {(member.role ? words(member.role) : null) ?? 'custom role'}
+            </span>{' '}
             {member.phoneMasked}
           </li>
         ))}
