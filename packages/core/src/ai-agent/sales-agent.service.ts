@@ -4,6 +4,7 @@ import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
 import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 
 import { AiService } from '../ai/ai.service';
+import { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import { InboxService } from '../messaging/inbox.service';
 import { StoresService } from '../stores/stores.service';
 import { customerConfirms } from './order-confirmation';
@@ -50,6 +51,7 @@ export class SalesAgentService {
     @Inject(SalesAgentToolsService) private readonly tools: SalesAgentToolsService,
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(ContactMemoryService) private readonly memory: ContactMemoryService,
   ) {}
 
   async compose(input: ComposeInput): Promise<ComposedReply> {
@@ -137,8 +139,12 @@ export class SalesAgentService {
             text: message.body?.slice(0, 2000),
           }))
       : input.customerTexts.map((text) => ({ from: 'customer', text: text.slice(0, 2000) }));
+    // Right after the shop block, which is the same on every reply, so later replies in this chat
+    // can read both from the prompt cache.
+    const memory = input.chat ? await this.memory.contextFor(input.storeId, input.contactId) : null;
     return [
       `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
+      ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
       `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
       `<product_candidates>${JSON.stringify(candidates?.result ?? { products: [] })}</product_candidates>`,
     ].join('\n');

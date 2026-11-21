@@ -14,6 +14,7 @@ import { PURGE_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/purge-webhook-ev
 import { QUEUE_CHANNEL_TOKEN_CHECKS } from '@dakly/core/channels/jobs/queue-channel-token-checks.job';
 import { RECONCILE_META_PAGE_SUBSCRIPTIONS } from '@dakly/core/channels/jobs/reconcile-meta-page-subscriptions.job';
 import { RECOVER_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/recover-webhook-events.job';
+import { QUEUE_CONVERSATION_MEMORY_UPDATES } from '@dakly/core/contact-memory/jobs/queue-conversation-memory-updates.job';
 import { SWEEP_CONTACT_STATS } from '@dakly/core/contacts/jobs/sweep-contact-stats.job';
 import { FAIL_STUCK_IMPORTS } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RUN_MAINTENANCE } from '@dakly/core/maintenance/jobs/run-maintenance.job';
@@ -68,6 +69,7 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.sync, QUEUE_CHANNEL_TOKEN_CHECKS, DAY_MS),
       scheduleJob(this.sync, RECONCILE_META_PAGE_SUBSCRIPTIONS, DAY_MS),
       scheduleJob(this.sync, QUEUE_CONVERSATION_RETURNS, MINUTE_MS),
+      scheduleJob(this.sync, QUEUE_CONVERSATION_MEMORY_UPDATES, MINUTE_MS),
       scheduleJob(this.payments, RECOVER_PAYMENT_CALLBACKS, MINUTE_MS),
       scheduleJob(this.payments, SWEEP_PAYMENT_CHECKS),
       scheduleJob(this.payments, SWEEP_PAYMENT_SETTLEMENTS, {

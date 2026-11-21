@@ -94,9 +94,11 @@ describe('Worker job schedulers', () => {
       scheduler('queue-channel-token-checks', 86400000),
       scheduler('reconcile-meta-page-subscriptions', 86400000),
       scheduler('queue-conversation-returns', 60000),
+      scheduler('queue-conversation-memory-updates', 60000),
       scheduler('queue-channel-token-checks', 86400000),
       scheduler('reconcile-meta-page-subscriptions', 86400000),
       scheduler('queue-conversation-returns', 60000),
+      scheduler('queue-conversation-memory-updates', 60000),
     ]);
     expect(payments.schedulers).toEqual([
       scheduler('recover-payment-callbacks', 60000),

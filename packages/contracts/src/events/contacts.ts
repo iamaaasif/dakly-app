@@ -16,6 +16,14 @@ export const contactDeletedEventSchema = z.strictObject({
   payload: z.strictObject({ contactId: z.uuid() }),
 });
 
+// A merge or undo emptied this contact's derived memory; the rebuild reads its own chats and orders.
+export const contactMemoryRebuildRequestedEventSchema = z.strictObject({
+  type: z.literal('contact_memory.rebuild_requested'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ contactId: z.uuid() }),
+});
+
 export const contactStatsRepairedEventSchema = z.strictObject({
   type: z.literal('contact_stats.repaired'),
   storeId: z.uuid(),
