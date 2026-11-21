@@ -11,7 +11,7 @@ export const killSwitchFeatureSchema = z.enum(killSwitchFeatures);
 export const changeKillSwitchSchema = z.strictObject({
   paused: z.boolean(),
   reason: supportReasonSchema,
-  confirmed: z.literal(true),
+  confirmed: z.literal(true, { error: 'Confirm the effect before saving' }),
 });
 export type ChangeKillSwitchInput = z.infer<typeof changeKillSwitchSchema>;
 
