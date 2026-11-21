@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
 
+import type { StaffAlertsService } from '../admin/staff-alerts.service';
 import type { PaymentsService } from '../payments/payments.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
@@ -34,6 +35,7 @@ const base: Row = {
 function setup(row: Partial<Row>, now: Date, payment?: { amountPoisha: number }) {
   const updates: SubscriptionUpdate[] = [];
   const events: DaklyEvent[] = [];
+  const alerts: { id: string; text: string }[] = [];
   const service = new SubscriptionRenewalService(
     {
       lockForRenewal: async () => ({ ...base, ...row }),
@@ -49,8 +51,14 @@ function setup(row: Partial<Row>, now: Date, payment?: { amountPoisha: number })
         events.push(event);
       },
     } as unknown as OutboxService,
+    {
+      notify: async (id: string, text: string) => {
+        alerts.push({ id, text });
+        return true;
+      },
+    } as unknown as StaffAlertsService,
   );
-  return { service, updates, events };
+  return { service, updates, events, alerts };
 }
 
 describe('SubscriptionRenewalService.renew', () => {
@@ -177,12 +185,13 @@ describe('SubscriptionRenewalService.applyPayment', () => {
     expect(updates).toEqual([]);
   });
 
-  it('refuses a payment below the price and leaves the plan unchanged', async () => {
-    const { service, updates } = setup({}, due, { amountPoisha: 100000 });
-    await expect(service.applyPayment('store-id', 'intent-id')).rejects.toMatchObject({
-      code: 'SUBSCRIPTION_PAYMENT_TOO_LOW',
-    });
+  it('tells staff about a payment below the price and leaves the plan unchanged', async () => {
+    const { service, updates, alerts } = setup({}, due, { amountPoisha: 100000 });
+    await service.applyPayment('store-id', 'intent-id');
     expect(updates).toEqual([]);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.id).toBe('subscription-underpaid-intent-id');
+    expect(alerts[0]?.text).toContain('paid 100000 poisha, due 349000 poisha');
   });
 
   it('charges the price of a scheduled plan change', async () => {

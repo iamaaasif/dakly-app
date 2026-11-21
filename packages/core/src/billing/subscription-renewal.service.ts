@@ -1,12 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 
 import type { DaklyEvent } from '@dakly/contracts/events/dakly-event';
 
+import { StaffAlertsService } from '../admin/staff-alerts.service';
 import { PaymentsService } from '../payments/payments.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { billingError } from './billing.errors';
 import { BillingRepository } from './billing.repository';
 import {
   DUNNING_DAYS,
@@ -25,7 +25,10 @@ export class SubscriptionRenewalService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(StaffAlertsService) private readonly alerts: StaffAlertsService,
   ) {}
+
+  private readonly logger = new Logger(SubscriptionRenewalService.name);
 
   // Run daily and again whenever a store is due. A free plan rolls over by itself; a paid one
   // waits for a payment, and the dunning steps count the days it stays unpaid.
@@ -65,19 +68,33 @@ export class SubscriptionRenewalService {
   }
 
   // A paid plan payment starts the next period at once and ends any past-due or read-only state.
-  applyPayment(storeId: string, intentId: string) {
-    return this.transaction.run(storeId, async () => {
+  // A payment below the price cannot start a period, but the shop has paid: staff are told so
+  // they can settle it by hand, and the job ends instead of retrying.
+  async applyPayment(storeId: string, intentId: string) {
+    const shortfall = await this.transaction.run(storeId, async () => {
       const payment = await this.payments.succeededSubscriptionPayment(storeId, intentId);
       if (!payment) return;
       const subscription = await this.repository.lockForRenewal(storeId);
       if (!subscription || subscription.lastPaymentIntentId === intentId) return;
       if (subscription.status === 'cancelled') return;
-      if (payment.amountPoisha < this.terms(subscription).amountPoisha)
-        throw billingError('SUBSCRIPTION_PAYMENT_TOO_LOW');
+      const dueAmountPoisha = this.terms(subscription).amountPoisha;
+      if (payment.amountPoisha < dueAmountPoisha)
+        return { paidPoisha: payment.amountPoisha, duePoisha: dueAmountPoisha };
       const now = this.clock.now();
       const start = subscription.currentPeriodEnd > now ? subscription.currentPeriodEnd : now;
       await this.startNextPeriod({ storeId, subscription, start, now, intentId });
     });
+    if (shortfall) await this.reportUnderpayment(storeId, intentId, shortfall);
+  }
+
+  private async reportUnderpayment(
+    storeId: string,
+    intentId: string,
+    { paidPoisha, duePoisha }: { paidPoisha: number; duePoisha: number },
+  ) {
+    this.logger.warn(`Plan payment ${intentId} is below the price for store ${storeId}`);
+    const text = `A plan payment is below the price and was not applied. Store ${storeId}, payment ${intentId}: paid ${paidPoisha} poisha, due ${duePoisha} poisha. Settle it by hand.`;
+    await this.alerts.notify(`subscription-underpaid-${intentId}`, text);
   }
 
   private async advanceDunning(storeId: string, subscription: Subscription, now: Date) {
