@@ -58,7 +58,7 @@ export function ShellNavigation({
     href: '/settings',
     label: 'Settings',
     icon: Settings,
-    related: ['/security', '/team/ownership', '/support-access'],
+    related: ['/security', '/team/ownership', '/support-access', '/activity'],
   };
   const linkProps = { collapsed, onNavigate };
   return (
