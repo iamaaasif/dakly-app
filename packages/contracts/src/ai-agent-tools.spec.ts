@@ -29,6 +29,7 @@ describe('sales agent tools', () => {
       'get_delivery_charge',
       'get_my_orders',
       'get_order_status',
+      'find_alternatives',
       'draft_order',
     ]);
   });

@@ -73,6 +73,12 @@ export class KhataScansController {
     return this.khataImports.importPage(storeId, userId, pageId, input);
   }
 
+  @Get('imports')
+  @RequirePermission('customers.edit')
+  listImports(@CurrentStore() storeId: string): Promise<KhataImportResponse[]> {
+    return this.khataImports.listImports(storeId);
+  }
+
   @Post('imports/:importId/undo')
   @RequirePermission('customers.edit')
   @HttpCode(200)
