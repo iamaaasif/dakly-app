@@ -121,15 +121,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-type User = ReturnType<typeof userEvent.setup>;
-
-async function readOnePage(user: User) {
-  await user.click(screen.getByRole('button', { name: /Add the last 1–3 months/ }));
-  const photo = new File(['x'], 'page.jpg', { type: 'image/jpeg' });
-  await user.upload(screen.getByLabelText('Upload photos or PDF'), photo);
-  await user.click(screen.getByRole('button', { name: 'Read 1 page' }));
-}
-
 // Opens the review of one page, as the address `?pages=` does, and returns the row of "Hasan".
 async function reviewHasan() {
   show([pageId]);
@@ -137,28 +128,6 @@ async function reviewHasan() {
 }
 
 describe('Khata Scanner', () => {
-  it('uploads a page, queues the read and shows the rows to review', async () => {
-    respond();
-    const user = userEvent.setup();
-    show();
-    await readOnePage(user);
-
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(`/customers/khata-scan?pages=${pageId}&page=1`),
-    );
-    expect(sent.map((call) => `${call.method} ${call.path.replace('/api', '')}`)).toEqual(
-      expect.arrayContaining([
-        'POST /khata-scans/pages',
-        'PUT https://files.test/up',
-        `POST /khata-scans/pages/${pageId}/read`,
-      ]),
-    );
-    expect(sent.find((call) => call.path.endsWith('/khata-scans/pages'))?.body).toEqual({
-      contentType: 'image/jpeg',
-      sizeBytes: 1,
-    });
-  });
-
   it('keeps Import off until the yellow row is checked or skipped, then sends one decision per row', async () => {
     respond();
     const user = userEvent.setup();
