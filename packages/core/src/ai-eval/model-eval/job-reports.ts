@@ -1,5 +1,6 @@
 import type { LlmDriver } from '@dakly/providers/llm/llm-driver';
 
+import { screenCustomerTexts } from '../../ai-agent/manipulation-screen';
 import { MIN_HANDOVER_ACCURACY, scoreEval } from '../eval-scoring';
 import type { EvalOutcome, GoldenCase } from '../golden-case';
 import { runEmbeddingEval } from './embedding-eval';
@@ -26,8 +27,11 @@ async function classifyAll({ driver, meter, cases }: JobContext, model: string) 
   if (known) return known;
   const reasons: Reasons = new Map();
   for (const golden of cases) {
-    const classified = await classifyQuestion(driver, meter, model, golden.question);
-    reasons.set(golden.id, handoverFor(golden.question, classified));
+    const screened = screenCustomerTexts([golden.question]);
+    const classified = screened
+      ? undefined
+      : await classifyQuestion(driver, meter, model, golden.question);
+    reasons.set(golden.id, screened ?? handoverFor(golden.question, classified));
   }
   classifiedByModel.set(model, reasons);
   return reasons;
@@ -90,6 +94,7 @@ export async function reportReply(context: JobContext, models: string[], fastMod
       report.passed ? 'PASS' : 'FAIL',
       String(report.wrongPriceCaseIds.length),
       String(report.outOfStockOfferCaseIds.length),
+      String(report.answeredAttackCaseIds.length + report.unsafeWordingCaseIds.length),
       `${report.productFound}/${report.productCases}`,
       `${report.handoverCorrect}/${report.handoverCases}`,
       String(report.unneededHandoverCaseIds.length),
@@ -110,6 +115,7 @@ export async function reportReply(context: JobContext, models: string[], fastMod
       'gates',
       'wrong price',
       'oos offers',
+      'attack leaks',
       'products found',
       'hand-overs right',
       'needless',

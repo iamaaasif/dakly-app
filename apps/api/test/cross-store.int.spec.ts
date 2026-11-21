@@ -21,6 +21,7 @@ import { Clock } from '@dakly/core/platform/clock';
 import { loadEnv, resetEnvForTests } from '@dakly/core/platform/config/env';
 import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
+import { FILE_STORAGE_DRIVER } from '@dakly/core/platform/file-storage/file-storage.provider';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies, SESSION_COOKIE } from '@dakly/core/platform/http/session-cookie';
 import { SessionsService } from '@dakly/core/sessions/sessions.service';
@@ -277,6 +278,7 @@ fixture('GET /orders/catalogue', async () => {
             isDefault: true,
             pricePoisha: 125000,
             available: 0,
+            photoUrl: null,
           },
         ],
       },
@@ -1302,6 +1304,115 @@ fixture('POST /contacts/:contactId/consents', async () => {
     [id],
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
+});
+const khataPage = { contentType: 'image/jpeg', sizeBytes: 2_000_000 };
+async function newKhataPage(shop: Shop) {
+  const created = await success(shop, 'POST', '/khata-scans/pages', 201, khataPage);
+  expect(created.json().uploadUrl).toContain(`/khata/${shop.id}/`);
+  return created.json().pageId as string;
+}
+async function allowKhataPages(quantity = 10) {
+  await f.admin.pool.query('update plans set limits=limits || $2::jsonb where id=$1', [
+    f.plan,
+    JSON.stringify({ ai_scan: quantity }),
+  ]);
+}
+fixture('POST /khata-scans/pages', async () => {
+  const { a, b } = await pair(),
+    id = await newKhataPage(a),
+    before = await f.row('khata_pages', id);
+  const own = await newKhataPage(b);
+  expect((await f.row('khata_pages', own)).store_id).toBe(b.id);
+  expect(await f.row('khata_pages', id)).toEqual(before);
+  expect((await f.request(a.member, 'POST', '/khata-scans/pages', khataPage)).statusCode).toBe(403);
+});
+fixture('POST /khata-scans/pages/:pageId/read', async () => {
+  const { a, b } = await pair(),
+    own = await newKhataPage(a),
+    foreign = await newKhataPage(a);
+  await allowKhataPages();
+  const storage = app.get<{
+    getObjectMetadata(key: string): Promise<{ contentType: string; sizeBytes: number } | null>;
+  }>(FILE_STORAGE_DRIVER);
+  const metadata = vi.spyOn(storage, 'getObjectMetadata').mockResolvedValue(khataPage);
+  try {
+    const queued = await success(a, 'POST', `/khata-scans/pages/${own}/read`, 202);
+    expect(queued.json()).toMatchObject({ id: own, status: 'reading' });
+    const before = await f.row('khata_pages', foreign);
+    await hidden(b, 'POST', (id) => `/khata-scans/pages/${id}/read`, foreign);
+    expect(await f.row('khata_pages', foreign)).toEqual(before);
+  } finally {
+    await f.admin.pool.query("update plans set limits=limits - 'ai_scan' where id=$1", [f.plan]);
+    metadata.mockRestore();
+  }
+});
+fixture('GET /khata-scans/pages/:pageId', async () => {
+  const { a, b } = await pair(),
+    id = await newKhataPage(a);
+  expect((await success(a, 'GET', `/khata-scans/pages/${id}`, 200)).json()).toMatchObject({
+    id,
+    status: 'uploaded',
+    rows: [],
+  });
+  await hidden(b, 'GET', (value) => `/khata-scans/pages/${value}`, id);
+});
+async function readKhataPage(shop: Shop) {
+  const id = await newKhataPage(shop);
+  const rowId = randomUUID();
+  await f.admin.pool.query("update khata_pages set status='read' where id=$1", [id]);
+  await f.admin.pool.query(
+    "insert into khata_rows(id,store_id,page_id,row_number,name,phone,amount_poisha,kind,confidence) values($1,$2,$3,1,'Rahim','01712345678',5000,'baki',90)",
+    [rowId, shop.id, id],
+  );
+  return { id, decisions: { rows: [{ rowId, action: 'import' }] } };
+}
+fixture('POST /khata-scans/pages/:pageId/import', async () => {
+  const { a, b } = await pair(),
+    own = await readKhataPage(a),
+    foreign = await readKhataPage(a);
+  const imported = await success(
+    a,
+    'POST',
+    `/khata-scans/pages/${own.id}/import`,
+    201,
+    own.decisions,
+  );
+  expect(imported.json()).toMatchObject({ pageId: own.id, status: 'done', rowsImported: 1 });
+  const before = await f.row('khata_pages', foreign.id);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/khata-scans/pages/${id}/import`,
+    foreign.id,
+    () => foreign.decisions,
+  );
+  expect(await f.row('khata_pages', foreign.id)).toEqual(before);
+  const denied = await f.request(
+    a.member,
+    'POST',
+    `/khata-scans/pages/${foreign.id}/import`,
+    foreign.decisions,
+  );
+  expect(denied.statusCode).toBe(403);
+});
+fixture('POST /khata-scans/imports/:importId/undo', async () => {
+  const { a, b } = await pair(),
+    page = await readKhataPage(a);
+  const imported = await success(
+    a,
+    'POST',
+    `/khata-scans/pages/${page.id}/import`,
+    201,
+    page.decisions,
+  );
+  const importId = imported.json().id as string;
+  await hidden(b, 'POST', (id) => `/khata-scans/imports/${id}/undo`, importId);
+  expect((await f.row('khata_imports', importId)).status).toBe('done');
+  expect(
+    (await f.request(a.member, 'POST', `/khata-scans/imports/${importId}/undo`)).statusCode,
+  ).toBe(403);
+  const undone = await success(a, 'POST', `/khata-scans/imports/${importId}/undo`, 200);
+  expect(undone.json()).toMatchObject({ id: importId, status: 'undone' });
 });
 async function dueEntries(shop: Shop, contactId: string) {
   await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {
@@ -4310,6 +4421,142 @@ fixture('DELETE /products/:productId/photos/:fileId', async () => {
     foreignProduct,
   );
   await hidden(b, 'DELETE', (id) => `/products/${own}/photos/${id}`, foreignPhoto.fileId);
+  expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
+});
+
+async function productWithVariant(shop: Shop) {
+  const result = await success(shop, 'POST', '/products', 201, {
+    name: 'পাঞ্জাবি',
+    pricePoisha: 125000,
+  });
+  return { id: result.json().id as string, variantId: result.json().variants[0].id as string };
+}
+async function uploadedVariantPhoto(shop: Shop, ids: { id: string; variantId: string }) {
+  const base = `/products/${ids.id}/variants/${ids.variantId}/photos`;
+  const issued = (await success(shop, 'POST', `${base}/upload-url`, 200, photoInput)).json();
+  const response = await fetch(issued.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': photoInput.contentType },
+    body: new Uint8Array([137, 80, 78, 71]),
+  });
+  expect(response.status).toBe(200);
+  return { ...photoInput, fileId: issued.fileId as string };
+}
+fixture('POST /products/:productId/variants/:variantId/photos/upload-url', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const issued = (
+    await success(
+      b,
+      'POST',
+      `/products/${own.id}/variants/${own.variantId}/photos/upload-url`,
+      200,
+      photoInput,
+    )
+  ).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/products/${issued.fileId}`,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/upload-url`,
+    foreign.id,
+    () => photoInput,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${own.id}/variants/${id}/photos/upload-url`,
+    foreign.variantId,
+    () => photoInput,
+  );
+  const base = `/products/${own.id}/variants/${own.variantId}/photos/upload-url`;
+  expect((await f.request(b.member, 'POST', base, photoInput)).statusCode).toBe(403);
+});
+fixture('POST /products/:productId/variants/:variantId/photos/confirm', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const photo = await uploadedVariantPhoto(b, own);
+  const confirmed = (
+    await success(
+      b,
+      'POST',
+      `/products/${own.id}/variants/${own.variantId}/photos/confirm`,
+      201,
+      photo,
+    )
+  ).json();
+  expect(confirmed.variants[0].imageFileIds).toEqual([photo.fileId]);
+  expect(confirmed.imageFileIds).toEqual([]);
+  expect((await f.row('files', photo.fileId)).store_id).toBe(b.id);
+  const before = await f.row('product_variants', foreign.variantId);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/confirm`,
+    foreign.id,
+    () => photo,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${own.id}/variants/${id}/photos/confirm`,
+    foreign.variantId,
+    () => photo,
+  );
+  expect(await f.row('product_variants', foreign.variantId)).toEqual(before);
+});
+fixture('PATCH /products/:productId/variants/:variantId/photos', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const base = `/products/${own.id}/variants/${own.variantId}/photos`;
+  const first = await uploadedVariantPhoto(b, own),
+    second = await uploadedVariantPhoto(b, own);
+  await success(b, 'POST', `${base}/confirm`, 201, first);
+  await success(b, 'POST', `${base}/confirm`, 201, second);
+  const payload = { fileIds: [second.fileId, first.fileId] };
+  const changed = (await success(b, 'PATCH', base, 200, payload)).json();
+  expect(changed.variants[0].imageFileIds).toEqual(payload.fileIds);
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/${id}/variants/${own.variantId}/photos`,
+    foreign.id,
+    () => payload,
+  );
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/${own.id}/variants/${id}/photos`,
+    foreign.variantId,
+    () => payload,
+  );
+});
+fixture('DELETE /products/:productId/variants/:variantId/photos/:fileId', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const foreignPhoto = await uploadedVariantPhoto(a, foreign),
+    photo = await uploadedVariantPhoto(b, own);
+  const foreignBase = `/products/${foreign.id}/variants/${foreign.variantId}/photos`;
+  const base = `/products/${own.id}/variants/${own.variantId}/photos`;
+  await success(a, 'POST', `${foreignBase}/confirm`, 201, foreignPhoto);
+  await success(b, 'POST', `${base}/confirm`, 201, photo);
+  const before = await f.row('files', foreignPhoto.fileId);
+  await success(b, 'DELETE', `${base}/${photo.fileId}`, 204);
+  expect((await f.row('product_variants', own.variantId)).image_file_ids).toEqual([]);
+  expect((await f.row('files', photo.fileId)).expires_at).not.toBeNull();
+  await hidden(
+    b,
+    'DELETE',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/${foreignPhoto.fileId}`,
+    foreign.id,
+  );
+  await hidden(b, 'DELETE', (id) => `${base}/${id}`, foreignPhoto.fileId);
   expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
 });
 

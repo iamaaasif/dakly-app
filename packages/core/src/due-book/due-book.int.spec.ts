@@ -338,7 +338,10 @@ describe('DueBookService (Postgres)', () => {
       await expect(app_.pool.query('update due_entries set amount_poisha = 1')).rejects.toThrow(
         /permission denied/,
       );
-      await expect(app_.pool.query('delete from due_entries')).rejects.toThrow(/permission denied/);
+      // Only a khata import's undo may delete, and only its own rows.
+      await expect(app_.pool.query('delete from due_entries')).resolves.toMatchObject({
+        rowCount: 0,
+      });
     } finally {
       await app_.pool.end();
     }

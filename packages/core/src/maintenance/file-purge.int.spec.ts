@@ -71,6 +71,12 @@ describe('file purges (Postgres)', () => {
 
   beforeAll(() => fixture.setup());
   afterAll(async () => {
+    await owner.query('delete from khata_rows where store_id = any($1::uuid[])', [
+      [fixture.a, fixture.b],
+    ]);
+    await owner.query('delete from khata_pages where store_id = any($1::uuid[])', [
+      [fixture.a, fixture.b],
+    ]);
     await owner.query('delete from imports where store_id = any($1::uuid[])', [
       [fixture.a, fixture.b],
     ]);
@@ -120,6 +126,31 @@ describe('file purges (Postgres)', () => {
     expect(storage.deleted.sort()).toEqual(
       [`imports/${fixture.a}/expired.csv`, `imports/${fixture.b}/expired.csv`].sort(),
     );
+  });
+
+  it('deletes an expired khata photo and keeps the page and its rows', async () => {
+    const key = `khata/${fixture.a}/old-page`;
+    const fileId = await insertFile(fixture.a, key, new Date(Date.now() - HOUR));
+    const pageId = randomUUID();
+    await owner.query(
+      "insert into khata_pages (id, store_id, file_id, status) values ($1, $2, $3, 'read')",
+      [pageId, fixture.a, fileId],
+    );
+    await owner.query(
+      "insert into khata_rows (id, store_id, page_id, row_number, name, amount_poisha, kind, confidence) values (gen_random_uuid(), $1, $2, 1, 'Rahim', 5000, 'baki', 90)",
+      [fixture.a, pageId],
+    );
+
+    await service.purgeExpiredFiles();
+
+    expect(storage.deleted).toContain(key);
+    expect(await remaining()).not.toContain(key);
+    const page = await owner.query('select file_id from khata_pages where id = $1', [pageId]);
+    expect(page.rows).toEqual([{ file_id: null }]);
+    const rows = await owner.query('select count(*)::int as n from khata_rows where page_id = $1', [
+      pageId,
+    ]);
+    expect(rows.rows[0].n).toBe(1);
   });
 
   it('deletes product objects with no files row after 24 hours and keeps recent and known ones', async () => {

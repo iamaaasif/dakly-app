@@ -13,6 +13,7 @@ vi.mock('next/navigation', () => ({
 }));
 afterEach(() => {
   cleanup();
+  window.sessionStorage.clear();
   vi.unstubAllGlobals();
 });
 describe('Shop setup', () => {
@@ -38,7 +39,7 @@ describe('Shop setup', () => {
       });
       render(
         <QueryClientProvider client={new QueryClient()}>
-          <SetupScreen />
+          <SetupScreen userId="user-1" />
         </QueryClientProvider>,
       );
       const user = userEvent.setup();
@@ -70,4 +71,31 @@ describe('Shop setup', () => {
       );
     },
   );
+  it("restores the business details after a reload and ignores another account's draft", async () => {
+    const draft = {
+      name: 'Dhaka Books',
+      businessType: 'Books and stationery',
+      district: 'Dhaka',
+      howYouSell: ['online_store'],
+      customerListSize: 'under_500',
+    };
+    window.sessionStorage.setItem('dakly-setup-draft:user-1', JSON.stringify(draft));
+    const view = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SetupScreen userId="user-1" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText('Business name') as HTMLInputElement).value).toBe(
+        'Dhaka Books',
+      ),
+    );
+    view.unmount();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <SetupScreen userId="user-2" />
+      </QueryClientProvider>,
+    );
+    expect((screen.getByLabelText('Business name') as HTMLInputElement).value).toBe('');
+  });
 });

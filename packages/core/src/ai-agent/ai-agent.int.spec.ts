@@ -528,16 +528,16 @@ it('answers price and delivery from tool results, saves the run and sources, and
       ai_sources: [{ tool: 'search_products', refs: [active.productId] }],
     },
   ]);
-  expect(inputs[2]).toContain('<tool_results round="1">');
+  expect(inputs[2]).toContain('<tool_results untrusted="true" round="1">');
   expect(inputs[1]).toContain('<conversation untrusted="true">');
   expect(await observe(active)).toMatchObject({
     conversations: [{ status: 'open', responder: 'ai', handover_reason: null }],
     runs: [
       { purpose: 'classify' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v2' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v3' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v2' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v3' },
     ],
     usage: [{ id: expect.any(String) }],
   });

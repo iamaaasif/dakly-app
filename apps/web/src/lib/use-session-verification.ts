@@ -1,10 +1,21 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useRef, useState } from 'react';
 
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { ApiError } from '@dakly/ui/api-client';
 
 import { sessionContextKey, useSessionContext } from './session-context';
+
+async function discardAccountCache(client: QueryClient) {
+  await client.cancelQueries();
+  client.removeQueries({ predicate: (query) => query.queryKey[0] !== sessionContextKey[0] });
+  client.getMutationCache().clear();
+}
+
+// An expired session keeps the screen mounted so a half-filled form keeps its values.
+function isAuthRequired(error: unknown) {
+  return error instanceof ApiError && error.code === 'AUTH_REQUIRED';
+}
 
 const freshContextQuery = { queryKey: sessionContextKey, staleTime: 0 };
 
@@ -14,6 +25,7 @@ export function useSessionVerification() {
   const [blocked, setBlocked] = useState(true);
   const [available, setAvailable] = useState(false);
   const [failure, setFailure] = useState('');
+  const [expired, setExpired] = useState(false);
   const [generation, setGeneration] = useState(0);
   const revision = useRef(0);
   const acceptedContextTag = useRef<string | undefined>(undefined);
@@ -25,9 +37,7 @@ export function useSessionVerification() {
   const discard = useCallback(async () => {
     setAvailable(false);
     setGeneration((value) => value + 1);
-    await client.cancelQueries();
-    client.removeQueries({ predicate: (query) => query.queryKey[0] !== sessionContextKey[0] });
-    client.getMutationCache().clear();
+    await discardAccountCache(client);
   }, [client]);
   const close = useCallback(async () => {
     pause();
@@ -47,10 +57,11 @@ export function useSessionVerification() {
       setAvailable(true);
       setBlocked(false);
       setFailure('');
+      setExpired(false);
     } catch (error) {
       if (revision.current !== current) return;
-      if (error instanceof ApiError && error.code === 'AUTH_REQUIRED') await discard();
-      setFailure('Could not verify your account and shop. Refresh to continue.');
+      if (isAuthRequired(error)) setExpired(true);
+      else setFailure('Could not verify your account and shop. Refresh to continue.');
     }
   }, [client, pause, discard]);
   return {
@@ -59,6 +70,7 @@ export function useSessionVerification() {
     blocked,
     available,
     failure,
+    expired: expired && available,
     setFailure,
     generation,
     close,

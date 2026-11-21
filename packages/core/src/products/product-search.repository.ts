@@ -5,12 +5,8 @@ import type { ProductOption } from '@dakly/contracts/products';
 import { products } from '@dakly/db/schema/products';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import {
-  chatProductFilter,
-  type Product,
-  type Variant,
-  variantSnapshot,
-} from './products.repository';
+import { type Variant, variantSnapshot } from './product-snapshots.repository';
+import { chatProductFilter, type Product } from './products.repository';
 
 export type SearchCandidate = Pick<
   Product,

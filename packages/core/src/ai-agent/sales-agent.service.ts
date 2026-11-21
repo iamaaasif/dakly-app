@@ -6,7 +6,8 @@ import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { AiService } from '../ai/ai.service';
 import { InboxService } from '../messaging/inbox.service';
 import { StoresService } from '../stores/stores.service';
-import { chatReply } from './prompts/chat-reply.v2';
+import { customerConfirms } from './order-confirmation';
+import { chatReply } from './prompts/chat-reply.v3';
 import {
   type ToolScope,
   SalesAgentToolsService,
@@ -19,6 +20,8 @@ const HISTORY_LENGTH = 20;
 const PHOTO_QUERY_LENGTH = 1000;
 const CARD_TOOL = 'send_product_card';
 const HAND_OVER_TOOL = 'hand_over';
+const DRAFT_TOOL = 'draft_order';
+const CONFIRM_TOOL = 'confirm_order';
 const SOURCE_KEYS = ['productId', 'itemId', 'orderNumber'];
 
 type Reason = (typeof handoverReasons)[number];
@@ -81,17 +84,29 @@ export class SalesAgentService {
           toolNames: results.map(({ tool }) => tool),
           sources: sourcesOf(results),
         };
-      const answered: { name: string; result: object }[] = [];
-      for (const call of attempt.toolCalls) {
-        const result = await this.tools.run(input, call.name, call.argumentsJson);
-        if (call.name === HAND_OVER_TOOL && 'reason' in result)
-          return { kind: 'handover', reason: result.reason as Reason };
-        results.push({ tool: call.name, result });
-        answered.push({ name: call.name, result });
-      }
-      transcript += `\n<tool_results round="${round}">${JSON.stringify(answered)}</tool_results>`;
+      const outcome = await this.answerToolCalls(input, attempt.toolCalls, results);
+      if ('handover' in outcome) return { kind: 'handover', reason: outcome.handover };
+      transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
     }
     return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  private async answerToolCalls(
+    input: ComposeInput,
+    calls: readonly { name: string; argumentsJson: string }[],
+    results: ToolResult[],
+  ): Promise<{ handover: Reason } | { answered: { name: string; result: object }[] }> {
+    const answered: { name: string; result: object }[] = [];
+    for (const call of calls) {
+      const result = isUnconfirmed(call, input.customerTexts, results)
+        ? { error: 'CONFIRMATION_NOT_GIVEN' }
+        : await this.tools.run(input, call.name, call.argumentsJson);
+      if (call.name === HAND_OVER_TOOL && 'reason' in result)
+        return { handover: result.reason as Reason };
+      results.push({ tool: call.name, result });
+      answered.push({ name: call.name, result });
+    }
+    return { answered };
   }
 
   // Search the customer's own words first, so the model starts with likely products.
@@ -136,6 +151,23 @@ function photoQuery(texts: string[]): string | undefined {
   return texts.some((text) => photoSearchText(text) !== undefined)
     ? parts.join(' ').slice(0, PHOTO_QUERY_LENGTH)
     : undefined;
+}
+
+// An order is confirmed only on the customer's own yes, and never in the turn that drafted it.
+function isUnconfirmed(
+  call: { name: string; argumentsJson: string },
+  customerTexts: readonly string[],
+  results: readonly ToolResult[],
+) {
+  if (call.name !== CONFIRM_TOOL) return false;
+  if (!customerConfirms(customerTexts)) return true;
+  const drafted = results.some(
+    ({ tool, result }) =>
+      tool === DRAFT_TOOL &&
+      'orderNumber' in result &&
+      call.argumentsJson.includes(String(result.orderNumber)),
+  );
+  return drafted;
 }
 
 const cardTexts = (results: ToolResult[]) =>

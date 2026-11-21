@@ -140,6 +140,40 @@ Route `/due-book`, in the "Physical shop" group of the menu. It shows for a memb
 7. Photos are stored for 30 days for review, then deleted; the extracted rows stay.
 8. Each page counts as one AI scan in usage.
 
+##### Khata scan API (KHT-1)
+
+Every route needs `customers.edit` and works on one page at a time. Listing past pages comes with the screens in KHT-3.
+
+| Route                              | What it does                                                                                                                |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `POST /khata-scans/pages`          | Takes the content type and size, returns `pageId` and a 15 minute upload URL. At most 100 pages an hour per shop.           |
+| `POST /khata-scans/pages/:id/read` | Checks the photo is stored and the plan has a page left, then queues the read. Retries a page that failed.                  |
+| `GET /khata-scans/pages/:id`       | Status, a 15 minute photo link while the photo is kept, and the rows with confidence, `needsCheck` and the suggested match. |
+
+- Page status: `uploaded`, `reading`, `read`, `unreadable`, `failed` (code `allowance` or `model`).
+- The read goes through `AiService` on the `vision` tier, so the model is whatever `AI_VISION_MODEL` names. The model returns each name, phone, date and amount as written. Code then converts Bangla and English digits, `৳`, `Tk`, `/-` and lakh grouping into poisha, validates the phone and date, and caps any row it could not fully place at 84 so it stays yellow (SHOP-R7). A row with no name or no readable amount is dropped.
+- Names are kept in the script they were written in. Matching never compares scripts: an exact phone is matched first, then the same phone with one digit different counts only if the contact shares a word with the row's name. A match is a suggestion, never a merge.
+- One scan is charged per page that gives at least one row, as `ai_scan` usage with the page id as the reference, so a rerun is free. A page the model cannot read is `unreadable` and costs nothing. The allowance is the `ai_scan` number in the plan's limits, set in the plan catalogue; a plan without it allows no scans.
+- The photo's file is set to expire after 30 days. The daily file purge clears the page's reference and deletes the photo (KHT-2); the rows stay.
+
+##### Khata import (KHT-2)
+
+Both routes need `customers.edit`.
+
+| Route                                | What it does                                                                                                                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /khata-scans/pages/:id/import` | Takes one decision per row (`import` or `skip`, `isChecked`, optional `mergeContactId`) and imports the page in one transaction. |
+| `POST /khata-scans/imports/:id/undo` | Removes what the import made, within 7 days of the import.                                                                       |
+
+- Every row on the page needs a decision, so the owner never imports a row by leaving it out. A row under 85% is imported only with `isChecked: true` (SHOP-R7); otherwise nothing is saved.
+- A customer who already has the row's phone is used as is. Otherwise a customer is made once for that phone, with source `khata_import`, kind customer and no consent (SHOP-R2). A similar-phone suggestion is used only when the owner sends it as `mergeContactId`.
+- A baki row becomes a Due book baki and a payment row a cash payment, both with source `khata_import` and the date from the page at noon in Dhaka (today if the page has no date, or a date in the future). Both need a phone or a chosen customer. No baki notice is sent for them.
+- Sale rows cannot be imported yet. They become orders in a later change, so the owner skips them for now.
+- Undo deletes the baki and payments the import made, and the customers it added that nobody has edited since and that have no other Due book entry. Only those khata-import ledger rows can be deleted by the app. The page goes back to read, so it can be imported again.
+- The daily file purge lets go of a page's photo once its 30 days are over and deletes the file. The page and its rows stay (rule 7).
+
+- Read quality is gated in `khata-row-reading.spec.ts`: a set of Bangla, Banglish and mixed lines, with Bangla and English digits, that must all convert correctly. It tests what the code does with the model's text. How well the model reads real handwriting needs a set of real page photos, which is open until the shop owner supplies them.
+
 #### POS connections
 
 Release 1, CSV or Excel:

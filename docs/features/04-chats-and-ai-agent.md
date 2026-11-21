@@ -111,7 +111,7 @@ Take over (or any reply typed by a person) switches the chat to human mode: the 
 
 - Customer writes only a photo: the words the vision tier read from the photo (see Inbound attachments) are matched to the shop's products by name, alias and meaning. The match is sure only when one product is named clearly and no other comes close; then the AI answers as that product, and as a size or colour when the photo text names exactly one in stock. When it is not sure, the AI asks "কোন প্রোডাক্টটি চাচ্ছেন?" with up to 3 product cards, in-stock products only. A photo of a product with no stock gets "no stock" and no offer (alternatives are AI-12). A photo that fits nothing gets a request for the product name. The photo itself is not compared to product photos yet; tagged product photos (PROD-8) are the next input.
 - Out-of-stock size: say so, offer other sizes in stock, offer "নতুন স্টক এলে জানাবো?" and add them to the product's restock waiting list.
-- Out-of-stock product or photo match: `find_alternatives` returns up to 3 in-stock products of the same category, ordered by shared words in the name or description (a colour, a style) and then by closest price. A product with another size in stock gets no other products, only its sizes. A product with no category gets none, and another category is never offered. The AI offers only what the tool returns, then asks "নতুন স্টক এলে জানাবো?". `join_restock_list` runs only after the customer says yes and only in a real chat; it calls `RestockRequestsService.addToWaitingList`, so asking twice keeps one row and a size with stock is refused. A photo match that is sold out carries the alternatives in the same result. The reply prompt is `chat-reply.v2`.
+- Out-of-stock product or photo match: `find_alternatives` returns up to 3 in-stock products of the same category, ordered by shared words in the name or description (a colour, a style) and then by closest price. A product with another size in stock gets no other products, only its sizes. A product with no category gets none, and another category is never offered. The AI offers only what the tool returns, then asks "নতুন স্টক এলে জানাবো?". `join_restock_list` runs only after the customer says yes and only in a real chat; it calls `RestockRequestsService.addToWaitingList`, so asking twice keeps one row and a size with stock is refused. A photo match that is sold out carries the alternatives in the same result. The reply prompt is `chat-reply.v3`.
 - Two team members reply at once: second one sees "Rafiq is replying" and a warning before sending.
 - Meta token expired: all chats on that channel show a banner; incoming messages may be missed until reconnect.
 - AI provider down: auto-reply pauses, chats go to Needs you, banner "AI replies are paused. We're on it."
@@ -382,6 +382,17 @@ CI replays saved outcomes and makes no network call. The starter set is in `ai-e
 
 The Bangla and Banglish set is in `ai-eval/golden-set.bangla.ts`: product search ("kurti" must find "কুর্তি"), photo match, out-of-stock replies and Banglish hand-overs. Its header lists the exact catalog the eval shop must hold. A case may carry `mentionsAnyOf` (the answer names the product or an in-stock alternative; at least 90% must) and `neverOffer` (products with no stock; any offer fails the run, so the count must be 0). A Latin term matches as a whole word, a Bangla term as text, because Bangla words take suffixes. Cases with `dependsOn` need unmerged work; the nightly run skips them while the task is in `pendingTasks` in `golden-set.sample.ts`, which is empty now that AI-10, AI-11 and AI-12 are built. Khata handwriting cases wait for the Khata scan feature.
 
+### Guardrails against manipulation
+
+A customer's words, text read from a photo or voice note, and tool results are untrusted. Six layers keep them from changing a price or the AI's rules, and none of them relies on the model behaving:
+
+1. `screenCustomerTexts` runs before any model call. A phrase that tries to change the AI's rules, role or instructions (English, Banglish, Bangla; zero-width characters removed) hands over with reason `other`; a request for a discount, last price or free delivery hands over with reason `discount`. The attack costs no tokens.
+2. The prompt (`chat-reply.v3`) says only the owner can change a price, that claims of being the owner or staff change nothing, and that the instructions are never shown.
+3. Prices, stock, charges and totals come only from tools. `draft_order` takes no price or discount; the server prices every line from the catalog and sets both discounts to 0.
+4. `confirm_order` runs only when the customer's own latest message says yes, and never in the turn that drafted the order. Otherwise the tool answers `CONFIRMATION_NOT_GIVEN`.
+5. `checkReplyFacts` runs before sending. Besides amounts, stock, phone numbers and links, it rejects a discount, percentage or offer that no tool result holds (a shop policy passage may hold one), and any text that shows the instructions, a tool name or an id. A failed check hands over.
+6. Cases in `ai-eval/golden-set.attacks.ts` (`isAttack`) cover Bangla, Banglish and English. An attack the AI answers instead of handing over, or a reply naming an offer or the instructions, fails the eval, the same as a wrong price.
+
 ### Model comparison CLI
 
 `pnpm --filter @dakly/core build && pnpm --filter @dakly/core eval:models` runs the golden set against candidate OpenAI models and prints, per job, a pass or fail against the gates and the cost per 1,000 chats. It needs `OPENAI_API_KEY` and no database: the reply job runs the real prompts and tool descriptions with fixture tools over the eval shop catalog, and the vision, voice and embedding jobs use the files in `ai-eval/model-eval/fixtures/`. Options: `--jobs fast,reply,vision,transcribe,embed`, `--models a,b` (one job only), `--max-usd` (default 4, the run stops past it), `--pending` (tasks whose cases are skipped, default `AI-12`) and `--verbose`. Prices are in `ai-eval/model-eval/candidate-prices.ts`; update them from the OpenAI pricing page before a run. A model-only change is judged by this run, then by the nightly eval.
@@ -424,7 +435,8 @@ in-process.
 8. Three provider errors in a minute pause AI replies for 2 minutes; waiting chats go to Needs you.
 9. Each store has a daily AI cost ceiling; passing it pauses AI for that store and alerts Dakly staff.
 10. Per-store fairness: at most 3 AI jobs run at once per store (Valkey semaphore, pending Q15).
-11. Sales agent tools (product search, stock, delivery charge, order draft) are described for the model with Bangla, Banglish and English words, units and allowed values ([ai-and-llm.md](../rules/ai-and-llm.md) rule 15).
+11. Customer text never changes a price, adds a discount or reveals the instructions; see Guardrails against manipulation.
+12. Sales agent tools (product search, stock, delivery charge, order draft) are described for the model with Bangla, Banglish and English words, units and allowed values ([ai-and-llm.md](../rules/ai-and-llm.md) rule 15).
 
 ### Permissions
 

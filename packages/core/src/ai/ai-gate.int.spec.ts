@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { loadEnv } from '../platform/config/env';
@@ -13,6 +13,12 @@ describe('AiGate', () => {
 
   beforeAll(async () => valkey.onModuleInit());
   afterAll(() => valkey.onApplicationShutdown());
+  // The gate is shared by every test in the run. Other specs make model calls fail, which can
+  // leave it paused, so each test starts from an empty gate.
+  beforeEach(async () => {
+    const keys = await valkey.connection.keys(`${loadEnv().QUEUE_PREFIX}:{ai}*`);
+    if (keys.length > 0) await valkey.connection.del(...keys);
+  });
 
   it('allows three simultaneous calls in one store and leaves other stores alone', async () => {
     const storeId = randomUUID();

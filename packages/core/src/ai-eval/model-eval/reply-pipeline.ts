@@ -7,7 +7,7 @@ import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/llm-driver';
 
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReply } from '../../ai-agent/prompts/chat-reply.v2';
+import { chatReply } from '../../ai-agent/prompts/chat-reply.v3';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v1';
 import { checkReplyFacts } from '../../ai-agent/reply-fact-check';
 import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
@@ -147,7 +147,7 @@ export async function composeReply(
     }
     const outcome = answerToolCalls(result.toolCalls, toolResults, note);
     if (outcome.handover) return { kind: 'handover', reason: outcome.handover };
-    transcript += `\n<tool_results round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
+    transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
   }
   note('ran out of tool rounds');
   return { kind: 'handover', reason: 'out_of_scope' };
