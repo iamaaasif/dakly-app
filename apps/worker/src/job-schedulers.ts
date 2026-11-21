@@ -33,6 +33,7 @@ import {
 import { scheduleJob } from '@dakly/core/platform/queue/job-schedule';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { DAY_MS, MINUTE_MS } from '@dakly/core/platform/time';
+import { START_PRODUCT_SEARCH_BACKFILL } from '@dakly/core/product-search/jobs/start-product-search-backfill.job';
 import { QUEUE_POST_METRICS_REFRESHES } from '@dakly/core/social/jobs/queue-post-metrics-refreshes.job';
 import { RECOVER_POST_TARGETS } from '@dakly/core/social/jobs/recover-post-targets.job';
 
@@ -85,6 +86,9 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.bulk, RUN_GOLDEN_EVAL, { pattern: '0 20 * * *', tz: 'UTC' }),
       // 19:00 UTC is 01:00 in Dhaka, after the Dhaka day the rollups need has finished.
       scheduleJob(this.bulk, RUN_MAINTENANCE, { pattern: '0 19 * * *', tz: 'UTC' }),
+      // Daily, so products saved before search embeddings and a changed embed model are both
+      // picked up; a store with nothing stale costs one query.
+      scheduleJob(this.bulk, START_PRODUCT_SEARCH_BACKFILL, { pattern: '0 21 * * *', tz: 'UTC' }),
     ]);
   }
 }

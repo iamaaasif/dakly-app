@@ -144,7 +144,7 @@ The Import from a CSV button sits beside Add product for members who can edit pr
 4. Movement kinds: `reserve`, `release`, `ship`, `return`, `adjust`, `import`.
 5. Products with stock tracking off skip all of this and never block an order.
 6. Readiness labels are computed, not stored. Running low is any tracked variant at or under the store threshold (default 3).
-7. Each product has AI aliases ("kurti", "কুর্তি", "three piece") stored as a list. The search embedding is rebuilt by a job on `product.updated` (AI-10); products saved before it get one on their next edit.
+7. Each product has AI aliases ("kurti", "কুর্তি", "three piece") stored as a list. The search embedding is rebuilt by a job on `product.updated` (AI-10); a daily job (AI-17) also embeds products that have none and rebuilds all of a shop's when `AI_EMBEDDING_MODEL` changes, 20 products per batch with a pause between batches.
 8. Restock: when a variant goes from 0 to available and people are on its waiting list, the owner is prompted to notify them. Sending is never automatic.
 
 Photos upload straight to R2 with a presigned URL; the API never streams files.

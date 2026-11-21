@@ -42,6 +42,13 @@ export class ProductSearchSourceService {
     return this.repository.nearestForChat(storeId, input);
   }
 
+  staleSearchProductIds(
+    storeId: string,
+    input: { after: string | null; model: string; limit: number },
+  ) {
+    return this.repository.staleSearchProductIds(storeId, input);
+  }
+
   async findSearchSource(storeId: string, id: string): Promise<ProductSearchSource | undefined> {
     const row = await this.repository.findSearchSource(storeId, id);
     if (!row) return undefined;
