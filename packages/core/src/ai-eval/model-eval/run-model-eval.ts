@@ -64,11 +64,14 @@ async function main() {
   const selected = (values.jobs?.split(',') ?? [...jobs]) as Job[];
   if (values.models && selected.length > 1) throw new Error('--models needs a single --jobs value');
   const modelsFor = (job: Job) => values.models?.split(',') ?? defaultModels[job];
-  if (selected.includes('fast')) await reportFast(context, modelsFor('fast'));
-  if (selected.includes('reply')) await reportReply(context, modelsFor('reply'), baselineFastModel);
-  if (selected.includes('vision')) await reportVision(context, modelsFor('vision'));
-  if (selected.includes('transcribe')) await reportTranscribe(context, modelsFor('transcribe'));
-  if (selected.includes('embed')) await reportEmbed(context, modelsFor('embed'));
+  const runners: Record<Job, () => Promise<void>> = {
+    fast: () => reportFast(context, modelsFor('fast')),
+    reply: () => reportReply(context, modelsFor('reply'), baselineFastModel),
+    vision: () => reportVision(context, modelsFor('vision')),
+    transcribe: () => reportTranscribe(context, modelsFor('transcribe')),
+    embed: () => reportEmbed(context, modelsFor('embed')),
+  };
+  for (const job of selected) await runners[job]();
   say(`\nTotal API spend this run: $${meter.spentUsd.toFixed(3)}`);
 }
 
