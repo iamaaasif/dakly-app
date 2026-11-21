@@ -21,11 +21,13 @@ const pricesByModel = z.record(
 export type AiConfig = {
   models: Record<AiTier, string>;
   embeddingModel: string;
+  transcribeModel: string;
   prices: z.infer<typeof pricesByModel>;
 };
 
 const standardPrices: AiConfig['prices'] = {
   'text-embedding-3-small': { input: 20_000, cachedInput: 0, output: 0 },
+  'gpt-4o-transcribe': { input: 6_000_000, cachedInput: 0, output: 10_000_000 },
   'gpt-6.1-terra': { input: 1_000_000, cachedInput: 50_000, output: 5_000_000 },
   'gpt-6-luna': { input: 100_000, cachedInput: 10_000, output: 500_000 },
 };
@@ -46,10 +48,15 @@ export function loadAiConfig(): AiConfig {
   }
   if (
     env.LLM_DRIVER === 'openai' &&
-    [...Object.values(models), env.AI_EMBEDDING_MODEL].some(
+    [...Object.values(models), env.AI_EMBEDDING_MODEL, env.AI_TRANSCRIBE_MODEL].some(
       (model) => !Object.hasOwn(prices, model),
     )
   )
     throw aiError('AI_CONFIG_INVALID');
-  return { models, embeddingModel: env.AI_EMBEDDING_MODEL, prices };
+  return {
+    models,
+    embeddingModel: env.AI_EMBEDDING_MODEL,
+    transcribeModel: env.AI_TRANSCRIBE_MODEL,
+    prices,
+  };
 }

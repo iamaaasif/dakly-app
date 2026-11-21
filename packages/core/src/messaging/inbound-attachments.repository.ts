@@ -15,6 +15,7 @@ export class InboundAttachmentsRepository {
       tx
         .select({
           attachments: messages.attachments,
+          body: messages.body,
           connectionId: conversations.channelConnectionId,
           channel: conversations.channel,
         })
@@ -52,6 +53,35 @@ export class InboundAttachmentsRepository {
       await tx
         .update(messages)
         .set({ attachments })
+        .where(and(eq(messages.storeId, storeId), eq(messages.id, messageId)));
+      return true;
+    });
+  }
+
+  // A retry that finds the attachment already read adds nothing, so the text is never doubled.
+  saveReading(
+    storeId: string,
+    messageId: string,
+    index: number,
+    outcome: { read: 'done'; text: string | undefined } | { read: 'failed' },
+  ) {
+    return this.database.forStore(storeId, async (tx) => {
+      const [row] = await tx
+        .select({ attachments: messages.attachments, mediaText: messages.mediaText })
+        .from(messages)
+        .where(and(eq(messages.storeId, storeId), eq(messages.id, messageId)))
+        .for('update');
+      const attachments = messageAttachmentsSchema.parse(row?.attachments ?? []);
+      const attachment = attachments[index];
+      if (attachment?.status !== 'stored' || attachment.read) return false;
+      attachments[index] = { ...attachment, read: outcome.read };
+      const text = outcome.read === 'done' ? outcome.text : undefined;
+      await tx
+        .update(messages)
+        .set({
+          attachments,
+          mediaText: text ? [row?.mediaText, text].filter(Boolean).join('\n') : row?.mediaText,
+        })
         .where(and(eq(messages.storeId, storeId), eq(messages.id, messageId)));
       return true;
     });
