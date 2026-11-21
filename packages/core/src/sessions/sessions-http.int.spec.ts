@@ -109,7 +109,10 @@ describe('Session boundary over Fastify and Postgres', () => {
     userId = user!.id;
     const shops = await admin.db
       .insert(stores)
-      .values([{ name: 'Rina shop', extensions: ['sales', 'chats'] }, { name: 'Other shop' }])
+      .values([
+        { name: 'Rina shop', extensions: ['sales', 'chats', 'social_auto_post'] },
+        { name: 'Other shop' },
+      ])
       .returning({ id: stores.id });
     storeId = shops[0]!.id;
     otherStoreId = shops[1]!.id;
@@ -306,7 +309,10 @@ describe('Session boundary over Fastify and Postgres', () => {
       canViewProducts: false,
       canViewChats: true,
     });
-    await admin.pool.query("update stores set extensions='{sales,chats}' where id=$1", [storeId]);
+    await admin.pool.query(
+      "update stores set extensions='{sales,chats,social_auto_post}' where id=$1",
+      [storeId],
+    );
     expect(shell.contextTag).toMatch(/^[a-f0-9]{64}$/);
     expect(context.headers['cache-control']).toBe('no-store');
     await service.setActiveStore(userId, sessionId, otherStoreId);
