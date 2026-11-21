@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
@@ -6,13 +7,14 @@ import { Card } from '@dakly/ui/card';
 import { useDismissMatchSuggestion } from '../api/dismiss-match-suggestion';
 import { useMatchSuggestions } from '../api/match-suggestions';
 import { customerPhone } from '../customer-labels';
+import { MergeCustomerDialog } from './merge-customer-dialog';
 
 type PossibleSamePersonProps = { contactId: string; canEdit: boolean };
 
-// Merging is a separate task (CUS-14), so the note only lists the matches and lets staff dismiss.
 export function PossibleSamePerson({ contactId, canEdit }: PossibleSamePersonProps) {
   const suggestions = useMatchSuggestions(contactId);
   const dismiss = useDismissMatchSuggestion();
+  const [merging, setMerging] = useState<{ id: string; name: string | null } | null>(null);
   if (!suggestions.data?.length) return null;
   return (
     <Card className="space-y-3">
@@ -32,17 +34,27 @@ export function PossibleSamePerson({ contactId, canEdit }: PossibleSamePersonPro
               </p>
             </div>
             {canEdit ? (
-              <Button
-                variant="secondary"
-                loading={dismiss.isPending && dismiss.variables === id}
-                onClick={() => dismiss.mutate(id)}
-              >
-                Dismiss
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setMerging(otherContact)}>Merge</Button>
+                <Button
+                  variant="secondary"
+                  loading={dismiss.isPending && dismiss.variables === id}
+                  onClick={() => dismiss.mutate(id)}
+                >
+                  Dismiss
+                </Button>
+              </div>
             ) : null}
           </li>
         ))}
       </ul>
+      {merging ? (
+        <MergeCustomerDialog
+          contactId={contactId}
+          other={merging}
+          onClose={() => setMerging(null)}
+        />
+      ) : null}
       {dismiss.error ? (
         <p role="alert" className="text-sm text-danger">
           {dismiss.error.message}

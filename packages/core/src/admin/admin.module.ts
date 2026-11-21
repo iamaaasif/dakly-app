@@ -8,6 +8,7 @@ import { AuditModule } from '../audit/audit.module';
 import { CodesModule } from '../auth/codes.module';
 import { SecurityNoticesModule } from '../auth/security-notices.module';
 import { UsersModule } from '../auth/users.module';
+import { BillingModule } from '../billing/billing.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { KillSwitchesModule } from '../kill-switches/kill-switches.module';
 import { CacheModule } from '../platform/cache/cache.module';
@@ -29,6 +30,7 @@ import { KillSwitchController } from './kill-switch.controller';
 import { OpsReportsController } from './ops-reports.controller';
 import { OwnerRecoveryHistoryController } from './owner-recovery-history.controller';
 import { OwnerSupportController } from './owner-support.controller';
+import { PlanCatalogueController } from './plan-catalogue.controller';
 import { ReconciliationController } from './reconciliation.controller';
 import { RiskyActionConfirmation } from './risky-action-confirmation';
 import { ShopsController } from './shops.controller';
@@ -88,6 +90,7 @@ import { WalletCreditService } from './wallet-credit.service';
     AiCostModule,
     AiRateModule,
     ProviderHealthModule,
+    BillingModule,
     ReconciliationModule,
   ],
   controllers: [
@@ -106,6 +109,7 @@ import { WalletCreditService } from './wallet-credit.service';
     KillSwitchController,
     OpsReportsController,
     ShopsController,
+    PlanCatalogueController,
     ReconciliationController,
   ],
   providers: [

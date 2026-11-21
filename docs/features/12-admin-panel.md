@@ -111,6 +111,8 @@ Support session checks and Owner request lists read current rows without explici
 - Changing a price never changes existing subscribers until their next renewal, and only if "Apply to existing" is ticked, which schedules a 30-day notice to each affected shop.
 - VAT rate and invoice details (Dakly's legal name, BIN, address) live here and are read by invoicing.
 
+Built so far (ADM-4, plans catalogue): the `/plans` screen lists every plan and lets super admins and finance edit name, monthly and yearly price, trial days, allowances and visibility. Analysts can read it. Each save needs a reason and a confirmation, writes `staff_audit_log` first in the same transaction, and keeps the allowance names the plan already has. Subscribers keep the price stored on their current period. Coupons, add-ons, unit prices, VAT, "Apply to existing" and the 30-day notice wait for PAY-7 and PAY-8.
+
 #### Billing operations and reconciliation
 
 Built so far (ADM-4, reconciliation queue): the `/reconciliation` screen lists settlement lines that are `unmatched` or `escalated`. Super admins and finance can mark a line as a gateway error (it leaves the queue) or escalate it (it stays). Both need a reason and a confirmation, and write `staff_audit_log` first in the same transaction. Analysts can read. Matching by hand, creating a refund from a line and the list of Dakly payments no line confirmed after 3 days wait for PAY-7 and the gateway drivers.
