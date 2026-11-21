@@ -29,6 +29,7 @@ import { StoresService } from '../stores/stores.service';
 import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { handoverReason } from './handover-reason';
+import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v1';
 import { checkReplyFacts } from './reply-fact-check';
 import { type ComposedReply, SalesAgentService } from './sales-agent.service';
@@ -120,8 +121,9 @@ export class AiAgentService {
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
     const texts = burst.texts;
-    const hasRoom = await this.hasAllowanceRoom(storeId, turn.contactId);
-    const reason = hasRoom ? await this.classify(storeId, texts) : 'allowance_used';
+    const reason =
+      screenCustomerTexts(texts) ??
+      (await this.classifyWithAllowance(storeId, turn.contactId, texts));
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose({
@@ -143,6 +145,12 @@ export class AiAgentService {
       return this.handOver(storeId, conversationId, candidate, 'out_of_scope');
     }
     return this.send(storeId, conversationId, candidate, composed);
+  }
+
+  private async classifyWithAllowance(storeId: string, contactId: string, texts: string[]) {
+    return (await this.hasAllowanceRoom(storeId, contactId))
+      ? this.classify(storeId, texts)
+      : 'allowance_used';
   }
 
   // A window that already holds a unit finishes even when the allowance is used up.

@@ -4,10 +4,12 @@ import {
   aiRatingReasons,
   type AiFeedbackQuery,
   type AiFeedbackResponse,
+  type FixAiReplyInput,
   type RateAiReplyInput,
 } from '@dakly/contracts/ai-feedback';
 import type { AuditEntry } from '@dakly/contracts/audit';
 
+import { TaughtAnswersService } from '../ai/taught-answers.service';
 import { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -25,6 +27,7 @@ export class AiReplyFeedbackService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(TaughtAnswersService) private readonly taughtAnswers: TaughtAnswersService,
   ) {}
 
   rate(storeId: string, actor: Actor, messageId: string, input: RateAiReplyInput) {
@@ -46,6 +49,26 @@ export class AiReplyFeedbackService {
     });
   }
 
+  // The right answer becomes a taught answer, so the next customer who asks gets it.
+  fix(storeId: string, actor: Actor, messageId: string, input: FixAiReplyInput) {
+    return this.transaction.run(storeId, async () => {
+      await this.requireChats(storeId);
+      const reply = await this.repository.findAiReply(storeId, messageId);
+      if (!reply) throw messagingError('AI_REPLY_NOT_FOUND');
+      if (reply.rating !== 'bad') throw messagingError('AI_REPLY_NOT_BAD');
+      if (reply.fixedAt) throw messagingError('AI_REPLY_ALREADY_FIXED');
+      const item = await this.taughtAnswers.teach(storeId, actor, input);
+      await this.repository.markFixed(storeId, messageId, this.clock.now());
+      await this.audit.record(storeId, {
+        actor,
+        action: 'ai_reply.fixed',
+        entityType: 'message',
+        entityId: messageId,
+        after: { ids: [item.id] },
+      });
+    });
+  }
+
   async feedback(storeId: string, query: AiFeedbackQuery): Promise<AiFeedbackResponse> {
     await this.requireChats(storeId);
     const [counts, rows] = await Promise.all([
@@ -57,11 +80,13 @@ export class AiReplyFeedbackService {
     const goodCount = total('good');
     const badCount = total('bad');
     const rated = goodCount + badCount;
+    const fixedCount = counts.reduce((sum, row) => sum + row.fixed, 0);
     return {
       summary: {
         helpfulPercent: rated === 0 ? null : Math.round((goodCount / rated) * 100),
         goodCount,
         badCount,
+        fixedCount,
         commonProblems: aiRatingReasons
           .map((reason) => ({
             reason,
@@ -72,13 +97,14 @@ export class AiReplyFeedbackService {
           .filter((problem) => problem.count > 0)
           .sort((a, b) => b.count - a.count),
       },
-      items: rows.flatMap(({ ratedAt, rating, reason, ...row }) =>
+      items: rows.flatMap(({ ratedAt, fixedAt, rating, reason, ...row }) =>
         ratedAt && rating
           ? [
               {
                 ...row,
                 rating,
                 reason: aiRatingReasons.find((known) => known === reason) ?? null,
+                fixedAt: fixedAt?.toISOString() ?? null,
                 ratedAt: ratedAt.toISOString(),
               },
             ]

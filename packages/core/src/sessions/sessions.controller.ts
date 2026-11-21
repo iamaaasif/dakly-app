@@ -11,7 +11,7 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import {
   userStorePageSchema,
@@ -69,6 +69,17 @@ export class SessionsController {
   @HttpCode(204)
   revokeOthers(@CurrentUser() userId: string, @CurrentSession() sessionId: string) {
     return this.sessions.revokeOthers(userId, sessionId);
+  }
+
+  @Post('me/sessions/sign-out-all')
+  @HttpCode(204)
+  async revokeAll(
+    @CurrentUser() userId: string,
+    @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
+    await this.sessions.revokeAll(userId, request.ip);
+    clearSessionCookie(reply);
   }
 
   @Get('me')

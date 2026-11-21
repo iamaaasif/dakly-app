@@ -109,6 +109,11 @@ export const productVariants = pgTable(
     onHand: integer('on_hand').notNull().default(0),
     reserved: integer('reserved').notNull().default(0),
     lowStockThreshold: integer('low_stock_threshold'),
+    // Optional photos of this variant only; with none, the product's photos are shown.
+    imageFileIds: uuid('image_file_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
     isDefault: boolean('is_default').notNull().default(false),
     position: smallint('position').notNull().default(0),
     status: text('status', { enum: productStatuses }).notNull().default('active'),

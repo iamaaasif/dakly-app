@@ -108,6 +108,18 @@ export const photoReadingSchema = z.strictObject({
 });
 export type PhotoReading = z.infer<typeof photoReadingSchema>;
 
+// A read photo is saved as text that starts with this label; the AI agent finds photos by it.
+export const photoReadingLabel = 'Photo';
+const photoReadingStart = /^(?:photo|ছবি)\s*:\s*/iu;
+const photoReadingFieldLabels = /^(?:search words|text in photo)\s*:\s*/gimu;
+
+// The words of a read photo with its labels removed, or undefined when the text is not a photo.
+export function photoSearchText(text: string): string | undefined {
+  const start = photoReadingStart.exec(text.trimStart());
+  if (!start) return undefined;
+  return text.trimStart().slice(start[0].length).replace(photoReadingFieldLabels, '').trim();
+}
+
 export const messageStatuses = [
   'received',
   'queued',

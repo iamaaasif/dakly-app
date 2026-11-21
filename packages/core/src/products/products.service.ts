@@ -34,6 +34,7 @@ import { ProductOrderVariantsRepository } from './product-order-variants.reposit
 import { productError } from './products.errors';
 import {
   type CatalogueProduct,
+  type CatalogueVariant,
   type Product,
   ProductsRepository,
   type Variant,
@@ -112,23 +113,32 @@ export class ProductsService {
   async listForOrders(storeId: string, query: OrderCatalogueQuery): Promise<OrderCataloguePage> {
     const { stock } = await this.stores.settings(storeId);
     const rows = await this.repository.list(storeId, query, stock.lowStockThreshold);
-    const items = rows.slice(0, query.limit).map(orderCatalogueProduct);
+    const items = rows
+      .slice(0, query.limit)
+      .map((product) => orderCatalogueProduct(product, this.storage));
     return { items, nextCursor: rows.length > query.limit ? (items.at(-1)?.id ?? null) : null };
   }
 
   async getForOrder(storeId: string, id: string): Promise<OrderCatalogueProduct> {
     const product = await this.repository.findById(storeId, id);
     if (!product) throw productError('PRODUCT_NOT_FOUND');
-    return orderCatalogueProduct(product);
+    return orderCatalogueProduct(product, this.storage);
   }
 
-  async searchForChat(storeId: string, text: string, limit: number): Promise<ChatProduct[]> {
-    return (await this.repository.searchForChat(storeId, text, limit)).map(chatProduct);
+  // Keeps the order of `ids`; an id that is no longer offerable is left out.
+  async getManyForChat(storeId: string, ids: string[]): Promise<ChatProduct[]> {
+    if (!ids.length) return [];
+    const found = new Map(
+      (await this.repository.findManyForChat(storeId, ids)).map((row) => [row.id, row]),
+    );
+    return ids.flatMap((id) => {
+      const product = found.get(id);
+      return product ? [chatProduct(product, this.storage)] : [];
+    });
   }
 
-  // An empty search matches every active product shown in chats.
-  async hasChatProduct(storeId: string) {
-    return (await this.repository.searchForChat(storeId, '', 1)).length > 0;
+  hasChatProduct(storeId: string) {
+    return this.repository.hasForChat(storeId);
   }
 
   countForChat(storeId: string): Promise<number> {
@@ -138,7 +148,7 @@ export class ProductsService {
   async getForChat(storeId: string, id: string): Promise<ChatProduct> {
     const product = await this.repository.findForChat(storeId, id);
     if (!product) throw productError('PRODUCT_NOT_FOUND');
-    return chatProduct(product);
+    return chatProduct(product, this.storage);
   }
 
   remove(storeId: string, id: string, _actor: Actor): Promise<void> {
@@ -322,39 +332,69 @@ export class ProductsService {
   }
 }
 
-export type ChatProduct = OrderCatalogueProduct & Pick<ProductResponse, 'description' | 'category'>;
+type OrderCatalogueVariant = OrderCatalogueProduct['variants'][number];
+export type ChatProduct = Omit<OrderCatalogueProduct, 'variants'> &
+  Pick<ProductResponse, 'description' | 'category'> & {
+    variants: (OrderCatalogueVariant & { photoFileId: string | null })[];
+  };
 
-function chatProduct(product: CatalogueProduct): ChatProduct {
+function chatProduct(product: CatalogueProduct, storage: FileStorageDriver): ChatProduct {
   return {
-    ...orderCatalogueProduct(product),
+    ...orderCatalogueProduct(product, storage),
+    variants: product.variants.map((variant) => ({
+      ...orderCatalogueVariant(product, variant, storage),
+      photoFileId: effectivePhoto(product, variant)?.id ?? null,
+    })),
     description: product.description,
     category: product.category,
   };
 }
 
-function orderCatalogueProduct(product: CatalogueProduct): OrderCatalogueProduct {
+// A variant without its own photo shows the product's first photo.
+function effectivePhoto(product: CatalogueProduct, variant: CatalogueVariant) {
+  return variant.photos[0] ?? product.photos[0];
+}
+
+function orderCatalogueVariant(
+  product: CatalogueProduct,
+  variant: CatalogueVariant,
+  storage: FileStorageDriver,
+): OrderCatalogueVariant {
+  const photo = effectivePhoto(product, variant);
+  return {
+    id: variant.id,
+    title: variant.title,
+    isDefault: variant.isDefault,
+    pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
+    available: variant.onHand - variant.reserved,
+    photoUrl: photo ? storage.createDownloadUrl(photo.objectKey, 15 * 60) : null,
+  };
+}
+
+function orderCatalogueProduct(
+  product: CatalogueProduct,
+  storage: FileStorageDriver,
+): OrderCatalogueProduct {
   return {
     id: product.id,
     name: product.name,
     isStockTracked: product.isStockTracked,
-    variants: product.variants.map((variant) => ({
-      id: variant.id,
-      title: variant.title,
-      isDefault: variant.isDefault,
-      pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
-      available: variant.onHand - variant.reserved,
-    })),
+    variants: product.variants.map((variant) => orderCatalogueVariant(product, variant, storage)),
   };
 }
 
 function toResponse(
   product: CatalogueProduct,
-  rows: Variant[],
+  rows: CatalogueVariant[],
   lowStockThreshold: number,
   storage: FileStorageDriver,
 ): ProductResponse {
   const variants = rows.map(({ productId: _productId, ...variant }) => ({
     ...variant,
+    photos: variant.photos.map((photo) => ({
+      id: photo.id,
+      url: storage.createDownloadUrl(photo.objectKey, 15 * 60),
+    })),
     pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
     available: variant.onHand - variant.reserved,
   }));

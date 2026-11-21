@@ -50,7 +50,7 @@ export const plans = pgTable(
     trialDays: smallint('trial_days').notNull().default(0),
     monthlyPricePoisha: poisha('monthly_price_poisha').notNull(),
     yearlyPricePoisha: poisha('yearly_price_poisha').notNull(),
-    // Allowances per period: customers, seats, ai_conversation, ai_content, ai_ask, automations.
+    // Allowances per period: customers, seats, ai_conversation, ai_content, ai_ask, ai_scan, automations.
     limits: jsonb('limits').notNull(),
     isPublic: boolean('is_public').notNull().default(true),
     position: smallint('position').notNull().default(0),

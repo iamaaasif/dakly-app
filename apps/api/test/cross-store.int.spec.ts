@@ -6,6 +6,10 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LLM_DRIVER } from '@dakly/core/ai/ai.config';
+import { AiService } from '@dakly/core/ai/ai.service';
+import { KnowledgeIndexService } from '@dakly/core/ai/knowledge/knowledge-index.service';
+import { KnowledgeRepository } from '@dakly/core/ai/knowledge/knowledge.repository';
+import { KnowledgeSearchService } from '@dakly/core/ai/knowledge-search.service';
 import { AnalyticsService } from '@dakly/core/analytics/analytics.service';
 import { CampaignApprovalService } from '@dakly/core/campaigns/campaign-approval.service';
 import { META_CHANNEL_DRIVER } from '@dakly/core/channels/meta-channel-driver';
@@ -17,6 +21,7 @@ import { Clock } from '@dakly/core/platform/clock';
 import { loadEnv, resetEnvForTests } from '@dakly/core/platform/config/env';
 import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
+import { FILE_STORAGE_DRIVER } from '@dakly/core/platform/file-storage/file-storage.provider';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies, SESSION_COOKIE } from '@dakly/core/platform/http/session-cookie';
 import { SessionsService } from '@dakly/core/sessions/sessions.service';
@@ -273,6 +278,7 @@ fixture('GET /orders/catalogue', async () => {
             isDefault: true,
             pricePoisha: 125000,
             available: 0,
+            photoUrl: null,
           },
         ],
       },
@@ -1298,6 +1304,115 @@ fixture('POST /contacts/:contactId/consents', async () => {
     [id],
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
+});
+const khataPage = { contentType: 'image/jpeg', sizeBytes: 2_000_000 };
+async function newKhataPage(shop: Shop) {
+  const created = await success(shop, 'POST', '/khata-scans/pages', 201, khataPage);
+  expect(created.json().uploadUrl).toContain(`/khata/${shop.id}/`);
+  return created.json().pageId as string;
+}
+async function allowKhataPages(quantity = 10) {
+  await f.admin.pool.query('update plans set limits=limits || $2::jsonb where id=$1', [
+    f.plan,
+    JSON.stringify({ ai_scan: quantity }),
+  ]);
+}
+fixture('POST /khata-scans/pages', async () => {
+  const { a, b } = await pair(),
+    id = await newKhataPage(a),
+    before = await f.row('khata_pages', id);
+  const own = await newKhataPage(b);
+  expect((await f.row('khata_pages', own)).store_id).toBe(b.id);
+  expect(await f.row('khata_pages', id)).toEqual(before);
+  expect((await f.request(a.member, 'POST', '/khata-scans/pages', khataPage)).statusCode).toBe(403);
+});
+fixture('POST /khata-scans/pages/:pageId/read', async () => {
+  const { a, b } = await pair(),
+    own = await newKhataPage(a),
+    foreign = await newKhataPage(a);
+  await allowKhataPages();
+  const storage = app.get<{
+    getObjectMetadata(key: string): Promise<{ contentType: string; sizeBytes: number } | null>;
+  }>(FILE_STORAGE_DRIVER);
+  const metadata = vi.spyOn(storage, 'getObjectMetadata').mockResolvedValue(khataPage);
+  try {
+    const queued = await success(a, 'POST', `/khata-scans/pages/${own}/read`, 202);
+    expect(queued.json()).toMatchObject({ id: own, status: 'reading' });
+    const before = await f.row('khata_pages', foreign);
+    await hidden(b, 'POST', (id) => `/khata-scans/pages/${id}/read`, foreign);
+    expect(await f.row('khata_pages', foreign)).toEqual(before);
+  } finally {
+    await f.admin.pool.query("update plans set limits=limits - 'ai_scan' where id=$1", [f.plan]);
+    metadata.mockRestore();
+  }
+});
+fixture('GET /khata-scans/pages/:pageId', async () => {
+  const { a, b } = await pair(),
+    id = await newKhataPage(a);
+  expect((await success(a, 'GET', `/khata-scans/pages/${id}`, 200)).json()).toMatchObject({
+    id,
+    status: 'uploaded',
+    rows: [],
+  });
+  await hidden(b, 'GET', (value) => `/khata-scans/pages/${value}`, id);
+});
+async function readKhataPage(shop: Shop) {
+  const id = await newKhataPage(shop);
+  const rowId = randomUUID();
+  await f.admin.pool.query("update khata_pages set status='read' where id=$1", [id]);
+  await f.admin.pool.query(
+    "insert into khata_rows(id,store_id,page_id,row_number,name,phone,amount_poisha,kind,confidence) values($1,$2,$3,1,'Rahim','01712345678',5000,'baki',90)",
+    [rowId, shop.id, id],
+  );
+  return { id, decisions: { rows: [{ rowId, action: 'import' }] } };
+}
+fixture('POST /khata-scans/pages/:pageId/import', async () => {
+  const { a, b } = await pair(),
+    own = await readKhataPage(a),
+    foreign = await readKhataPage(a);
+  const imported = await success(
+    a,
+    'POST',
+    `/khata-scans/pages/${own.id}/import`,
+    201,
+    own.decisions,
+  );
+  expect(imported.json()).toMatchObject({ pageId: own.id, status: 'done', rowsImported: 1 });
+  const before = await f.row('khata_pages', foreign.id);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/khata-scans/pages/${id}/import`,
+    foreign.id,
+    () => foreign.decisions,
+  );
+  expect(await f.row('khata_pages', foreign.id)).toEqual(before);
+  const denied = await f.request(
+    a.member,
+    'POST',
+    `/khata-scans/pages/${foreign.id}/import`,
+    foreign.decisions,
+  );
+  expect(denied.statusCode).toBe(403);
+});
+fixture('POST /khata-scans/imports/:importId/undo', async () => {
+  const { a, b } = await pair(),
+    page = await readKhataPage(a);
+  const imported = await success(
+    a,
+    'POST',
+    `/khata-scans/pages/${page.id}/import`,
+    201,
+    page.decisions,
+  );
+  const importId = imported.json().id as string;
+  await hidden(b, 'POST', (id) => `/khata-scans/imports/${id}/undo`, importId);
+  expect((await f.row('khata_imports', importId)).status).toBe('done');
+  expect(
+    (await f.request(a.member, 'POST', `/khata-scans/imports/${importId}/undo`)).statusCode,
+  ).toBe(403);
+  const undone = await success(a, 'POST', `/khata-scans/imports/${importId}/undo`, 200);
+  expect(undone.json()).toMatchObject({ id: importId, status: 'undone' });
 });
 async function dueEntries(shop: Shop, contactId: string) {
   await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {
@@ -3732,6 +3847,7 @@ fixture('GET /ai-replies/feedback', async () => {
       helpfulPercent: 50,
       goodCount: 1,
       badCount: 1,
+      fixedCount: 0,
       commonProblems: [{ reason: 'missed_the_question', count: 1 }],
     },
     items: [
@@ -3742,6 +3858,7 @@ fixture('GET /ai-replies/feedback', async () => {
         customerName: expect.any(String),
         customerQuestion: 'Kurti M size ache?',
         replyText: 'Ji, M size ache.',
+        fixedAt: null,
         ratedAt: expect.any(String),
       },
     ],
@@ -3750,6 +3867,62 @@ fixture('GET /ai-replies/feedback', async () => {
   expect(good.items.map((item: { messageId: string }) => item.messageId)).toEqual([praised]);
   const all = (await success(b, 'GET', '/ai-replies/feedback?filter=all', 200)).json();
   expect(all.items).toHaveLength(2);
+});
+
+fixture('POST /ai-replies/:messageId/fix', async () => {
+  const { a, b } = await pair();
+  const foreign = await seedAiReply(a);
+  const own = await seedAiReply(b);
+  const url = (id: string) => `/ai-replies/${id}/fix`;
+  // Banglish question, Bangla answer: both are kept exactly as typed.
+  const body = () => ({
+    question: 'Panjabi er kapor ki?',
+    answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+    keywords: ['kapor', 'কাপড়'],
+  });
+  expect((await f.request(b.owner, 'POST', url(own), body())).statusCode).toBe(403);
+  await enableChats(a);
+  await enableChats(b);
+  await hidden(b, 'POST', url, foreign, body);
+  // Not rated yet, then rated good: only a bad reply can be fixed.
+  await success(b, 'POST', url(own), 409, body());
+  await success(b, 'PUT', `/ai-replies/${own}/rating`, 204, { rating: 'good' });
+  await success(b, 'POST', url(own), 409, body());
+  await success(b, 'PUT', `/ai-replies/${own}/rating`, 204, {
+    rating: 'bad',
+    reason: 'wrong_information',
+  });
+  await success(b, 'POST', url(own), 400, { ...body(), question: '' });
+  await success(b, 'POST', url(own), 400, { ...body(), storeId: a.id });
+  await success(b, 'POST', url(own), 400, { answer: 'Ji.' });
+  const needs = (await success(b, 'GET', '/ai-replies/feedback?filter=needs_fixing', 200)).json();
+  expect(needs.items).toHaveLength(1);
+  await success(b, 'POST', url(own), 204, body());
+  const { rows: taught } = await f.admin.pool.query(
+    'select kind, question, answer, keywords from knowledge_items where store_id = $1',
+    [b.id],
+  );
+  expect(taught).toEqual([
+    {
+      kind: 'policy',
+      question: 'Panjabi er kapor ki?',
+      answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+      keywords: ['kapor', 'কাপড়'],
+    },
+  ]);
+  expect(await f.row('messages', own)).toMatchObject({ ai_fixed_at: expect.any(String) });
+  // Fixing twice would teach the same answer twice.
+  await success(b, 'POST', url(own), 409, body());
+  const after = (await success(b, 'GET', '/ai-replies/feedback?filter=needs_fixing', 200)).json();
+  expect(after.items).toEqual([]);
+  expect(after.summary).toMatchObject({ badCount: 1, fixedCount: 1 });
+  const bad = (await success(b, 'GET', '/ai-replies/feedback?filter=bad', 200)).json();
+  expect(bad.items).toMatchObject([{ messageId: own, fixedAt: expect.any(String) }]);
+  const { rows: audited } = await f.admin.pool.query(
+    "select actor_user_id from audit_log where store_id = $1 and entity_id = $2 and action = 'ai_reply.fixed'",
+    [b.id, own],
+  );
+  expect(audited).toEqual([{ actor_user_id: b.owner.id }]);
 });
 
 fixture('GET /conversations/:conversationId', async () => {
@@ -3904,6 +4077,62 @@ for (const [path, responder] of [
       expect(handBack.json()).toMatchObject({ responder: 'ai', aiResumesAt: null });
     }
     expect(await f.row('conversations', foreign)).toMatchObject({ responder: 'ai' });
+  });
+}
+
+async function seedComment(shop: Shop, status = 'new') {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    `insert into social_comments(id,store_id,channel_connection_id,external_post_id,external_comment_id,author_name,body,status,commented_at)
+     values($1::uuid,$2,$3,'post-1',$1::text,'Rumana Akter','Price koto?',$4,now())`,
+    [id, shop.id, await seedChannel(shop), status],
+  );
+  return id;
+}
+
+fixture('GET /comments', async () => {
+  const { a, b } = await pair();
+  await seedComment(a);
+  const own = await seedComment(b);
+  expect((await f.request(b.owner, 'GET', '/comments')).statusCode).toBe(403);
+  await enableChats(b);
+  const listed = (await success(b, 'GET', '/comments', 200)).json();
+  expect(listed.items).toMatchObject([{ id: own, body: 'Price koto?', status: 'new' }]);
+  await success(b, 'GET', '/comments?limit=0', 400);
+});
+
+for (const path of ['reply', 'private-reply'] as const) {
+  fixture(`POST /comments/:commentId/${path}`, async () => {
+    const { a, b } = await pair();
+    await enableChats(b);
+    const url = (id: string) => `/comments/${id}/${path}`;
+    const foreign = await seedComment(a);
+    await hidden(b, 'POST', url, foreign, () => ({ body: 'Inbox e dilam' }));
+    await success(b, 'POST', url(await seedComment(b)), 400, { body: '   ' });
+    expect(await f.row('social_comments', foreign)).toMatchObject({
+      status: 'new',
+      public_reply_external_id: null,
+      private_replied_at: null,
+    });
+  });
+}
+
+for (const [path, status] of [
+  ['hide', 'hidden'],
+  ['unhide', 'new'],
+] as const) {
+  fixture(`POST /comments/:commentId/${path}`, async () => {
+    const { a, b } = await pair();
+    await enableChats(b);
+    const url = (id: string) => `/comments/${id}/${path}`;
+    const foreign = await seedComment(a, path === 'hide' ? 'new' : 'hidden');
+    await hidden(b, 'POST', url, foreign);
+    // A comment already in the asked state answers without calling Meta.
+    const own = await seedComment(b, status);
+    expect((await success(b, 'POST', url(own), 200)).json()).toMatchObject({ id: own, status });
+    expect(await f.row('social_comments', foreign)).toMatchObject({
+      status: path === 'hide' ? 'new' : 'hidden',
+    });
   });
 }
 
@@ -4192,6 +4421,142 @@ fixture('DELETE /products/:productId/photos/:fileId', async () => {
     foreignProduct,
   );
   await hidden(b, 'DELETE', (id) => `/products/${own}/photos/${id}`, foreignPhoto.fileId);
+  expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
+});
+
+async function productWithVariant(shop: Shop) {
+  const result = await success(shop, 'POST', '/products', 201, {
+    name: 'পাঞ্জাবি',
+    pricePoisha: 125000,
+  });
+  return { id: result.json().id as string, variantId: result.json().variants[0].id as string };
+}
+async function uploadedVariantPhoto(shop: Shop, ids: { id: string; variantId: string }) {
+  const base = `/products/${ids.id}/variants/${ids.variantId}/photos`;
+  const issued = (await success(shop, 'POST', `${base}/upload-url`, 200, photoInput)).json();
+  const response = await fetch(issued.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': photoInput.contentType },
+    body: new Uint8Array([137, 80, 78, 71]),
+  });
+  expect(response.status).toBe(200);
+  return { ...photoInput, fileId: issued.fileId as string };
+}
+fixture('POST /products/:productId/variants/:variantId/photos/upload-url', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const issued = (
+    await success(
+      b,
+      'POST',
+      `/products/${own.id}/variants/${own.variantId}/photos/upload-url`,
+      200,
+      photoInput,
+    )
+  ).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/products/${issued.fileId}`,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/upload-url`,
+    foreign.id,
+    () => photoInput,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${own.id}/variants/${id}/photos/upload-url`,
+    foreign.variantId,
+    () => photoInput,
+  );
+  const base = `/products/${own.id}/variants/${own.variantId}/photos/upload-url`;
+  expect((await f.request(b.member, 'POST', base, photoInput)).statusCode).toBe(403);
+});
+fixture('POST /products/:productId/variants/:variantId/photos/confirm', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const photo = await uploadedVariantPhoto(b, own);
+  const confirmed = (
+    await success(
+      b,
+      'POST',
+      `/products/${own.id}/variants/${own.variantId}/photos/confirm`,
+      201,
+      photo,
+    )
+  ).json();
+  expect(confirmed.variants[0].imageFileIds).toEqual([photo.fileId]);
+  expect(confirmed.imageFileIds).toEqual([]);
+  expect((await f.row('files', photo.fileId)).store_id).toBe(b.id);
+  const before = await f.row('product_variants', foreign.variantId);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/confirm`,
+    foreign.id,
+    () => photo,
+  );
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${own.id}/variants/${id}/photos/confirm`,
+    foreign.variantId,
+    () => photo,
+  );
+  expect(await f.row('product_variants', foreign.variantId)).toEqual(before);
+});
+fixture('PATCH /products/:productId/variants/:variantId/photos', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const base = `/products/${own.id}/variants/${own.variantId}/photos`;
+  const first = await uploadedVariantPhoto(b, own),
+    second = await uploadedVariantPhoto(b, own);
+  await success(b, 'POST', `${base}/confirm`, 201, first);
+  await success(b, 'POST', `${base}/confirm`, 201, second);
+  const payload = { fileIds: [second.fileId, first.fileId] };
+  const changed = (await success(b, 'PATCH', base, 200, payload)).json();
+  expect(changed.variants[0].imageFileIds).toEqual(payload.fileIds);
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/${id}/variants/${own.variantId}/photos`,
+    foreign.id,
+    () => payload,
+  );
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/${own.id}/variants/${id}/photos`,
+    foreign.variantId,
+    () => payload,
+  );
+});
+fixture('DELETE /products/:productId/variants/:variantId/photos/:fileId', async () => {
+  const { a, b } = await pair(),
+    foreign = await productWithVariant(a),
+    own = await productWithVariant(b);
+  const foreignPhoto = await uploadedVariantPhoto(a, foreign),
+    photo = await uploadedVariantPhoto(b, own);
+  const foreignBase = `/products/${foreign.id}/variants/${foreign.variantId}/photos`;
+  const base = `/products/${own.id}/variants/${own.variantId}/photos`;
+  await success(a, 'POST', `${foreignBase}/confirm`, 201, foreignPhoto);
+  await success(b, 'POST', `${base}/confirm`, 201, photo);
+  const before = await f.row('files', foreignPhoto.fileId);
+  await success(b, 'DELETE', `${base}/${photo.fileId}`, 204);
+  expect((await f.row('product_variants', own.variantId)).image_file_ids).toEqual([]);
+  expect((await f.row('files', photo.fileId)).expires_at).not.toBeNull();
+  await hidden(
+    b,
+    'DELETE',
+    (id) => `/products/${id}/variants/${own.variantId}/photos/${foreignPhoto.fileId}`,
+    foreign.id,
+  );
+  await hidden(b, 'DELETE', (id) => `${base}/${id}`, foreignPhoto.fileId);
   expect(await f.row('files', foreignPhoto.fileId)).toEqual(before);
 });
 
@@ -4715,6 +5080,45 @@ describe('every production shop route isolates its data', () => {
 
   it('requires an executable fixture or a named boundary proof for every actual Fastify route', () => {
     inventory.assertCovered([...fixtures.keys(), ...isolationBoundaries.keys()]);
+  });
+  it('finds an answer taught from a bad reply for Bangla, Banglish and mixed questions', async () => {
+    const shop = await f.shop();
+    await enableChats(shop);
+    const replyId = await seedAiReply(shop);
+    await success(shop, 'PUT', `/ai-replies/${replyId}/rating`, 204, {
+      rating: 'bad',
+      reason: 'wrong_information',
+    });
+    await success(shop, 'POST', `/ai-replies/${replyId}/fix`, 204, {
+      question: 'Panjabi er kapor ki?',
+      answer: 'আমাদের পাঞ্জাবি ১০০% কটন।',
+      keywords: ['কাপড়', 'kapor', 'fabric'],
+    });
+    await success(shop, 'POST', '/knowledge-items', 201, {
+      kind: 'policy',
+      question: 'Showroom kothay?',
+      answer: 'ধানমন্ডিতে আমাদের শোরুম।',
+      keywords: ['showroom'],
+    });
+    // The worker indexes after commit; here the same service runs inline.
+    const ai = app.get(AiService, { strict: false });
+    const repository = app.get(KnowledgeRepository, { strict: false });
+    const indexer = new KnowledgeIndexService(repository, undefined as never, ai);
+    const { rows: items } = await f.admin.pool.query(
+      'select id, question, updated_at from knowledge_items where store_id = $1',
+      [shop.id],
+    );
+    for (const item of items)
+      await indexer.index(shop.id, item.id, {
+        revision: item.updated_at.toISOString(),
+        finalAttempt: true,
+      });
+    const taught = items.find((item) => item.question === 'Panjabi er kapor ki?').id;
+    const search = new KnowledgeSearchService(repository, ai);
+    // None of these is the question the customer typed; each reaches the answer by a word the
+    // team added, in Bangla letters, English letters or both.
+    for (const question of ['কাপড়', 'kapor', 'fabric', 'panjabi কাপড়'])
+      expect((await search.search(shop.id, question, 1))[0]?.itemId, question).toBe(taught);
   });
   it('returns the phone limit error to a masked member on contact search, create and edit', async () => {
     const shop = await f.shop();

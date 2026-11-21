@@ -372,6 +372,8 @@ it('answers after a routine classification', async () => {
     usage: [{ id: expect.any(String) }],
     runs: [
       { tier: 'fast', purpose: 'classify' },
+      // The customer's words are searched in the catalogue before the model answers.
+      { tier: 'embed', purpose: 'embedding' },
       { tier: 'reply', purpose: 'chat_reply' },
     ],
   });
@@ -526,14 +528,16 @@ it('answers price and delivery from tool results, saves the run and sources, and
       ai_sources: [{ tool: 'search_products', refs: [active.productId] }],
     },
   ]);
-  expect(inputs[2]).toContain('<tool_results round="1">');
+  expect(inputs[2]).toContain('<tool_results untrusted="true" round="1">');
   expect(inputs[1]).toContain('<conversation untrusted="true">');
   expect(await observe(active)).toMatchObject({
     conversations: [{ status: 'open', responder: 'ai', handover_reason: null }],
     runs: [
       { purpose: 'classify' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v1' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v1' },
+      { purpose: 'embedding' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v2' },
+      { purpose: 'embedding' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v2' },
     ],
     usage: [{ id: expect.any(String) }],
   });

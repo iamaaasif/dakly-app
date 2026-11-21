@@ -12,10 +12,15 @@ import { products, productVariants } from '@dakly/db/schema/products';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import {
+  photoSnapshot,
+  type CatalogueVariant,
+  type Variant,
+  variantSnapshot,
+} from './product-snapshots.repository';
 
 // Drizzle strips qualifiers in SELECT expressions; this must refer to the outer product.
 const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.id.name)}`;
-const productImagesColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.imageFileIds.name)}`;
 
 const productColumns = {
   id: products.id,
@@ -47,7 +52,7 @@ const variantColumns = {
   isDefault: productVariants.isDefault,
 };
 export type CatalogueProduct = Product & {
-  variants: Variant[];
+  variants: CatalogueVariant[];
   photos: { id: string; objectKey: string }[];
 };
 type PhotoWrite = ConfirmProductPhotoInput & {
@@ -63,14 +68,7 @@ export type Product = ProductDetails & {
   createdAt: Date;
   updatedAt: Date;
 };
-export type Variant = CreateProductInput['variants'][number] & {
-  id: string;
-  productId: string;
-  title: string;
-  isDefault: boolean;
-  onHand: number;
-  reserved: number;
-};
+export type { CatalogueVariant, Variant };
 export type SkuMatch = {
   id: string;
   productId: string;
@@ -141,8 +139,15 @@ export class ProductsRepository {
   }
 
   // The AI agent may only offer active products the shop shows in chats.
-  searchForChat(storeId: string, text: string, limit: number): Promise<CatalogueProduct[]> {
-    const pattern = `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+  hasForChat(storeId: string): Promise<boolean> {
+    return this.database
+      .forStore(storeId, (tx) =>
+        tx.select({ id: products.id }).from(products).where(chatProductFilter(storeId)).limit(1),
+      )
+      .then((rows) => rows.length > 0);
+  }
+
+  findManyForChat(storeId: string, ids: string[]): Promise<CatalogueProduct[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -151,16 +156,7 @@ export class ProductsRepository {
           photos: photoSnapshot(storeId),
         })
         .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            eq(products.status, 'active'),
-            eq(products.isVisibleInChats, true),
-            sql`(${products.name} ilike ${pattern} or exists (select 1 from unnest(${products.aliases}) alias where alias ilike ${pattern}))`,
-          ),
-        )
-        .orderBy(desc(products.id))
-        .limit(limit),
+        .where(and(chatProductFilter(storeId), inArray(products.id, ids))),
     );
   }
 
@@ -184,14 +180,7 @@ export class ProductsRepository {
           photos: photoSnapshot(storeId),
         })
         .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            eq(products.id, id),
-            eq(products.status, 'active'),
-            eq(products.isVisibleInChats, true),
-          ),
-        ),
+        .where(and(chatProductFilter(storeId), eq(products.id, id))),
     );
     return rows[0];
   }
@@ -409,20 +398,10 @@ export class ProductsRepository {
   }
 }
 
-function variantSnapshot(storeId: string) {
-  return sql<Variant[]>`(select coalesce(jsonb_agg(jsonb_build_object(
-    'id', v.id, 'productId', v.product_id, 'title', v.title, 'optionValues', v.option_values,
-    'sku', v.sku, 'priceOverridePoisha', v.price_override_poisha, 'costPoisha', v.cost_poisha,
-    'onHand', v.on_hand, 'reserved', v.reserved, 'isDefault', v.is_default
-  ) order by v.position, v.id), '[]'::jsonb)
-  from ${productVariants} v
-  where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived')`;
-}
-
-function photoSnapshot(storeId: string) {
-  return sql<CatalogueProduct['photos']>`(select coalesce(jsonb_agg(
-    jsonb_build_object('id', f.id, 'objectKey', f.object_key)
-    order by array_position(${productImagesColumn}, f.id)), '[]'::jsonb)
-    from ${files} f where f.store_id = ${storeId} and f.id = any(${productImagesColumn})
-    and f.purpose = 'product_image' and f.status = 'ready')`;
+export function chatProductFilter(storeId: string) {
+  return and(
+    eq(products.storeId, storeId),
+    eq(products.status, 'active'),
+    eq(products.isVisibleInChats, true),
+  );
 }

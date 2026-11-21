@@ -96,10 +96,12 @@ describe('store settings patches', () => {
     expect(contracts.changeStoreExtensionsSchema.parse({ extensions: [] })).toEqual({
       extensions: [],
     });
+    expect(contracts.changeStoreExtensionsSchema.parse({ extensions: ['physical_shop'] })).toEqual({
+      extensions: ['physical_shop'],
+    });
   });
   it.each([
     {},
-    { extensions: ['physical_shop'] },
     { extensions: ['core'] },
     { extensions: ['chats', 'chats'] },
     { extensions: null },

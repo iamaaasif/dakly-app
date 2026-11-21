@@ -7,7 +7,8 @@ import { usePlans } from '../api/plans';
 import type { BusinessDraft } from '../auth.types';
 import { PlanForm } from './plan-form';
 
-export function PlanPicker({ draft, onBack }: { draft: BusinessDraft; onBack: () => void }) {
+type PlanPickerProps = { draft: BusinessDraft; onBack: () => void; onCreated: () => void };
+export function PlanPicker({ draft, onBack, onCreated }: PlanPickerProps) {
   const plans = usePlans();
   if (plans.isPending)
     return (
@@ -25,5 +26,5 @@ export function PlanPicker({ draft, onBack }: { draft: BusinessDraft; onBack: ()
         <Button onClick={() => void plans.refetch()}>Refresh plans</Button>
       </div>
     );
-  return <PlanForm draft={draft} onBack={onBack} plans={plans.data} />;
+  return <PlanForm draft={draft} onBack={onBack} onCreated={onCreated} plans={plans.data} />;
 }

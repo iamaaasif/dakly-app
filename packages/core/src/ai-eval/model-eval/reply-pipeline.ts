@@ -3,18 +3,18 @@ import {
   type ChatClassification,
 } from '@dakly/contracts/chat-classification';
 import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
-import type { handoverReasons } from '@dakly/contracts/chats';
+import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/llm-driver';
 
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReply } from '../../ai-agent/prompts/chat-reply.v1';
+import { chatReply } from '../../ai-agent/prompts/chat-reply.v2';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v1';
 import { checkReplyFacts } from '../../ai-agent/reply-fact-check';
 import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
 import type { EvalOutcome } from '../golden-case';
 import { evalShop } from './eval-catalog';
 import type { EvalMeter } from './eval-meter';
-import { runFixtureTool } from './fixture-tools';
+import { matchEvalPhoto, runFixtureTool } from './fixture-tools';
 
 const MAX_ROUNDS = 4;
 const TIMEOUT_MS = 60_000;
@@ -105,6 +105,16 @@ function answerToolCalls(calls: ToolCall[], toolResults: object[], note: Note) {
   return { answered };
 }
 
+// The photo match for a photo's text, else a search of what the customer wrote, as the real agent does.
+function replyCandidates(question: string): object | undefined {
+  const photo = photoSearchText(question);
+  if (photo !== undefined) return matchEvalPhoto(photo);
+  const query = question.slice(0, 100).trim();
+  return query.length >= MIN_SEARCH_LENGTH
+    ? runFixtureTool('search_products', JSON.stringify({ query }))
+    : undefined;
+}
+
 // The same loop as SalesAgentService.compose, with fixture tools instead of the database.
 export async function composeReply(
   { driver, meter, model }: Run,
@@ -112,13 +122,9 @@ export async function composeReply(
   note: Note = () => undefined,
 ): Promise<EvalOutcome> {
   const toolResults: object[] = [];
-  const query = question.slice(0, 100).trim();
-  const candidates =
-    query.length >= MIN_SEARCH_LENGTH
-      ? runFixtureTool('search_products', JSON.stringify({ query }))
-      : { products: [] };
-  if (query.length >= MIN_SEARCH_LENGTH) toolResults.push(candidates);
-  const context = replyContext(question, candidates);
+  const candidates = replyCandidates(question);
+  if (candidates) toolResults.push(candidates);
+  const context = replyContext(question, candidates ?? { products: [] });
   let transcript = '';
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {
@@ -141,7 +147,7 @@ export async function composeReply(
     }
     const outcome = answerToolCalls(result.toolCalls, toolResults, note);
     if (outcome.handover) return { kind: 'handover', reason: outcome.handover };
-    transcript += `\n<tool_results round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
+    transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
   }
   note('ran out of tool rounds');
   return { kind: 'handover', reason: 'out_of_scope' };

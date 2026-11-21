@@ -84,7 +84,7 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
     await expect(otherPage.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
     const backupCode = await setupAuthenticator(context, baseURL!, password);
     await signOut(page);
-    await expect(page).toHaveURL(`${baseURL}/sign-in`);
+    await expect(page).toHaveURL(new RegExp(`^${baseURL}/sign-in(\\?next=.*)?$`));
     await expect(otherPage.getByRole('heading', { name: 'Dashboard', exact: true })).toBeHidden();
     await privateInput(page, 'identifier', phone);
     await privateInput(page, 'password', password);
@@ -115,7 +115,7 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
       ).rows.some((row) => row.is_remembered),
     ).toBe(true);
     await signOut(page);
-    await expect(page).toHaveURL(`${baseURL}/sign-in`);
+    await expect(page).toHaveURL(new RegExp(`^${baseURL}/sign-in(\\?next=.*)?$`));
     await recoveryProof(page, { phone, password, seen, userId, database, baseURL: baseURL! });
   } finally {
     await scrubPage(page);
@@ -159,7 +159,7 @@ type RecoveryFixture = {
 };
 async function requestRecovery(page: Page, fixture: RecoveryFixture) {
   await page.goto('/security/recovery');
-  await privateInput(page, 'phone', fixture.phone);
+  await privateInput(page, 'identifier', fixture.phone);
   await expect
     .poll(
       async () => {
@@ -237,5 +237,5 @@ async function recoveryProof(page: Page, fixture: RecoveryFixture) {
     ).rows[0].totp_enabled_at,
   ).toBeNull();
   await page.goto('/dashboard');
-  await expect(page).toHaveURL(`${fixture.baseURL}/sign-in`);
+  await expect(page).toHaveURL(`${fixture.baseURL}/sign-in?next=%2Fdashboard`);
 }

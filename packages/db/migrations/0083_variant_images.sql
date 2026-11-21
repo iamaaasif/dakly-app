@@ -1,0 +1,1 @@
+ALTER TABLE "product_variants" ADD COLUMN "image_file_ids" uuid[] DEFAULT '{}'::uuid[] NOT NULL;

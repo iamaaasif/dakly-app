@@ -14,6 +14,7 @@ const PRODUCT_ERRORS = {
   PRODUCT_PHOTO_ALREADY_ADDED: { status: 409, message: 'This photo was already added' },
   PRODUCT_PHOTO_NOT_FOUND: { status: 404, message: 'Photo not found' },
   PRODUCT_PHOTO_ORDER_INVALID: { status: 400, message: 'Include every product photo once' },
+  PRODUCT_VARIANT_PHOTO_LIMIT: { status: 409, message: 'A variant can have up to ten photos' },
   PRODUCT_NOT_FOUND: { status: 404, message: 'Product not found' },
   PRODUCT_VARIANT_NOT_FOUND: { status: 404, message: 'Product variant not found' },
   RESTOCK_CONTACT_NOT_FOUND: { status: 404, message: 'Customer not found' },

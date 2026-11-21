@@ -109,7 +109,10 @@ describe('Session boundary over Fastify and Postgres', () => {
     userId = user!.id;
     const shops = await admin.db
       .insert(stores)
-      .values([{ name: 'Rina shop' }, { name: 'Other shop' }])
+      .values([
+        { name: 'Rina shop', extensions: ['sales', 'chats', 'social_auto_post'] },
+        { name: 'Other shop' },
+      ])
       .returning({ id: stores.id });
     storeId = shops[0]!.id;
     otherStoreId = shops[1]!.id;
@@ -297,6 +300,19 @@ describe('Session boundary over Fastify and Postgres', () => {
       canEditStoreSettings: false,
       canChangeExtensions: false,
     });
+    // Turning an extension off hides its pages and keeps the rest.
+    await admin.pool.query("update stores set extensions='{chats}' where id=$1", [storeId]);
+    const trimmed = (await app.inject({ url: '/me/context', headers: { cookie: cookie() } })).json()
+      .currentStore;
+    expect(trimmed).toMatchObject({
+      canViewOrders: false,
+      canViewProducts: false,
+      canViewChats: true,
+    });
+    await admin.pool.query(
+      "update stores set extensions='{sales,chats,social_auto_post}' where id=$1",
+      [storeId],
+    );
     expect(shell.contextTag).toMatch(/^[a-f0-9]{64}$/);
     expect(context.headers['cache-control']).toBe('no-store');
     await service.setActiveStore(userId, sessionId, otherStoreId);
@@ -420,6 +436,29 @@ describe('Session boundary over Fastify and Postgres', () => {
       }
     },
   );
+  it('signs out every session, including the current one, and clears the cookie', async () => {
+    const [other] = await admin.db
+      .insert(users)
+      .values({ name: 'Sign out everywhere', email: crypto.randomUUID() + '@example.test' })
+      .returning({ id: users.id });
+    const otherId = other!.id;
+    try {
+      const current = await service.create(otherId, { isRemembered: false });
+      const another = await service.create(otherId, { isRemembered: true });
+      const response = await app.inject({
+        method: 'POST',
+        url: '/me/sessions/sign-out-all',
+        headers: { cookie: `dakly_session=${current.token}`, origin },
+      });
+      expect(response.statusCode).toBe(204);
+      expect(String(response.headers['set-cookie'])).toContain('Expires=Thu, 01 Jan 1970');
+      expect(await service.resolve(current.token)).toBeUndefined();
+      expect(await service.resolve(another.token)).toBeUndefined();
+    } finally {
+      await admin.db.execute(sql`delete from account_security_events where user_id = ${otherId}`);
+      await admin.db.delete(users).where(eq(users.id, otherId));
+    }
+  });
   it('keeps account-only context usable and drops selected access after removal', async () => {
     const created = await service.create(userId, { isRemembered: false });
     const headers = { cookie: `dakly_session=${created.token}` };

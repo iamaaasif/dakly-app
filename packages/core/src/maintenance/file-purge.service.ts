@@ -31,6 +31,7 @@ export class FilePurgeService {
   // R2 is called, and deleting a missing object is not an error.
   purgeExpiredFiles() {
     return this.forEachStore(async (storeId) => {
+      await this.repository.releaseExpiredKhataPhotos(storeId);
       for (;;) {
         const keys = await this.repository.deleteExpiredBatch(storeId, FILE_BATCH);
         for (const key of keys) await this.storage.deleteObject(key);

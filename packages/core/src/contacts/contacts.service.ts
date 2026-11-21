@@ -266,6 +266,10 @@ export class ContactsService {
     return this.importContacts.findByPhones(storeId, phones);
   }
 
+  findNearPhoneMatches(storeId: string, phones: string[]) {
+    return this.importContacts.findNearPhones(storeId, phones);
+  }
+
   saveImportedRows(
     storeId: string,
     importId: string,

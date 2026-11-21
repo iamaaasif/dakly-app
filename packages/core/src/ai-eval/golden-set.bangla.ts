@@ -94,7 +94,15 @@ export const banglaGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [1450],
     mentionsAnyOf: ['কুর্তি'],
-    dependsOn: 'AI-11',
+  },
+  {
+    id: 'photo-canvas-english',
+    language: 'english',
+    question: 'photo: white canvas shoes, lace-up, rubber sole. How much?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500],
+    mentionsAnyOf: ['ক্যানভাস', 'canvas'],
+    neverOffer: ['লোফার', 'loafer', 'স্নিকার্স', 'sneakers'],
   },
   {
     id: 'photo-loafer-banglish',
@@ -103,7 +111,6 @@ export const banglaGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [2100],
     neverOffer: ['স্নিকার্স', 'sneakers'],
-    dependsOn: 'AI-11',
   },
   // Out of stock. Needs AI-12.
   {
@@ -192,7 +199,8 @@ export const banglaRecordedOutcomes: Record<string, EvalOutcome> = {
   'search-colour-price-bn': { kind: 'reply', text: 'লাল কুর্তি আছে, ৳১,৪৫০।' },
   'search-three-piece-banglish': { kind: 'reply', text: 'থ্রি পিস আছে, দাম ৳২,২০০।' },
   'photo-kurti-bn': { kind: 'reply', text: 'এই কুর্তিটা আছে, দাম ৳১,৪৫০।' },
-  'photo-loafer-banglish': { kind: 'reply', text: 'এই লোফারটা ৳২,১০০।' },
+  'photo-canvas-english': { kind: 'reply', text: 'এই ক্যানভাস জুতাটা ৳১,৫০০।' },
+  'photo-loafer-banglish': { kind: 'reply', text: 'এই লোফারটা এখন স্টকে নেই।' },
   'oos-size-bn': { kind: 'reply', text: 'XL এখন নেই। M আর L সাইজ আছে, ৳৬৫০।' },
   'oos-size-banglish': { kind: 'reply', text: 'XL nai. M ar L ache, 650 taka.' },
   'oos-product-bn': {

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type {
   ChannelReceipt,
   InboundAttachmentKind,
+  InboundComment,
   InboundMessage,
   InboundPostback,
 } from '../channel-driver';
@@ -65,6 +66,30 @@ const echoMessage = z.object({
   metadata: z.uuid(),
   is_echo: z.literal(true),
   app_id: z.union([z.string().min(1), z.int().positive()]).transform(String),
+});
+
+const unixSeconds = z.number().int().nonnegative().max(8.64e12);
+const facebookComment = z.object({
+  item: z.literal('comment'),
+  verb: z.literal('add'),
+  comment_id: z.string().min(1),
+  post_id: z.string().min(1),
+  parent_id: z.string().min(1).optional(),
+  from: z.object({ id: z.string().min(1), name: z.string().min(1).optional() }),
+  message: z.string().min(1),
+  created_time: unixSeconds,
+});
+const instagramComment = z.object({
+  id: z.string().min(1),
+  parent_id: z.string().min(1).optional(),
+  from: z.object({ id: z.string().min(1), username: z.string().min(1).optional() }),
+  media: z.object({ id: z.string().min(1) }),
+  text: z.string().min(1),
+});
+const commentEntry = z.object({
+  id: z.string().min(1),
+  time: unixSeconds.optional(),
+  changes: z.array(z.object({ field: z.string(), value: z.unknown() })).default([]),
 });
 
 type MetaMessagingChannel = 'messenger' | 'instagram';
@@ -208,4 +233,61 @@ export function readMetaWebhookDelivery(rawBody: Buffer): Record<string, unknown
     if (error instanceof SyntaxError) return undefined;
     throw error;
   }
+}
+
+function facebookCommentOf(account: string, value: unknown): InboundComment | undefined {
+  const parsed = facebookComment.safeParse(value).data;
+  if (!parsed || parsed.from.id === account) return undefined;
+  return {
+    channel: 'messenger',
+    accountExternalId: account,
+    externalPostId: parsed.post_id,
+    externalCommentId: parsed.comment_id,
+    // Meta sets parent_id to the post for a top-level comment.
+    parentExternalCommentId:
+      parsed.parent_id && parsed.parent_id !== parsed.post_id ? parsed.parent_id : null,
+    authorExternalId: parsed.from.id,
+    authorName: parsed.from.name ?? null,
+    text: parsed.message,
+    commentedAt: new Date(parsed.created_time * 1000),
+  };
+}
+
+function instagramCommentOf(
+  account: string,
+  value: unknown,
+  time: number | undefined,
+): InboundComment | undefined {
+  const parsed = instagramComment.safeParse(value).data;
+  // The Instagram event carries no comment time, so the delivery time stands in for it.
+  if (!parsed || parsed.from.id === account || time === undefined) return undefined;
+  return {
+    channel: 'instagram',
+    accountExternalId: account,
+    externalPostId: parsed.media.id,
+    externalCommentId: parsed.id,
+    parentExternalCommentId: parsed.parent_id ?? null,
+    authorExternalId: parsed.from.id,
+    authorName: parsed.from.username ?? null,
+    text: parsed.text,
+    commentedAt: new Date(time * 1000),
+  };
+}
+
+export function parseMetaComments(payload: unknown): InboundComment[] {
+  const delivery = deliverySchema.safeParse(payload).data;
+  if (!delivery || (delivery.object !== 'page' && delivery.object !== 'instagram')) return [];
+  const facebook = delivery.object === 'page';
+  return delivery.entry.flatMap((rawEntry) => {
+    const entry = commentEntry.safeParse(rawEntry).data;
+    if (!entry) return [];
+    return entry.changes.flatMap(({ field, value }) => {
+      if (facebook && field !== 'feed') return [];
+      if (!facebook && field !== 'comments') return [];
+      const comment = facebook
+        ? facebookCommentOf(entry.id, value)
+        : instagramCommentOf(entry.id, value, entry.time);
+      return comment ? [comment] : [];
+    });
+  });
 }

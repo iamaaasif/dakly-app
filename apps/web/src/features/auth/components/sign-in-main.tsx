@@ -13,6 +13,7 @@ export type SignInView = 'phone' | 'email' | 'signup';
 type SignInMainProps = {
   config: AuthConfig;
   method: 'phone' | 'email';
+  next?: string;
   remember: boolean;
   embedded: boolean;
   onRemember: (remember: boolean) => void;
@@ -22,6 +23,7 @@ type SignInMainProps = {
 export function SignInMain({
   config,
   method,
+  next,
   remember,
   embedded,
   onRemember,
@@ -42,7 +44,7 @@ export function SignInMain({
       }
     >
       <div className="space-y-6">
-        <SignInNavigation method={method} onNavigate={onNavigate} />
+        <SignInNavigation method={method} next={next} onNavigate={onNavigate} />
         <SignInForm
           key={method}
           method={method}

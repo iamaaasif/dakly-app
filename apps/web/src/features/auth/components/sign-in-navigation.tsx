@@ -3,14 +3,22 @@ import { AuthLink } from './auth-link';
 type Method = 'phone' | 'email';
 export function SignInNavigation({
   method,
+  next,
   onNavigate,
 }: {
   method: Method;
+  next?: string;
   onNavigate?: (view: Method | 'signup') => void;
 }) {
+  const query = (method: Method) => {
+    const params = new URLSearchParams();
+    if (method === 'email') params.set('method', 'email');
+    if (next) params.set('next', next);
+    return params.size ? `/sign-in?${params}` : '/sign-in';
+  };
   const tabs: { view: Method; href: string; label: string }[] = [
-    { view: 'phone', href: '/sign-in', label: 'Mobile number' },
-    { view: 'email', href: '/sign-in?method=email', label: 'Email' },
+    { view: 'phone', href: query('phone'), label: 'Mobile number' },
+    { view: 'email', href: query('email'), label: 'Email' },
   ];
   return (
     <nav

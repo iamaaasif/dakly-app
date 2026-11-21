@@ -98,9 +98,9 @@ export const getOrderStatusTool = {
 export const sendProductCardTool = {
   name: 'send_product_card',
   description:
-    'Send the customer a product card with name and price before your reply. Use it when the customer wants to see a product or asks for options. The price on the card comes from the shop, so do not repeat it in your own words unless a tool returned it.',
+    'Send the customer a product card with name and price before your reply. Use it when the customer wants to see a product or asks for options. Pass variantId when the customer asks about one colour or size, so the card shows the photo of that variant. The price on the card comes from the shop, so do not repeat it in your own words unless a tool returned it.',
   aliases: ['ছবি', 'দেখান', 'photo', 'picture', 'pic den', 'dekhan'],
-  input: z.strictObject({ productId: z.uuid() }),
+  input: z.strictObject({ productId: z.uuid(), variantId: z.uuid().optional() }),
   units: {},
 } satisfies AiToolDefinition;
 

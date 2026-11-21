@@ -68,12 +68,12 @@ async function seedPlatform(db: Database): Promise<void> {
       {
         key: 'ai.models',
         value: {
-          reply: 'gpt-6.1-terra',
+          reply: 'gpt-6-luna',
           writer: 'gpt-6.1-terra',
-          vision: 'gpt-6.1-terra',
+          vision: 'gpt-6-luna',
           fast: 'gpt-6-luna',
-          embed: 'text-embedding-3-small',
-          transcribe: 'gpt-transcribe',
+          embed: 'text-embedding-3-large',
+          transcribe: 'gpt-4o-transcribe',
         },
       },
       { key: 'billing.vat_rate_basis_points', value: 1500 },
@@ -201,6 +201,8 @@ function planRow(code: string, name: string, monthly: number, yearly: number, po
     ai_conversation: [0, 300, 1_500, 5_000][position],
     ai_content: [20, 100, 400, 1_500][position],
     ai_ask: [20, 100, 400, 1_500][position],
+    // Placeholder for local data; the real per-plan page quota is set in the plan catalogue.
+    ai_scan: [10, 50, 200, 800][position],
   };
   return {
     code,

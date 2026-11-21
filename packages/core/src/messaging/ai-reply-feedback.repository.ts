@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 
 import type { AiFeedbackQuery, RateAiReplyInput } from '@dakly/contracts/ai-feedback';
 import { aiRatingReasons } from '@dakly/contracts/ai-feedback';
@@ -8,6 +8,9 @@ import { messages } from '@dakly/db/schema/chats';
 import { TenantDatabase } from '../platform/database/tenant-database';
 
 const FEEDBACK_LIMIT = 50;
+
+const ratingOf = (filter: Exclude<AiFeedbackQuery['filter'], 'all'>) =>
+  filter === 'good' ? 'good' : 'bad';
 
 @Injectable()
 export class AiReplyFeedbackRepository {
@@ -40,6 +43,33 @@ export class AiReplyFeedbackRepository {
     return Boolean(rated);
   }
 
+  async findAiReply(storeId: string, messageId: string) {
+    const [reply] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ rating: messages.aiRating, fixedAt: messages.aiFixedAt })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(messages.id, messageId),
+            eq(messages.authorType, 'ai'),
+          ),
+        )
+        // The fix creates an answer from this reply; a second fix must wait for this one.
+        .for('update'),
+    );
+    return reply;
+  }
+
+  async markFixed(storeId: string, messageId: string, now: Date) {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(messages)
+        .set({ aiFixedAt: now })
+        .where(and(eq(messages.storeId, storeId), eq(messages.id, messageId))),
+    );
+  }
+
   async counts(storeId: string) {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
@@ -47,6 +77,7 @@ export class AiReplyFeedbackRepository {
           rating: messages.aiRating,
           reason: messages.aiRatingReason,
           count: sql<number>`count(*)::int`,
+          fixed: sql<number>`count(${messages.aiFixedAt})::int`,
         })
         .from(messages)
         .where(and(eq(messages.storeId, storeId), isNotNull(messages.aiRating)))
@@ -67,6 +98,7 @@ export class AiReplyFeedbackRepository {
           reason: messages.aiRatingReason,
           replyText: messages.body,
           ratedAt: messages.ratedAt,
+          fixedAt: messages.aiFixedAt,
           // Raw, qualified names: drizzle drops table names inside sql`` of a one-table select,
           // which makes the subquery columns ambiguous.
           customerName: sql<
@@ -81,7 +113,10 @@ export class AiReplyFeedbackRepository {
         .where(
           and(
             eq(messages.storeId, storeId),
-            filter === 'all' ? isNotNull(messages.aiRating) : eq(messages.aiRating, filter),
+            filter === 'all'
+              ? isNotNull(messages.aiRating)
+              : eq(messages.aiRating, ratingOf(filter)),
+            filter === 'needs_fixing' ? isNull(messages.aiFixedAt) : undefined,
           ),
         )
         .orderBy(desc(messages.ratedAt), desc(messages.id))

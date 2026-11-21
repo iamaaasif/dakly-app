@@ -12,29 +12,33 @@ export type KnowledgeUploadInput = z.infer<typeof knowledgeUploadSchema>;
 export type KnowledgeUploadResponse = { fileId: string; uploadUrl: string };
 
 export const knowledgeAnswerMaxLength = 20_000;
-const answer = z
+export const knowledgeAnswerSchema = z
   .string()
   .trim()
   .min(1)
   .max(knowledgeAnswerMaxLength)
   .refine((text) => !text.includes('\u0000'), 'Remove the null character');
-const question = z.string().trim().min(1).max(500);
+export const knowledgeQuestionSchema = z.string().trim().min(1).max(500);
 // A few words customers use for this answer; the screen shows at most four.
-const keywords = z.array(z.string().trim().min(1).max(40)).max(10);
+export const knowledgeKeywordsSchema = z.array(z.string().trim().min(1).max(40)).max(10);
 const fileId = z.uuid();
 
 export const createKnowledgeItemSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('policy'),
-    question: question.optional(),
-    answer,
-    keywords: keywords.optional(),
+    question: knowledgeQuestionSchema.optional(),
+    answer: knowledgeAnswerSchema,
+    keywords: knowledgeKeywordsSchema.optional(),
   }),
   z.strictObject({ kind: z.literal('file'), fileId }),
 ]);
 
 export const changeKnowledgeItemSchema = z.union([
-  z.strictObject({ question: question.optional(), answer, keywords: keywords.optional() }),
+  z.strictObject({
+    question: knowledgeQuestionSchema.optional(),
+    answer: knowledgeAnswerSchema,
+    keywords: knowledgeKeywordsSchema.optional(),
+  }),
   z.strictObject({ fileId }),
 ]);
 
