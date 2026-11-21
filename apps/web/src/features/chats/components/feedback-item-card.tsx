@@ -23,7 +23,7 @@ export function FeedbackItemCard({ item }: { item: AiFeedbackItem }) {
         </time>
       </div>
       {item.customerQuestion ? <p className="text-text-muted">“{item.customerQuestion}”</p> : null}
-      <p className="rounded-md bg-surface-muted p-2 whitespace-pre-wrap">{item.replyText}</p>
+      <p className="rounded-md bg-primary-soft p-2 whitespace-pre-wrap">{item.replyText}</p>
       {item.reason ? (
         <p className="text-sm text-danger">{feedbackReasonLabels[item.reason]}</p>
       ) : null}

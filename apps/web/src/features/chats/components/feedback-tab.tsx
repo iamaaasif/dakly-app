@@ -1,6 +1,6 @@
 import type { AiFeedbackQuery } from '@dakly/contracts/ai-feedback';
+import { formatCount } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
@@ -38,9 +38,10 @@ export function FeedbackTab({ filter, onFilterChange }: FeedbackTabProps) {
         <Stat
           label="Helpful"
           value={summary.helpfulPercent === null ? '–' : `${summary.helpfulPercent}%`}
+          tone="text-success"
         />
-        <Stat label="Good answers" value={String(summary.goodCount)} />
-        <Stat label="Bad answers" value={String(summary.badCount)} />
+        <Stat label="Good answers" value={formatCount(summary.goodCount)} tone="text-text" />
+        <Stat label="Bad answers" value={formatCount(summary.badCount)} tone="text-danger" />
       </dl>
       {summary.commonProblems.length > 0 ? (
         <p className="flex flex-wrap items-center gap-2 text-sm">
@@ -54,14 +55,15 @@ export function FeedbackTab({ filter, onFilterChange }: FeedbackTabProps) {
       ) : null}
       <div role="group" aria-label="Show" className="flex flex-wrap gap-2">
         {(Object.keys(filterLabels) as Filter[]).map((name) => (
-          <Button
+          <button
             key={name}
-            variant={name === filter ? 'primary' : 'secondary'}
+            type="button"
             aria-pressed={name === filter}
             onClick={() => onFilterChange(name)}
+            className="inline-flex min-h-8 items-center rounded-full border border-border px-3 text-base hover:bg-surface-muted aria-pressed:border-inverse aria-pressed:bg-inverse aria-pressed:font-semibold aria-pressed:text-on-primary"
           >
             {filterLabels[name]}
-          </Button>
+          </button>
         ))}
       </div>
       {items.length === 0 ? (
@@ -77,10 +79,10 @@ export function FeedbackTab({ filter, onFilterChange }: FeedbackTabProps) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone: string }) {
   return (
-    <div className="rounded-lg border border-border p-3">
-      <dd className="text-lg font-semibold">{value}</dd>
+    <div className="rounded-lg bg-surface-muted p-3">
+      <dd className={`text-lg font-semibold ${tone}`}>{value}</dd>
       <dt className="text-sm text-text-muted">{label}</dt>
     </div>
   );
