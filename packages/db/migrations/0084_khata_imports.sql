@@ -42,12 +42,8 @@ CREATE POLICY "khata_imports_isolation" ON "khata_imports"
   WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON "khata_imports" TO dakly_app;--> statement-breakpoint
 GRANT UPDATE ON "khata_rows" TO dakly_app;--> statement-breakpoint
-DROP POLICY "due_entries_isolation" ON "due_entries";--> statement-breakpoint
-CREATE POLICY "due_entries_select" ON "due_entries" FOR SELECT
-  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
-CREATE POLICY "due_entries_insert" ON "due_entries" FOR INSERT
-  WITH CHECK ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid);--> statement-breakpoint
 -- Only a khata import's undo may remove a ledger row; a manual entry can never be deleted.
-CREATE POLICY "due_entries_delete_khata_import" ON "due_entries" FOR DELETE
-  USING ("store_id" = NULLIF(current_setting('app.store_id', true), '')::uuid AND "source" = 'khata_import');--> statement-breakpoint
+-- A restrictive policy narrows the store policy for deletes without replacing it.
+CREATE POLICY "due_entries_delete_khata_import" ON "due_entries" AS RESTRICTIVE FOR DELETE
+  USING ("source" = 'khata_import');--> statement-breakpoint
 GRANT DELETE ON "due_entries" TO dakly_app;
