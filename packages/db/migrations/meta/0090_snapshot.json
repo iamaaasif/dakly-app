@@ -1,6 +1,6 @@
 {
-  "id": "c131adde-5100-4205-bc1a-0278e04a2948",
-  "prevId": "98a4b831-ca71-4570-9f07-1f00bce30e82",
+  "id": "e8d8891e-e1f9-4149-9dbc-c9f8667bf87d",
+  "prevId": "f292be87-c86c-4158-9bf2-becc7b35fee3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3217,7 +3217,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'khata_scan')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'khata_scan')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
