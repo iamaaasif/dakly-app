@@ -21,6 +21,7 @@ export const orderSources = [
   'pos_csv',
   'shopify',
   'woocommerce',
+  'khata_import',
 ] as const;
 // Fulfilment and money are separate fields. Allowed moves are in orders/order-stage.ts.
 export const orderStages = [
@@ -226,9 +227,9 @@ export type OrderDetail = OrderSummary & {
   buyerContactId: string | null;
   isRecipientBuyer: boolean;
   hasRecipientPhoneMatch: boolean;
-  recipientPhone: string;
-  recipientAddress: string;
-  recipientDistrict: string;
+  recipientPhone: string | null;
+  recipientAddress: string | null;
+  recipientDistrict: string | null;
   recipientBdAreaId: number | null;
   isDeliveryChargeOverridden: boolean;
   onHoldReason: (typeof onHoldReasons)[number] | null;

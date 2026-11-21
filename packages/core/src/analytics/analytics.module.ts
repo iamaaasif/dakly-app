@@ -28,6 +28,7 @@ import { SummarizeAttributionRemoved } from './jobs/summarize-attribution-remove
 import { SummarizeOrderCodCollected } from './jobs/summarize-order-cod-collected.job';
 import { SummarizeOrderCreated } from './jobs/summarize-order-created.job';
 import { SummarizeOrderEdited } from './jobs/summarize-order-edited.job';
+import { SummarizeOrderImported } from './jobs/summarize-order-imported.job';
 import { SummarizeOrderStageChanged } from './jobs/summarize-order-stage-changed.job';
 import { SweepAnalyticsJob } from './jobs/sweep-analytics.job';
 import { OrderAttributionEngine } from './order-attribution-engine.service';
@@ -63,6 +64,7 @@ import { OrderAttributionEngine } from './order-attribution-engine.service';
     SummarizeAttributionRemoved,
     SummarizeOrderCodCollected,
     SummarizeOrderCreated,
+    SummarizeOrderImported,
     SummarizeOrderEdited,
     SummarizeOrderStageChanged,
     SweepAnalyticsJob,

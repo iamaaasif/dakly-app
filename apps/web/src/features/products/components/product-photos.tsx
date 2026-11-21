@@ -3,7 +3,11 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import Image from 'next/image';
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
 
-import { MAX_PRODUCT_PHOTOS, type ProductResponse } from '@dakly/contracts/products';
+import {
+  MAX_PRODUCT_PHOTOS,
+  type ProductResponse,
+  type ProductVariantResponse,
+} from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { Label } from '@dakly/ui/label';
 
@@ -13,30 +17,59 @@ import { useUploadProductPhoto } from '../api/upload-product-photo';
 import { SessionDialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
 
-type ProductPhotosProps = { product: Pick<ProductResponse, 'id' | 'name' | 'photos'> };
-export function ProductPhotos({ product }: ProductPhotosProps) {
+type ProductPhotosProps = {
+  product: Pick<ProductResponse, 'id' | 'name' | 'photos'>;
+  // Photos of one variant; without it the product's own photos are shown.
+  variant?: Pick<ProductVariantResponse, 'id' | 'title' | 'photos'>;
+};
+export function ProductPhotos({ product, variant }: ProductPhotosProps) {
   const { data } = useSessionContext();
+  const scope = variant
+    ? {
+        id: product.id,
+        variantId: variant.id,
+        name: `${product.name} ${variant.title}`,
+        photos: variant.photos,
+      }
+    : { id: product.id, variantId: undefined, name: product.name, photos: product.photos };
   return (
-    <section className="space-y-4" aria-label="Product photos">
+    <section
+      className="space-y-4"
+      aria-label={variant ? `${variant.title} photos` : 'Product photos'}
+    >
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-text">Photos</h2>
+        {variant ? (
+          <h3 className="text-sm font-semibold text-text">{variant.title}</h3>
+        ) : (
+          <h2 className="text-sm font-semibold text-text">Photos</h2>
+        )}
         <span className="text-xs text-text-muted">
-          {product.photos.length} photo{product.photos.length === 1 ? '' : 's'}
+          {scope.photos.length} photo{scope.photos.length === 1 ? '' : 's'}
         </span>
       </div>
       {data?.currentStore?.canEditProducts ? (
-        <EditablePhotos product={product} />
+        <EditablePhotos scope={scope} />
       ) : (
-        <PhotoList product={product} />
+        <PhotoList scope={scope} />
       )}
+      {variant && !scope.photos.length ? (
+        <p className="text-xs text-text-muted">No photos. The product photos show instead.</p>
+      ) : null}
     </section>
   );
 }
 
-function EditablePhotos({ product }: ProductPhotosProps) {
-  const upload = useUploadProductPhoto(product.id);
-  const reorder = useReorderProductPhotos(product.id);
-  const remove = useRemoveProductPhoto(product.id);
+type PhotoScope = {
+  id: string;
+  variantId: string | undefined;
+  name: string;
+  photos: ProductResponse['photos'];
+};
+
+function EditablePhotos({ scope }: { scope: PhotoScope }) {
+  const upload = useUploadProductPhoto(scope.id, scope.variantId);
+  const reorder = useReorderProductPhotos(scope.id, scope.variantId);
+  const remove = useRemoveProductPhoto(scope.id, scope.variantId);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const chooser = useRef<HTMLInputElement>(null);
   const inputId = useId();
@@ -44,7 +77,7 @@ function EditablePhotos({ product }: ProductPhotosProps) {
   const error = upload.error ?? reorder.error;
   function handleMoveEarlier(index: number, onMoved: () => void) {
     upload.reset();
-    const fileIds = product.photos.map((photo) => photo.id);
+    const fileIds = scope.photos.map((photo) => photo.id);
     fileIds.splice(index - 1, 0, fileIds.splice(index, 1)[0]!);
     reorder.mutate({ fileIds }, { onSuccess: onMoved });
   }
@@ -67,10 +100,10 @@ function EditablePhotos({ product }: ProductPhotosProps) {
   return (
     <>
       <PhotoList
-        product={product}
+        scope={scope}
         actions={{ disabled: busy, onMove: handleMoveEarlier, onRemove: handleRequestRemoval }}
       >
-        {product.photos.length < MAX_PRODUCT_PHOTOS ? (
+        {scope.photos.length < MAX_PRODUCT_PHOTOS ? (
           <PhotoInput id={inputId} input={chooser} disabled={busy} onFile={handleUpload} />
         ) : null}
       </PhotoList>
@@ -82,7 +115,7 @@ function EditablePhotos({ product }: ProductPhotosProps) {
       ) : null}
       {removeId ? (
         <RemovePhotoDialog
-          productName={product.name}
+          productName={scope.name}
           error={remove.error?.message}
           pending={remove.isPending}
           onClose={() => setRemoveId(null)}
@@ -93,7 +126,8 @@ function EditablePhotos({ product }: ProductPhotosProps) {
   );
 }
 
-type PhotoListProps = ProductPhotosProps & {
+type PhotoListProps = {
+  scope: PhotoScope;
   children?: ReactNode;
   actions?: {
     disabled: boolean;
@@ -101,14 +135,14 @@ type PhotoListProps = ProductPhotosProps & {
     onRemove: (id: string) => void;
   };
 };
-function PhotoList({ product, actions, children }: PhotoListProps) {
-  if (!product.photos.length && !children) return <p className="text-text-muted">No photos yet.</p>;
+function PhotoList({ scope, actions, children }: PhotoListProps) {
+  if (!scope.photos.length && !children) return <p className="text-text-muted">No photos yet.</p>;
   return (
     <ul className="flex flex-wrap gap-4">
-      {product.photos.map((photo, index) => (
+      {scope.photos.map((photo, index) => (
         <PhotoEntry
           key={photo.id}
-          name={product.name}
+          name={scope.name}
           photo={photo}
           index={index}
           actions={actions}

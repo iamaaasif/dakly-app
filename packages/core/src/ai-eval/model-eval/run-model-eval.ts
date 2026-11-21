@@ -11,13 +11,14 @@ import { say } from './eval-output';
 import {
   reportEmbed,
   reportFast,
+  reportMemory,
   reportReply,
   reportTranscribe,
   reportVision,
   type JobContext,
 } from './job-reports';
 
-const jobs = ['fast', 'reply', 'vision', 'transcribe', 'embed'] as const;
+const jobs = ['fast', 'reply', 'vision', 'transcribe', 'embed', 'memory'] as const;
 type Job = (typeof jobs)[number];
 
 const chatModels = ['gpt-6-luna', 'gpt-5.6-luna', 'gpt-6.1-terra', 'gpt-5.6-terra'];
@@ -27,6 +28,7 @@ const defaultModels: Record<Job, string[]> = {
   vision: chatModels,
   transcribe: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'gpt-transcribe'],
   embed: ['text-embedding-3-small', 'text-embedding-3-large'],
+  memory: chatModels,
 };
 // The reply job takes its hand-over decisions from one fast model, so every reply model is
 // judged on the same questions.
@@ -69,6 +71,7 @@ async function main() {
     vision: () => reportVision(context, modelsFor('vision')),
     transcribe: () => reportTranscribe(context, modelsFor('transcribe')),
     embed: () => reportEmbed(context, modelsFor('embed')),
+    memory: () => reportMemory(context, modelsFor('memory')),
   };
   for (const job of selected) await runners[job]();
   say(`\nTotal API spend this run: $${meter.spentUsd.toFixed(3)}`);

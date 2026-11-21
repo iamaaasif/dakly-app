@@ -7,6 +7,7 @@ import { runEmbeddingEval } from './embedding-eval';
 import type { EvalMeter } from './eval-meter';
 import { dollars, printTable, say } from './eval-output';
 import { runTranscribeEval, runVisionEval, type MediaScore } from './media-eval';
+import { runMemoryEval } from './memory-eval';
 import { classifyQuestion, composeReply, handoverFor } from './reply-pipeline';
 
 export type JobContext = {
@@ -156,6 +157,16 @@ export function reportVision({ driver, meter }: JobContext, models: string[]) {
     label: 'vision',
     models,
     run: (model) => runVisionEval(driver, meter, model),
+  });
+}
+
+export function reportMemory({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Memory job (facts from Bangla, Banglish and mixed chats)',
+    unit: 'chats',
+    label: 'memory',
+    models,
+    run: (model) => runMemoryEval(driver, meter, model),
   });
 }
 
