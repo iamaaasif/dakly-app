@@ -813,9 +813,8 @@ and trade licence allow 100 characters, legal name 200, address 1,000 and email 
 flag continues to govern customer records.
 
 `PATCH /store/extensions` replaces the selection with a unique `extensions`
-array containing only `chats`, `sales` and `social_auto_post`. An empty array
-turns all three off. Core is implicit and stays on; `core` and `physical_shop`
-are rejected in release 1. Only Owner and Admin may change extensions, through
+array containing `chats`, `sales`, `social_auto_post` and `physical_shop`. An empty array
+turns all four off. Core is implicit and stays on; `core` is rejected. Physical Shop became selectable in ACC-13 once the Due book shipped. Only Owner and Admin may change extensions, through
 the pure team permission policy exposed by `TeamService`; a custom role with
 settings edit access cannot change them.
 
@@ -1128,3 +1127,9 @@ The banner shows only for a shop with no saved answers, because sign-up asks the
 The card shows "N of M done", one card per step in API order, and only the first open step gets the filled button; a done step shows a green tick and "Done". "Change setup" reopens the dialog with the saved answers. When every step is done the card reads "You're all set" and "Hide guide" hides it for the shop. Members who cannot change extensions (`canChangeExtensions`) see the card without Change setup and Hide guide, and never see the banner. The step titles, texts, buttons and links live in the web app. Teach Dakly opens the AI agent drawer on its Knowledge tab (`/chats?agent=knowledge`).
 
 The design shows three steps for a shop with no answers. Release 1 has no store connection, so such a shop sees two. Steps use the action fill, not the brighter orange in the image, to keep the 4.5:1 text contrast in `docs/design/theme.md`.
+
+### Extensions screen (ACC-13, third PR)
+
+`/extensions` is its own page, reached from Configuration in the menu (evidence in `docs/design/evidence/acc-13-extensions/`). The old Extensions tab in Settings now redirects here. The header shows "N of 4 on". Each card has the extension's icon, an On or Off badge, what it adds, a switch and an Open link to its first page; Open is disabled while the extension is off.
+
+A switch saves at once with `PATCH /store/extensions`, sending the full selection with the one change, then shows a toast ("Chats turned off. Your data is kept."). The shell context (`GET /me/context`) now reads the shop's extensions: Sales off clears the Orders and Products flags, Chats the chat flags, Social Auto Post the social flags and Physical Shop the Due book flags, so the menu and those pages hide while data stays. The menu refreshes after each switch. Only members with `canChangeExtensions` can switch; others see the cards locked and a line saying so. Physical Shop is an ordinary card. Its Open link goes to `/due-book` and "Adds" names only the Due book, because Shop sales is not built yet.

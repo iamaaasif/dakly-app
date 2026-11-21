@@ -36,9 +36,10 @@ test('lists chats by tab and channel and shows the tab counts', async ({
   const connectionId = randomUUID();
   const contactIds: string[] = [];
   try {
-    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
-      storeId,
-    ]);
+    await database.pool.query(
+      "update stores set extensions = array['sales', 'chats', 'social_auto_post', 'physical_shop'] where id = $1",
+      [storeId],
+    );
     await database.pool.query(
       `insert into channel_connections (id, store_id, kind, external_account_id, display_name)
        values ($1::uuid, $2, 'facebook_page', $3, 'Dhaka Threads')`,

@@ -40,9 +40,11 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
             [id, `017${randomInt(10000000, 99999999)}`, `${id}@example.test`],
           );
         for (const [index, id] of storeIds.entries()) {
-          await client.query('insert into stores(id,name) values($1,$2)', [
+          // Pages hide while their extension is off, so browser shops start with all of them on.
+          await client.query('insert into stores(id,name,extensions) values($1,$2,$3)', [
             id,
             index === 0 ? 'Dhaka Threads' : 'Sylhet Books',
+            ['sales', 'chats', 'social_auto_post', 'physical_shop'],
           ]);
           await client.query(
             "insert into memberships(id,store_id,user_id,built_in_role,status) values($3,$1,$2,'owner','active')",

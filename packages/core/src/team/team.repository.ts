@@ -3,6 +3,7 @@ import { and, eq, type SQL, sql } from 'drizzle-orm';
 
 import type { UserStore, UserStorePageQuery } from '@dakly/contracts/sessions';
 import type { Database } from '@dakly/db/client';
+import { stores } from '@dakly/db/schema/stores';
 import { memberships, roles } from '@dakly/db/schema/team';
 
 import { AccountDatabase } from '../platform/database/account-database';
@@ -85,6 +86,13 @@ export class TeamRepository {
       ),
     );
     return result.rows;
+  }
+
+  async extensions(storeId: string): Promise<string[]> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select({ extensions: stores.extensions }).from(stores).where(eq(stores.id, storeId)),
+    );
+    return row?.extensions ?? [];
   }
 
   async storeContext(userId: string, storeId?: string) {
