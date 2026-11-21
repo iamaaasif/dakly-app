@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0081_snapshot.json`: **99 tables, 1333 columns, 408 explicit indexes and 312 foreign keys**.
+Built from `packages/db/migrations/meta/0082_snapshot.json`: **101 tables, 1356 columns, 415 explicit indexes and 318 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1173,7 +1173,7 @@ erDiagram
 
 ## AI
 
-Schema files: `ai.ts`.
+Schema files: `ai.ts`, `khata-scans.ts`.
 
 ```mermaid
 erDiagram
@@ -1193,6 +1193,12 @@ erDiagram
     stores ||..o{ ai_runs : "store_id"
     stores ||..o{ assistant_messages : "store_id"
     users ||..o{ assistant_messages : "user_id"
+    stores ||..o{ khata_pages : "store_id"
+    users |o..o{ khata_pages : "created_by_user_id"
+    files ||..o{ khata_pages : "store_id, file_id"
+    stores ||..o{ khata_rows : "store_id"
+    khata_pages ||..o{ khata_rows : "store_id, page_id"
+    contacts |o..o{ khata_rows : "store_id, matched_contact_id"
     ai_agent_settings {
         uuid store_id PK,FK "NOT NULL; uuid"
         boolean is_auto_reply_on "NOT NULL; boolean"
@@ -1277,6 +1283,33 @@ erDiagram
         text content "NOT NULL; text"
         jsonb data_used "NULL; jsonb"
         uuid ai_run_id "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    khata_pages {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid file_id FK "NOT NULL; uuid"
+        text status "NOT NULL; text"
+        text failure_code "NULL; text"
+        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
+        uuid created_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    khata_rows {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid page_id FK "NOT NULL; uuid"
+        integer row_number "NOT NULL; integer"
+        date entry_date "NULL; date"
+        text name "NOT NULL; text"
+        text phone "NULL; text"
+        text item "NULL; text"
+        bigint amount_poisha "NOT NULL; bigint"
+        text kind "NOT NULL; text"
+        smallint confidence "NOT NULL; smallint"
+        uuid matched_contact_id FK "NULL; uuid"
+        text match_kind "NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
@@ -2124,6 +2157,12 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `imports_started_by_user_id_users_id_fk`                             | `imports(started_by_user_id)`                             | `users(id)`                                 | no action |
 | `imports_file_id_store_fk`                                           | `imports(store_id, file_id)`                              | `files(store_id, id)`                       | no action |
 | `imports_report_file_id_store_fk`                                    | `imports(store_id, report_file_id)`                       | `files(store_id, id)`                       | no action |
+| `khata_pages_store_id_stores_id_fk`                                  | `khata_pages(store_id)`                                   | `stores(id)`                                | no action |
+| `khata_pages_created_by_user_id_users_id_fk`                         | `khata_pages(created_by_user_id)`                         | `users(id)`                                 | no action |
+| `khata_pages_file_id_store_fk`                                       | `khata_pages(store_id, file_id)`                          | `files(store_id, id)`                       | no action |
+| `khata_rows_store_id_stores_id_fk`                                   | `khata_rows(store_id)`                                    | `stores(id)`                                | no action |
+| `khata_rows_page_id_store_fk`                                        | `khata_rows(store_id, page_id)`                           | `khata_pages(store_id, id)`                 | cascade   |
+| `khata_rows_matched_contact_id_store_fk`                             | `khata_rows(store_id, matched_contact_id)`                | `contacts(store_id, id)`                    | no action |
 | `delivery_zones_store_id_stores_id_fk`                               | `delivery_zones(store_id)`                                | `stores(id)`                                | no action |
 | `discount_codes_store_id_stores_id_fk`                               | `discount_codes(store_id)`                                | `stores(id)`                                | no action |
 | `discount_codes_contact_id_contacts_id_fk`                           | `discount_codes(contact_id)`                              | `contacts(id)`                              | set null  |

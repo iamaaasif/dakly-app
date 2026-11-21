@@ -41,6 +41,31 @@ export class ImportContactsRepository {
     return rows.map((row) => row.id);
   }
 
+  // Contacts whose phone differs from one given phone in exactly one digit, with their names so
+  // the caller can compare. Each phone becomes 11 patterns with one `_` wildcard.
+  async findNearPhones(
+    storeId: string,
+    phones: string[],
+  ): Promise<{ id: string; phone: string; name: string | null }[]> {
+    if (phones.length === 0) return [];
+    const patterns = phones.flatMap((phone) =>
+      [...phone].map((_, index) => `${phone.slice(0, index)}_${phone.slice(index + 1)}`),
+    );
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: contacts.id, phone: contacts.phone, name: contacts.name })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            isNull(contacts.deletedAt),
+            sql`${contacts.phone} like any (${sql.param(patterns)}::text[])`,
+          ),
+        ),
+    );
+    return rows.map((row) => ({ ...row, phone: row.phone! }));
+  }
+
   async findByPhones(storeId: string, phones: string[]): Promise<ImportMatch[]> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
