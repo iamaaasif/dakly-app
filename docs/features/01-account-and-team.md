@@ -888,7 +888,10 @@ factor. Successful session creation needs no Redis acknowledgement afterward.
 Google lockout delivery uses the account's verified contacts, never its subject id.
 
 Lost-authenticator recovery requires a phone code, a separate verified-email code
-when present, and the password when set. Recovery codes have their own purposes
+when present, and the password when set. An account with no verified phone (a Google
+sign-up) starts recovery with its verified email instead: send `email` in place of
+`phone`, then the email code and the password when set. An account with a verified
+phone cannot use the email-only path, and no phone is ever forced. Recovery codes have their own purposes
 and bind to current credential state. `POST /auth/totp/recovery` returns a recovery
 id and a completion token once. Keep that token to complete recovery later.
 The database stores only token hashes. Each account receives SMS and verified
