@@ -12,6 +12,7 @@ import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
 import { LlmError } from '@dakly/providers/llm/llm-driver';
 
 import { DatabaseModule } from '../platform/database/database.module';
+import { KhataImportsService } from './khata-imports.service';
 import { KhataScansModule } from './khata-scans.module';
 import { KhataScansService } from './khata-scans.service';
 
@@ -25,11 +26,13 @@ const planIds: string[] = [];
 const usage = { inputTokens: 100, cachedInputTokens: 0, outputTokens: 50 };
 let app: INestApplicationContext;
 let service: KhataScansService;
+let imports: KhataImportsService;
 
 afterEach(() => vi.restoreAllMocks());
 beforeAll(async () => {
   app = await NestFactory.createApplicationContext(TestModule, { logger: false });
   service = app.get(KhataScansService);
+  imports = app.get(KhataImportsService);
 });
 afterAll(async () => {
   try {
@@ -39,7 +42,10 @@ afterAll(async () => {
       'ai_runs',
       'usage_events',
       'khata_rows',
+      'khata_imports',
       'khata_pages',
+      'due_entries',
+      'consents',
       'contacts',
       'files',
       'subscriptions',
@@ -269,6 +275,196 @@ describe('KhataScansService (Postgres)', () => {
     expect(await service.getPage(storeId, pageId)).toMatchObject({
       status: 'failed',
       failureCode: 'model',
+    });
+  });
+});
+
+describe('KhataImportsService (Postgres)', () => {
+  async function readPageOf(storeId: string, userId: string, rows: KhataModelOutput['rows']) {
+    storeObject();
+    modelReads({ pageReadable: true, rows });
+    const pageId = await uploadedPage(storeId, userId);
+    await service.requestRead(storeId, pageId);
+    await service.readPage(storeId, pageId, true);
+    return service.getPage(storeId, pageId);
+  }
+
+  const importAll = (page: { rows: { id: string }[] }, extra: Record<string, object> = {}) => ({
+    rows: page.rows.map((row) => ({ rowId: row.id, action: 'import' as const, ...extra[row.id] })),
+  });
+
+  const balanceOf = async (storeId: string, phone: string) =>
+    (
+      await admin.pool.query(
+        `select coalesce(sum(case when e.kind = 'baki' then e.amount_poisha else -e.amount_poisha end), 0)::int as balance
+         from due_entries e join contacts c on c.id = e.contact_id and c.store_id = e.store_id
+         where e.store_id = $1 and c.phone = $2`,
+        [storeId, phone],
+      )
+    ).rows[0].balance;
+
+  it('imports customers without consent, baki and payments dated from the page', async () => {
+    const { storeId, userId } = await shop(5);
+    const regularId = randomUUID();
+    await admin.pool.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Rahim Uddin','01712345678','manual','customer')",
+      [regularId, storeId],
+    );
+    const page = await readPageOf(storeId, userId, [
+      baki(),
+      baki({ nameText: 'Shila', phoneText: '01911223344', amountText: '500', kind: 'baki' }),
+      baki({ nameText: 'Shila', phoneText: '01911223344', amountText: '200', kind: 'payment' }),
+      baki({ nameText: 'অজানা', phoneText: null, amountText: '90' }),
+    ]);
+    const skipUnknown = { [page.rows[3]!.id]: { action: 'skip' } };
+
+    const result = await imports.importPage(storeId, userId, page.id, importAll(page, skipUnknown));
+
+    expect(result).toMatchObject({
+      status: 'done',
+      rowsRead: 4,
+      rowsImported: 3,
+      rowsSkipped: 1,
+      customersCreated: 1,
+    });
+    expect(await balanceOf(storeId, '01712345678')).toBe(125_000);
+    expect(await balanceOf(storeId, '01911223344')).toBe(30_000);
+    const created = await admin.pool.query(
+      "select name, source, kind from contacts where store_id=$1 and phone='01911223344'",
+      [storeId],
+    );
+    expect(created.rows).toEqual([{ name: 'Shila', source: 'khata_import', kind: 'customer' }]);
+    const consents = await admin.pool.query(
+      'select count(*)::int as n from consents where store_id=$1',
+      [storeId],
+    );
+    expect(consents.rows[0].n).toBe(0);
+    const dated = await admin.pool.query(
+      "select to_char(occurred_at at time zone 'Asia/Dhaka', 'YYYY-MM-DD') as day, source from due_entries where store_id=$1 and amount_poisha = 125000",
+      [storeId],
+    );
+    expect(dated.rows).toEqual([{ day: '2026-11-12', source: 'khata_import' }]);
+  });
+
+  it('refuses a second import of the same page and a decision list that misses a row', async () => {
+    const { storeId, userId } = await shop(5);
+    const page = await readPageOf(storeId, userId, [baki(), baki({ phoneText: '01811111111' })]);
+
+    await expect(
+      imports.importPage(storeId, userId, page.id, {
+        rows: [{ rowId: page.rows[0]!.id, action: 'import' }],
+      }),
+    ).rejects.toMatchObject({ code: 'KHATA_IMPORT_ROWS_MISMATCH' });
+    await imports.importPage(storeId, userId, page.id, importAll(page));
+    await expect(
+      imports.importPage(storeId, userId, page.id, importAll(page)),
+    ).rejects.toMatchObject({ code: 'KHATA_PAGE_ALREADY_IMPORTED' });
+  });
+
+  it('keeps a row under 85% out until it is checked and saves nothing when one row is refused', async () => {
+    const { storeId, userId } = await shop(5);
+    const page = await readPageOf(storeId, userId, [
+      baki(),
+      baki({ nameText: 'শিলা', phoneText: '01811111111', confidence: 60 }),
+    ]);
+    const yellow = page.rows[1]!;
+    expect(yellow.needsCheck).toBe(true);
+
+    await expect(
+      imports.importPage(storeId, userId, page.id, importAll(page)),
+    ).rejects.toMatchObject({ code: 'KHATA_ROW_NEEDS_CHECK' });
+    expect(await balanceOf(storeId, '01712345678')).toBe(0);
+
+    const result = await imports.importPage(
+      storeId,
+      userId,
+      page.id,
+      importAll(page, { [yellow.id]: { isChecked: true } }),
+    );
+    expect(result.rowsImported).toBe(2);
+  });
+
+  it('adds baki to a similar-phone customer only when the owner chooses the merge', async () => {
+    const { storeId, userId } = await shop(5);
+    const mituId = randomUUID();
+    await admin.pool.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Mitu Akter','01556781230','manual','customer')",
+      [mituId, storeId],
+    );
+    const page = await readPageOf(storeId, userId, [
+      baki({ nameText: 'Mitu', phoneText: '01556 781231', amountText: '950' }),
+    ]);
+    expect(page.rows[0]!.match).toEqual({ contactId: mituId, kind: 'similar_phone' });
+
+    const result = await imports.importPage(
+      storeId,
+      userId,
+      page.id,
+      importAll(page, { [page.rows[0]!.id]: { mergeContactId: mituId } }),
+    );
+
+    expect(result.customersCreated).toBe(0);
+    expect(await balanceOf(storeId, '01556781230')).toBe(95_000);
+    expect(await balanceOf(storeId, '01556781231')).toBe(0);
+  });
+
+  it('refuses a baki with no phone and no chosen customer', async () => {
+    const { storeId, userId } = await shop(5);
+    const page = await readPageOf(storeId, userId, [baki({ phoneText: null })]);
+    await expect(
+      imports.importPage(storeId, userId, page.id, importAll(page)),
+    ).rejects.toMatchObject({ code: 'KHATA_ROW_NEEDS_PHONE' });
+  });
+
+  it('undoes an import: removes its baki and the customers it added that nobody changed', async () => {
+    const { storeId, userId } = await shop(5);
+    await admin.pool.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values(gen_random_uuid(),$1,'Rahim Uddin','01712345678','manual','customer')",
+      [storeId],
+    );
+    const page = await readPageOf(storeId, userId, [
+      baki(),
+      baki({ nameText: 'Shila', phoneText: '01911223344' }),
+      baki({ nameText: 'Jabed', phoneText: '01822334455' }),
+    ]);
+    const result = await imports.importPage(storeId, userId, page.id, importAll(page));
+    await admin.pool.query(
+      "update contacts set notes='VIP', updated_at = now() + interval '1 minute' where store_id=$1 and phone='01822334455'",
+      [storeId],
+    );
+
+    const undone = await imports.undo(storeId, result.id);
+
+    expect(undone.status).toBe('undone');
+    const left = await admin.pool.query(
+      'select phone, deleted_at is not null as deleted from contacts where store_id=$1 order by phone',
+      [storeId],
+    );
+    expect(left.rows).toEqual([
+      { phone: '01712345678', deleted: false },
+      { phone: '01822334455', deleted: false },
+      { phone: '01911223344', deleted: true },
+    ]);
+    const entries = await admin.pool.query(
+      'select count(*)::int as n from due_entries where store_id=$1',
+      [storeId],
+    );
+    expect(entries.rows[0].n).toBe(0);
+    const again = await service.getPage(storeId, page.id);
+    expect(again.status).toBe('read');
+    await imports.importPage(storeId, userId, page.id, importAll(again));
+  });
+
+  it('does not undo an import after 7 days', async () => {
+    const { storeId, userId } = await shop(5);
+    const page = await readPageOf(storeId, userId, [baki()]);
+    const result = await imports.importPage(storeId, userId, page.id, importAll(page));
+    await admin.pool.query(
+      "update khata_imports set created_at = now() - interval '8 days' where id=$1",
+      [result.id],
+    );
+    await expect(imports.undo(storeId, result.id)).rejects.toMatchObject({
+      code: 'KHATA_IMPORT_UNDO_EXPIRED',
     });
   });
 });

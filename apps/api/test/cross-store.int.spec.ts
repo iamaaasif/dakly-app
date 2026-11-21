@@ -1356,6 +1356,64 @@ fixture('GET /khata-scans/pages/:pageId', async () => {
   });
   await hidden(b, 'GET', (value) => `/khata-scans/pages/${value}`, id);
 });
+async function readKhataPage(shop: Shop) {
+  const id = await newKhataPage(shop);
+  const rowId = randomUUID();
+  await f.admin.pool.query("update khata_pages set status='read' where id=$1", [id]);
+  await f.admin.pool.query(
+    "insert into khata_rows(id,store_id,page_id,row_number,name,phone,amount_poisha,kind,confidence) values($1,$2,$3,1,'Rahim','01712345678',5000,'baki',90)",
+    [rowId, shop.id, id],
+  );
+  return { id, decisions: { rows: [{ rowId, action: 'import' }] } };
+}
+fixture('POST /khata-scans/pages/:pageId/import', async () => {
+  const { a, b } = await pair(),
+    own = await readKhataPage(a),
+    foreign = await readKhataPage(a);
+  const imported = await success(
+    a,
+    'POST',
+    `/khata-scans/pages/${own.id}/import`,
+    201,
+    own.decisions,
+  );
+  expect(imported.json()).toMatchObject({ pageId: own.id, status: 'done', rowsImported: 1 });
+  const before = await f.row('khata_pages', foreign.id);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/khata-scans/pages/${id}/import`,
+    foreign.id,
+    () => foreign.decisions,
+  );
+  expect(await f.row('khata_pages', foreign.id)).toEqual(before);
+  const denied = await f.request(
+    a.member,
+    'POST',
+    `/khata-scans/pages/${foreign.id}/import`,
+    foreign.decisions,
+  );
+  expect(denied.statusCode).toBe(403);
+});
+fixture('POST /khata-scans/imports/:importId/undo', async () => {
+  const { a, b } = await pair(),
+    page = await readKhataPage(a);
+  const imported = await success(
+    a,
+    'POST',
+    `/khata-scans/pages/${page.id}/import`,
+    201,
+    page.decisions,
+  );
+  const importId = imported.json().id as string;
+  await hidden(b, 'POST', (id) => `/khata-scans/imports/${id}/undo`, importId);
+  expect((await f.row('khata_imports', importId)).status).toBe('done');
+  expect(
+    (await f.request(a.member, 'POST', `/khata-scans/imports/${importId}/undo`)).statusCode,
+  ).toBe(403);
+  const undone = await success(a, 'POST', `/khata-scans/imports/${importId}/undo`, 200);
+  expect(undone.json()).toMatchObject({ id: importId, status: 'undone' });
+});
 async function dueEntries(shop: Shop, contactId: string) {
   await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {
     amountPoisha: 95000,

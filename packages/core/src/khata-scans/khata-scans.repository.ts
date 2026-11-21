@@ -1,15 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 
 import {
   type KhataFailureCode,
+  type KhataImportStatus,
   type KhataMatchKind,
   type KhataPageContentType,
   type KhataPageStatus,
   type KhataRowKind,
+  type KhataRowOutcome,
   khataPageContentTypeSchema,
 } from '@dakly/contracts/khata-scans';
-import { khataPages, khataRows } from '@dakly/db/schema/khata-scans';
+import { khataImports, khataPages, khataRows } from '@dakly/db/schema/khata-scans';
 import { files } from '@dakly/db/schema/platform';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -19,10 +21,28 @@ export type KhataPage = {
   status: KhataPageStatus;
   failureCode: KhataFailureCode | null;
   createdAt: Date;
-  objectKey: string;
-  contentType: KhataPageContentType;
-  sizeBytes: number;
+  // All four are null once the 30-day photo purge has run.
+  objectKey: string | null;
+  contentType: KhataPageContentType | null;
+  sizeBytes: number | null;
   photoExpiresAt: Date | null;
+};
+export type KhataImport = {
+  id: string;
+  pageId: string;
+  status: KhataImportStatus;
+  rowsRead: number;
+  rowsImported: number;
+  rowsSkipped: number;
+  customersCreated: number;
+  createdAt: Date;
+};
+export type RowOutcome = {
+  rowId: string;
+  outcome: KhataRowOutcome;
+  contactId: string | null;
+  isContactCreated: boolean;
+  dueEntryId: string | null;
 };
 export type NewKhataPage = {
   id: string;
@@ -59,9 +79,23 @@ const pageColumns = {
 };
 
 // The file row stores the type as text; only the upload route writes it, from the same union.
-function toPage(row: Omit<KhataPage, 'contentType'> & { contentType: string }): KhataPage {
-  return { ...row, contentType: khataPageContentTypeSchema.parse(row.contentType) };
+function toPage(row: Omit<KhataPage, 'contentType'> & { contentType: string | null }): KhataPage {
+  return {
+    ...row,
+    contentType: row.contentType ? khataPageContentTypeSchema.parse(row.contentType) : null,
+  };
 }
+
+const importColumns = {
+  id: khataImports.id,
+  pageId: khataImports.pageId,
+  status: khataImports.status,
+  rowsRead: khataImports.rowsRead,
+  rowsImported: khataImports.rowsImported,
+  rowsSkipped: khataImports.rowsSkipped,
+  customersCreated: khataImports.customersCreated,
+  createdAt: khataImports.createdAt,
+};
 
 @Injectable()
 export class KhataScansRepository {
@@ -94,9 +128,9 @@ export class KhataScansRepository {
       tx
         .select(pageColumns)
         .from(khataPages)
-        .innerJoin(
+        .leftJoin(
           files,
-          and(eq(files.storeId, khataPages.storeId), eq(files.id, khataPages.fileId)),
+          and(eq(files.storeId, khataPages.storeId), sql`${files.id} = ${khataPages.fileId}`),
         )
         .where(and(eq(khataPages.storeId, storeId), eq(khataPages.id, pageId))),
     );
@@ -129,7 +163,7 @@ export class KhataScansRepository {
         )
         .returning({ fileId: khataPages.fileId });
       const [queued] = updated;
-      if (!queued) return false;
+      if (!queued?.fileId) return false;
       await tx
         .update(files)
         .set({ status: 'ready' })
@@ -197,5 +231,118 @@ export class KhataScansRepository {
         })
         .where(and(eq(khataPages.storeId, storeId), eq(khataPages.id, pageId))),
     );
+  }
+
+  async hasDoneImport(storeId: string, pageId: string): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: khataImports.id })
+        .from(khataImports)
+        .where(
+          and(
+            eq(khataImports.storeId, storeId),
+            eq(khataImports.pageId, pageId),
+            eq(khataImports.status, 'done'),
+          ),
+        ),
+    );
+    return rows.length > 0;
+  }
+
+  async insertImport(
+    storeId: string,
+    entry: { id: string; pageId: string; rowsRead: number; createdByUserId: string },
+  ): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(khataImports)
+        .values({ ...entry, storeId, rowsImported: 0, rowsSkipped: 0, customersCreated: 0 }),
+    );
+  }
+
+  async saveImportResult(
+    storeId: string,
+    importId: string,
+    outcomes: RowOutcome[],
+    counts: { rowsImported: number; rowsSkipped: number; customersCreated: number },
+  ): Promise<KhataImport> {
+    return this.database.forStore(storeId, async (tx) => {
+      for (const outcome of outcomes)
+        await tx
+          .update(khataRows)
+          .set({
+            importId,
+            outcome: outcome.outcome,
+            contactId: outcome.contactId,
+            isContactCreated: outcome.isContactCreated,
+            dueEntryId: outcome.dueEntryId,
+          })
+          .where(and(eq(khataRows.storeId, storeId), eq(khataRows.id, outcome.rowId)));
+      const [saved] = await tx
+        .update(khataImports)
+        .set(counts)
+        .where(and(eq(khataImports.storeId, storeId), eq(khataImports.id, importId)))
+        .returning(importColumns);
+      return saved!;
+    });
+  }
+
+  async findImport(storeId: string, importId: string): Promise<KhataImport | undefined> {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select(importColumns)
+        .from(khataImports)
+        .where(and(eq(khataImports.storeId, storeId), eq(khataImports.id, importId))),
+    );
+    return row;
+  }
+
+  // Rows of an import that made something. Skipped rows made nothing.
+  importedRows(storeId: string, importId: string): Promise<StoredKhataRow[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select()
+        .from(khataRows)
+        .where(
+          and(
+            eq(khataRows.storeId, storeId),
+            eq(khataRows.importId, importId),
+            eq(khataRows.outcome, 'imported'),
+          ),
+        ),
+    );
+  }
+
+  // Undo gives the page back to the owner as read and not yet decided.
+  async resetPageRows(storeId: string, pageId: string): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(khataRows)
+        .set({
+          importId: null,
+          outcome: null,
+          contactId: null,
+          isContactCreated: false,
+          dueEntryId: null,
+        })
+        .where(and(eq(khataRows.storeId, storeId), eq(khataRows.pageId, pageId))),
+    );
+  }
+
+  async markUndone(storeId: string, importId: string, undoneAt: Date): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(khataImports)
+        .set({ status: 'undone', undoneAt })
+        .where(
+          and(
+            eq(khataImports.storeId, storeId),
+            eq(khataImports.id, importId),
+            eq(khataImports.status, 'done'),
+          ),
+        )
+        .returning({ id: khataImports.id }),
+    );
+    return rows.length === 1;
   }
 }

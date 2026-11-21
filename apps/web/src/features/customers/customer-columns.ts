@@ -36,6 +36,7 @@ export const contactSourceLabels: Record<ContactSource, string> = {
   shopify: 'Shopify',
   woocommerce: 'WooCommerce',
   pos: 'Shop sale',
+  khata_import: 'Khata import',
 };
 
 // An absent `columns` address value means the defaults; an empty one means none.

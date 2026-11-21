@@ -15,6 +15,7 @@ export const contactSources = [
   'shopify',
   'woocommerce',
   'pos',
+  'khata_import',
 ] as const;
 export const contactKinds = ['chat_only', 'lead', 'customer', 'not_customer'] as const;
 export const notCustomerReasons = [
