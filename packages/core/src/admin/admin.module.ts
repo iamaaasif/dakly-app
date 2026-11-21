@@ -27,6 +27,9 @@ import { OpsReportsController } from './ops-reports.controller';
 import { OwnerRecoveryHistoryController } from './owner-recovery-history.controller';
 import { OwnerSupportController } from './owner-support.controller';
 import { RiskyActionConfirmation } from './risky-action-confirmation';
+import { ShopsController } from './shops.controller';
+import { ShopsRepository } from './shops.repository';
+import { ShopsService } from './shops.service';
 import { SmsSenderReviewController } from './sms-sender-review.controller';
 import { SmsSenderReviewService } from './sms-sender-review.service';
 import { StaffAccessService } from './staff-access.service';
@@ -95,6 +98,7 @@ import { WalletCreditService } from './wallet-credit.service';
     SmsSenderReviewController,
     KillSwitchController,
     OpsReportsController,
+    ShopsController,
   ],
   providers: [
     StaffRecoveryService,
@@ -106,6 +110,8 @@ import { WalletCreditService } from './wallet-credit.service';
     WalletCreditService,
     SmsSenderReviewService,
     KillSwitchAdminService,
+    ShopsRepository,
+    ShopsService,
     SupportService,
     SupportOwnerService,
     SupportAuditService,

@@ -10,6 +10,9 @@ export function StaffNav({ role }: { role: StaffIdentity['role'] }) {
           Recover shop account
         </Link>
       ) : null}
+      <Link href="/shops" className="text-action underline">
+        Shops
+      </Link>
       <Link href="/support" className="text-action underline">
         Support access
       </Link>

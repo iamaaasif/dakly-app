@@ -106,6 +106,15 @@ const examples: DaklyEvent[] = [
     occurredAt,
     payload: { productId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2' },
   },
+  {
+    type: 'product.photo_added',
+    storeId,
+    occurredAt,
+    payload: {
+      productId: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
+      fileId: '019c01ea-cf15-7d31-a7f5-d73d66007ae3',
+    },
+  },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
   { type: 'contact.deleted', storeId, occurredAt, payload: { contactId } },
   { type: 'contact_stats.repaired', storeId, occurredAt, payload: { day: '2026-11-19' } },

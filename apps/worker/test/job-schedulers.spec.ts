@@ -86,6 +86,7 @@ describe('Worker job schedulers', () => {
     ];
     expect(bulk.schedulers).toEqual([
       ...bulkIntervals,
+      scheduler('queue-conversation-memories', 600000),
       scheduler('sweep-contact-stats', { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduler('sweep-automation-birthdays', { pattern: '0 * * * *', tz: 'UTC' }),
       scheduler('sweep-analytics', { pattern: '0 0 * * *', tz: 'UTC' }),
@@ -93,6 +94,7 @@ describe('Worker job schedulers', () => {
       scheduler('run-golden-eval', { pattern: '0 20 * * *', tz: 'UTC' }),
       scheduler('run-maintenance', { pattern: '0 19 * * *', tz: 'UTC' }),
       ...bulkIntervals,
+      scheduler('queue-conversation-memories', 600000),
     ]);
     expect(sync.schedulers).toEqual([
       scheduler('queue-channel-token-checks', 86400000),
