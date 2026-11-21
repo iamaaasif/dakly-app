@@ -39,6 +39,7 @@ export function browserRegistration(database, mailpitUrl) {
       await database.pool.query('delete from sessions where user_id=any($1::uuid[])', [ids]);
       for (const table of [
         'contacts',
+        'store_daily_metrics',
         'audit_log',
         'memberships',
         'subscriptions',
