@@ -16,7 +16,14 @@ type GoogleIdentity = {
       }) => void;
       renderButton: (
         element: HTMLElement,
-        options: { type: string; text: string; size: string },
+        options: {
+          type: string;
+          theme: string;
+          text: string;
+          size: string;
+          shape: string;
+          width: number;
+        },
       ) => void;
     };
   };
@@ -35,7 +42,8 @@ export function GoogleSignIn({
   latest.current = { isRemembered, onResult };
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const mutation = useGoogleSignIn();
-  if (!clientId) return <p className="text-text-muted">Google sign-in is currently unavailable.</p>;
+  // Without a Google client id the button is left out; the other sign-in methods remain.
+  if (!clientId) return null;
   function initialize() {
     const google = (window as Window & { google?: GoogleIdentity }).google;
     if (!google || !element.current) {
@@ -54,19 +62,23 @@ export function GoogleSignIn({
     });
     google.accounts.id.renderButton(element.current, {
       type: 'standard',
+      theme: 'outline',
       text: 'continue_with',
       size: 'large',
+      shape: 'rectangular',
+      // Google accepts 200 to 400 px; the cell is narrower than that on a phone.
+      width: Math.min(400, Math.max(200, Math.round(element.current.clientWidth))),
     });
     setState('ready');
   }
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       <Script
         src="https://accounts.google.com/gsi/client"
         onReady={initialize}
         onError={() => setState('error')}
       />
-      <div ref={element} inert={mutation.isPending} />
+      <div ref={element} className="flex min-h-10 justify-center" inert={mutation.isPending} />
       {state === 'loading' ? <p role="status">Loading Google sign-in…</p> : null}
       {mutation.isPending ? <p role="status">Checking your Google account…</p> : null}
       {state === 'error' || mutation.error ? (
