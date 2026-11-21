@@ -177,9 +177,14 @@ All three routes need `customers.edit`.
 
 ##### Khata Scanner screen (KHT-3)
 
-Route `/customers/khata-scan` for a member with `customers.edit` (`canCreateCustomer`). The design is the Khata Scanner screen of the prototype.
+Route `/customers/khata-scan`, opened from Add customers > Scan your khata. It shows for a member with `customers.edit` (`canCreateCustomer`). The design is the Khata Scanner screen of the prototype; screenshots are in `docs/design/evidence/kht-3-khata-scan/`.
 
-- **Past imports.** From `GET /khata-scans/imports`: date, "1 page", rows imported of rows read, new customers, and Undo while the 7 days last. Undo asks first, then calls `POST /khata-scans/imports/:id/undo`.
+- **Start.** Two cards (Add the last 1–3 months, Digitize old notebooks slowly) and "Past imports" from `GET /khata-scans/imports`: date, "1 page", rows imported of rows read, new customers, and Undo while the 7 days last. "Start from today" in the design points at Shop sales, which is not built, so it is not offered.
+- **Add pages.** Take photo (phone camera) or Upload photos or PDF, up to 10 pages at a time, JPG, PNG or PDF, 10 MB each. Pressing "Read N pages" uploads each page to its link, queues the read and moves on.
+- **Reading.** The three steps follow the page status: waiting, reading, then review. A page that is `unreadable` or `failed` shows its reason, and a failed page can be read again.
+- **Review.** One tab per page, one row per read line: date, customer, phone, product, amount, confidence and status. A row under 85% has yellow boxes and "Check this". "Looks right" confirms it (`isChecked`), "Skip" leaves it out. "Import N rows" stays off until every yellow row is confirmed or skipped (SHOP-R7), and a baki or payment with no phone must be linked or skipped. A similar-phone customer is offered as "Merge with Mitu Akter 01556-781230?" and only "Yes, link" sends `mergeContactId`.
+- **Result.** Rows found, imported, new customers, matched to existing customers, walk-in sales and skipped, with links to Orders and Customers and "Scan more pages".
+- **Not in the screen.** The rows cannot be edited, because the import takes decisions only; there is no Qty column because a read row has none; and a page is imported on its own, so each tab has its own Import button.
 
 #### POS connections
 
