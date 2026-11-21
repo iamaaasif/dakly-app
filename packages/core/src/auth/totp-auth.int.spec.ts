@@ -337,6 +337,40 @@ describe('TOTP account security over Fastify', () => {
         .rows,
     ).toHaveLength(0);
   });
+  it('recovers a Google-only account with its verified email and no mobile', async () => {
+    const user = await seed();
+    const email = `${randomUUID()}@example.test`;
+    await admin.pool.query(
+      'update users set phone=null,phone_verified_at=null,password_hash=null,email=$2,email_verified_at=$3 where id=$1',
+      [user.id, email, now],
+    );
+    expect((await request('/auth/totp/recovery/code', { email, method: 'email' })).statusCode).toBe(
+      204,
+    );
+    const started = await request('/auth/totp/recovery', { email, emailCode: codeFor(email) });
+    expect(started.statusCode, started.body).toBe(202);
+    await deliverNotices();
+    const notice = messages.findLast(
+      (message) => message.to === email && /recovery/.test(message.text),
+    );
+    expect(notice).toBeDefined();
+    expect(
+      (await admin.pool.query('select id from account_recoveries where user_id=$1', [user.id]))
+        .rows,
+    ).toHaveLength(1);
+  });
+  it('does not offer email recovery to an account that has a verified mobile', async () => {
+    const user = await seed();
+    const email = `${randomUUID()}@example.test`;
+    await admin.pool.query('update users set email=$2,email_verified_at=$3 where id=$1', [
+      user.id,
+      email,
+      now,
+    ]);
+    expect((await request('/auth/totp/recovery/code', { email, method: 'email' })).statusCode).toBe(
+      403,
+    );
+  });
   it('waits seven days after notices, removes TOTP without a session, and rejects reuse', async () => {
     const user = await seed();
     const started = await recovery(user);

@@ -4,10 +4,13 @@ import type {
   ChannelDriver,
   ChannelKind,
   ChannelReceipt,
+  CommentDriver,
+  InboundComment,
   InboundMessage,
   InboundPostback,
 } from '@dakly/providers/channel/channel-driver';
 
+import { CommentsService } from '../comments/comments.service';
 import { ChannelReceiptsService } from '../messaging/channel-receipts.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
@@ -38,10 +41,12 @@ export class MetaWebhookRoutingService {
     private readonly driver: Pick<
       ChannelDriver,
       'parseWebhook' | 'parseReceipts' | 'parsePostbacks'
-    >,
+    > &
+      Pick<CommentDriver, 'parseComments'>,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(ChannelReceiptsService) private readonly receipts: ChannelReceiptsService,
+    @Inject(CommentsService) private readonly comments: CommentsService,
   ) {}
 
   async process(webhookEventId: string, finalAttempt: boolean) {
@@ -66,6 +71,7 @@ export class MetaWebhookRoutingService {
     const events = [
       ...messages,
       ...this.driver.parsePostbacks(delivery.payload),
+      ...this.driver.parseComments(delivery.payload),
       ...receipts.filter(
         (receipt) => receipt.kind === 'echo' && receipt.appExternalId === this.appId,
       ),
@@ -114,13 +120,29 @@ export class MetaWebhookRoutingService {
 
   private routeEvent(
     storeId: string,
-    event: InboundMessage | InboundPostback | ChannelReceipt,
+    event: InboundMessage | InboundPostback | InboundComment | ChannelReceipt,
     receivedAt: Date,
     finalAttempt: boolean,
   ) {
     if ('kind' in event) return this.receipts.record(storeId, event, receivedAt, finalAttempt);
+    if ('externalCommentId' in event) return this.routeComment(storeId, event, receivedAt);
     if ('payload' in event) return this.routePostback(storeId, event, receivedAt);
     return this.routeMessage(storeId, event, receivedAt);
+  }
+
+  private routeComment(storeId: string, comment: InboundComment, receivedAt: Date) {
+    return this.comments.receive(storeId, {
+      kind: connectionKind[comment.channel],
+      externalAccountId: comment.accountExternalId,
+      externalPostId: comment.externalPostId,
+      externalCommentId: comment.externalCommentId,
+      parentExternalCommentId: comment.parentExternalCommentId,
+      authorExternalId: comment.authorExternalId,
+      authorName: comment.authorName,
+      text: comment.text,
+      commentedAt: comment.commentedAt,
+      receivedAt,
+    });
   }
 
   private routePostback(storeId: string, postback: InboundPostback, receivedAt: Date) {

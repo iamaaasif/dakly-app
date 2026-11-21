@@ -9,7 +9,7 @@ const settings = {
   related: ['/security', '/team/ownership', '/support-access'],
 };
 const storeSettings = { href: '/settings?tab=store' };
-const extensions = { href: '/settings?tab=extensions' };
+const extensions = { href: '/extensions' };
 const team = { href: '/team' };
 
 describe('currentState', () => {
@@ -20,7 +20,9 @@ describe('currentState', () => {
   it('marks the tab link as the page and Settings as the location on a tab', () => {
     expect(currentState(storeSettings, '/settings', 'store')).toBe('page');
     expect(currentState(settings, '/settings', 'store')).toBe('location');
-    expect(currentState(extensions, '/settings', 'extensions')).toBe('page');
+  });
+  it('marks Extensions as the page on its own route', () => {
+    expect(currentState(extensions, '/extensions', null)).toBe('page');
   });
   it('marks Settings as the location on the screens it leads to', () => {
     expect(currentState(settings, '/security', null)).toBe('location');
