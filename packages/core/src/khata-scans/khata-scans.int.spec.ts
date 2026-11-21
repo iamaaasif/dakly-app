@@ -542,4 +542,27 @@ describe('KhataImportsService (Postgres)', () => {
       code: 'KHATA_IMPORT_UNDO_EXPIRED',
     });
   });
+
+  it('lists the latest imports of one shop, newest first, with undone ones marked', async () => {
+    const { storeId, userId } = await shop(5);
+    const other = await shop(5);
+    const first = await readPageOf(storeId, userId, [baki()]);
+    const older = await imports.importPage(storeId, userId, first.id, importAll(first));
+    await admin.pool.query(
+      "update khata_imports set created_at = now() - interval '1 day' where id=$1",
+      [older.id],
+    );
+    const second = await readPageOf(storeId, userId, [baki({ phoneText: '01911223344' })]);
+    const newer = await imports.importPage(storeId, userId, second.id, importAll(second));
+    await imports.undo(storeId, older.id);
+    const elsewhere = await readPageOf(other.storeId, other.userId, [baki()]);
+    await imports.importPage(other.storeId, other.userId, elsewhere.id, importAll(elsewhere));
+
+    const listed = await imports.listImports(storeId);
+
+    expect(listed.map((item) => [item.id, item.status])).toEqual([
+      [newer.id, 'done'],
+      [older.id, 'undone'],
+    ]);
+  });
 });
