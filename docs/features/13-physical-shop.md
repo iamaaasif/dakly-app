@@ -82,7 +82,7 @@ What others do: TallyKhata and OkCredit made baki tracking free and sent an SMS 
 3. Remind sends one reminder. "Remind all over 30 days" sends to every customer with debt older than 30 days who was not reminded in the last 7 days. Reminder text is polite and fixed by template (the AI may rephrase within the template, never add threats or late fees).
 4. Limits: maximum 1 reminder per customer per 7 days, and only between 9 am and 8 pm. Reminders are sent to people who owe money only and are classed as transactional.
 5. Collect records a payment, lowers the balance, and optionally sends a thank-you SMS. Overpaying creates store credit shown as a negative balance "Shop owes ৳200".
-6. Writing off a debt (Owner only) closes it with a reason and keeps it in history.
+6. Writing off a debt (Owner or Admin) closes it with a reason and keeps it in history.
 7. Due book money is not "Total spent" until paid; the order counts as an order straight away.
 
 #### Due book API (DUE-1)
