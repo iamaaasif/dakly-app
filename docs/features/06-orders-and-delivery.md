@@ -99,7 +99,7 @@ No booking; the order gets a rider name and moves to With courier; the rider or 
 
 **Order link**
 
-Each product with "Order link" on gets a URL. A buyer picks size and quantity, enters buyer details, and uses the same delivery details or enters a separate recipient. It arrives in To confirm with source Order link, records the buyer independently of the recipient phone, and reserves stock. Order-specific SMS or WhatsApp uses the chosen order contact details without granting access to unrelated orders. Self-delivery saves the buyer's own phone under D27; another recipient's phone remains only on the order. Rate limit 5 orders per delivery phone per day to stop spam.
+Each product with "Order link" on gets a URL. A buyer picks size and quantity, enters buyer details, and uses the same delivery details or enters a separate recipient. It arrives in To confirm with source Order link, records the buyer independently of the recipient phone, and reserves stock. Order-specific SMS or WhatsApp uses the chosen order contact details without granting access to unrelated orders. Self-delivery saves the buyer's own phone under D27; another recipient's phone remains only on the order. Rate limit 5 orders per delivery phone per day to stop spam. Built plain, with no design: the API serves the page at `/l/o/{store}/{product}` (the short link domain maps `/{store}/{product}` onto it), one product and one variant per order, cash on delivery, and the total is shown after ordering. A product with the order link off, a missing shop and another shop's product all give the same not-found page. Set `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY`; without them production keeps the link closed.
 
 ### Business rules
 

@@ -19,6 +19,9 @@ import { OrderCatalogueController } from './order-catalogue.controller';
 import { OrderConfirmationController } from './order-confirmation.controller';
 import { OrderConfirmationRepository } from './order-confirmation.repository';
 import { OrderConfirmationService } from './order-confirmation.service';
+import { BOT_CHECK_DRIVER, createBotCheckDriver } from './order-link-provider';
+import { OrderLinkController } from './order-link.controller';
+import { OrderLinkService } from './order-link.service';
 import { OrderProductArchiveController } from './order-product-archive.controller';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
@@ -44,6 +47,7 @@ import { OrdersService } from './orders.service';
     OrderProductArchiveController,
     OrderCatalogueController,
     OrderConfirmationController,
+    OrderLinkController,
   ],
   providers: [
     BuyerOrdersRepository,
@@ -61,6 +65,8 @@ import { OrdersService } from './orders.service';
     OrderAttributionService,
     OrderConfirmationRepository,
     OrderConfirmationService,
+    OrderLinkService,
+    { provide: BOT_CHECK_DRIVER, useFactory: createBotCheckDriver },
   ],
   exports: [
     BuyerOrdersService,
