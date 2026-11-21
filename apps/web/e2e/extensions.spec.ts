@@ -24,14 +24,27 @@ test('turns an extension off and on from its card', async ({ page, context, base
   const evidence = resolve(process.cwd(), '../../docs/design/evidence/acc-13-extensions');
   await mkdir(evidence, { recursive: true });
 
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/extensions');
-  const sales = page.getByRole('switch', { name: 'Sales', exact: true });
-  await expect(sales).toBeVisible();
-  if ((await sales.getAttribute('aria-checked')) !== 'true') await sales.click();
-  await expect(sales).toHaveAttribute('aria-checked', 'true');
-  const physical = page.getByRole('switch', { name: 'Physical Shop', exact: true });
-  if ((await physical.getAttribute('aria-checked')) !== 'true') await physical.click();
-  await expect(physical).toHaveAttribute('aria-checked', 'true');
+  const pages = [
+    ['Sales', 'Orders'],
+    ['Chats', 'Chats'],
+    ['Social Auto Post', 'Social hub'],
+    ['Physical Shop', 'Due book'],
+  ] as const;
+  // Switching an extension off hides its menu pages, and on brings them back.
+  for (const [extension, menuLink] of pages) {
+    const toggle = page.getByRole('switch', { name: extension, exact: true });
+    const link = page.getByRole('link', { name: menuLink, exact: true });
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect(link).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await expect(link).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect(link).toBeVisible();
+  }
   for (const [width, height] of [
     [1440, 900],
     [360, 800],
@@ -45,17 +58,4 @@ test('turns an extension off and on from its card', async ({ page, context, base
       fullPage: width < 800,
     });
   }
-
-  await sales.click();
-  await expect(sales).toHaveAttribute('aria-checked', 'false');
-  await page.reload();
-  await expect(page.getByRole('switch', { name: 'Sales', exact: true })).toHaveAttribute(
-    'aria-checked',
-    'false',
-  );
-  await page.getByRole('switch', { name: 'Sales', exact: true }).click();
-  await expect(page.getByRole('switch', { name: 'Sales', exact: true })).toHaveAttribute(
-    'aria-checked',
-    'true',
-  );
 });

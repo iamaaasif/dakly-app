@@ -109,7 +109,7 @@ describe('Session boundary over Fastify and Postgres', () => {
     userId = user!.id;
     const shops = await admin.db
       .insert(stores)
-      .values([{ name: 'Rina shop' }, { name: 'Other shop' }])
+      .values([{ name: 'Rina shop', extensions: ['sales', 'chats'] }, { name: 'Other shop' }])
       .returning({ id: stores.id });
     storeId = shops[0]!.id;
     otherStoreId = shops[1]!.id;
@@ -297,6 +297,16 @@ describe('Session boundary over Fastify and Postgres', () => {
       canEditStoreSettings: false,
       canChangeExtensions: false,
     });
+    // Turning an extension off hides its pages and keeps the rest.
+    await admin.pool.query("update stores set extensions='{chats}' where id=$1", [storeId]);
+    const trimmed = (await app.inject({ url: '/me/context', headers: { cookie: cookie() } })).json()
+      .currentStore;
+    expect(trimmed).toMatchObject({
+      canViewOrders: false,
+      canViewProducts: false,
+      canViewChats: true,
+    });
+    await admin.pool.query("update stores set extensions='{sales,chats}' where id=$1", [storeId]);
     expect(shell.contextTag).toMatch(/^[a-f0-9]{64}$/);
     expect(context.headers['cache-control']).toBe('no-store');
     await service.setActiveStore(userId, sessionId, otherStoreId);
