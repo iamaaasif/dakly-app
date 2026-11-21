@@ -193,4 +193,12 @@ describe('Khata Scanner', () => {
       `/customers/khata-scan?pages=${pageId}%2C${pageId2}&page=1`,
     );
   });
+
+  it('shows a page the shop already imported as imported, not as a review', async () => {
+    respond([done]);
+    show([pageId]);
+
+    expect(await screen.findByText('This page is imported.')).toBeTruthy();
+    expect(screen.queryByText('Hasan')).toBeNull();
+  });
 });

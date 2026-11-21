@@ -5,6 +5,7 @@ import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
+import { useKhataImports } from '../api/khata-imports';
 import { useKhataPages } from '../api/khata-page';
 import { KhataDoneStep } from './khata-done-step';
 import { KhataReadingStep } from './khata-reading-step';
@@ -20,17 +21,25 @@ type ScanStageProps = {
 // One stage covers reading, review and the result, because they all follow from what the pages say.
 export function KhataScanStage({ pageIds, activePage, onActivePage, onScanMore }: ScanStageProps) {
   const queries = useKhataPages(pageIds);
+  const pastImports = useKhataImports();
   const [imported, setImported] = useState<Record<string, PageImport>>({});
   const failed = queries.find((query) => query.isError);
   if (failed?.isError)
     return <QueryError message={failed.error.message} onRetry={() => void failed.refetch()} />;
   const pages = queries.flatMap((query) => (query.data ? [query.data] : []));
-  if (pages.length < pageIds.length) return <Skeleton className="h-64 w-full" />;
+  if (pages.length < pageIds.length || pastImports.isPending)
+    return <Skeleton className="h-64 w-full" />;
 
   const waiting = pages.filter((page) => page.status === 'uploaded' || page.status === 'reading');
   if (waiting.length > 0)
     return <KhataReadingStep current={waiting.length === pages.length ? 1 : 2} />;
-  const finished = pages.every((page) => page.status !== 'read' || imported[page.id]);
+  // A reload loses the local result, so the server's list says which pages were already imported.
+  const importedBefore = new Set(
+    (pastImports.data ?? []).filter((item) => item.status === 'done').map((item) => item.pageId),
+  );
+  const finished = pages.every(
+    (page) => page.status !== 'read' || imported[page.id] || importedBefore.has(page.id),
+  );
   if (finished && Object.keys(imported).length > 0)
     return <KhataDoneStep imports={Object.values(imported)} onScanMore={onScanMore} />;
   return (
@@ -39,6 +48,7 @@ export function KhataScanStage({ pageIds, activePage, onActivePage, onScanMore }
       active={Math.min(activePage, pages.length) - 1}
       onActive={(index) => onActivePage(index + 1)}
       imported={imported}
+      importedBefore={importedBefore}
       onImported={(pageId, done) => setImported((current) => ({ ...current, [pageId]: done }))}
     />
   );
@@ -49,10 +59,18 @@ type PageTabsProps = {
   active: number;
   onActive: (index: number) => void;
   imported: Record<string, PageImport>;
+  importedBefore: Set<string>;
   onImported: (pageId: string, done: PageImport) => void;
 };
 
-function PageTabs({ pages, active, onActive, imported, onImported }: PageTabsProps) {
+function PageTabs({
+  pages,
+  active,
+  onActive,
+  imported,
+  importedBefore,
+  onImported,
+}: PageTabsProps) {
   const tabs =
     pages.length > 1 ? (
       <div className="flex flex-wrap gap-1.5">
@@ -70,7 +88,7 @@ function PageTabs({ pages, active, onActive, imported, onImported }: PageTabsPro
             )}
           >
             Page {index + 1}
-            {imported[page.id] ? ' · imported' : ''}
+            {imported[page.id] || importedBefore.has(page.id) ? ' · imported' : ''}
           </button>
         ))}
       </div>
@@ -79,7 +97,12 @@ function PageTabs({ pages, active, onActive, imported, onImported }: PageTabsPro
     <>
       {pages.map((page, index) => (
         <div key={page.id} hidden={index !== active}>
-          <PagePanel page={page} tabs={tabs} imported={imported[page.id]} onImported={onImported} />
+          <PagePanel
+            page={page}
+            tabs={tabs}
+            imported={imported[page.id] ?? (importedBefore.has(page.id) ? 'before' : undefined)}
+            onImported={onImported}
+          />
         </div>
       ))}
     </>
@@ -89,7 +112,7 @@ function PageTabs({ pages, active, onActive, imported, onImported }: PageTabsPro
 type PagePanelProps = {
   page: KhataPageResponse;
   tabs: ReactNode;
-  imported: PageImport | undefined;
+  imported: PageImport | 'before' | undefined;
   onImported: (pageId: string, done: PageImport) => void;
 };
 
