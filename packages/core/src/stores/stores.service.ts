@@ -72,6 +72,10 @@ export class StoresService {
     return toSettingsResponse(store);
   }
 
+  findPublicBySlug(slug: string) {
+    return this.maintenance.findPublicBySlug(slug);
+  }
+
   maintenanceStoreIds(after: string | null, limit: number) {
     return this.maintenance.maintenanceStoreIds(after, limit);
   }

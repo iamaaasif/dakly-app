@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { NotificationsModule } from '../notifications/notifications.module';
+import { OrdersModule } from '../orders/orders.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
@@ -10,6 +11,8 @@ import { OutboxModule } from '../platform/outbox/outbox.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { ProcessPaymentCallbackJob } from './jobs/process-payment-callback.job';
+import { OrderPaymentLinksController } from './order-payment-links.controller';
+import { OrderPaymentLinksService } from './order-payment-links.service';
 import { PaymentCallbackVerificationService } from './payment-callback-verification.service';
 import { PaymentCallbacksController } from './payment-callbacks.controller';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
@@ -23,6 +26,7 @@ import { PaymentsService } from './payments.service';
     CacheModule,
     ClockModule,
     NotificationsModule,
+    OrdersModule,
     OutboxModule,
     BullModule.registerQueueAsync({
       name: QUEUES.inbound,
@@ -32,15 +36,17 @@ import { PaymentsService } from './payments.service';
       },
     }),
   ],
-  controllers: [PaymentCallbacksController],
+  controllers: [PaymentCallbacksController, OrderPaymentLinksController],
   providers: [
     { provide: PAYMENT_DRIVERS, useFactory: () => buildPaymentDrivers(loadEnv()) },
     PaymentCallbacksRepository,
     PaymentCallbacksService,
+    OrderPaymentLinksService,
     PaymentsRepository,
     PaymentsService,
   ],
   exports: [
+    OrderPaymentLinksService,
     PaymentsRepository,
     PaymentsService,
     PaymentCallbacksRepository,

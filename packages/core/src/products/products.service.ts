@@ -127,6 +127,13 @@ export class ProductsService {
     return orderCatalogueProduct(product, this.storage);
   }
 
+  // Only an active product with its order link switched on; anything else looks like it does not exist.
+  async getForOrderLink(storeId: string, id: string): Promise<OrderCatalogueProduct> {
+    const product = await this.repository.findForOrderLink(storeId, id);
+    if (!product) throw productError('PRODUCT_NOT_FOUND');
+    return orderCatalogueProduct(product, this.storage);
+  }
+
   // Keeps the order of `ids`; an id that is no longer offerable is left out.
   async getManyForChat(storeId: string, ids: string[]): Promise<ChatProduct[]> {
     if (!ids.length) return [];
