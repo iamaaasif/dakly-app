@@ -1,6 +1,8 @@
-import { describePhotoMatch } from '../../ai-agent/sales-agent-tools.service';
+import { describeAlternatives, describePhotoMatch } from '../../ai-agent/sales-agent-tools.service';
+import { pickAlternatives } from '../../product-search/product-alternatives';
 import { decidePhotoMatch } from '../../product-search/product-photo-match';
 import { nameScores, parseQuery } from '../../product-search/product-search-ranking';
+import type { ChatProduct } from '../../products/products.service';
 import {
   deliveryZones,
   evalChatProducts,
@@ -26,6 +28,33 @@ function parse(raw: string): Args {
 function productById({ productId }: Args) {
   const found = evalProducts.find((candidate) => candidate.productId === productId);
   return found ? productResult(found) : { error: 'PRODUCT_NOT_FOUND' };
+}
+
+const ALTERNATIVE_LIMIT = 3;
+
+function presentEvalProduct(product: ChatProduct): object {
+  const found = evalProducts.find(({ productId }) => productId === product.id);
+  return found ? productResult(found) : {};
+}
+
+function findAlternatives({ productId }: Args) {
+  const soldOut = evalChatProducts.find(({ id }) => id === productId);
+  if (!soldOut) return { error: 'PRODUCT_NOT_FOUND' };
+  return describeAlternatives(
+    soldOut,
+    pickAlternatives(soldOut, evalChatProducts, ALTERNATIVE_LIMIT),
+    presentEvalProduct,
+  );
+}
+
+function joinRestockList({ variantId }: Args) {
+  const variant = evalProducts
+    .flatMap(({ variants }) => variants)
+    .find((v) => v.variantId === variantId);
+  if (!variant) return { error: 'PRODUCT_VARIANT_NOT_FOUND' };
+  return variant.stock > 0
+    ? { error: 'RESTOCK_VARIANT_IN_STOCK' }
+    : { onWaitingList: true, variantId };
 }
 
 // Mirrors the real tool: the photo the model chose, else the product's first one, and a size with
@@ -69,6 +98,8 @@ const handlers: Record<string, (args: Args) => object> = {
   }),
   get_product: productById,
   send_product_card: sendProductCard,
+  find_alternatives: findAlternatives,
+  join_restock_list: joinRestockList,
   get_delivery_charge: () => ({ places: [], zones: deliveryZones }),
   search_knowledge: () => ({ passages: [] }),
   get_my_orders: () => ({ orders: [] }),
@@ -89,8 +120,9 @@ export function matchEvalPhoto(photoText: string): object {
   const scores = nameScores(evalSearchDocuments, words);
   const named = evalChatProducts.filter(({ id }) => scores.has(id));
   const match = decidePhotoMatch(named, scores, words);
-  return describePhotoMatch(match, (product) => {
-    const found = evalProducts.find(({ productId }) => productId === product.id);
-    return found ? productResult(found) : {};
-  });
+  const alternatives =
+    match.kind === 'sold_out'
+      ? pickAlternatives(match.product, evalChatProducts, ALTERNATIVE_LIMIT)
+      : [];
+  return describePhotoMatch(match, presentEvalProduct, alternatives);
 }
