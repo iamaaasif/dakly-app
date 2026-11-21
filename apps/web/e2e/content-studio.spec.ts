@@ -107,6 +107,8 @@ test('writes options, saves one to the library and opens it in Create post', asy
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/content-studio');
     await expect(page.getByRole('heading', { name: 'AI Content Studio', level: 1 })).toBeVisible();
+    await expect(page.getByText('580 AI credits left').first()).toBeVisible();
+    await expect(page.getByText('Uses 3 AI credits · 580 AI credits left')).toBeVisible();
     await capture(page, 'create');
     await capture(page, 'create-style', page.getByText('Use my Brand Profile'));
 
