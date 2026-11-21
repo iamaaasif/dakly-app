@@ -98,13 +98,13 @@ export const getOrderStatusTool = {
 export const sendProductCardTool = {
   name: 'send_product_card',
   description:
-    'Send the customer a product card with name and price before your reply. Use it when the customer wants to see a product or asks for options. Pass variantId when the customer asks about one colour or size, so the card shows the photo of that variant. When the product has no such variant but its photos are tagged with the colour or style the customer asked for, pass the photoId of that photo instead. When the customer asks for a colour or style that no photo matches, set withoutPhoto so no other colour is shown as if it were the one asked for, and say that colour is not available. The price on the card comes from the shop, so do not repeat it in your own words unless a tool returned it.',
+    'Send the customer a product card with name and price before your reply. Always pass variantId, photoId and withoutPhoto, with null for the ones that do not apply. Use it when the customer wants to see a product or asks for options. Pass variantId when the customer asks about one colour or size, so the card shows the photo of that variant. When the product has no such variant but its photos are tagged with the colour or style the customer asked for, pass the photoId of that photo instead. When the customer asks for a colour or style that no photo matches, set withoutPhoto so no other colour is shown as if it were the one asked for, and say that colour is not available. The price on the card comes from the shop, so do not repeat it in your own words unless a tool returned it.',
   aliases: ['ছবি', 'দেখান', 'photo', 'picture', 'pic den', 'dekhan'],
   input: z.strictObject({
     productId: z.uuid(),
-    variantId: z.uuid().optional(),
-    photoId: z.uuid().optional(),
-    withoutPhoto: z.boolean().optional(),
+    variantId: z.uuid().nullable(),
+    photoId: z.uuid().nullable(),
+    withoutPhoto: z.boolean().nullable(),
   }),
   units: {},
 } satisfies AiToolDefinition;

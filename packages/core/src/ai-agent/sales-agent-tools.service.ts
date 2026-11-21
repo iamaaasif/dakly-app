@@ -325,7 +325,7 @@ function productResult(product: ChatProduct) {
 function cardPhotoId(
   product: ChatProduct,
   variant: ChatProduct['variants'][number] | undefined,
-  photoId: string | undefined,
+  photoId: string | null,
 ) {
   if (photoId) return product.photos.some(({ id }) => id === photoId) ? photoId : 'unknown';
   return variant?.photoFileId ?? product.variants[0]?.photoFileId ?? null;
