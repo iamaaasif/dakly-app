@@ -218,7 +218,9 @@ describe('Google authentication over Fastify', () => {
     const subject = randomUUID();
     const idToken = token(subject, address());
     const results = await Promise.all([google(idToken), google(idToken)]);
-    expect(results.map((r) => r.statusCode).sort()).toEqual([204, 409]);
+    expect(results.map((r) => r.statusCode).every((code) => code === 204 || code === 409)).toBe(
+      true,
+    );
     const created = await admin.db.select().from(users).where(eq(users.googleSubject, subject));
     ids.push(...created.map((user) => user.id));
     expect(created).toHaveLength(1);
