@@ -253,3 +253,11 @@ export type ConfirmProductPhotoInput = z.infer<typeof confirmProductPhotoSchema>
 export type ReorderProductPhotosInput = z.infer<typeof reorderProductPhotosSchema>;
 export type ProductPhotoUploadResponse = { fileId: string; uploadUrl: string };
 export type ProductPhotoResponse = { id: string; url: string };
+
+// What the model says about one product photo. Tags hold the colour and the look in English and
+// Bangla, so "লাল" finds the red photo as well as "red".
+export const productPhotoTagsSchema = z.strictObject({
+  description: z.string().max(400),
+  tags: z.array(z.string().min(1).max(40)).max(12),
+});
+export type ProductPhotoTags = z.infer<typeof productPhotoTagsSchema>;
