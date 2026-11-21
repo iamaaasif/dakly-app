@@ -130,6 +130,11 @@ const groups = [
     ],
   },
   {
+    evidence: 'admin/plan-catalogue.int.spec.ts',
+    boundary: 'audited staff edits of the global plan catalogue, which holds no shop data',
+    routes: ['GET /admin/plans', 'PUT /admin/plans/:code'],
+  },
+  {
     evidence: 'admin/ops-reports.int.spec.ts',
     boundary: 'staff reads of provider health and AI cost through definer functions, counts only',
     routes: ['GET /admin/provider-health', 'GET /admin/ai-cost'],
