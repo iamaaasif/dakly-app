@@ -2,7 +2,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ZodType } from 'zod';
 
 import type { aiRunPurposes } from '@dakly/contracts/ai';
-import type { LlmTool } from '@dakly/providers/llm/llm-driver';
+import type {
+  LlmErrorCode,
+  LlmImage,
+  LlmTool,
+  LlmTranscriptionRequest,
+} from '@dakly/providers/llm/llm-driver';
 
 import { Clock } from '../platform/clock';
 import { hasDatabaseTransactionScope } from '../platform/database/scoped-transactions';
@@ -21,6 +26,7 @@ export type AiRequest<T> = {
   tier: AiTier;
   prompt: { version: string; instructions: string };
   input: string;
+  images?: readonly LlmImage[];
   output: ZodType<T>;
   tools?: readonly LlmTool[];
   signal?: AbortSignal;
@@ -85,6 +91,29 @@ export class AiService {
     }
   }
 
+  async transcribe(
+    storeId: string,
+    request: Pick<LlmTranscriptionRequest, 'audio' | 'hint'> & { signal?: AbortSignal },
+  ): Promise<
+    { kind: 'output'; text: string } | { kind: 'failure'; code: GateFailure | LlmErrorCode }
+  > {
+    if (hasDatabaseTransactionScope()) throw aiError('AI_INSIDE_TRANSACTION');
+    if (request.signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
+    const permit = await this.gate.acquire(storeId);
+    if (permit.kind === 'paused') return { kind: 'failure', code: 'AI_PAUSED' };
+    if (permit.kind === 'busy') return { kind: 'failure', code: 'AI_STORE_BUSY' };
+    const model = this.config.transcribeModel;
+    try {
+      return await this.runs.transcribe(
+        storeId,
+        { ...request, model, timeoutMs: aiTimeoutMs },
+        Object.hasOwn(this.config.prices, model) ? this.config.prices[model] : undefined,
+      );
+    } finally {
+      await this.gate.release(storeId, permit.ticket);
+    }
+  }
+
   private async billOutput<T>(
     storeId: string,
     usage: ConsumeUsageInput,
@@ -130,6 +159,7 @@ export class AiService {
         model,
         instructions: request.prompt.instructions,
         input: request.input,
+        images: request.images,
         output: request.output,
         tools: request.tools,
         signal: request.signal,

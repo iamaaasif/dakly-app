@@ -164,6 +164,17 @@ export class ProductsRepository {
     );
   }
 
+  async countForChat(storeId: string): Promise<number> {
+    const shown = and(eq(products.status, 'active'), eq(products.isVisibleInChats, true));
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(products)
+        .where(and(eq(products.storeId, storeId), shown)),
+    );
+    return row?.count ?? 0;
+  }
+
   async findForChat(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx

@@ -56,6 +56,10 @@ export class DeliveryService {
     return { items, nextCursor: zones.length > query.limit ? items.at(-1)!.id : null };
   }
 
+  countZones(storeId: string): Promise<number> {
+    return this.repository.count(storeId);
+  }
+
   createZone(
     storeId: string,
     input: CreateDeliveryZoneInput,

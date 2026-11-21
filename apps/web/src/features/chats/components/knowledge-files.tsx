@@ -1,4 +1,4 @@
-import { FileText, Trash2, Upload } from 'lucide-react';
+import { FileText, Link as LinkIcon, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { knowledgeFileBytes, type KnowledgeItemResponse } from '@dakly/contracts/knowledge';
@@ -17,7 +17,7 @@ export function KnowledgeFiles({ files, canEdit }: KnowledgeFilesProps) {
     <section aria-labelledby="knowledge-files" className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <h3 id="knowledge-files" className="text-sm font-semibold text-text-muted uppercase">
-          Files
+          Files and links
         </h3>
         {canEdit ? (
           <Button
@@ -31,8 +31,8 @@ export function KnowledgeFiles({ files, canEdit }: KnowledgeFilesProps) {
         ) : null}
       </div>
       <p className="text-sm text-text-muted">
-        PDF or text, up to {knowledgeFileBytes / (1024 * 1024)} MB. Dakly reads the file and learns
-        the facts in it.
+        Upload a size chart, return policy or price list. Dakly reads it and uses it in replies. PDF
+        or text, up to {knowledgeFileBytes / (1024 * 1024)} MB.
       </p>
       <input
         ref={picker}
@@ -73,19 +73,24 @@ type FileRowProps = {
 
 function FileRow({ item, canEdit, onRemove }: FileRowProps) {
   const [confirming, setConfirming] = useState(false);
+  const Icon = item.kind === 'url' ? LinkIcon : FileText;
   return (
-    <li className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-3">
-      <FileText aria-hidden="true" size={16} strokeWidth={1.75} />
-      <span>Uploaded file</span>
-      <KnowledgeItemStatus item={item} />
+    <li className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-3">
+      <Icon aria-hidden="true" size={16} strokeWidth={1.75} className="text-text-muted" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-semibold">
+          {item.sourceUrl ?? item.fileName ?? 'Uploaded file'}
+        </span>
+        <KnowledgeItemStatus item={item} />
+      </span>
       {canEdit && !confirming ? (
         <Button
           variant="secondary"
-          className="ml-auto"
+          className="min-h-8 min-w-8 border-0 bg-transparent p-0 text-text-muted"
           aria-label="Delete file"
           onClick={() => setConfirming(true)}
         >
-          <Trash2 aria-hidden="true" size={16} strokeWidth={1.75} />
+          <X aria-hidden="true" size={16} strokeWidth={1.75} />
         </Button>
       ) : null}
       {confirming ? (

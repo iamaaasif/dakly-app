@@ -1,4 +1,6 @@
-import type { CampaignResponse } from '@dakly/contracts/campaigns';
+import type { ReactNode } from 'react';
+
+import type { CampaignResponse, CampaignResultsResponse } from '@dakly/contracts/campaigns';
 import { formatCount, formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 
@@ -8,34 +10,37 @@ import {
   campaignStatusColors,
   campaignStatusLabels,
 } from '../campaign-labels';
+import { CampaignFailures } from './campaign-failures';
 import { CampaignFunnel } from './campaign-funnel';
 import { CampaignPageHeader } from './campaign-page-header';
 import { formatDateTime } from '@/lib/format-date';
 
-export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
+type CampaignResultsProps = {
+  campaign: CampaignResponse;
+  // Cost, return and failures come from a second request; the counts above render without it.
+  results?: CampaignResultsResponse;
+  actions?: ReactNode;
+  customers?: ReactNode;
+};
+
+export function CampaignResults({ campaign, results, actions, customers }: CampaignResultsProps) {
   const { counts, channel } = campaign;
   const orders = BigInt(campaign.attribution?.orders ?? '0');
-  const revenue = BigInt(campaign.attribution?.revenuePoisha ?? '0');
   // Only WhatsApp and email report reads; an SMS has no read receipt.
   const reads = channel === 'sms' ? [] : [{ label: 'Read', count: counts.read }];
-  const cards = [
-    { label: 'Sent', value: formatCount(counts.sent) },
-    { label: 'Delivered', value: formatCount(counts.delivered) },
-    ...reads.map(({ label, count }) => ({ label, value: formatCount(count) })),
-    { label: 'Tapped link', value: formatCount(counts.tapped) },
-    { label: 'Failed', value: formatCount(counts.failed) },
-    { label: 'Orders', value: formatCount(orders) },
-    { label: 'Revenue', value: formatMoney(revenue) },
-  ];
+  const cards = resultCards(campaign, results);
   return (
     <main className="space-y-6 p-6 md:p-8">
       <CampaignPageHeader
         title={campaign.name}
         subtitle={`${campaignChannelLabels[channel]} · ${whenSent(campaign)}`}
         action={
-          <Badge variant={campaignStatusColors[campaign.status]}>
-            {campaignStatusLabels[campaign.status]}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={campaignStatusColors[campaign.status]}>
+              {campaignStatusLabels[campaign.status]}
+            </Badge>
+            {actions}
+          </div>
         }
       />
       <section aria-labelledby="results-heading" className="space-y-4">
@@ -50,7 +55,7 @@ export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
             </div>
           ))}
         </dl>
-        <ResultNotes campaign={campaign} />
+        <ResultNotes campaign={campaign} results={results} />
       </section>
       <section aria-labelledby="funnel-heading" className="max-w-xl space-y-3">
         <h2 id="funnel-heading" className="text-lg font-semibold">
@@ -66,9 +71,33 @@ export function CampaignResults({ campaign }: { campaign: CampaignResponse }) {
           ]}
         />
       </section>
+      {results ? <CampaignFailures results={results} /> : null}
+      {customers}
       <CampaignMessage campaign={campaign} />
     </main>
   );
+}
+
+function resultCards(campaign: CampaignResponse, results?: CampaignResultsResponse) {
+  const { counts, channel } = campaign;
+  const orders = BigInt(campaign.attribution?.orders ?? '0');
+  const revenue = BigInt(campaign.attribution?.revenuePoisha ?? '0');
+  const reads = channel === 'sms' ? [] : [{ label: 'Read', value: formatCount(counts.read) }];
+  const cards = [
+    { label: 'Sent', value: formatCount(counts.sent) },
+    { label: 'Delivered', value: formatCount(counts.delivered) },
+    ...reads,
+    { label: 'Tapped link', value: formatCount(counts.tapped) },
+    { label: 'Failed', value: formatCount(counts.failed) },
+    { label: 'Orders', value: formatCount(orders) },
+    { label: 'Revenue', value: formatMoney(revenue) },
+  ];
+  if (!results) return cards;
+  const { costPoisha, returnPerTaka } = results;
+  // An SMS has no poisha rate yet, so its cost is unknown, not free.
+  const cost = channel === 'sms' ? '—' : formatMoney(BigInt(costPoisha));
+  const returned = returnPerTaka === null ? '—' : formatMoney(BigInt(returnPerTaka) * 100n);
+  return [...cards, { label: 'Cost', value: cost }, { label: 'Return per ৳1', value: returned }];
 }
 
 function whenSent({ status, startedAt, finishedAt, createdAt }: CampaignResponse) {
@@ -78,10 +107,19 @@ function whenSent({ status, startedAt, finishedAt, createdAt }: CampaignResponse
     : `Created ${formatDateTime(createdAt)}`;
 }
 
-function ResultNotes({ campaign }: { campaign: CampaignResponse }) {
+function ResultNotes({
+  campaign,
+  results,
+}: {
+  campaign: CampaignResponse;
+  results?: CampaignResultsResponse;
+}) {
   return (
     <div className="space-y-1 text-sm text-text-muted">
       <p>Orders and revenue include returns up to today.</p>
+      {results?.resultsFinalAt ? (
+        <p>Results final on {formatDateTime(results.resultsFinalAt)}</p>
+      ) : null}
       {campaign.counts.countedAt === null ? <p role="status">Counts are being updated.</p> : null}
     </div>
   );

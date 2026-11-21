@@ -10,6 +10,7 @@ import { createDatabase } from '@dakly/db/client';
 import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
 import type { LlmResult } from '@dakly/providers/llm/llm-driver';
 
+import { KnowledgeSearchService } from '../ai/knowledge-search.service';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AiPracticeModule } from './ai-practice.module';
 import { AiPracticeService } from './ai-practice.service';
@@ -172,12 +173,68 @@ it('answers a test question without saving a message or spending a unit', async 
   expect(await practice.ask(active.storeId, 'price koto?')).toEqual({
     kind: 'reply',
     text: 'Ji bolun',
+    source: { kind: 'general' },
   });
   expect(await sideEffects(active.storeId)).toEqual({
     messages: '0',
     conversations: '0',
     usage: '0',
   });
+});
+
+// The model asks Knowledge a question, so the reply names what it found.
+async function askKnowledge(storeId: string, itemId: string) {
+  vi.spyOn(KnowledgeSearchService.prototype, 'search').mockResolvedValue([
+    { itemId, content: 'Two days' },
+  ]);
+  const toolCalls = [
+    { id: 'call-1', name: 'search_knowledge', argumentsJson: '{"question":"delivery"}' },
+  ];
+  const driver = new FakeLlmDriver([
+    routine,
+    { kind: 'tool_calls', toolCalls, usage, responseId: 'fake', model: 'gpt-6.1-terra' },
+    reply('Two days.'),
+  ]);
+  vi.spyOn(FakeLlmDriver.prototype, 'respond').mockImplementation((request) =>
+    fakeRespond.call(driver, request),
+  );
+  return practice.ask(storeId, 'delivery koto din?');
+}
+
+const knowledgeItem = async (storeId: string) =>
+  (
+    await admin.pool.query<{ id: string }>('select id from knowledge_items where store_id = $1', [
+      storeId,
+    ])
+  ).rows[0]!.id;
+
+it('names the answer a reply came from', async () => {
+  const active = await shop();
+  const itemId = await knowledgeItem(active.storeId);
+  expect(await askKnowledge(active.storeId, itemId)).toEqual({
+    kind: 'reply',
+    text: 'Two days.',
+    source: { kind: 'answer', question: 'Delivery?' },
+  });
+});
+
+it('names the file a reply came from', async () => {
+  const active = await shop({ knowledge: false });
+  const fileId = randomUUID();
+  await admin.pool.query(
+    "insert into files (id, store_id, purpose, object_key, file_name, content_type, size_bytes, status) values ($1, $2, 'knowledge_file', $3, 'Size chart.pdf', 'application/pdf', 10, 'ready')",
+    [fileId, active.storeId, `stores/${active.storeId}/knowledge/${fileId}`],
+  );
+  const itemId = randomUUID();
+  await admin.pool.query(
+    "insert into knowledge_items (id, store_id, kind, file_id, status) values ($1, $2, 'file', $3, 'active')",
+    [itemId, active.storeId, fileId],
+  );
+  expect(await askKnowledge(active.storeId, itemId)).toMatchObject({
+    source: { kind: 'file', fileName: 'Size chart.pdf' },
+  });
+  await admin.pool.query('delete from knowledge_items where id = $1', [itemId]);
+  await admin.pool.query('delete from files where id = $1', [fileId]);
 });
 
 it('shows a hand-over instead of a reply when the question needs a person', async () => {

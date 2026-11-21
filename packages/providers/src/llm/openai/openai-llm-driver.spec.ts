@@ -256,6 +256,64 @@ describe('OpenAiLlmDriver', () => {
 
     await expect(response).rejects.toMatchObject({ code: 'LLM_ABORTED', message: 'LLM_ABORTED' });
   });
+  it('sends each image to the model as a data URL beside the text', async () => {
+    const driver = new OpenAiLlmDriver('test-key', async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      expect(body.input).toEqual([
+        {
+          role: 'user',
+          content: [
+            { type: 'input_text', text: 'দাম কত?' },
+            { type: 'input_image', image_url: 'data:image/png;base64,AQID', detail: 'high' },
+          ],
+        },
+      ]);
+      return Response.json(fixtures.reply);
+    });
+    await driver.respond({
+      ...request,
+      images: [{ contentType: 'image/png', bytes: new Uint8Array([1, 2, 3]) }],
+    });
+  });
+
+  it('transcribes a voice note and returns the text with the measured tokens', async () => {
+    const driver = new OpenAiLlmDriver('test-key', async (url, options) => {
+      expect(url).toBe('https://api.openai.com/v1/audio/transcriptions');
+      const form = options?.body as FormData;
+      expect(form.get('model')).toBe('test-transcribe');
+      expect(form.get('prompt')).toBe('Bangla, Banglish');
+      expect((form.get('file') as File).name).toBe('voice.ogg');
+      expect(options?.headers).toEqual({ Authorization: 'Bearer test-key' });
+      return Response.json({
+        text: ' ভাইয়া red saree ta ache?\n',
+        usage: { type: 'tokens', input_tokens: 120, output_tokens: 9, total_tokens: 129 },
+      });
+    });
+    await expect(
+      driver.transcribe({
+        model: 'test-transcribe',
+        audio: { contentType: 'audio/ogg', bytes: new Uint8Array([1]) },
+        hint: 'Bangla, Banglish',
+        timeoutMs: 1000,
+      }),
+    ).resolves.toEqual({
+      model: 'test-transcribe',
+      text: 'ভাইয়া red saree ta ache?',
+      usage: { inputTokens: 120, cachedInputTokens: 0, outputTokens: 9 },
+    });
+  });
+
+  it('maps a transcription outage to a retryable error', async () => {
+    const driver = new OpenAiLlmDriver('test-key', async () => new Response('', { status: 503 }));
+    await expect(
+      driver.transcribe({
+        model: 'test-transcribe',
+        audio: { contentType: 'audio/ogg', bytes: new Uint8Array([1]) },
+        hint: '',
+        timeoutMs: 1000,
+      }),
+    ).rejects.toMatchObject({ code: 'LLM_UNAVAILABLE' });
+  });
 });
 
 const pendingResponse: typeof fetch = async (_url, options) =>

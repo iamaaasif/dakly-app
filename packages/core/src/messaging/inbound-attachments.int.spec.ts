@@ -20,6 +20,7 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { MINUTE_MS } from '../platform/time';
 import { InboundAttachmentsModule } from './inbound-attachments.module';
+import { InboundMediaReadingService } from './inbound-media-reading.service';
 import { CopyMessageAttachmentsJob } from './jobs/copy-message-attachments.job';
 import { MessagingModule } from './messaging.module';
 import { MessagingService } from './messaging.service';
@@ -52,6 +53,8 @@ beforeAll(async () => {
     },
   );
   download = vi.spyOn(FakeMetaChannelDriver.prototype, 'downloadMedia');
+  // Reading has its own spec; these tests are about the copy.
+  vi.spyOn(InboundMediaReadingService.prototype, 'read').mockResolvedValue();
 });
 
 beforeEach(() => {

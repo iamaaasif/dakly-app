@@ -281,6 +281,38 @@ it('searches only this store knowledge', async () => {
   expect(result.passages.map(({ content }) => content)).toEqual(['Return within 3 days if unused']);
 });
 
+it('counts a use only when the search happens in a real chat', async () => {
+  const storeId = await shop();
+  const buyer = await contact(storeId);
+  const vector = JSON.stringify(Array.from({ length: 512 }, () => 0.5));
+  const itemId = randomUUID();
+  await admin.pool.query(
+    "insert into knowledge_items (id, store_id, kind, question, answer, status) values ($1, $2, 'policy', 'Return policy', 'Return within 3 days', 'active')",
+    [itemId, storeId],
+  );
+  await admin.pool.query(
+    'insert into knowledge_chunks (id, store_id, knowledge_item_id, content, embedding, embedding_model, token_count) values (gen_random_uuid(), $1, $2, $3, $4::vector, $5, 5)',
+    [
+      storeId,
+      itemId,
+      'Return within 3 days',
+      vector,
+      process.env.AI_EMBEDDING_MODEL ?? 'text-embedding-3-small',
+    ],
+  );
+  const timesUsed = async () =>
+    (
+      await admin.pool.query<{ times_used: number }>(
+        'select times_used from knowledge_items where id = $1',
+        [itemId],
+      )
+    ).rows[0]!.times_used;
+  await run(storeId, buyer, 'search_knowledge', { question: 'return policy' });
+  expect(await timesUsed()).toBe(0);
+  await runInChat(storeId, buyer, 'search_knowledge', { question: 'return policy' });
+  expect(await timesUsed()).toBe(1);
+});
+
 it('answers a bad call with a result the model can act on', async () => {
   const storeId = await shop();
   const buyer = await contact(storeId);

@@ -4,8 +4,16 @@ import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import {
+  getDeliveryChargeTool,
+  getProductTool,
+  searchKnowledgeTool,
+  searchProductsTool,
+  sendProductCardTool,
+} from '@dakly/contracts/ai-agent-tools';
+import {
   MIN_TEST_QUESTIONS,
   type TestAnswerResponse,
+  type TestAnswerSource,
   type TestQuestion,
 } from '@dakly/contracts/ai-practice';
 import { chatClassificationSchema } from '@dakly/contracts/chat-classification';
@@ -27,6 +35,8 @@ import { classifyChat } from './prompts/classify-chat.v1';
 import { gradeTestAnswer } from './prompts/grade-test-answer.v1';
 import { checkReplyFacts } from './reply-fact-check';
 import { SalesAgentService } from './sales-agent.service';
+
+const productToolNames = [searchProductsTool.name, getProductTool.name, sendProductCardTool.name];
 
 const gradeSchema = z.strictObject({ agrees: z.boolean() });
 
@@ -111,7 +121,25 @@ export class AiPracticeService {
       linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
     });
     if (!checked.isSafe) return { kind: 'handover', reason: 'out_of_scope' };
-    return { kind: 'reply', text: composed.text };
+    return { kind: 'reply', text: composed.text, source: await this.sourceOf(storeId, composed) };
+  }
+
+  // Knowledge wins over products, and products over store rules, because an owner's own answer is
+  // the thing they can change from this screen.
+  private async sourceOf(
+    storeId: string,
+    composed: { toolNames: string[]; sources: { tool: string; refs: string[] }[] },
+  ): Promise<TestAnswerSource> {
+    const itemId = composed.sources.find((source) => source.tool === searchKnowledgeTool.name)
+      ?.refs[0];
+    const item = itemId ? await this.knowledge.describe(storeId, itemId) : undefined;
+    if (item?.kind === 'file') return { kind: 'file', fileName: item.fileName };
+    if (item) return { kind: 'answer', question: item.question };
+    // A product search runs on every question, so only one that found a product counts.
+    const foundProduct = composed.sources.some((source) => productToolNames.includes(source.tool));
+    if (foundProduct) return { kind: 'products' };
+    if (composed.toolNames.includes(getDeliveryChargeTool.name)) return { kind: 'store_rules' };
+    return { kind: 'general' };
   }
 
   async goLive(storeId: string, userId: string, connectionId: string): Promise<void> {
