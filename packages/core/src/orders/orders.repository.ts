@@ -214,8 +214,9 @@ export class OrdersRepository {
       phone,
       variantIds,
       since,
-    }: { orderId: string; phone: string; variantIds: string[]; since: Date },
+    }: { orderId: string; phone: string | null; variantIds: string[]; since: Date },
   ) {
+    if (!phone) return null;
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({ id: orders.id })

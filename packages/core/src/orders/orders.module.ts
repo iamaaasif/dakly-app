@@ -22,6 +22,8 @@ import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
 import { OrderSetupRepository } from './order-setup.repository';
 import { OrderSetupService } from './order-setup.service';
+import { KhataSalesRepository } from './khata-sales.repository';
+import { KhataSalesService } from './khata-sales.service';
 import { OrdersController } from './orders.controller';
 import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
@@ -47,6 +49,8 @@ import { OrdersService } from './orders.service';
     BuyerOrdersRepository,
     BuyerOrdersService,
     ChatOrdersService,
+    KhataSalesRepository,
+    KhataSalesService,
     OrdersRepository,
     OrdersService,
     OrderSetupRepository,
@@ -61,6 +65,7 @@ import { OrdersService } from './orders.service';
   exports: [
     BuyerOrdersService,
     ChatOrdersService,
+    KhataSalesService,
     OrdersService,
     OrderSetupService,
     OrderReportingService,

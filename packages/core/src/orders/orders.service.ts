@@ -217,7 +217,7 @@ export class OrdersService {
     );
     const page = rows.slice(0, query.limit);
     const outcomes = await this.repository.parcelOutcomes(storeId, [
-      ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
+      ...new Set(page.flatMap(({ recipientPhone }) => (recipientPhone ? [recipientPhone] : []))),
     ]);
     const byPhone = new Map(outcomes.map((row) => [row.phone, row]));
     const items = page.map((row) =>
@@ -234,11 +234,17 @@ export class OrdersService {
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
-    const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
+    const outcomes = await this.repository.parcelOutcomes(
+      storeId,
+      order.recipientPhone ? [order.recipientPhone] : [],
+    );
     const timeline = await orderStageHistory(storeId, orderId, this.audit);
     return {
       ...order,
-      recipientPhone: access.seeFullPhone ? order.recipientPhone : maskPhone(order.recipientPhone),
+      recipientPhone:
+        access.seeFullPhone || !order.recipientPhone
+          ? order.recipientPhone
+          : maskPhone(order.recipientPhone),
       possibleDuplicateOfOrderId: access.seeFullPhone ? order.possibleDuplicateOfOrderId : null,
       hasRecipientPhoneMatch: await this.contacts.hasOrderPhoneMatch(storeId, order, access),
       createdAt: order.createdAt.toISOString(),

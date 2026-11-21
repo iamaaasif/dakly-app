@@ -6,6 +6,7 @@ import { DueBookModule } from '../due-book/due-book.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
+import { OrdersModule } from '../orders/orders.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { UsageModule } from '../usage/usage.module';
 import { KhataImportsService } from './khata-imports.service';
@@ -21,6 +22,7 @@ import { KhataScansService } from './khata-scans.service';
     ContactsModule,
     DueBookModule,
     FileStorageModule,
+    OrdersModule,
     OutboxModule,
     UsageModule,
   ],

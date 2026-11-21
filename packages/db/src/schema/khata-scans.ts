@@ -27,6 +27,7 @@ import { users } from './auth';
 import { createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { contacts } from './contacts';
 import { dueEntries } from './due-book';
+import { orders } from './orders';
 import { files } from './platform';
 import { stores } from './stores';
 
@@ -131,6 +132,7 @@ export const khataRows = pgTable(
     contactId: uuid('contact_id'),
     isContactCreated: boolean('is_contact_created').notNull().default(false),
     dueEntryId: uuid('due_entry_id'),
+    orderId: uuid('order_id'),
     createdAt: createdAt(),
   },
   (table) => [
@@ -160,6 +162,12 @@ export const khataRows = pgTable(
       columns: [table.storeId, table.dueEntryId],
       foreignColumns: [dueEntries.storeId, dueEntries.id] as [AnyPgColumn, AnyPgColumn],
     }),
+    foreignKey({
+      name: 'khata_rows_order_id_store_fk',
+      columns: [table.storeId, table.orderId],
+      foreignColumns: [orders.storeId, orders.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    index('khata_rows_order_id_idx').on(table.orderId),
     index('khata_rows_import_id_idx').on(table.storeId, table.importId),
     index('khata_rows_contact_id_idx').on(table.contactId),
     index('khata_rows_due_entry_id_idx').on(table.dueEntryId),

@@ -18,6 +18,7 @@ export const orderSourceLabels: Record<OrderSource, string> = {
   pos_csv: 'POS CSV',
   shopify: 'Shopify',
   woocommerce: 'WooCommerce',
+  khata_import: 'Khata import',
 };
 
 export const onHoldReasonLabels: Record<(typeof onHoldReasons)[number], string> = {

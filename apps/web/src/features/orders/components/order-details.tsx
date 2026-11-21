@@ -104,18 +104,21 @@ function OrderStageTracker({ currentStage, stageRef }: OrderStageTrackerProps) {
 
 type DeliveryDetailsProps = { order: OrderDetail };
 
+// A khata import sale was made over the counter, so it has no one to call or deliver to.
 function DeliveryDetails({ order }: DeliveryDetailsProps) {
+  const { recipientPhone } = order;
+  if (!recipientPhone) return null;
   return (
     <section aria-label="Delivery details" className="space-y-3">
       <h3 className="text-sm font-semibold text-text">Delivery details</h3>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold wrap-anywhere text-text">{order.recipientName}</p>
-          <p className="text-sm text-text-muted">{formatPhone(order.recipientPhone)}</p>
+          <p className="text-sm text-text-muted">{formatPhone(recipientPhone)}</p>
         </div>
         <div className="flex items-center gap-2">
           <a
-            href={`tel:${order.recipientPhone}`}
+            href={`tel:${recipientPhone}`}
             tabIndex={-1}
             className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-text hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:min-h-8"
           >
@@ -123,7 +126,7 @@ function DeliveryDetails({ order }: DeliveryDetailsProps) {
             Call
           </a>
           <a
-            href={`https://wa.me/880${order.recipientPhone.replace(/^0/, '')}`}
+            href={`https://wa.me/880${recipientPhone.replace(/^0/, '')}`}
             target="_blank"
             rel="noopener noreferrer"
             tabIndex={-1}

@@ -9,6 +9,7 @@ import {
 import { ContactsService } from '../contacts/contacts.service';
 import { KhataCustomersService } from '../contacts/khata-customers.service';
 import { DueBookService } from '../due-book/due-book.service';
+import { KhataSalesService } from '../orders/khata-sales.service';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -32,6 +33,7 @@ export class KhataImportsService {
     @Inject(KhataScansRepository) private readonly repository: KhataScansRepository,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(KhataCustomersService) private readonly customers: KhataCustomersService,
+    @Inject(KhataSalesService) private readonly sales: KhataSalesService,
     @Inject(DueBookService) private readonly dueBook: DueBookService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(Clock) private readonly clock: Clock,
@@ -98,6 +100,10 @@ export class KhataImportsService {
       // The rows point at the entries, so the pointers go before the entries do.
       await this.repository.resetPageRows(storeId, found.pageId);
       await this.dueBook.removeKhataEntries(storeId, entryIds);
+      await this.sales.removeUnchanged(
+        storeId,
+        rows.flatMap((row) => (row.orderId ? [row.orderId] : [])),
+      );
 
       const createdIds = [
         ...new Set(
@@ -133,12 +139,13 @@ export class KhataImportsService {
       contactId: null,
       isContactCreated: false,
       dueEntryId: null,
+      orderId: null,
     } as const;
     if (decision.action === 'skip') return skipped;
     if (row.confidence < KHATA_CONFIDENCE_THRESHOLD && !decision.isChecked)
       throw khataScanError('KHATA_ROW_NEEDS_CHECK');
-    if (row.kind === 'sale') throw khataScanError('KHATA_SALE_IMPORT_UNAVAILABLE');
-
+    if (row.kind === 'sale')
+      return this.importSale({ storeId, userId, row, decision, customersByPhone });
     const customer = await this.customerFor(storeId, row, decision, customersByPhone);
     const when = {
       amountPoisha: row.amountPoisha,
@@ -161,6 +168,43 @@ export class KhataImportsService {
       contactId: customer.contactId,
       isContactCreated: customer.isCreated,
       dueEntryId: entry.entry.id,
+      orderId: null,
+    };
+  }
+
+  // A sale with a phone or a chosen customer is linked to them; one without is a walk-in sale
+  // and links to nobody (SHOP-R1).
+  private async importSale({
+    storeId,
+    userId,
+    row,
+    decision,
+    customersByPhone,
+  }: {
+    storeId: string;
+    userId: string;
+    row: StoredKhataRow;
+    decision: Decision;
+    customersByPhone: Map<string, string>;
+  }): Promise<RowOutcome> {
+    const customer =
+      row.phone || decision.mergeContactId
+        ? await this.customerFor(storeId, row, decision, customersByPhone)
+        : undefined;
+    const orderId = await this.sales.record(storeId, {
+      userId,
+      contactId: customer?.contactId ?? null,
+      name: row.name,
+      amountPoisha: row.amountPoisha,
+      soldAt: new Date(this.entryTime(row.entryDate)),
+    });
+    return {
+      rowId: row.id,
+      outcome: 'imported',
+      contactId: customer?.contactId ?? null,
+      isContactCreated: customer?.isCreated ?? false,
+      dueEntryId: null,
+      orderId,
     };
   }
 
