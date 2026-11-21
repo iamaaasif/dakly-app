@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
-import type { handoverReasons } from '@dakly/contracts/chats';
+import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 
 import { AiService } from '../ai/ai.service';
 import { InboxService } from '../messaging/inbox.service';
@@ -17,6 +17,7 @@ import {
 const MAX_ROUNDS = 4;
 const REPLY_BUDGET_MS = 20_000;
 const HISTORY_LENGTH = 20;
+const PHOTO_QUERY_LENGTH = 1000;
 const CARD_TOOL = 'send_product_card';
 const HAND_OVER_TOOL = 'hand_over';
 const DRAFT_TOOL = 'draft_order';
@@ -110,6 +111,8 @@ export class SalesAgentService {
 
   // Search the customer's own words first, so the model starts with likely products.
   private async productCandidates(input: ComposeInput): Promise<ToolResult | undefined> {
+    const photo = photoQuery(input.customerTexts);
+    if (photo) return { tool: 'match_photo', result: await this.tools.matchPhoto(input, photo) };
     const query = input.customerTexts.join(' ').slice(0, 100).trim();
     if (query.length < 3) return undefined;
     const result = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
@@ -140,6 +143,14 @@ export class SalesAgentService {
       `<product_candidates>${JSON.stringify(candidates?.result ?? { products: [] })}</product_candidates>`,
     ].join('\n');
   }
+}
+
+// The photo's words and the shopper's caption, kept whole: a caption like "red ta" narrows the match.
+function photoQuery(texts: string[]): string | undefined {
+  const parts = texts.map((text) => photoSearchText(text) ?? text);
+  return texts.some((text) => photoSearchText(text) !== undefined)
+    ? parts.join(' ').slice(0, PHOTO_QUERY_LENGTH)
+    : undefined;
 }
 
 // An order is confirmed only on the customer's own yes, and never in the turn that drafted it.

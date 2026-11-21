@@ -12,19 +12,21 @@ import { TotpStep } from './totp-step';
 type SignInScreenProps = {
   config: AuthConfig;
   method?: 'phone' | 'email';
+  next?: string;
   onAuthenticated?: () => void;
   onNavigate?: (view: SignInView) => void;
 };
 export function SignInScreen({
   config,
   method = 'phone',
+  next,
   onAuthenticated,
   onNavigate,
 }: SignInScreenProps) {
   const [pending, setPending] = useState<GoogleSignInResponse>();
   const [remember, setRemember] = useState(true);
   const embedded = Boolean(onAuthenticated);
-  const complete = onAuthenticated ?? (() => window.location.replace('/dashboard'));
+  const complete = onAuthenticated ?? (() => window.location.replace(next ?? '/dashboard'));
   const result = (value: GoogleSignInResponse) => (value ? setPending(value) : complete());
   if (pending)
     return (
@@ -44,6 +46,7 @@ export function SignInScreen({
     <SignInMain
       config={config}
       method={method}
+      next={next}
       remember={remember}
       embedded={embedded}
       onRemember={setRemember}

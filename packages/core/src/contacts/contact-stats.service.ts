@@ -24,6 +24,7 @@ const INTENTIONAL_SOURCES: readonly ContactSource[] = [
   'shopify',
   'woocommerce',
   'pos',
+  'khata_import',
 ];
 
 @Injectable()

@@ -25,7 +25,7 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { BuyerOrdersService } from '../orders/buyer-orders.service';
 import { ChatOrdersService } from '../orders/chat-orders.service';
 import { AppError } from '../platform/errors/app-error';
-import { ProductSearchService } from '../product-search/product-search.service';
+import { type PhotoMatch, ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 
 // The agent job supplies both ids. No tool argument can name another store or customer.
@@ -98,6 +98,14 @@ export class SalesAgentToolsService {
     return { products: found.map(productResult) };
   }
 
+  // The customer sent a photo: say which product it shows, or that the shop cannot tell.
+  async matchPhoto({ storeId }: ToolScope, photoText: string): Promise<object> {
+    return describePhotoMatch(
+      await this.productSearch.matchPhoto(storeId, photoText),
+      productResult,
+    );
+  }
+
   private async getProduct({ storeId }: ToolScope, raw: unknown) {
     const { productId } = getProductTool.input.parse(raw);
     return productResult(await this.products.getForChat(storeId, productId));
@@ -167,9 +175,13 @@ export class SalesAgentToolsService {
   }
 
   private async sendProductCard({ storeId }: ToolScope, raw: unknown) {
-    const { productId } = sendProductCardTool.input.parse(raw);
+    const { productId, variantId } = sendProductCardTool.input.parse(raw);
     const product = await this.products.getForChat(storeId, productId);
-    return { cardText: productCardText(product), ...productResult(product) };
+    const variant = variantId ? product.variants.find(({ id }) => id === variantId) : undefined;
+    if (variantId && !variant) return { error: 'PRODUCT_VARIANT_NOT_FOUND' };
+    // The variant's own photo, else the product's first one; sending it is up to the reply sender.
+    const photoFileId = variant?.photoFileId ?? product.variants[0]?.photoFileId ?? null;
+    return { cardText: productCardText(product, variant), photoFileId, ...productResult(product) };
   }
 
   private async draftOrder({ storeId, contactId, chat }: ToolScope, raw: unknown) {
@@ -250,6 +262,37 @@ function draftKey(
   return `ai-order:${conversationId}:${createHash('sha256').update(details).digest('hex').slice(0, 32)}`;
 }
 
+// The rule tells the model what it may do with the answer, so a guess is never presented as a match.
+export function describePhotoMatch(
+  match: PhotoMatch,
+  present: (product: ChatProduct) => object,
+): object {
+  if (match.kind === 'sure')
+    return {
+      photoMatch: 'sure',
+      rule: 'Answer as this product, with its listed price and stock only.',
+      ...(match.variantId ? { matchedVariantId: match.variantId } : {}),
+      products: [present(match.product)],
+    };
+  if (match.kind === 'unsure')
+    return {
+      photoMatch: 'unsure',
+      rule: 'Do not pick one. Ask "কোন প্রোডাক্টটি চাচ্ছেন?" and send a card for each product with send_product_card.',
+      products: match.products.map(present),
+    };
+  if (match.kind === 'sold_out')
+    return {
+      photoMatch: 'sold_out',
+      rule: 'The photo shows this product and it has no stock. Say so. Do not offer it or take an order for it.',
+      products: [present(match.product)],
+    };
+  return {
+    photoMatch: 'none',
+    rule: 'No product fits the photo. Do not guess. Ask for the product name or a clearer photo.',
+    products: [],
+  };
+}
+
 function productResult(product: ChatProduct) {
   return {
     productId: product.id,
@@ -265,8 +308,8 @@ function productResult(product: ChatProduct) {
   };
 }
 
-function productCardText(product: ChatProduct) {
-  const lines = product.variants.map(
+function productCardText(product: ChatProduct, only?: ChatProduct['variants'][number]) {
+  const lines = (only ? [only] : product.variants).map(
     (variant) => `${variant.title}: ${formatMoney(variant.pricePoisha)}`,
   );
   return [product.name, ...lines].join('\n');

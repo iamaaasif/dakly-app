@@ -103,4 +103,15 @@ describe('ProductSearchService', () => {
       code: 'AI_INSIDE_TRANSACTION',
     });
   });
+
+  it('asks, with only products in stock, when a long photo text fits two kurtis', async () => {
+    const photo = 'red kurti with white flower print on a hanger, front view, plain background';
+    const found = await build({}).matchPhoto('store', photo);
+    expect(found).toMatchObject({ kind: 'unsure', products: [{ id: 'kurti-new' }] });
+  });
+
+  it('says a photo of a sold-out product is sold out', async () => {
+    const found = await build({}).matchPhoto('store', 'a cotton kurti on a hanger');
+    expect(found).toMatchObject({ kind: 'sold_out', product: { id: 'kurti-sold-out' } });
+  });
 });

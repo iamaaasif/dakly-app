@@ -23,6 +23,7 @@ export const sourceLabels: Record<ContactSource, string> = {
   shopify: 'Shopify',
   woocommerce: 'WooCommerce',
   pos: 'Shop counter',
+  khata_import: 'Khata import',
 };
 
 export const kindLabels: Record<Exclude<ContactKind, 'not_customer'>, string> = {

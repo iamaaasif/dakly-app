@@ -184,11 +184,13 @@ function userInput(request: LlmRequest) {
       role: 'user',
       content: [
         { type: 'input_text', text: request.input },
-        ...request.images.map(({ contentType, bytes }) => ({
-          type: 'input_image',
-          image_url: `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}`,
-          detail: 'high',
-        })),
+        ...request.images.map(({ contentType, bytes }) => {
+          const data = `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}`;
+          if (contentType === 'application/pdf') {
+            return { type: 'input_file', filename: 'page.pdf', file_data: data };
+          }
+          return { type: 'input_image', image_url: data, detail: 'high' };
+        }),
       ],
     },
   ];

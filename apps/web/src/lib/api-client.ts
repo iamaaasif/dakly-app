@@ -16,7 +16,7 @@ export async function apiRequest<TResponse>(
     ...request,
     context: contextTag ? { header: 'X-Session-Context', tag: contextTag } : undefined,
   }).catch((error: unknown) => {
-    if (contextTag && isContextFailure(error)) notifyContextChanged();
+    if (isSessionExpired(error) || (contextTag && isContextFailure(error))) notifyContextChanged();
     throw error;
   });
   if (contextTag && response.headers.get('x-session-context') !== contextTag) {
@@ -35,6 +35,10 @@ export function apiPost<TResponse>(
   options?: ApiOptions,
 ): Promise<TResponse> {
   return apiRequest<TResponse>(path, { ...options, body });
+}
+
+function isSessionExpired(error: unknown) {
+  return error instanceof ApiError && error.status === 401;
 }
 
 function isContextFailure(error: unknown) {

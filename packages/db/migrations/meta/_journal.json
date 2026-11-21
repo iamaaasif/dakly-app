@@ -579,8 +579,29 @@
     {
       "idx": 82,
       "version": "7",
-      "when": 1795254168652,
-      "tag": "0082_admin_shop_reports",
+      "when": 1795251621528,
+      "tag": "0082_khata_scans",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1795254292171,
+      "tag": "0083_variant_images",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1795256193944,
+      "tag": "0084_khata_imports",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1795259597789,
+      "tag": "0088_admin_shop_reports",
       "breakpoints": true
     }
   ]
