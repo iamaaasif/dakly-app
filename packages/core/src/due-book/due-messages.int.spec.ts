@@ -351,6 +351,27 @@ describe('Due book notices and reminders (Postgres)', () => {
       });
     });
 
+    it('lists when a customer was last reminded and who was never reminded', async () => {
+      const reminded = await contact('01711000111');
+      const never = await contact('01711000112');
+      await baki(reminded, 50000, 3);
+      await baki(never, 60000, 5);
+      await reminders.remind(storeA, reminded, userId);
+      const owner = { seeFullPhone: true };
+      const all = await dueBook.listCustomers(storeA, { filter: 'all', limit: 10 }, owner);
+      // The row time is the database clock, not the test clock.
+      const remindedAt = all.items.find((item) => item.contactId === reminded)!.lastRemindedAt;
+      expect(Date.now() - new Date(remindedAt!).getTime()).toBeLessThan(60_000);
+      expect(all.items.find((item) => item.contactId === never)!.lastRemindedAt).toBeNull();
+      const unreminded = await dueBook.listCustomers(
+        storeA,
+        { filter: 'never_reminded', limit: 10 },
+        owner,
+      );
+      expect(unreminded.items.map((item) => item.contactId)).toEqual([never]);
+      expect((await dueBook.summary(storeA)).neverRemindedCustomers).toBe(1);
+    });
+
     it('announces the request in the outbox with the message id', async () => {
       const id = await contact();
       await baki(id, 175000, 40);

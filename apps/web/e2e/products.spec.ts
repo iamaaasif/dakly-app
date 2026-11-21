@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -21,7 +22,10 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
   const products: ProductResponse[] = [];
   const fileIds: string[] = [];
   const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-4');
+  const restockEvidence = resolve(process.cwd(), '../../docs/design/evidence/web-7-restock');
   await mkdir(evidence, { recursive: true });
+  await mkdir(restockEvidence, { recursive: true });
+  const contactIds = [randomUUID(), randomUUID(), randomUUID()];
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -34,7 +38,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
       headers: { Origin: baseURL!, 'X-Session-Context': contextTag },
     });
   }
-  async function capture(name: string) {
+  async function capture(name: string, directory = evidence) {
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
@@ -44,7 +48,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
         .toBe(true);
-      await page.screenshot({ path: resolve(evidence, `${name}-${width}.png`) });
+      await page.screenshot({ path: resolve(directory, `${name}-${width}.png`) });
     }
   }
   try {
@@ -83,6 +87,18 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
           })
         ).status(),
       ).toBe(204);
+    // Three people asked about XL while it was sold out; contact rows are made directly.
+    for (const [index, id] of contactIds.entries())
+      await database.pool.query(
+        "insert into contacts(id,store_id,name,source,kind) values($1,$2,$3,'manual','lead')",
+        [id, fixture.storeIds[0], `Waiting ${index + 1}`],
+      );
+    for (const contactId of contactIds)
+      expect(
+        (
+          await request(`/variants/${panjabi.variants[2]!.id}/restock-requests`, { contactId })
+        ).status(),
+      ).toBe(201);
     const png = await readFile(resolve(process.cwd(), 'e2e/fixtures/silk-scarf.png'));
     const uploadInput = { contentType: 'image/png', sizeBytes: png.length };
     const issued = await (
@@ -134,29 +150,42 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
       'aria-current',
       'page',
     );
+    const restockDialog = page.getByRole('dialog', { name: 'Restock Cotton Panjabi' });
     await page.getByRole('button', { name: 'Adjust stock for Cotton Panjabi, XL' }).click();
-    await page.getByLabel('Change in stock').fill('10');
-    await page.getByLabel('Reason', { exact: true }).fill('New delivery counted');
-    await capture('stock-adjustment');
+    await expect(restockDialog.getByText('3 waiting')).toBeVisible();
+    await restockDialog.getByLabel('XL', { exact: true }).fill('10');
+    await capture('restock', restockEvidence);
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: 'Adjust stock for Cotton Panjabi, XL' }),
     ).toBeFocused();
     await page.getByRole('button', { name: 'Adjust stock for Cotton Panjabi, XL' }).click();
-    await page.getByLabel('Change in stock').fill('10');
-    await page.getByLabel('Reason', { exact: true }).fill('New delivery counted');
+    await restockDialog.getByLabel('XL', { exact: true }).fill('10');
+    await expect(
+      restockDialog.getByRole('checkbox', { name: /people who were waiting/ }),
+    ).toBeChecked();
     await page.getByRole('button', { name: 'Save stock', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: 'Adjust stock for Cotton Panjabi, XL' }),
     ).toHaveText('XL 10');
+    // The three people have no chat to reach, so approving queues nothing and they keep waiting.
+    await expect
+      .poll(
+        async () =>
+          (
+            await database.pool.query(
+              "select count(*)::int as waiting from restock_requests where store_id=$1 and status='waiting'",
+              [fixture.storeIds[0]],
+            )
+          ).rows[0].waiting,
+      )
+      .toBe(3);
     await page.getByRole('button', { name: 'Adjust stock for Cotton Panjabi, XL' }).click();
-    await page.getByLabel('Reason', { exact: true }).fill('Keep this draft on focus');
+    await restockDialog.getByLabel('M', { exact: true }).fill('3');
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(page.getByLabel('Reason', { exact: true })).toHaveValue(
-      'Keep this draft on focus',
-    );
+    await expect(restockDialog.getByLabel('M', { exact: true })).toHaveValue('3');
     expect((await request('/me/active-store', { storeId: fixture.storeIds[1] })).status()).toBe(
       204,
     );
@@ -174,6 +203,14 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
         "delete from outbox_events where store_id=$1 and (payload->>'productId'=any($2::text[]) or payload->>'variantId'=any($3::text[]))",
         [fixture.storeIds[0], ids, variants],
       );
+      await database.pool.query(
+        'delete from restock_requests where store_id=$1 and variant_id=any($2::uuid[])',
+        [fixture.storeIds[0], variants],
+      );
+      await database.pool.query('delete from contacts where store_id=$1 and id=any($2::uuid[])', [
+        fixture.storeIds[0],
+        contactIds,
+      ]);
       await database.pool.query(
         'delete from stock_movements where store_id=$1 and variant_id=any($2::uuid[])',
         [fixture.storeIds[0], variants],
