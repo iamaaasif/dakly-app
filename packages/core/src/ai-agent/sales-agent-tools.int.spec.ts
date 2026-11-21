@@ -196,6 +196,7 @@ it('finds only active chat-visible products of this store by name or alias, with
         name: 'কটন পাঞ্জাবি',
         category: null,
         description: null,
+        photos: [],
         variants: [{ variantId: expect.any(String), title: 'Default', priceTaka: 1200, stock: 8 }],
       },
     ],

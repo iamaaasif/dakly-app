@@ -14,6 +14,7 @@ export const aiRunPurposes = [
   'embedding',
   'contact_memory',
   'grade_test',
+  'tag_product_photo',
   'khata_scan',
 ] as const;
 export const aiRunOutcomes = [
