@@ -37,6 +37,11 @@ export class UsageService {
     return Math.max(0, allowance - used);
   }
 
+  async summary(storeId: string, unit: UsageUnit) {
+    const { allowance, periodEnd, used } = await this.currentUsage(storeId, unit);
+    return { allowance, remaining: Math.max(0, allowance - used), periodEnd };
+  }
+
   async isConsumed(storeId: string, unit: UsageUnit, reference: string): Promise<boolean> {
     return (await this.repository.findByReference(storeId, unit, reference)) !== undefined;
   }
@@ -65,11 +70,14 @@ export class UsageService {
   }
 
   private async currentUsage(storeId: string, unit: UsageUnit) {
-    const { allowance, periodStart } = await this.billing.currentAllowance(storeId, unit);
+    const { allowance, periodStart, periodEnd } = await this.billing.currentAllowance(
+      storeId,
+      unit,
+    );
     // Billing counts periods in UTC calendar days, so the UTC date names the period.
     const period = periodStart.toISOString().slice(0, 10);
     const used = await this.repository.periodTotal(storeId, unit, period);
-    return { allowance, period, used };
+    return { allowance, period, periodEnd, used };
   }
 
   private notifyThreshold(storeId: string, unit: UsageUnit, period: string, percent: number) {

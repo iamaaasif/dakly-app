@@ -35,7 +35,11 @@ export class BillingService {
   async currentAllowance(storeId: string, unit: UsageUnit) {
     const period = await this.repository.currentPeriod(storeId);
     if (!period) throw billingError('SUBSCRIPTION_NOT_FOUND');
-    return { allowance: period.limits[unit] ?? 0, periodStart: period.currentPeriodStart };
+    return {
+      allowance: period.limits[unit] ?? 0,
+      periodStart: period.currentPeriodStart,
+      periodEnd: period.currentPeriodEnd,
+    };
   }
 
   async startPlan(storeId: string, code: string, cycle: (typeof billingCycles)[number]) {

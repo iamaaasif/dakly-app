@@ -5,6 +5,8 @@ import { contentKinds, contentLanguages } from './social';
 
 export const contentTones = ['friendly', 'festive', 'urgent', 'premium', 'playful'] as const;
 
+export const contentLengths = ['short', 'medium', 'long'] as const;
+
 export const productDescriptionRequestSchema = z.strictObject({
   tone: z.enum(contentTones),
   language: z.enum(contentLanguages),
@@ -20,6 +22,9 @@ export const contentWriteRequestSchema = z
     writeRequestSchema.extend({
       operation: z.literal('generate'),
       topic: searchText.max(2000).optional(),
+      length: z.enum(contentLengths).optional(),
+      hashtags: z.boolean().optional(),
+      orderLine: z.boolean().optional(),
     }),
     writeRequestSchema.extend({
       operation: z.enum(['shorten', 'friendlier', 'translate']),
@@ -50,3 +55,11 @@ export type ProductDescriptionInput = z.infer<typeof productDescriptionRequestSc
 export type ContentWriteResult = z.infer<typeof contentWriteOutputSchema> & {
   aiRunId: string;
 };
+
+export const contentCreditsSchema = z.strictObject({
+  remaining: z.number().int().nonnegative(),
+  allowance: z.number().int().nonnegative(),
+  resetsAt: z.iso.datetime(),
+});
+
+export type ContentCredits = z.infer<typeof contentCreditsSchema>;
