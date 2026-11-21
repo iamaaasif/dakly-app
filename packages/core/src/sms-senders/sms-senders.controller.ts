@@ -11,7 +11,12 @@ import {
 } from '@nestjs/common';
 
 import {
+  confirmSmsSenderDocumentSchema,
   requestSmsSenderIdSchema,
+  smsSenderDocumentUploadSchema,
+  type ConfirmSmsSenderDocumentInput,
+  type SmsSenderDocumentUploadInput,
+  type SmsSenderDocumentUploadResponse,
   smsSenderIdListQuerySchema,
   type RequestSmsSenderIdInput,
   type SmsSenderIdListQuery,
@@ -23,11 +28,15 @@ import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { SmsSenderDocumentsService } from './sms-sender-documents.service';
 import { SmsSendersService } from './sms-senders.service';
 
 @Controller('sms-sender-ids')
 export class SmsSendersController {
-  constructor(@Inject(SmsSendersService) private readonly smsSenders: SmsSendersService) {}
+  constructor(
+    @Inject(SmsSendersService) private readonly smsSenders: SmsSendersService,
+    @Inject(SmsSenderDocumentsService) private readonly documents: SmsSenderDocumentsService,
+  ) {}
 
   @Get()
   @RequirePermission('storeSettings.view')
@@ -46,6 +55,28 @@ export class SmsSendersController {
     @Body(new ZodValidationPipe(requestSmsSenderIdSchema)) input: RequestSmsSenderIdInput,
   ): Promise<SmsSenderIdResponse> {
     return this.smsSenders.request(storeId, input, { kind: 'user', userId });
+  }
+
+  @Post('documents/upload-url')
+  @RequirePermission('storeSettings.edit')
+  @HttpCode(200)
+  requestDocumentUpload(
+    @CurrentStore() storeId: string,
+    @Body(new ZodValidationPipe(smsSenderDocumentUploadSchema))
+    input: SmsSenderDocumentUploadInput,
+  ): SmsSenderDocumentUploadResponse {
+    return this.documents.requestUpload(storeId, input);
+  }
+
+  @Post('documents/confirm')
+  @RequirePermission('storeSettings.edit')
+  confirmDocument(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Body(new ZodValidationPipe(confirmSmsSenderDocumentSchema))
+    input: ConfirmSmsSenderDocumentInput,
+  ): Promise<{ id: string }> {
+    return this.documents.confirm(storeId, userId, input);
   }
 
   @Post(':smsSenderIdId/test')

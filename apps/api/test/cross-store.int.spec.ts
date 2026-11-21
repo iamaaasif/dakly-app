@@ -2755,9 +2755,31 @@ fixture('GET /wallets', async () => {
   });
   expect((await f.request(a.member, 'GET', '/wallets')).statusCode).toBe(403);
 });
+const documentInput = { contentType: 'application/pdf', sizeBytes: 4 };
+async function uploadedSmsDocument(shop: Shop) {
+  const issued = (
+    await success(shop, 'POST', '/sms-sender-ids/documents/upload-url', 200, documentInput)
+  ).json();
+  const response = await fetch(issued.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': documentInput.contentType },
+    body: new Uint8Array([37, 80, 68, 70]),
+  });
+  expect(response.status).toBe(200);
+  return { ...documentInput, fileId: issued.fileId as string };
+}
+async function confirmedSmsDocument(shop: Shop) {
+  const document = await uploadedSmsDocument(shop);
+  await success(shop, 'POST', '/sms-sender-ids/documents/confirm', 201, document);
+  return document.fileId;
+}
 async function smsSender(shop: Shop, status: 'requested' | 'approved' = 'requested') {
   const id = (
-    await success(shop, 'POST', '/sms-sender-ids', 201, { senderName: 'Rina Shop' })
+    await success(shop, 'POST', '/sms-sender-ids', 201, {
+      senderName: 'Rina Shop',
+      tradeLicenceFileId: await confirmedSmsDocument(shop),
+      nidFileId: await confirmedSmsDocument(shop),
+    })
   ).json().id as string;
   if (status === 'approved')
     await f.admin.pool.query("update sms_sender_ids set status='approved' where id=$1", [id]);
@@ -3533,6 +3555,50 @@ fixture('POST /sms-sender-ids', async () => {
   const own = await smsSender(b);
   expect((await f.row('sms_sender_ids', own)).store_id).toBe(b.id);
   expect(await f.row('sms_sender_ids', id)).toEqual(before);
+});
+fixture('POST /sms-sender-ids/documents/upload-url', async () => {
+  const { b } = await pair();
+  const issued = (
+    await success(b, 'POST', '/sms-sender-ids/documents/upload-url', 200, documentInput)
+  ).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/sms_sender_document/${issued.fileId}`,
+  );
+  expect(await f.row('files', issued.fileId)).toBeUndefined();
+  const refused = [
+    [b.member, documentInput, 403],
+    [b.owner, { ...documentInput, sizeBytes: 5242881 }, 400],
+    [b.owner, { ...documentInput, contentType: 'image/gif' }, 400],
+  ] as const;
+  for (const [who, body, status] of refused)
+    expect(
+      (await f.request(who, 'POST', '/sms-sender-ids/documents/upload-url', body)).statusCode,
+    ).toBe(status);
+});
+fixture('POST /sms-sender-ids/documents/confirm', async () => {
+  const { a, b } = await pair();
+  const foreign = await uploadedSmsDocument(a);
+  const own = await uploadedSmsDocument(b);
+  await success(a, 'POST', '/sms-sender-ids/documents/confirm', 201, foreign);
+  await success(b, 'POST', '/sms-sender-ids/documents/confirm', 201, own);
+  expect(await f.row('files', own.fileId)).toMatchObject({
+    store_id: b.id,
+    purpose: 'sms_sender_document',
+    status: 'ready',
+  });
+  // The other shop's object lives under its own prefix, so this shop cannot claim it.
+  const before = await f.row('files', foreign.fileId);
+  const stolen = await f.request(b.owner, 'POST', '/sms-sender-ids/documents/confirm', foreign);
+  expect(stolen.statusCode, stolen.body).toBe(422);
+  expect(stolen.json().error.code).toBe('SMS_SENDER_DOCUMENT_INVALID');
+  expect(await f.row('files', foreign.fileId)).toEqual(before);
+  // A confirmed document of shop A cannot be attached to a request from shop B.
+  const attach = await f.request(b.owner, 'POST', '/sms-sender-ids', {
+    senderName: 'Karim Shop',
+    tradeLicenceFileId: foreign.fileId,
+    nidFileId: own.fileId,
+  });
+  expect(attach.statusCode, attach.body).toBe(422);
 });
 fixture('POST /sms-sender-ids/:smsSenderIdId/test', async () => {
   const { a, b } = await pair(),
