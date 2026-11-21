@@ -18,6 +18,7 @@ const settings: StoreSendingSettings = {
   quietHours: { startHour: 21, endHour: 9 },
   frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
   onlyOwnersAndAdminsApprove: true,
+  sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
 };
 
 type MarketingSend = { channel: string; sentAt: Date };
@@ -36,6 +37,8 @@ describe('SendPolicyService', () => {
   let service: SendPolicyService;
   let clockAt: Date;
   let afterLock: () => void;
+  let current: StoreSendingSettings;
+  let smsSentToday: number;
 
   beforeEach(() => {
     contact = { kind: 'customer', isBlocked: false, isOverPlanLimit: false, hasPhone: true };
@@ -44,6 +47,8 @@ describe('SendPolicyService', () => {
     sends = [];
     clockAt = NOON_DHAKA;
     afterLock = () => undefined;
+    current = settings;
+    smsSentToday = 0;
     // The batch reads answer the same for every contact id they are given.
     const contacts = {
       lockForConsent: async () => undefined,
@@ -59,10 +64,11 @@ describe('SendPolicyService', () => {
         consent ? ids.map((contactId) => ({ contactId, status: consent })) : [],
     };
     const stores = {
-      sendingSettings: async () => settings,
+      sendingSettings: async () => current,
     };
     const repository = {
       lockContact: async () => afterLock(),
+      countChannelSends: async () => smsSentToday,
       listMarketingSends: async (
         _storeId: string,
         ids: string[],
@@ -396,6 +402,77 @@ describe('SendPolicyService', () => {
 
     expect(await service.check(STORE_ID, request({ category: 'transactional' }))).toEqual({
       action: 'send',
+    });
+  });
+
+  describe('SMS rules', () => {
+    const limit = (perDay: number, on = true) => ({
+      ...settings,
+      sms: { quietHoursOn: true, dailyLimit: { on, perDay } },
+    });
+    const NIGHT = new Date('2026-11-16T17:00:00Z'); // 23:00 in Dhaka
+
+    it('defers marketing SMS to the next local midnight once the day limit is used', async () => {
+      current = limit(2000);
+      smsSentToday = 2000;
+      expect(await service.check(STORE_ID, request())).toEqual({
+        action: 'defer',
+        until: new Date('2026-11-16T18:00:00Z'),
+      });
+      smsSentToday = 1999;
+      expect(await service.check(STORE_ID, request())).toEqual({ action: 'send' });
+    });
+
+    it('does not apply the SMS limit when it is off, or to another channel', async () => {
+      smsSentToday = 5000;
+      current = limit(2000, false);
+      expect(await service.check(STORE_ID, request())).toEqual({ action: 'send' });
+      current = limit(2000);
+      expect(await messengerAt(NOON_DHAKA)).toEqual({ action: 'send' });
+    });
+
+    it('lets marketing SMS go out at night when quiet hours are off for SMS only', async () => {
+      current = { ...settings, sms: { quietHoursOn: false, dailyLimit: { on: false, perDay: 1 } } };
+      expect(await service.check(STORE_ID, request({ at: NIGHT }))).toEqual({ action: 'send' });
+      expect((await messengerAt(NIGHT)).action).toBe('defer');
+    });
+
+    async function messengerAt(at: Date) {
+      const [row] = await service.checkAudience(STORE_ID, {
+        contactIds: [CONTACT_ID],
+        channel: 'messenger',
+        category: 'marketing',
+        at,
+        windowClosesAtOf: new Map([[CONTACT_ID, new Date(at.getTime() + HOUR)]]),
+      });
+      return row!.decision;
+    }
+
+    it('sends only the messages left today when an audience is checked', async () => {
+      current = limit(3);
+      smsSentToday = 1;
+      const ids = ['a', 'b', 'c', 'd'];
+      const checked = await service.checkAudience(STORE_ID, {
+        contactIds: ids,
+        channel: 'sms',
+        category: 'marketing',
+        at: NOON_DHAKA,
+      });
+      expect(checked.map((row) => row.decision.action)).toEqual(['send', 'send', 'defer', 'defer']);
+    });
+
+    it('defers a retry once the limit is used', async () => {
+      current = limit(10);
+      smsSentToday = 10;
+      const check = await service.prepareMarketingRetryCheck(STORE_ID, {
+        channel: 'sms',
+        contactId: CONTACT_ID,
+        settings: current,
+      });
+      expect(check().decision).toEqual({
+        action: 'defer',
+        until: new Date('2026-11-16T18:00:00Z'),
+      });
     });
   });
 });

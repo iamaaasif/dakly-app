@@ -133,6 +133,9 @@ const groups = [
     evidence: 'admin/plan-catalogue.int.spec.ts',
     boundary: 'audited staff edits of the global plan catalogue, which holds no shop data',
     routes: ['GET /admin/plans', 'PUT /admin/plans/:code'],
+    evidence: 'admin/reconciliation.int.spec.ts',
+    boundary: 'audited staff closing of global gateway settlement lines, which hold no shop data',
+    routes: ['GET /admin/reconciliation', 'POST /admin/reconciliation/lines/:lineId'],
   },
   {
     evidence: 'admin/ops-reports.int.spec.ts',

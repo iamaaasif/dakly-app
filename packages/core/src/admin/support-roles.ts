@@ -17,3 +17,10 @@ export const aiCostViewRoles: StaffIdentity['role'][] = [
 // Feature 12: finance and super admins edit plans and prices; analysts only read them.
 export const planEditRoles: StaffIdentity['role'][] = ['super_admin', 'finance'];
 export const planViewRoles: StaffIdentity['role'][] = ['super_admin', 'finance', 'analyst'];
+// Feature 12: finance and super admins work the reconciliation queue; analysts can view it.
+export const reconciliationEditRoles: StaffIdentity['role'][] = ['super_admin', 'finance'];
+export const reconciliationViewRoles: StaffIdentity['role'][] = [
+  'super_admin',
+  'finance',
+  'analyst',
+];
