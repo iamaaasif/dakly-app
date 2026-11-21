@@ -12,6 +12,8 @@ import {
   dueCustomerListQuerySchema,
   dueHistoryQuerySchema,
   type RecordBakiInput,
+  type RemindOverdueResponse,
+  type RemindResponse,
   type RecordedDueEntryResponse,
   recordBakiSchema,
   type WriteOffInput,
@@ -25,10 +27,14 @@ import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { DueBookService } from './due-book.service';
+import { DueRemindersService } from './due-reminders.service';
 
 @Controller('due-book')
 export class DueBookController {
-  constructor(@Inject(DueBookService) private readonly dueBook: DueBookService) {}
+  constructor(
+    @Inject(DueBookService) private readonly dueBook: DueBookService,
+    @Inject(DueRemindersService) private readonly reminders: DueRemindersService,
+  ) {}
 
   @Get('summary')
   @RequirePermission('dueBook.view')
@@ -104,5 +110,24 @@ export class DueBookController {
       actor: { kind: 'user', userId },
       access,
     });
+  }
+
+  @Post('customers/:contactId/reminders')
+  @RequirePermission('dueBook.edit')
+  remind(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+  ): Promise<RemindResponse> {
+    return this.reminders.remind(storeId, contactId, userId);
+  }
+
+  @Post('reminders/overdue')
+  @RequirePermission('dueBook.edit')
+  remindOverdue(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+  ): Promise<RemindOverdueResponse> {
+    return this.reminders.remindOverdue(storeId, userId);
   }
 }

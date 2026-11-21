@@ -522,6 +522,14 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
       400,
     );
   });
+  it('turns the baki notice on by default and saves the switch', async () => {
+    const { cookie } = await settingsStore();
+    expect((await settings(cookie)).json().dueBook).toEqual({ bakiNoticeEnabled: true });
+    const changed = await patch(cookie, { dueBook: { bakiNoticeEnabled: false } });
+    expect(changed.json().dueBook).toEqual({ bakiNoticeEnabled: false });
+    expect((await settings(cookie)).json().dueBook).toEqual({ bakiNoticeEnabled: false });
+    expect((await settings(cookie)).json().sending.onlyOwnersAndAdminsApprove).toBe(true);
+  });
   it('rejects invalid settings and release 2 extensions at the HTTP edge', async () => {
     const { cookie } = await settingsStore();
     for (const payload of [

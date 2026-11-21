@@ -13,6 +13,7 @@ import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
 import { ValkeyClient } from '@dakly/core/platform/cache/valkey-client';
+import { Clock } from '@dakly/core/platform/clock';
 import { loadEnv, resetEnvForTests } from '@dakly/core/platform/config/env';
 import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
@@ -1228,6 +1229,14 @@ async function dueEntryId(shop: Shop, contactId: string) {
   });
   return result.json().entry.id as string;
 }
+async function dueMessageId(shop: Shop, contactId: string) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    "insert into due_messages(id,store_id,contact_id,kind,body) values($1,$2,$3,'reminder','নমুনা')",
+    [id, shop.id, contactId],
+  );
+  return id;
+}
 fixture('GET /due-book/summary', async () => {
   const { a, b } = await pair();
   await dueEntries(a, await contact(a));
@@ -1341,6 +1350,59 @@ fixture('POST /due-book/customers/:contactId/write-offs', async () => {
   const rows = await f.admin.pool.query('select kind from due_entries where contact_id=$1', [id]);
   expect(rows.rows).toHaveLength(2);
 });
+// Reminders go out only from 9 am to 8 pm Dhaka time, so these two routes run at noon there.
+async function atNoonInDhaka(work: () => Promise<void>) {
+  const clock = vi
+    .spyOn(app.get(Clock), 'now')
+    .mockReturnValue(new Date(Date.now() - (Date.now() % 86_400_000) + 6 * 3_600_000));
+  try {
+    await work();
+  } finally {
+    clock.mockRestore();
+  }
+}
+async function overdueCustomer(shop: Shop) {
+  const id = await contact(shop);
+  await success(shop, 'POST', `/due-book/customers/${id}/baki`, 201, {
+    amountPoisha: 95000,
+    occurredAt: new Date(Date.now() - 40 * 86_400_000).toISOString(),
+  });
+  return id;
+}
+fixture('POST /due-book/customers/:contactId/reminders', () =>
+  atNoonInDhaka(async () => {
+    const { a, b } = await pair(),
+      id = await overdueCustomer(a);
+    const own = await success(a, 'POST', `/due-book/customers/${id}/reminders`, 201);
+    expect(own.json().messageId).toEqual(expect.any(String));
+    const again = await f.request(a.owner, 'POST', `/due-book/customers/${id}/reminders`);
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.code).toBe('DUE_REMINDER_TOO_SOON');
+    await hidden(b, 'POST', (value) => `/due-book/customers/${value}/reminders`, id);
+    expect(
+      (await f.request(a.member, 'POST', `/due-book/customers/${id}/reminders`)).statusCode,
+    ).toBe(403);
+    const rows = await f.admin.pool.query('select store_id from due_messages where contact_id=$1', [
+      id,
+    ]);
+    expect(rows.rows).toEqual([{ store_id: a.id }]);
+  }),
+);
+fixture('POST /due-book/reminders/overdue', () =>
+  atNoonInDhaka(async () => {
+    const { a, b } = await pair(),
+      aId = await overdueCustomer(a),
+      bId = await overdueCustomer(b);
+    const result = await success(a, 'POST', '/due-book/reminders/overdue', 201);
+    expect(result.json()).toMatchObject({ queued: 1, skippedRecentlyReminded: 0 });
+    const rows = await f.admin.pool.query(
+      'select contact_id from due_messages where contact_id=any($1::uuid[])',
+      [[aId, bId]],
+    );
+    expect(rows.rows).toEqual([{ contact_id: aId }]);
+    expect((await f.request(a.member, 'POST', '/due-book/reminders/overdue')).statusCode).toBe(403);
+  }),
+);
 async function customerImport(shop: Shop) {
   const result = await success(shop, 'POST', '/imports', 201, { sizeBytes: 120 });
   expect(result.json().uploadUrl).toContain(`/imports/${shop.id}/`);
@@ -4520,6 +4582,7 @@ describe('every production shop route isolates its data', () => {
       ['wallet_ledger', 'id', await smsCredits(a, 10), await smsCredits(b, 20)],
       ['sms_sender_ids', 'id', await smsSender(a), await smsSender(b)],
       ['due_entries', 'id', await dueEntryId(a, contactA), await dueEntryId(b, contactB)],
+      ['due_messages', 'id', await dueMessageId(a, contactA), await dueMessageId(b, contactB)],
     ];
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);
     const client = await connection.pool.connect();

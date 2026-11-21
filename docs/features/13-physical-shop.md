@@ -87,7 +87,7 @@ What others do: TallyKhata and OkCredit made baki tracking free and sent an SMS 
 
 #### Due book API (DUE-1)
 
-What the code does now; the SMS notices and reminders (DUE-2) and the screens (DUE-3) come later.
+What the code does now; the screens (DUE-3) come later. The SMS notices and reminders are under "Baki notices and reminders (DUE-2)" below.
 
 - Every baki, payment and write-off is a row in `due_entries`. Rows are never edited or deleted by the app; a correction is a new row. The row says who recorded it and when it happened. Edit and delete of an entry, from the "Customer disputes baki" case, are not built yet.
 - The balance is the baki total minus payments and write-offs. A negative balance means the shop owes the customer. Payments and write-offs both settle the oldest baki first, and the oldest debt is the date of the oldest baki that is still open.
@@ -108,6 +108,15 @@ Routes (all under the Due book permission: `dueBook.view` to read, `dueBook.edit
 | `POST /due-book/customers/:contactId/baki`         | Add baki: `amountPoisha`, optional `note`, optional `occurredAt`   |
 | `POST /due-book/customers/:contactId/payments`     | Collect: `amountPoisha`, `method`, optional `note`, `occurredAt`   |
 | `POST /due-book/customers/:contactId/write-offs`   | Write off: `amountPoisha`, `reason`. Owner or Admin only           |
+
+#### Baki notices and reminders (DUE-2)
+
+- Every message is one row in `due_messages` (kind `baki_notice` or `reminder`, status `queued`, `sending`, `sent`, `skipped` or `failed`, and a skip reason). The row is the record that a message was asked for, so a retried job never sends it twice, and the reminder rows are what the 7-day limit counts.
+- **Baki notice.** `due.added` is relayed to one subscriber, which stores the notice and sends it. The text is Bangla: "রিনার দোকান: ৳950 বাকি যোগ হয়েছে। মোট বাকি ৳1,750। ধন্যবাদ।" There is one notice per baki. None is sent when the shop turned the switch off (`dueBook.bakiNoticeEnabled` in the store settings, on by default), for a khata import (source `khata_import`), for a baki dated more than a day before it was recorded (copied from a paper khata), or when the customer's balance after it is not above zero.
+- **Reminder.** "Remind" is `POST /due-book/customers/:contactId/reminders` and "Remind all over 30 days" is `POST /due-book/reminders/overdue`. Each customer is checked under their own lock, then the reminder is stored and `due.reminder_requested` is published in the same transaction; the subscriber sends it. The text is fixed: "রিনার দোকান: প্রিয় গ্রাহক, আপনার ৳1,750 বাকি আছে। সুবিধামতো পরিশোধ করলে কৃতজ্ঞ থাকব। ধন্যবাদ।" The AI does not rephrase it yet.
+- **Limits (SHOP-R4).** One reminder per customer per 7 days, counting reminders that are queued, sending or sent. Reminders are asked for and sent only from 9 am up to 8 pm in the shop's time zone; a request outside those hours is refused with `DUE_REMINDER_OUTSIDE_HOURS`, and a reminder that was stored just before 8 pm and reached delivery after it is skipped as `outside_hours`. A single Remind that breaks a rule answers 409 with `DUE_REMINDER_TOO_SOON`, `DUE_NOT_OWING`, `DUE_REMINDER_NO_PHONE`, `DUE_REMINDER_BLOCKED` or `DUE_REMINDER_OUTSIDE_HOURS`. Remind all skips such customers and counts them: `{ queued, skippedRecentlyReminded, skippedNoPhone, skippedBlocked }`. One call covers at most the 500 customers with the oldest debt.
+- **Delivery.** Both kinds are transactional (SHOP-R3): no marketing consent is needed, a blocked customer or one with no phone is skipped, and the text has no offer, link or fee. The message uses the shop's SMS credits: the credits for the text's parts are reserved before sending, charged when the provider accepts, and returned when it refuses. A shop with no credits left gets a skipped message with reason `no_credits`. The send is not inside a database transaction. If a job stops after the provider call, the retry sends under the same operation key and settles the credits once.
+- A baki notice or reminder is SMS only. WhatsApp utility messages, the message preview and the "Send thank-you SMS" switch come with DUE-3 and later work.
 
 #### Khata Scanner
 
@@ -161,7 +170,7 @@ Shop counter staff: create sales, edit or cancel own sales the same day, add bak
 
 ### Events
 
-`sale.created`, `sale.updated`, `sale.cancelled`, `sale.synced_offline`, `due.added`, `due.payment_recorded`, `due.reminder_sent`, `due.written_off`, `khata.scan_started`, `khata.rows_imported`, `khata.import_undone`, `pos.import_completed`, `pos.row_failed`, `pos.sync_completed` (release 2).
+`sale.created`, `sale.updated`, `sale.cancelled`, `sale.synced_offline`, `due.added`, `due.payment_recorded`, `due.reminder_requested`, `due.written_off`, `khata.scan_started`, `khata.rows_imported`, `khata.import_undone`, `pos.import_completed`, `pos.row_failed`, `pos.sync_completed` (release 2).
 
 ### Acceptance criteria
 

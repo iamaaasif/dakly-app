@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   type AnyPgColumn,
   check,
+  integer,
   foreignKey,
   index,
   pgTable,
@@ -12,6 +13,9 @@ import {
 
 import {
   dueEntryKinds,
+  dueMessageKinds,
+  dueMessageSkipReasons,
+  dueMessageStatuses,
   dueEntrySources,
   duePaymentMethods,
   MAX_DUE_AMOUNT_POISHA,
@@ -68,6 +72,64 @@ export const dueEntries = pgTable(
     check(
       'due_entries_note',
       sql`char_length(${table.note}) <= 500 and (${table.kind} <> 'write_off' or ${table.note} is not null)`,
+    ),
+  ],
+);
+
+// A baki notice or reminder SMS. The row is the record that it was asked for, so a retried job
+// never sends twice, and the reminder rows are what the 7-day limit counts.
+export const dueMessages = pgTable(
+  'due_messages',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    contactId: uuid('contact_id').notNull(),
+    kind: text('kind', { enum: dueMessageKinds }).notNull(),
+    // The baki a notice is about; a reminder has none.
+    entryId: uuid('entry_id'),
+    body: text('body').notNull(),
+    status: text('status', { enum: dueMessageStatuses }).notNull().default('queued'),
+    skipReason: text('skip_reason', { enum: dueMessageSkipReasons }),
+    credits: integer('credits'),
+    providerMessageId: text('provider_message_id'),
+    requestedByUserId: uuid('requested_by_user_id').references(() => users.id),
+    createdAt: createdAt(),
+    sentAt: timestamptz('sent_at'),
+  },
+  (table) => [
+    foreignKey({
+      name: 'due_messages_contact_id_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id] as [AnyPgColumn, AnyPgColumn],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'due_messages_entry_id_store_fk',
+      columns: [table.storeId, table.entryId],
+      foreignColumns: [dueEntries.storeId, dueEntries.id] as [AnyPgColumn, AnyPgColumn],
+    }),
+    // One notice per baki.
+    uniqueIndex('due_messages_entry_key')
+      .on(table.storeId, table.entryId)
+      .where(sql`${table.entryId} is not null`),
+    index('due_messages_contact_idx').on(
+      table.storeId,
+      table.contactId,
+      table.kind,
+      table.createdAt,
+    ),
+    index('due_messages_requested_by_user_id_idx').on(table.requestedByUserId),
+    check('due_messages_kind', isOneOf(table.kind, dueMessageKinds)),
+    check('due_messages_status', isOneOf(table.status, dueMessageStatuses)),
+    check('due_messages_skip_reason', isOneOf(table.skipReason, dueMessageSkipReasons)),
+    check(
+      'due_messages_skipped_has_reason',
+      sql`(${table.status} = 'skipped') = (${table.skipReason} is not null)`,
+    ),
+    check(
+      'due_messages_entry_for_notice',
+      sql`(${table.kind} = 'baki_notice') = (${table.entryId} is not null)`,
     ),
   ],
 );

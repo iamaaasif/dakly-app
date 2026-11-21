@@ -15,3 +15,11 @@ export const duePaymentRecordedEventSchema = dueEventSchema.extend({
 export const dueWrittenOffEventSchema = dueEventSchema.extend({
   type: z.literal('due.written_off'),
 });
+
+// A reminder is stored first and delivered by the subscriber, so a stopped process loses nothing.
+export const dueReminderRequestedEventSchema = z.strictObject({
+  type: z.literal('due.reminder_requested'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ contactId: z.uuid(), messageId: z.uuid() }),
+});
