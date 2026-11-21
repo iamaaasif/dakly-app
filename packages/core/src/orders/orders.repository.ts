@@ -178,7 +178,9 @@ export class OrdersRepository {
     return row ?? { waiting: 0, highRisk: 0, codAwaitingOrders: 0, codAwaitingPoisha: '0' };
   }
 
-  parcelOutcomes(storeId: string, phones: string[]) {
+  // A khata import sale has no delivery phone, so it has no parcel history.
+  parcelOutcomes(storeId: string, deliveryPhones: (string | null)[]) {
+    const phones = deliveryPhones.filter((phone) => phone !== null);
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -214,8 +216,9 @@ export class OrdersRepository {
       phone,
       variantIds,
       since,
-    }: { orderId: string; phone: string; variantIds: string[]; since: Date },
+    }: { orderId: string; phone: string | null; variantIds: string[]; since: Date },
   ) {
+    if (!phone) return null;
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({ id: orders.id })
