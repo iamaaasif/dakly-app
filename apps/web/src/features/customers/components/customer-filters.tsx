@@ -3,7 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Search } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FormProvider, useForm } from 'react-hook-form';
+import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 
 import {
   type ContactListQuery,
@@ -15,19 +15,22 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
 import { customersSearch } from '../api/customers';
+import { type CustomerColumn, customerColumnsParam } from '../customer-columns';
 import { customerKindLabels } from '../customer-labels';
+import { CustomerColumnsMenu } from './customer-columns-menu';
 
 const filterSchema = contactListQuerySchema.pick({ search: true, tag: true });
 type CustomerFilterInput = Pick<ContactListQuery, 'search' | 'tag'>;
 
 type CustomerFiltersProps = {
   query: ContactListQuery;
+  columns: CustomerColumn[];
   searchError?: string;
 };
 
 const optional = { setValueAs: (value: string) => value.trim() || undefined };
 
-export function CustomerFilters({ query, searchError }: CustomerFiltersProps) {
+export function CustomerFilters({ query, columns, searchError }: CustomerFiltersProps) {
   const router = useRouter();
   const form = useForm<CustomerFilterInput>({
     resolver: zodResolver(filterSchema),
@@ -35,12 +38,14 @@ export function CustomerFilters({ query, searchError }: CustomerFiltersProps) {
     errors: searchError ? { search: { type: 'server', message: searchError } } : undefined,
   });
   const onSubmit = form.handleSubmit((values) =>
-    router.push(`/customers?${customersSearch({ kind: query.kind, ...values })}`),
+    router.push(
+      `/customers?${customersSearch({ kind: query.kind, ...values, columns: customerColumnsParam(columns) })}`,
+    ),
   );
 
   return (
     <div className="space-y-4">
-      <CustomerKindsNav query={query} />
+      <CustomerKindsNav query={query} columns={columns} />
       <FormProvider {...form}>
         <form onSubmit={onSubmit} className="flex flex-col gap-3 lg:flex-row lg:items-end">
           <div className="flex-1">
@@ -67,29 +72,31 @@ export function CustomerFilters({ query, searchError }: CustomerFiltersProps) {
               )}
             </FormField>
           </div>
-          <div className="w-full lg:w-48">
-            <FormField name="tag" label="Tag">
-              {(control) => (
-                <Input
-                  {...control}
-                  {...form.register('tag', optional)}
-                  placeholder="Filter by tag"
-                />
-              )}
-            </FormField>
-          </div>
+          <TagField />
           <Button type="submit" variant="secondary" className="shrink-0">
             Search customers
           </Button>
+          <CustomerColumnsMenu query={query} columns={columns} />
         </form>
       </FormProvider>
     </div>
   );
 }
 
-function CustomerKindsNav({ query }: { query: ContactListQuery }) {
+function CustomerKindsNav({
+  query,
+  columns,
+}: {
+  query: ContactListQuery;
+  columns: CustomerColumn[];
+}) {
   const kindHref = (kind?: ContactListQuery['kind']) =>
-    `/customers?${customersSearch({ kind, search: query.search, tag: query.tag })}`;
+    `/customers?${customersSearch({
+      kind,
+      search: query.search,
+      tag: query.tag,
+      columns: customerColumnsParam(columns),
+    })}`;
   return (
     <nav
       aria-label="Customer types"
@@ -106,5 +113,18 @@ function CustomerKindsNav({ query }: { query: ContactListQuery }) {
         </Link>
       ))}
     </nav>
+  );
+}
+
+function TagField() {
+  const { register } = useFormContext<CustomerFilterInput>();
+  return (
+    <div className="w-full lg:w-48">
+      <FormField name="tag" label="Tag">
+        {(control) => (
+          <Input {...control} {...register('tag', optional)} placeholder="Filter by tag" />
+        )}
+      </FormField>
+    </div>
   );
 }

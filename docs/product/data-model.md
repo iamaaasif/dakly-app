@@ -111,7 +111,7 @@ Every event carries `store_id`, `event_id`, `occurred_at`, `actor` (user id, ai,
 | Orders    | order.created, order.stage\_changed, order.cancelled, order.returned, courier.booked, courier.status\_changed, courier.cod\_paid, stock.low, stock.out, restock.notified       |
 | Marketing | campaign.approved, campaign.sent, recipient.status\_changed, link.tapped, workflow.started, enrollment.created, enrollment.exited, post.scheduled, post.published, post.failed |
 | Analytics | touch.created, attribution.created, attribution.removed, attribution.window\_changed                                                                                           |
-| Shop      | sale.created, sale.synced\_offline, due.added, due.payment\_recorded, due.reminder\_sent, khata.rows\_imported, pos.import\_completed                                          |
+| Shop      | sale.created, sale.synced\_offline, due.added, due.payment\_recorded, due.reminder\_requested, khata.rows\_imported, pos.import\_completed                                     |
 | Billing   | plan.changed, trial.ending, payment.succeeded, payment.failed, usage.threshold\_reached (80% and 100%), wallet.low\_balance                                                    |
 
 Webhooks for outside systems (release 2): order.created, order.stage\_changed, contact.created, consent.changed, signed with an HMAC secret per store.

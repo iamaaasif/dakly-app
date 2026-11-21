@@ -35,7 +35,10 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   transaction, so the event and the contact commit or roll back together.
 - `GET /contacts` (`customers.view`) lists the store's contacts, newest first, with
   `cursor` and `limit` (default 50, at most 100). Filters: `kind`, one `tag`, and
-  `search`. Deleted contacts are never listed.
+  `search`. Deleted contacts are never listed. Each row also carries `whatsappPhone` (masked
+  like `phone`), `email`, `district`, `source` and `consentedChannels`, the channels whose
+  latest consent answer is granted, for the Columns picker. The profile and the other routes
+  keep the short contact shape.
 - `GET /contacts/:contactId` (`customers.view`) returns one contact with its channel
   identities (channel, connection and profile name), read only. A deleted contact
   reads as not found.
@@ -95,7 +98,18 @@ The web app has two customer screens.
   Next page links. Tabs filter by kind (All, Customer, Lead, Chat only, Not a customer). A
   search box takes a name or a mobile number and a tag box takes one tag. The kind, search,
   tag and page live in the URL. A name search under 3 letters shows the API's message on the
-  search field. Rows link to the profile and become cards on a phone. Members with Edit
+  search field. Rows link to the profile and become cards on a phone. The Columns button, after
+  Search customers, opens a menu of Phone, WhatsApp, Email, Location, Source, Tags and Consent,
+  each a checkbox that stays open while the owner changes several. Customer and Type always
+  show. Phone and WhatsApp are on until the owner changes them; the rest start off, as in the
+  design. The choice is the `columns` value in the address (a comma list; absent means the
+  defaults, empty means none) so it survives a reload and a shared link, and it carries through
+  the tabs, search and paging. WhatsApp shows the WhatsApp number, or the phone when none is
+  set. Location is the district. Consent shows a green tag for each channel the customer
+  agreed to; a customer who agreed to none shows "None". An empty cell says what is missing
+  (No email, No location, No tags). The design also strikes through channels the customer has
+  not agreed to; the screen lists only the agreed ones. Orders, Spent and Last purchase come
+  in CUS-17 part 2, read from `contact_stats`. Members with Edit
   Customers press Add customers and choose Add manually or Import from an Excel or CSV file. The manual
   form shows a phone the store already has as an error on the phone field. Add by voice, Scan
   your khata, Connect your store and Connect your POS are not offered until their tasks ship
@@ -138,7 +152,7 @@ The web app has two customer screens.
 - Both screens show the phone as the API sent it: full for members with "See full phone
   numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
 - Not built yet, because no route gives the data: header totals and tab counts, sort, columns
-  (WhatsApp, Email, Location; CUS-17), bulk actions, the profile stats and its Orders, Activity,
+  for Orders, Spent and Last purchase, bulk actions, the profile stats and its Orders, Activity,
   Campaign history and Notes tabs, profile fields (Email, Address, Favourite category), quick
   actions (Call, WhatsApp, SMS), tag input inside the tags card, and the current consent answer
   per channel.
@@ -333,7 +347,7 @@ normalization remains in the shared phone schema.
 
 ### What it is for
 
-One clean list of every person who buys from the shop, wherever they bought, with the history and consent needed to message them well. Segments group them; Customer insights explain them. Release 1 (Khata Scanner import in release 2, tab 9).
+One clean list of every person who buys from the shop, wherever they bought, with the history and consent needed to message them well. Segments group them; Customer insights explain them. Release 1, including the Khata Scanner import (D46, tab 9).
 
 ### User stories
 
@@ -349,7 +363,7 @@ One clean list of every person who buys from the shop, wherever they bought, wit
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | All customers         | Header with totals ("2,486 customers · 1,124 bought more than once · 2,203 can receive marketing messages"); Export, Add by voice, Add customers; quick tabs with counts (All, Leads from chats, New, Returning, VIP, Inactive, High-value, At-risk); filters (source, consent channel, spend band, last purchase band); sort (last purchase, total spent, orders, name); Columns picker (Customer, Phone, WhatsApp, Email, Location, Type, Orders, Spent, Last purchase, Source, Tags, Consent); search by name, phone, email, tag; row checkboxes with bulk bar (Add tag, Add to segment, Message selected, Export selected, Delete); paging; consent legend. Phone: card list. |
 | Customer profile      | Header (avatar, name, type, tags, contact line), Edit, Create campaign; stats (total spending, orders, average order value, last purchase, first purchase, lifetime value); tabs Overview, Orders, Activity, Campaign history, Notes, Marketing preferences; Contact card (Call, WhatsApp, SMS, last contact); Follow-up (Tomorrow, In 3 days, In 1 week, pick date); Segments chips; Due balance if any (release 2); Return risk badge.                                                                                                                                                                                                                                          |
-| Add customers chooser | Type one customer's details; Say the details (voice); Import a file; Scan your khata (release 2); Connect your store; Connect your POS.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Add customers chooser | Type one customer's details; Say the details (voice); Import a file; Scan your khata (KHT-3, D46); Connect your store; Connect your POS.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Add manually          | Name\*, phone\*, WhatsApp number (same as phone by default), email, address, district, birthday (day and month), gender, tags, notes, marketing permission per channel (WhatsApp, SMS; Email consent is stored when imported but unused until the email release) with the consent wording shown.                                                                                                                                                                                                                                                                                                                                                                                  |
 | Add by voice          | Language chips (Bangla, English, Mixed); mic permission state; recording with live words and timer; processing; review form with each field marked Heard clearly / Check this; Save. States: mic blocked, couldn't understand.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | Import (7 steps)      | Upload (download template, drag file, .xlsx/.csv up to 10 MB, 50,000 rows) → Detect (rows, columns, size) → Map fields (auto-matched, editable) → Preview (first 10 rows: Ready, Already in Dakly, Invalid) → Validate (duplicates choice; consent confirmation checkbox) → Confirm ("Import N customers") → Results (added, updated, skipped with downloadable error report).                                                                                                                                                                                                                                                                                                    |

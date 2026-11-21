@@ -128,9 +128,12 @@ export class ContactsService {
     const match = searchFilter(search, seeFullPhone);
     if (match.phone) await this.phoneAccess.checkLimit(storeId, 'lookup', seeFullPhone, actor);
     const rows = await this.contactsRepository.list(storeId, { ...filter, ...match });
-    const items = rows
-      .slice(0, query.limit)
-      .map((contact) => toContactResponse(contact, seeFullPhone));
+    const items = rows.slice(0, query.limit).map((contact) => ({
+      ...contact,
+      phone: maskedUnless(seeFullPhone, contact.phone),
+      whatsappPhone: maskedUnless(seeFullPhone, contact.whatsappPhone),
+      createdAt: contact.createdAt.toISOString(),
+    }));
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
   }
 
@@ -314,6 +317,12 @@ export class ContactsService {
     if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
   }
 
+  // Due book entries for one customer wait for each other, so a payment is always settled
+  // against the baki that was there when it was recorded.
+  async lockForDueBook(storeId: string, id: string): Promise<void> {
+    await this.lockForConsent(storeId, [id]);
+  }
+
   async lockConsentHistory(storeId: string, ids: string[]): Promise<void> {
     const locked = await this.importContacts.lockConsentHistory(storeId, ids);
     if (locked.length < new Set(ids).size) throw contactError('CONTACT_NOT_FOUND');
@@ -423,10 +432,14 @@ function toImportedContact(
   };
 }
 
+function maskedUnless(seeFullPhone: boolean, phone: string | null) {
+  return phone && !seeFullPhone ? maskPhone(phone) : phone;
+}
+
 function toContactResponse(contact: Contact, seeFullPhone: boolean): ContactResponse {
   return {
     ...contact,
-    phone: contact.phone && !seeFullPhone ? maskPhone(contact.phone) : contact.phone,
+    phone: maskedUnless(seeFullPhone, contact.phone),
     createdAt: contact.createdAt.toISOString(),
   };
 }

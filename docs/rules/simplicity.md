@@ -43,7 +43,7 @@ Dakly copies the good parts of Immich, Twenty, Cal.com, Novu, Documenso, Dub, Bu
 | Barrel index.ts re-exports                                        | Cal.com bans them                       | Circular imports, slow builds                                                               | Import the file directly                                                |
 | Business logic in tRPC or route handlers                          | Cal.com rule; Dub's handlers are long   | Logic cannot be reused by jobs                                                              | Handler calls a service                                                 |
 | Comments that repeat the code; paragraph comments                 | Twenty and Cal.com both now ban this    | Noise that goes stale                                                                       | Comment only the why, max a few lines                                   |
-| Huge PRs                                                          | Cal.com limit                           | Unreviewable                                                                                | Under ~500 changed lines, split by layer                                |
+| Huge PRs                                                          | Cal.com limit                           | Unreviewable                                                                                | Under ~800 changed lines, split by layer                                |
 
 ## Limits enforced by lint
 

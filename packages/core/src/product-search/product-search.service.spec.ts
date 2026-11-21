@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { LlmError } from '@dakly/providers/llm/llm-driver';
 
 import type { AiService } from '../ai/ai.service';
+import { AppError } from '../platform/errors/app-error';
 import type { ProductSearchSourceService } from '../products/product-search-source.service';
 import type { ChatProduct, ProductsService } from '../products/products.service';
 import { ProductSearchService } from './product-search.service';
@@ -78,5 +79,28 @@ describe('ProductSearchService', () => {
       },
     });
     expect((await service.search('store', 'kurti', 3)).length).toBe(2);
+  });
+
+  it('still answers by spelling when the AI is paused', async () => {
+    const service = build({
+      embed: async () => {
+        throw new AppError('AI_PAUSED', { status: 503, message: 'The AI is paused' });
+      },
+    });
+    expect((await service.search('store', 'kurti', 3)).length).toBe(2);
+  });
+
+  it('lets a programming error through', async () => {
+    const service = build({
+      embed: async () => {
+        throw new AppError('AI_INSIDE_TRANSACTION', {
+          status: 500,
+          message: 'Called inside a transaction',
+        });
+      },
+    });
+    await expect(service.search('store', 'kurti', 3)).rejects.toMatchObject({
+      code: 'AI_INSIDE_TRANSACTION',
+    });
   });
 });

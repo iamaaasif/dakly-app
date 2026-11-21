@@ -4,6 +4,8 @@ import { dashboardQuerySchema } from '@dakly/contracts/dashboard';
 
 import { DashboardAskBox } from '@/features/assistant/components/dashboard-ask-box';
 import { Dashboard } from '@/features/dashboard/components/dashboard';
+import { SetupBanner } from '@/features/setup-guide/components/setup-banner';
+import { SetupCard } from '@/features/setup-guide/components/setup-card';
 import { requireSession } from '@/lib/require-session';
 
 export default async function DashboardPage({
@@ -15,6 +17,11 @@ export default async function DashboardPage({
   if (!session.hasMemberships) redirect('/setup');
   const parsed = dashboardQuerySchema.safeParse({ period: (await searchParams).period });
   return (
-    <Dashboard period={parsed.success ? parsed.data.period : 30} askBox={<DashboardAskBox />} />
+    <Dashboard
+      period={parsed.success ? parsed.data.period : 30}
+      askBox={<DashboardAskBox />}
+      setupBanner={<SetupBanner />}
+      setupCard={<SetupCard />}
+    />
   );
 }

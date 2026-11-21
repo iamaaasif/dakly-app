@@ -35,13 +35,20 @@ export class ProductSearchIndexService {
     const source = await this.products.findSearchSource(storeId, productId);
     if (!source) return;
     const text = buildSearchText(source);
-    const textHash = createHash('sha256').update(text).digest('hex');
+    const textHash = hashOf(text);
     if (source.searchTextHash === textHash) return;
     const {
       embeddings: [embedding],
       model,
     } = await this.ai.embed(storeId, [text]);
     if (!embedding) throw new Error('Embedding result is missing a vector');
+    // A newer edit may have landed during the embed call; its own job builds the newer embedding.
+    const latest = await this.products.findSearchSource(storeId, productId);
+    if (!latest || hashOf(buildSearchText(latest)) !== textHash) return;
     await this.products.saveSearchEmbedding(storeId, productId, { embedding, model, textHash });
   }
+}
+
+function hashOf(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
 }

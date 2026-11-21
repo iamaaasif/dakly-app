@@ -223,6 +223,18 @@ export type ContactResponse = {
   createdAt: string;
 };
 
+// The list adds the columns its Columns picker can show; the profile and the other routes keep the short shape.
+export type ContactListItemResponse = ContactResponse & {
+  // Masked like `phone` for members without See full phone numbers.
+  whatsappPhone: string | null;
+  email: string | null;
+  // The Location column.
+  district: string | null;
+  source: ContactSource;
+  // Channels the customer agreed to receive marketing on, in `consentChannels` order.
+  consentedChannels: ConsentChannel[];
+};
+
 export type ImportUploadResponse = { importId: string; uploadUrl: string };
 
 export type ImportResponse = {
@@ -257,7 +269,7 @@ export type ContactIdentityResponse = {
 };
 
 export type ContactDetailResponse = ContactResponse & { identities: ContactIdentityResponse[] };
-export type ContactListResponse = { items: ContactResponse[]; nextCursor: string | null };
+export type ContactListResponse = { items: ContactListItemResponse[]; nextCursor: string | null };
 
 export type ConsentChannel = (typeof consentChannels)[number];
 export type ConsentStatus = (typeof consentStatuses)[number];

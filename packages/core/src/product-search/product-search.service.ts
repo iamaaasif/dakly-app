@@ -58,7 +58,7 @@ export class ProductSearchService {
       });
       return nearest.filter(({ distance }) => distance <= maxMeaningDistance).map(({ id }) => id);
     } catch (error) {
-      if (error instanceof LlmError || error instanceof AppError) return [];
+      if (isAiUnavailable(error)) return [];
       throw error;
     }
   }
@@ -66,4 +66,12 @@ export class ProductSearchService {
 
 function isSellable(product: ChatProduct): boolean {
   return !product.isStockTracked || product.variants.some((variant) => variant.available > 0);
+}
+
+// A paused or busy AI is expected; any other AppError, such as a call inside a transaction, is a bug.
+function isAiUnavailable(error: unknown): boolean {
+  if (error instanceof LlmError) return true;
+  return (
+    error instanceof AppError && (error.code === 'AI_PAUSED' || error.code === 'AI_STORE_BUSY')
+  );
 }
