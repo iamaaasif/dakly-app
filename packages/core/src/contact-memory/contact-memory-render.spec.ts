@@ -45,6 +45,24 @@ describe('renderContactMemory', () => {
     expect(await count(text ?? '')).toBeLessThanOrEqual(contactMemoryContextMaxTokens);
   });
 
+  it.each([
+    [
+      'Banglish',
+      (index: number) => `pochondo ${index}: dhilashala sutir kapor, halka rong, panjabi`,
+    ],
+    [
+      'mixed Bangla and English',
+      (index: number) => `পছন্দ ${index}: loose cotton কাপড়, light রঙ, panjabi আর kurti`,
+    ],
+  ])('keeps 40 %s facts and a long summary under both caps', async (_name, value) => {
+    const facts = Array.from({ length: 40 }, (_, index) => fact(index, { value: value(index) }));
+    const summary = 'bhai size M nen, delivery Sylhet e hoy. '.repeat(15).slice(0, 600);
+    const text = await renderContactMemory({ summary, facts }, count);
+    expect(text).toBeDefined();
+    expect(bytes(text ?? '')).toBeLessThanOrEqual(contactMemoryContextMaxBytes);
+    expect(await count(text ?? '')).toBeLessThanOrEqual(contactMemoryContextMaxTokens);
+  });
+
   it('drops model facts, oldest first, before staff facts', async () => {
     const staff = fact(0, { source: 'staff', kind: 'tone', value: 'polite, short answers' });
     const facts = [
