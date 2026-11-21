@@ -148,6 +148,27 @@ export class ProductsRepository {
       .then((rows) => rows.length > 0);
   }
 
+  async findForOrderLink(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          ...productColumns,
+          variants: variantSnapshot(storeId),
+          photos: photoSnapshot(storeId),
+        })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            eq(products.id, id),
+            eq(products.status, 'active'),
+            eq(products.isVisibleInOrderLink, true),
+          ),
+        ),
+    );
+    return rows[0];
+  }
+
   findManyForChat(storeId: string, ids: string[]): Promise<CatalogueProduct[]> {
     return this.database.forStore(storeId, (tx) =>
       tx

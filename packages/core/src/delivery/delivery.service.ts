@@ -125,6 +125,22 @@ export class DeliveryService {
     return { deliveryZoneId: zone.id, chargePoisha: zone.chargePoisha, district: district.name };
   }
 
+  // Same zone rule as calculateDeliveryCharge, for every district in two queries.
+  async listDistrictCharges(storeId: string) {
+    const districts = await this.repository.listDistricts(storeId);
+    const zones = await this.repository.findApplicableZones(
+      storeId,
+      districts.flatMap(({ id, parentId }) => (parentId ? [id, parentId] : [id])),
+    );
+    return districts.flatMap(({ id, name, nameBn, parentId }) => {
+      const zone =
+        [id, parentId]
+          .map((areaId) => zones.find((candidate) => candidate.bdAreaIds.includes(areaId ?? -1)))
+          .find(Boolean) ?? zones.find((candidate) => candidate.isDefault);
+      return zone ? [{ id, name, nameBn, chargePoisha: zone.chargePoisha }] : [];
+    });
+  }
+
   async calculateChargesByAreaName(
     storeId: string,
     name: string,

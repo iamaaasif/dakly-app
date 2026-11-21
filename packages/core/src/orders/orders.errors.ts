@@ -26,6 +26,16 @@ const ORDER_ERRORS = {
     status: 429,
     message: 'Too many taps. Try again in a minute',
   },
+  ORDER_LINK_NOT_FOUND: { status: 404, message: 'This order link does not work' },
+  ORDER_LINK_RATE_LIMITED: { status: 429, message: 'Too many requests. Try again later' },
+  ORDER_LINK_PHONE_LIMIT: {
+    status: 429,
+    message: 'This phone number has reached the daily order limit. Call the shop to order',
+  },
+  ORDER_LINK_BOT_CHECK_FAILED: {
+    status: 400,
+    message: 'We could not check that you are a person. Reload the page and try again',
+  },
   ORDER_ADVANCE_REQUIRED: {
     status: 409,
     message: 'This customer must pay the delivery charge in advance before the order is confirmed',
