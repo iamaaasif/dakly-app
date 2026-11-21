@@ -379,6 +379,10 @@ CI replays saved outcomes and makes no network call. The starter set is in `ai-e
 
 The Bangla and Banglish set is in `ai-eval/golden-set.bangla.ts`: product search ("kurti" must find "কুর্তি"), photo match, out-of-stock replies and Banglish hand-overs. Its header lists the exact catalog the eval shop must hold. A case may carry `mentionsAnyOf` (the answer names the product or an in-stock alternative; at least 90% must) and `neverOffer` (products with no stock; any offer fails the run, so the count must be 0). A Latin term matches as a whole word, a Bangla term as text, because Bangla words take suffixes. Cases with `dependsOn` need AI-10, AI-11 or AI-12; the nightly run skips them while the task is in `pendingTasks` in `golden-set.sample.ts`. Remove the task from that list in the PR that merges it. Khata handwriting cases wait for the Khata scan feature.
 
+### Model comparison CLI
+
+`pnpm --filter @dakly/core build && pnpm --filter @dakly/core eval:models` runs the golden set against candidate OpenAI models and prints, per job, a pass or fail against the gates and the cost per 1,000 chats. It needs `OPENAI_API_KEY` and no database: the reply job runs the real prompts and tool descriptions with fixture tools over the eval shop catalog, and the vision, voice and embedding jobs use the files in `ai-eval/model-eval/fixtures/`. Options: `--jobs fast,reply,vision,transcribe,embed`, `--models a,b` (one job only), `--max-usd` (default 4, the run stops past it), `--pending` (tasks whose cases are skipped, default `AI-12`) and `--verbose`. Prices are in `ai-eval/model-eval/candidate-prices.ts`; update them from the OpenAI pricing page before a run. A model-only change is judged by this run, then by the nightly eval.
+
 ### Shared AI service
 
 Features pass a tier, versioned prompt and output schema to `AiService`.

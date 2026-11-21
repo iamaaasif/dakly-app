@@ -3,6 +3,7 @@ import type { SignUpInput } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
 
 import { useSignUpVerification } from '../hooks/use-sign-up-verification';
+import { ResendButton } from './resend-button';
 import { TotpStep } from './totp-step';
 import { FormField as AuthField } from '@/components/form-field';
 
@@ -15,19 +16,24 @@ export function SignUpVerify({
   onBack: () => void;
   onAuthenticated?: () => void;
 }) {
-  const { form, seconds, challenge, complete, submit, resend, pending } = useSignUpVerification(
+  const { form, countdown, challenge, complete, submit, resend, pending } = useSignUpVerification(
     account,
     { onAuthenticated },
   );
   if (challenge) return <TotpStep challengeId={challenge} onSuccess={complete} />;
   return (
     <form method="post" className="space-y-4" onSubmit={submit}>
-      <p>Enter the six-digit SMS code. It expires after ten minutes.</p>
+      <p>
+        Enter the six-digit SMS code we sent to {account.registration.phone}. It expires after ten
+        minutes.
+      </p>
       <AuthField
         label="Verification code"
         field={form.register('code')}
         error={form.formState.errors.code}
         inputMode="numeric"
+        maxLength={6}
+        className="text-center text-lg tracking-widest"
         autoComplete="one-time-code"
         autoFocus
       />
@@ -40,9 +46,7 @@ export function SignUpVerify({
         <Button type="submit" loading={pending}>
           Verify mobile
         </Button>
-        <Button variant="secondary" disabled={seconds > 0} loading={pending} onClick={resend}>
-          {seconds ? `Resend in ${seconds}s` : 'Resend code'}
-        </Button>
+        <ResendButton {...countdown} loading={pending} onClick={resend} />
         <Button variant="secondary" onClick={onBack}>
           Change number
         </Button>
