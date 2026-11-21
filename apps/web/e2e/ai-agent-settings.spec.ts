@@ -341,6 +341,124 @@ test('tests the agent with a customer message and shows a reply and a hand-over'
     ).toBeVisible();
     await capture(page, 'test-unknown');
   } finally {
+    // The agent may log a run if the browser route is bypassed; leave none behind.
+    await database.pool.query('delete from ai_runs where store_id = $1', [storeId]);
+    await database.pool.end();
+  }
+});
+
+test('shows the rated replies in the Feedback tab and filters them', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
+    token: string;
+    storeIds: [string, string];
+  };
+  const [storeId] = fixture.storeIds;
+  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const connectionId = randomUUID();
+  const people = [
+    {
+      name: 'Habib Rahman',
+      ask: 'Panjabi er kapor ki?',
+      reply: 'Amader panjabi 100% cotton.',
+      rating: 'bad',
+      reason: 'missed_the_question',
+    },
+    {
+      name: 'Arif Chowdhury',
+      ask: 'Wholesale price koto?',
+      reply: 'Dam 2,450 taka.',
+      rating: 'bad',
+      reason: 'wrong_price_or_stock',
+    },
+    {
+      name: 'Sadia Islam',
+      ask: 'Kurti M size ache?',
+      reply: 'Ji, M size ache.',
+      rating: 'good',
+      reason: null,
+    },
+  ].map((person) => ({ ...person, contactId: randomUUID(), conversationId: randomUUID() }));
+  try {
+    await database.pool.query("update stores set extensions = array['chats'] where id = $1", [
+      storeId,
+    ]);
+    await database.pool.query(
+      `insert into channel_connections(id,store_id,kind,external_account_id,display_name,status)
+       values($1::uuid,$2,'facebook_page',$1::text,'Dhaka Threads','active')`,
+      [connectionId, storeId],
+    );
+    for (const person of people) {
+      const identityId = randomUUID();
+      await database.pool.query(
+        "insert into contacts(id,store_id,name,source,kind) values($1,$2,$3,'messenger','customer')",
+        [person.contactId, storeId, person.name],
+      );
+      await database.pool.query(
+        "insert into contact_identities(id,store_id,contact_id,channel_connection_id,channel,external_id) values($1::uuid,$2,$3,$4,'messenger',$1::text)",
+        [identityId, storeId, person.contactId, connectionId],
+      );
+      await database.pool.query(
+        "insert into conversations(id,store_id,contact_id,channel_connection_id,channel) values($1,$2,$3,$4,'messenger')",
+        [person.conversationId, storeId, person.contactId, connectionId],
+      );
+      await database.pool.query(
+        `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at,sender_identity_id)
+         values(gen_random_uuid(),$1,$2,'in','customer','text',$3,'received',now() - interval '2 hours',$4)`,
+        [storeId, person.conversationId, person.ask, identityId],
+      );
+      await database.pool.query(
+        `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at,ai_rating,ai_rating_reason,rated_at)
+         values(gen_random_uuid(),$1,$2,'out','ai','text',$3,'sent',now() - interval '1 hour',$4,$5,now())`,
+        [storeId, person.conversationId, person.reply, person.rating, person.reason],
+      );
+    }
+    await context.addCookies([
+      {
+        name: 'dakly_session',
+        value: fixture.token,
+        url: baseURL!,
+        httpOnly: true,
+        sameSite: 'Lax',
+      },
+    ]);
+    await context.request.post('/api/me/active-store', {
+      headers: { Origin: baseURL! },
+      data: { storeId },
+    });
+    await page.goto('/chats?agent=feedback');
+    const drawer = page.getByRole('dialog', { name: 'Dakly AI agent' });
+    await expect(drawer.getByText('Habib Rahman')).toBeVisible();
+    await expect(drawer.getByText('33%')).toBeVisible();
+    await expect(drawer.getByText('Sadia Islam')).toBeHidden();
+    await capture(page, 'feedback');
+    await drawer.getByRole('button', { name: 'Good answers' }).click();
+    await expect(page).toHaveURL(/feedback=good/);
+    await expect(drawer.getByText('Sadia Islam')).toBeVisible();
+    await expect(drawer.getByText('Habib Rahman')).toBeHidden();
+    await capture(page, 'feedback-good');
+  } finally {
+    const owned = [storeId, people.map((person) => person.conversationId)];
+    await database.pool.query(
+      'delete from messages where store_id = $1 and conversation_id = any($2::uuid[])',
+      owned,
+    );
+    await database.pool.query(
+      'delete from conversations where store_id = $1 and id = any($2::uuid[])',
+      [storeId, people.map((person) => person.conversationId)],
+    );
+    await database.pool.query(
+      'delete from contact_identities where store_id = $1 and channel_connection_id = $2',
+      [storeId, connectionId],
+    );
+    await database.pool.query('delete from contacts where store_id = $1 and id = any($2::uuid[])', [
+      storeId,
+      people.map((person) => person.contactId),
+    ]);
+    await database.pool.query('delete from channel_connections where id = $1', [connectionId]);
     await database.pool.end();
   }
 });
