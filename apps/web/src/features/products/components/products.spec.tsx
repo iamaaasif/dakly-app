@@ -234,46 +234,44 @@ describe('Products screen', () => {
       new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('adjust'),
     ).toBeNull();
   });
-  it('refreshes stock counts without replacing an open adjustment draft', async () => {
+  it('refreshes stock counts without replacing an open restock draft', async () => {
     let refreshed = false;
-    vi.stubGlobal('fetch', async () =>
-      response({
-        items: [
-          {
-            ...product,
-            variants: [
-              { ...product.variants[0]!, onHand: refreshed ? 8 : 5, available: refreshed ? 6 : 3 },
+    vi.stubGlobal('fetch', async (path: string) =>
+      path.endsWith('/restock-waiting')
+        ? response({ items: [] })
+        : response({
+            items: [
+              {
+                ...product,
+                variants: [
+                  {
+                    ...product.variants[0]!,
+                    onHand: refreshed ? 8 : 5,
+                    available: refreshed ? 6 : 3,
+                  },
+                ],
+              },
             ],
-          },
-        ],
-        nextCursor: null,
-      }),
+            nextCursor: null,
+          }),
     );
     const { client } = show();
     await screen.findByRole('table');
     await userEvent.click(
       screen.getAllByRole('button', { name: 'Adjust stock for Cotton Panjabi, Default' })[0]!,
     );
-    await userEvent.type(screen.getByLabelText('Reason'), 'Keep the count draft');
+    await userEvent.type(screen.getByLabelText('Default'), '4');
     refreshed = true;
     await client.refetchQueries({ queryKey: productsKeys.all });
-    expect(
-      await within(screen.getByRole('dialog')).findByText(
-        'On hand: 8 · Reserved: 2 · Available: 6',
-      ),
-    ).toBeTruthy();
-    expect((screen.getByLabelText('Reason') as HTMLTextAreaElement).value).toBe(
-      'Keep the count draft',
-    );
+    expect(await within(screen.getByRole('dialog')).findByText('6 now')).toBeTruthy();
+    expect((screen.getByLabelText('Default') as HTMLInputElement).value).toBe('4');
   });
-  it('adjusts one variant with a reason and refreshes the available stock', async () => {
+  it('restocks a size and refreshes the available stock', async () => {
     let changed = false;
-    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+    vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
+      if (path.endsWith('/restock-waiting')) return response({ items: [] });
       if (init.method === 'POST') {
-        expect(JSON.parse(String(init.body))).toEqual({
-          quantity: 2,
-          reason: 'Counted new delivery',
-        });
+        expect(JSON.parse(String(init.body))).toEqual({ quantity: 2, reason: 'Restock' });
         expect(new Headers(init.headers).get('X-Session-Context')).toBe('verified');
         changed = true;
         return new Response(null, { status: 204, headers: { 'x-session-context': 'verified' } });
@@ -295,33 +293,31 @@ describe('Products screen', () => {
     await userEvent.click(
       screen.getAllByRole('button', { name: 'Adjust stock for Cotton Panjabi, Default' })[0]!,
     );
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('On hand: 5 · Reserved: 2 · Available: 3')).toBeTruthy();
-    await userEvent.type(within(dialog).getByLabelText('Change in stock'), '2');
-    await userEvent.type(within(dialog).getByLabelText('Reason'), 'Counted new delivery');
+    const dialog = screen.getByRole('dialog', { name: 'Restock Cotton Panjabi' });
+    expect(within(dialog).getByText('3 now')).toBeTruthy();
+    await userEvent.type(within(dialog).getByLabelText('Default'), '2');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save stock' }));
     expect(await within(screen.getByRole('table')).findByText('Default 5')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
-  it('keeps rejected adjustments and their error visible', async () => {
-    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) =>
-      init.method === 'POST'
-        ? Response.json(
-            { error: { code: 'STOCK_NOT_AVAILABLE', message: 'Not enough available stock' } },
-            { status: 409, headers: { 'x-session-context': 'verified' } },
-          )
-        : response({ items: [product], nextCursor: null }),
-    );
+  it('keeps a rejected restock and its error visible', async () => {
+    vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
+      if (path.endsWith('/restock-waiting')) return response({ items: [] });
+      if (init.method !== 'POST') return response({ items: [product], nextCursor: null });
+      return Response.json(
+        { error: { code: 'STOCK_NOT_AVAILABLE', message: 'Not enough available stock' } },
+        { status: 409, headers: { 'x-session-context': 'verified' } },
+      );
+    });
     show();
     await screen.findByRole('table');
     await userEvent.click(
       screen.getAllByRole('button', { name: 'Adjust stock for Cotton Panjabi, Default' })[0]!,
     );
-    await userEvent.type(screen.getByLabelText('Change in stock'), '-10');
-    await userEvent.type(screen.getByLabelText('Reason'), 'Damaged');
+    await userEvent.type(screen.getByLabelText('Default'), '10');
     await userEvent.click(screen.getByRole('button', { name: 'Save stock' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Not enough available stock');
-    expect((screen.getByLabelText('Reason') as HTMLTextAreaElement).value).toBe('Damaged');
+    expect((screen.getByLabelText('Default') as HTMLInputElement).value).toBe('10');
   });
 });
 
@@ -543,6 +539,11 @@ describe('Product editor navigation', () => {
     ).toBe('stock');
     expect(within(dialog).getByText(/available · 2 reserved · 5 on hand/)).toBeTruthy();
 
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change stock for Default' }));
+    expect(
+      await screen.findByRole('dialog', { name: /Adjust stock: Cotton Panjabi/ }),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(within(dialog).getByRole('tab', { name: 'Overview' }));
     expect(
       new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('productTab'),
