@@ -539,6 +539,11 @@ describe('Product editor navigation', () => {
     ).toBe('stock');
     expect(within(dialog).getByText(/available · 2 reserved · 5 on hand/)).toBeTruthy();
 
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Change stock for Default' }));
+    expect(
+      await screen.findByRole('dialog', { name: /Adjust stock: Cotton Panjabi/ }),
+    ).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(within(dialog).getByRole('tab', { name: 'Overview' }));
     expect(
       new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('productTab'),

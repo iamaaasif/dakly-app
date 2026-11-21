@@ -187,7 +187,7 @@ request is marked `notified` only after its message is queued, so a retry never 
 with no chat on a Page stay waiting. The response gives `queued` and `waiting`, and the owner approves
 again for the rest. WhatsApp and SMS delivery wait for those channels' send paths.
 
-The Restock dialog on the Products list lists every size of the product with its available stock, how many people wait for it (`GET /products/:productId/restock-waiting`) and a box for the pieces that arrived. Save stock adds each filled size with one stock adjustment (reason Restock). The "Message the people who were waiting for these sizes" box shows only when someone is waiting, starts ticked, and calls the approval route for each restocked size that has people waiting. Stock is saved first, and the dialog shows the error if a later call fails, so reopening it shows the new counts. The dialog only adds stock; a stock decrease has no screen yet.
+The Restock dialog on the Products list lists every size of the product with its available stock, how many people wait for it (`GET /products/:productId/restock-waiting`) and a box for the pieces that arrived. Save stock adds each filled size with one stock adjustment (reason Restock). The "Message the people who were waiting for these sizes" box shows only when someone is waiting, starts ticked, and calls the approval route for each restocked size that has people waiting. Stock is saved first. If a later call fails, the dialog shows the error, clears the sizes already saved and keeps the rest, so saving again never adds the same pieces twice and still messages the people waiting for the saved sizes. The dialog only adds stock; lowering it is **Change stock** on the product sheet's Stock tab.
 
 PROD-3 adds photo upload, confirmation, reorder and removal. Upload URLs last five
 minutes and sign the declared content type and exact byte length. Only JPEG, PNG
@@ -209,10 +209,10 @@ The API requires the four `R2_*` values listed in `.env.example`.
 
 PROD-4's first web slice adds `/products`: search and readiness filters in the
 address, cursor pages, available stock per variant and signed photo thumbnails.
-The selected stock adjustment is in the address too; counts stay in the query
+The list's Restock button opens the Restock dialog from the address (`adjust` holds a size of the product); counts stay in the query
 cache while form input stays in React Hook Form.
 Members with product edit access can adjust a variant with a signed quantity and
-reason. Product view access is checked by the page and after shop changes.
+reason from **Change stock** on the Stock tab of the product sheet. Product view access is checked by the page and after shop changes.
 The editor opens from `create=1` or a product id in the address. New products
 have explicit **Save as hidden** and **Save and show** actions. Existing products
 use **Save product**; visibility changes use **Hide product** and **Show product**.

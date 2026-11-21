@@ -9,6 +9,8 @@ type RestockProductInput = {
   restocks: { variantId: string; quantity: number }[];
   // Sizes whose waiting people the owner agreed to message.
   notifyVariantIds: string[];
+  // Called after each size is saved, so a retry can skip it instead of adding the pieces twice.
+  onSaved: (variantId: string) => void;
 };
 
 // Stock is added first, because the approval route refuses a size that is still out of stock.
@@ -18,12 +20,14 @@ export function useRestockProduct() {
   const client = useQueryClient();
   return useMutation({
     gcTime: 0,
-    mutationFn: async ({ restocks, notifyVariantIds }: RestockProductInput) => {
-      for (const { variantId, quantity } of restocks)
+    mutationFn: async ({ restocks, notifyVariantIds, onSaved }: RestockProductInput) => {
+      for (const { variantId, quantity } of restocks) {
         await request<void>(`/variants/${variantId}/stock-adjustments`, {
           method: 'POST',
           body: { quantity, reason: 'Restock' },
         });
+        onSaved(variantId);
+      }
       let queued = 0;
       for (const variantId of notifyVariantIds) {
         const result = await request<RestockNotificationResponse>(

@@ -11,7 +11,7 @@ import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 
 import { useRestockWaiting } from '../api/get-restock-waiting';
-import { useRestockProduct } from '../api/restock-product';
+import { useRestockSubmit } from './restock-submit';
 
 type RestockDialogProps = { product: ProductResponse; onClose: () => void };
 
@@ -27,17 +27,8 @@ export function RestockDialog({ product, onClose }: RestockDialogProps) {
       notify: true,
     },
   });
-  const restock = useRestockProduct();
+  const { save, restock } = useRestockSubmit(form, waitingBySize, onClose);
   const quantitiesMessage = quantitiesErrorMessage(form.formState.errors.quantities);
-  const save = form.handleSubmit(({ quantities, notify }) => {
-    const restocks = Object.entries(quantities)
-      .filter(([, quantity]) => quantity > 0)
-      .map(([variantId, quantity]) => ({ variantId, quantity }));
-    const notifyVariantIds = notify
-      ? restocks.map((item) => item.variantId).filter((id) => (waitingBySize.get(id) ?? 0) > 0)
-      : [];
-    restock.mutate({ restocks, notifyVariantIds }, { onSuccess: onClose });
-  });
   return (
     <Dialog title={`Restock ${product.name}`} open onClose={onClose} className="max-w-md">
       <FormProvider {...form}>

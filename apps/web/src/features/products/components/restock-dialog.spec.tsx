@@ -35,11 +35,19 @@ const product = {
 } as unknown as ProductResponse;
 
 type Call = { method: string; path: string; body: unknown };
-function show(waiting: { variantId: string; waiting: number }[]) {
+function show(waiting: { variantId: string; waiting: number }[], failOnce?: string) {
+  let failed = false;
   const calls: Call[] = [];
   vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
     calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (init?.method === 'POST' && path.includes(failOnce ?? '\0') && !failed) {
+      failed = true;
+      return Response.json(
+        { error: { code: 'FAILED', message: 'Stock adjustment failed' } },
+        { status: 500, headers: { 'x-session-context': 'verified' } },
+      );
+    }
     let json: unknown;
     if (path.endsWith('/restock-waiting')) json = { items: waiting };
     if (path.endsWith('/restock-notifications')) json = { queued: 3, waiting: 0 };
@@ -137,5 +145,23 @@ describe('Restock dialog', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('at least one size');
     expect(writes(calls)).toEqual([]);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('does not add the same pieces twice when a retry follows a partly saved restock', async () => {
+    const { calls, onClose } = show([{ variantId: extraLarge, waiting: 3 }], extraLarge);
+    await screen.findByText(/3 waiting/);
+    await userEvent.type(screen.getByLabelText('M'), '5');
+    await userEvent.type(screen.getByLabelText('XL'), '10');
+    await userEvent.click(screen.getByRole('button', { name: 'Save stock' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Stock adjustment failed');
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Save stock' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(writes(calls).map(({ path, body }) => [path, body])).toEqual([
+      [`/api/variants/${medium}/stock-adjustments`, { quantity: 5, reason: 'Restock' }],
+      [`/api/variants/${extraLarge}/stock-adjustments`, { quantity: 10, reason: 'Restock' }],
+      [`/api/variants/${extraLarge}/stock-adjustments`, { quantity: 10, reason: 'Restock' }],
+      [`/api/variants/${extraLarge}/restock-notifications`, undefined],
+    ]);
   });
 });
