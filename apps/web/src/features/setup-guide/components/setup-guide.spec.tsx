@@ -77,7 +77,7 @@ describe('setup guide', () => {
     expect(within(steps[0]!).getByText('Done')).toBeTruthy();
     const teach = within(steps[1]!).getByRole('link', { name: 'Teach Dakly' });
     expect(teach.className).toContain('bg-action');
-    expect(teach.getAttribute('href')).toBe('/chats?agent=settings');
+    expect(teach.getAttribute('href')).toBe('/chats?agent=knowledge');
     expect(within(steps[2]!).getByRole('link', { name: 'Add products' }).className).not.toContain(
       'bg-action',
     );
