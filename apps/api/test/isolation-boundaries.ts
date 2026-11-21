@@ -154,6 +154,11 @@ const groups = [
     boundary: 'public order confirm page; the store comes from the hashed token, never the request',
     routes: ['GET /l/c/:token', 'POST /l/c/:token'],
   },
+  {
+    evidence: 'orders/order-link.int.spec.ts',
+    boundary: 'public order link; the store comes from the slug on the server, never the request',
+    routes: ['GET /l/o/:slug/:productId', 'POST /l/o/:slug/:productId/orders'],
+  },
 ];
 export const isolationBoundaries = new Map(
   groups.flatMap(({ routes, ...reason }) => routes.map((route) => [route, reason] as const)),
