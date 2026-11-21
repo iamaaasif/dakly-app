@@ -527,6 +527,17 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('contacts', foreignId)).toEqual(before);
   });
+fixture('POST /contacts/:contactId/erase', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a),
+    own = await contact(b);
+  await hidden(b, 'POST', (value) => `/contacts/${value}/erase`, id);
+  expect((await f.row('contacts', id)).store_id).toBe(a.id);
+  await success(b, 'POST', `/contacts/${own}/erase`, 204);
+  const { rows } = await f.admin.pool.query('select 1 from contacts where id = $1', [own]);
+  expect(rows).toHaveLength(0);
+  expect((await f.row('contacts', id)).store_id).toBe(a.id);
+});
 async function product(shop: Shop) {
   const result = await success(shop, 'POST', '/products', 201, {
     name: 'পাঞ্জাবি',
