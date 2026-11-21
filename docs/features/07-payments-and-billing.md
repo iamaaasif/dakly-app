@@ -405,6 +405,15 @@ sandbox payments are excluded from this settlement match.
 - bKash does not sign its redirect. The web layer forwards `paymentID`, `status` and the merchant reference as JSON; the driver only reads the reference and builds the event id. The callback is a hint and the status check decides.
 - Agreements (auto-renew), refunds and Cancel Agreement are not built yet; PAY-7 and PAY-6 add them.
 
+### Order payment links (PAY-6, part 1)
+
+Staff with `orders.edit` make a link for an order with `POST /orders/:orderId/payment-links` (`kind` advance or full, the shop's own connected credential, an expiry of 1 to 168 hours, default 24). `GET` lists the order's links and `POST .../:intentId/void` voids one that is unpaid.
+
+- The amount comes from the order, never from the caller's own total. A full payment asks for what is still unpaid. An advance asks for the delivery charge unless staff name an amount; it is refused when it is zero or above what is still unpaid.
+- Making a link moves a cash-on-delivery order to "waiting for advance" (`advance_requested`) and voids the shop's older unpaid links for that order, so one amount is open at a time (PAY-R7). Only to-confirm and to-pack orders that are not synced from another system can take a link.
+- When a payment is verified, the `payment.succeeded` event runs a job that sets the order's received money to verified minus refunded across the order's live intents. Running it twice changes nothing. Sandbox payments never count. A fully paid order is `paid`, a partly paid one `advance_paid`, and an order cancelled meanwhile shows `refund_due`. If more than the order total arrives, the order keeps the total and the extra stays visible on the payment for a refund (PAY-R9).
+- The link address is `SHORT_LINK_BASE_URL/p/<short code>`. The page behind it, the gateway start and refunds follow in the next PAY-6 parts.
+
 ### Subscription renewal (PAY-7)
 
 `SubscriptionRenewalService` in `packages/core/src/billing/` moves a store's one subscription through its periods. A job sweeps due stores every day at 10:00 Asia/Dhaka and queues one `renew-subscription` job per store.

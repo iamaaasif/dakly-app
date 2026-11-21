@@ -13,12 +13,16 @@ import { BuyerOrdersService } from './buyer-orders.service';
 import { ChatOrdersService } from './chat-orders.service';
 import { KhataSalesRepository } from './khata-sales.repository';
 import { KhataSalesService } from './khata-sales.service';
+import { OrderAdvancesService } from './order-advances.service';
 import { OrderAttributionRepository } from './order-attribution.repository';
 import { OrderAttributionService } from './order-attribution.service';
 import { OrderCatalogueController } from './order-catalogue.controller';
 import { OrderConfirmationController } from './order-confirmation.controller';
 import { OrderConfirmationRepository } from './order-confirmation.repository';
 import { OrderConfirmationService } from './order-confirmation.service';
+import { BOT_CHECK_DRIVER, createBotCheckDriver } from './order-link-provider';
+import { OrderLinkController } from './order-link.controller';
+import { OrderLinkService } from './order-link.service';
 import { OrderProductArchiveController } from './order-product-archive.controller';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
@@ -44,6 +48,7 @@ import { OrdersService } from './orders.service';
     OrderProductArchiveController,
     OrderCatalogueController,
     OrderConfirmationController,
+    OrderLinkController,
   ],
   providers: [
     BuyerOrdersRepository,
@@ -53,6 +58,7 @@ import { OrdersService } from './orders.service';
     KhataSalesService,
     OrdersRepository,
     OrdersService,
+    OrderAdvancesService,
     OrderSetupRepository,
     OrderSetupService,
     OrderReportingRepository,
@@ -61,9 +67,12 @@ import { OrdersService } from './orders.service';
     OrderAttributionService,
     OrderConfirmationRepository,
     OrderConfirmationService,
+    OrderLinkService,
+    { provide: BOT_CHECK_DRIVER, useFactory: createBotCheckDriver },
   ],
   exports: [
     BuyerOrdersService,
+    OrderAdvancesService,
     ChatOrdersService,
     KhataSalesService,
     OrdersService,
