@@ -63,6 +63,12 @@ export class ContactMemoryService {
       throw contactMemoryError('CONTACT_NOT_FOUND');
   }
 
+  // A contact deleted by staff or by the customer's own request keeps no memory, and the
+  // cleared checkpoints stop any later job from building it again.
+  async eraseForDeletedContact(storeId: string, contactId: string): Promise<void> {
+    await this.repository.clear(storeId, contactId, null, this.clock.now());
+  }
+
   private async extract(storeId: string, work: MemoryWork) {
     const input = memoryPromptInput(work);
     // Nothing to read: the batch is only voice notes that failed or stickers. Move past it.
