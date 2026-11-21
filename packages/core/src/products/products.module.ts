@@ -7,6 +7,8 @@ import { StoresModule } from '../stores/stores.module';
 import { ProductImportService } from './product-import.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductPhotosController } from './product-photos.controller';
+import { ProductSearchSourceService } from './product-search-source.service';
+import { ProductSearchRepository } from './product-search.repository';
 import { ProductStockRepository } from './product-stock.repository';
 import { ProductStockService } from './product-stock.service';
 import { ProductsController } from './products.controller';
@@ -24,7 +26,9 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductImportService,
     ProductStockRepository,
     ProductStockService,
+    ProductSearchRepository,
+    ProductSearchSourceService,
   ],
-  exports: [ProductsService, ProductImportService, ProductStockService],
+  exports: [ProductsService, ProductImportService, ProductStockService, ProductSearchSourceService],
 })
 export class ProductsModule {}
