@@ -14,6 +14,15 @@ export class KnowledgeSearchService {
     return this.repository.hasActive(storeId);
   }
 
+  recordUse(storeId: string, itemIds: string[]) {
+    return this.repository.recordUse(storeId, itemIds);
+  }
+
+  async describe(storeId: string, itemId: string) {
+    const item = await this.repository.find(storeId, itemId);
+    return item && { kind: item.kind, question: item.question, fileName: item.fileName };
+  }
+
   async search(storeId: string, query: string, limit: number): Promise<KnowledgeHit[]> {
     const {
       embeddings: [embedding],
