@@ -38,6 +38,7 @@ import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-hea
 import { MetaPageReconciliationModule } from '@dakly/core/channels/meta-page-reconciliation.module';
 import { MetaWebhookMaintenanceModule } from '@dakly/core/channels/meta-webhook-maintenance.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
+import { ContactMemoryModule } from '@dakly/core/contact-memory/contact-memory.module';
 import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
 import { DueBookModule } from '@dakly/core/due-book/due-book.module';
 import { SendBakiNoticeOnDueAdded } from '@dakly/core/due-book/jobs/send-baki-notice-on-due-added.job';
@@ -160,6 +161,7 @@ import { JobSchedulers } from './job-schedulers';
     InboundAttachmentsModule,
     ChannelTokenHealthModule,
     MetaPageReconciliationModule,
+    ContactMemoryModule,
     ConversationReturnsModule,
     AutomationRunsModule,
     AutomationsModule,

@@ -126,13 +126,13 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M4. Chats inbox (people only)
 
-| ID     | Task                                                     | Status      | Depends       | PR         | Notes                                                                                                                                                                                                                     |
-| ------ | -------------------------------------------------------- | ----------- | ------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CHAT-3 | Status, responder, assignment, take over, internal notes | Done        | CHAT-1        | #183, #192 | Rules, notes and the take-over timer merged. The AI return after a person's last message and the unclaimed hand-back are built in AI-5 part 4.                                                                            |
-| CHAT-4 | Saved replies                                            | Done        | CHAT-1        | #186       | Staff pick saved replies by hand (D43).                                                                                                                                                                                   |
-| CHAT-5 | Web: inbox list, conversation, composer, customer panel  | In progress | CHAT-3, WEB-2 | #285       | Part 1 is the chat list with tabs and channel filter. Part 1b: search, sort, Assigned to filter. Part 4: bulk select and header pills. Labels need an owner decision. Intent tags and Lead saved: AI-5. Comments: CHAT-6. |
-| CHAT-6 | Comments: receive, reply publicly and privately, hide    | In review   | CHAT-2        | #415, #419 |                                                                                                                                                                                                                           |
-| CHAT-8 | Customer memory processing                               | Todo        | AI-4, CHAT-1  |            | Preserve memory ownership on merge and undo. Clear derived facts and checkpoints on erasure.                                                                                                                              |
+| ID     | Task                                                     | Status      | Depends       | PR         | Notes                                                                                                                                                                                                                                                                         |
+| ------ | -------------------------------------------------------- | ----------- | ------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CHAT-3 | Status, responder, assignment, take over, internal notes | Done        | CHAT-1        | #183, #192 | Rules, notes and the take-over timer merged. The AI return after a person's last message and the unclaimed hand-back are built in AI-5 part 4.                                                                                                                                |
+| CHAT-4 | Saved replies                                            | Done        | CHAT-1        | #186       | Staff pick saved replies by hand (D43).                                                                                                                                                                                                                                       |
+| CHAT-5 | Web: inbox list, conversation, composer, customer panel  | In progress | CHAT-3, WEB-2 | #285       | Part 1 is the chat list with tabs and channel filter. Part 1b: search, sort, Assigned to filter. Part 4: bulk select and header pills. Labels need an owner decision. Intent tags and Lead saved: AI-5. Comments: CHAT-6.                                                     |
+| CHAT-6 | Comments: receive, reply publicly and privately, hide    | In review   | CHAT-2        | #415, #419 |                                                                                                                                                                                                                                                                               |
+| CHAT-8 | Customer memory processing                               | In progress | AI-4, CHAT-1  | #416       | Preserve memory ownership on merge and undo. Clear derived facts and checkpoints on erasure. Part 1: quiet-chat sweep, model call, guarded save and clear. Left: merge and undo invalidation, contact deletion, delayed-message rebuild, prompt rendering with the token cap. |
 
 ## M5. Products
 
@@ -213,12 +213,12 @@ Core, built before channel connections with SMS as the first channel (D40), and 
 
 ## M12. Admin panel
 
-| ID    | Task                                                                          | Status      | Depends     | PR  | Notes |
-| ----- | ----------------------------------------------------------------------------- | ----------- | ----------- | --- | ----- |
-| ADM-1 | `apps/admin`, staff users, passkey or TOTP, staff sessions, Cloudflare Access | Done        | WEB-1       | #30 |       |
-| ADM-2 | Staff audit log; support grants with owner approval                           | Done        | ADM-1       | #31 |       |
-| ADM-3 | Shops list and detail through report functions                                | In progress | ADM-2       |     |       |
-| ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | Todo        | ADM-2, AI-2 |     |       |
+| ID    | Task                                                                          | Status | Depends     | PR         | Notes |
+| ----- | ----------------------------------------------------------------------------- | ------ | ----------- | ---------- | ----- |
+| ADM-1 | `apps/admin`, staff users, passkey or TOTP, staff sessions, Cloudflare Access | Done   | WEB-1       | #30        |       |
+| ADM-2 | Staff audit log; support grants with owner approval                           | Done   | ADM-1       | #31        |       |
+| ADM-3 | Shops list and detail through report functions                                | Done   | ADM-2       | #429, #430 |       |
+| ADM-5 | Kill switches, feature flags, provider health, AI cost per shop               | Todo   | ADM-2, AI-2 |            |       |
 
 ## M13. Due book and Khata scan
 
