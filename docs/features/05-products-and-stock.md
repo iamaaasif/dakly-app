@@ -235,6 +235,17 @@ in the list, or remove a photo after confirming. The first photo appears on the
 products list. Each product has room for ten photos. Browser uploads need the
 [R2 bucket CORS rule](../architecture.md#files).
 
+PROD-7 gives each variant optional photos of its own, up to ten, on `product_variants.image_file_ids`.
+They use the same upload, confirm, reorder and remove steps as product photos, under
+`/products/:productId/variants/:variantId/photos` (needs `products.edit`), and the same file purpose and
+limits. A variant never needs a photo: with none, the product's first photo stands in, and no readiness
+label depends on variant photos (`Needs a photo` still looks at the product's photos only). Product
+responses carry `imageFileIds` and signed `photos` on each variant. Editing a product keeps the photos of
+every variant that is kept. The order picker returns a `photoUrl` for each variant (its own first photo,
+else the product's). The AI tool `send_product_card` takes an optional `variantId` and returns the
+`photoFileId` to show (the variant's own, else the product's first); cards are still sent as text until the
+reply sender can attach images. Photo search (AI-11) should index variant photos with their variant.
+
 Adjust opening stock after saving through the list. The low-stock threshold
 belongs to the shop.
 
