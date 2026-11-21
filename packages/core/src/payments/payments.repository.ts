@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 
 import {
   paymentEvents,
@@ -30,6 +30,10 @@ type IntentUpdate = Pick<
 const intentColumns = {
   id: paymentIntents.id,
   flow: paymentIntents.flow,
+  purpose: paymentIntents.purpose,
+  orderId: paymentIntents.orderId,
+  verifiedAmountPoisha: paymentIntents.verifiedAmountPoisha,
+  refundedPoisha: paymentIntents.refundedPoisha,
   gateway: paymentIntents.gateway,
   credentialId: paymentIntents.credentialId,
   amountPoisha: paymentIntents.amountPoisha,
@@ -134,5 +138,56 @@ export class PaymentsRepository {
         .returning({ id: paymentEvents.id }),
     );
     return event;
+  }
+
+  listForOrder(storeId: string, orderId: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select(intentColumns)
+        .from(paymentIntents)
+        .where(and(eq(paymentIntents.storeId, storeId), eq(paymentIntents.orderId, orderId)))
+        .orderBy(desc(paymentIntents.createdAt)),
+    );
+  }
+
+  // A link that has not been paid yet stops taking new attempts; one already at the gateway can
+  // still settle and then goes to review.
+  async voidUnpaid(storeId: string, where: { orderId: string; id?: string }, now: Date) {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(paymentIntents)
+        .set({ voidedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(paymentIntents.storeId, storeId),
+            eq(paymentIntents.orderId, where.orderId),
+            where.id ? eq(paymentIntents.id, where.id) : undefined,
+            inArray(paymentIntents.status, ['created', 'pending']),
+            isNull(paymentIntents.voidedAt),
+          ),
+        )
+        .returning({ id: paymentIntents.id }),
+    );
+    return rows.length;
+  }
+
+  // What the shop actually holds for an order: verified money less refunds.
+  async receivedForOrder(storeId: string, orderId: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          received: sql<string>`coalesce(sum(${paymentIntents.verifiedAmountPoisha} - ${paymentIntents.refundedPoisha}), 0)::text`,
+        })
+        .from(paymentIntents)
+        .where(
+          and(
+            eq(paymentIntents.storeId, storeId),
+            eq(paymentIntents.orderId, orderId),
+            eq(paymentIntents.isSandbox, false),
+            inArray(paymentIntents.status, ['succeeded', 'partially_refunded', 'refunded']),
+          ),
+        ),
+    );
+    return Number(row?.received ?? 0);
   }
 }

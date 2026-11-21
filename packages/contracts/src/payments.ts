@@ -88,3 +88,33 @@ export const paymentCallbackSchema = z.strictObject({
   eventId: z.string().min(1).max(512),
   merchantReference: z.string().min(1).max(512),
 });
+
+export const orderPaymentLinkKinds = ['advance', 'full'] as const;
+
+// An advance defaults to the delivery charge. The amount of a full payment is the unpaid rest of
+// the order, so only an advance can name an amount.
+export const createOrderPaymentLinkSchema = z
+  .strictObject({
+    gateway: paymentGatewaySchema,
+    credentialId: z.uuid(),
+    kind: z.enum(orderPaymentLinkKinds),
+    amountPoisha: z.int().positive().optional(),
+    expiresInHours: z.int().min(1).max(168).default(24),
+  })
+  .refine((input) => input.kind === 'advance' || input.amountPoisha === undefined, {
+    path: ['amountPoisha'],
+    message: 'Only an advance can name an amount',
+  });
+
+export type CreateOrderPaymentLink = z.infer<typeof createOrderPaymentLinkSchema>;
+
+export type OrderPaymentLink = {
+  id: string;
+  gateway: (typeof paymentGateways)[number];
+  kind: (typeof orderPaymentLinkKinds)[number];
+  amountPoisha: number;
+  status: (typeof paymentIntentStatuses)[number];
+  isVoided: boolean;
+  expiresAt: string;
+  url: string;
+};
