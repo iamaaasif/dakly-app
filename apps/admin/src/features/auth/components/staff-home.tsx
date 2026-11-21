@@ -8,6 +8,7 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useStaffSession } from '../api/session';
 import { useStaffSignOut } from '../api/sign-out';
 import { AuthPanel } from './auth-panel';
+import { StaffNav } from './staff-nav';
 
 export function StaffHome() {
   const session = useStaffSession();
@@ -32,24 +33,7 @@ export function StaffHome() {
       {session.data ? (
         <div className="space-y-4">
           <p className="font-medium">{session.data.name}</p>
-          <nav className="flex flex-wrap gap-4">
-            {['support', 'super_admin'].includes(session.data.role) ? (
-              <Link href="/account-recovery" className="text-action underline">
-                Recover shop account
-              </Link>
-            ) : null}
-            <Link href="/shops" className="text-action underline">
-              Shops
-            </Link>
-            <Link href="/support" className="text-action underline">
-              Support access
-            </Link>
-            {session.data.role === 'super_admin' ? (
-              <Link href="/audit" className="text-action underline">
-                Staff audit history
-              </Link>
-            ) : null}
-          </nav>
+          <StaffNav role={session.data.role} />
           <p className="text-muted">Role: {session.data.role.replaceAll('_', ' ')}</p>
           <Button
             loading={signOut.isPending}

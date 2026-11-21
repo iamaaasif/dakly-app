@@ -7,3 +7,7 @@ export async function adminApi<T>(path: string, body?: unknown): Promise<T> {
 export function adminRequest<T>(path: string, body?: unknown): Promise<T> {
   return adminApi<T>(`auth/${path}`, body);
 }
+
+export async function adminPut<T>(path: string, body: unknown): Promise<T> {
+  return readJson<T>(await apiFetch(`/api/admin/${path}`, { method: 'PUT', body }));
+}
