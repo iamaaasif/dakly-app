@@ -1,12 +1,10 @@
 'use client';
-import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import type { ContactListQuery } from '@dakly/contracts/contacts';
 import { ApiError } from '@dakly/ui/api-client';
 import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
@@ -14,6 +12,7 @@ import { customersSearch, useCustomers } from '../api/customers';
 import { AddCustomersChooser } from './add-customers-chooser';
 import { CustomerFilters } from './customer-filters';
 import { CustomerList } from './customer-list';
+import { CustomersHeader } from './customers-header';
 import { ImportCustomersDialog } from './import-customers-dialog';
 import { NewCustomerForm } from './new-customer-form';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
@@ -35,14 +34,7 @@ export function CustomersScreen({ query }: CustomersScreenProps) {
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-xl font-bold">All customers</h1>
-        {canCreate ? (
-          <Button onClick={() => setAdding('choose')} className="gap-2">
-            <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add customers
-          </Button>
-        ) : null}
-      </div>
+      <CustomersHeader query={query} canCreate={canCreate} onAdd={() => setAdding('choose')} />
 
       {added ? (
         <p role="status">

@@ -76,15 +76,19 @@ export class ContactsController {
     @Query(new ZodValidationPipe(contactExportQuerySchema)) query: ContactExportQuery,
     @Res() reply: FastifyReply,
   ) {
-    const { filename, type, body } = await this.exports.export(storeId, query, access, {
+    const { filename, type, body, rowCount } = await this.exports.export(storeId, query, access, {
       kind: 'user',
       userId,
     });
-    return reply
-      .header('Cache-Control', 'no-store')
-      .header('Content-Disposition', `attachment; filename="${filename}"`)
-      .type(type)
-      .send(body);
+    return (
+      reply
+        .header('Cache-Control', 'no-store')
+        .header('Content-Disposition', `attachment; filename="${filename}"`)
+        // The screen says how many customers are in the file.
+        .header('X-Row-Count', String(rowCount))
+        .type(type)
+        .send(body)
+    );
   }
 
   @Get(':contactId')

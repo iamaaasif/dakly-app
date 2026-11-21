@@ -13,6 +13,7 @@ import type {
   ContactResponse,
 } from '@dakly/contracts/contacts';
 import type { SessionContext } from '@dakly/contracts/sessions';
+import { ToastProvider } from '@dakly/ui/toast';
 
 import { CustomerProfile } from './customer-profile';
 import { CustomersScreen } from './customers-screen';
@@ -57,7 +58,7 @@ const apiError = (status: number, code: string, message: string) => ({
   body: { error: { code, message } },
 });
 
-function show(child: ReactNode, canEdit = true) {
+function show(child: ReactNode, canEdit = true, canExport = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const context: SessionContext = {
     user: { id: 'member', name: 'Member' },
@@ -78,6 +79,7 @@ function show(child: ReactNode, canEdit = true) {
       canEditAutomations: false,
       canViewCustomers: true,
       canCreateCustomer: canEdit,
+      canExportCustomers: canExport,
       canViewChats: true,
       canEditChats: true,
       canViewSegments: true,
@@ -96,7 +98,9 @@ function show(child: ReactNode, canEdit = true) {
   client.setQueryData(sessionContextKey, context);
   return render(child, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
     ),
   });
 }
@@ -472,6 +476,42 @@ describe('Import customers', () => {
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('Choose the column that has phone numbers')).toBeTruthy();
     expect(screen.queryByText('Step 4 of 7 · Preview')).toBeNull();
+  });
+
+  it.each([
+    ['2486', '2,486 customers'],
+    ['1', '1 customer'],
+  ])('exports the customers on the screen and says how many (%s)', async (rows, said) => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', async (path: string) => {
+      urls.push(path);
+      const headers = {
+        'x-session-context': 'verified',
+        'content-disposition': 'attachment; filename="dakly-customers-2026-11-20.xlsx"',
+        'x-row-count': rows,
+      };
+      return path.startsWith('/api/contacts/export')
+        ? new Response('file', { headers })
+        : Response.json({ items: [], nextCursor: null }, { headers });
+    });
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => undefined }),
+    );
+    show(<CustomersScreen query={{ limit: 50, kind: 'lead', tag: 'eid' }} />, true, true);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Export' }));
+    expect(
+      await screen.findByText(`Exporting ${said} to Excel. Check your downloads in a moment.`),
+    ).toBeTruthy();
+    expect(urls.some((url) => url === '/api/contacts/export?kind=lead&tag=eid')).toBe(true);
+  });
+
+  it('offers no Export button without the Download customer lists switch', async () => {
+    respond(() => ({ body: { items: [], nextCursor: null } }));
+    show(<CustomersScreen query={allCustomers} />);
+    await screen.findByText('No customers yet. Customers you add show here.');
+    expect(screen.queryByRole('button', { name: 'Export' })).toBeNull();
   });
 
   it('refuses a file that is not Excel or CSV before uploading it', async () => {

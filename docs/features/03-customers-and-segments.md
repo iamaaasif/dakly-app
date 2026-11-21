@@ -138,7 +138,7 @@ The web app has two customer screens.
 - Both screens show the phone as the API sent it: full for members with "See full phone
   numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
 - Not built yet, because no route gives the data: header totals and tab counts, sort, columns
-  (WhatsApp, Email, Location), export, bulk actions, the profile stats and its Orders, Activity,
+  (WhatsApp, Email, Location; CUS-17), bulk actions, the profile stats and its Orders, Activity,
   Campaign history and Notes tabs, profile fields (Email, Address, Favourite category), quick
   actions (Call, WhatsApp, SMS), tag input inside the tags card, and the current consent answer
   per channel.
@@ -299,9 +299,12 @@ match (`kind`, `tag`, `search`, no page or limit) as an Excel (.xlsx) file named
   filter matches more than 50,000 customers with `CONTACT_EXPORT_TOO_LARGE` (422): narrow the
   filters. A background export for larger lists is not built.
 - Every download writes the audit event `contacts.exported` with the number of rows, and the
-  response is `Cache-Control: no-store`.
-- Not built yet: the Export button and its "Exporting N customers to Excel" message on the
-  customers screen. The screen needs the member's `exportLists` flag in the session context first.
+  response is `Cache-Control: no-store` and carries the number of customers in `X-Row-Count`.
+- The customers screen shows an Export button beside Add customers to members whose session
+  context has `canExportCustomers` (View Customers and the Download customer lists switch). It
+  downloads the file for the kind, search and tag in the URL and then shows "Exporting N customers
+  to Excel. Check your downloads in a moment." in a toast. A failed download shows its message
+  under the title.
 
 The shared phone schema accepts `01712345678`, `1712345678`, `+8801712345678`,
 `8801712345678`, spaces, hyphens and Bangla digits. All forms become the ASCII
