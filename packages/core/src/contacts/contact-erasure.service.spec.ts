@@ -18,10 +18,13 @@ function service(found: boolean) {
   const events: unknown[] = [];
   const audits: unknown[] = [];
   const instance = new ContactErasureService(
-    { erase: async () => ({ found, conversationIds: ['c1', 'c2'] }) } as ContactErasureRepository,
+    {
+      erase: async () => ({ found, conversationIds: ['c1', 'c2'], attachmentKeys: ['k'] }),
+      dueDeleted: async () => [{ storeId: 's', contactId: 'c' }],
+    } as unknown as ContactErasureRepository,
     { run: (_store: string, work: () => Promise<unknown>) => work() } as StoreTransaction,
     { record: async (_store: string, entry: unknown) => void audits.push(entry) } as AuditService,
-    { publish: async (event: unknown) => void events.push(event) } as OutboxService,
+    { publishAll: async (list: unknown[]) => void events.push(...list) } as OutboxService,
     { now: () => new Date('2026-11-21T00:00:00Z') } as Clock,
     { canEraseCustomers: (access: StoreAccess) => access.role === 'owner' } as TeamService,
   );
@@ -47,6 +50,18 @@ describe('ContactErasureService', () => {
     const { instance, events, audits } = service(true);
     await instance.erase('s', 'c', owner, actor);
     expect(audits).toMatchObject([{ action: 'contacts.erased', entityId: 'c' }]);
-    expect(events).toMatchObject([{ type: 'contact.deleted', payload: { contactId: 'c' } }]);
+    expect(events).toMatchObject([
+      { type: 'contact.deleted', payload: { contactId: 'c' } },
+      {
+        type: 'contact.erased',
+        payload: { contactId: 'c', conversationIds: ['c1', 'c2'], attachmentKeys: ['k'] },
+      },
+    ]);
+  });
+
+  it('erases the deleted customers that are due, as the system', async () => {
+    const { instance, audits } = service(true);
+    expect(await instance.eraseDeletedCustomers()).toBe(1);
+    expect(audits).toMatchObject([{ actor: { kind: 'system' }, action: 'contacts.erased' }]);
   });
 });

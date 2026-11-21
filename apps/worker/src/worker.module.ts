@@ -38,6 +38,7 @@ import { ChannelTokenHealthModule } from '@dakly/core/channels/channel-token-hea
 import { MetaPageReconciliationModule } from '@dakly/core/channels/meta-page-reconciliation.module';
 import { MetaWebhookMaintenanceModule } from '@dakly/core/channels/meta-webhook-maintenance.module';
 import { MetaWebhookRoutingModule } from '@dakly/core/channels/meta-webhook-routing.module';
+import { ContactErasureModule } from '@dakly/core/contacts/contact-erasure.module';
 import { ContactStatsRepairModule } from '@dakly/core/contacts/contact-stats-repair.module';
 import { DueBookModule } from '@dakly/core/due-book/due-book.module';
 import { SendBakiNoticeOnDueAdded } from '@dakly/core/due-book/jobs/send-baki-notice-on-due-added.job';
@@ -51,6 +52,7 @@ import { ReadKhataPage } from '@dakly/core/khata-scans/jobs/read-khata-page.job'
 import { KhataScansModule } from '@dakly/core/khata-scans/khata-scans.module';
 import { MaintenanceModule } from '@dakly/core/maintenance/maintenance.module';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
+import { ErasedContactFilesModule } from '@dakly/core/messaging/erased-contact-files.module';
 import { InboundAttachmentsModule } from '@dakly/core/messaging/inbound-attachments.module';
 import { CopyMessageAttachmentsJob } from '@dakly/core/messaging/jobs/copy-message-attachments.job';
 import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
@@ -155,6 +157,7 @@ import { JobSchedulers } from './job-schedulers';
     MetaWebhookMaintenanceModule,
     MessagingModule,
     InboundAttachmentsModule,
+    ErasedContactFilesModule,
     ChannelTokenHealthModule,
     MetaPageReconciliationModule,
     ConversationReturnsModule,
@@ -166,6 +169,7 @@ import { JobSchedulers } from './job-schedulers';
     ImportsModule,
     KhataScansModule,
     ContactStatsRepairModule,
+    ContactErasureModule,
     AnalyticsModule,
     PaymentJobsModule,
     MaintenanceModule,

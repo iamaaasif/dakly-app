@@ -14,6 +14,7 @@ import { PURGE_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/purge-webhook-ev
 import { QUEUE_CHANNEL_TOKEN_CHECKS } from '@dakly/core/channels/jobs/queue-channel-token-checks.job';
 import { RECONCILE_META_PAGE_SUBSCRIPTIONS } from '@dakly/core/channels/jobs/reconcile-meta-page-subscriptions.job';
 import { RECOVER_WEBHOOK_EVENTS } from '@dakly/core/channels/jobs/recover-webhook-events.job';
+import { ERASE_DELETED_CONTACTS } from '@dakly/core/contacts/jobs/erase-deleted-contacts.job';
 import { SWEEP_CONTACT_STATS } from '@dakly/core/contacts/jobs/sweep-contact-stats.job';
 import { FAIL_STUCK_IMPORTS } from '@dakly/core/imports/jobs/fail-stuck-imports.job';
 import { RUN_MAINTENANCE } from '@dakly/core/maintenance/jobs/run-maintenance.job';
@@ -63,6 +64,7 @@ export class JobSchedulers implements OnModuleInit, OnApplicationBootstrap {
       scheduleJob(this.workflow, WAKE_DUE_RUNS, MINUTE_MS),
       scheduleJob(this.campaign, START_DUE_CAMPAIGNS, MINUTE_MS),
       scheduleJob(this.bulk, FAIL_STUCK_IMPORTS),
+      scheduleJob(this.bulk, ERASE_DELETED_CONTACTS, { pattern: '30 1 * * *', tz: 'UTC' }),
       scheduleJob(this.bulk, SWEEP_CONTACT_STATS, { pattern: '0 0 * * *', tz: 'UTC' }),
       scheduleJob(this.bulk, SWEEP_AUTOMATION_BIRTHDAYS, { pattern: '0 * * * *', tz: 'UTC' }),
       scheduleJob(this.sync, QUEUE_CHANNEL_TOKEN_CHECKS, DAY_MS),
