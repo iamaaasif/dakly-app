@@ -21,11 +21,11 @@ const store = {
   vatBin: null,
   tradeLicenceNumber: null,
 };
-function show(tab: 'store' | 'extensions', canChangeExtensions = true) {
+function show(tab: 'store') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
     contextTag: 'verified',
-    currentStore: { canViewStoreSettings: true, canEditStoreSettings: true, canChangeExtensions },
+    currentStore: { canViewStoreSettings: true, canEditStoreSettings: true },
   });
   render(
     <QueryClientProvider client={client}>
@@ -79,32 +79,4 @@ it('sends only changed fields, clears nullable values and retains a draft on ord
   await waitFor(() => expect(screen.queryByText('Could not refresh settings')).toBeNull());
   await user.click(screen.getByRole('button', { name: 'Save store information' }));
   await waitFor(() => expect(writes).toEqual([{ legalName: null }]));
-});
-it('does not grant extension editing to a custom settings editor', async () => {
-  vi.stubGlobal('fetch', async () =>
-    Response.json(store, { headers: { 'x-session-context': 'verified' } }),
-  );
-  show('extensions', false);
-  expect((await screen.findByLabelText('Sales')).matches(':disabled')).toBe(true);
-  expect(screen.queryByRole('button', { name: 'Save extensions' })).toBeNull();
-  expect(screen.queryByLabelText('Physical shop')).toBeNull();
-});
-it('saves the actual extension selection with Core implicit', async () => {
-  const writes: unknown[] = [];
-  vi.stubGlobal(
-    'BroadcastChannel',
-    class {
-      postMessage() {}
-      close() {}
-    },
-  );
-  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
-    if (init.method === 'PATCH') writes.push(JSON.parse(String(init.body)));
-    return Response.json(store, { headers: { 'x-session-context': 'verified' } });
-  });
-  show('extensions');
-  const user = userEvent.setup();
-  await user.click(await screen.findByLabelText('Sales'));
-  await user.click(screen.getByRole('button', { name: 'Save extensions' }));
-  await waitFor(() => expect(writes).toEqual([{ extensions: [] }]));
 });

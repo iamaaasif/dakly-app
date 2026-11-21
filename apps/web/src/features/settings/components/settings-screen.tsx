@@ -10,13 +10,7 @@ import { useSessionContext } from '@/lib/session-context';
 type SettingsLink = { href: string; label: string; current?: boolean };
 
 // The SMS tab's content comes from the integrations feature, so the page passes it in.
-export function SettingsScreen({
-  tab,
-  sms,
-}: {
-  tab: 'store' | 'sms' | 'extensions';
-  sms?: ReactNode;
-}) {
+export function SettingsScreen({ tab, sms }: { tab: 'store' | 'sms'; sms?: ReactNode }) {
   const { data } = useSessionContext();
   const access = data?.currentStore;
   const account: SettingsLink[] = [
@@ -28,19 +22,16 @@ export function SettingsScreen({
   const store: SettingsLink[] = [
     { href: '/settings?tab=store', label: 'Store information', current: tab === 'store' },
     { href: '/settings?tab=sms', label: 'SMS settings', current: tab === 'sms' },
-    { href: '/settings?tab=extensions', label: 'Extensions', current: tab === 'extensions' },
   ];
-  const title = tab === 'extensions' ? 'Extensions' : 'Store settings';
   const subtitle = {
     store: 'Your store details, shown on messages and invoices.',
     sms: 'Your store details and how Dakly sends SMS, WhatsApp and email for you.',
-    extensions: 'Turn store features on and off for your store.',
   }[tab];
 
   return (
     <main className="space-y-6 p-4 md:p-8">
       <div>
-        <h1 className="text-xl font-bold md:text-2xl">{title}</h1>
+        <h1 className="text-xl font-bold md:text-2xl">Store settings</h1>
         <p className="mt-1 text-sm text-text-muted">{subtitle}</p>
       </div>
       <div className="grid gap-6 md:grid-cols-[14rem_minmax(0,1fr)]">
@@ -56,13 +47,13 @@ export function SettingsScreen({
   );
 }
 
-function SettingsBody({ tab, sms }: { tab: 'store' | 'sms' | 'extensions'; sms: ReactNode }) {
+function SettingsBody({ tab, sms }: { tab: 'store' | 'sms'; sms: ReactNode }) {
   const { data } = useSessionContext();
   const access = data?.currentStore;
   if (!access?.canViewStoreSettings)
     return <p role="status">Store details need Store settings access.</p>;
   if (tab === 'sms') return sms;
-  return <SettingsContent tab={tab} />;
+  return <SettingsContent />;
 }
 
 function SettingsGroup({ heading, links }: { heading: string; links: SettingsLink[] }) {
