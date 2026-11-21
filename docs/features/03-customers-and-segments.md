@@ -35,7 +35,10 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   transaction, so the event and the contact commit or roll back together.
 - `GET /contacts` (`customers.view`) lists the store's contacts, newest first, with
   `cursor` and `limit` (default 50, at most 100). Filters: `kind`, one `tag`, and
-  `search`. Deleted contacts are never listed.
+  `search`. Deleted contacts are never listed. Each row also carries `whatsappPhone` (masked
+  like `phone`), `email`, `district`, `source` and `consentedChannels`, the channels whose
+  latest consent answer is granted, for the Columns picker. The profile and the other routes
+  keep the short contact shape.
 - `GET /contacts/:contactId` (`customers.view`) returns one contact with its channel
   identities (channel, connection and profile name), read only. A deleted contact
   reads as not found.
@@ -95,7 +98,18 @@ The web app has two customer screens.
   Next page links. Tabs filter by kind (All, Customer, Lead, Chat only, Not a customer). A
   search box takes a name or a mobile number and a tag box takes one tag. The kind, search,
   tag and page live in the URL. A name search under 3 letters shows the API's message on the
-  search field. Rows link to the profile and become cards on a phone. Members with Edit
+  search field. Rows link to the profile and become cards on a phone. The Columns button, after
+  Search customers, opens a menu of Phone, WhatsApp, Email, Location, Source, Tags and Consent,
+  each a checkbox that stays open while the owner changes several. Customer and Type always
+  show. Phone and WhatsApp are on until the owner changes them; the rest start off, as in the
+  design. The choice is the `columns` value in the address (a comma list; absent means the
+  defaults, empty means none) so it survives a reload and a shared link, and it carries through
+  the tabs, search and paging. WhatsApp shows the WhatsApp number, or the phone when none is
+  set. Location is the district. Consent shows a green tag for each channel the customer
+  agreed to; a customer who agreed to none shows "None". An empty cell says what is missing
+  (No email, No location, No tags). The design also strikes through channels the customer has
+  not agreed to; the screen lists only the agreed ones. Orders, Spent and Last purchase wait
+  for order totals on the list. Members with Edit
   Customers press Add customers and choose Add manually or Import from an Excel or CSV file. The manual
   form shows a phone the store already has as an error on the phone field. Add by voice, Scan
   your khata, Connect your store and Connect your POS are not offered until their tasks ship
@@ -138,7 +152,7 @@ The web app has two customer screens.
 - Both screens show the phone as the API sent it: full for members with "See full phone
   numbers", otherwise masked as `01712-XXX678`. A contact without a phone shows "No phone yet".
 - Not built yet, because no route gives the data: header totals and tab counts, sort, columns
-  (WhatsApp, Email, Location; CUS-17), bulk actions, the profile stats and its Orders, Activity,
+  for Orders, Spent and Last purchase, bulk actions, the profile stats and its Orders, Activity,
   Campaign history and Notes tabs, profile fields (Email, Address, Favourite category), quick
   actions (Call, WhatsApp, SMS), tag input inside the tags card, and the current consent answer
   per channel.
