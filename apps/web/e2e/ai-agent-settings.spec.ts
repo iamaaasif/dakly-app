@@ -367,24 +367,27 @@ test('shows the rated replies in the Feedback tab and filters them', async ({
     {
       name: 'Habib Rahman',
       ask: 'Panjabi er kapor ki?',
-      reply: 'Amader panjabi 100% cotton.',
+      reply: 'আমাদের পাঞ্জাবি ১০০% কটন।',
       rating: 'bad',
       reason: 'missed_the_question',
+      fixed: false,
     },
     {
       name: 'Arif Chowdhury',
       ask: 'Wholesale price koto?',
-      reply: 'Dam 2,450 taka.',
+      reply: 'দাম ৳2,450।',
       rating: 'bad',
-      reason: 'wrong_price_or_stock',
+      reason: 'should_have_handed_over',
+      fixed: true,
     },
-    {
-      name: 'Sadia Islam',
+    ...['Sadia Islam', 'Rumana Akter', 'Lamia Haque'].map((name) => ({
+      name,
       ask: 'Kurti M size ache?',
       reply: 'Ji, M size ache.',
       rating: 'good',
       reason: null,
-    },
+      fixed: false,
+    })),
   ].map((person) => ({ ...person, contactId: randomUUID(), conversationId: randomUUID() }));
   try {
     await database.pool.query(
@@ -416,9 +419,9 @@ test('shows the rated replies in the Feedback tab and filters them', async ({
         [storeId, person.conversationId, person.ask, identityId],
       );
       await database.pool.query(
-        `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at,ai_rating,ai_rating_reason,rated_at)
-         values(gen_random_uuid(),$1,$2,'out','ai','text',$3,'sent',now() - interval '1 hour',$4,$5,now())`,
-        [storeId, person.conversationId, person.reply, person.rating, person.reason],
+        `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status,created_at,ai_rating,ai_rating_reason,rated_at,ai_fixed_at)
+         values(gen_random_uuid(),$1,$2,'out','ai','text',$3,'sent',now() - interval '1 hour',$4,$5,now(),case when $6 then now() end)`,
+        [storeId, person.conversationId, person.reply, person.rating, person.reason, person.fixed],
       );
     }
     await context.addCookies([
@@ -437,9 +440,21 @@ test('shows the rated replies in the Feedback tab and filters them', async ({
     await page.goto('/chats?agent=feedback');
     const drawer = page.getByRole('dialog', { name: 'Dakly AI agent' });
     await expect(drawer.getByText('Habib Rahman')).toBeVisible();
-    await expect(drawer.getByText('33%')).toBeVisible();
+    await expect(drawer.getByText('60%')).toBeVisible();
     await expect(drawer.getByText('Sadia Islam')).toBeHidden();
+    await expect(drawer.getByText('Learned', { exact: true })).toBeVisible();
     await capture(page, 'feedback');
+    await drawer.getByRole('button', { name: 'Write the right answer' }).click();
+    const fix = page.getByRole('dialog', { name: 'Write the right answer' });
+    await expect(fix.getByLabel('When a customer asks')).toHaveValue('Panjabi er kapor ki?');
+    await fix.getByLabel('Dakly replies').fill('জি, আমাদের পাঞ্জাবি ১০০% কটন, কাপড় খুবই নরম।');
+    await fix.getByLabel(/Also use it for these words/).fill('kapor, কাপড়, cotton');
+    await capture(page, 'feedback-fix-dialog');
+    await fix.getByRole('button', { name: 'Save and teach Dakly' }).click();
+    await expect(fix).toBeHidden();
+    await expect(drawer.getByText('Learned', { exact: true })).toHaveCount(2);
+    await expect(drawer.getByRole('button', { name: 'Write the right answer' })).toHaveCount(0);
+    await capture(page, 'feedback-fixed');
     await drawer.getByRole('button', { name: 'Good answers' }).click();
     await expect(page).toHaveURL(/feedback=good/);
     await expect(drawer.getByText('Sadia Islam')).toBeVisible();
@@ -447,6 +462,7 @@ test('shows the rated replies in the Feedback tab and filters them', async ({
     await capture(page, 'feedback-good');
   } finally {
     const owned = [storeId, people.map((person) => person.conversationId)];
+    await database.pool.query('delete from knowledge_items where store_id = $1', [storeId]);
     await database.pool.query(
       'delete from messages where store_id = $1 and conversation_id = any($2::uuid[])',
       owned,
