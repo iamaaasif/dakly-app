@@ -17,6 +17,10 @@ export class GoogleIdentityError extends Error {
   }
 }
 
+function displayName(claim: unknown): string | undefined {
+  return typeof claim === 'string' ? claim.trim().slice(0, 120) || undefined : undefined;
+}
+
 export function googleIdentity(claims: {
   sub?: unknown;
   email?: unknown;
@@ -34,11 +38,10 @@ export function googleIdentity(claims: {
   )
     throw new GoogleIdentityError('GOOGLE_IDENTITY_INVALID');
   const email = claims.email.toLowerCase();
-  const name = typeof claims.name === 'string' ? claims.name.trim().slice(0, 120) : '';
   return {
     subject: claims.sub,
     email,
-    name: name || undefined,
+    name: displayName(claims.name),
     emailIsAuthoritative:
       email.endsWith('@gmail.com') || (typeof claims.hd === 'string' && claims.hd.length > 0),
   };
