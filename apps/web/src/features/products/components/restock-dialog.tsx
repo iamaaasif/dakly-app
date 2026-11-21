@@ -83,10 +83,13 @@ function RestockSize({ variant, waiting }: RestockSizeProps) {
   const { register } = useFormContext<RestockStockInput>();
   return (
     <li className="flex items-center gap-3">
-      <Label htmlFor={`restock-${variant.id}`} className="w-12 shrink-0 font-semibold">
+      <Label
+        htmlFor={`restock-${variant.id}`}
+        className="max-w-[30%] min-w-8 font-semibold break-all"
+      >
         {variant.title}
       </Label>
-      <span className="flex-1 text-sm text-text-muted">
+      <span className="min-w-0 flex-1 text-sm text-text-muted">
         {variant.available} now
         {waiting > 0 ? <span className="font-medium text-action"> · {waiting} waiting</span> : null}
       </span>
@@ -97,7 +100,7 @@ function RestockSize({ variant, waiting }: RestockSizeProps) {
         step={1}
         inputMode="numeric"
         placeholder="+0"
-        className="w-24"
+        className="w-24 shrink-0"
         {...register(`quantities.${variant.id}`, {
           setValueAs: (value) => (value === '' ? 0 : Number(value)),
         })}
