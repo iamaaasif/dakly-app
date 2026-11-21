@@ -203,7 +203,8 @@ function NewOrderProductLine({
         </FormField>
         <div className="space-y-2 text-sm">
           <p className="font-medium">Price</p>
-          <p className="min-h-10 rounded-md bg-surface-muted px-2 py-2 tabular-nums">
+          <p className="flex min-h-10 items-center gap-2 rounded-md bg-surface-muted px-2 py-2 tabular-nums">
+            {selected?.photoUrl ? <VariantThumbnail url={selected.photoUrl} /> : null}
             {selected ? formatMoney(selected.price) : '—'}
           </p>
         </div>
@@ -365,19 +366,23 @@ function OrderProductLine({
   );
 }
 
+function VariantThumbnail({ url }: { url: string }) {
+  return (
+    <Image
+      src={url}
+      alt=""
+      width={32}
+      height={32}
+      unoptimized
+      className="size-8 shrink-0 rounded-md object-cover"
+    />
+  );
+}
+
 function OrderVariantPrice({ variant }: { variant: VariantChoice }) {
   return (
     <div className="mt-1 flex items-center gap-2 text-text-muted">
-      {variant.photoUrl ? (
-        <Image
-          src={variant.photoUrl}
-          alt=""
-          width={32}
-          height={32}
-          unoptimized
-          className="size-8 shrink-0 rounded-md object-cover"
-        />
-      ) : null}
+      {variant.photoUrl ? <VariantThumbnail url={variant.photoUrl} /> : null}
       <p>
         {formatMoney(variant.price)}
         {variant.stock !== null ? ` · ${variant.stock} in stock` : ''}
