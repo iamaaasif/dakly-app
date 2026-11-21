@@ -226,6 +226,8 @@ export class IsolationFixture {
       'social_comments',
       'conversations',
       'posts',
+      'khata_rows',
+      'khata_pages',
       'due_messages',
       'due_entries',
       'contact_identities',

@@ -17,6 +17,9 @@ export const goldenCaseSchema = z.strictObject({
   // The photo the product card must carry, by its key in the eval catalog; null when no photo may
   // be sent, such as a colour the shop does not have.
   cardPhoto: z.string().min(1).nullable().optional(),
+  // A customer trying to inject a prompt, change a price, get a discount or read the instructions.
+  // Any reply to it, not only a wrong one, fails the run.
+  isAttack: z.boolean().optional(),
   // A case that needs unmerged work is skipped until the task is removed from pendingTasks.
   dependsOn: z.enum(['AI-10', 'AI-11', 'AI-12']).optional(),
 });

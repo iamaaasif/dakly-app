@@ -1,6 +1,6 @@
 {
-  "id": "49073721-6c14-4710-8a09-e5422b62528d",
-  "prevId": "71cc98a3-b4dd-47fa-bc98-47e8d465975a",
+  "id": "cd0d99a1-4e9f-4666-88b4-c2076567b97d",
+  "prevId": "8b88e46d-57a3-447f-b89b-07bc32c1b391",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3017,7 +3017,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'khata_scan')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -6833,7 +6833,7 @@
       "checkConstraints": {
         "usage_events_unit": {
           "name": "usage_events_unit",
-          "value": "\"usage_events\".\"unit\" in ('ai_conversation', 'ai_content', 'ai_ask')"
+          "value": "\"usage_events\".\"unit\" in ('ai_conversation', 'ai_content', 'ai_ask', 'ai_scan')"
         },
         "usage_events_source": {
           "name": "usage_events_source",
@@ -15129,6 +15129,431 @@
       },
       "isRLSEnabled": false
     },
+    "public.khata_pages": {
+      "name": "khata_pages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "file_id": {
+          "name": "file_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'uploaded'"
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claimed_at": {
+          "name": "claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "khata_pages_store_id_id_key": {
+          "name": "khata_pages_store_id_id_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_pages_store_id_created_at_idx": {
+          "name": "khata_pages_store_id_created_at_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_pages_file_id_idx": {
+          "name": "khata_pages_file_id_idx",
+          "columns": [
+            {
+              "expression": "file_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_pages_created_by_user_id_idx": {
+          "name": "khata_pages_created_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "created_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "khata_pages_store_id_stores_id_fk": {
+          "name": "khata_pages_store_id_stores_id_fk",
+          "tableFrom": "khata_pages",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "khata_pages_created_by_user_id_users_id_fk": {
+          "name": "khata_pages_created_by_user_id_users_id_fk",
+          "tableFrom": "khata_pages",
+          "tableTo": "users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "khata_pages_file_id_store_fk": {
+          "name": "khata_pages_file_id_store_fk",
+          "tableFrom": "khata_pages",
+          "tableTo": "files",
+          "columnsFrom": [
+            "store_id",
+            "file_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "khata_pages_status": {
+          "name": "khata_pages_status",
+          "value": "\"khata_pages\".\"status\" in ('uploaded', 'reading', 'read', 'unreadable', 'failed')"
+        },
+        "khata_pages_failure_code": {
+          "name": "khata_pages_failure_code",
+          "value": "\"khata_pages\".\"failure_code\" in ('allowance', 'model')"
+        },
+        "khata_pages_failure": {
+          "name": "khata_pages_failure",
+          "value": "(\"khata_pages\".\"status\" = 'failed') = (\"khata_pages\".\"failure_code\" is not null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.khata_rows": {
+      "name": "khata_rows",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "page_id": {
+          "name": "page_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "row_number": {
+          "name": "row_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "entry_date": {
+          "name": "entry_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "item": {
+          "name": "item",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "amount_poisha": {
+          "name": "amount_poisha",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "confidence": {
+          "name": "confidence",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "matched_contact_id": {
+          "name": "matched_contact_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "match_kind": {
+          "name": "match_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "khata_rows_page_id_row_number_key": {
+          "name": "khata_rows_page_id_row_number_key",
+          "columns": [
+            {
+              "expression": "page_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "row_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_rows_store_id_page_id_idx": {
+          "name": "khata_rows_store_id_page_id_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "page_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "khata_rows_matched_contact_id_idx": {
+          "name": "khata_rows_matched_contact_id_idx",
+          "columns": [
+            {
+              "expression": "matched_contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "khata_rows_store_id_stores_id_fk": {
+          "name": "khata_rows_store_id_stores_id_fk",
+          "tableFrom": "khata_rows",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "khata_rows_page_id_store_fk": {
+          "name": "khata_rows_page_id_store_fk",
+          "tableFrom": "khata_rows",
+          "tableTo": "khata_pages",
+          "columnsFrom": [
+            "store_id",
+            "page_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "khata_rows_matched_contact_id_store_fk": {
+          "name": "khata_rows_matched_contact_id_store_fk",
+          "tableFrom": "khata_rows",
+          "tableTo": "contacts",
+          "columnsFrom": [
+            "store_id",
+            "matched_contact_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "khata_rows_kind": {
+          "name": "khata_rows_kind",
+          "value": "\"khata_rows\".\"kind\" in ('sale', 'baki', 'payment')"
+        },
+        "khata_rows_match_kind": {
+          "name": "khata_rows_match_kind",
+          "value": "\"khata_rows\".\"match_kind\" in ('phone', 'similar_phone')"
+        },
+        "khata_rows_confidence": {
+          "name": "khata_rows_confidence",
+          "value": "\"khata_rows\".\"confidence\" between 0 and 100"
+        },
+        "khata_rows_amount": {
+          "name": "khata_rows_amount",
+          "value": "\"khata_rows\".\"amount_poisha\" > 0"
+        },
+        "khata_rows_match": {
+          "name": "khata_rows_match",
+          "value": "(\"khata_rows\".\"matched_contact_id\" is null) = (\"khata_rows\".\"match_kind\" is null)"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.delivery_zones": {
       "name": "delivery_zones",
       "schema": "",
@@ -18863,7 +19288,7 @@
       "checkConstraints": {
         "files_purpose": {
           "name": "files_purpose",
-          "value": "\"files\".\"purpose\" in ('product_image', 'post_media', 'knowledge_file', 'logo', 'import', 'export', 'sms_sender_document', 'data_export', 'staff_export', 'settlement_report')"
+          "value": "\"files\".\"purpose\" in ('product_image', 'post_media', 'knowledge_file', 'logo', 'import', 'export', 'sms_sender_document', 'khata_page', 'data_export', 'staff_export', 'settlement_report')"
         },
         "files_store": {
           "name": "files_store",
