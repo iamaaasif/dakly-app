@@ -184,11 +184,6 @@ function isUnconfirmed(
   return drafted;
 }
 
-const cardTexts = (results: ToolResult[]) =>
-  results.flatMap(({ tool, result }) =>
-    tool === CARD_TOOL && 'cardText' in result ? [String(result.cardText)] : [],
-  );
-
 function sourcesOf(results: ToolResult[]) {
   return results
     .map(({ tool, result }) => ({ tool, refs: refsIn(result) }))
