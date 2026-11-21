@@ -73,7 +73,15 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
           team.close(),
           security.close(),
           (async () => {
-            for (const table of ['store_daily_metrics', 'contacts', 'audit_log', 'memberships'])
+            for (const table of [
+              'store_daily_metrics',
+              'contacts',
+              'sms_sender_ids',
+              'files',
+              'audit_log',
+              'memberships',
+              'ai_runs',
+            ])
               await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
                 storeIds,
               ]);

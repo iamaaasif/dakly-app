@@ -14,6 +14,10 @@ const SMS_SENDER_ERRORS = {
     status: 409,
     message: 'A test SMS can only be sent from an approved sender name',
   },
+  SMS_SENDER_DOCUMENT_INVALID: {
+    status: 422,
+    message: 'Upload the trade licence and the NID again before you send the request',
+  },
   SMS_SENDER_TEST_RATE_LIMITED: { status: 429, message: 'Wait before sending another test SMS' },
   SMS_SENDER_TEST_PHONE_REQUIRED: {
     status: 409,

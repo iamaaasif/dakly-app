@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0076_snapshot.json`: **97 tables, 1305 columns, 400 explicit indexes and 304 foreign keys**.
+Built from `packages/db/migrations/meta/0077_snapshot.json`: **97 tables, 1307 columns, 401 explicit indexes and 305 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1273,6 +1273,7 @@ erDiagram
     users |o..o{ campaigns : "created_by_user_id"
     channel_connections |o..o{ campaigns : "store_id, channel_connection_id"
     whatsapp_templates |o..o{ campaigns : "store_id, whatsapp_template_id"
+    campaigns |o..o{ campaigns : "store_id, source_campaign_id"
     stores ||..o{ campaign_recipients : "store_id"
     campaigns ||..o{ campaign_recipients : "campaign_id"
     contacts ||..o{ campaign_recipients : "contact_id"
@@ -1407,6 +1408,8 @@ erDiagram
         jsonb content "NOT NULL; jsonb"
         uuid__ include_segment_ids "NOT NULL; uuid[]"
         uuid__ exclude_segment_ids "NOT NULL; uuid[]"
+        uuid source_campaign_id FK "NULL; uuid"
+        text source_outcome "NULL; text"
         text status "NOT NULL; text"
         text pause_reason "NULL; text"
         integer balance_pause_revision "NULL; integer"
@@ -1974,6 +1977,7 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `campaigns_created_by_user_id_users_id_fk`                           | `campaigns(created_by_user_id)`                           | `users(id)`                                 | no action |
 | `campaigns_channel_connection_id_store_fk`                           | `campaigns(store_id, channel_connection_id)`              | `channel_connections(store_id, id)`         | no action |
 | `campaigns_whatsapp_template_id_store_fk`                            | `campaigns(store_id, whatsapp_template_id)`               | `whatsapp_templates(store_id, id)`          | no action |
+| `campaigns_source_campaign_id_store_fk`                              | `campaigns(store_id, source_campaign_id)`                 | `campaigns(store_id, id)`                   | no action |
 | `tracked_link_visit_days_store_id_stores_id_fk`                      | `tracked_link_visit_days(store_id)`                       | `stores(id)`                                | no action |
 | `tracked_link_visit_days_tracked_link_id_tracked_links_id_fk`        | `tracked_link_visit_days(tracked_link_id)`                | `tracked_links(id)`                         | cascade   |
 | `tracked_link_visit_days_tracked_link_id_store_fk`                   | `tracked_link_visit_days(store_id, tracked_link_id)`      | `tracked_links(store_id, id)`               | cascade   |

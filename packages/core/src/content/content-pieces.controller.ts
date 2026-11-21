@@ -24,6 +24,7 @@ import {
 } from '@dakly/contracts/content';
 import {
   contentWriteRequestSchema,
+  type ContentCredits,
   type ContentWriteInput,
   type ContentWriteResult,
 } from '@dakly/contracts/content-writing';
@@ -47,6 +48,12 @@ export class ContentPiecesController {
     @Query(new ZodValidationPipe(contentPieceListQuerySchema)) query: ContentPieceListQuery,
   ): Promise<ContentPieceList> {
     return this.content.listPieces(storeId, query);
+  }
+
+  @Get('credits')
+  @RequirePermission('social.view')
+  credits(@CurrentStore() storeId: string): Promise<ContentCredits> {
+    return this.content.credits(storeId);
   }
 
   @Get(':contentPieceId')

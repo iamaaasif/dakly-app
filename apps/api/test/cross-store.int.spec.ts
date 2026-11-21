@@ -433,6 +433,34 @@ fixture('GET /contacts', async () => {
     expect(ids).not.toContain(foreign);
   }
 });
+fixture('GET /contacts/export', async () => {
+  const { a, b } = await pair();
+  const phones = { a: phone(), b: phone() };
+  await success(a, 'POST', '/contacts', 201, { name: 'own-a', phone: phones.a });
+  await success(b, 'POST', '/contacts', 201, { name: 'own-b', phone: phones.b });
+  for (const [shop, own, foreign] of [
+    [a, 'own-a', 'own-b'],
+    [b, 'own-b', 'own-a'],
+  ] as const) {
+    const result = await success(shop, 'GET', '/contacts/export', 200);
+    expect(result.headers['content-type']).toContain('spreadsheetml.sheet');
+    expect(result.headers['content-disposition']).toMatch(
+      /^attachment; filename="dakly-customers-\d{4}-\d{2}-\d{2}\.xlsx"$/,
+    );
+    const { readSheet } = await import('read-excel-file/node');
+    const rows = await readSheet(result.rawPayload);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]?.[0]).toBe(own);
+    expect(JSON.stringify(rows)).not.toContain(foreign);
+    const { rows: audit } = await f.admin.pool.query(
+      "select count(*)::int as count from audit_log where store_id = $1 and action = 'contacts.exported'",
+      [shop.id],
+    );
+    expect(audit[0].count).toBe(1);
+  }
+  expect((await f.request(b.member, 'GET', '/contacts/export')).statusCode).toBe(403);
+  expect((await f.request(a.owner, 'GET', '/contacts/export?limit=5')).statusCode).toBe(400);
+});
 async function matchSuggestion(shop: Shop) {
   const [contactId, matchedContactId] = [await contact(shop), await contact(shop)];
   const id = randomUUID();
@@ -1641,6 +1669,45 @@ fixture('POST /campaigns/:campaignId/duplicate', async () => {
   expect((await f.row('campaigns', copy.id)).store_id).toBe(a.id);
   await hidden(b, 'POST', (value) => `/campaigns/${value}/duplicate`, id);
 });
+// A sent Messenger campaign: SMS has no read receipts, so only Messenger can be resent.
+async function sentCampaign(shop: Shop, finishedHoursAgo: number, channel: 'sms' | 'messenger') {
+  const id = await approvableCampaign(shop);
+  const page = randomUUID();
+  await f.admin.pool.query(
+    "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values($1::uuid,$2,'facebook_page',$1::text,'Page')",
+    [page, shop.id],
+  );
+  await f.admin.pool.query(
+    `update campaigns set status='sent', approved_at=now(), channel=$3,
+       channel_connection_id=case when $3 = 'messenger' then $4::uuid end,
+       finished_at=now() - $2 * interval '1 hour'
+     where id=$1`,
+    [id, finishedHoursAgo, channel, page],
+  );
+  return id;
+}
+fixture('POST /campaigns/:campaignId/resend', async () => {
+  const { a, b } = await pair(),
+    id = await sentCampaign(a, 49, 'messenger');
+  const draft = (await success(a, 'POST', `/campaigns/${id}/resend`, 201)).json();
+  expect(draft).toMatchObject({
+    status: 'draft',
+    source: { campaignId: id, outcome: 'resend_unread' },
+  });
+  expect((await f.row('campaigns', draft.id)).store_id).toBe(a.id);
+  await hidden(b, 'POST', (value) => `/campaigns/${value}/resend`, id);
+  const sms = await sentCampaign(b, 49, 'sms');
+  const refused = await success(b, 'POST', `/campaigns/${sms}/resend`, 409);
+  expect(refused.json().error.code).toBe('CAMPAIGN_RESEND_NEEDS_READS');
+});
+fixture('POST /campaigns/:campaignId/follow-up', async () => {
+  const { a, b } = await pair(),
+    id = await sentCampaign(a, 1, 'sms');
+  const draft = (await success(a, 'POST', `/campaigns/${id}/follow-up`, 201)).json();
+  expect(draft).toMatchObject({ source: { campaignId: id, outcome: 'follow_up_unordered' } });
+  expect((await f.row('campaigns', draft.id)).store_id).toBe(a.id);
+  await hidden(b, 'POST', (value) => `/campaigns/${value}/follow-up`, id);
+});
 fixture('GET /campaigns/:campaignId/results', async () => {
   const { a, b } = await pair(),
     id = await approvableCampaign(a);
@@ -2688,9 +2755,31 @@ fixture('GET /wallets', async () => {
   });
   expect((await f.request(a.member, 'GET', '/wallets')).statusCode).toBe(403);
 });
+const documentInput = { contentType: 'application/pdf', sizeBytes: 4 };
+async function uploadedSmsDocument(shop: Shop) {
+  const issued = (
+    await success(shop, 'POST', '/sms-sender-ids/documents/upload-url', 200, documentInput)
+  ).json();
+  const response = await fetch(issued.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': documentInput.contentType },
+    body: new Uint8Array([37, 80, 68, 70]),
+  });
+  expect(response.status).toBe(200);
+  return { ...documentInput, fileId: issued.fileId as string };
+}
+async function confirmedSmsDocument(shop: Shop) {
+  const document = await uploadedSmsDocument(shop);
+  await success(shop, 'POST', '/sms-sender-ids/documents/confirm', 201, document);
+  return document.fileId;
+}
 async function smsSender(shop: Shop, status: 'requested' | 'approved' = 'requested') {
   const id = (
-    await success(shop, 'POST', '/sms-sender-ids', 201, { senderName: 'Rina Shop' })
+    await success(shop, 'POST', '/sms-sender-ids', 201, {
+      senderName: 'Rina Shop',
+      tradeLicenceFileId: await confirmedSmsDocument(shop),
+      nidFileId: await confirmedSmsDocument(shop),
+    })
   ).json().id as string;
   if (status === 'approved')
     await f.admin.pool.query("update sms_sender_ids set status='approved' where id=$1", [id]);
@@ -3467,6 +3556,50 @@ fixture('POST /sms-sender-ids', async () => {
   expect((await f.row('sms_sender_ids', own)).store_id).toBe(b.id);
   expect(await f.row('sms_sender_ids', id)).toEqual(before);
 });
+fixture('POST /sms-sender-ids/documents/upload-url', async () => {
+  const { b } = await pair();
+  const issued = (
+    await success(b, 'POST', '/sms-sender-ids/documents/upload-url', 200, documentInput)
+  ).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/sms_sender_document/${issued.fileId}`,
+  );
+  expect(await f.row('files', issued.fileId)).toBeUndefined();
+  const refused = [
+    [b.member, documentInput, 403],
+    [b.owner, { ...documentInput, sizeBytes: 5242881 }, 400],
+    [b.owner, { ...documentInput, contentType: 'image/gif' }, 400],
+  ] as const;
+  for (const [who, body, status] of refused)
+    expect(
+      (await f.request(who, 'POST', '/sms-sender-ids/documents/upload-url', body)).statusCode,
+    ).toBe(status);
+});
+fixture('POST /sms-sender-ids/documents/confirm', async () => {
+  const { a, b } = await pair();
+  const foreign = await uploadedSmsDocument(a);
+  const own = await uploadedSmsDocument(b);
+  await success(a, 'POST', '/sms-sender-ids/documents/confirm', 201, foreign);
+  await success(b, 'POST', '/sms-sender-ids/documents/confirm', 201, own);
+  expect(await f.row('files', own.fileId)).toMatchObject({
+    store_id: b.id,
+    purpose: 'sms_sender_document',
+    status: 'ready',
+  });
+  // The other shop's object lives under its own prefix, so this shop cannot claim it.
+  const before = await f.row('files', foreign.fileId);
+  const stolen = await f.request(b.owner, 'POST', '/sms-sender-ids/documents/confirm', foreign);
+  expect(stolen.statusCode, stolen.body).toBe(422);
+  expect(stolen.json().error.code).toBe('SMS_SENDER_DOCUMENT_INVALID');
+  expect(await f.row('files', foreign.fileId)).toEqual(before);
+  // A confirmed document of shop A cannot be attached to a request from shop B.
+  const attach = await f.request(b.owner, 'POST', '/sms-sender-ids', {
+    senderName: 'Karim Shop',
+    tradeLicenceFileId: foreign.fileId,
+    nidFileId: own.fileId,
+  });
+  expect(attach.statusCode, attach.body).toBe(422);
+});
 fixture('POST /sms-sender-ids/:smsSenderIdId/test', async () => {
   const { a, b } = await pair(),
     id = await smsSender(a, 'approved');
@@ -3850,6 +3983,30 @@ async function contentCharges(shop: Shop) {
   );
   return result.rows.map(({ quantity }) => quantity);
 }
+
+fixture('GET /content-pieces/credits', async () => {
+  const { a, b } = await pair();
+  await allowContentCredits(10);
+  const model = scriptWriter(() => ['One scarf', 'Two scarves', 'Three scarves']);
+  try {
+    await success(a, 'POST', '/content-pieces/generate', 200, {
+      operation: 'generate',
+      kind: 'facebook_post',
+      topic: 'Cotton scarves',
+      tone: 'friendly',
+      language: 'en',
+    });
+    const credits = async (shop: Shop) =>
+      (await success(shop, 'GET', '/content-pieces/credits', 200)).json();
+    expect(await credits(a)).toMatchObject({ allowance: 10, remaining: 7 });
+    expect(await credits(b)).toMatchObject({ allowance: 10, remaining: 10 });
+    expect(new Date((await credits(a)).resetsAt).getTime()).toBeGreaterThan(Date.now());
+    expect((await f.request(a.member, 'GET', '/content-pieces/credits')).statusCode).toBe(403);
+  } finally {
+    await f.admin.pool.query("update plans set limits=limits - 'ai_content' where id=$1", [f.plan]);
+    model.mockRestore();
+  }
+});
 
 fixture('POST /content-pieces/generate', async () => {
   const { a, b } = await pair();

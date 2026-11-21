@@ -5,17 +5,45 @@ import {
 } from '@dakly/contracts/contacts';
 import { formatCount } from '@dakly/contracts/money';
 
+import { xlsxToCsvFile } from './xlsx-to-csv';
+
 export const IMPORT_PREVIEW_ROWS = 20;
 
 export type ImportFileSummary = { header: string[]; rows: string[][]; rowCount: number };
 
 // Returns a message for the shop owner when the file cannot be imported.
-export function checkImportFile(file: File): string | undefined {
-  if (!file.name.toLowerCase().endsWith('.csv'))
-    return 'Only CSV files can be imported. In Excel, choose Save As, then CSV UTF-8.';
+function checkImportFile(file: File, excel = false): string | undefined {
+  const name = file.name.toLowerCase();
+  if (!name.endsWith('.csv') && !(excel && name.endsWith('.xlsx')))
+    return excel
+      ? 'Only Excel (.xlsx) or CSV files can be imported.'
+      : 'Only CSV files can be imported. In Excel, choose Save As, then CSV UTF-8.';
   if (file.size > MAX_IMPORT_FILE_BYTES) return 'A file can be at most 10 MB.';
   if (file.size === 0) return 'This file is empty.';
   return undefined;
+}
+
+// The file to upload, always CSV, with what the browser read from it, or a message for the owner.
+export async function prepareImportFile(
+  file: File,
+  rowName: string,
+  excel: boolean,
+): Promise<{ file: File; preview: ImportFileSummary } | string> {
+  const problem = checkImportFile(file, excel);
+  if (problem) return problem;
+  let csv = file;
+  if (file.name.toLowerCase().endsWith('.xlsx')) {
+    try {
+      csv = await xlsxToCsvFile(file);
+    } catch {
+      return 'This Excel file could not be read. Check that it is a .xlsx file.';
+    }
+    // The converted text is what the API checks, so it has its own size limit.
+    const tooLarge = checkImportFile(csv);
+    if (tooLarge) return tooLarge;
+  }
+  const preview = readImportFile(await csv.arrayBuffer(), rowName);
+  return typeof preview === 'string' ? preview : { file: csv, preview };
 }
 
 // `rowName` is what a row is in the file, such as customers, for the messages.

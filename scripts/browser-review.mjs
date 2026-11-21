@@ -100,6 +100,7 @@ export function browserReview(database, environment, accessKey) {
     async close() {
       for (const table of [
         'support_sessions',
+        'store_daily_metrics',
         'support_grants',
         'contacts',
         'audit_log',
