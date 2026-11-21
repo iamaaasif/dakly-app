@@ -3,7 +3,12 @@ import { z } from 'zod';
 
 import type { Database } from '@dakly/db/client';
 import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
-import { LlmError, type LlmEmbedding, type LlmResult } from '@dakly/providers/llm/llm-driver';
+import {
+  LlmError,
+  type LlmEmbedding,
+  type LlmResult,
+  type LlmTranscription,
+} from '@dakly/providers/llm/llm-driver';
 
 import { ScopedTransactions, type Transaction } from '../platform/database/scoped-transactions';
 import type { ConsumeUsageInput, UsageService } from '../usage/usage.service';
@@ -34,6 +39,7 @@ const billedRequest: AiRequest<z.infer<typeof schema>> = {
 
 const config: AiConfig = {
   embeddingModel: 'test-embedding',
+  transcribeModel: 'test-transcribe',
   models: { reply: model, writer: model, vision: model, fast: 'gpt-6-luna' },
   prices: {
     [model]: { input: 2_000_000, cachedInput: 250_000, output: 8_000_000 },
@@ -177,6 +183,32 @@ describe('AiService', () => {
     expect(used.size).toBe(0);
   });
 
+  it('bills a photo reading and a voice transcription as one chat unit each, once', async () => {
+    const { service, charges } = fixture([reply, reply], {
+      transcriptions: [{ model, text: 'ei saree ta ache?', usage }],
+    });
+    const photo = {
+      ...request,
+      tier: 'vision',
+      purpose: 'describe_image',
+      usageReference: 'media:m:0',
+    } as const;
+
+    await service.run(storeId, photo);
+    await service.run(storeId, photo);
+    await service.transcribe(storeId, {
+      audio: { contentType: 'audio/ogg', bytes: new Uint8Array([1]) },
+      hint: 'Bangla',
+      usageReference: 'media:m:1',
+    });
+
+    expect(charges.map(({ unit, quantity, reference }) => [unit, quantity, reference])).toEqual([
+      ['ai_conversation', 1, 'media:m:0'],
+      ['ai_conversation', 1, 'media:m:0'],
+      ['ai_conversation', 1, 'media:m:1'],
+    ]);
+  });
+
   it('records chat calls without consuming a conversation unit', async () => {
     const { service, used } = fixture([reply]);
 
@@ -232,6 +264,7 @@ function fixture(
     pausedWhileAdmitting?: boolean;
     failWrites?: boolean;
     embeddings?: (LlmEmbedding | Error)[];
+    transcriptions?: LlmTranscription[];
   } = {},
 ) {
   let failures = 0;
@@ -264,7 +297,7 @@ function fixture(
     },
   } as unknown as AiGate;
   const clock = { now: () => new Date('2026-11-18T15:00:00Z') };
-  const driver = new FakeLlmDriver(script, options.embeddings);
+  const driver = new FakeLlmDriver(script, options.embeddings, options.transcriptions);
   const service = new AiService(
     new AiRunsService(driver, repo, clock, gate),
     gate,

@@ -12,9 +12,12 @@ import { SignUpConsent } from './sign-up-consent';
 import { SignUpFields } from './sign-up-fields';
 import { formError } from '@/lib/form-error';
 
+const consentSchema = z.literal(true, {
+  error: 'Read and agree to the Terms and Privacy documents.',
+});
 const accountSchema = signUpSchema.extend({
-  password: passwordSchema,
-  consent: z.literal(true, { error: 'Read and agree to the Terms and Privacy documents.' }),
+  password: z.union([passwordSchema, z.literal('').transform(() => undefined)]),
+  consent: consentSchema,
   email: z.union([signUpSchema.shape.email, z.literal('').transform(() => undefined)]),
 });
 export function SignUpAccount({
@@ -22,7 +25,7 @@ export function SignUpAccount({
   onSent,
 }: {
   legal: NonNullable<AuthConfig['legal']>;
-  onSent: (account: { registration: SignUpInput; password: string }) => void;
+  onSent: (account: { registration: SignUpInput; password?: string }) => void;
 }) {
   const form = useForm({
     resolver: zodResolver(accountSchema),

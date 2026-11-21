@@ -3,7 +3,11 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
 import { chatClassificationSchema } from '@dakly/contracts/chat-classification';
-import type { handoverReasons } from '@dakly/contracts/chats';
+import {
+  isAwaitingReading,
+  messageAttachmentsSchema,
+  type handoverReasons,
+} from '@dakly/contracts/chats';
 
 import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
@@ -30,6 +34,9 @@ import { checkReplyFacts } from './reply-fact-check';
 import { type ComposedReply, SalesAgentService } from './sales-agent.service';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
+// Past this a stuck copy or reading no longer holds the reply back.
+const MEDIA_WAIT_LIMIT_MS = 3 * MINUTE_MS;
+const MEDIA_WAIT_MS = 3000;
 const HOLDING_REPLY = 'একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।';
 type Reason = (typeof handoverReasons)[number];
 type Turn = NonNullable<Awaited<ReturnType<InboxService['aiReplyTurn']>>>;
@@ -109,12 +116,11 @@ export class AiAgentService {
       await this.schedule(storeId, conversationId, turn.latest.id);
       return;
     }
-    const texts = burstText(turn, debounceSeconds * 1000);
-    // A window that already holds a unit finishes even when the allowance is used up.
-    const reference = await this.windowReference(storeId, turn.contactId);
-    const hasRoom =
-      (await this.usage.isConsumed(storeId, 'ai_conversation', reference)) ||
-      (await this.usage.hasAllowance(storeId, 'ai_conversation', 1));
+    const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
+    // A photo or voice note is read in the background; answering first would ignore what it says.
+    if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
+    const texts = burst.texts;
+    const hasRoom = await this.hasAllowanceRoom(storeId, turn.contactId);
     const reason = hasRoom ? await this.classify(storeId, texts) : 'allowance_used';
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
@@ -139,8 +145,17 @@ export class AiAgentService {
     return this.send(storeId, conversationId, candidate, composed);
   }
 
-  private retryLater() {
-    return { delayUntil: this.clock.now().getTime() + 1000 };
+  // A window that already holds a unit finishes even when the allowance is used up.
+  private async hasAllowanceRoom(storeId: string, contactId: string) {
+    const reference = await this.windowReference(storeId, contactId);
+    return (
+      (await this.usage.isConsumed(storeId, 'ai_conversation', reference)) ||
+      (await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
+    );
+  }
+
+  private retryLater(delayMs = 1000) {
+    return { delayUntil: this.clock.now().getTime() + delayMs };
   }
 
   private async eligibleTurn(
@@ -310,15 +325,21 @@ export class AiAgentService {
   }
 }
 
-function burstText(turn: Turn, delay: number) {
+function burstText(turn: Turn, delay: number, now: Date) {
   const texts: string[] = [];
+  let awaitingMedia = false;
   let previous = turn.latest.createdAt.getTime();
   for (const message of turn.inbound) {
     if (message.senderIdentityId !== turn.latest.senderIdentityId) break;
     const receivedAt = message.createdAt.getTime();
     if (previous - receivedAt > delay) break;
+    if (message.mediaText) texts.push(message.mediaText.slice(0, 2000));
     if (message.body) texts.push(message.body.slice(0, 2000));
+    const unread = messageAttachmentsSchema
+      .parse(message.attachments ?? [])
+      .some(isAwaitingReading);
+    if (unread && now.getTime() - receivedAt < MEDIA_WAIT_LIMIT_MS) awaitingMedia = true;
     previous = receivedAt;
   }
-  return texts.reverse();
+  return { texts: texts.reverse(), awaitingMedia };
 }

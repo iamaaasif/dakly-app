@@ -9,6 +9,7 @@ import {
   type LlmErrorCode,
   type LlmRequest,
   type LlmResult,
+  type LlmTranscriptionRequest,
 } from '@dakly/providers/llm/llm-driver';
 
 import { Clock } from '../platform/clock';
@@ -100,6 +101,36 @@ export class AiRunsService {
     }
     await this.record(storeId, context, { ...result, startedAt });
     return result;
+  }
+
+  // An unreadable audio file is not an error here; the caller gets the code and decides.
+  async transcribe(
+    storeId: string,
+    request: LlmTranscriptionRequest,
+    price: Price | undefined,
+  ): Promise<{ kind: 'output'; text: string } | { kind: 'failure'; code: LlmErrorCode }> {
+    const startedAt = this.clock.now();
+    const context: RunContext = {
+      tier: 'transcribe',
+      purpose: 'transcribe',
+      promptVersion: 'transcribe.v1',
+      price,
+    };
+    try {
+      const result = await this.driver.transcribe(request);
+      await this.record(storeId, context, { ...result, startedAt });
+      return { kind: 'output', text: result.text };
+    } catch (error) {
+      if (!(error instanceof LlmError)) throw error;
+      if (providerFailures.has(error.code)) await this.gate.recordFailure();
+      await this.record(storeId, context, {
+        model: request.model,
+        startedAt,
+        usage: error.usage ?? emptyUsage,
+        code: error.code,
+      });
+      return { kind: 'failure', code: error.code };
+    }
   }
 
   private record(

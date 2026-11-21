@@ -189,6 +189,11 @@ export default tseslint.config(
     },
   }),
   {
+    // The model eval CLI prints its result tables to the terminal.
+    files: ['packages/core/src/ai-eval/model-eval/eval-output.ts'],
+    rules: { 'no-console': 'off' },
+  },
+  {
     files: ['scripts/**/*.mjs', 'apps/web/*.spec.mjs'],
     languageOptions: { globals: { ...globals.node } },
     rules: { 'no-console': 'off' },

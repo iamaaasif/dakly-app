@@ -18,7 +18,7 @@ Source: [Google ID token verification](https://developers.google.com/identity/gs
 An existing Google subject remains the primary sign-in identity. For an unmatched
 subject, a Google-verified Gmail or Workspace address can establish email ownership.
 Other addresses need a fresh code sent to that exact mailbox before linking or
-before a signup ticket can carry a verified email. No address domain is permanently
+before a new account can take it as a verified email. No address domain is permanently
 excluded.
 
 The email challenge binds its subject, email, expected verified owner (or absence)

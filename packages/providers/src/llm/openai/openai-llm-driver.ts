@@ -7,6 +7,8 @@ import {
   type LlmEmbeddingRequest,
   type LlmRequest,
   type LlmResult,
+  type LlmTranscription,
+  type LlmTranscriptionRequest,
 } from '../llm-driver';
 
 const unsupportedSchemaKeywords = [
@@ -54,6 +56,13 @@ const message = z.object({
   ),
 });
 
+const transcriptionEnvelope = z.object({
+  text: z.string(),
+  usage: z
+    .object({ input_tokens: z.int().nonnegative(), output_tokens: z.int().nonnegative() })
+    .nullish(),
+});
+
 const embeddingEnvelope = z.object({
   model: z.string().min(1),
   data: z.array(
@@ -73,6 +82,31 @@ export class OpenAiLlmDriver implements LlmDriver {
 
   async respond(request: LlmRequest): Promise<LlmResult> {
     return decodeResponse(await this.post('responses', responseRequestBody(request), request));
+  }
+
+  async transcribe(request: LlmTranscriptionRequest): Promise<LlmTranscription> {
+    const form = new FormData();
+    form.append('model', request.model);
+    form.append('response_format', 'json');
+    form.append('prompt', request.hint);
+    form.append(
+      'file',
+      new Blob([request.audio.bytes], { type: request.audio.contentType }),
+      `voice.${audioExtensions[request.audio.contentType] ?? 'bin'}`,
+    );
+    const body = await this.post('audio/transcriptions', form, request);
+    const result = transcriptionEnvelope.safeParse(body);
+    if (!result.success) throw new LlmError('LLM_INVALID_RESPONSE');
+    const { text, usage } = result.data;
+    return {
+      model: request.model,
+      text: text.trim(),
+      usage: {
+        inputTokens: usage?.input_tokens ?? 0,
+        cachedInputTokens: 0,
+        outputTokens: usage?.output_tokens ?? 0,
+      },
+    };
   }
 
   async embed(request: LlmEmbeddingRequest): Promise<LlmEmbedding> {
@@ -105,8 +139,8 @@ export class OpenAiLlmDriver implements LlmDriver {
   }
 
   private async post(
-    path: 'responses' | 'embeddings',
-    body: string,
+    path: 'responses' | 'embeddings' | 'audio/transcriptions',
+    body: string | FormData,
     request: Pick<LlmRequest, 'timeoutMs' | 'signal'>,
   ): Promise<unknown> {
     const deadline = AbortSignal.timeout(request.timeoutMs);
@@ -114,7 +148,11 @@ export class OpenAiLlmDriver implements LlmDriver {
     try {
       const response = await this.request(`https://api.openai.com/v1/${path}`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        // A form body sets its own multipart content type and boundary.
+        headers:
+          typeof body === 'string'
+            ? { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' }
+            : { Authorization: `Bearer ${this.apiKey}` },
         body,
         redirect: 'error',
         signal,
@@ -130,12 +168,38 @@ export class OpenAiLlmDriver implements LlmDriver {
   }
 }
 
+const audioExtensions: Record<string, string> = {
+  'audio/mpeg': 'mp3',
+  'audio/mp4': 'm4a',
+  'audio/aac': 'aac',
+  'audio/ogg': 'ogg',
+  'audio/wav': 'wav',
+  'audio/webm': 'webm',
+};
+
+function userInput(request: LlmRequest) {
+  if (!request.images?.length) return request.input;
+  return [
+    {
+      role: 'user',
+      content: [
+        { type: 'input_text', text: request.input },
+        ...request.images.map(({ contentType, bytes }) => ({
+          type: 'input_image',
+          image_url: `data:${contentType};base64,${Buffer.from(bytes).toString('base64')}`,
+          detail: 'high',
+        })),
+      ],
+    },
+  ];
+}
+
 function responseRequestBody(request: LlmRequest): string {
   try {
     return JSON.stringify({
       model: request.model,
       instructions: request.instructions,
-      input: request.input,
+      input: userInput(request),
       store: false,
       text: {
         format: {

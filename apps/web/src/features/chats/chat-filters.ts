@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { aiFeedbackFilters } from '@dakly/contracts/ai-feedback';
 import { chatChannels } from '@dakly/contracts/channels';
 import type { ConversationListQuery } from '@dakly/contracts/chats';
 
@@ -25,6 +26,8 @@ export const chatScreenQuerySchema = z.strictObject({
   channel: z.enum(chatChannels).optional(),
   // The open AI agent drawer tab; absent when the drawer is closed.
   agent: z.enum(agentTabs).optional(),
+  // The Feedback tab's filter; the tab shows the bad answers when it is absent.
+  feedback: z.enum(aiFeedbackFilters).optional(),
 });
 
 export type ChatScreenQuery = z.infer<typeof chatScreenQuerySchema>;
@@ -48,6 +51,7 @@ export function chatsHref(query: Partial<ChatScreenQuery>) {
   if (query.tab && query.tab !== 'all') params.set('tab', query.tab);
   if (query.channel) params.set('channel', query.channel);
   if (query.agent) params.set('agent', query.agent);
+  if (query.agent && query.feedback) params.set('feedback', query.feedback);
   const search = params.toString();
   return search ? `/chats?${search}` : '/chats';
 }

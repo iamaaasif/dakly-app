@@ -80,6 +80,8 @@ export const messageAttachmentSchema = z.discriminatedUnion('status', [
     objectKey: z.string().min(1),
     contentType: z.string().min(1),
     sizeBytes: z.number().int().positive(),
+    // Set once the voice note was transcribed or the photo described, or the try was given up.
+    read: z.enum(['done', 'failed']).optional(),
   }),
   z.strictObject({
     kind: attachmentKindSchema,
@@ -89,6 +91,22 @@ export const messageAttachmentSchema = z.discriminatedUnion('status', [
 ]);
 export const messageAttachmentsSchema = z.array(messageAttachmentSchema);
 export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
+
+// Only photos and voice notes are read; video and files wait for a later task.
+export function isAwaitingReading(attachment: MessageAttachment): boolean {
+  if (attachment.kind !== 'image' && attachment.kind !== 'voice') return false;
+  return attachment.status === 'pending' || (attachment.status === 'stored' && !attachment.read);
+}
+
+// What the model reports about a customer's photo. searchWords are written for a product search,
+// in English and Bangla, so one photo finds the shop's item whichever language its name uses.
+export const photoReadingSchema = z.strictObject({
+  subject: z.enum(['product', 'payment_screenshot', 'other']),
+  description: z.string().max(400),
+  searchWords: z.array(z.string().min(1).max(40)).max(12),
+  visibleText: z.string().max(400),
+});
+export type PhotoReading = z.infer<typeof photoReadingSchema>;
 
 export const messageStatuses = [
   'received',

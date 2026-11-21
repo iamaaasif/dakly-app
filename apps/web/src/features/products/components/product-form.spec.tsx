@@ -59,6 +59,8 @@ function show(initial?: ProductResponse) {
       canEditProducts: true,
       canViewOrders: false,
       canEditOrders: false,
+      canViewDueBook: false,
+      canEditDueBook: false,
       canViewCampaigns: false,
       canViewAnalytics: false,
       canChangeAttributionWindow: false,

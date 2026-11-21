@@ -7,6 +7,8 @@ import { Button } from '@dakly/ui/button';
 
 import { useVerifyCode } from '../api/verify-code';
 import { useVerifyEmailCode } from '../api/verify-email-code';
+import { useCodeResend } from '../hooks/use-code-resend';
+import { ResendButton } from './resend-button';
 import { FormField as AuthField } from '@/components/form-field';
 import { formError } from '@/lib/form-error';
 
@@ -21,6 +23,7 @@ export function SignInCode({ target, method, onResult, onBack }: SignInCodeProps
   const form = useForm({ resolver: zodResolver(codeSchema), defaultValues: { code: '' } });
   const phone = useVerifyCode();
   const email = useVerifyEmailCode();
+  const { countdown, sending, resend } = useCodeResend(method, target.identifier, form.setError);
   return (
     <form
       method="post"
@@ -47,13 +50,15 @@ export function SignInCode({ target, method, onResult, onBack }: SignInCodeProps
         }
       })}
     >
-      <p>Enter the six-digit code we sent. Reloading this page starts sign-in again.</p>
+      <p>Enter the six-digit code we sent to {target.identifier}. It expires after ten minutes.</p>
       <AuthField
         label="Sign-in code"
         field={form.register('code')}
         error={form.formState.errors.code}
         inputMode="numeric"
         autoComplete="one-time-code"
+        maxLength={6}
+        className="text-center text-lg tracking-widest"
         autoFocus
       />
       {form.formState.errors.root ? (
@@ -64,9 +69,12 @@ export function SignInCode({ target, method, onResult, onBack }: SignInCodeProps
       <Button type="submit" loading={phone.isPending || email.isPending}>
         Verify code
       </Button>
-      <Button variant="secondary" onClick={onBack}>
-        Change sign-in details
-      </Button>
+      <div className="flex flex-wrap gap-3">
+        <ResendButton {...countdown} loading={sending} onClick={resend} />
+        <Button variant="secondary" onClick={onBack}>
+          Change sign-in details
+        </Button>
+      </div>
     </form>
   );
 }

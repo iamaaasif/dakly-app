@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -38,16 +38,16 @@ describe('Sign in', () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Mobile number'), '01712345678');
     await user.type(screen.getByLabelText('Password'), 'password123');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(screen.getByRole('button', { name: /^Sign in/ }));
     await waitFor(() => expect(completed).toBe(true));
   });
   it('offers real password, code and recovery entry points without requiring registration config', () => {
     show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
     expect(screen.getByLabelText('Mobile number')).toBeTruthy();
     expect(screen.getByLabelText('Password')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Get a code' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Get a code by/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Forgot password?' })).toBeTruthy();
-    expect(screen.getByText('Google sign-in is currently unavailable.')).toBeTruthy();
+    expect(screen.queryByText(/Google/)).toBeNull();
   });
   it.each([
     {
@@ -90,12 +90,11 @@ describe('Sign in', () => {
         screen.getByLabelText(method === 'phone' ? 'Mobile number' : 'Email'),
         target,
       );
-      await user.click(screen.getByLabelText('Keep me signed in on this device'));
       if (mode === 'password') {
         await user.type(screen.getByLabelText('Password'), 'my-password123');
-        await user.click(screen.getByRole('button', { name: 'Sign in' }));
+        await user.click(screen.getByRole('button', { name: /^Sign in/ }));
       } else {
-        await user.click(screen.getByRole('button', { name: 'Get a code' }));
+        await user.click(screen.getByRole('button', { name: /Get a code by/ }));
         await user.type(await screen.findByLabelText('Sign-in code'), '123456');
         await user.click(screen.getByRole('button', { name: 'Verify code' }));
       }
@@ -119,7 +118,26 @@ describe('Sign in', () => {
     rendered.rerender(view('email'));
     expect(
       (screen.getByLabelText('Keep me signed in on this device') as HTMLInputElement).checked,
-    ).toBe(true);
+    ).toBe(false);
+  });
+  it('lets someone ask for a new sign-in code after the 30 second wait', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const sent: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      sent.push(url);
+      return new Response(null, { status: 204 });
+    });
+    show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.type(screen.getByLabelText('Mobile number'), '01712345678');
+    await user.click(screen.getByRole('button', { name: /Get a code by/ }));
+    const resend = await screen.findByRole('button', { name: 'Resend code in 0:30' });
+    expect((resend as HTMLButtonElement).disabled).toBe(true);
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
+    await user.click(screen.getByRole('button', { name: 'Resend code' }));
+    await screen.findByRole('button', { name: 'Resend code in 0:30' });
+    expect(sent).toEqual(['/api/auth/code', '/api/auth/code']);
+    vi.useRealTimers();
   });
   it('maps API field errors back to the input without leaving the form', async () => {
     vi.stubGlobal('fetch', async () =>
@@ -138,7 +156,7 @@ describe('Sign in', () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Mobile number'), '01712345678');
     await user.type(screen.getByLabelText('Password'), 'password123');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(screen.getByRole('button', { name: /^Sign in/ }));
     await waitFor(() =>
       expect(screen.getByLabelText('Mobile number').getAttribute('aria-invalid')).toBe('true'),
     );

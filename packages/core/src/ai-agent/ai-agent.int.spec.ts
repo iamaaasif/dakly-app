@@ -379,6 +379,40 @@ it('answers after a routine classification', async () => {
   });
 });
 
+it('classifies the words of a voice note together with the message text', async () => {
+  const active = await shop();
+  const message = await receive(active, 'দাম কত?');
+  await admin.pool.query('update messages set media_text = $2 where id = $1', [
+    message.id,
+    'Voice note: ei saree ta ki stock e ache?',
+  ]);
+  const inputs = scriptSequence(classified, replyText('জি, আছে।'));
+
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+
+  expect(JSON.parse(inputs[0]!)).toEqual({
+    customer_messages: ['দাম কত?', 'Voice note: ei saree ta ki stock e ache?'],
+  });
+});
+
+it('waits for a voice note that is still being read instead of answering without it', async () => {
+  const active = await shop();
+  const message = await receive(active, 'দাম কত?');
+  await admin.pool.query('update messages set attachments = $2 where id = $1', [
+    message.id,
+    JSON.stringify([
+      { kind: 'voice', status: 'stored', objectKey: 'k', contentType: 'audio/ogg', sizeBytes: 3 },
+    ]),
+  ]);
+  const inputs = script(classification);
+
+  const result = await agent.reply(active.storeId, message.conversation_id, message.id);
+
+  expect(result).toEqual({ delayUntil: expect.any(Number) });
+  expect(inputs).toEqual([]);
+  expect((await observe(active)).replies).toEqual([]);
+});
+
 it('delays classification while the store has three model calls running', async () => {
   const active = await shop();
   const message = await receive(active, 'Hello');

@@ -119,7 +119,11 @@ export class DueBookService {
   async customer(storeId: string, contactId: string, access: Access): Promise<DueCustomerResponse> {
     const contact = await this.contacts.getById(storeId, contactId, access);
     const balance = await this.balances.balanceOf(storeId, contactId);
-    return { ...toBalanceResponse(contactId, balance), name: contact.name, phone: contact.phone };
+    return {
+      ...toBalanceResponse(contactId, balance),
+      name: contact.name,
+      phone: contact.phone,
+    };
   }
 
   async history(
@@ -152,7 +156,7 @@ export class DueBookService {
     const cursor = readCursor(query.cursor);
     const rows = await this.balances.listOwing(storeId, {
       overdueBefore: this.overdueBefore(),
-      onlyOverdue: query.filter === 'over_30_days',
+      filter: query.filter,
       cursor: cursor && { oldestDebtAt: cursor.occurredAt, contactId: cursor.id },
       limit: query.limit + 1,
     });
@@ -162,6 +166,7 @@ export class DueBookService {
       phone: row.phone && !access.seeFullPhone ? maskPhone(row.phone) : row.phone,
       balancePoisha: row.balancePoisha,
       oldestDebtAt: row.oldestDebtAt.toISOString(),
+      lastRemindedAt: row.lastRemindedAt?.toISOString() ?? null,
     }));
     const last = rows[query.limit - 1];
     return {

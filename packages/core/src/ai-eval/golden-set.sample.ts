@@ -1,4 +1,5 @@
 import type { EvalOutcome, GoldenCase } from './golden-case';
+import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 
 // A small starter set. The 200 anonymised beta chats replace it at M7.
 export const sampleGoldenCases: GoldenCase[] = [
@@ -54,3 +55,12 @@ export const sampleRecordedOutcomes: Record<string, EvalOutcome> = {
   'person-banglish': { kind: 'handover', reason: 'asked_for_person' },
   'discount-bn': { kind: 'handover', reason: 'discount' },
 };
+
+// Cases that need work not yet merged are skipped until the task leaves this list.
+export const pendingTasks: readonly NonNullable<GoldenCase['dependsOn']>[] = ['AI-11', 'AI-12'];
+
+export const activeGoldenCases = [...sampleGoldenCases, ...banglaGoldenCases].filter(
+  (golden) => !golden.dependsOn || !pendingTasks.includes(golden.dependsOn),
+);
+
+export const allRecordedOutcomes = { ...sampleRecordedOutcomes, ...banglaRecordedOutcomes };

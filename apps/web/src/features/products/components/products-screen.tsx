@@ -11,7 +11,7 @@ import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
 import { ProductResults } from './product-results';
 import { ProductSheet } from './product-sheet';
-import { StockAdjustmentForm } from './stock-adjustment-form';
+import { RestockDialog } from './restock-dialog';
 import { SessionDialog } from '@/components/session-dialog';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
@@ -71,7 +71,7 @@ export function ProductsScreen({
             }}
           />
         ) : null}
-        <SelectedStockAdjustment
+        <SelectedRestock
           products={products.data}
           variantId={canEdit ? adjust : undefined}
           onClose={() => router.replace(listHref)}
@@ -134,19 +134,18 @@ function AddProductModal({
   );
 }
 
-type SelectedStockAdjustmentProps = {
+type SelectedRestockProps = {
   products?: ProductListResponse;
   variantId?: string;
   onClose: () => void;
 };
-function SelectedStockAdjustment({ products, variantId, onClose }: SelectedStockAdjustmentProps) {
+function SelectedRestock({ products, variantId, onClose }: SelectedRestockProps) {
   if (!variantId || !products) return null;
   const product = products.items.find((item) =>
     item.variants.some((variant) => variant.id === variantId),
   );
-  const variant = product?.variants.find((item) => item.id === variantId);
-  if (!product || !variant) return <p role="alert">That variant is not on this page.</p>;
-  return <StockAdjustmentForm productName={product.name} variant={variant} onClose={onClose} />;
+  if (!product) return <p role="alert">That product is not on this page.</p>;
+  return <RestockDialog product={product} onClose={onClose} />;
 }
 
 type SelectedProductSheetProps = {
