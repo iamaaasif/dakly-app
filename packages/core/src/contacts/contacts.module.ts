@@ -16,6 +16,7 @@ import { ContactsController } from './contacts.controller';
 import { ContactsRepository } from './contacts.repository';
 import { ContactsService } from './contacts.service';
 import { ImportContactsRepository } from './import-contacts.repository';
+import { KhataCustomersService } from './khata-customers.service';
 import { OrderContactsRepository } from './order-contacts.repository';
 
 @Module({
@@ -24,6 +25,7 @@ import { OrderContactsRepository } from './order-contacts.repository';
   providers: [
     ContactsService,
     ContactDeletionService,
+    KhataCustomersService,
     ContactExportService,
     ContactExportRepository,
     ContactsRepository,
@@ -34,6 +36,11 @@ import { OrderContactsRepository } from './order-contacts.repository';
     ImportContactsRepository,
     OrderContactsRepository,
   ],
-  exports: [ContactsService, ContactIdentitiesService, ContactMatchSuggestionsService],
+  exports: [
+    ContactsService,
+    KhataCustomersService,
+    ContactIdentitiesService,
+    ContactMatchSuggestionsService,
+  ],
 })
 export class ContactsModule {}
