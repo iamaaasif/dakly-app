@@ -10,6 +10,7 @@ import {
   canManageMember,
   canApproveSends,
   canChangeExtensions,
+  canWriteOffDue,
 } from './permissions';
 
 const expectedAreas = [
@@ -51,6 +52,12 @@ describe('permission policy', () => {
     expect(
       canChangeExtensions({ ...builtInRoleAccess.owner, role: 'unknown' } as StoreAccess),
     ).toBe(false);
+  });
+  it('lets only Owner and Admin write off a debt, whatever the Due book level of a custom role', () => {
+    expect(canWriteOffDue(builtInRoleAccess.owner)).toBe(true);
+    expect(canWriteOffDue(builtInRoleAccess.admin)).toBe(true);
+    expect(canWriteOffDue(builtInRoleAccess.marketer)).toBe(false);
+    expect(canWriteOffDue({ ...customAccess, areas: { dueBook: 'edit' } })).toBe(false);
   });
   it('lets only Owner and Admin approve sends, whatever a custom role can edit', () => {
     expect(canApproveSends(builtInRoleAccess.owner)).toBe(true);

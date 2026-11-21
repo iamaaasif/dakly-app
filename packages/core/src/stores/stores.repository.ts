@@ -3,6 +3,7 @@ import { eq, sql } from 'drizzle-orm';
 
 import type {
   CreateStoreInput,
+  SetupProfile,
   StoreResponse,
   StoreSettingsResponse,
   ChangeStoreSettingsInput,
@@ -18,6 +19,11 @@ const storeColumns = {
   slug: stores.slug,
   extensions: stores.extensions,
 };
+const setupColumns = {
+  howYouSell: stores.howYouSell,
+  extensions: stores.extensions,
+  guideHidden: sql<boolean>`coalesce((${stores.settings}->>'setupGuideHidden')::boolean, false)`,
+};
 const settingsColumns = {
   ...storeColumns,
   legalName: stores.legalName,
@@ -30,12 +36,14 @@ const settingsColumns = {
   tradeLicenceNumber: stores.tradeLicenceNumber,
   sending: sql<unknown>`${stores.settings}->'sending'`,
   stock: sql<unknown>`${stores.settings}->'stock'`,
+  dueBook: sql<unknown>`${stores.settings}->'dueBook'`,
 };
 
 // The service parses the sending section and fills its defaults.
-export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending' | 'stock'> & {
+export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending' | 'stock' | 'dueBook'> & {
   sending: unknown;
   stock: unknown;
+  dueBook: unknown;
 };
 
 export type AttributionRebuild = {
@@ -178,7 +186,7 @@ export class StoresRepository {
 
   async changeSettings(
     storeId: string,
-    { sending, stock, ...columns }: ChangeStoreSettingsInput,
+    { sending, stock, dueBook, ...columns }: ChangeStoreSettingsInput,
     updatedAt: Date,
   ): Promise<StoreSettingsRow | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) => {
@@ -186,9 +194,11 @@ export class StoresRepository {
       if (sending)
         settings = sql`jsonb_set(${settings}, '{sending}', ${JSON.stringify(sending)}::jsonb)`;
       if (stock) settings = sql`jsonb_set(${settings}, '{stock}', ${JSON.stringify(stock)}::jsonb)`;
+      if (dueBook)
+        settings = sql`jsonb_set(${settings}, '{dueBook}', ${JSON.stringify(dueBook)}::jsonb)`;
       return tx
         .update(stores)
-        .set({ ...columns, updatedAt, ...((sending || stock) && { settings }) })
+        .set({ ...columns, updatedAt, ...((sending || stock || dueBook) && { settings }) })
         .where(eq(stores.id, storeId))
         .returning(settingsColumns);
     });
@@ -208,5 +218,48 @@ export class StoresRepository {
         .returning(settingsColumns),
     );
     return row;
+  }
+
+  async setupProfile(storeId: string): Promise<SetupProfile | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx.select(setupColumns).from(stores).where(eq(stores.id, storeId)).limit(1),
+    );
+    return row as SetupProfile | undefined;
+  }
+
+  // New answers mean new steps, so the guide comes back if it was hidden.
+  async changeHowYouSell(
+    storeId: string,
+    howYouSell: SetupProfile['howYouSell'],
+    extensions: string[],
+    updatedAt: Date,
+  ): Promise<SetupProfile | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .update(stores)
+        .set({
+          howYouSell,
+          extensions,
+          updatedAt,
+          settings: sql`${stores.settings} - 'setupGuideHidden'`,
+        })
+        .where(eq(stores.id, storeId))
+        .returning(setupColumns),
+    );
+    return row as SetupProfile | undefined;
+  }
+
+  async hideSetupGuide(storeId: string, updatedAt: Date): Promise<SetupProfile | undefined> {
+    const [row] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .update(stores)
+        .set({
+          updatedAt,
+          settings: sql`jsonb_set(${stores.settings}, '{setupGuideHidden}', 'true'::jsonb)`,
+        })
+        .where(eq(stores.id, storeId))
+        .returning(setupColumns),
+    );
+    return row as SetupProfile | undefined;
   }
 }

@@ -121,6 +121,53 @@ describe('ContactsRepository (Postgres)', () => {
     expect(saved!.id).not.toBe(deleted!.id);
   });
 
+  it('lists the columns for the Columns picker and only the channels the latest answer grants', async () => {
+    const [contact] = await admin.db
+      .insert(contacts)
+      .values({
+        storeId: storeB,
+        name: 'Column check',
+        phone: '01511100001',
+        whatsappPhone: '01511100002',
+        email: 'column@example.test',
+        district: 'Sylhet',
+        source: 'messenger',
+        kind: 'customer',
+        createdAt: new Date(Date.UTC(2030, 0, 1)),
+      })
+      .returning({ id: contacts.id });
+    const [noAnswer] = await admin.db
+      .insert(contacts)
+      .values({
+        storeId: storeB,
+        name: 'No answer',
+        source: 'manual',
+        kind: 'lead',
+        createdAt: new Date(Date.UTC(2029, 0, 1)),
+      })
+      .returning({ id: contacts.id });
+    await admin.db.execute(sql`
+      insert into consents(id, store_id, contact_id, channel, status, source, captured_at) values
+        (gen_random_uuid(), ${storeB}, ${contact!.id}, 'whatsapp', 'granted', 'manual', '2030-01-01T00:00:00Z'),
+        (gen_random_uuid(), ${storeB}, ${contact!.id}, 'sms', 'granted', 'manual', '2030-01-01T00:00:00Z'),
+        (gen_random_uuid(), ${storeB}, ${contact!.id}, 'sms', 'withdrawn', 'stop_keyword', '2030-01-02T00:00:00Z'),
+        (gen_random_uuid(), ${storeB}, ${contact!.id}, 'email', 'not_answered', 'import', '2030-01-01T00:00:00Z')`);
+
+    const [row, second] = await repository.list(storeB, { limit: 2 });
+
+    expect(row).toMatchObject({
+      id: contact!.id,
+      whatsappPhone: '01511100002',
+      email: 'column@example.test',
+      district: 'Sylhet',
+      source: 'messenger',
+      consentedChannels: ['whatsapp'],
+    });
+    // A contact nobody asked has an empty list, not null.
+    expect(second?.consentedChannels).toEqual([]);
+    await admin.db.execute(sql`delete from contacts where id in (${contact!.id}, ${noAnswer!.id})`);
+  });
+
   it('lists contacts newest first by kind, tag, name and phone, page by page', async () => {
     const [rina, karim, lead, deleted] = await admin.db
       .insert(contacts)

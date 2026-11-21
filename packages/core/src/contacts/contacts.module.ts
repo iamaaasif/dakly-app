@@ -5,6 +5,8 @@ import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { ContactDeletionService } from './contact-deletion.service';
+import { ContactExportRepository } from './contact-export.repository';
+import { ContactExportService } from './contact-export.service';
 import { ContactIdentitiesRepository } from './contact-identities.repository';
 import { ContactIdentitiesService } from './contact-identities.service';
 import { ContactMatchSuggestionsController } from './contact-match-suggestions.controller';
@@ -22,6 +24,8 @@ import { OrderContactsRepository } from './order-contacts.repository';
   providers: [
     ContactsService,
     ContactDeletionService,
+    ContactExportService,
+    ContactExportRepository,
     ContactsRepository,
     ContactIdentitiesRepository,
     ContactIdentitiesService,

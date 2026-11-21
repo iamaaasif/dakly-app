@@ -197,6 +197,16 @@ describe('UsageService.consume', () => {
     expect(await service.consume(storeId, ask('draft-1', 5))).toMatchObject({ quantity: 5 });
   });
 
+  it('summarises the allowance, what is left and when the period ends', async () => {
+    const { storeId } = await shop(5);
+    await service.consume(storeId, ask('draft-1', 2));
+    expect(await service.summary(storeId, 'ai_ask')).toEqual({
+      allowance: 5,
+      remaining: 3,
+      periodEnd: new Date('2026-12-16T04:00:00Z'),
+    });
+  });
+
   it('checks the current period allowance without spending a unit', async () => {
     const { storeId } = await shop(1);
     const another = await shop(0);

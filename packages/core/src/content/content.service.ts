@@ -14,6 +14,7 @@ import type {
 import {
   contentWriteOutputSchema,
   type ContentWriteInput,
+  type ContentCredits,
   type ContentWriteResult,
 } from '@dakly/contracts/content-writing';
 import type { ProductResponse } from '@dakly/contracts/products';
@@ -30,7 +31,7 @@ import { TeamService } from '../team/team.service';
 import { UsageService } from '../usage/usage.service';
 import { contentPieceNotFound, contentWriteError } from './content.errors';
 import { ContentRepository } from './content.repository';
-import { contentWritingV1 } from './prompts/content-writing.v1';
+import { contentWritingV2 } from './prompts/content-writing.v2';
 
 type Actor = Extract<AuditEntry['actor'], { kind: 'user' }>;
 
@@ -136,6 +137,11 @@ export class ContentService {
     });
   }
 
+  async credits(storeId: string): Promise<ContentCredits> {
+    const { allowance, remaining, periodEnd } = await this.usage.summary(storeId, 'ai_content');
+    return { allowance, remaining, resetsAt: periodEnd.toISOString() };
+  }
+
   async write(
     storeId: string,
     access: StoreAccess,
@@ -155,8 +161,7 @@ export class ContentService {
     const quantity = input.operation === 'generate' ? 3 : 1;
     if (!(await this.usage.hasAllowance(storeId, 'ai_content', quantity)))
       throw contentWriteError('CONTENT_CREDITS_UNAVAILABLE');
-    const avoided = brand.wordsToAvoid.map(normalize).filter(Boolean);
-    const limit = formatLimits[input.kind];
+    const { avoided, limit, hashtags } = writingChoices(input, brand);
     const output = contentWriteOutputSchema.refine(({ options }) =>
       validOptions(options, {
         quantity,
@@ -164,6 +169,7 @@ export class ContentService {
         supportedNumbers,
         pricePoisha: product?.pricePoisha,
         limit,
+        hashtags,
       }),
     );
     const result = await this.ai.run(storeId, {
@@ -171,7 +177,7 @@ export class ContentService {
       usageReference: randomUUID(),
       usageQuantity: quantity,
       tier: 'writer',
-      prompt: contentWritingV1,
+      prompt: contentWritingV2,
       input: JSON.stringify({ request, brand: visibleBrand, product, characterLimit: limit }),
       output,
     });
@@ -214,6 +220,21 @@ function productWritingDetails(product: ProductResponse) {
       : undefined;
   return { facts: { ...facts, pricePoisha }, numbers: numbersIn(JSON.stringify(facts)) };
 }
+
+// A left-out order line is checked like a word to avoid, so the model cannot add it anyway.
+function writingChoices(input: ContentWriteInput, brand: BrandProfile) {
+  const choices = input.operation === 'generate' ? input : undefined;
+  const avoided = [
+    ...brand.wordsToAvoid,
+    ...(choices?.orderLine === false ? [brand.callToActionBn, brand.callToActionEn] : []),
+  ]
+    .map((word) => normalize(word ?? ''))
+    .filter(Boolean);
+  const limit = Math.min(formatLimits[input.kind], lengthLimits[choices?.length ?? 'long']);
+  return { avoided, limit, hashtags: choices?.hashtags !== false };
+}
+
+const lengthLimits = { short: 300, medium: 700, long: 20_000 } as const;
 
 const formatLimits: Record<ContentWriteInput['kind'], number> = {
   facebook_post: 20_000,
@@ -270,6 +291,7 @@ function validOptions(
     supportedNumbers?: string[];
     pricePoisha?: number;
     limit: number;
+    hashtags: boolean;
   },
 ): boolean {
   if (options.length !== rules.quantity) return false;
@@ -278,6 +300,7 @@ function validOptions(
   return drafts.every(({ original, text }) => {
     if (!text || original.length > rules.limit || original.includes('\u0000')) return false;
     if (rules.avoided.some((word) => text.includes(word))) return false;
+    if (!rules.hashtags && /[#＃]\p{L}/u.test(original)) return false;
     const supportedNumbers = rules.supportedNumbers;
     return !supportedNumbers || validProductNumbers(text, supportedNumbers, rules.pricePoisha);
   });

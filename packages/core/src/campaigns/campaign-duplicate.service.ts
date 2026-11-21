@@ -36,6 +36,8 @@ export class CampaignDuplicateService {
       content: source.content,
       includeSegmentIds: source.includeSegmentIds,
       excludeSegmentIds: source.excludeSegmentIds,
+      sourceCampaignId: source.sourceCampaignId,
+      sourceOutcome: source.sourceOutcome,
       scheduledFor: null,
       createdByUserId: actor.kind === 'user' ? actor.userId : null,
     });

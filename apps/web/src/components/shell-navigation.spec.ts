@@ -54,6 +54,7 @@ describe('navigationGroups', () => {
         canEditAutomations: false,
         canViewCustomers: true,
         canCreateCustomer: false,
+        canExportCustomers: false,
         canViewChats: true,
         canEditChats: true,
         canViewSegments: true,

@@ -4,6 +4,7 @@ import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { OpenSmsSenderIdResponse, SmsSenderIdStatus } from '@dakly/contracts/sms-senders';
 import type { Database } from '@dakly/db/client';
 import { smsSenderIds } from '@dakly/db/schema/channels';
+import { files } from '@dakly/db/schema/platform';
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { isConstraintViolation } from '../platform/database/error-code';
@@ -32,17 +33,55 @@ export class SmsSendersRepository {
     @Inject(DATABASE) private readonly connection: Database,
   ) {}
 
+  async insertDocument(
+    storeId: string,
+    file: {
+      id: string;
+      objectKey: string;
+      contentType: string;
+      sizeBytes: number;
+      uploadedByUserId: string;
+      expiresAt: Date;
+    },
+  ): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(files)
+        .values({ ...file, storeId, purpose: 'sms_sender_document', status: 'ready' })
+        .onConflictDoNothing()
+        .returning({ id: files.id }),
+    );
+    return rows.length === 1;
+  }
+
+  async countDocuments(storeId: string, fileIds: string[]): Promise<number> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: files.id })
+        .from(files)
+        .where(
+          and(
+            eq(files.storeId, storeId),
+            eq(files.purpose, 'sms_sender_document'),
+            eq(files.status, 'ready'),
+            inArray(files.id, fileIds),
+          ),
+        ),
+    );
+    return rows.length;
+  }
+
   // Undefined when the store already has a sender that is not rejected.
   async insert(
     storeId: string,
-    senderName: string,
+    input: { senderName: string; tradeLicenceFileId: string; nidFileId: string },
     requestedByUserId: string,
   ): Promise<SmsSender | undefined> {
     try {
       const [row] = await this.database.forStore(storeId, (tx) =>
         tx
           .insert(smsSenderIds)
-          .values({ storeId, senderName, requestedByUserId })
+          .values({ storeId, requestedByUserId, ...input })
           .returning(senderColumns),
       );
       return row;
@@ -98,10 +137,15 @@ export class SmsSendersRepository {
     from: readonly SmsSenderIdStatus[],
     decision: SmsSenderDecision,
   ): Promise<SmsSender | undefined> {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
+    return this.database.forStore(storeId, async (tx) => {
+      const [before] = await tx
+        .select({ trade: smsSenderIds.tradeLicenceFileId, nid: smsSenderIds.nidFileId })
+        .from(smsSenderIds)
+        .where(and(eq(smsSenderIds.storeId, storeId), eq(smsSenderIds.id, id)))
+        .for('update');
+      const [row] = await tx
         .update(smsSenderIds)
-        .set(decision)
+        .set({ ...decision, tradeLicenceFileId: null, nidFileId: null })
         .where(
           and(
             eq(smsSenderIds.storeId, storeId),
@@ -109,9 +153,16 @@ export class SmsSendersRepository {
             inArray(smsSenderIds.status, [...from]),
           ),
         )
-        .returning(senderColumns),
-    );
-    return row;
+        .returning(senderColumns);
+      // The documents are only for the review; the purge job deletes them once nothing points at them.
+      const documentIds = [before?.trade, before?.nid].filter((fileId) => fileId != null);
+      if (row && documentIds.length > 0)
+        await tx
+          .update(files)
+          .set({ expiresAt: decision.decidedAt })
+          .where(and(eq(files.storeId, storeId), inArray(files.id, documentIds)));
+      return row;
+    });
   }
 
   // Staff read across stores through the definer function, never with row security off.

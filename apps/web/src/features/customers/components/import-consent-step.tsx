@@ -1,6 +1,7 @@
 import { useFormContext } from 'react-hook-form';
 
 import type { StartImportInput } from '@dakly/contracts/contacts';
+import { formatCount } from '@dakly/contracts/money';
 import { ApiError } from '@dakly/ui/api-client';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
@@ -41,13 +42,19 @@ export function ImportConsentStep({ rowCount, error, loading, onBack }: ImportCo
           />
         )}
       </FormField>
-      <p className="text-sm text-text-muted">{rowCount} rows in this file.</p>
+      <p className="text-sm text-text-muted">
+        {formatCount(rowCount)} {rowCount === 1 ? 'row' : 'rows'} in this file.
+      </p>
       {error ? (
         <p role="alert" className="text-danger">
           {error instanceof ApiError ? error.message : 'The import did not start. Try again.'}
         </p>
       ) : null}
-      <ImportStepActions onBack={onBack} next="Start import" loading={loading} />
+      <ImportStepActions
+        onBack={onBack}
+        next={`Import ${formatCount(rowCount)} ${rowCount === 1 ? 'customer' : 'customers'}`}
+        loading={loading}
+      />
     </div>
   );
 }
