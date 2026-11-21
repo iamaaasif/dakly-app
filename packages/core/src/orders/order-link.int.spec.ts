@@ -21,7 +21,9 @@ describe('public order link (Postgres)', () => {
   const f = new OwnerIsolationFixture();
   let app: INestApplicationContext;
   let service: OrderLinkService;
-  const ip = () => `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
+  // A fresh address each call, so a limit counted by one test never reaches another.
+  const ip = () =>
+    `2001:db8::${randomUUID().slice(0, 4)}:${randomUUID().slice(0, 4)}:${randomUUID().slice(0, 4)}`;
   const slugA = `shop-a-${randomUUID().slice(0, 8)}`;
   const slugB = `shop-b-${randomUUID().slice(0, 8)}`;
   const phone = () => `0171${Math.floor(1000000 + Math.random() * 8999999)}`;
