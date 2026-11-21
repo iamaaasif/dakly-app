@@ -113,6 +113,8 @@ Support session checks and Owner request lists read current rows without explici
 
 #### Billing operations and reconciliation
 
+Built so far (ADM-4, reconciliation queue): the `/reconciliation` screen lists settlement lines that are `unmatched` or `escalated`. Super admins and finance can mark a line as a gateway error (it leaves the queue) or escalate it (it stays). Both need a reason and a confirmation, and write `staff_audit_log` first in the same transaction. Analysts can read. Matching by hand, creating a refund from a line and the list of Dakly payments no line confirmed after 3 days wait for PAY-7 and the gateway drivers.
+
 - All invoices, payments and refunds across shops, with filters.
 - **Reconciliation queue:** lines from the nightly gateway settlement import that did not match a Dakly payment, and Dakly payments that no settlement line confirmed after 3 days. Actions: match by hand, mark as gateway error, create a refund, escalate.
 - **Dunning view:** shops in past\_due and read\_only, with retry history and one-click "Send reminder now".
