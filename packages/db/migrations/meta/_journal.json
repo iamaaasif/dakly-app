@@ -577,16 +577,23 @@
       "breakpoints": true
     },
     {
+      "idx": 82,
+      "version": "7",
+      "when": 1795251621528,
+      "tag": "0082_khata_scans",
+      "breakpoints": true
+    },
+    {
       "idx": 83,
       "version": "7",
-      "when": 1795252361217,
+      "when": 1795254292171,
       "tag": "0083_variant_images",
       "breakpoints": true
     },
     {
       "idx": 84,
       "version": "7",
-      "when": 1795252882702,
+      "when": 1795254355574,
       "tag": "0084_product_photo_tags",
       "breakpoints": true
     }
