@@ -2,9 +2,8 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 
 import { AccountSecurityEventsModule } from '../account-security-events/account-security-events.module';
-import { AiRateController } from './ai-rate.controller';
-import { AiRateModule } from '../ai-rate/ai-rate.module';
 import { AiCostModule } from '../ai-cost/ai-cost.module';
+import { AiRateModule } from '../ai-rate/ai-rate.module';
 import { AuditModule } from '../audit/audit.module';
 import { CodesModule } from '../auth/codes.module';
 import { SecurityNoticesModule } from '../auth/security-notices.module';
@@ -22,6 +21,7 @@ import { SmsModule } from '../sms/sms.module';
 import { SmsSendersModule } from '../sms-senders/sms-senders.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { AiRateController } from './ai-rate.controller';
 import { BreakGlassController } from './break-glass.controller';
 import { BreakGlassService } from './break-glass.service';
 import { KillSwitchAdminService } from './kill-switch-admin.service';

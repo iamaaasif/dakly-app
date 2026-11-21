@@ -10,11 +10,11 @@ import {
   type LlmTranscription,
 } from '@dakly/providers/llm/llm-driver';
 
+import type { AiRateService } from '../ai-rate/ai-rate.service';
 import { ScopedTransactions, type Transaction } from '../platform/database/scoped-transactions';
 import type { ConsumeUsageInput, UsageService } from '../usage/usage.service';
 import type { AiGate } from './ai-gate';
 import type { AiRun, AiRunsRepository } from './ai-runs.repository';
-import type { AiRateService } from '../ai-rate/ai-rate.service';
 import { AiRunsService } from './ai-runs.service';
 import type { AiConfig } from './ai.config';
 import { AiService, type AiRequest } from './ai.service';
