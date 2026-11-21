@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "ai_fixed_at" timestamp with time zone;

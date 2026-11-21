@@ -171,6 +171,8 @@ export const messages = pgTable(
     aiRatingReason: text('ai_rating_reason'),
     ratedByUserId: uuid('rated_by_user_id').references(() => users.id),
     ratedAt: timestamptz('rated_at'),
+    // Set when the team wrote the right answer for a bad AI reply and it became a taught answer.
+    aiFixedAt: timestamptz('ai_fixed_at'),
     sentAt: timestamptz('sent_at'),
     deliveredAt: timestamptz('delivered_at'),
     readAt: timestamptz('read_at'),

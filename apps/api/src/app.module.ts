@@ -12,6 +12,7 @@ import { AutomationsModule } from '@dakly/core/automations/automations.module';
 import { CampaignsModule } from '@dakly/core/campaigns/campaigns.module';
 import { MetaAuthorizationModule } from '@dakly/core/channels/meta-authorization.module';
 import { MetaWebhooksModule } from '@dakly/core/channels/meta-webhooks.module';
+import { CommentsModule } from '@dakly/core/comments/comments.module';
 import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { ContentModule } from '@dakly/core/content/content.module';
@@ -68,6 +69,7 @@ import { HealthController } from './health.controller';
     AiPracticeModule,
     KnowledgeModule,
     LinksModule,
+    CommentsModule,
     InboxModule,
     SegmentsModule,
     AutomationsModule,

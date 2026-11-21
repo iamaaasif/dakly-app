@@ -6,6 +6,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import {
   MetaRequestError,
   type ChannelDriver,
+  type CommentDriver,
   type OutboundMessage,
 } from '@dakly/providers/channel/channel-driver';
 
@@ -60,7 +61,8 @@ export class ChannelConnectionsService {
     @Inject(MetaPageSubscriptionsService)
     private readonly pageSubscriptions: MetaPageSubscriptionsService,
     @Inject(META_CHANNEL_DRIVER)
-    private readonly driver: Pick<ChannelDriver, 'send' | 'downloadMedia'> | null,
+    private readonly driver:
+      (Pick<ChannelDriver, 'send' | 'downloadMedia'> & Omit<CommentDriver, 'parseComments'>) | null,
   ) {}
 
   async list(
@@ -176,6 +178,61 @@ export class ChannelConnectionsService {
           { accountExternalId: externalAccountId, accessToken: token.toString() },
           toOutbound(channel, message),
         ),
+      );
+    } catch (error) {
+      await this.recordSendCredentialRejection(storeId, connectionId, ciphertext, error);
+      throw error;
+    } finally {
+      token.fill(0);
+    }
+  }
+
+  replyToMetaComment(
+    prepared: PreparedMetaSend,
+    comment: Parameters<CommentDriver['replyToComment']>[1],
+  ) {
+    return this.useMetaToken(prepared, 'meta_comment_reply', (driver, credentials) =>
+      driver.replyToComment(credentials, comment),
+    );
+  }
+
+  sendMetaPrivateReply(
+    prepared: PreparedMetaSend,
+    comment: Parameters<CommentDriver['sendPrivateReply']>[1],
+  ) {
+    return this.useMetaToken(prepared, 'meta_private_reply', (driver, credentials) =>
+      driver.sendPrivateReply(credentials, comment),
+    );
+  }
+
+  setMetaCommentHidden(
+    prepared: PreparedMetaSend,
+    comment: Parameters<CommentDriver['setCommentHidden']>[1],
+  ) {
+    return this.useMetaToken(prepared, 'meta_comment_hide', (driver, credentials) =>
+      driver.setCommentHidden(credentials, comment),
+    );
+  }
+
+  private async useMetaToken<T>(
+    prepared: PreparedMetaSend,
+    metric: string,
+    call: (
+      driver: NonNullable<ChannelConnectionsService['driver']>,
+      credentials: { accessToken: string; accountExternalId: string },
+    ) => Promise<T>,
+  ): Promise<T> {
+    if (hasDatabaseTransactionScope()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
+    if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
+    const { storeId, connectionId, ciphertext, externalAccountId, keyVersion } = prepared;
+    const token = this.encryption.decrypt(
+      { owner: 'store', storeId, purpose: 'channel-access-token' },
+      { ciphertext, keyVersion },
+    );
+    const driver = this.driver;
+    try {
+      return await measureVendorCall(this.logger, metric, 'Meta comment call measured', () =>
+        call(driver, { accessToken: token.toString(), accountExternalId: externalAccountId }),
       );
     } catch (error) {
       await this.recordSendCredentialRejection(storeId, connectionId, ciphertext, error);

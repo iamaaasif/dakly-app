@@ -127,15 +127,20 @@ export class ProductsService {
     return orderCatalogueProduct(product, this.storage);
   }
 
-  async searchForChat(storeId: string, text: string, limit: number): Promise<ChatProduct[]> {
-    return (await this.repository.searchForChat(storeId, text, limit)).map((product) =>
-      chatProduct(product, this.storage),
+  // Keeps the order of `ids`; an id that is no longer offerable is left out.
+  async getManyForChat(storeId: string, ids: string[]): Promise<ChatProduct[]> {
+    if (!ids.length) return [];
+    const found = new Map(
+      (await this.repository.findManyForChat(storeId, ids)).map((row) => [row.id, row]),
     );
+    return ids.flatMap((id) => {
+      const product = found.get(id);
+      return product ? [chatProduct(product, this.storage)] : [];
+    });
   }
 
-  // An empty search matches every active product shown in chats.
-  async hasChatProduct(storeId: string) {
-    return (await this.repository.searchForChat(storeId, '', 1)).length > 0;
+  hasChatProduct(storeId: string) {
+    return this.repository.hasForChat(storeId);
   }
 
   countForChat(storeId: string): Promise<number> {

@@ -25,6 +25,7 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { BuyerOrdersService } from '../orders/buyer-orders.service';
 import { ChatOrdersService } from '../orders/chat-orders.service';
 import { AppError } from '../platform/errors/app-error';
+import { ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 
 // The agent job supplies both ids. No tool argument can name another store or customer.
@@ -69,6 +70,7 @@ export class SalesAgentToolsService {
 
   constructor(
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(ProductSearchService) private readonly productSearch: ProductSearchService,
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(KnowledgeSearchService) private readonly knowledge: KnowledgeSearchService,
     @Inject(BuyerOrdersService) private readonly orders: BuyerOrdersService,
@@ -92,7 +94,7 @@ export class SalesAgentToolsService {
 
   private async searchProducts({ storeId }: ToolScope, raw: unknown) {
     const { query } = searchProductsTool.input.parse(raw);
-    const found = await this.products.searchForChat(storeId, query, SEARCH_PRODUCT_LIMIT);
+    const found = await this.productSearch.search(storeId, query, SEARCH_PRODUCT_LIMIT);
     return { products: found.map(productResult) };
   }
 
@@ -165,13 +167,19 @@ export class SalesAgentToolsService {
   }
 
   private async sendProductCard({ storeId }: ToolScope, raw: unknown) {
-    const { productId, variantId, photoId } = sendProductCardTool.input.parse(raw);
+    const { productId, variantId, photoId, withoutPhoto } = sendProductCardTool.input.parse(raw);
     const product = await this.products.getForChat(storeId, productId);
     const variant = variantId ? product.variants.find(({ id }) => id === variantId) : undefined;
     if (variantId && !variant) return { error: 'PRODUCT_VARIANT_NOT_FOUND' };
-    const photoFileId = cardPhotoId(product, variant, photoId);
+    const photoFileId = withoutPhoto ? null : cardPhotoId(product, variant, photoId);
     if (photoFileId === 'unknown') return { error: 'PHOTO_NOT_FOUND' };
-    return { cardText: productCardText(product, variant), photoFileId, ...productResult(product) };
+    return {
+      cardText: productCardText(product, variant),
+      photoFileId,
+      // A named size with no stock is shown as such, never as something to buy.
+      ...(variant && isOutOfStock(product, variant) ? { outOfStock: true } : {}),
+      ...productResult(product),
+    };
   }
 
   private async draftOrder({ storeId, contactId, chat }: ToolScope, raw: unknown) {
@@ -284,9 +292,15 @@ function cardPhotoId(
   return variant?.photoFileId ?? product.variants[0]?.photoFileId ?? null;
 }
 
-function productCardText(product: ChatProduct, only?: ChatProduct['variants'][number]) {
+type ChatVariant = ChatProduct['variants'][number];
+
+const isOutOfStock = (product: ChatProduct, variant: ChatVariant) =>
+  product.isStockTracked && variant.available <= 0;
+
+function productCardText(product: ChatProduct, only?: ChatVariant) {
   const lines = (only ? [only] : product.variants).map(
-    (variant) => `${variant.title}: ${formatMoney(variant.pricePoisha)}`,
+    (variant) =>
+      `${variant.title}: ${formatMoney(variant.pricePoisha)}${isOutOfStock(product, variant) ? ' · স্টক নেই (out of stock)' : ''}`,
   );
   return [product.name, ...lines].join('\n');
 }

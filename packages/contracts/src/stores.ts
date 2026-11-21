@@ -110,8 +110,8 @@ export type ChangeStoreSettingsInput = z.infer<typeof changeStoreSettingsSchema>
 
 export const changeStoreExtensionsSchema = z.strictObject({
   extensions: z
-    .array(z.enum(['chats', 'sales', 'social_auto_post']))
-    .max(3)
+    .array(z.enum(['chats', 'sales', 'social_auto_post', 'physical_shop']))
+    .max(4)
     .refine((values) => new Set(values).size === values.length, 'Choose each extension once'),
 });
 export type ChangeStoreExtensionsInput = z.infer<typeof changeStoreExtensionsSchema>;

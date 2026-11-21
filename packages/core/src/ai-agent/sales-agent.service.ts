@@ -129,19 +129,21 @@ export class SalesAgentService {
   // Stable parts first so the provider's prompt cache can reuse them.
   private async context(input: ComposeInput, candidates: ToolResult | undefined) {
     const shop = await this.stores.settings(input.storeId);
-    // A practice question has no conversation, so it has no history.
+    // A practice question has no saved conversation, so the question itself is the whole history.
     const history = input.chat
       ? await this.inbox.messages(input.storeId, input.chat.conversationId, {
           limit: HISTORY_LENGTH,
         })
-      : { items: [] };
-    const conversation = history.items
-      .filter((message) => message.kind !== 'note' && message.body)
-      .reverse()
-      .map((message) => ({
-        from: message.direction === 'in' ? 'customer' : 'shop',
-        text: message.body?.slice(0, 2000),
-      }));
+      : undefined;
+    const conversation = history
+      ? history.items
+          .filter((message) => message.kind !== 'note' && message.body)
+          .reverse()
+          .map((message) => ({
+            from: message.direction === 'in' ? 'customer' : 'shop',
+            text: message.body?.slice(0, 2000),
+          }))
+      : input.customerTexts.map((text) => ({ from: 'customer', text: text.slice(0, 2000) }));
     return [
       `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
       `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,

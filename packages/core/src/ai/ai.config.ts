@@ -27,6 +27,7 @@ export type AiConfig = {
 
 const standardPrices: AiConfig['prices'] = {
   'text-embedding-3-small': { input: 20_000, cachedInput: 0, output: 0 },
+  'text-embedding-3-large': { input: 130_000, cachedInput: 0, output: 0 },
   'gpt-4o-transcribe': { input: 6_000_000, cachedInput: 0, output: 10_000_000 },
   'gpt-6.1-terra': { input: 1_000_000, cachedInput: 50_000, output: 5_000_000 },
   'gpt-6-luna': { input: 100_000, cachedInput: 10_000, output: 500_000 },

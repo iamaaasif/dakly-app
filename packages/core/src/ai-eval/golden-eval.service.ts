@@ -46,7 +46,7 @@ export class GoldenEvalService {
   }
 
   private async alertStaff(report: EvalReport) {
-    const text = `Dakly golden-set eval failed. Wrong prices: ${report.wrongPriceCaseIds.length}; out-of-stock offers: ${report.outOfStockOfferCaseIds.length}; products found: ${report.productFound} of ${report.productCases}; hand-overs correct: ${report.handoverCorrect} of ${report.handoverCases}. Cases: ${[...report.wrongPriceCaseIds, ...report.outOfStockOfferCaseIds, ...report.missedProductCaseIds, ...report.missedHandoverCaseIds].join(', ')}.`;
+    const text = `Dakly golden-set eval failed. Wrong prices: ${report.wrongPriceCaseIds.length}; out-of-stock offers: ${report.outOfStockOfferCaseIds.length}; wrong photos: ${report.wrongPhotoCaseIds.length}; products found: ${report.productFound} of ${report.productCases}; hand-overs correct: ${report.handoverCorrect} of ${report.handoverCases}. Cases: ${[...report.wrongPriceCaseIds, ...report.outOfStockOfferCaseIds, ...report.wrongPhotoCaseIds, ...report.missedProductCaseIds, ...report.missedHandoverCaseIds].join(', ')}.`;
     try {
       if (!(await this.alerts.notify(`golden-eval-${Date.now()}`, text)))
         this.logger.warn('Golden-set eval failed and Slack is not configured');

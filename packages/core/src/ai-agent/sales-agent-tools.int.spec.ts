@@ -273,7 +273,7 @@ it('searches only this store knowledge', async () => {
     );
     await admin.pool.query(
       'insert into knowledge_chunks (id, store_id, knowledge_item_id, content, embedding, embedding_model, token_count) values (gen_random_uuid(), $1, $2, $3, $4::vector, $5, 5)',
-      [id, itemId, text, vector, process.env.AI_EMBEDDING_MODEL ?? 'text-embedding-3-small'],
+      [id, itemId, text, vector, process.env.AI_EMBEDDING_MODEL ?? 'text-embedding-3-large'],
     );
   }
   const result = (await run(storeId, buyer, 'search_knowledge', { question: 'return policy' })) as {
@@ -298,7 +298,7 @@ it('counts a use only when the search happens in a real chat', async () => {
       itemId,
       'Return within 3 days',
       vector,
-      process.env.AI_EMBEDDING_MODEL ?? 'text-embedding-3-small',
+      process.env.AI_EMBEDDING_MODEL ?? 'text-embedding-3-large',
     ],
   );
   const timesUsed = async () =>

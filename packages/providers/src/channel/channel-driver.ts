@@ -67,6 +67,41 @@ export type SendResult = {
   imageRejected?: true;
 };
 
+// A comment on one of the shop's own Facebook Page posts or Instagram media.
+export type InboundComment = {
+  channel: Exclude<ChannelKind, 'whatsapp'>;
+  accountExternalId: string;
+  externalPostId: string;
+  externalCommentId: string;
+  parentExternalCommentId: string | null;
+  authorExternalId: string;
+  authorName: string | null;
+  text: string;
+  commentedAt: Date;
+};
+
+type CommentTarget = {
+  channel: Exclude<ChannelKind, 'whatsapp'>;
+  externalCommentId: string;
+};
+
+export type CommentDriver = {
+  parseComments(payload: unknown): InboundComment[];
+  replyToComment(
+    credentials: ChannelCredentials,
+    comment: CommentTarget & { text: string },
+  ): Promise<{ externalReplyId: string }>;
+  // Meta allows one private reply per comment, within 7 days, and opens a chat with the author.
+  sendPrivateReply(
+    credentials: ChannelCredentials,
+    comment: CommentTarget & { text: string },
+  ): Promise<{ externalMessageId: string; recipientExternalId: string }>;
+  setCommentHidden(
+    credentials: ChannelCredentials,
+    comment: CommentTarget & { hidden: boolean },
+  ): Promise<void>;
+};
+
 export type ChannelDriver = {
   readonly kind: ChannelKind;
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string): boolean;

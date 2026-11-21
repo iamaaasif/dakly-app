@@ -144,7 +144,7 @@ The Import from a CSV button sits beside Add product for members who can edit pr
 4. Movement kinds: `reserve`, `release`, `ship`, `return`, `adjust`, `import`.
 5. Products with stock tracking off skip all of this and never block an order.
 6. Readiness labels are computed, not stored. Running low is any tracked variant at or under the store threshold (default 3).
-7. Each product has AI aliases ("kurti", "কুর্তি", "three piece") stored as a list. The search embedding rebuild job waits for AI-3.
+7. Each product has AI aliases ("kurti", "কুর্তি", "three piece") stored as a list. The search embedding is rebuilt by a job on `product.updated` (AI-10); products saved before it get one on their next edit.
 8. Restock: when a variant goes from 0 to available and people are on its waiting list, the owner is prompted to notify them. Sending is never automatic.
 
 Photos upload straight to R2 with a presigned URL; the API never streams files.
@@ -249,12 +249,14 @@ reply sender can attach images. Photo search (AI-11) should index variant photos
 PROD-8 tags each photo for the AI. Confirming a product or variant photo raises `product.photo_added`;
 `TagProductPhotoJob` (queue `inbound`) sends the photo to the `vision` tier with the prompt
 `tag-product-photo.v1` and saves a short English description and up to 12 tags, colour first, in English
-and Bangla (`red, লাল, kurti, কুর্তি`) on the `files` row (`photo_description`, `photo_tags`). Each photo
-uses one unit of the Chats AI allowance (`ai_conversation`) under the reference `product-photo:<fileId>`,
-so a retry is free; with no allowance the photo stays untagged and is still shown normally. A photo that
+and Bangla (`red, লাল, kurti, কুর্তি`) on the `files` row (`photo_description`, `photo_tags`). The run is recorded
+as `tag_product_photo` and does not use the Chats AI allowance; this is a working assumption until the
+scan allowance is set. A photo that does not get tags is still shown normally. A photo that
 already has tags is skipped. The AI tools list every photo of a product and its variants with its tags
 (`photos` in `search_products`, `get_product` and `send_product_card`), and `send_product_card` takes an
-optional `photoId`. That is how a product with no variants but a red and a blue photo still shows the red
+optional `photoId`. When no photo matches the colour asked for, the AI sets `withoutPhoto` so the card goes
+out as text and says that colour is unavailable. A card for an out-of-stock variant ends with
+"স্টক নেই (out of stock)" and the result carries `outOfStock: true`. That is how a product with no variants but a red and a blue photo still shows the red
 one when the customer asks for red. Existing photos are not tagged retroactively.
 
 PROD-9 sends the chosen photo in chat. When `send_product_card` returns a `photoFileId`, the sales

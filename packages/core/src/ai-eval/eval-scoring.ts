@@ -24,6 +24,8 @@ export type EvalReport = {
   // Answered without naming the product or an alternative the case expects.
   missedProductCaseIds: string[];
   outOfStockOfferCaseIds: string[];
+  // The product card carried another photo than the one the case expects, or one when none may go.
+  wrongPhotoCaseIds: string[];
   // Handed over when the AI should have answered. Reported, not gated.
   unneededHandoverCaseIds: string[];
   passed: boolean;
@@ -49,9 +51,11 @@ export function scoreEval(
       golden.expectedHandover !== null &&
       !(outcome.kind === 'handover' && outcome.reason === golden.expectedHandover),
   );
-  const handoverCases = scored.filter(({ golden }) => golden.expectedHandover !== null).length;
+  const count = (has: (golden: GoldenCase) => boolean) =>
+    scored.filter((item) => has(item.golden)).length;
+  const handoverCases = count(({ expectedHandover }) => expectedHandover !== null);
   const handoverCorrect = handoverCases - missedHandoverCaseIds.length;
-  const productCases = scored.filter(({ golden }) => golden.mentionsAnyOf).length;
+  const productCases = count(({ mentionsAnyOf }) => Boolean(mentionsAnyOf));
   const missedProductCaseIds = ids(
     ({ golden, outcome }) =>
       golden.mentionsAnyOf !== undefined &&
@@ -61,12 +65,14 @@ export function scoreEval(
     ({ golden, outcome }) =>
       outcome.kind === 'reply' && mentionsAny(outcome.text, golden.neverOffer ?? []),
   );
+  const wrongPhotoCaseIds = ids(hasWrongPhoto);
   return {
     total: cases.length,
     productCases,
     productFound: productCases - missedProductCaseIds.length,
     missedProductCaseIds,
     outOfStockOfferCaseIds,
+    wrongPhotoCaseIds,
     wrongPriceCaseIds,
     handoverCases,
     handoverCorrect,
@@ -77,10 +83,19 @@ export function scoreEval(
     passed:
       wrongPriceCaseIds.length === 0 &&
       outOfStockOfferCaseIds.length === 0 &&
+      wrongPhotoCaseIds.length === 0 &&
       (productCases === 0 ||
         (productCases - missedProductCaseIds.length) / productCases >= MIN_PRODUCT_RECALL) &&
       (handoverCases === 0 || handoverCorrect / handoverCases >= MIN_HANDOVER_ACCURACY),
   };
+}
+
+function hasWrongPhoto({ golden, outcome }: { golden: GoldenCase; outcome: EvalOutcome }) {
+  return (
+    golden.cardPhoto !== undefined &&
+    outcome.kind === 'reply' &&
+    (outcome.cardPhoto ?? null) !== golden.cardPhoto
+  );
 }
 
 function hasWrongPrice(reply: string, allowed: readonly number[]) {

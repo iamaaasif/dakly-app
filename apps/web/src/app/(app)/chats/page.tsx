@@ -7,7 +7,7 @@ import { requireSession } from '@/lib/require-session';
 export default async function ChatsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; channel?: string }>;
+  searchParams: Promise<{ tab?: string; channel?: string; post?: string }>;
 }) {
   const session = await requireSession();
   if (!session.currentStore?.canViewChats)
