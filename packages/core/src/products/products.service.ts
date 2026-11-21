@@ -30,6 +30,7 @@ import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provi
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { chatProduct, orderCatalogueProduct, type ChatProduct } from './product-catalogue-views';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { productError } from './products.errors';
 import {
@@ -40,6 +41,7 @@ import {
   type Variant,
 } from './products.repository';
 
+export type { ChatProduct };
 type Actor = AuditEntry['actor'];
 
 @Injectable()
@@ -240,6 +242,12 @@ export class ProductsService {
       )
         throw productError('PRODUCT_NOT_FOUND');
       await this.publishUpdated(storeId, productId);
+      await this.outbox.publish({
+        type: 'product.photo_added',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { productId, fileId: input.fileId },
+      });
       return this.getById(storeId, productId);
     });
   }
@@ -325,57 +333,6 @@ export class ProductsService {
       payload: { productId },
     });
   }
-}
-
-type OrderCatalogueVariant = OrderCatalogueProduct['variants'][number];
-export type ChatProduct = Omit<OrderCatalogueProduct, 'variants'> &
-  Pick<ProductResponse, 'description' | 'category'> & {
-    variants: (OrderCatalogueVariant & { photoFileId: string | null })[];
-  };
-
-function chatProduct(product: CatalogueProduct, storage: FileStorageDriver): ChatProduct {
-  return {
-    ...orderCatalogueProduct(product, storage),
-    variants: product.variants.map((variant) => ({
-      ...orderCatalogueVariant(product, variant, storage),
-      photoFileId: effectivePhoto(product, variant)?.id ?? null,
-    })),
-    description: product.description,
-    category: product.category,
-  };
-}
-
-// A variant without its own photo shows the product's first photo.
-function effectivePhoto(product: CatalogueProduct, variant: CatalogueVariant) {
-  return variant.photos[0] ?? product.photos[0];
-}
-
-function orderCatalogueVariant(
-  product: CatalogueProduct,
-  variant: CatalogueVariant,
-  storage: FileStorageDriver,
-): OrderCatalogueVariant {
-  const photo = effectivePhoto(product, variant);
-  return {
-    id: variant.id,
-    title: variant.title,
-    isDefault: variant.isDefault,
-    pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
-    available: variant.onHand - variant.reserved,
-    photoUrl: photo ? storage.createDownloadUrl(photo.objectKey, 15 * 60) : null,
-  };
-}
-
-function orderCatalogueProduct(
-  product: CatalogueProduct,
-  storage: FileStorageDriver,
-): OrderCatalogueProduct {
-  return {
-    id: product.id,
-    name: product.name,
-    isStockTracked: product.isStockTracked,
-    variants: product.variants.map((variant) => orderCatalogueVariant(product, variant, storage)),
-  };
 }
 
 function toResponse(

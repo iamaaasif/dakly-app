@@ -78,6 +78,8 @@ import {
 } from '@dakly/core/platform/queue/job-dispatcher';
 import { QUEUES } from '@dakly/core/platform/queue/queues';
 import { toRedisConnection } from '@dakly/core/platform/queue/redis-connection';
+import { TagProductPhotoJob } from '@dakly/core/products/jobs/tag-product-photo.job';
+import { ProductPhotoTagsModule } from '@dakly/core/products/product-photo-tags.module';
 import { SocialPublishingModule } from '@dakly/core/social/social-publishing.module';
 
 import { JobSchedulers } from './job-schedulers';
@@ -105,6 +107,7 @@ import { JobSchedulers } from './job-schedulers';
     FailStuckImportsJob,
     RunContactImport,
     RunProductImport,
+    TagProductPhotoJob,
     UndoContactImport,
     StreamNotificationOnCreated,
     WakeSnoozedNotificationsJob,
@@ -161,6 +164,7 @@ import { JobSchedulers } from './job-schedulers';
     ClockModule,
     DueBookModule,
     ImportsModule,
+    ProductPhotoTagsModule,
     ContactStatsRepairModule,
     AnalyticsModule,
     PaymentJobsModule,

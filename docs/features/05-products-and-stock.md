@@ -246,6 +246,17 @@ else the product's). The AI tool `send_product_card` takes an optional `variantI
 `photoFileId` to show (the variant's own, else the product's first); cards are still sent as text until the
 reply sender can attach images. Photo search (AI-11) should index variant photos with their variant.
 
+PROD-8 tags each photo for the AI. Confirming a product or variant photo raises `product.photo_added`;
+`TagProductPhotoJob` (queue `inbound`) sends the photo to the `vision` tier with the prompt
+`tag-product-photo.v1` and saves a short English description and up to 12 tags, colour first, in English
+and Bangla (`red, লাল, kurti, কুর্তি`) on the `files` row (`photo_description`, `photo_tags`). Each photo
+uses one unit of the Chats AI allowance (`ai_conversation`) under the reference `product-photo:<fileId>`,
+so a retry is free; with no allowance the photo stays untagged and is still shown normally. A photo that
+already has tags is skipped. The AI tools list every photo of a product and its variants with its tags
+(`photos` in `search_products`, `get_product` and `send_product_card`), and `send_product_card` takes an
+optional `photoId`. That is how a product with no variants but a red and a blue photo still shows the red
+one when the customer asks for red. Existing photos are not tagged retroactively.
+
 Adjust opening stock after saving through the list. The low-stock threshold
 belongs to the shop.
 

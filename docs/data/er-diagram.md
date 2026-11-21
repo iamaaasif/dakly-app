@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0081_snapshot.json`: **99 tables, 1333 columns, 408 explicit indexes and 312 foreign keys**.
+Built from `packages/db/migrations/meta/0082_snapshot.json`: **99 tables, 1335 columns, 408 explicit indexes and 312 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1846,6 +1846,8 @@ erDiagram
         text purpose "NOT NULL; text"
         text object_key UK "NOT NULL; text"
         text file_name "NULL; text"
+        text photo_description "NULL; text"
+        text__ photo_tags "NULL; text[]"
         text content_type "NOT NULL; text"
         bigint size_bytes "NOT NULL; bigint"
         bytea sha256 "NULL; bytea"

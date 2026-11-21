@@ -165,12 +165,12 @@ export class SalesAgentToolsService {
   }
 
   private async sendProductCard({ storeId }: ToolScope, raw: unknown) {
-    const { productId, variantId } = sendProductCardTool.input.parse(raw);
+    const { productId, variantId, photoId } = sendProductCardTool.input.parse(raw);
     const product = await this.products.getForChat(storeId, productId);
     const variant = variantId ? product.variants.find(({ id }) => id === variantId) : undefined;
     if (variantId && !variant) return { error: 'PRODUCT_VARIANT_NOT_FOUND' };
-    // The variant's own photo, else the product's first one; sending it is up to the reply sender.
-    const photoFileId = variant?.photoFileId ?? product.variants[0]?.photoFileId ?? null;
+    const photoFileId = cardPhotoId(product, variant, photoId);
+    if (photoFileId === 'unknown') return { error: 'PHOTO_NOT_FOUND' };
     return { cardText: productCardText(product, variant), photoFileId, ...productResult(product) };
   }
 
@@ -258,6 +258,12 @@ function productResult(product: ChatProduct) {
     name: product.name,
     category: product.category,
     description: product.description,
+    photos: product.photos.map(({ id, variantId, description, tags }) => ({
+      photoId: id,
+      variantId,
+      description,
+      tags,
+    })),
     variants: product.variants.map((variant) => ({
       variantId: variant.id,
       title: variant.title,
@@ -265,6 +271,17 @@ function productResult(product: ChatProduct) {
       stock: product.isStockTracked ? variant.available : null,
     })),
   };
+}
+
+// The photo the model chose, else the variant's own, else the product's first one; sending it is
+// up to the reply sender.
+function cardPhotoId(
+  product: ChatProduct,
+  variant: ChatProduct['variants'][number] | undefined,
+  photoId: string | undefined,
+) {
+  if (photoId) return product.photos.some(({ id }) => id === photoId) ? photoId : 'unknown';
+  return variant?.photoFileId ?? product.variants[0]?.photoFileId ?? null;
 }
 
 function productCardText(product: ChatProduct, only?: ChatProduct['variants'][number]) {

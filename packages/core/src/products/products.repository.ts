@@ -15,6 +15,7 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import {
   photoSnapshot,
   type CatalogueVariant,
+  type PhotoRef,
   type Variant,
   variantSnapshot,
 } from './product-snapshots.repository';
@@ -53,7 +54,7 @@ const variantColumns = {
 };
 export type CatalogueProduct = Product & {
   variants: CatalogueVariant[];
-  photos: { id: string; objectKey: string }[];
+  photos: PhotoRef[];
 };
 type PhotoWrite = ConfirmProductPhotoInput & {
   objectKey: string;
