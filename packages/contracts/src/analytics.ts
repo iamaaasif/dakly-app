@@ -19,6 +19,8 @@ export const campaignSorts = [
   'return',
 ] as const;
 export type AnalyticsTab = (typeof analyticsTabs)[number];
+// The AI agent tab has no CSV download yet, so it is a screen tab only.
+export const analyticsViewTabs = [...analyticsTabs, 'ai-agent'] as const;
 
 // ANA-R8: no period over 12 months in release 1.
 const periodDays = { '30': 30, '90': 90, '365': 365 } as const;
@@ -36,7 +38,7 @@ export const analyticsExportQuerySchema = z.strictObject({
 export type AnalyticsExportQuery = z.infer<typeof analyticsExportQuerySchema>;
 // What the page keeps in the URL: the tab, the period, the Compare toggle and the Campaigns table filters.
 export const analyticsViewSchema = z.object({
-  tab: z.enum(analyticsTabs).default('overview'),
+  tab: z.enum(analyticsViewTabs).default('overview'),
   period: analyticsQuerySchema.shape.period,
   compare: z
     .enum(['on', 'off'])

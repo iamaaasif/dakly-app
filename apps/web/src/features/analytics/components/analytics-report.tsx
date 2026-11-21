@@ -2,6 +2,7 @@ import type { AnalyticsOverviewResponse, AnalyticsView } from '@dakly/contracts/
 import type { AttributionSettingsResponse } from '@dakly/contracts/stores';
 import { cn } from '@dakly/ui/cn';
 
+import { AnalyticsAiAgentTab } from './analytics-ai-agent-tab';
 import { AnalyticsAutomationsTab } from './analytics-automations-tab';
 import { AnalyticsCampaignsTab } from './analytics-campaigns-tab';
 import { AnalyticsChannelsTab } from './analytics-channels-tab';
@@ -44,6 +45,7 @@ function TabContent({ data, view }: Pick<Props, 'data' | 'view'>) {
     return <AnalyticsCampaignsTab view={view} timeZone={data.timeZone} />;
   if (view.tab === 'automations') return <AnalyticsAutomationsTab view={view} />;
   if (view.tab === 'channels') return <AnalyticsChannelsTab view={view} />;
+  if (view.tab === 'ai-agent') return <AnalyticsAiAgentTab view={view} />;
   if (view.tab === 'social') return <AnalyticsSocialTab view={view} timeZone={data.timeZone} />;
   return <AnalyticsOverviewTab data={data} view={view} />;
 }
