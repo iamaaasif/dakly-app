@@ -43,7 +43,7 @@ export type NewKhataRow = {
   matchedContactId: string | null;
   matchKind: KhataMatchKind | null;
 };
-export type StoredKhataRow = NewKhataRow & { id: string; pageId: string };
+export type StoredKhataRow = typeof khataRows.$inferSelect;
 
 const pageColumns = {
   id: khataPages.id,
@@ -115,20 +115,7 @@ export class KhataScansRepository {
     if (pageIds.length === 0) return [];
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({
-          id: khataRows.id,
-          pageId: khataRows.pageId,
-          rowNumber: khataRows.rowNumber,
-          entryDate: khataRows.entryDate,
-          name: khataRows.name,
-          phone: khataRows.phone,
-          item: khataRows.item,
-          amountPoisha: khataRows.amountPoisha,
-          kind: khataRows.kind,
-          confidence: khataRows.confidence,
-          matchedContactId: khataRows.matchedContactId,
-          matchKind: khataRows.matchKind,
-        })
+        .select()
         .from(khataRows)
         .where(and(eq(khataRows.storeId, storeId), inArray(khataRows.pageId, pageIds)))
         .orderBy(khataRows.pageId, khataRows.rowNumber),

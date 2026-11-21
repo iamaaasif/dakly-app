@@ -375,7 +375,7 @@ erDiagram
 
 ## Channels, customers and chats
 
-Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `khata-scans.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`.
+Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`.
 
 ```mermaid
 erDiagram
@@ -427,12 +427,6 @@ erDiagram
     users |o..o{ imports : "started_by_user_id"
     files ||..o{ imports : "store_id, file_id"
     files |o..o{ imports : "store_id, report_file_id"
-    stores ||..o{ khata_pages : "store_id"
-    users |o..o{ khata_pages : "created_by_user_id"
-    files ||..o{ khata_pages : "store_id, file_id"
-    stores ||..o{ khata_rows : "store_id"
-    khata_pages ||..o{ khata_rows : "store_id, page_id"
-    contacts |o..o{ khata_rows : "store_id, matched_contact_id"
     contacts ||--o| contact_memories : "contact_id"
     stores ||..o{ contact_memories : "store_id"
     users |o..o{ contact_memories : "edited_by_user_id"
@@ -651,33 +645,6 @@ erDiagram
         integer requeue_count "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
-    }
-    khata_pages {
-        uuid id PK "NOT NULL; uuid"
-        uuid store_id FK "NOT NULL; uuid"
-        uuid file_id FK "NOT NULL; uuid"
-        text status "NOT NULL; text"
-        text failure_code "NULL; text"
-        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
-        uuid created_by_user_id FK "NULL; uuid"
-        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
-        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
-    }
-    khata_rows {
-        uuid id PK "NOT NULL; uuid"
-        uuid store_id FK "NOT NULL; uuid"
-        uuid page_id FK "NOT NULL; uuid"
-        integer row_number "NOT NULL; integer"
-        date entry_date "NULL; date"
-        text name "NOT NULL; text"
-        text phone "NULL; text"
-        text item "NULL; text"
-        bigint amount_poisha "NOT NULL; bigint"
-        text kind "NOT NULL; text"
-        smallint confidence "NOT NULL; smallint"
-        uuid matched_contact_id FK "NULL; uuid"
-        text match_kind "NULL; text"
-        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     contact_memories {
         uuid contact_id PK,FK "NOT NULL; uuid"
@@ -1170,7 +1137,7 @@ erDiagram
 
 ## AI
 
-Schema files: `ai.ts`.
+Schema files: `ai.ts`, `khata-scans.ts`.
 
 ```mermaid
 erDiagram
@@ -1190,6 +1157,12 @@ erDiagram
     stores ||..o{ ai_runs : "store_id"
     stores ||..o{ assistant_messages : "store_id"
     users ||..o{ assistant_messages : "user_id"
+    stores ||..o{ khata_pages : "store_id"
+    users |o..o{ khata_pages : "created_by_user_id"
+    files ||..o{ khata_pages : "store_id, file_id"
+    stores ||..o{ khata_rows : "store_id"
+    khata_pages ||..o{ khata_rows : "store_id, page_id"
+    contacts |o..o{ khata_rows : "store_id, matched_contact_id"
     ai_agent_settings {
         uuid store_id PK,FK "NOT NULL; uuid"
         boolean is_auto_reply_on "NOT NULL; boolean"
@@ -1274,6 +1247,33 @@ erDiagram
         text content "NOT NULL; text"
         jsonb data_used "NULL; jsonb"
         uuid ai_run_id "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    khata_pages {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid file_id FK "NOT NULL; uuid"
+        text status "NOT NULL; text"
+        text failure_code "NULL; text"
+        timestamp_with_time_zone claimed_at "NULL; timestamp with time zone"
+        uuid created_by_user_id FK "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    khata_rows {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid page_id FK "NOT NULL; uuid"
+        integer row_number "NOT NULL; integer"
+        date entry_date "NULL; date"
+        text name "NOT NULL; text"
+        text phone "NULL; text"
+        text item "NULL; text"
+        bigint amount_poisha "NOT NULL; bigint"
+        text kind "NOT NULL; text"
+        smallint confidence "NOT NULL; smallint"
+        uuid matched_contact_id FK "NULL; uuid"
+        text match_kind "NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
 ```
