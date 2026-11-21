@@ -271,15 +271,4 @@ describe('KhataScansService (Postgres)', () => {
       failureCode: 'model',
     });
   });
-
-  it('lists the newest pages first with their rows', async () => {
-    const { storeId, userId } = await shop(5);
-    const first = await uploadedPage(storeId, userId);
-    const second = await uploadedPage(storeId, userId);
-    const page = await service.listPages(storeId, { limit: 1 });
-    expect(page.items.map((item) => item.id)).toEqual([second]);
-    expect((await service.listPages(storeId, { limit: 1, cursor: second })).items[0]?.id).toBe(
-      first,
-    );
-  });
 });

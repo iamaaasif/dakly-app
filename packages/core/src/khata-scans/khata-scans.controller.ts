@@ -7,17 +7,13 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Query,
 } from '@nestjs/common';
 
 import {
   type CreateKhataPageInput,
-  type KhataPageListQuery,
-  type KhataPageListResponse,
   type KhataPageResponse,
   type KhataPageUploadResponse,
   createKhataPageSchema,
-  khataPageListQuerySchema,
 } from '@dakly/contracts/khata-scans';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
@@ -48,15 +44,6 @@ export class KhataScansController {
     @Param('pageId', ParseUUIDPipe) pageId: string,
   ): Promise<KhataPageResponse> {
     return this.khataScans.requestRead(storeId, pageId);
-  }
-
-  @Get()
-  @RequirePermission('customers.edit')
-  list(
-    @CurrentStore() storeId: string,
-    @Query(new ZodValidationPipe(khataPageListQuerySchema)) query: KhataPageListQuery,
-  ): Promise<KhataPageListResponse> {
-    return this.khataScans.listPages(storeId, query);
   }
 
   @Get(':pageId')

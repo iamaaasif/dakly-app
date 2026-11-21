@@ -45,7 +45,6 @@ describe('khata scan filters without RLS assistance', () => {
     const stale = new Date(now.getTime() - 300_000);
 
     expect(await repository.findPage(f.b, pageId)).toBeUndefined();
-    expect(await repository.listPages(f.b, 10)).toEqual([]);
     expect(await repository.markQueued(f.b, pageId)).toBe(false);
     expect(await repository.markQueued(f.a, pageId)).toBe(true);
     expect(await repository.claim(f.b, pageId, now, stale)).toBe(false);

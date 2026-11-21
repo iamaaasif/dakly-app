@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
 
 import {
   type KhataFailureCode,
@@ -101,22 +101,6 @@ export class KhataScansRepository {
         .where(and(eq(khataPages.storeId, storeId), eq(khataPages.id, pageId))),
     );
     return row && toPage(row);
-  }
-
-  async listPages(storeId: string, limit: number, cursor?: string): Promise<KhataPage[]> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select(pageColumns)
-        .from(khataPages)
-        .innerJoin(
-          files,
-          and(eq(files.storeId, khataPages.storeId), eq(files.id, khataPages.fileId)),
-        )
-        .where(and(eq(khataPages.storeId, storeId), cursor ? lt(khataPages.id, cursor) : undefined))
-        .orderBy(desc(khataPages.id))
-        .limit(limit),
-    );
-    return rows.map(toPage);
   }
 
   async rowsForPages(storeId: string, pageIds: string[]): Promise<StoredKhataRow[]> {

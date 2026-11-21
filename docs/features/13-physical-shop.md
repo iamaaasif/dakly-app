@@ -131,14 +131,13 @@ Routes (all under the Due book permission: `dueBook.view` to read, `dueBook.edit
 
 ##### Khata scan API (KHT-1)
 
-Every route needs `customers.edit` and works on one page at a time.
+Every route needs `customers.edit` and works on one page at a time. Listing past pages comes with the screens in KHT-3.
 
 | Route                              | What it does                                                                                                                |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `POST /khata-scans/pages`          | Takes the content type and size, returns `pageId` and a 15 minute upload URL. At most 100 pages an hour per shop.           |
 | `POST /khata-scans/pages/:id/read` | Checks the photo is stored and the plan has a page left, then queues the read. Retries a page that failed.                  |
 | `GET /khata-scans/pages/:id`       | Status, a 15 minute photo link while the photo is kept, and the rows with confidence, `needsCheck` and the suggested match. |
-| `GET /khata-scans/pages`           | Newest pages first with their rows, by cursor.                                                                              |
 
 - Page status: `uploaded`, `reading`, `read`, `unreadable`, `failed` (code `allowance` or `model`).
 - The read goes through `AiService` on the `vision` tier, so the model is whatever `AI_VISION_MODEL` names. The model returns each name, phone, date and amount as written. Code then converts Bangla and English digits, `৳`, `Tk`, `/-` and lakh grouping into poisha, validates the phone and date, and caps any row it could not fully place at 84 so it stays yellow (SHOP-R7). A row with no name or no readable amount is dropped.

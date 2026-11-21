@@ -1334,17 +1334,6 @@ fixture('GET /khata-scans/pages/:pageId', async () => {
   });
   await hidden(b, 'GET', (value) => `/khata-scans/pages/${value}`, id);
 });
-fixture('GET /khata-scans/pages', async () => {
-  const { a, b } = await pair(),
-    first = await newKhataPage(a),
-    second = await newKhataPage(b);
-  const ids = async (shop: Shop) =>
-    (await success(shop, 'GET', '/khata-scans/pages', 200))
-      .json()
-      .items.map((page: { id: string }) => page.id);
-  expect(await ids(a)).toEqual([first]);
-  expect(await ids(b)).toEqual([second]);
-});
 async function dueEntries(shop: Shop, contactId: string) {
   await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {
     amountPoisha: 95000,

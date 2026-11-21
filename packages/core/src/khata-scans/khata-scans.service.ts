@@ -3,8 +3,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   type CreateKhataPageInput,
   type KhataMatchKind,
-  type KhataPageListQuery,
-  type KhataPageListResponse,
   type KhataPageResponse,
   type KhataPageUploadResponse,
   KHATA_CONFIDENCE_THRESHOLD,
@@ -118,24 +116,6 @@ export class KhataScansService {
     const page = await this.findPage(storeId, pageId);
     const rows = await this.repository.rowsForPages(storeId, [pageId]);
     return this.toResponse(page, rows);
-  }
-
-  async listPages(storeId: string, query: KhataPageListQuery): Promise<KhataPageListResponse> {
-    const found = await this.repository.listPages(storeId, query.limit + 1, query.cursor);
-    const pages = found.slice(0, query.limit);
-    const rows = await this.repository.rowsForPages(
-      storeId,
-      pages.map((page) => page.id),
-    );
-    return {
-      items: pages.map((page) =>
-        this.toResponse(
-          page,
-          rows.filter((row) => row.pageId === page.id),
-        ),
-      ),
-      nextCursor: found.length > query.limit ? (pages.at(-1)?.id ?? null) : null,
-    };
   }
 
   // The job's entry point. A page that is read, unreadable or failed is left alone, so a

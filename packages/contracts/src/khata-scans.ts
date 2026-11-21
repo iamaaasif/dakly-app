@@ -14,10 +14,6 @@ export const createKhataPageSchema = z.strictObject({
   contentType: khataPageContentTypeSchema,
   sizeBytes: z.number().int().positive().max(KHATA_PAGE_MAX_BYTES),
 });
-export const khataPageListQuerySchema = z.strictObject({
-  cursor: z.uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
-});
 
 // What the vision model returns. Everything is text as written on the page, in Bangla, Banglish
 // or English letters and digits; code turns it into dates, phones and poisha.
@@ -37,7 +33,6 @@ export const khataModelOutputSchema = z.strictObject({
 });
 
 export type CreateKhataPageInput = z.infer<typeof createKhataPageSchema>;
-export type KhataPageListQuery = z.infer<typeof khataPageListQuerySchema>;
 export type KhataModelOutput = z.infer<typeof khataModelOutputSchema>;
 export type KhataPageContentType = z.infer<typeof khataPageContentTypeSchema>;
 export type KhataPageStatus = (typeof khataPageStatuses)[number];
@@ -66,4 +61,3 @@ export type KhataPageResponse = {
   createdAt: string;
   rows: KhataRowResponse[];
 };
-export type KhataPageListResponse = { items: KhataPageResponse[]; nextCursor: string | null };
