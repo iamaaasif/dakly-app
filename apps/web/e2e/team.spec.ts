@@ -64,7 +64,9 @@ test('invites a new recipient, changes live access and transfers ownership to th
     await recipient.goto('/invites/accept');
     await checked;
     await recipient.evaluate((url) => location.assign(url), link);
-    await expect(recipient.getByRole('heading', { name: 'Sign in to Dakly', exact: true })).toBeVisible();
+    await expect(
+      recipient.getByRole('heading', { name: 'Sign in to Dakly', exact: true }),
+    ).toBeVisible();
     expect(await recipient.evaluate(() => location.hash)).toBe('');
     await recipient.getByRole('link', { name: 'Create an account', exact: true }).click();
     await recipient.getByLabel('Full name').fill(fixture.name);
