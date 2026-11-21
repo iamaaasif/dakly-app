@@ -38,16 +38,16 @@ describe('Sign in', () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Mobile number'), '01712345678');
     await user.type(screen.getByLabelText('Password'), 'password123');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(screen.getByRole('button', { name: /^Sign in/ }));
     await waitFor(() => expect(completed).toBe(true));
   });
   it('offers real password, code and recovery entry points without requiring registration config', () => {
     show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
     expect(screen.getByLabelText('Mobile number')).toBeTruthy();
     expect(screen.getByLabelText('Password')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Get a code' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Get a code by/ })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Forgot password?' })).toBeTruthy();
-    expect(screen.getByText('Google sign-in is currently unavailable.')).toBeTruthy();
+    expect(screen.queryByText(/Google/)).toBeNull();
   });
   it.each([
     {
@@ -92,9 +92,9 @@ describe('Sign in', () => {
       );
       if (mode === 'password') {
         await user.type(screen.getByLabelText('Password'), 'my-password123');
-        await user.click(screen.getByRole('button', { name: 'Sign in' }));
+        await user.click(screen.getByRole('button', { name: /^Sign in/ }));
       } else {
-        await user.click(screen.getByRole('button', { name: 'Get a code' }));
+        await user.click(screen.getByRole('button', { name: /Get a code by/ }));
         await user.type(await screen.findByLabelText('Sign-in code'), '123456');
         await user.click(screen.getByRole('button', { name: 'Verify code' }));
       }
@@ -137,7 +137,7 @@ describe('Sign in', () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Mobile number'), '01712345678');
     await user.type(screen.getByLabelText('Password'), 'password123');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(screen.getByRole('button', { name: /^Sign in/ }));
     await waitFor(() =>
       expect(screen.getByLabelText('Mobile number').getAttribute('aria-invalid')).toBe('true'),
     );
