@@ -134,7 +134,7 @@ Route `/due-book`, in the "Physical shop" group of the menu. It shows for a memb
 1. The owner uploads up to 10 photos at a time (JPG, PNG or PDF pages; max 10 MB each), or takes them in the phone camera.
 2. Processing steps shown live: Straighten photo, Read handwriting, Match customers. Bangla and English handwriting, Bangla and English digits.
 3. Each row gets fields and a confidence score. Rows under 85% are yellow and must be checked; the import button stays off until every yellow row is confirmed or skipped.
-4. Matching: phone exact match first, then name plus similar phone (one digit different) is offered as "Merge with Mitu Akter 01556-781230?". Never merged automatically.
+4. Matching: phone exact match first, then name plus similar phone (one digit different) is offered as "Same person as Mitu Akter?". Never merged automatically.
 5. Import creates customers (source "Khata import", no marketing consent), sales (orders with source Khata import, dated from the page) and baki entries. Rows without a phone become walk-in sales and are not linked.
 6. Past imports can be undone within 7 days, removing every record they created that hasn't been changed since.
 7. Photos are stored for 30 days for review, then deleted; the extracted rows stay.
@@ -182,7 +182,7 @@ Route `/customers/khata-scan`, opened from Add customers > Scan your khata. It s
 - **Start.** Two cards (Add the last 1–3 months, Digitize old notebooks slowly) and "Past imports" from `GET /khata-scans/imports`: date, "1 page", rows imported of rows read, new customers, and Undo while the 7 days last. "Start from today" in the design points at Shop sales, which is not built, so it is not offered.
 - **Add pages.** Take photo (phone camera) or Upload photos or PDF, up to 10 pages at a time, JPG, PNG or PDF, 10 MB each. Pressing "Read N pages" uploads each page to its link, queues the read and moves on.
 - **Reading.** The three steps follow the page status: waiting, reading, then review. A page that is `unreadable` or `failed` shows its reason, and a failed page can be read again.
-- **Review.** One tab per page, one row per read line: date, customer, phone, product, amount, confidence and status. A row under 85% has yellow boxes and "Check this". "Looks right" confirms it (`isChecked`), "Skip" leaves it out. "Import N rows" stays off until every yellow row is confirmed or skipped (SHOP-R7), and a baki or payment with no phone must be linked or skipped. A similar-phone customer is offered as "Merge with Mitu Akter 01556-781230?" and only "Yes, link" sends `mergeContactId`.
+- **Review.** One tab per page, one row per read line: date, customer, phone, product, amount, confidence and status. A row under 85% has yellow boxes and "Check this". "Looks right" confirms it (`isChecked`), "Skip" leaves it out. "Import N rows" stays off until every yellow row is confirmed or skipped (SHOP-R7), and a baki or payment with no phone must be linked or skipped. A similar-phone customer is offered as "Same person as Mitu Akter?" and only "Yes, link" sends `mergeContactId`.
 - **Result.** Rows found, imported, new customers, matched to existing customers, walk-in sales and skipped, with links to Orders and Customers and "Scan more pages".
 - **Not in the screen.** The rows cannot be edited, because the import takes decisions only; there is no Qty column because a read row has none; and a page is imported on its own, so each tab has its own Import button.
 

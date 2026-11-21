@@ -201,7 +201,7 @@ describe('Khata Scanner', () => {
     show();
     await readOnePage(user);
 
-    expect(await screen.findByText(/Merge with Mitu Akter 01556-781230\?/)).toBeTruthy();
+    expect(await screen.findByText(/Same person as Mitu Akter\?/)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Yes, link' }));
     expect(screen.getByText(/Linked to Mitu Akter/)).toBeTruthy();
   });
