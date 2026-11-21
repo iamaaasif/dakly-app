@@ -70,19 +70,18 @@ export function CampaignDraftShell({
           <fieldset className="min-w-0 space-y-4" disabled={busy}>
             {fields(step)}
           </fieldset>
-          {error && (
-            <p role="alert" className="text-danger">
-              {error}
-            </p>
-          )}
-          {message && <p role="status">{message}</p>}
+          <FormStatus error={error} message={message} />
           <StepButtons
             previous={previous && hrefFor(previous)}
             hasNext={Boolean(next)}
             saving={saving}
           />
         </form>
-        {sideColumn && <PreviewColumn channel={channel}>{sideColumn}</PreviewColumn>}
+        {sideColumn && (
+          <SideColumn step={step} channel={channel}>
+            {sideColumn}
+          </SideColumn>
+        )}
       </div>
     </div>
   );
@@ -118,7 +117,16 @@ function StepButtons({
   );
 }
 
-function PreviewColumn({ channel, children }: { channel: CampaignChannel; children: ReactNode }) {
+function SideColumn({
+  step,
+  channel,
+  children,
+}: {
+  step: Step;
+  channel: CampaignChannel;
+  children: ReactNode;
+}) {
+  if (step !== 'content') return <div className="min-w-0">{children}</div>;
   return (
     <div className="min-w-0 space-y-2">
       <p className="text-sm font-medium text-text-muted">
@@ -126,5 +134,18 @@ function PreviewColumn({ channel, children }: { channel: CampaignChannel; childr
       </p>
       {children}
     </div>
+  );
+}
+
+function FormStatus({ error, message }: { error?: string; message?: string }) {
+  return (
+    <>
+      {error && (
+        <p role="alert" className="text-danger">
+          {error}
+        </p>
+      )}
+      {message && <p role="status">{message}</p>}
+    </>
   );
 }

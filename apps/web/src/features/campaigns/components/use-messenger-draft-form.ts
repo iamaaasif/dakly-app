@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import {
+  campaignAudienceSchema,
   campaignDetailsSchema,
   messengerCampaignContentSchema,
   type CampaignResponse,
@@ -12,8 +13,9 @@ import {
 import type { ChannelConnection } from '@dakly/contracts/channels';
 
 import { useSaveCampaign } from '../api/save-campaign';
+import { changedAudience } from './changed-audience';
 
-const draftSchema = campaignDetailsSchema.extend({
+const draftSchema = campaignDetailsSchema.extend(campaignAudienceSchema.shape).extend({
   channelConnectionId: z.uuid('Choose a Facebook Page.'),
   content: messengerCampaignContentSchema,
 });
@@ -28,6 +30,8 @@ function valuesOf(campaign: CampaignResponse, pageId: string): DraftInput {
   return {
     name: campaign.name,
     goal: campaign.goal,
+    includeSegmentIds: campaign.includeSegmentIds,
+    excludeSegmentIds: campaign.excludeSegmentIds,
     channelConnectionId: pageId,
     content: messengerCampaignContentSchema.parse(campaign.content),
   };
@@ -36,7 +40,14 @@ function valuesOf(campaign: CampaignResponse, pageId: string): DraftInput {
 // A Page disconnected since the last save is no longer a choice, so the shop picks another.
 function startingValues(pages: ChannelConnection[], campaign?: CampaignResponse): DraftInput {
   if (!campaign)
-    return { name: '', goal: null, channelConnectionId: pages[0]?.id ?? '', content: emptyContent };
+    return {
+      name: '',
+      goal: null,
+      includeSegmentIds: [],
+      excludeSegmentIds: [],
+      channelConnectionId: pages[0]?.id ?? '',
+      content: emptyContent,
+    };
   const kept = pages.some(({ id }) => id === campaign.channelConnectionId);
   return valuesOf(campaign, kept ? (campaign.channelConnectionId ?? '') : '');
 }
@@ -76,6 +87,7 @@ export function useMessengerDraftForm(
         ...(dirtyFields.goal && { goal: input.goal }),
         ...(dirtyFields.channelConnectionId && { channelConnectionId: input.channelConnectionId }),
         ...(dirtyFields.content && { content: input.content }),
+        ...changedAudience(campaign, input),
       };
       if (!Object.keys(change).length) return afterSave?.();
       save.mutate(
