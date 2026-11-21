@@ -171,7 +171,7 @@ export const banglaGoldenCases: GoldenCase[] = [
     cardPhoto: 'bag-red',
   },
   {
-    id: 'photo-bag-blue-banglish',
+    id: 'photo-bag-nil-banglish',
     language: 'banglish',
     question: 'photo: nil handbag, lomba strap. eta koto?',
     expectedHandover: null,
@@ -362,11 +362,7 @@ export const banglaRecordedOutcomes: Record<string, EvalOutcome> = {
     text: 'এই লাল হ্যান্ডব্যাগটা আছে, দাম ৳১,৮০০।',
     cardPhoto: 'bag-red',
   },
-  'photo-bag-blue-banglish': {
-    kind: 'reply',
-    text: 'Nil handbag, 1800 taka.',
-    cardPhoto: 'bag-blue',
-  },
+  'photo-bag-nil-banglish': { kind: 'reply', text: 'Nil handbag 1800 tk.', cardPhoto: 'bag-blue' },
   'photo-bag-black-oos-mixed': {
     kind: 'reply',
     text: 'কালো হ্যান্ডব্যাগ এখন স্টকে নেই। লাল আর নীল আছে, ৳১,৮০০। নতুন স্টক এলে জানাবো?',
