@@ -1,4 +1,5 @@
-import { ChevronRight, FileUp, PencilLine } from 'lucide-react';
+import { BookOpen, ChevronRight, FileUp, PencilLine } from 'lucide-react';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { SessionDialog as Dialog } from '@/components/session-dialog';
@@ -27,6 +28,26 @@ export function AddCustomersChooser({ onChoose, onClose }: AddCustomersChooserPr
           hint="Upload a customer list. We find duplicates for you."
           onClick={() => onChoose('import')}
         />
+        <Link
+          href="/customers/khata-scan"
+          className="flex min-h-10 w-full items-center gap-3 rounded-lg border border-border bg-surface p-4 text-left hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-surface-muted text-text">
+            <BookOpen aria-hidden="true" size={20} strokeWidth={1.75} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">Scan your khata</span>
+            <span className="block text-sm text-text-muted">
+              Photograph your sales notebook. Dakly reads names, phones and sales.
+            </span>
+          </span>
+          <ChevronRight
+            aria-hidden="true"
+            size={16}
+            strokeWidth={1.75}
+            className="text-text-muted"
+          />
+        </Link>
       </div>
     </Dialog>
   );

@@ -4,6 +4,8 @@ import {
   formatCalendarDate,
   formatDate,
   formatDateTime,
+  formatDhakaMonthDay,
+  formatMonthDay,
   formatRelativeTime,
   formatShortDate,
   formatShortDateTime,
@@ -163,5 +165,12 @@ describe('formatShortDateTime', () => {
 describe('formatTimeZone', () => {
   it('names the city and the offset', () => {
     expect(formatTimeZone('Asia/Dhaka')).toBe('Dhaka time (GMT+6)');
+  });
+});
+
+describe('formatMonthDay', () => {
+  it('shows a page date as written and an instant on the Dhaka calendar', () => {
+    expect(formatMonthDay('2026-11-02')).toBe('Nov 2');
+    expect(formatDhakaMonthDay('2026-10-28T19:30:00.000Z')).toBe('Oct 29');
   });
 });
