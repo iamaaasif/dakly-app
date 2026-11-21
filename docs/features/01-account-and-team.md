@@ -957,7 +957,7 @@ boundaries. RLS and repository predicates are tested independently; see
 
 ### Sign-in and setup screens (ACC-8, first PR)
 
-The public `/sign-in` screen is a split screen as in the design: brand panel on wide screens, Mobile number and Email tabs, +880 prefix, Show inside the password field, Forgot password? beside its label, Get a code by SMS (or email) beside Continue with Google. The Google button is Google's own rendered button (outline theme, G mark, Google's font, as its brand rules require), sized to the grid cell, so its font differs from the SMS button; it is left out when `WEB_GOOGLE_CLIENT_ID` is not set. The design's prototype note and its Rocket line are not copied. The screen supports phone or email with a password or a code,
+The public `/sign-in` screen is a split screen as in the design: brand panel on wide screens, Mobile number and Email tabs, +880 prefix, Show inside the password field, Forgot password? beside its label, Get a code by SMS (or email) beside Continue with Google. The Google button is Google's own rendered button (outline theme, G mark, Google's font, as its brand rules require), sized to the grid cell, so its font differs from the SMS button; it is left out when `WEB_GOOGLE_CLIENT_ID` is not set. The design's prototype note and its Rocket line are not copied. Code screens show where the code went and offer Resend code after 0:30; sign-up shows a three-step password strength meter once a password is typed. The screen supports phone or email with a password or a code,
 Keep me signed in, Google identity, and the required authenticator or backup-code
 step. `/forgot-password` requests a reset code and confirms the new password;
 accounts with two-step verification finish that step before receiving a session.
