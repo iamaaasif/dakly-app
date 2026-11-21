@@ -31,6 +31,7 @@ import { StoresService } from '../stores/stores.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { practiceError } from './ai-practice.errors';
 import { handoverReason } from './handover-reason';
+import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v1';
 import { gradeTestAnswer } from './prompts/grade-test-answer.v1';
 import { checkReplyFacts } from './reply-fact-check';
@@ -93,6 +94,8 @@ export class AiPracticeService {
   }
 
   async ask(storeId: string, question: string): Promise<TestAnswerResponse> {
+    const screened = screenCustomerTexts([question]);
+    if (screened) return { kind: 'handover', reason: screened };
     const classified = await this.ai.run(storeId, {
       tier: 'fast',
       purpose: 'classify',

@@ -532,8 +532,8 @@ it('answers price and delivery from tool results, saves the run and sources, and
     conversations: [{ status: 'open', responder: 'ai', handover_reason: null }],
     runs: [
       { purpose: 'classify' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v1' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v1' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v2' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v2' },
     ],
     usage: [{ id: expect.any(String) }],
   });

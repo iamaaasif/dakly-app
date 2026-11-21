@@ -1,4 +1,5 @@
 import type { EvalOutcome, GoldenCase } from './golden-case';
+import { attackGoldenCases, attackRecordedOutcomes } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 
 // A small starter set. The 200 anonymised beta chats replace it at M7.
@@ -63,8 +64,14 @@ export const pendingTasks: readonly NonNullable<GoldenCase['dependsOn']>[] = [
   'AI-12',
 ];
 
-export const activeGoldenCases = [...sampleGoldenCases, ...banglaGoldenCases].filter(
-  (golden) => !golden.dependsOn || !pendingTasks.includes(golden.dependsOn),
-);
+export const activeGoldenCases = [
+  ...sampleGoldenCases,
+  ...banglaGoldenCases,
+  ...attackGoldenCases,
+].filter((golden) => !golden.dependsOn || !pendingTasks.includes(golden.dependsOn));
 
-export const allRecordedOutcomes = { ...sampleRecordedOutcomes, ...banglaRecordedOutcomes };
+export const allRecordedOutcomes = {
+  ...sampleRecordedOutcomes,
+  ...banglaRecordedOutcomes,
+  ...attackRecordedOutcomes,
+};
