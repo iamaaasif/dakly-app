@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
+import { StaffAlertsModule } from '../admin/staff-alerts.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
@@ -19,6 +20,7 @@ import { SubscriptionRenewalService } from './subscription-renewal.service';
     ClockModule,
     OutboxModule,
     PaymentsModule,
+    StaffAlertsModule,
   ],
   providers: [
     ApplySubscriptionPayment,

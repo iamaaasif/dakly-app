@@ -28,6 +28,20 @@ export const contactErasedEventSchema = z.strictObject({
   }),
 });
 
+export const contactMergedEventSchema = z.strictObject({
+  type: z.literal('contact.merged'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ keptContactId: z.uuid(), mergedContactId: z.uuid() }),
+});
+
+export const contactMergeUndoneEventSchema = z.strictObject({
+  type: z.literal('contact.merge_undone'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ keptContactId: z.uuid(), mergedContactId: z.uuid() }),
+});
+
 export const contactStatsRepairedEventSchema = z.strictObject({
   type: z.literal('contact_stats.repaired'),
   storeId: z.uuid(),

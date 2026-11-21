@@ -7,7 +7,7 @@ import {
 
 import { AiService } from '../ai/ai.service';
 import { Clock } from '../platform/clock';
-import { mergeMemory } from './contact-memory-merge';
+import { maxFacts, mergeMemory } from './contact-memory-merge';
 import { ContactMemoryOwnersRepository } from './contact-memory-owners.repository';
 import { memoryPromptInput } from './contact-memory-prompt-input';
 import { renderContactMemory } from './contact-memory-render';
@@ -89,7 +89,7 @@ export class ContactMemoryService {
     storeId: string,
     ids: { keptContactId: string; mergedContactId: string },
   ): Promise<ContactMemoryFact[]> {
-    const adopted = await this.owners.adoptStaffFacts(storeId, ids);
+    const adopted = await this.adoptStaffFacts(storeId, ids);
     await this.owners.invalidateForOwners(
       storeId,
       [ids.keptContactId, ids.mergedContactId],
@@ -105,12 +105,53 @@ export class ContactMemoryService {
     ids: { keptContactId: string; mergedContactId: string },
     adopted: ContactMemoryFact[],
   ): Promise<void> {
-    await this.owners.removeAdoptedFacts(storeId, ids.keptContactId, adopted);
+    await this.removeAdoptedFacts(storeId, ids.keptContactId, adopted);
     await this.owners.invalidateForOwners(
       storeId,
       [ids.keptContactId, ids.mergedContactId],
       this.clock.now(),
     );
+  }
+
+  // The kept contact takes the staff facts typed on the merged one and the stricter clear time, so
+  // nothing a customer asked to forget comes back. Returns what it added so undo takes back those.
+  private async adoptStaffFacts(
+    storeId: string,
+    { keptContactId, mergedContactId }: { keptContactId: string; mergedContactId: string },
+  ): Promise<ContactMemoryFact[]> {
+    const rows = await this.owners.lockMemories(storeId, [keptContactId, mergedContactId]);
+    const kept = rows.find((row) => row.contactId === keptContactId);
+    const merged = rows.find((row) => row.contactId === mergedContactId);
+    const keptFacts = kept?.facts ?? [];
+    const adopted = (merged?.facts ?? [])
+      .filter(
+        (fact) =>
+          fact.source === 'staff' &&
+          !keptFacts.some(({ kind, value }) => kind === fact.kind && value === fact.value),
+      )
+      .slice(0, maxFacts - keptFacts.length);
+    const clearedAt = [kept?.clearedAt, merged?.clearedAt]
+      .filter((date) => date != null)
+      .sort((left, right) => right.getTime() - left.getTime())[0];
+    if (adopted.length || clearedAt)
+      await this.owners.saveFacts(storeId, keptContactId, {
+        facts: [...keptFacts, ...adopted],
+        clearedAt: clearedAt ?? null,
+      });
+    return adopted;
+  }
+
+  private async removeAdoptedFacts(
+    storeId: string,
+    contactId: string,
+    adopted: ContactMemoryFact[],
+  ): Promise<void> {
+    const [row] = adopted.length ? await this.owners.lockMemories(storeId, [contactId]) : [];
+    if (!row) return;
+    const taken = new Set(adopted.map((fact) => JSON.stringify(fact)));
+    await this.owners.saveFacts(storeId, contactId, {
+      facts: row.facts.filter((fact) => !taken.has(JSON.stringify(fact))),
+    });
   }
 
   private async extract(storeId: string, work: MemoryWork) {

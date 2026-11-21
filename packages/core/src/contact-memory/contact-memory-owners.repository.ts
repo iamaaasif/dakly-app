@@ -50,81 +50,37 @@ export class ContactMemoryOwnersRepository {
     });
   }
 
-  // The kept contact takes the staff facts typed on the merged one and the stricter clear time.
-  // Returns the facts it added so an undo can take back exactly those.
-  async adoptStaffFacts(
-    storeId: string,
-    { keptContactId, mergedContactId }: { keptContactId: string; mergedContactId: string },
-  ): Promise<ContactMemoryFact[]> {
+  // Locks the memory rows of both contacts for the rest of the transaction. A contact with no
+  // row yet has no facts and no clear time.
+  async lockMemories(storeId: string, contactIds: string[]) {
     return this.database.forStore(storeId, async (tx) => {
       const rows = await tx
-        .select()
+        .select({
+          contactId: contactMemories.contactId,
+          facts: contactMemories.facts,
+          clearedAt: contactMemories.clearedAt,
+        })
         .from(contactMemories)
         .where(
-          and(
-            eq(contactMemories.storeId, storeId),
-            inArray(contactMemories.contactId, [keptContactId, mergedContactId]),
-          ),
-        );
-      const kept = rows.find((row) => row.contactId === keptContactId);
-      const merged = rows.find((row) => row.contactId === mergedContactId);
-      const keptFacts = factsSchema.parse(kept?.facts ?? []);
-      const adopted = z
-        .array(contactMemoryFactSchema)
-        .parse(merged?.facts ?? [])
-        .filter(
-          (fact) =>
-            fact.source === 'staff' &&
-            !keptFacts.some(({ kind, value }) => kind === fact.kind && value === fact.value),
+          and(eq(contactMemories.storeId, storeId), inArray(contactMemories.contactId, contactIds)),
         )
-        .slice(0, 40 - keptFacts.length);
-      const clearedAt = strictestCutoff(kept?.clearedAt, merged?.clearedAt);
-      if (!adopted.length && !clearedAt) return [];
-      await tx
-        .insert(contactMemories)
-        .values({ storeId, contactId: keptContactId })
-        .onConflictDoNothing();
-      await tx
-        .update(contactMemories)
-        .set({ facts: [...keptFacts, ...adopted], clearedAt })
-        .where(
-          and(eq(contactMemories.storeId, storeId), eq(contactMemories.contactId, keptContactId)),
-        );
-      return adopted;
+        .orderBy(contactMemories.contactId)
+        .for('update');
+      return rows.map((row) => ({ ...row, facts: factsSchema.parse(row.facts) }));
     });
   }
 
-  async removeAdoptedFacts(
+  async saveFacts(
     storeId: string,
     contactId: string,
-    adopted: ContactMemoryFact[],
+    change: { facts: ContactMemoryFact[]; clearedAt?: Date | null },
   ): Promise<void> {
-    if (!adopted.length) return;
     await this.database.forStore(storeId, async (tx) => {
-      const [row] = await tx
-        .select({ facts: contactMemories.facts })
-        .from(contactMemories)
-        .where(and(eq(contactMemories.storeId, storeId), eq(contactMemories.contactId, contactId)))
-        .for('update');
-      if (!row) return;
-      const taken = new Set(adopted.map((fact) => JSON.stringify(fact)));
-      const facts = z
-        .array(contactMemoryFactSchema)
-        .parse(row.facts)
-        .filter((fact) => !taken.has(JSON.stringify(fact)));
+      await tx.insert(contactMemories).values({ storeId, contactId }).onConflictDoNothing();
       await tx
         .update(contactMemories)
-        .set({ facts })
+        .set(change)
         .where(and(eq(contactMemories.storeId, storeId), eq(contactMemories.contactId, contactId)));
     });
   }
-}
-
-// The later clear time wins, so nothing a customer asked to forget comes back after a merge.
-function strictestCutoff(...dates: (Date | null | undefined)[]): Date | null {
-  return (
-    dates
-      .filter((date) => date != null)
-      .sort((left, right) => right.getTime() - left.getTime())[0] ?? null
-  );
 }
