@@ -8,6 +8,12 @@ import { ImportStepActions } from './import-step-actions';
 import { prepareImportFile, type ImportFileSummary } from '@/lib/import-file';
 import { useUploadImport } from '@/lib/use-upload-import';
 
+export type UploadedImport = {
+  importId: string;
+  preview: ImportFileSummary;
+  file: { name: string; size: number };
+};
+
 type ImportUploadStepProps = {
   path: Parameters<typeof useUploadImport>[0];
   // What a row is, in the plural, the name of the file picker and the CSV a shop can download.
@@ -16,7 +22,7 @@ type ImportUploadStepProps = {
   template: { filename: string; csv: string };
   // Customer files may be Excel; the browser turns the first sheet into CSV before it uploads.
   excel?: boolean;
-  onUploaded: (upload: { importId: string; preview: ImportFileSummary }) => void;
+  onUploaded: (upload: UploadedImport) => void;
 };
 
 export function ImportUploadStep({
@@ -27,7 +33,7 @@ export function ImportUploadStep({
   excel = false,
   onUploaded,
 }: ImportUploadStepProps) {
-  const [chosen, setChosen] = useState<{ file: File; preview: ImportFileSummary }>();
+  const [chosen, setChosen] = useState<{ file: File; source: File; preview: ImportFileSummary }>();
   const [problem, setProblem] = useState<string>();
   const upload = useUploadImport(path);
 
@@ -36,7 +42,8 @@ export function ImportUploadStep({
     setChosen(undefined);
     const prepared = await prepareImportFile(file, rowName, excel);
     setProblem(typeof prepared === 'string' ? prepared : undefined);
-    if (typeof prepared === 'object') setChosen(prepared);
+    // `source` is the file the owner picked; `file` may be the CSV made from it.
+    if (typeof prepared === 'object') setChosen({ ...prepared, source: file });
   }
 
   return (
@@ -44,8 +51,8 @@ export function ImportUploadStep({
       <ImportDropzone label={fileLabel} excel={excel} onFile={(file) => void choose(file)} />
       {chosen ? (
         <p role="status" className="text-sm">
-          <span className="font-semibold wrap-anywhere">{chosen.file.name}</span>
-          {` · ${chosen.preview.rowCount} rows · ${chosen.preview.header.length} columns · ${Math.ceil(chosen.file.size / 1024)} KB`}
+          <span className="font-semibold wrap-anywhere">{chosen.source.name}</span>
+          {` · ${chosen.preview.rowCount} rows · ${chosen.preview.header.length} columns · ${Math.ceil(chosen.source.size / 1024)} KB`}
         </p>
       ) : null}
       {problem ? (
@@ -66,7 +73,12 @@ export function ImportUploadStep({
         onNext={() =>
           chosen &&
           upload.mutate(chosen.file, {
-            onSuccess: (importId) => onUploaded({ importId, preview: chosen.preview }),
+            onSuccess: (importId) =>
+              onUploaded({
+                importId,
+                preview: chosen.preview,
+                file: { name: chosen.source.name, size: chosen.source.size },
+              }),
           })
         }
       />

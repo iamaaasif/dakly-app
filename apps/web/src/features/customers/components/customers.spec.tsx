@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,6 +13,7 @@ import type {
   ContactResponse,
 } from '@dakly/contracts/contacts';
 import type { SessionContext } from '@dakly/contracts/sessions';
+import { ToastProvider } from '@dakly/ui/toast';
 
 import { CustomerProfile } from './customer-profile';
 import { CustomersScreen } from './customers-screen';
@@ -55,7 +58,7 @@ const apiError = (status: number, code: string, message: string) => ({
   body: { error: { code, message } },
 });
 
-function show(child: ReactNode, canEdit = true) {
+function show(child: ReactNode, canEdit = true, canExport = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const context: SessionContext = {
     user: { id: 'member', name: 'Member' },
@@ -76,6 +79,7 @@ function show(child: ReactNode, canEdit = true) {
       canEditAutomations: false,
       canViewCustomers: true,
       canCreateCustomer: canEdit,
+      canExportCustomers: canExport,
       canViewChats: true,
       canEditChats: true,
       canViewSegments: true,
@@ -94,7 +98,9 @@ function show(child: ReactNode, canEdit = true) {
   client.setQueryData(sessionContextKey, context);
   return render(child, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
     ),
   });
 }
@@ -426,6 +432,11 @@ describe('Import customers', () => {
     expect((await screen.findByRole('status')).textContent).toContain('2 rows · 2 columns');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
+    expect(await screen.findByText('Step 2 of 7 · Detect')).toBeTruthy();
+    expect(screen.getByText('Rows').nextSibling?.textContent).toBe('2');
+    expect(screen.getByText('Columns', { selector: 'dt' }).nextSibling?.textContent).toBe('2');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
     expect(((await screen.findByLabelText('Phone')) as HTMLSelectElement).value).toBe('1');
     expect((screen.getByLabelText(/Name/) as HTMLSelectElement).value).toBe('0');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -434,7 +445,7 @@ describe('Import customers', () => {
     await user.click(screen.getByRole('radio', { name: /Leave existing customers/ }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.type(screen.getByLabelText(/WhatsApp: where/), 'Shopify checkout');
-    await user.click(screen.getByRole('button', { name: 'Start import' }));
+    await user.click(screen.getByRole('button', { name: 'Import 2 customers' }));
 
     expect(await screen.findByText('Import finished.')).toBeTruthy();
     expect(sent.find((request) => request.path.endsWith('/start'))?.body).toEqual({
@@ -462,8 +473,45 @@ describe('Import customers', () => {
     await screen.findByRole('status');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
     expect(await screen.findByText('Choose the column that has phone numbers')).toBeTruthy();
-    expect(screen.queryByText('Step 3 of 6 · Preview')).toBeNull();
+    expect(screen.queryByText('Step 4 of 7 · Preview')).toBeNull();
+  });
+
+  it.each([
+    ['2486', '2,486 customers'],
+    ['1', '1 customer'],
+  ])('exports the customers on the screen and says how many (%s)', async (rows, said) => {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', async (path: string) => {
+      urls.push(path);
+      const headers = {
+        'x-session-context': 'verified',
+        'content-disposition': 'attachment; filename="dakly-customers-2026-11-20.xlsx"',
+        'x-row-count': rows,
+      };
+      return path.startsWith('/api/contacts/export')
+        ? new Response('file', { headers })
+        : Response.json({ items: [], nextCursor: null }, { headers });
+    });
+    vi.stubGlobal(
+      'URL',
+      Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => undefined }),
+    );
+    show(<CustomersScreen query={{ limit: 50, kind: 'lead', tag: 'eid' }} />, true, true);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Export' }));
+    expect(
+      await screen.findByText(`Exporting ${said} to Excel. Check your downloads in a moment.`),
+    ).toBeTruthy();
+    expect(urls.some((url) => url === '/api/contacts/export?kind=lead&tag=eid')).toBe(true);
+  });
+
+  it('offers no Export button without the Download customer lists switch', async () => {
+    respond(() => ({ body: { items: [], nextCursor: null } }));
+    show(<CustomersScreen query={allCustomers} />);
+    await screen.findByText('No customers yet. Customers you add show here.');
+    expect(screen.queryByRole('button', { name: 'Export' })).toBeNull();
   });
 
   it('refuses a file that is not Excel or CSV before uploading it', async () => {
@@ -486,6 +534,26 @@ describe('Import customers', () => {
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
     expect((await screen.findByRole('alert')).textContent).toContain('could not be read');
     expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
+  });
+
+  it('shows the Excel file the owner picked on the Detect step, not the CSV made from it', async () => {
+    respond((path) =>
+      path === '/api/imports'
+        ? { body: { importId, uploadUrl: 'https://files.example.test/up' } }
+        : { status: 200, body: { items: [], nextCursor: null } },
+    );
+    show(<CustomersScreen query={allCustomers} />);
+    const user = userEvent.setup({ applyAccept: false });
+    await user.click(screen.getByRole('button', { name: 'Add customers' }));
+    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
+    const bytes = readFileSync('src/lib/fixtures/customers.xlsx');
+    await user.upload(screen.getByLabelText('Customer file'), new File([bytes], 'shop-list.xlsx'));
+    expect((await screen.findByRole('status')).textContent).toContain('shop-list.xlsx');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Step 2 of 7 · Detect')).toBeTruthy();
+    expect(screen.getByText('File', { selector: 'dt' }).nextSibling?.textContent).toBe(
+      'shop-list.xlsx',
+    );
   });
 
   it('undoes a finished import after the owner confirms', async () => {
