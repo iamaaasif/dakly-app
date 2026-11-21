@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
-import { channelConnectionKinds, channelConnectionStatuses } from './channels';
-import { billingCycles } from './billing';
-import { builtInRoles, extensions } from './stores';
+import { type billingCycles } from './billing';
+import { type channelConnectionKinds, type channelConnectionStatuses } from './channels';
+import { type builtInRoles, type extensions } from './stores';
 
 // A shop's status for staff: a closing or suspended shop shows that, otherwise its subscription status.
 export const adminShopStatuses = [
