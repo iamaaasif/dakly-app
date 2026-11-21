@@ -34,26 +34,32 @@ const product = {
   variants: [size(medium, 'M', 4), size(large, 'L', 2), size(extraLarge, 'XL', 0)],
 } as unknown as ProductResponse;
 
+function reply(body: unknown, status = 200) {
+  const headers = { 'x-session-context': 'verified' };
+  return body === undefined
+    ? new Response(null, { status, headers })
+    : Response.json(body, { status, headers });
+}
+function answer(path: string, waiting: unknown[]) {
+  if (path.endsWith('/restock-waiting')) return reply({ items: waiting });
+  if (path.endsWith('/restock-notifications')) return reply({ queued: 3, waiting: 0 });
+  return reply(undefined, 204);
+}
 type Call = { method: string; path: string; body: unknown };
 function show(waiting: { variantId: string; waiting: number }[], failOnce?: string) {
   let failed = false;
   const calls: Call[] = [];
   vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
-    const method = init?.method ?? 'GET';
-    calls.push({ method, path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    if (init?.method === 'POST' && path.includes(failOnce ?? '\0') && !failed) {
+    calls.push({
+      method: init?.method ?? 'GET',
+      path,
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    if (init?.method === 'POST' && failOnce && path.includes(failOnce) && !failed) {
       failed = true;
-      return Response.json(
-        { error: { code: 'FAILED', message: 'Stock adjustment failed' } },
-        { status: 500, headers: { 'x-session-context': 'verified' } },
-      );
+      return reply({ error: { code: 'FAILED', message: 'Stock adjustment failed' } }, 500);
     }
-    let json: unknown;
-    if (path.endsWith('/restock-waiting')) json = { items: waiting };
-    if (path.endsWith('/restock-notifications')) json = { queued: 3, waiting: 0 };
-    return json
-      ? Response.json(json, { headers: { 'x-session-context': 'verified' } })
-      : new Response(null, { status: 204, headers: { 'x-session-context': 'verified' } });
+    return answer(path, waiting);
   });
   vi.stubGlobal(
     'ResizeObserver',
