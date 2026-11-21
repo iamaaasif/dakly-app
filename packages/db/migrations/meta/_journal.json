@@ -603,6 +603,13 @@
       "when": 1795257242320,
       "tag": "0085_khata_sales",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1795260875821,
+      "tag": "0086_admin_shop_reports",
+      "breakpoints": true
     }
   ]
 }
