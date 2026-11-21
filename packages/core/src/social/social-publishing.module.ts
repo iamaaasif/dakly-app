@@ -6,6 +6,7 @@ import { FakeMetaPublishingDriver } from '@dakly/providers/social/meta/fake-meta
 import { MetaGraphPublishingDriver } from '@dakly/providers/social/meta/meta-graph-publishing-driver';
 
 import { AuditModule } from '../audit/audit.module';
+import { BillingModule } from '../billing/billing.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { KillSwitchesModule } from '../kill-switches/kill-switches.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -37,6 +38,7 @@ import { SocialRepository } from './social.repository';
 
 @Module({
   imports: [
+    BillingModule,
     KillSwitchesModule,
     AuditModule,
     ClockModule,

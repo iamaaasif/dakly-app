@@ -1,5 +1,5 @@
 {
-  "id": "acad0c82-38f0-4c91-a12f-e1108d0be349",
+  "id": "4ab19f2f-a211-4b29-b369-6f1df115ad4b",
   "prevId": "312a0db6-d159-4988-8898-92a2e97c3bc4",
   "version": "7",
   "dialect": "postgresql",
@@ -3101,13 +3101,6 @@
         },
         "cost_micro_usd": {
           "name": "cost_micro_usd",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "cost_poisha": {
-          "name": "cost_poisha",
           "type": "bigint",
           "primaryKey": false,
           "notNull": true,
@@ -10334,7 +10327,7 @@
         },
         "conversations_handover_reason": {
           "name": "conversations_handover_reason",
-          "value": "\"conversations\".\"handover_reason\" in ('asked_for_person', 'complaint', 'refund', 'discount', 'angry', 'out_of_scope', 'ready_to_buy', 'ai_unavailable', 'allowance_used', 'ai_paused', 'other')"
+          "value": "\"conversations\".\"handover_reason\" in ('asked_for_person', 'complaint', 'refund', 'discount', 'angry', 'out_of_scope', 'ready_to_buy', 'ai_unavailable', 'allowance_used', 'ai_paused', 'store_read_only', 'other')"
         },
         "conversations_lead_temperature": {
           "name": "conversations_lead_temperature",

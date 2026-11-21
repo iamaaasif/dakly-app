@@ -16,6 +16,7 @@ export const handoverReasons = [
   'ai_unavailable',
   'allowance_used',
   'ai_paused',
+  'store_read_only',
   'other',
 ] as const;
 export const leadTemperatures = ['hot', 'warm', 'cold'] as const;

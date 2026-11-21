@@ -34,6 +34,7 @@ import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
+import { RequireWritableStore } from '../platform/tenancy/writable-store.guard';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { SocialRescheduleService } from './social-reschedule.service';
 import { SocialService } from './social.service';
@@ -95,6 +96,7 @@ export class SocialController {
   }
 
   @Post(':postId/approve')
+  @RequireWritableStore()
   @RequirePermission('social.edit')
   @HttpCode(200)
   approveDraft(
@@ -107,6 +109,7 @@ export class SocialController {
   }
 
   @Post(':postId/schedule')
+  @RequireWritableStore()
   @RequirePermission('social.edit')
   @HttpCode(200)
   schedulePost(
@@ -123,6 +126,7 @@ export class SocialController {
   }
 
   @Post(':postId/reschedule')
+  @RequireWritableStore()
   @RequirePermission('social.edit')
   @HttpCode(200)
   reschedulePost(

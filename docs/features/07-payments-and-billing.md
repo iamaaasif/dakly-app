@@ -413,7 +413,11 @@ sandbox payments are excluded from this settlement match.
 - Dunning steps count from the due date: retries on day 1, 3 and 5, then `read_only` on day 8. Each step publishes `subscription.past_due` with the attempt number, and day 8 publishes `subscription.read_only`. Reminders and the guard read these.
 - A succeeded billing payment with purpose `subscription` starts the next period at once (from the due date when paid early, otherwise from now), clears past-due and read-only state, and publishes `subscription.renewed`. The payment id is kept in `last_payment_intent_id`, so the same payment applies once. A payment below the next period's price is not applied: staff get an alert with the store, payment and amounts to settle it by hand, and the job ends without retrying.
 - The next period's plan and price come from a scheduled plan change, or a price change whose 30-day notice has passed (ADM-R10), less a coupon that still runs. They are catalogue data, never constants.
-- Agreement charges, reminders and the read-only guard are added in later PAY-7 parts.
+- Read-only mode (`read_only` status, from day 8) is enforced in one place per path, and reading stays open:
+  - Routes that start sending or automation carry `@RequireWritableStore()` and answer `402 STORE_READ_ONLY`: campaign approve, resume and test send; post approve, schedule and reschedule; automation publish and enable. Pause, cancel, edit and delete stay open.
+  - Background work waits instead of failing, so it continues as soon as the plan is paid: the campaign batch and post publish jobs defer five minutes, and an automation step is left for the sweep.
+  - The AI agent hands the chat to a person with the reason `store_read_only` and the owner sees why.
+- Agreement charges and reminders are added in later PAY-7 parts.
 
 ### Rules
 
