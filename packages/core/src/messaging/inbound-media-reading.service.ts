@@ -11,6 +11,7 @@ import type { LlmImage, LlmTranscriptionRequest } from '@dakly/providers/llm/llm
 
 import { AiService } from '../ai/ai.service';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
+import { UsageService } from '../usage/usage.service';
 import { InboundAttachmentsRepository } from './inbound-attachments.repository';
 import { messagingError } from './messaging.errors';
 import { readCustomerPhoto } from './prompts/read-customer-photo.v1';
@@ -36,6 +37,7 @@ export class InboundMediaReadingService {
   constructor(
     @Inject(InboundAttachmentsRepository) private readonly repository: InboundAttachmentsRepository,
     @Inject(AiService) private readonly ai: AiService,
+    @Inject(UsageService) private readonly usage: UsageService,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
   ) {}
 
@@ -61,8 +63,19 @@ export class InboundMediaReadingService {
     if (retry) throw messagingError('MEDIA_READING_UNAVAILABLE');
   }
 
-  private async readOne({ storeId, attachment }: Target, caption: string | null): Promise<Reading> {
+  private async readOne(
+    { storeId, messageId, index, attachment }: Target,
+    caption: string | null,
+  ): Promise<Reading> {
     if (attachment.kind !== 'voice' && attachment.kind !== 'image') return { kind: 'failed' };
+    // One unit per file. Without allowance the file stays unread: the AI is paused anyway and
+    // a retry would find the same empty allowance.
+    const usageReference = `media:${messageId}:${index}`;
+    if (
+      !(await this.usage.isConsumed(storeId, 'ai_conversation', usageReference)) &&
+      !(await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
+    )
+      return { kind: 'failed' };
     const file = await this.storage.readBytes(
       attachment.objectKey,
       inboundAttachmentLimits[attachment.kind].maxBytes,
@@ -70,23 +83,34 @@ export class InboundMediaReadingService {
     if (file.kind !== 'found') return { kind: 'failed' };
     const media = { contentType: attachment.contentType, bytes: file.bytes };
     return attachment.kind === 'voice'
-      ? this.transcribe(storeId, media)
-      : this.describe(storeId, media, caption);
+      ? this.transcribe(storeId, media, usageReference)
+      : this.describe(storeId, media, caption, usageReference);
   }
 
   private async transcribe(
     storeId: string,
     audio: LlmTranscriptionRequest['audio'],
+    usageReference: string,
   ): Promise<Reading> {
-    const result = await this.ai.transcribe(storeId, { audio, hint: transcribeVoiceNoteHint });
+    const result = await this.ai.transcribe(storeId, {
+      audio,
+      hint: transcribeVoiceNoteHint,
+      usageReference,
+    });
     if (result.kind === 'failure') return failed(result.code);
     return { kind: 'read', text: result.text ? `Voice note: ${result.text}` : undefined };
   }
 
-  private async describe(storeId: string, image: LlmImage, caption: string | null) {
+  private async describe(
+    storeId: string,
+    image: LlmImage,
+    caption: string | null,
+    usageReference: string,
+  ) {
     const result = await this.ai.run(storeId, {
       tier: 'vision',
       purpose: 'describe_image',
+      usageReference,
       prompt: readCustomerPhoto,
       input: JSON.stringify({ customer_message: caption ?? '' }),
       images: [image],

@@ -31,15 +31,17 @@ type GoogleIdentity = {
 export function GoogleSignIn({
   clientId,
   isRemembered,
+  termsVersion,
   onResult,
 }: {
   clientId: string | null;
   isRemembered: boolean;
+  termsVersion?: string;
   onResult: (result: GoogleSignInResponse) => void;
 }) {
   const element = useRef<HTMLDivElement>(null);
-  const latest = useRef({ isRemembered, onResult });
-  latest.current = { isRemembered, onResult };
+  const latest = useRef({ isRemembered, termsVersion, onResult });
+  latest.current = { isRemembered, termsVersion, onResult };
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const mutation = useGoogleSignIn();
   // Without a Google client id the button is left out; the other sign-in methods remain.
@@ -55,7 +57,11 @@ export function GoogleSignIn({
       auto_select: false,
       callback: ({ credential }) => {
         mutation.mutate(
-          { idToken: credential, isRemembered: latest.current.isRemembered },
+          {
+            idToken: credential,
+            isRemembered: latest.current.isRemembered,
+            termsVersion: latest.current.termsVersion,
+          },
           { onSuccess: (result) => latest.current.onResult(result) },
         );
       },
@@ -79,13 +85,29 @@ export function GoogleSignIn({
         onError={() => setState('error')}
       />
       <div ref={element} className="flex min-h-10 justify-center" inert={mutation.isPending} />
+      <GoogleStatus state={state} pending={mutation.isPending} error={mutation.error} />
+    </div>
+  );
+}
+
+function GoogleStatus({
+  state,
+  pending,
+  error,
+}: {
+  state: 'loading' | 'ready' | 'error';
+  pending: boolean;
+  error: Error | null;
+}) {
+  return (
+    <>
       {state === 'loading' ? <p role="status">Loading Google sign-in…</p> : null}
-      {mutation.isPending ? <p role="status">Checking your Google account…</p> : null}
-      {state === 'error' || mutation.error ? (
+      {pending ? <p role="status">Checking your Google account…</p> : null}
+      {state === 'error' || error ? (
         <p role="alert" className="text-danger">
-          {mutation.error?.message ?? 'Google sign-in could not load. Use your phone or email.'}
+          {error?.message ?? 'Google sign-in could not load. Use your phone or email.'}
         </p>
       ) : null}
-    </div>
+    </>
   );
 }

@@ -11,8 +11,7 @@ import { formError } from '@/lib/form-error';
 
 export function useSignUpVerification(
   account: { registration: SignUpInput; password?: string },
-  signupTicket: string | undefined,
-  options: { isRemembered: boolean; onAuthenticated?: () => void },
+  options: { onAuthenticated?: () => void },
 ) {
   const [seconds, setSeconds] = useState(30);
   const [challenge, setChallenge] = useState<string>();
@@ -22,9 +21,7 @@ export function useSignUpVerification(
       purpose: 'sign_up' as const,
       phone: account.registration.phone,
       password: account.password,
-      signupTicket,
       code: '',
-      isRemembered: options.isRemembered,
     },
   });
   const verify = useVerifyCode();

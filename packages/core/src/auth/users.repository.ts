@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 
-import type { SignUpInput } from '@dakly/contracts/auth';
 import type { AccountProfile, UserProfile } from '@dakly/contracts/sessions';
 import type { Database } from '@dakly/db/client';
 import { accountRecoveries } from '@dakly/db/schema/account-recovery';
@@ -14,9 +13,10 @@ import { DATABASE } from '../platform/database/database.tokens';
 import { isConstraintViolation } from '../platform/database/error-code';
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import type { NewAccount } from './sign-in';
 
 type NewUser = {
-  input: SignUpInput;
+  input: NewAccount;
   now: Date;
   passwordHash?: string;
   google?: GoogleIdentity;
@@ -294,7 +294,7 @@ export class UsersRepository {
           email: google?.email ?? input.email,
           emailVerifiedAt: google ? now : undefined,
           googleSubject: google?.subject,
-          phoneVerifiedAt: now,
+          phoneVerifiedAt: input.phone ? now : undefined,
           termsVersion: input.termsVersion,
           termsAcceptedAt: now,
         })
