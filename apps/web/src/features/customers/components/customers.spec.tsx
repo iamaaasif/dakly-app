@@ -385,6 +385,90 @@ describe('Customer profile', () => {
     });
   });
 
+  describe('merging', () => {
+    const suggestion = {
+      id: 'suggestion',
+      reason: 'same_phone',
+      otherContact: { id: 'other', name: 'Karim Uddin', phone: '01712-XXX678' },
+      createdAt: '2026-11-18T08:00:00Z',
+    };
+    const merge = {
+      id: 'merge-1',
+      keptContactId: 'other',
+      mergedContactId: contactId,
+      mergedContactName: 'Rahima Akter',
+      mergedAt: '2026-11-20T08:00:00Z',
+      undoUntil: '2026-11-27T08:00:00Z',
+      undoneAt: null,
+      undoConflicts: [],
+    };
+
+    it('asks first, merges with one key, and opens the kept profile', async () => {
+      respond((path, method) => {
+        if (path === '/api/contact-merges' && method === 'POST') return { body: merge };
+        if (path.includes('/contact-match-suggestions')) return { body: [suggestion] };
+        if (path.includes('/contact-merges')) return { body: [] };
+        return { body: detail };
+      });
+      show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Merge' }));
+      expect(screen.getByRole('dialog', { name: 'Merge Karim Uddin?' })).toBeTruthy();
+      expect(screen.getByText('You can undo the merge for 7 days.')).toBeTruthy();
+      await userEvent.click(screen.getByRole('button', { name: 'Merge customers' }));
+      await waitFor(() => expect(push).toHaveBeenCalledWith('/customers/other'));
+      const posted = sent.find((call) => call.method === 'POST');
+      expect(posted?.body).toEqual({
+        contactId,
+        otherContactId: 'other',
+        operationKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      });
+    });
+
+    it('shows the API reason when a merge is refused', async () => {
+      respond((path, method) => {
+        if (path === '/api/contact-merges' && method === 'POST')
+          return apiError(
+            409,
+            'CONTACT_MERGE_CHAT_CONFLICT',
+            'Both customers have a chat on the same page.',
+          );
+        if (path.includes('/contact-match-suggestions')) return { body: [suggestion] };
+        if (path.includes('/contact-merges')) return { body: [] };
+        return { body: detail };
+      });
+      show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Merge' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Merge customers' }));
+      expect((await screen.findByRole('alert')).textContent).toContain('same page');
+    });
+
+    it('lists a merge that can be undone and returns to the restored profile', async () => {
+      respond((path, method) => {
+        if (path.endsWith('/undo')) return { body: { ...merge, undoneAt: '2026-11-21T08:00:00Z' } };
+        if (path.includes('/contact-match-suggestions')) return { body: [] };
+        if (path.includes('/contact-merges') && method === 'GET') return { body: [merge] };
+        return { body: detail };
+      });
+      show(<CustomerProfile contactId={contactId} />);
+      expect(await screen.findByText('Merged with Rahima Akter')).toBeTruthy();
+      await userEvent.click(screen.getByRole('button', { name: 'Undo merge' }));
+      await waitFor(() => expect(push).toHaveBeenCalledWith(`/customers/${contactId}`));
+      expect(await screen.findByText('Merge undone.')).toBeTruthy();
+    });
+
+    it('offers no Merge or Undo to a viewer', async () => {
+      respond((path) => {
+        if (path.includes('/contact-match-suggestions')) return { body: [suggestion] };
+        if (path.includes('/contact-merges')) return { body: [merge] };
+        return { body: detail };
+      });
+      show(<CustomerProfile contactId={contactId} />, false);
+      await screen.findByText('Merged with Rahima Akter');
+      expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Undo merge' })).toBeNull();
+    });
+  });
+
   it('says when the customer is gone', async () => {
     respond(() => apiError(404, 'CONTACT_NOT_FOUND', 'Contact not found'));
     show(<CustomerProfile contactId={contactId} />);

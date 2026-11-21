@@ -1,6 +1,6 @@
 'use client';
 import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import type { SmsSenderIdResponse } from '@dakly/contracts/sms-senders';
 import { Badge } from '@dakly/ui/badge';
@@ -12,6 +12,7 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useSmsSenderIds } from '../api/sms-sender-ids';
 import { useSendTestSms } from '../api/sms-sender-requests';
 import { RequestSenderDialog } from './request-sender-dialog';
+import { SmsBalanceLine } from './sms-balance-line';
 import { useSessionContext } from '@/lib/session-context';
 
 const statusBadge = {
@@ -21,7 +22,17 @@ const statusBadge = {
   rejected: { label: 'Rejected', variant: 'danger' },
 } as const;
 
-export function SmsSettings() {
+// The sending rules are store settings, so the page passes that card in.
+export function SmsSettings({ rules }: { rules?: ReactNode }) {
+  return (
+    <div className="space-y-6">
+      <SenderName />
+      {rules}
+    </div>
+  );
+}
+
+function SenderName() {
   const { data: session } = useSessionContext();
   const editable = Boolean(session?.currentStore?.canEditStoreSettings);
   const [requesting, setRequesting] = useState(false);
@@ -51,6 +62,7 @@ export function SmsSettings() {
           </Button>
         ) : null}
       </div>
+      <SmsBalanceLine />
       {senders.isPending ? <Skeleton className="h-16 w-full" /> : null}
       {senders.error ? (
         <QueryError message={senders.error.message} onRetry={() => void senders.refetch()} />

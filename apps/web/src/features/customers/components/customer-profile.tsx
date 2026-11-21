@@ -14,6 +14,7 @@ import { channelLabels, customerKindLabels, customerPhone } from '../customer-la
 import { ConsentForm } from './consent-form';
 import { CustomerActions } from './customer-actions';
 import { PossibleSamePerson } from './possible-same-person';
+import { RecentMerges } from './recent-merges';
 import { formatCalendarDate } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
@@ -122,6 +123,7 @@ function ProfileContent({
       </Card>
 
       <PossibleSamePerson contactId={contact.id} canEdit={canEdit} />
+      <RecentMerges contactId={contact.id} canEdit={canEdit} />
 
       <Card className="space-y-3">
         <h2 className="text-md font-semibold">Chat channels</h2>

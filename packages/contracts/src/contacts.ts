@@ -134,6 +134,8 @@ export const mergeContactsSchema = z.strictObject({
 });
 export type MergeContactsInput = z.infer<typeof mergeContactsSchema>;
 
+export const contactMergeListQuerySchema = z.strictObject({ contactId: z.uuid() });
+
 // The older contact is kept, so the screen opens that profile after a merge.
 export type ContactMergeResponse = {
   id: string;
