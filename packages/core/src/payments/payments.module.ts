@@ -46,6 +46,7 @@ import { PaymentsService } from './payments.service';
     PaymentsService,
   ],
   exports: [
+    OrderPaymentLinksService,
     PaymentsRepository,
     PaymentsService,
     PaymentCallbacksRepository,
