@@ -65,38 +65,38 @@ function approvalResponse(error: string | undefined, headers: Record<string, str
   );
 }
 
+function testResponse(refused: string | undefined, headers: Record<string, string>) {
+  if (!refused) return new Response(null, { status: 204, headers });
+  return Response.json(
+    { error: { code: 'CAMPAIGN_TEST_PHONE_REQUIRED', message: refused } },
+    { status: 409, headers },
+  );
+}
+
 function walletResponse(balance: number | 'refused', headers: Record<string, string>) {
   if (balance === 'refused')
     return Response.json({ error: { code: 'FORBIDDEN', message: 'No' } }, { status: 403, headers });
   return Response.json({ smsCredits: balance, whatsappPoisha: 0 }, { headers });
 }
 
-function otherResponse(
-  url: string,
-  {
-    approvalError,
-    balance,
-    saved,
-    headers,
-  }: {
-    approvalError?: string;
-    balance: number | 'refused';
-    saved: CampaignResponse;
-    headers: Record<string, string>;
-  },
-) {
-  if (url.endsWith('/approve')) return approvalResponse(approvalError, headers);
-  if (url.endsWith('/wallets')) return walletResponse(balance, headers);
+type ShowOptions = {
+  balance: number | 'refused';
+  approvalError?: string;
+  testRefused?: string;
+  start?: Partial<CampaignResponse>;
+};
+
+function otherResponse(url: string, options: ShowOptions, saved: CampaignResponse) {
+  const headers = { 'x-session-context': 'verified' };
+  if (url.endsWith('/test-send')) return testResponse(options.testRefused, headers);
+  if (url.endsWith('/approve')) return approvalResponse(options.approvalError, headers);
+  if (url.endsWith('/wallets')) return walletResponse(options.balance, headers);
   if (url.includes('/estimate')) return Response.json(estimate, { headers });
   if (url.endsWith(`/campaigns/${draft.id}`)) return Response.json(saved, { headers });
   return Response.json({ items: [], nextCursor: null }, { headers });
 }
 
-function show(options: {
-  balance: number | 'refused';
-  approvalError?: string;
-  start?: Partial<CampaignResponse>;
-}) {
+function show(options: ShowOptions) {
   const calls: { method: string; url: string; body?: unknown }[] = [];
   let saved = { ...draft, ...options.start };
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
@@ -108,7 +108,7 @@ function show(options: {
       saved = { ...saved, ...(body as Partial<CampaignResponse>) };
       return Response.json(saved, { headers });
     }
-    return otherResponse(url, { ...options, saved, headers });
+    return otherResponse(url, options, saved);
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionContextKey, {
@@ -231,6 +231,25 @@ describe('Schedule step', () => {
     await user.click(await screen.findByRole('checkbox'));
     await user.click(screen.getByRole('button', { name: 'Approve and send' }));
     expect((await screen.findByText(/No one in this audience/)).getAttribute('role')).toBe('alert');
+  });
+});
+
+describe('Test send', () => {
+  it('sends a test SMS to the member’s own phone from the dialog', async () => {
+    const calls = show({ balance: 5000 });
+    const user = userEvent.setup({ advanceTimers: () => {} });
+    await user.click(await screen.findByRole('button', { name: 'Approve and launch' }));
+    await user.click(await screen.findByRole('button', { name: 'Send a test SMS to my phone' }));
+    expect((await screen.findByRole('status')).textContent).toContain('Test sent to your phone');
+    expect(calls.filter(({ url }) => url.endsWith('/test-send'))).toHaveLength(1);
+  });
+
+  it('shows why a test could not be sent', async () => {
+    show({ balance: 5000, testRefused: 'Verify your phone number to receive a test message' });
+    const user = userEvent.setup({ advanceTimers: () => {} });
+    await user.click(await screen.findByRole('button', { name: 'Approve and launch' }));
+    await user.click(await screen.findByRole('button', { name: 'Send a test SMS to my phone' }));
+    expect(await screen.findByText(/Verify your phone number/)).toBeTruthy();
   });
 });
 

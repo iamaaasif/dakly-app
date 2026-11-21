@@ -45,6 +45,15 @@ const CAMPAIGN_ERRORS = {
     status: 400,
     message: 'That change does not fit this campaign’s channel',
   },
+  CAMPAIGN_TEST_SMS_ONLY: {
+    status: 409,
+    message: 'A test message can be sent for SMS campaigns only',
+  },
+  CAMPAIGN_TEST_PHONE_REQUIRED: {
+    status: 409,
+    message: 'Verify your phone number to receive a test message',
+  },
+  CAMPAIGN_TEST_RATE_LIMITED: { status: 429, message: 'Wait before sending another test message' },
   CAMPAIGN_APPROVAL_DENIED: {
     status: 403,
     message: 'Only an owner or admin can approve sends in this shop',

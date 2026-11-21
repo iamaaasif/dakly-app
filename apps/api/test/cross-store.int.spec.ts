@@ -1936,6 +1936,26 @@ fixture('GET /campaigns/:campaignId/estimate', async () => {
   expect(estimate).toMatchObject({ audienceCount: 1, recipientsCount: 1, smsCredits: 1 });
   await hidden(b, 'GET', (value) => `/campaigns/${value}/estimate`, id);
 });
+fixture('POST /campaigns/:campaignId/test-send', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  await success(a, 'POST', `/campaigns/${id}/test-send`, 204);
+  expect(f.sms.at(-1)).toMatchObject({ to: a.owner.phone });
+  expect(f.sms.at(-1)?.text).toMatch(/^Test: ঈদে ২০% ছাড়/);
+  const sent = f.sms.length;
+  await hidden(b, 'POST', (value) => `/campaigns/${value}/test-send`, id);
+  expect(f.sms).toHaveLength(sent);
+  // A test is not a campaign message: no recipient row and no credits charged.
+  const { rows } = await f.admin.pool.query(
+    'select count(*)::int as recipients from campaign_recipients where campaign_id=$1',
+    [id],
+  );
+  expect(rows[0].recipients).toBe(0);
+  const messenger = await sentCampaign(b, 1, 'messenger');
+  await f.admin.pool.query("update campaigns set status='draft' where id=$1", [messenger]);
+  const refused = await success(b, 'POST', `/campaigns/${messenger}/test-send`, 409);
+  expect(refused.json().error.code).toBe('CAMPAIGN_TEST_SMS_ONLY');
+});
 fixture('POST /campaigns/:campaignId/duplicate', async () => {
   const { a, b } = await pair(),
     id = await approvableCampaign(a);
