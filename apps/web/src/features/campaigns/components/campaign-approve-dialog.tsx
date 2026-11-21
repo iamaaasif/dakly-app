@@ -13,9 +13,9 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useApproveCampaign } from '../api/approve-campaign';
 import { useCampaignEstimate } from '../api/campaign-estimate';
 import { useSendCampaignTest } from '../api/send-campaign-test';
-import { useSmsBalance } from '../api/sms-balance';
 import { campaignChannelLabels } from '../campaign-labels';
 import { formatDateTime } from '@/lib/format-date';
+import { useSmsBalance } from '@/lib/sms-balance';
 
 // Mounted only while open, so the estimate and balance are read when the owner reaches this point.
 export function CampaignApproveDialog({

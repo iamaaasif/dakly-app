@@ -19,7 +19,12 @@ const sender = (overrides: object) => ({
 });
 const requests: { method: string; url: string; body?: unknown }[] = [];
 
-function show(items: object[], canEdit = true) {
+function walletResponse(balance: number | null) {
+  if (balance === null) return Response.json({ code: 'FORBIDDEN' }, { status: 403, headers });
+  return Response.json({ smsCredits: balance, whatsappPoisha: 0 }, { headers });
+}
+
+function show(items: object[], canEdit = true, balance: number | null = 12400) {
   let documents = 0;
   vi.stubGlobal(
     'ResizeObserver',
@@ -46,6 +51,7 @@ function show(items: object[], canEdit = true) {
       (init.method === 'POST' && url.endsWith('/sms-sender-ids'))
     )
       return Response.json({ id: 'ok' }, { status: 201, headers });
+    if (url.endsWith('/wallets')) return walletResponse(balance);
     return Response.json({ items, nextCursor: null }, { headers });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -55,7 +61,7 @@ function show(items: object[], canEdit = true) {
   });
   render(
     <QueryClientProvider client={client}>
-      <SmsSettings />
+      <SmsSettings rules={<p>Sending rules</p>} />
     </QueryClientProvider>,
   );
 }
@@ -148,4 +154,19 @@ it('hides the request button without edit access', async () => {
 
   await screen.findByText('Dakly shared sender');
   expect(screen.queryByRole('button', { name: 'Request a sender name' })).toBeNull();
+});
+
+it('shows the SMS balance, flags a low one, and leaves it out without billing access', async () => {
+  show([], true, 12400);
+  expect(await screen.findByText('12,400 SMS')).toBeTruthy();
+  expect(screen.getByText('About 6,200 Bangla messages')).toBeTruthy();
+  expect(screen.queryByText('Low')).toBeNull();
+  cleanup();
+  show([], true, 320);
+  expect(await screen.findByText('320 SMS')).toBeTruthy();
+  expect(screen.getByText('Low')).toBeTruthy();
+  cleanup();
+  show([], true, null);
+  await screen.findByText('Sending rules');
+  expect(screen.queryByText('SMS balance')).toBeNull();
 });
