@@ -14,17 +14,19 @@ export const contactMemoryMaxSerializedBytes = 16_384;
 export const contactMemoryContextMaxBytes = 1_200;
 export const contactMemoryContextMaxTokens = 300;
 
+export const contactMemoryFactKinds = [
+  'size',
+  'colour',
+  'style',
+  'budget',
+  'language',
+  'tone',
+  'past_issue',
+  'delivery_area',
+] as const;
+
 export const contactMemoryFactSchema = z.strictObject({
-  kind: z.enum([
-    'size',
-    'colour',
-    'style',
-    'budget',
-    'language',
-    'tone',
-    'past_issue',
-    'delivery_area',
-  ]),
+  kind: z.enum(contactMemoryFactKinds),
   value: z.string().trim().min(1).max(160),
   source: z.enum(['customer_message', 'own_order', 'staff']),
   sourceId: z.uuid(),
@@ -56,3 +58,20 @@ export const renderedContactMemorySchema = z.strictObject({
 
 export type ContactMemory = z.infer<typeof contactMemorySchema>;
 export type ContactMemoryFact = z.infer<typeof contactMemoryFactSchema>;
+
+// One call returns the chat summary and the customer's memory. A fact names the message or order
+// that shows it, and the service drops any fact whose id it did not send. The model cannot write a
+// staff fact.
+export const contactMemoryExtractionSchema = z.strictObject({
+  conversationSummary: z.string().max(600),
+  customerSummary: z.string().max(600),
+  facts: z
+    .array(
+      contactMemoryFactSchema
+        .pick({ kind: true, value: true, sourceId: true })
+        .extend({ source: z.enum(['customer_message', 'own_order']) }),
+    )
+    .max(20),
+});
+
+export type ContactMemoryExtraction = z.infer<typeof contactMemoryExtractionSchema>;

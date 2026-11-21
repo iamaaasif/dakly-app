@@ -90,6 +90,7 @@ describe('Worker job schedulers', () => {
       scheduler('run-golden-eval', { pattern: '0 20 * * *', tz: 'UTC' }),
       scheduler('run-maintenance', { pattern: '0 19 * * *', tz: 'UTC' }),
       ...bulkIntervals,
+      scheduler('queue-conversation-memories', 600000),
     ]);
     expect(sync.schedulers).toEqual([
       scheduler('queue-channel-token-checks', 86400000),
