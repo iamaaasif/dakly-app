@@ -1,6 +1,6 @@
 import { TriangleAlert, Check } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import type { KhataImportResponse, KhataPageResponse } from '@dakly/contracts/khata-scans';
 import { Button } from '@dakly/ui/button';
@@ -23,9 +23,13 @@ export type PageImport = {
   walkIn: number;
 };
 
-type ReviewPageProps = { page: KhataPageResponse; onImported: (done: PageImport) => void };
+type ReviewPageProps = {
+  page: KhataPageResponse;
+  tabs: ReactNode;
+  onImported: (done: PageImport) => void;
+};
 
-export function KhataReviewPage({ page, onImported }: ReviewPageProps) {
+export function KhataReviewPage({ page, tabs, onImported }: ReviewPageProps) {
   const [choices, setChoices] = useState<Record<string, RowChoice>>({});
   const importPage = useImportKhataPage(page.id);
   const choiceOf = (rowId: string) => choices[rowId] ?? untouchedChoice;
@@ -55,7 +59,7 @@ export function KhataReviewPage({ page, onImported }: ReviewPageProps) {
         </p>
       ) : null}
       <div className="flex flex-wrap items-start gap-4">
-        <PagePhoto page={page} />
+        <PagePhoto page={page} tabs={tabs} />
         <RowTable rows={page.rows} choiceOf={choiceOf} onChange={change} />
       </div>
     </div>
@@ -133,9 +137,10 @@ function RowTable({ rows, choiceOf, onChange }: RowTableProps) {
   );
 }
 
-function PagePhoto({ page }: { page: KhataPageResponse }) {
+function PagePhoto({ page, tabs }: { page: KhataPageResponse; tabs: ReactNode }) {
   return (
     <figure className="flex min-w-0 flex-[1_1_260px] flex-col gap-2.5 rounded-lg border border-border bg-surface p-3">
+      {tabs}
       {page.photoUrl ? (
         <Image
           src={page.photoUrl}

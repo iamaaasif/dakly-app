@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import type { KhataPageResponse } from '@dakly/contracts/khata-scans';
 import { cn } from '@dakly/ui/cn';
@@ -45,51 +45,62 @@ type PageTabsProps = {
 
 function PageTabs({ pages, imported, onImported }: PageTabsProps) {
   const [active, setActive] = useState(0);
+  const tabs =
+    pages.length > 1 ? (
+      <div className="flex flex-wrap gap-1.5">
+        {pages.map((page, index) => (
+          <button
+            key={page.id}
+            type="button"
+            aria-pressed={index === active}
+            onClick={() => setActive(index)}
+            className={cn(
+              'min-h-7 rounded-md border px-2.5 text-sm font-semibold',
+              index === active
+                ? 'border-inverse bg-inverse text-on-primary'
+                : 'border-border-strong bg-surface',
+            )}
+          >
+            Page {index + 1}
+            {imported[page.id] ? ' · imported' : ''}
+          </button>
+        ))}
+      </div>
+    ) : null;
   return (
-    <div className="flex flex-col gap-4">
-      {pages.length > 1 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {pages.map((page, index) => (
-            <button
-              key={page.id}
-              type="button"
-              aria-pressed={index === active}
-              onClick={() => setActive(index)}
-              className={cn(
-                'min-h-7 rounded-md border px-2.5 text-sm font-semibold',
-                index === active
-                  ? 'border-inverse bg-inverse text-on-primary'
-                  : 'border-border-strong bg-surface',
-              )}
-            >
-              Page {index + 1}
-              {imported[page.id] ? ' · imported' : ''}
-            </button>
-          ))}
-        </div>
-      ) : null}
+    <>
       {pages.map((page, index) => (
         <div key={page.id} hidden={index !== active}>
-          <PagePanel page={page} imported={imported[page.id]} onImported={onImported} />
+          <PagePanel page={page} tabs={tabs} imported={imported[page.id]} onImported={onImported} />
         </div>
       ))}
-    </div>
+    </>
   );
 }
 
 type PagePanelProps = {
   page: KhataPageResponse;
+  tabs: ReactNode;
   imported: PageImport | undefined;
   onImported: (pageId: string, done: PageImport) => void;
 };
 
-function PagePanel({ page, imported, onImported }: PagePanelProps) {
-  if (page.status !== 'read') return <KhataPageProblem page={page} />;
-  if (imported)
+// The tabs sit in the photo card on the review screen, as in the design; the other states have no card.
+function PagePanel({ page, tabs, imported, onImported }: PagePanelProps) {
+  if (page.status === 'read' && !imported)
     return (
-      <p role="status" className="rounded-lg bg-success-soft p-4 text-success">
-        This page is imported.
-      </p>
+      <KhataReviewPage page={page} tabs={tabs} onImported={(done) => onImported(page.id, done)} />
     );
-  return <KhataReviewPage page={page} onImported={(done) => onImported(page.id, done)} />;
+  return (
+    <div className="flex flex-col gap-4">
+      {tabs}
+      {page.status === 'read' ? (
+        <p role="status" className="rounded-lg bg-success-soft p-4 text-success">
+          This page is imported.
+        </p>
+      ) : (
+        <KhataPageProblem page={page} />
+      )}
+    </div>
+  );
 }
