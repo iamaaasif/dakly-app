@@ -44,6 +44,15 @@ export type Contact = {
   createdAt: Date;
 };
 
+// A list row carries the columns the Columns picker can show.
+export type ListedContact = Contact & {
+  whatsappPhone: string | null;
+  email: string | null;
+  district: string | null;
+  source: ContactSource;
+  consentedChannels: ConsentChannel[];
+};
+
 // What the send gate needs; the phone itself stays here.
 export type ContactRecipient = {
   kind: ContactKind;
@@ -144,10 +153,23 @@ export class ContactsRepository {
     );
   }
 
-  list(storeId: string, filter: ContactFilter): Promise<Contact[]> {
+  list(storeId: string, filter: ContactFilter): Promise<ListedContact[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select(contactColumns)
+        .select({
+          ...contactColumns,
+          whatsappPhone: contacts.whatsappPhone,
+          email: contacts.email,
+          district: contacts.district,
+          source: contacts.source,
+          consentedChannels: sql<ConsentChannel[]>`coalesce(array(
+            select ${contactConsentCurrent.channel} from ${contactConsentCurrent}
+            where ${contactConsentCurrent.storeId} = ${storeId}
+              and ${contactConsentCurrent.contactId} = ${contacts.id}
+              and ${contactConsentCurrent.status} = 'granted'
+            order by ${contactConsentCurrent.channel}
+          ), '{}')`,
+        })
         .from(contacts)
         .where(and(...matchingConditions(storeId, filter), cursorCondition(storeId, filter.cursor)))
         .orderBy(desc(contacts.createdAt), desc(contacts.id))

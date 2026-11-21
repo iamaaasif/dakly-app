@@ -27,8 +27,8 @@ Many Dakly shops also sell over a counter, and most of those keep a paper khata 
 | Part                      | What it does                                                                               | Release                                                                                    |
 | ------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
 | Shop sales (Pocket Sales) | A fast counter till on phone or tablet: tap products, pick payment, done. Works offline.   | Release 2 (Physical Shop extension)                                                        |
-| Due book                  | Who owes how much, since when; remind and collect.                                         | Release 2 (Physical Shop extension)                                                        |
-| Khata Scanner             | Photograph notebook pages; AI reads names, phones, amounts and creates customers and baki. | Release 2                                                                                  |
+| Due book                  | Who owes how much, since when; remind and collect.                                         | Release 1 (D46)                                                                            |
+| Khata Scanner             | Photograph notebook pages; AI reads names, phones, amounts and creates customers and baki. | Release 1 (D46)                                                                            |
 | POS connections           | Bring sales and customers from an existing POS.                                            | Release 1: Excel or CSV upload only. Release 2: API key, webhook and named POS connectors. |
 
 Decisions applied: Due book reminders use the shop's SMS credits (or WhatsApp utility messages from the ৳ balance if the shop picks WhatsApp). Walk-in sales count in sales numbers but never create customers or receive messages.
