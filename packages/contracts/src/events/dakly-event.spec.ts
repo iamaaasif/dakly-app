@@ -116,6 +116,18 @@ const examples: DaklyEvent[] = [
     },
   },
   { type: 'contact.created', storeId, occurredAt, payload: { contactId } },
+  {
+    type: 'contact.merged',
+    storeId,
+    occurredAt,
+    payload: { keptContactId: contactId, mergedContactId: storeId },
+  },
+  {
+    type: 'contact.merge_undone',
+    storeId,
+    occurredAt,
+    payload: { keptContactId: contactId, mergedContactId: storeId },
+  },
   { type: 'contact.deleted', storeId, occurredAt, payload: { contactId } },
   {
     type: 'contact.erased',
