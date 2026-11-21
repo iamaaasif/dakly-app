@@ -31,7 +31,7 @@ import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { handoverReason } from './handover-reason';
 import { classifyChat } from './prompts/classify-chat.v1';
 import { checkReplyFacts } from './reply-fact-check';
-import { type ComposedReply, SalesAgentService } from './sales-agent.service';
+import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
@@ -264,14 +264,19 @@ export class AiAgentService {
     before: EligibleTurn,
     composed: Extract<ComposedReply, { kind: 'reply' }>,
   ) {
-    const { aiRunId, cardTexts, sources, text } = composed;
+    const { aiRunId, cards, sources, text } = composed;
     let isSaved = false;
     try {
       await this.transaction.runLocked(storeId, async () => {
         const current = await this.lockCurrent(storeId, conversationId, before);
         if (!current) return;
         const latestId = current.turn.latest.id;
-        const send = (content: string, key: string, aiSources?: typeof sources) =>
+        const send = (
+          content: string,
+          key: string,
+          aiSources?: typeof sources,
+          image?: ProductCard['image'],
+        ) =>
           this.messaging.queueChannelMessage(storeId, {
             ...current.target,
             category: 'staff_reply',
@@ -279,8 +284,10 @@ export class AiAgentService {
             content,
             operationKey: `ai-reply:${latestId}:${key}`,
             aiSources,
+            image,
           });
-        for (const [index, card] of cardTexts.entries()) await send(card, `card-${index}`);
+        for (const [index, card] of cards.entries())
+          await send(card.text, `card-${index}`, undefined, card.image);
         await send(text, 'reply', sources);
         // After queuing, so the window starts at the earliest saved AI reply.
         await this.usage.consume(storeId, {

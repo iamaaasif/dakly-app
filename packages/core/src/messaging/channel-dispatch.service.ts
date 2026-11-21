@@ -1,12 +1,15 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { messageAttachmentsSchema } from '@dakly/contracts/chats';
 import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
+import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
+import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
@@ -66,12 +69,24 @@ export class ChannelDispatchService {
     @Inject(OutboundMessagingRepository) private readonly outbound: OutboundMessagingRepository,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(StoresService) private readonly stores: StoresService,
+    @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
   ) {}
 
   async sendQueuedMessage(storeId: string, messageId: string): Promise<void> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
     const pending = await this.prepareChannelDispatch(storeId, messageId);
-    if (pending) await this.submit(storeId, pending, {});
+    if (pending) await this.submit(storeId, pending, { imageUrl: this.imageUrl(pending) });
+  }
+
+  // The Meta servers fetch the photo, so the link outlives the send but not by long.
+  private imageUrl({ attachments }: { attachments: unknown }) {
+    const parsed = messageAttachmentsSchema.safeParse(attachments);
+    const image = parsed.success
+      ? parsed.data.find((item) => item.kind === 'image' && item.status === 'stored')
+      : undefined;
+    return image?.status === 'stored'
+      ? this.storage.createDownloadUrl(image.objectKey, 600)
+      : undefined;
   }
 
   // A campaign recipient's message was checked by the campaign's own claim just before this, so

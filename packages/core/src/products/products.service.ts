@@ -142,6 +142,20 @@ export class ProductsService {
     return this.repository.countForChat(storeId);
   }
 
+  // The stored file behind a photo the AI chose, only if it belongs to a product shown in chats.
+  async chatPhotoFile(storeId: string, productId: string, fileId: string) {
+    const product = await this.repository.findForChat(storeId, productId);
+    const photos = [product?.photos, ...(product?.variants.map(({ photos }) => photos) ?? [])];
+    const photo = photos.flat().find((candidate) => candidate?.id === fileId);
+    return (
+      photo && {
+        objectKey: photo.objectKey,
+        contentType: photo.contentType,
+        sizeBytes: photo.sizeBytes,
+      }
+    );
+  }
+
   async getForChat(storeId: string, id: string): Promise<ChatProduct> {
     const product = await this.repository.findForChat(storeId, id);
     if (!product) throw productError('PRODUCT_NOT_FOUND');
