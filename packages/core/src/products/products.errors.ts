@@ -16,6 +16,10 @@ const PRODUCT_ERRORS = {
   PRODUCT_PHOTO_ORDER_INVALID: { status: 400, message: 'Include every product photo once' },
   PRODUCT_NOT_FOUND: { status: 404, message: 'Product not found' },
   PRODUCT_VARIANT_NOT_FOUND: { status: 404, message: 'Product variant not found' },
+  RESTOCK_CONTACT_NOT_FOUND: { status: 404, message: 'Customer not found' },
+  RESTOCK_REQUEST_NOT_FOUND: { status: 404, message: 'Restock request not found' },
+  RESTOCK_VARIANT_STILL_OUT: { status: 409, message: 'This size is still out of stock' },
+  RESTOCK_VARIANT_IN_STOCK: { status: 409, message: 'This size is in stock' },
   PRODUCT_SKU_TAKEN: { status: 409, message: 'A variant with this SKU already exists' },
 } as const satisfies ErrorCatalog;
 

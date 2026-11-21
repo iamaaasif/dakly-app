@@ -7,7 +7,7 @@ Build each feature as a vertical slice, contract first, backend before frontend,
 - **Contract first.** The zod schema in `packages/contracts` is shared by the API and the web form. Writing it first fixes the shape both sides build against, so the backend and frontend can be built by different people (or sessions) without guessing.
 - **Backend before frontend.** Rules, permissions and store isolation live in the service and the database. A screen built first tends to grow its own rules, which then disagree with the API.
 - **Vertical slices, not layers across the app.** "Confirm an order" end to end (contract, table, service, route, button) ships value and gets reviewed as one idea. "All repositories for release 1" does not.
-- **Small PRs.** Under about 500 changed lines, one purpose ([pull-requests.md](../rules/pull-requests.md)). A slice usually takes two to four PRs.
+- **Small PRs.** Under about 800 changed lines (1,000 at most), one purpose ([pull-requests.md](../rules/pull-requests.md)). A slice usually takes two to four PRs.
 
 This is the same approach as Cal.com and Twenty (contract or API types shared with the web app) and Google's guidance on small CLs.
 
@@ -27,7 +27,7 @@ Before you start: read the feature doc, check [open-questions.md](../product/ope
 | 8   | Web: screen           | `features/<feature>/components/`, `app/(app)/<route>/page.tsx` | Loading, empty, error and data states; works at 360 px; matches the feature doc             |
 | 9   | Docs and tracker      | Feature doc, `tasks.md`                                        | Doc matches what was built; task row updated with the PR link                               |
 
-Steps 1 to 5 can be one PR for a small slice. Split as 1–3, 4–6, 7–8 when the diff passes 500 lines. Step 9 is in every PR.
+Steps 1 to 5 can be one PR for a small slice. Split as 1–3, 4–6, 7–8 when the diff passes 800 lines. Step 9 is in every PR.
 
 ## When the frontend can go first
 

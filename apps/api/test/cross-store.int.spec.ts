@@ -13,6 +13,7 @@ import { DeliveryService } from '@dakly/core/delivery/delivery.service';
 import { NotificationStreamService } from '@dakly/core/notifications/notification-stream.service';
 import { NotificationsService } from '@dakly/core/notifications/notifications.service';
 import { ValkeyClient } from '@dakly/core/platform/cache/valkey-client';
+import { Clock } from '@dakly/core/platform/clock';
 import { loadEnv, resetEnvForTests } from '@dakly/core/platform/config/env';
 import { EnvelopeEncryption } from '@dakly/core/platform/crypto/envelope-encryption';
 import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.tokens';
@@ -658,6 +659,74 @@ fixture('POST /variants/:variantId/stock-adjustments', async () => {
     ).statusCode,
   ).toBe(403);
 });
+async function waitingRequest(shop: Shop) {
+  const created = (
+    await success(shop, 'POST', '/products', 201, { name: 'Restock fixture', pricePoisha: 10000 })
+  ).json();
+  const variantId = created.variants[0].id as string;
+  const contactId = await contact(shop);
+  const request = (
+    await success(shop, 'POST', `/variants/${variantId}/restock-requests`, 201, { contactId })
+  ).json();
+  return { productId: created.id as string, variantId, contactId, id: request.id as string };
+}
+fixture('POST /variants/:variantId/restock-requests', async () => {
+  const { a, b } = await pair(),
+    { variantId, contactId, id } = await waitingRequest(a);
+  expect((await f.row('restock_requests', id)).store_id).toBe(a.id);
+  const again = await success(a, 'POST', `/variants/${variantId}/restock-requests`, 201, {
+    contactId,
+  });
+  expect(again.json().id).toBe(id);
+  await hidden(
+    b,
+    'POST',
+    (value) => `/variants/${value}/restock-requests`,
+    variantId,
+    () => ({ contactId: randomUUID() }),
+  );
+});
+fixture('GET /restock-requests', async () => {
+  const { a, b } = await pair(),
+    { id } = await waitingRequest(a);
+  const own = (await success(a, 'GET', '/restock-requests', 200)).json();
+  expect(own.items.map((item: { id: string }) => item.id)).toEqual([id]);
+  expect((await success(b, 'GET', '/restock-requests', 200)).json().items).toEqual([]);
+});
+fixture('GET /products/:productId/restock-waiting', async () => {
+  const { a, b } = await pair(),
+    { productId, variantId } = await waitingRequest(a);
+  expect(
+    (await success(a, 'GET', `/products/${productId}/restock-waiting`, 200)).json().items,
+  ).toEqual([{ variantId, waiting: 1 }]);
+  expect(
+    (await success(b, 'GET', `/products/${productId}/restock-waiting`, 200)).json().items,
+  ).toEqual([]);
+});
+fixture('DELETE /restock-requests/:id', async () => {
+  const { a, b } = await pair(),
+    { id } = await waitingRequest(a);
+  await hidden(b, 'DELETE', (value) => `/restock-requests/${value}`, id);
+  expect((await f.row('restock_requests', id)).status).toBe('waiting');
+  await success(a, 'DELETE', `/restock-requests/${id}`, 204);
+  expect((await f.row('restock_requests', id)).status).toBe('cancelled');
+  expect((await f.request(a.member, 'DELETE', `/restock-requests/${id}`)).statusCode).toBe(403);
+});
+fixture('POST /variants/:variantId/restock-notifications', async () => {
+  const { a, b } = await pair(),
+    { variantId, id } = await waitingRequest(a);
+  await success(a, 'POST', `/variants/${variantId}/restock-notifications`, 409);
+  await f.admin.pool.query('update product_variants set on_hand=3 where id=$1', [variantId]);
+  // The contact has no chat, so nobody is messaged and the request keeps waiting.
+  expect(
+    (await success(a, 'POST', `/variants/${variantId}/restock-notifications`, 200)).json(),
+  ).toEqual({ queued: 0, waiting: 1 });
+  expect((await f.row('restock_requests', id)).status).toBe('waiting');
+  await hidden(b, 'POST', (value) => `/variants/${value}/restock-notifications`, variantId);
+  expect(
+    (await f.request(a.member, 'POST', `/variants/${variantId}/restock-notifications`)).statusCode,
+  ).toBe(403);
+});
 async function deliveryZone(shop: Shop) {
   const result = await success(shop, 'POST', '/delivery-zones', 201, {
     name: 'Outside Dhaka',
@@ -1213,6 +1282,195 @@ fixture('POST /contacts/:contactId/consents', async () => {
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
 });
+async function dueEntries(shop: Shop, contactId: string) {
+  await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {
+    amountPoisha: 95000,
+  });
+  return success(shop, 'POST', `/due-book/customers/${contactId}/payments`, 201, {
+    amountPoisha: 20000,
+    method: 'cash',
+  });
+}
+async function dueEntryId(shop: Shop, contactId: string) {
+  const result = await success(shop, 'POST', `/due-book/customers/${contactId}/baki`, 201, {
+    amountPoisha: 1000,
+  });
+  return result.json().entry.id as string;
+}
+async function dueMessageId(shop: Shop, contactId: string) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    "insert into due_messages(id,store_id,contact_id,kind,body) values($1,$2,$3,'reminder','নমুনা')",
+    [id, shop.id, contactId],
+  );
+  return id;
+}
+fixture('GET /due-book/summary', async () => {
+  const { a, b } = await pair();
+  await dueEntries(a, await contact(a));
+  await success(b, 'POST', `/due-book/customers/${await contact(b)}/baki`, 201, {
+    amountPoisha: 5000,
+  });
+  expect((await success(a, 'GET', '/due-book/summary', 200)).json()).toMatchObject({
+    totalOwedPoisha: 75000,
+    customersOwing: 1,
+    collectedLast7DaysPoisha: 20000,
+  });
+  expect((await success(b, 'GET', '/due-book/summary', 200)).json()).toMatchObject({
+    totalOwedPoisha: 5000,
+    customersOwing: 1,
+    collectedLast7DaysPoisha: 0,
+  });
+  expect((await f.request(a.member, 'GET', '/due-book/summary')).statusCode).toBe(403);
+});
+fixture('GET /due-book/customers', async () => {
+  const { a, b } = await pair(),
+    aId = await contact(a),
+    bId = await contact(b);
+  await dueEntries(a, aId);
+  await dueEntries(b, bId);
+  for (const [shop, own, foreign] of [
+    [a, aId, bId],
+    [b, bId, aId],
+  ] as const) {
+    const ids = (await success(shop, 'GET', '/due-book/customers', 200))
+      .json()
+      .items.map((item: { contactId: string }) => item.contactId);
+    expect(ids).toEqual([own]);
+    expect(ids).not.toContain(foreign);
+  }
+  expect((await f.request(a.member, 'GET', '/due-book/customers')).statusCode).toBe(403);
+});
+fixture('GET /due-book/customers/:contactId', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  await dueEntries(a, id);
+  expect((await success(a, 'GET', `/due-book/customers/${id}`, 200)).json()).toMatchObject({
+    contactId: id,
+    balancePoisha: 75000,
+  });
+  await hidden(b, 'GET', (value) => `/due-book/customers/${value}`, id);
+});
+fixture('GET /due-book/customers/:contactId/entries', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  await dueEntries(a, id);
+  const own = await success(a, 'GET', `/due-book/customers/${id}/entries`, 200);
+  expect(own.json().items.map((item: { kind: string }) => item.kind)).toEqual(['payment', 'baki']);
+  await hidden(b, 'GET', (value) => `/due-book/customers/${value}/entries`, id);
+});
+fixture('POST /due-book/customers/:contactId/baki', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  const input = { amountPoisha: 95000, note: 'দুটি শাড়ি' };
+  const own = await success(a, 'POST', `/due-book/customers/${id}/baki`, 201, input);
+  expect(own.json().balance).toMatchObject({ contactId: id, balancePoisha: 95000 });
+  await hidden(
+    b,
+    'POST',
+    (value) => `/due-book/customers/${value}/baki`,
+    id,
+    () => input,
+  );
+  const rows = await f.admin.pool.query('select store_id from due_entries where contact_id=$1', [
+    id,
+  ]);
+  expect(rows.rows).toEqual([{ store_id: a.id }]);
+  expect(
+    (await f.request(a.member, 'POST', `/due-book/customers/${id}/baki`, input)).statusCode,
+  ).toBe(403);
+  const body = { ...input, storeId: b.id };
+  expect(
+    (await f.request(a.owner, 'POST', `/due-book/customers/${id}/baki`, body)).statusCode,
+  ).toBe(400);
+});
+fixture('POST /due-book/customers/:contactId/payments', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  await success(a, 'POST', `/due-book/customers/${id}/baki`, 201, { amountPoisha: 95000 });
+  const input = { amountPoisha: 50000, method: 'bkash' };
+  const own = await success(a, 'POST', `/due-book/customers/${id}/payments`, 201, input);
+  expect(own.json().balance.balancePoisha).toBe(45000);
+  await hidden(
+    b,
+    'POST',
+    (value) => `/due-book/customers/${value}/payments`,
+    id,
+    () => input,
+  );
+  const rows = await f.admin.pool.query('select kind from due_entries where contact_id=$1', [id]);
+  expect(rows.rows).toHaveLength(2);
+});
+fixture('POST /due-book/customers/:contactId/write-offs', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  await success(a, 'POST', `/due-book/customers/${id}/baki`, 201, { amountPoisha: 95000 });
+  const input = { amountPoisha: 25000, reason: 'দোকান বন্ধ করে চলে গেছেন' };
+  const own = await success(a, 'POST', `/due-book/customers/${id}/write-offs`, 201, input);
+  expect(own.json().balance.balancePoisha).toBe(70000);
+  await hidden(
+    b,
+    'POST',
+    (value) => `/due-book/customers/${value}/write-offs`,
+    id,
+    () => input,
+  );
+  const rows = await f.admin.pool.query('select kind from due_entries where contact_id=$1', [id]);
+  expect(rows.rows).toHaveLength(2);
+});
+// Reminders go out only from 9 am to 8 pm Dhaka time, so these two routes run at noon there.
+async function atNoonInDhaka(work: () => Promise<void>) {
+  const clock = vi
+    .spyOn(app.get(Clock), 'now')
+    .mockReturnValue(new Date(Date.now() - (Date.now() % 86_400_000) + 6 * 3_600_000));
+  try {
+    await work();
+  } finally {
+    clock.mockRestore();
+  }
+}
+async function overdueCustomer(shop: Shop) {
+  const id = await contact(shop);
+  await success(shop, 'POST', `/due-book/customers/${id}/baki`, 201, {
+    amountPoisha: 95000,
+    occurredAt: new Date(Date.now() - 40 * 86_400_000).toISOString(),
+  });
+  return id;
+}
+fixture('POST /due-book/customers/:contactId/reminders', () =>
+  atNoonInDhaka(async () => {
+    const { a, b } = await pair(),
+      id = await overdueCustomer(a);
+    const own = await success(a, 'POST', `/due-book/customers/${id}/reminders`, 201);
+    expect(own.json().messageId).toEqual(expect.any(String));
+    const again = await f.request(a.owner, 'POST', `/due-book/customers/${id}/reminders`);
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.code).toBe('DUE_REMINDER_TOO_SOON');
+    await hidden(b, 'POST', (value) => `/due-book/customers/${value}/reminders`, id);
+    expect(
+      (await f.request(a.member, 'POST', `/due-book/customers/${id}/reminders`)).statusCode,
+    ).toBe(403);
+    const rows = await f.admin.pool.query('select store_id from due_messages where contact_id=$1', [
+      id,
+    ]);
+    expect(rows.rows).toEqual([{ store_id: a.id }]);
+  }),
+);
+fixture('POST /due-book/reminders/overdue', () =>
+  atNoonInDhaka(async () => {
+    const { a, b } = await pair(),
+      aId = await overdueCustomer(a),
+      bId = await overdueCustomer(b);
+    const result = await success(a, 'POST', '/due-book/reminders/overdue', 201);
+    expect(result.json()).toMatchObject({ queued: 1, skippedRecentlyReminded: 0 });
+    const rows = await f.admin.pool.query(
+      'select contact_id from due_messages where contact_id=any($1::uuid[])',
+      [[aId, bId]],
+    );
+    expect(rows.rows).toEqual([{ contact_id: aId }]);
+    expect((await f.request(a.member, 'POST', '/due-book/reminders/overdue')).statusCode).toBe(403);
+  }),
+);
 async function customerImport(shop: Shop) {
   const result = await success(shop, 'POST', '/imports', 201, { sizeBytes: 120 });
   expect(result.json().uploadUrl).toContain(`/imports/${shop.id}/`);
@@ -4372,6 +4630,7 @@ describe('every production shop route isolates its data', () => {
   });
   it('returns own rows and hides foreign rows without repository filters under every route policy', async () => {
     const { a, b } = await pair();
+    const [contactA, contactB] = [await contact(a), await contact(b)];
     const rows: [string, string, string, string][] = [
       ['stores', 'id', a.id, b.id],
       ['memberships', 'id', a.membership, b.membership],
@@ -4381,7 +4640,7 @@ describe('every production shop route isolates its data', () => {
         await knowledgeItem(a, 'ঢাকায় ৬০ টাকা।'),
         await knowledgeItem(b, 'ঢাকার বাইরে ১২০ টাকা।'),
       ],
-      ['contacts', 'id', await contact(a), await contact(b)],
+      ['contacts', 'id', contactA, contactB],
       ['roles', 'id', await role(a), await role(b)],
       ['segments', 'id', await segment(a), await segment(b)],
       ['campaigns', 'id', await campaign(a), await campaign(b)],
@@ -4390,6 +4649,8 @@ describe('every production shop route isolates its data', () => {
       ['staff_recovery_history', 'audit_id', await f.recovery(a), await f.recovery(b)],
       ['wallet_ledger', 'id', await smsCredits(a, 10), await smsCredits(b, 20)],
       ['sms_sender_ids', 'id', await smsSender(a), await smsSender(b)],
+      ['due_entries', 'id', await dueEntryId(a, contactA), await dueEntryId(b, contactB)],
+      ['due_messages', 'id', await dueMessageId(a, contactA), await dueMessageId(b, contactB)],
     ];
     const connection = app.get<IsolationFixture['admin']>(DATABASE_CONNECTION);
     const client = await connection.pool.connect();

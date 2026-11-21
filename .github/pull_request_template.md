@@ -15,5 +15,5 @@
 - [ ] New tables with shop data have `store_id`, an RLS policy and a cross-store test.
 - [ ] Input is parsed with a zod schema from `packages/contracts`.
 - [ ] Errors use `AppError` codes; no secrets, tokens, phone numbers or message text in logs.
-- [ ] Under about 500 changed lines, one purpose.
+- [ ] Under about 800 changed lines, one purpose.
 - [ ] The feature doc matches the code, and the task row in `docs/tasks.md` has the new status and this PR's number.

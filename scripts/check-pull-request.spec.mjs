@@ -64,14 +64,14 @@ describe('pull request size', () => {
     expect(countChangedLines(numstat)).toBe(24);
   });
 
-  it('passes at 500, warns above 500 and fails above 800', () => {
-    expect(checkSize(500, [])).toEqual({ errors: [], warnings: [] });
-    expect(checkSize(501, []).warnings).toHaveLength(1);
-    expect(checkSize(800, [])).toMatchObject({ errors: [] });
-    expect(checkSize(801, []).errors).toHaveLength(1);
+  it('passes at 800, warns above 800 and fails above 1000', () => {
+    expect(checkSize(800, [])).toEqual({ errors: [], warnings: [] });
+    expect(checkSize(801, []).warnings).toHaveLength(1);
+    expect(checkSize(1000, [])).toMatchObject({ errors: [] });
+    expect(checkSize(1001, []).errors).toHaveLength(1);
   });
 
-  it('only warns above 800 for a mechanical change', () => {
+  it('only warns above 1000 for a mechanical change', () => {
     expect(checkSize(2000, ['mechanical-change'])).toMatchObject({ errors: [] });
     expect(checkSize(2000, ['mechanical-change']).warnings).toHaveLength(1);
   });

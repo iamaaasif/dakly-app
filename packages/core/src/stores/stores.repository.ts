@@ -36,12 +36,14 @@ const settingsColumns = {
   tradeLicenceNumber: stores.tradeLicenceNumber,
   sending: sql<unknown>`${stores.settings}->'sending'`,
   stock: sql<unknown>`${stores.settings}->'stock'`,
+  dueBook: sql<unknown>`${stores.settings}->'dueBook'`,
 };
 
 // The service parses the sending section and fills its defaults.
-export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending' | 'stock'> & {
+export type StoreSettingsRow = Omit<StoreSettingsResponse, 'sending' | 'stock' | 'dueBook'> & {
   sending: unknown;
   stock: unknown;
+  dueBook: unknown;
 };
 
 export type AttributionRebuild = {
@@ -184,7 +186,7 @@ export class StoresRepository {
 
   async changeSettings(
     storeId: string,
-    { sending, stock, ...columns }: ChangeStoreSettingsInput,
+    { sending, stock, dueBook, ...columns }: ChangeStoreSettingsInput,
     updatedAt: Date,
   ): Promise<StoreSettingsRow | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) => {
@@ -192,9 +194,11 @@ export class StoresRepository {
       if (sending)
         settings = sql`jsonb_set(${settings}, '{sending}', ${JSON.stringify(sending)}::jsonb)`;
       if (stock) settings = sql`jsonb_set(${settings}, '{stock}', ${JSON.stringify(stock)}::jsonb)`;
+      if (dueBook)
+        settings = sql`jsonb_set(${settings}, '{dueBook}', ${JSON.stringify(dueBook)}::jsonb)`;
       return tx
         .update(stores)
-        .set({ ...columns, updatedAt, ...((sending || stock) && { settings }) })
+        .set({ ...columns, updatedAt, ...((sending || stock || dueBook) && { settings }) })
         .where(eq(stores.id, storeId))
         .returning(settingsColumns);
     });
