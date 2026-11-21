@@ -11,18 +11,18 @@ import { SignUpVerify } from './sign-up-verify';
 
 export function SignUpScreen({
   config,
-  signupTicket,
+  google,
   isRemembered = false,
   onAuthenticated,
   onSignIn,
 }: {
   config: AuthConfig;
-  signupTicket?: string;
+  google?: { signupTicket: string; email: string };
   isRemembered?: boolean;
   onAuthenticated?: () => void;
   onSignIn?: () => void;
 }) {
-  const [account, setAccount] = useState<{ registration: SignUpInput; password: string } | null>(
+  const [account, setAccount] = useState<{ registration: SignUpInput; password?: string } | null>(
     null,
   );
   if (!config.legal)
@@ -44,13 +44,13 @@ export function SignUpScreen({
       {account ? (
         <SignUpVerify
           account={account}
-          signupTicket={signupTicket}
+          signupTicket={google?.signupTicket}
           isRemembered={isRemembered}
           onBack={() => setAccount(null)}
           onAuthenticated={onAuthenticated}
         />
       ) : (
-        <SignUpAccount legal={config.legal} onSent={setAccount} />
+        <SignUpAccount legal={config.legal} googleEmail={google?.email} onSent={setAccount} />
       )}
       <AuthLink href="/sign-in" onNavigate={onSignIn}>
         Already have an account? Sign in

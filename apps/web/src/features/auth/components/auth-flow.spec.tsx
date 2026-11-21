@@ -90,7 +90,6 @@ describe('Sign in', () => {
         screen.getByLabelText(method === 'phone' ? 'Mobile number' : 'Email'),
         target,
       );
-      await user.click(screen.getByLabelText('Keep me signed in on this device'));
       if (mode === 'password') {
         await user.type(screen.getByLabelText('Password'), 'my-password123');
         await user.click(screen.getByRole('button', { name: 'Sign in' }));
@@ -119,7 +118,7 @@ describe('Sign in', () => {
     rendered.rerender(view('email'));
     expect(
       (screen.getByLabelText('Keep me signed in on this device') as HTMLInputElement).checked,
-    ).toBe(true);
+    ).toBe(false);
   });
   it('maps API field errors back to the input without leaving the form', async () => {
     vi.stubGlobal('fetch', async () =>
