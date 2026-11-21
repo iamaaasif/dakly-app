@@ -243,6 +243,19 @@ const examples: DaklyEvent[] = [
     occurredAt,
     payload: { wallet: 'sms_credits', entryId: '019c01ea-cf15-7d31-a7f5-d73d66007ae0' },
   },
+  { type: 'subscription.renewed', storeId, occurredAt, payload: { subscriptionId: connectionId } },
+  {
+    type: 'subscription.past_due',
+    storeId,
+    occurredAt,
+    payload: { subscriptionId: connectionId, attempt: 1 },
+  },
+  {
+    type: 'subscription.read_only',
+    storeId,
+    occurredAt,
+    payload: { subscriptionId: connectionId },
+  },
   {
     type: 'due.added',
     storeId,

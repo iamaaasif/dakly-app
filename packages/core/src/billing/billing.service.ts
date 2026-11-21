@@ -7,6 +7,7 @@ import { Clock } from '../platform/clock';
 import { DAY_MS } from '../platform/time';
 import { billingError } from './billing.errors';
 import { BillingRepository } from './billing.repository';
+import { nextPeriodEnd } from './subscription-renewal';
 
 @Injectable()
 export class BillingService {
@@ -71,17 +72,9 @@ export class BillingService {
       currentPeriodPricePoisha: price,
       trialEndsAt,
       currentPeriodStart: now,
-      currentPeriodEnd: trialEndsAt ?? nextPeriod(now, cycle),
+      currentPeriodEnd: trialEndsAt ?? nextPeriodEnd(now, cycle),
     });
   }
-}
-function nextPeriod(start: Date, cycle: (typeof billingCycles)[number]): Date {
-  const end = new Date(start);
-  end.setUTCDate(1);
-  end.setUTCMonth(end.getUTCMonth() + (cycle === 'monthly' ? 1 : 12));
-  const lastDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() + 1, 0)).getUTCDate();
-  end.setUTCDate(Math.min(start.getUTCDate(), lastDay));
-  return end;
 }
 
 function toAdminPlan(plan: Awaited<ReturnType<BillingRepository['allPlans']>>[number]): AdminPlan {

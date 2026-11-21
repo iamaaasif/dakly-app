@@ -4,6 +4,7 @@ import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { ClockModule } from '../platform/clock.module';
 import { QUEUES } from '../platform/queue/queues';
+import { ContactMemoryOwnersRepository } from './contact-memory-owners.repository';
 import { ContactMemoryRepository } from './contact-memory.repository';
 import { ContactMemoryService } from './contact-memory.service';
 import { ConversationMemoriesSweepService } from './conversation-memories-sweep.service';
@@ -14,6 +15,7 @@ import { UpdateConversationMemoryJob } from './jobs/update-conversation-memory.j
 @Module({
   imports: [BullModule.registerQueue({ name: QUEUES.bulk }), AiModule, ClockModule],
   providers: [
+    ContactMemoryOwnersRepository,
     ContactMemoryRepository,
     ContactMemoryService,
     ConversationMemoriesSweepService,

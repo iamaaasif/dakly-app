@@ -394,6 +394,27 @@ gateway, transaction id and verified gross amount. A match updates the line and
 the intent together. Unmatched lines remain available for staff review. Shop and
 sandbox payments are excluded from this settlement match.
 
+### bKash driver (PAY-3)
+
+`packages/providers/src/payment/bkash/` implements the payment driver on bKash tokenized checkout (v1.2.0-beta): grant token, create, execute and payment status. Endpoint names and fields come from bKash's public docs and recorded fixtures; they are not yet run against a live sandbox, which needs merchant keys.
+
+- Shop credentials are a JSON object `{ appKey, appSecret, username, password }`. Dakly's own account comes from `BKASH_BILLING_*` env vars and is optional.
+- The token is cached in memory per account until one minute before it expires.
+- `getStatus` calls Execute first, because that captures the money after the customer approves. If Execute errors, times out or is refused, it calls Query. Only a `Completed` reply with `0000`, a trxID, currency, invoice and a parseable amount counts as paid.
+- Amounts go to bKash as taka with two decimals, built from poisha with integer maths.
+- bKash does not sign its redirect. The web layer forwards `paymentID`, `status` and the merchant reference as JSON; the driver only reads the reference and builds the event id. The callback is a hint and the status check decides.
+- Agreements (auto-renew), refunds and Cancel Agreement are not built yet; PAY-7 and PAY-6 add them.
+
+### Subscription renewal (PAY-7)
+
+`SubscriptionRenewalService` in `packages/core/src/billing/` moves a store's one subscription through its periods. A job sweeps due stores every day at 10:00 Asia/Dhaka and queues one `renew-subscription` job per store.
+
+- A due free plan, or one a coupon makes free, rolls into the next period by itself. A paid plan with no payment becomes `past_due` with `past_due_since` set to the due date. A cancellation scheduled for period end sets `cancelled`.
+- Dunning steps count from the due date: retries on day 1, 3 and 5, then `read_only` on day 8. Each step publishes `subscription.past_due` with the attempt number, and day 8 publishes `subscription.read_only`. Reminders and the guard read these.
+- A succeeded billing payment with purpose `subscription` starts the next period at once (from the due date when paid early, otherwise from now), clears past-due and read-only state, and publishes `subscription.renewed`. The payment id is kept in `last_payment_intent_id`, so the same payment applies once. A payment below the next period's price is refused with `SUBSCRIPTION_PAYMENT_TOO_LOW`.
+- The next period's plan and price come from a scheduled plan change, or a price change whose 30-day notice has passed (ADM-R10), less a coupon that still runs. They are catalogue data, never constants.
+- Agreement charges, reminders and the read-only guard are added in later PAY-7 parts.
+
 ### Rules
 
 The PRD's payment rules apply in full. The ones code must make impossible to break:

@@ -88,4 +88,23 @@ describe('ProductSearchIndexService with Postgres', () => {
       await app.get(ProductSearchSourceService).findSearchSource(f.b, productId),
     ).toBeUndefined();
   });
+
+  it('rebuilds an unchanged product only when asked, and lists products on an old model', async () => {
+    const ai = app.get(AiService);
+    ai.embed = (async () => ({
+      embeddings: [vector(0.3)],
+      model: 'new-model',
+    })) as typeof ai.embed;
+    const indexer = app.get(ProductSearchIndexService);
+    await indexer.index(f.a, productId);
+    expect(await stored()).toMatchObject({ model: 'test-model' });
+    const source = app.get(ProductSearchSourceService);
+    const stale = (storeId: string, model: string) =>
+      source.staleSearchProductIds(storeId, { after: null, model, limit: 10 });
+    expect(await stale(f.a, 'new-model')).toEqual([productId]);
+    expect(await stale(f.b, 'new-model')).toEqual([]);
+    await indexer.index(f.a, productId, { rebuild: true });
+    expect(await stored()).toMatchObject({ model: 'new-model' });
+    expect(await stale(f.a, 'new-model')).toEqual([]);
+  });
 });

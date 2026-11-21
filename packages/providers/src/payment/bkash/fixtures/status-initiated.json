@@ -1,0 +1,15 @@
+{
+  "paymentID": "TR0011abc",
+  "mode": "0011",
+  "paymentCreateTime": "2026-11-21T10:00:00:000 GMT+0600",
+  "amount": "120",
+  "currency": "BDT",
+  "intent": "sale",
+  "merchantInvoice": "inv-1",
+  "merchantInvoiceNumber": "inv-1",
+  "transactionStatus": "Initiated",
+  "verificationStatus": "Complete",
+  "statusCode": "0000",
+  "statusMessage": "Successful",
+  "payerReference": "inv-1"
+}
