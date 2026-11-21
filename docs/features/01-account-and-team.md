@@ -756,7 +756,8 @@ subject is the primary identity; its existing account wins even if Google's emai
 now differs from the account's email.
 
 For an unmatched subject, verified Gmail or Workspace (`hd`) claims can establish
-email ownership. Other addresses require a fresh mailbox code because Google's
+email ownership. Other addresses that match an existing verified account require a
+fresh mailbox code before linking, because Google's
 `email_verified` claim can describe former ownership ([ADR 0010](../adr/0010-google-email-authority.md)).
 The response is 202 `{ status: 'email_verification_required', verificationTicket }`.
 Submit `{ verificationTicket, code, isRemembered? }` to
@@ -777,8 +778,8 @@ new user gets the Google name (or the email's first part), the Google email as a
 verified email, no phone and no password, and a session; the response is 204. The body
 must carry `termsVersion` for this case, otherwise `400 AUTH_TERMS_REQUIRED` and nothing
 is created. The web form shows the Terms and Privacy links beside the Google button.
-A Google address that is not Gmail or Workspace still needs the fresh email code first
-(ADR 0010), then the account is created. Two parallel calls for one subject create one
+A Google address that is not Gmail or Workspace and matches no account needs no code
+([ADR 0011](../adr/0011-google-new-account-needs-no-code.md)). Two parallel calls for one subject create one
 account; the second gets `409 AUTH_ACCOUNT_EXISTS`. The person can add a mobile number
 and a password later in Settings.
 

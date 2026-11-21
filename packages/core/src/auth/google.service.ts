@@ -56,7 +56,8 @@ export class GoogleService {
         request,
       );
     const owner = await this.users.findByVerifiedEmail(identity.email);
-    if (!identity.emailIsAuthoritative) {
+    // A code is only needed to link into an existing account; a new account has nothing to take over.
+    if (owner && !identity.emailIsAuthoritative) {
       const grant: GoogleGrant = {
         purpose: 'email',
         identity,

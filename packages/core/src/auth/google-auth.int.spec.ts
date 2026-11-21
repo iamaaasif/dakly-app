@@ -320,34 +320,28 @@ describe('Google authentication over Fastify', () => {
     targets.add(JSON.stringify([email, JSON.stringify([verificationTicket, subject, email])]));
     return { verificationTicket, code: codeFor(email), subject };
   }
-  it('does not reserve a third-party email until fresh email proof', async () => {
+  it('creates an account for a third-party email without asking for a code', async () => {
     const email = address();
-    const challenge = await thirdParty(email);
-    expect(await admin.db.select().from(users).where(eq(users.email, email))).toHaveLength(0);
-    const response = await post('/auth/google/email/verify', {
-      verificationTicket: challenge.verificationTicket,
-      code: challenge.code,
-    });
+    const subject = randomUUID();
+    const response = await google(token(subject, email, { hd: undefined }));
     expect(response.statusCode).toBe(204);
-    expect(await createdBy(challenge.subject)).toMatchObject({
+    expect(await createdBy(subject)).toMatchObject({
       email,
       emailVerifiedAt: expect.any(Date),
       phone: null,
     });
   });
-  it.each(['owner_changed', 'owner_appeared', 'subject_linked', 'verification_replaced'])(
+  it.each(['owner_changed', 'subject_linked', 'verification_replaced'])(
     'rejects stale third-party challenge binding: %s',
     async (change) => {
       const owner = await account();
-      const email = change === 'owner_appeared' ? address() : owner.email!;
+      const email = owner.email!;
       const challenge = await thirdParty(email);
       const other = await account();
       if (change === 'owner_changed') {
         await admin.db.update(users).set({ email: address() }).where(eq(users.id, owner.id));
         await admin.db.update(users).set({ email }).where(eq(users.id, other.id));
       }
-      if (change === 'owner_appeared')
-        await admin.db.update(users).set({ email }).where(eq(users.id, other.id));
       if (change === 'subject_linked')
         await admin.db
           .update(users)
@@ -369,7 +363,7 @@ describe('Google authentication over Fastify', () => {
     },
   );
   it('binds email proof to the exact pending subject and ticket', async () => {
-    const email = address();
+    const email = (await account()).email!;
     const first = await thirdParty(email);
     await app.get(ValkeyClient).connection.del(authKey('resend', email));
     const second = await thirdParty(email);
@@ -383,7 +377,6 @@ describe('Google authentication over Fastify', () => {
       code: first.code,
     });
     expect(verified.statusCode).toBe(204);
-    await createdBy(first.subject);
   });
   it('refuses a subject linked elsewhere between lookup and the locked write', async () => {
     const owner = await account();
