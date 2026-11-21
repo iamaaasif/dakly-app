@@ -37,7 +37,6 @@ const PHOTO_LINK_SECONDS = 15 * 60;
 const PHOTO_DAYS = 30;
 const PAGES_PER_HOUR = 100;
 // A handwritten page is slower to read than a chat message.
-const READ_TIMEOUT_MS = 60_000;
 // A reader that has not finished in 5 minutes is gone; the next delivery takes the page over.
 const LEASE_MS = 5 * 60 * 1000;
 const TRANSIENT_MODEL_FAILURES: ReadonlySet<string> = new Set([
@@ -136,9 +135,8 @@ export class KhataScansService {
       purpose: 'khata_scan',
       prompt: readKhataPage,
       input: MODEL_INSTRUCTION,
-      attachments: [{ contentType: page.contentType, bytes: file.bytes }],
+      images: [{ contentType: page.contentType, bytes: file.bytes }],
       output: khataModelOutputSchema,
-      timeoutMs: READ_TIMEOUT_MS,
     });
     if (result.kind !== 'output') {
       const code = result.kind === 'failure' ? result.code : undefined;

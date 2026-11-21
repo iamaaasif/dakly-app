@@ -1988,6 +1988,26 @@ fixture('GET /campaigns/:campaignId/estimate', async () => {
   expect(estimate).toMatchObject({ audienceCount: 1, recipientsCount: 1, smsCredits: 1 });
   await hidden(b, 'GET', (value) => `/campaigns/${value}/estimate`, id);
 });
+fixture('POST /campaigns/:campaignId/test-send', async () => {
+  const { a, b } = await pair(),
+    id = await approvableCampaign(a);
+  await success(a, 'POST', `/campaigns/${id}/test-send`, 204);
+  expect(f.sms.at(-1)).toMatchObject({ to: a.owner.phone });
+  expect(f.sms.at(-1)?.text).toMatch(/^Test: ঈদে ২০% ছাড়/);
+  const sent = f.sms.length;
+  await hidden(b, 'POST', (value) => `/campaigns/${value}/test-send`, id);
+  expect(f.sms).toHaveLength(sent);
+  // A test is not a campaign message: no recipient row and no credits charged.
+  const { rows } = await f.admin.pool.query(
+    'select count(*)::int as recipients from campaign_recipients where campaign_id=$1',
+    [id],
+  );
+  expect(rows[0].recipients).toBe(0);
+  const messenger = await sentCampaign(b, 1, 'messenger');
+  await f.admin.pool.query("update campaigns set status='draft' where id=$1", [messenger]);
+  const refused = await success(b, 'POST', `/campaigns/${messenger}/test-send`, 409);
+  expect(refused.json().error.code).toBe('CAMPAIGN_TEST_SMS_ONLY');
+});
 fixture('POST /campaigns/:campaignId/duplicate', async () => {
   const { a, b } = await pair(),
     id = await approvableCampaign(a);
@@ -2674,6 +2694,32 @@ fixture('PATCH /setup-checklist', async () => {
     howYouSell: ['online_store'],
   });
   expect(reopened.json().hidden).toBe(false);
+});
+
+fixture('GET /audit-log', async () => {
+  const { a, b } = await pair();
+  const insert = (storeId: string, action: string) =>
+    f.admin.pool.query(
+      "insert into audit_log(id,store_id,actor_type,action,entity_type,entity_id) values (gen_random_uuid(),$1,'system',$2,'store',$1)",
+      [storeId, action],
+    );
+  await insert(a.id, 'store.settings_changed');
+  await insert(a.id, 'store.extensions_changed');
+  await insert(b.id, 'store.foreign_change');
+  const page = await success(a, 'GET', '/audit-log?limit=1', 200);
+  expect(page.json().items).toHaveLength(1);
+  expect(page.json().nextCursor).toBe(page.json().items[0].id);
+  const rest = await success(a, 'GET', `/audit-log?before=${page.json().nextCursor}`, 200);
+  const actions = [...page.json().items, ...rest.json().items].map(
+    ({ action }: { action: string }) => action,
+  );
+  expect(actions).not.toContain('store.foreign_change');
+  expect(actions).toEqual(expect.arrayContaining(['store.settings_changed']));
+  const staff = await f.request(a.member, 'GET', '/audit-log');
+  expect(staff.statusCode, staff.body).toBe(403);
+  expect(staff.json().error.code).toBe('AUDIT_LOG_DENIED');
+  expect((await f.request(a.owner, 'GET', '/audit-log?limit=0')).statusCode).toBe(400);
+  expect((await f.request(a.owner, 'GET', `/audit-log?storeId=${b.id}`)).statusCode).toBe(400);
 });
 
 fixture('GET /dashboard', async () => {

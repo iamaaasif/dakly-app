@@ -128,6 +128,12 @@ const segmentIdsSchema = z
   .max(10)
   .refine((ids) => new Set(ids).size === ids.length, 'Choose each segment once');
 
+// The segments a draft reaches and leaves out, as the builder's audience step edits them.
+export const campaignAudienceSchema = z.object({
+  includeSegmentIds: segmentIdsSchema,
+  excludeSegmentIds: segmentIdsSchema,
+});
+
 const campaignDraftShape = {
   name: z.string().trim().min(1).max(100),
   goal: z.enum(campaignGoals).nullable(),

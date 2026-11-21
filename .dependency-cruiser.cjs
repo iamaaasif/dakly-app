@@ -7,7 +7,11 @@ module.exports = {
         'A core feature may use another feature only through its module or service. ' +
         'Repositories, jobs, listeners and private files stay inside their own feature.',
       severity: 'error',
-      from: { path: '^packages/core/src/([^/]+)/' },
+      // The model eval CLI reads prompt files directly because it must test their exact text.
+      from: {
+        path: '^packages/core/src/([^/]+)/',
+        pathNot: '^packages/core/src/ai-eval/model-eval/',
+      },
       to: {
         path: '^packages/core/src/([^/]+)/',
         pathNot: [

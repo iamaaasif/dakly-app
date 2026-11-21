@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -6,7 +7,8 @@ import { expect, test, type Page } from '@playwright/test';
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
 
-async function capture(page: Page, screen: string) {
+// A full-page shot at 360 px shows a long screen below the fold, such as the estimate card.
+async function capture(page: Page, screen: string, fullPage = false) {
   const evidence = process.env.CAMP4_SCREENSHOT_DIR;
   if (evidence) await mkdir(evidence, { recursive: true });
   for (const [width, height] of [
@@ -17,7 +19,8 @@ async function capture(page: Page, screen: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    if (evidence) await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`) });
+    if (evidence)
+      await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`), fullPage });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 }
@@ -44,8 +47,34 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
   }
   const storeId = fixture.storeIds[0];
   const ids: string[] = [];
+  const segmentIds: string[] = [];
+  const contactIds: string[] = [];
   try {
     expect((await post('/me/active-store', { storeId })).status()).toBe(204);
+    const segment = await post('/segments', {
+      name: 'Dhaka customers',
+      rules: {
+        match: 'all',
+        conditions: [{ field: 'district', operator: 'is_any_of', values: ['Dhaka'] }],
+      },
+    });
+    expect(segment.status()).toBe(201);
+    segmentIds.push((await segment.json()).id);
+    // Three Dhaka customers agreed to SMS and one did not, so the estimate shows a skip line.
+    const phoneBase = 1_700_000_000 + Math.floor(Math.random() * 90_000_000);
+    for (const [index, consented] of [true, true, true, false].entries()) {
+      const contactId = randomUUID();
+      contactIds.push(contactId);
+      await database.pool.query(
+        "insert into contacts(id,store_id,name,phone,source,kind,district) values($1,$2,$3,$4,'manual','customer','Dhaka')",
+        [contactId, storeId, `Audience customer ${index + 1}`, `0${phoneBase + index}`],
+      );
+      if (consented)
+        await database.pool.query(
+          "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,'sms','granted','checkout')",
+          [storeId, contactId],
+        );
+    }
     const created = await post('/campaigns', {
       name: 'Puja winback',
       goal: 'win_back',
@@ -185,6 +214,49 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
       .fill('Winter Kurti collection is in. Order today and get free delivery in Dhaka.');
     await expect(page.getByText('Live preview · SMS', { exact: true })).toBeVisible();
     await capture(page, 'sms-content-step');
+    await expect(page.getByText(/ · 1 SMS part\./)).toBeVisible();
+    await page.getByRole('link', { name: '3. Audience' }).click();
+    await page.getByRole('group', { name: 'Send to' }).getByLabel('Dhaka customers').click();
+    const saveAudience = page.waitForRequest(
+      (request) =>
+        request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
+    );
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    expect((await saveAudience).postDataJSON()).toEqual({
+      content: {
+        text: 'Winter Kurti collection is in. Order today and get free delivery in Dhaka.',
+      },
+      includeSegmentIds: segmentIds,
+    });
+    await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+    const estimateCard = page.getByRole('region', { name: 'Estimate' });
+    await expect(estimateCard).toContainText('3 SMS credits');
+    await expect(estimateCard).toContainText('1 have not agreed to messages');
+    await capture(page, 'sms-audience-step', true);
+
+    await page.getByRole('link', { name: '4. Schedule' }).click();
+    await expect(page.getByRole('heading', { name: 'When should it go out?' })).toBeVisible();
+    await page.getByRole('radio', { name: /Schedule for later/ }).check();
+    const sendDay = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await page.getByLabel('Date', { exact: true }).fill(sendDay);
+    await page.getByLabel('Time', { exact: true }).fill('09:00');
+    const saveTime = page.waitForRequest(
+      (request) =>
+        request.method() === 'PATCH' && request.url().endsWith(`/api/campaigns/${draft.id}`),
+    );
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    expect((await saveTime).postDataJSON()).toEqual({
+      scheduledFor: new Date(`${sendDay}T09:00:00+06:00`).toISOString(),
+    });
+    await capture(page, 'sms-schedule-step', true);
+    await page.getByRole('button', { name: 'Approve and launch' }).click();
+    const approveDialog = page.getByRole('dialog', { name: 'Approve this campaign?' });
+    await expect(approveDialog).toContainText('3 SMS credits');
+    await expect(
+      approveDialog.getByRole('button', { name: 'Approve and schedule' }),
+    ).toBeDisabled();
+    await capture(page, 'sms-approve-dialog');
+    await approveDialog.getByRole('button', { name: 'Cancel' }).click();
 
     await page.goto(`/campaigns/${sent.id}`);
     await expect(page.getByRole('heading', { name: 'Puja winback' })).toBeVisible();
@@ -195,6 +267,18 @@ test('saves an SMS draft and opens a sent campaign read-only', async ({
     await database.pool.query('delete from campaigns where store_id=$1 and id=any($2::uuid[])', [
       storeId,
       ids,
+    ]);
+    await database.pool.query(
+      'delete from consents where store_id=$1 and contact_id=any($2::uuid[])',
+      [storeId, contactIds],
+    );
+    await database.pool.query('delete from contacts where store_id=$1 and id=any($2::uuid[])', [
+      storeId,
+      contactIds,
+    ]);
+    await database.pool.query('delete from segments where store_id=$1 and id=any($2::uuid[])', [
+      storeId,
+      segmentIds,
     ]);
     await database.pool.end();
   }

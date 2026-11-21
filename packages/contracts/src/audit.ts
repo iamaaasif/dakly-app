@@ -34,3 +34,26 @@ export const auditEntrySchema = z.strictObject({
 export type AuditEntry = z.infer<typeof auditEntrySchema>;
 
 export type AuditHistoryQuery = Pick<AuditEntry, 'entityType' | 'entityId' | 'action'>;
+
+export const auditLogQuerySchema = z.strictObject({
+  before: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type AuditLogQuery = z.infer<typeof auditLogQuerySchema>;
+
+export type AuditLogItem = {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  // Names live on accounts, not in the shop, so the log shows who by role.
+  actor: {
+    kind: 'user' | 'staff' | 'customer' | 'system' | 'ai';
+    isYou: boolean;
+    role: string | null;
+  };
+  changedFields: string[];
+  reason: string | null;
+  createdAt: string;
+};
+export type AuditLogPage = { items: AuditLogItem[]; nextCursor: string | null };

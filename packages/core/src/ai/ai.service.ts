@@ -2,7 +2,12 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { ZodType } from 'zod';
 
 import type { aiRunPurposes } from '@dakly/contracts/ai';
-import type { LlmAttachment, LlmTool } from '@dakly/providers/llm/llm-driver';
+import type {
+  LlmErrorCode,
+  LlmImage,
+  LlmTool,
+  LlmTranscriptionRequest,
+} from '@dakly/providers/llm/llm-driver';
 
 import { Clock } from '../platform/clock';
 import { hasDatabaseTransactionScope } from '../platform/database/scoped-transactions';
@@ -13,7 +18,12 @@ import { AiRunsService, type AiAttempt } from './ai-runs.service';
 import { AI_CONFIG, aiTimeoutMs, type AiConfig, type AiTier } from './ai.config';
 import { aiError } from './ai.errors';
 
-const usageUnits = { content: 'ai_content', ask: 'ai_ask' } as const;
+// Reading a customer's photo or voice note draws from the chat allowance, one unit each.
+const usageUnits = {
+  content: 'ai_content',
+  ask: 'ai_ask',
+  describe_image: 'ai_conversation',
+} as const;
 type BillablePurpose = keyof typeof usageUnits;
 type AiPurpose = (typeof aiRunPurposes)[number];
 
@@ -21,15 +31,13 @@ export type AiRequest<T> = {
   tier: AiTier;
   prompt: { version: string; instructions: string };
   input: string;
-  attachments?: readonly LlmAttachment[];
+  images?: readonly LlmImage[];
   output: ZodType<T>;
   tools?: readonly LlmTool[];
   signal?: AbortSignal;
-  // Reading a photographed page takes longer than a chat reply.
-  timeoutMs?: number;
 } & (
   | { purpose: 'content'; usageReference: string; usageQuantity: number }
-  | { purpose: 'ask'; usageReference: string }
+  | { purpose: 'ask' | 'describe_image'; usageReference: string }
   | { purpose: Exclude<AiPurpose, BillablePurpose>; usageReference?: never }
 );
 
@@ -50,7 +58,7 @@ export class AiService {
   async run<T>(storeId: string, request: AiRequest<T>): Promise<AiResult<T>> {
     if (hasDatabaseTransactionScope()) throw aiError('AI_INSIDE_TRANSACTION');
     if (request.signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
-    const deadline = this.clock.now().getTime() + (request.timeoutMs ?? aiTimeoutMs);
+    const deadline = this.clock.now().getTime() + aiTimeoutMs;
     const permit = await this.gate.acquire(storeId);
     if (permit.kind === 'paused') return { kind: 'failure', code: 'AI_PAUSED' };
     if (permit.kind === 'busy') return { kind: 'failure', code: 'AI_STORE_BUSY' };
@@ -88,12 +96,47 @@ export class AiService {
     }
   }
 
-  private async billOutput<T>(
+  async transcribe(
+    storeId: string,
+    request: Pick<LlmTranscriptionRequest, 'audio' | 'hint'> & {
+      usageReference: string;
+      signal?: AbortSignal;
+    },
+  ): Promise<
+    { kind: 'output'; text: string } | { kind: 'failure'; code: GateFailure | LlmErrorCode }
+  > {
+    if (hasDatabaseTransactionScope()) throw aiError('AI_INSIDE_TRANSACTION');
+    if (request.signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
+    const permit = await this.gate.acquire(storeId);
+    if (permit.kind === 'paused') return { kind: 'failure', code: 'AI_PAUSED' };
+    if (permit.kind === 'busy') return { kind: 'failure', code: 'AI_STORE_BUSY' };
+    const model = this.config.transcribeModel;
+    const { usageReference, ...llmRequest } = request;
+    let result;
+    try {
+      result = await this.runs.transcribe(
+        storeId,
+        { ...llmRequest, model, timeoutMs: aiTimeoutMs },
+        Object.hasOwn(this.config.prices, model) ? this.config.prices[model] : undefined,
+      );
+    } finally {
+      await this.gate.release(storeId, permit.ticket);
+    }
+    if (result.kind !== 'output') return result;
+    return this.billOutput(
+      storeId,
+      { unit: 'ai_conversation', reference: usageReference, quantity: 1 },
+      result,
+      request.signal,
+    );
+  }
+
+  private async billOutput<R>(
     storeId: string,
     usage: ConsumeUsageInput,
-    result: AiResult<T>,
+    result: R,
     signal?: AbortSignal,
-  ): Promise<AiResult<T>> {
+  ): Promise<R | { kind: 'failure'; code: GateFailure }> {
     if (signal?.aborted) return { kind: 'failure', code: 'LLM_ABORTED' };
     try {
       await this.usage.consume(storeId, usage);
@@ -133,7 +176,7 @@ export class AiService {
         model,
         instructions: request.prompt.instructions,
         input: request.input,
-        attachments: request.attachments,
+        images: request.images,
         output: request.output,
         tools: request.tools,
         signal: request.signal,

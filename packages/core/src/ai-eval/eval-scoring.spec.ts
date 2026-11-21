@@ -3,7 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { scoreEval } from './eval-scoring';
 import type { EvalOutcome, GoldenCase } from './golden-case';
 import { replayResponder } from './golden-eval.service';
-import { sampleGoldenCases, sampleRecordedOutcomes } from './golden-set.sample';
+import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
+import {
+  activeGoldenCases,
+  allRecordedOutcomes,
+  pendingTasks,
+  sampleGoldenCases,
+  sampleRecordedOutcomes,
+} from './golden-set.sample';
 
 describe('scoreEval', () => {
   it('passes the saved sample run', () => {
@@ -58,6 +65,56 @@ describe('scoreEval', () => {
 
   it('throws when a case has no outcome', () => {
     expect(() => scoreEval(sampleGoldenCases, {})).toThrow('No outcome for golden case');
+  });
+});
+
+describe('Bangla and Banglish set', () => {
+  const allCases = [...sampleGoldenCases, ...banglaGoldenCases];
+
+  it('passes the saved run with every case switched on', () => {
+    const report = scoreEval(allCases, allRecordedOutcomes);
+    expect(report).toMatchObject({
+      wrongPriceCaseIds: [],
+      outOfStockOfferCaseIds: [],
+      missedProductCaseIds: [],
+      passed: true,
+    });
+    expect(report.productCases).toBeGreaterThan(10);
+  });
+
+  it('has a recorded answer for every case and skips cases that wait on unmerged work', () => {
+    expect(banglaGoldenCases.every(({ id }) => id in banglaRecordedOutcomes)).toBe(true);
+    expect(
+      activeGoldenCases.some(({ dependsOn }) => dependsOn && pendingTasks.includes(dependsOn)),
+    ).toBe(false);
+    expect(activeGoldenCases.length).toBeLessThan(allCases.length);
+  });
+
+  it('fails when the answer offers an item with no stock', () => {
+    const report = scoreEval(banglaGoldenCases, {
+      ...banglaRecordedOutcomes,
+      'oos-product-bn': { kind: 'reply', text: 'ক্যানভাস জুতা বা লোফার নিন, ৳১,৫০০।' },
+    });
+    expect(report.outOfStockOfferCaseIds).toEqual(['oos-product-bn']);
+    expect(report.passed).toBe(false);
+  });
+
+  it('counts a handed-over or wrong-product answer as a missed product', () => {
+    const report = scoreEval(banglaGoldenCases, {
+      ...banglaRecordedOutcomes,
+      'search-kurti-bn': { kind: 'handover', reason: 'out_of_scope' },
+      'search-kurti-banglish': { kind: 'reply', text: 'শাড়ি আছে।' },
+    });
+    expect(report.missedProductCaseIds).toEqual(['search-kurti-bn', 'search-kurti-banglish']);
+    expect(report.passed).toBe(false);
+  });
+
+  it('matches a size only as a whole word', () => {
+    const report = scoreEval(banglaGoldenCases, {
+      ...banglaRecordedOutcomes,
+      'oos-size-banglish': { kind: 'reply', text: 'Medium size nai, 650 taka.' },
+    });
+    expect(report.missedProductCaseIds).toEqual(['oos-size-banglish']);
   });
 });
 

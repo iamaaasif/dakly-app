@@ -1,7 +1,8 @@
 import { useFormContext } from 'react-hook-form';
 
-import { passwordSchema, type SignUpInput } from '@dakly/contracts/auth';
+import { type SignUpInput } from '@dakly/contracts/auth';
 
+import { PasswordStrength } from './password-strength';
 import { FormField as AuthField } from '@/components/form-field';
 
 export function SignUpFields() {
@@ -32,18 +33,14 @@ export function SignUpFields() {
         autoComplete="email"
       />
       <AuthField
-        label="Password"
+        label="Password (optional)"
         field={form.register('password')}
         error={errors.password}
         type="password"
         autoComplete="new-password"
-        hint="Use at least 8 characters with a number."
+        hint="Skip it to sign in with a code each time. A password needs 8 characters and a number."
       />
-      <p role="status">
-        {passwordSchema.safeParse(password).success
-          ? 'Password meets the requirements.'
-          : 'Add at least 8 characters and a number.'}
-      </p>
+      {password ? <PasswordStrength password={password} /> : null}
     </>
   );
 }

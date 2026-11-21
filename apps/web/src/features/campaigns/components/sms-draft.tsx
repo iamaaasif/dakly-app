@@ -9,18 +9,22 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { Textarea } from '@dakly/ui/textarea';
 
+import { CampaignApproveDialog } from './campaign-approve-dialog';
+import { CampaignAudienceFields } from './campaign-audience-fields';
 import { CampaignDraftShell } from './campaign-draft-shell';
+import { CampaignEstimate } from './campaign-estimate';
 import { CampaignGoalCards } from './campaign-goal-cards';
-import { useCampaignStep } from './campaign-steps';
+import { isScheduleBlocked } from './campaign-schedule';
+import { CampaignScheduleFields } from './campaign-schedule-fields';
+import { useAfterSave, type CampaignStepId } from './campaign-steps';
 import { useSmsDraftForm, type SmsDraftInput } from './use-sms-draft-form';
 
 export function SmsDraft({ campaign }: { campaign: CampaignResponse }) {
   const formId = useId();
-  const { goTo, next } = useCampaignStep();
-  const { form, submit, saveDraft, save, isDirty } = useSmsDraftForm(
-    campaign,
-    () => next && goTo(next),
-  );
+  const { afterSave, approving, closeApproval } = useAfterSave();
+  const { form, submit, saveDraft, save, isDirty } = useSmsDraftForm(campaign, afterSave);
+  const schedule = useWatch({ control: form.control, name: 'schedule' });
+  const scheduleBlocked = isScheduleBlocked(schedule, 'sms');
   return (
     <FormProvider {...form}>
       <CampaignDraftShell
@@ -31,14 +35,40 @@ export function SmsDraft({ campaign }: { campaign: CampaignResponse }) {
         onSaveDraft={saveDraft}
         saving={save.isPending}
         canSave={isDirty}
+        finishBlocked={scheduleBlocked}
         busy={save.isPending}
         error={save.error?.message}
         message={save.isSuccess && !isDirty ? 'Draft saved.' : undefined}
-        fields={(step) => (step === 'goal' ? <SmsGoalFields /> : <SmsContentFields />)}
-        side={(step) => step === 'content' && <SmsPreview />}
+        fields={(step) => <SmsFields step={step} failureCode={campaign.approvalFailureCode} />}
+        side={(step) => (
+          <>
+            {(step === 'content' || step === 'schedule') && <SmsPreview />}
+            {(step === 'audience' || step === 'schedule') && (
+              <CampaignEstimate
+                channel="sms"
+                campaignId={campaign.id}
+                savedAt={campaign.updatedAt}
+              />
+            )}
+          </>
+        )}
       />
+      {approving && <CampaignApproveDialog campaign={campaign} onClose={closeApproval} />}
     </FormProvider>
   );
+}
+
+function SmsFields({
+  step,
+  failureCode,
+}: {
+  step: CampaignStepId;
+  failureCode: CampaignResponse['approvalFailureCode'];
+}) {
+  if (step === 'goal') return <SmsGoalFields />;
+  if (step === 'content') return <SmsContentFields />;
+  if (step === 'audience') return <CampaignAudienceFields />;
+  return <CampaignScheduleFields channel="sms" failureCode={failureCode} />;
 }
 
 function SmsGoalFields() {
@@ -62,11 +92,12 @@ function SmsGoalFields() {
 function SmsContentFields() {
   const { register, control } = useFormContext<SmsDraftInput>();
   const text = useWatch({ control, name: 'content.text' });
+  const partCount = countSmsParts(text);
   return (
     <FormField
       name="content.text"
       label="Message"
-      hint={`${text.length} of 1000 characters · ${countSmsParts(text)} SMS parts. Dakly adds the opt-out link.`}
+      hint={`${text.length} of 1000 characters · ${partCount === 1 ? '1 SMS part' : `${partCount} SMS parts`}. Dakly adds the opt-out link.`}
     >
       {(field) => (
         <Textarea

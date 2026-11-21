@@ -7,7 +7,8 @@ import { expect, test, type Page } from '@playwright/test';
 import type { CampaignResponse } from '@dakly/contracts/campaigns';
 import { createDatabase } from '@dakly/db/client';
 
-async function capture(page: Page, screen: string) {
+// A full-page shot at 360 px shows a long screen below the fold, such as the estimate card.
+async function capture(page: Page, screen: string, fullPage = false) {
   const evidence = process.env.CAMP7_SCREENSHOT_DIR;
   if (evidence) await mkdir(evidence, { recursive: true });
   for (const [width, height] of [
@@ -18,7 +19,8 @@ async function capture(page: Page, screen: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
-    if (evidence) await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`) });
+    if (evidence)
+      await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`), fullPage });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
 }
@@ -77,7 +79,6 @@ test('builds a Messenger draft with an image and buttons', async ({ page, contex
       });
     }
     expect((await send('post', '/me/active-store', { storeId })).status()).toBe(204);
-    // The builder has no audience step yet, so the segment is set through the API.
     const segment = await send('post', '/segments', {
       name: 'Dhaka customers',
       rules: {
@@ -86,7 +87,6 @@ test('builds a Messenger draft with an image and buttons', async ({ page, contex
       },
     });
     expect(segment.status()).toBe(201);
-    const segmentId: string = (await segment.json()).id;
 
     await page.goto('/campaigns/new');
     await expect(page.getByText('Connect first', { exact: true })).toHaveCount(2);
@@ -103,17 +103,23 @@ test('builds a Messenger draft with an image and buttons', async ({ page, contex
     expect(draft).toMatchObject({ channel: 'messenger', channelConnectionId: pageId });
     await expect(page).toHaveURL(new RegExp(`/campaigns/${draft.id}$`));
 
-    expect(
-      (await send('patch', `/campaigns/${draft.id}`, { includeSegmentIds: [segmentId] })).status(),
-    ).toBe(200);
-    await page.reload();
     await expect(page.getByLabel('Campaign name')).toHaveValue('Eid offer');
     await capture(page, 'goal-step');
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page).toHaveURL(/step=content$/);
+    await page.getByRole('link', { name: '3. Audience' }).click();
+    await expect(page).toHaveURL(/step=audience$/);
+    await page.getByRole('group', { name: 'Send to' }).getByLabel('Dhaka customers').click();
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByText('Draft saved.', { exact: true })).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByRole('group', { name: 'Send to' }).getByLabel('Dhaka customers'),
+    ).toBeChecked();
     const estimate = page.getByRole('region', { name: 'Estimate' });
     await expect(estimate).toContainText('Will receive');
     await expect(estimate).toContainText('Messenger only allows a message');
+    await capture(page, 'audience-step', true);
+    await page.getByRole('link', { name: '2. Content' }).click();
+    await expect(estimate).toContainText('Will receive');
     await page.getByLabel(/Image link/).fill('https://shop.example/eid.jpg');
     await page
       .getByLabel('Message', { exact: true })

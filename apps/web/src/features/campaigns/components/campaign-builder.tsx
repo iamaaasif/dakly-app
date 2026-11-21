@@ -8,6 +8,7 @@ import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import type { z } from 'zod';
 
 import { campaignDetailsSchema, type CampaignResponse } from '@dakly/contracts/campaigns';
+import { formatCount } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
@@ -185,6 +186,13 @@ function CampaignSummary({ campaign }: { campaign: CampaignResponse }) {
       <Badge variant={campaignStatusColors[campaign.status]}>
         {campaignStatusLabels[campaign.status]}
       </Badge>
+      {campaign.approval && (
+        <p role="status">
+          Checking who can get this message: {formatCount(campaign.approval.checked)} of up to{' '}
+          {formatCount(campaign.approval.estimatedTotal)} people so far. Nothing is sent until the
+          check finishes.
+        </p>
+      )}
       <dl className="space-y-3">
         <div>
           <dt className="text-sm text-text-muted">Channel</dt>

@@ -11,7 +11,6 @@ import type {
 import { hashPassword } from '../platform/crypto/password';
 import { authError } from './auth.errors';
 import { AuthService } from './auth.service';
-import { GoogleTickets } from './google-tickets';
 import { signInSubject, type SignInRequest } from './sign-in';
 import { SignInCodes } from './sign-in-codes';
 import { UsersRepository } from './users.repository';
@@ -21,7 +20,6 @@ export class SignInCodeFlowService {
   constructor(
     @Inject(UsersRepository) private readonly users: UsersRepository,
     @Inject(SignInCodes) private readonly codes: SignInCodes,
-    @Inject(GoogleTickets) private readonly googleTickets: GoogleTickets,
     @Inject(AuthService) private readonly auth: AuthService,
   ) {}
 
@@ -77,15 +75,11 @@ export class SignInCodeFlowService {
     registration: SignUpInput,
     request: SignInRequest,
   ) {
-    const google = input.signupTicket
-      ? await this.googleTickets.read(input.signupTicket, 'signup', true)
-      : undefined;
     return this.auth.completeSignIn(
       {
         id: this.users.allocateId(),
         target: input.phone,
         registration,
-        google: google ? { identity: google.identity, mode: 'signup' } : undefined,
         registrationPasswordHash: input.password ? await hashPassword(input.password) : undefined,
       },
       request,

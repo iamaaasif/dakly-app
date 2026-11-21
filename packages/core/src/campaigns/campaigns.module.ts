@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module, type DynamicModule } from '@nestjs/common';
 
 import { AnalyticsReportsModule } from '../analytics/analytics-reports.module';
+import { UsersModule } from '../auth/users.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { LinksModule } from '../links/links.module';
 import { MessagingModule } from '../messaging/messaging.module';
@@ -14,6 +15,7 @@ import { QUEUES } from '../platform/queue/queues';
 import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
 import { SmsModule } from '../sms/sms.module';
+import { SmsSendersModule } from '../sms-senders/sms-senders.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { WalletsModule } from '../wallets/wallets.module';
@@ -40,6 +42,7 @@ import { CampaignSmsService } from './campaign-sms.service';
 import { CampaignSourceAudienceRepository } from './campaign-source-audience.repository';
 import { CampaignSourceService } from './campaign-source.service';
 import { CampaignSweepService } from './campaign-sweep.service';
+import { CampaignTestSendService } from './campaign-test-send.service';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsRepository } from './campaigns.repository';
 import { CampaignsService } from './campaigns.service';
@@ -58,8 +61,10 @@ import { CampaignsService } from './campaigns.service';
     SegmentsModule,
     SendingModule,
     SmsModule,
+    SmsSendersModule,
     StoresModule,
     TeamModule,
+    UsersModule,
     WalletsModule,
   ],
   controllers: [CampaignsController],
@@ -81,6 +86,7 @@ import { CampaignsService } from './campaigns.service';
     CampaignSourceAudienceRepository,
     CampaignSourceService,
     CampaignSmsService,
+    CampaignTestSendService,
     CampaignsService,
     CampaignMessengerSender,
     CampaignReceiptReconciler,

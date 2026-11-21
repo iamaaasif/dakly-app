@@ -9,7 +9,8 @@ import { authKey } from './auth-key';
 import { authError } from './auth.errors';
 
 export type GoogleGrant = {
-  purpose: 'signup' | 'email';
+  purpose: 'email';
+  termsVersion?: string;
   identity: GoogleIdentity;
   expectedOwnerId?: string;
   expectedEmailVerifiedAt?: string;

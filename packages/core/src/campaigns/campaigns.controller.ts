@@ -37,6 +37,7 @@ import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { CampaignDuplicateService } from './campaign-duplicate.service';
 import { CampaignResultsService } from './campaign-results.service';
 import { CampaignSourceService } from './campaign-source.service';
+import { CampaignTestSendService } from './campaign-test-send.service';
 import { CampaignsService } from './campaigns.service';
 
 @Controller('campaigns')
@@ -46,6 +47,7 @@ export class CampaignsController {
     @Inject(CampaignResultsService) private readonly results: CampaignResultsService,
     @Inject(CampaignDuplicateService) private readonly copies: CampaignDuplicateService,
     @Inject(CampaignSourceService) private readonly sources: CampaignSourceService,
+    @Inject(CampaignTestSendService) private readonly testSends: CampaignTestSendService,
   ) {}
 
   @Get()
@@ -172,6 +174,17 @@ export class CampaignsController {
       access,
       actor: { kind: 'user', userId },
     });
+  }
+
+  @Post(':campaignId/test-send')
+  @HttpCode(204)
+  @RequirePermission('campaigns.edit')
+  testSend(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('campaignId', ParseUUIDPipe) campaignId: string,
+  ): Promise<void> {
+    return this.testSends.send(storeId, campaignId, userId);
   }
 
   @Post(':campaignId/unschedule')
