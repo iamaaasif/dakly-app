@@ -4,33 +4,43 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import { totpRecoverySchema, type TotpRecoveryResponse } from '@dakly/contracts/totp';
+import { totpRecoveryFieldsSchema, type TotpRecoveryResponse } from '@dakly/contracts/totp';
 
 import { useRequestRecoveryCode } from '../api/request-recovery-code';
 import { useStartRecovery } from '../api/start-recovery';
 import { formError } from '@/lib/form-error';
 
-const recoverySchema = totpRecoverySchema.extend({
-  emailCode: z.union([
-    totpRecoverySchema.shape.emailCode,
-    z.literal('').transform(() => undefined),
-  ]),
-  password: z.union([totpRecoverySchema.shape.password, z.literal('').transform(() => undefined)]),
+const optional = (schema: z.ZodType<string | undefined>) =>
+  z.union([schema, z.literal('').transform(() => undefined)]);
+const recoverySchema = z.object({
+  identifier: z.string().trim().min(1, 'Enter your mobile number or email'),
+  phoneCode: optional(totpRecoveryFieldsSchema.shape.phoneCode),
+  emailCode: optional(totpRecoveryFieldsSchema.shape.emailCode),
+  password: optional(totpRecoveryFieldsSchema.shape.password),
 });
+export type RecoveryFormInput = {
+  identifier: string;
+  phoneCode: string;
+  emailCode: string;
+  password: string;
+};
+// A Google-only account has no mobile, so the same field takes its verified email.
+const whoIs = (identifier: string) =>
+  identifier.includes('@') ? { email: identifier } : { phone: identifier };
 export function useRecoveryRequest() {
   const [proof, setProof] = useState<TotpRecoveryResponse>();
   const [sent, setSent] = useState<string>();
   const form = useForm({
     resolver: zodResolver(recoverySchema),
-    defaultValues: { phone: '', phoneCode: '', emailCode: '', password: '' },
+    defaultValues: { identifier: '', phoneCode: '', emailCode: '', password: '' },
   });
   const code = useRequestRecoveryCode();
   const start = useStartRecovery();
   const errors = form.formState.errors;
   async function send(method: 'phone' | 'email') {
-    if (!(await form.trigger('phone'))) return;
+    if (!(await form.trigger('identifier'))) return;
     try {
-      await code.mutateAsync({ phone: form.getValues('phone'), method });
+      await code.mutateAsync({ ...whoIs(form.getValues('identifier').trim()), method });
       form.clearErrors('root');
       setSent(
         method === 'phone' ? 'A mobile code was sent.' : 'A code was sent to your verified email.',
@@ -41,7 +51,8 @@ export function useRecoveryRequest() {
   }
   const submit = form.handleSubmit(async (input) => {
     try {
-      const result = await start.mutateAsync(input);
+      const { identifier, ...proofs } = input;
+      const result = await start.mutateAsync({ ...whoIs(identifier), ...proofs });
       form.reset();
       setProof(result);
     } catch (error) {

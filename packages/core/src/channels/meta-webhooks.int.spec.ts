@@ -606,6 +606,65 @@ describe('Meta webhook intake', () => {
     }
   });
 
+  it("stores a signed Page comment once and ignores the shop's own comment", async () => {
+    const storeId = randomUUID();
+    const account = randomUUID();
+    const eventTime = Date.now() - 30_000;
+    const handler = app.get(ProcessWebhookEventJob);
+    const comment = (id: string, from: string) => ({
+      field: 'feed',
+      value: {
+        item: 'comment',
+        verb: 'add',
+        comment_id: id,
+        post_id: `${account}_1`,
+        parent_id: `${account}_1`,
+        from: { id: from, name: 'Sadia Islam' },
+        message: 'Price koto?',
+        created_time: Math.floor(eventTime / 1000),
+      },
+    });
+    async function process(change: unknown) {
+      const body = JSON.stringify({
+        object: 'page',
+        entry: [{ id: account, time: Math.floor(eventTime / 1000), changes: [change] }],
+      });
+      expect((await post(body)).statusCode).toBe(200);
+      const [received] = await stored(body);
+      await handler.handle({ webhookEventId: received!.id }, true);
+      return (await stored(body))[0]!;
+    }
+    await admin.pool.query('insert into stores (id, name) values ($1, $2)', [
+      storeId,
+      'Comment shop',
+    ]);
+    try {
+      await admin.pool.query(
+        `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
+         values ($1::uuid, $2, 'facebook_page', $1::text, 'Comments', $3)`,
+        [account, storeId, new Date(eventTime - 120_000)],
+      );
+      expect((await process(comment('c-1', 'customer-comment-fixture'))).status).toBe('processed');
+      expect((await process(comment('c-2', account))).status).toBe('ignored');
+      const rows = await admin.pool.query(
+        'select external_comment_id, external_post_id, body, status from social_comments where store_id = $1',
+        [storeId],
+      );
+      expect(rows.rows).toEqual([
+        {
+          external_comment_id: 'c-1',
+          external_post_id: `${account}_1`,
+          body: 'Price koto?',
+          status: 'new',
+        },
+      ]);
+    } finally {
+      for (const table of ['social_comments', 'channel_connections'])
+        await admin.pool.query(`delete from ${table} where store_id = $1`, [storeId]);
+      await admin.pool.query('delete from stores where id = $1', [storeId]);
+    }
+  });
+
   it('rejects a signature for different bytes and logs the rejection without the payload', async () => {
     const payload = delivery('instagram');
     const log = vi.spyOn(Logger.prototype, 'warn');

@@ -1,5 +1,5 @@
 {
-  "id": "6a65e86e-ca0b-4983-a165-02de328e0794",
+  "id": "71cc98a3-b4dd-47fa-bc98-47e8d465975a",
   "prevId": "2c915268-2b58-4a4c-982f-21957ffef271",
   "version": "7",
   "dialect": "postgresql",
@@ -10285,6 +10285,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "ai_fixed_at": {
+          "name": "ai_fixed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "sent_at": {
           "name": "sent_at",
           "type": "timestamp with time zone",
@@ -19541,13 +19547,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "image_file_ids": {
-          "name": "image_file_ids",
-          "type": "uuid[]",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::uuid[]"
         },
         "is_default": {
           "name": "is_default",
