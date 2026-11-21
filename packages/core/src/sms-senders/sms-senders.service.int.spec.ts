@@ -48,8 +48,23 @@ async function errorCode(work: Promise<unknown>) {
   );
 }
 
-function request(storeId: string, senderName = 'Nusrat Fab') {
-  return senders.request(storeId, { senderName }, { kind: 'user', userId: owner });
+async function documents(storeId: string) {
+  const ids = [randomUUID(), randomUUID()];
+  for (const id of ids)
+    await admin.pool.query(
+      `insert into files(id,store_id,purpose,object_key,content_type,size_bytes,status)
+       values($1,$2,'sms_sender_document',$3,'application/pdf',1000,'ready')`,
+      [id, storeId, `stores/${storeId}/sms_sender_document/${id}`],
+    );
+  return { tradeLicenceFileId: ids[0]!, nidFileId: ids[1]! };
+}
+
+async function request(storeId: string, senderName = 'Nusrat Fab') {
+  return senders.request(
+    storeId,
+    { senderName, ...(await documents(storeId)) },
+    { kind: 'user', userId: owner },
+  );
 }
 
 function decide(storeId: string, id: string, status: 'approved' | 'rejected', reason: string) {
@@ -73,6 +88,7 @@ beforeEach(() => {
 
 afterAll(async () => {
   await admin.pool.query('delete from sms_sender_ids where store_id=any($1::uuid[])', [storeIds]);
+  await admin.pool.query('delete from files where store_id=any($1::uuid[])', [storeIds]);
   await admin.pool.query('delete from stores where id=any($1::uuid[])', [storeIds]);
   await admin.pool.query('delete from users where id=any($1::uuid[])', [[owner, unverified]]);
   await Promise.all([admin.pool.end(), app.close()]);
@@ -120,6 +136,44 @@ describe('SmsSendersService (Postgres)', () => {
       second.id,
       first.id,
     ]);
+  });
+
+  it('refuses documents that belong to another store', async () => {
+    const storeId = await store();
+    const other = await documents(await store());
+
+    expect(
+      await errorCode(
+        senders.request(
+          storeId,
+          { senderName: 'Nusrat Fab', ...other },
+          { kind: 'user', userId: owner },
+        ),
+      ),
+    ).toBe('SMS_SENDER_DOCUMENT_INVALID');
+  });
+
+  it('lets the purge job delete the documents once the request is decided', async () => {
+    const storeId = await store();
+    const { id } = await request(storeId);
+    const attached = () =>
+      admin.pool.query(
+        'select trade_licence_file_id, nid_file_id from sms_sender_ids where id=$1',
+        [id],
+      );
+    expect((await attached()).rows[0]).toEqual({
+      trade_licence_file_id: expect.any(String),
+      nid_file_id: expect.any(String),
+    });
+
+    await decide(storeId, id, 'approved', 'Operator approved the masking name');
+
+    expect((await attached()).rows[0]).toEqual({ trade_licence_file_id: null, nid_file_id: null });
+    const expiring = await admin.pool.query(
+      'select count(*)::int as count from files where store_id=$1 and expires_at is not null',
+      [storeId],
+    );
+    expect(expiring.rows[0].count).toBe(2);
   });
 
   it('decides a request once', async () => {
