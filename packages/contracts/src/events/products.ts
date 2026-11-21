@@ -9,6 +9,14 @@ export const productUpdatedEventSchema = z.strictObject({
   payload: z.strictObject({ productId: z.uuid() }),
 });
 
+// Raised when a photo is confirmed, so the AI can tag it (PROD-8).
+export const productPhotoAddedEventSchema = z.strictObject({
+  type: z.literal('product.photo_added'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: z.strictObject({ productId: z.uuid(), fileId: z.uuid() }),
+});
+
 export const stockChangedEventSchema = z.strictObject({
   type: z.literal('stock.changed'),
   storeId: z.uuid(),

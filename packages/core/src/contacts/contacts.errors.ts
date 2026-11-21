@@ -13,6 +13,7 @@ const CONTACT_ERRORS = {
     status: 429,
     message: 'Too many phone searches or changes. Try again later',
   },
+  CONTACT_ERASE_NOT_ALLOWED: { status: 403, message: 'Only the owner can erase a customer' },
   CONTACT_EXPORT_NOT_ALLOWED: { status: 403, message: 'You cannot download customer lists' },
   CONTACT_EXPORT_TOO_LARGE: {
     status: 422,
