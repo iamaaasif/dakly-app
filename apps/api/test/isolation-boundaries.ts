@@ -114,6 +114,16 @@ const groups = [
     ],
   },
   {
+    evidence: 'admin/kill-switches.int.spec.ts',
+    boundary:
+      'audited staff kill switches: global control rows, or the store named in the path with a conflict check',
+    routes: [
+      'GET /admin/kill-switches',
+      'PUT /admin/kill-switches/:feature',
+      'PUT /admin/stores/:storeId/kill-switches/:feature',
+    ],
+  },
+  {
     evidence: 'route-access.int.spec.ts; stores/stores.int.spec.ts; admin/support.int.spec.ts',
     boundary: 'public health/catalogue or one-use support handoff (no shop session)',
     routes: ['GET /health', 'GET /plans', 'POST /support/exchange'],
