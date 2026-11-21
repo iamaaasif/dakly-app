@@ -89,7 +89,7 @@ function transport() {
     }
     if (path === '/api/auth/google')
       return Response.json(
-        { status: 'signup_required', signupTicket: 'b'.repeat(43) },
+        { status: 'signup_required', signupTicket: 'b'.repeat(43), email: 'rina@example.test' },
         { status: 202 },
       );
     if (path.endsWith('/code/verify'))

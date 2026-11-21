@@ -12,26 +12,35 @@ import { SignUpConsent } from './sign-up-consent';
 import { SignUpFields } from './sign-up-fields';
 import { formError } from '@/lib/form-error';
 
+const consentSchema = z.literal(true, {
+  error: 'Read and agree to the Terms and Privacy documents.',
+});
 const accountSchema = signUpSchema.extend({
   password: passwordSchema,
-  consent: z.literal(true, { error: 'Read and agree to the Terms and Privacy documents.' }),
+  consent: consentSchema,
   email: z.union([signUpSchema.shape.email, z.literal('').transform(() => undefined)]),
 });
+// A Google account brings its own verified email and needs no password.
+const googleAccountSchema = signUpSchema
+  .omit({ email: true })
+  .extend({ consent: consentSchema, password: z.undefined(), email: z.undefined() });
 export function SignUpAccount({
   legal,
+  googleEmail,
   onSent,
 }: {
   legal: NonNullable<AuthConfig['legal']>;
-  onSent: (account: { registration: SignUpInput; password: string }) => void;
+  googleEmail?: string;
+  onSent: (account: { registration: SignUpInput; password?: string }) => void;
 }) {
   const form = useForm({
-    resolver: zodResolver(accountSchema),
+    resolver: zodResolver(googleEmail ? googleAccountSchema : accountSchema),
     defaultValues: {
       purpose: 'sign_up' as const,
       name: '',
       phone: '',
-      email: '',
-      password: '',
+      email: googleEmail ? undefined : '',
+      password: googleEmail ? undefined : '',
       termsVersion: legal.termsVersion,
     },
   });
@@ -45,13 +54,13 @@ export function SignUpAccount({
         onSubmit={form.handleSubmit(async ({ password, consent: _consent, ...registration }) => {
           try {
             await request.mutateAsync(registration);
-            onSent({ registration, password });
+            onSent({ registration, password: password || undefined });
           } catch (error) {
             formError(error, form.setError);
           }
         })}
       >
-        <SignUpFields />
+        <SignUpFields googleEmail={googleEmail} />
         <SignUpConsent legal={legal} />
         {errors.root ? (
           <p role="alert" className="text-danger">

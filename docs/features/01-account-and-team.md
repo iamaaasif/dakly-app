@@ -773,7 +773,9 @@ together; history contains no token, subject or email. All successful paths use
 TOTP checks. Enabled TOTP returns a challenge and postpones sign-in and linking until the second factor passes.
 
 Without an eligible existing account, the response is 202
-`{ status: 'signup_required', signupTicket }`, without a session. Request a normal
+`{ status: 'signup_required', signupTicket, email }`, without a session. The web form
+shows `email` as the account email and asks only for name, mobile and consent, with no
+password; the person can add one later in Settings. Request a normal
 `sign_up` phone code, then include `signupTicket` in `POST /auth/code/verify`.
 Only after mobile proof succeeds is the ticket consumed and its server-held subject
 and verified email used for signup. The optional registration email cannot replace
@@ -964,7 +966,9 @@ The public `/sign-in` screen supports phone or email with a password or a code,
 Keep me signed in, Google identity, and the required authenticator or backup-code
 step. `/forgot-password` requests a reset code and confirms the new password;
 accounts with two-step verification finish that step before receiving a session.
-Google email verification and signup tickets stay in component memory.
+Google email verification and signup tickets stay in component memory. Keep me signed in
+is ticked by default, as in the design. `/sign-in` and `/sign-up` send a person with a live
+session to the Dashboard.
 
 `/sign-up` has account and SMS verification steps. `/setup` resumes the verified
 account at business details and plan choice. The final `POST /stores` commits the
