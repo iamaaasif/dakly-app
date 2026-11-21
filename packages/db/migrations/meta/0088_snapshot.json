@@ -1,5 +1,5 @@
 {
-  "id": "6e4dc71a-d6d5-4a0d-b3e8-513521515b6f",
+  "id": "46ceef26-5745-4a37-a8ca-3d68e87bf11e",
   "prevId": "27e123d2-d162-4d3a-871d-f7c01d655451",
   "version": "7",
   "dialect": "postgresql",
@@ -635,146 +635,6 @@
         "abuse_reports_status": {
           "name": "abuse_reports_status",
           "value": "\"abuse_reports\".\"status\" in ('open', 'actioned', 'dismissed')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.kill_switches": {
-      "name": "kill_switches",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "feature": {
-          "name": "feature",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "store_id": {
-          "name": "store_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "paused_by_staff_id": {
-          "name": "paused_by_staff_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "kill_switches_global_key": {
-          "name": "kill_switches_global_key",
-          "columns": [
-            {
-              "expression": "feature",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"kill_switches\".\"store_id\" is null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "kill_switches_store_key": {
-          "name": "kill_switches_store_key",
-          "columns": [
-            {
-              "expression": "feature",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "store_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"kill_switches\".\"store_id\" is not null",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "kill_switches_paused_by_staff_id_idx": {
-          "name": "kill_switches_paused_by_staff_id_idx",
-          "columns": [
-            {
-              "expression": "paused_by_staff_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "kill_switches_store_id_stores_id_fk": {
-          "name": "kill_switches_store_id_stores_id_fk",
-          "tableFrom": "kill_switches",
-          "tableTo": "stores",
-          "columnsFrom": [
-            "store_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "kill_switches_paused_by_staff_id_staff_users_id_fk": {
-          "name": "kill_switches_paused_by_staff_id_staff_users_id_fk",
-          "tableFrom": "kill_switches",
-          "tableTo": "staff_users",
-          "columnsFrom": [
-            "paused_by_staff_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "kill_switches_feature": {
-          "name": "kill_switches_feature",
-          "value": "\"kill_switches\".\"feature\" in ('ai_replies', 'campaign_sending', 'social_posting')"
-        },
-        "kill_switches_reason_length": {
-          "name": "kill_switches_reason_length",
-          "value": "char_length(\"kill_switches\".\"reason\") >= 10"
         }
       },
       "isRLSEnabled": false
@@ -3157,7 +3017,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'khata_scan')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'khata_scan')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -10261,7 +10121,7 @@
         },
         "conversations_handover_reason": {
           "name": "conversations_handover_reason",
-          "value": "\"conversations\".\"handover_reason\" in ('asked_for_person', 'complaint', 'refund', 'discount', 'angry', 'out_of_scope', 'ready_to_buy', 'ai_unavailable', 'allowance_used', 'ai_paused', 'other')"
+          "value": "\"conversations\".\"handover_reason\" in ('asked_for_person', 'complaint', 'refund', 'discount', 'angry', 'out_of_scope', 'ready_to_buy', 'ai_unavailable', 'allowance_used', 'other')"
         },
         "conversations_lead_temperature": {
           "name": "conversations_lead_temperature",
@@ -19599,6 +19459,18 @@
         "file_name": {
           "name": "file_name",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photo_description": {
+          "name": "photo_description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photo_tags": {
+          "name": "photo_tags",
+          "type": "text[]",
           "primaryKey": false,
           "notNull": false
         },

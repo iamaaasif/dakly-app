@@ -90,6 +90,12 @@ export class ProductVariantPhotosService {
       )
         throw productError('PRODUCT_PHOTO_ALREADY_ADDED');
       await this.save(storeId, ids, [...variant.imageFileIds, input.fileId]);
+      await this.outbox.publish({
+        type: 'product.photo_added',
+        storeId,
+        occurredAt: now.toISOString(),
+        payload: { productId: ids.productId, fileId: input.fileId },
+      });
       return this.products.getById(storeId, ids.productId);
     });
   }

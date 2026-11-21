@@ -621,8 +621,15 @@
     {
       "idx": 88,
       "version": "7",
-      "when": 1795262801090,
-      "tag": "0088_kill_switches",
+      "when": 1795262266643,
+      "tag": "0088_product_photo_tags",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1795263119055,
+      "tag": "0089_kill_switches",
       "breakpoints": true
     }
   ]

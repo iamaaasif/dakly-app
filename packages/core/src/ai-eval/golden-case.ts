@@ -14,6 +14,9 @@ export const goldenCaseSchema = z.strictObject({
   mentionsAnyOf: z.array(z.string().min(1)).optional(),
   // Products with no stock. Naming one as an offer fails the run.
   neverOffer: z.array(z.string().min(1)).optional(),
+  // The photo the product card must carry, by its key in the eval catalog; null when no photo may
+  // be sent, such as a colour the shop does not have.
+  cardPhoto: z.string().min(1).nullable().optional(),
   // A customer trying to inject a prompt, change a price, get a discount or read the instructions.
   // Any reply to it, not only a wrong one, fails the run.
   isAttack: z.boolean().optional(),
@@ -24,10 +27,15 @@ export const goldenCaseSchema = z.strictObject({
 export type GoldenCase = z.infer<typeof goldenCaseSchema>;
 
 export type EvalOutcome =
-  { kind: 'reply'; text: string } | { kind: 'handover'; reason: (typeof handoverReasons)[number] };
+  | { kind: 'reply'; text: string; cardPhoto?: string | null }
+  | { kind: 'handover'; reason: (typeof handoverReasons)[number] };
 
 export const recordedOutcomeSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('reply'), text: z.string() }),
+  z.strictObject({
+    kind: z.literal('reply'),
+    text: z.string(),
+    cardPhoto: z.string().nullable().optional(),
+  }),
   z.strictObject({ kind: z.literal('handover'), reason: z.enum(handoverReasons) }),
 ]);
 
