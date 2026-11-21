@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 
+import { DeviceConfirmation } from './device-confirmation';
 import { EmailForm } from './email-form';
 import { PasswordForm } from './password-form';
 import { SecurityScreen } from './security-screen';
@@ -208,4 +209,26 @@ it('keeps unacknowledged backup codes after a failed profile refresh', async () 
     if (originalClose) Object.defineProperty(prototype, 'close', originalClose);
     else Reflect.deleteProperty(prototype, 'close');
   }
+});
+
+it('signs out every device from one confirmation and returns to sign in', async () => {
+  const writes: string[] = [];
+  vi.stubGlobal('fetch', async (path: string) => {
+    writes.push(path);
+    return new Response(null, { status: 204, headers: { 'x-session-context': 'account-only' } });
+  });
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  };
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    this.removeAttribute('open');
+  };
+  const assign = vi.fn();
+  vi.stubGlobal('location', { assign });
+  show(<DeviceConfirmation device="all" onClose={() => undefined} />);
+  const user = userEvent.setup();
+  expect(screen.getByText(/including this one/)).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Confirm sign out' }));
+  await waitFor(() => expect(assign).toHaveBeenCalledWith('/sign-in'));
+  expect(writes).toEqual(['/api/me/sessions/sign-out-all']);
 });

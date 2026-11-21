@@ -13,7 +13,7 @@ import { DeviceConfirmation } from './device-confirmation';
 
 export function DevicesPanel({ before }: { before?: string }) {
   const devices = useDevices(before);
-  const [selected, setSelected] = useState<DeviceSession | 'others'>();
+  const [selected, setSelected] = useState<DeviceSession | 'others' | 'all'>();
   if (devices.isPending) return <Skeleton className="h-40 w-full" />;
   if (devices.error)
     return <QueryError message={devices.error.message} onRetry={() => void devices.refetch()} />;
@@ -26,9 +26,14 @@ export function DevicesPanel({ before }: { before?: string }) {
             If you don&apos;t recognise a device, log it out and change your password.
           </p>
         </div>
-        <Button variant="secondary" onClick={() => setSelected('others')}>
-          Sign out other devices
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={() => setSelected('others')}>
+            Sign out other devices
+          </Button>
+          <Button variant="secondary" onClick={() => setSelected('all')}>
+            Sign out everywhere
+          </Button>
+        </div>
       </div>
 
       {devices.data.items.length === 0 ? (
