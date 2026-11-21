@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, ne, or, sql } from 'drizzle-orm';
 
 import type { ProductOption } from '@dakly/contracts/products';
 import { products } from '@dakly/db/schema/products';
@@ -52,6 +52,33 @@ export class ProductSearchRepository {
       `),
     );
     return result.rows.map((row) => ({ id: row.id, distance: Number(row.distance) }));
+  }
+
+  // Products with no embedding, or one built by a model other than the configured one.
+  async staleSearchProductIds(
+    storeId: string,
+    input: { after: string | null; model: string; limit: number },
+  ): Promise<string[]> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: products.id })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            ne(products.status, 'archived'),
+            input.after ? gt(products.id, input.after) : undefined,
+            or(
+              isNull(products.searchEmbedding),
+              isNull(products.embeddingModel),
+              ne(products.embeddingModel, input.model),
+            ),
+          ),
+        )
+        .orderBy(asc(products.id))
+        .limit(input.limit),
+    );
+    return rows.map((row) => row.id);
   }
 
   async findSearchSource(storeId: string, id: string) {

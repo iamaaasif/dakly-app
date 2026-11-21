@@ -30,6 +30,7 @@ type IntentUpdate = Pick<
 const intentColumns = {
   id: paymentIntents.id,
   flow: paymentIntents.flow,
+  purpose: paymentIntents.purpose,
   gateway: paymentIntents.gateway,
   credentialId: paymentIntents.credentialId,
   amountPoisha: paymentIntents.amountPoisha,

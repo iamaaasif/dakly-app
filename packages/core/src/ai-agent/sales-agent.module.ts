@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AiModule } from '../ai/ai.module';
 import { KnowledgeSearchModule } from '../ai/knowledge-search.module';
+import { ContactMemoryModule } from '../contact-memory/contact-memory.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { InboxModule } from '../messaging/inbox.module';
@@ -15,6 +16,7 @@ import { SalesAgentService } from './sales-agent.service';
 @Module({
   imports: [
     AiModule,
+    ContactMemoryModule,
     ContactsModule,
     DeliveryModule,
     InboxModule,

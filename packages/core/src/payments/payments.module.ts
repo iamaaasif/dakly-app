@@ -14,7 +14,7 @@ import { PaymentCallbackVerificationService } from './payment-callback-verificat
 import { PaymentCallbacksController } from './payment-callbacks.controller';
 import { PaymentCallbacksRepository } from './payment-callbacks.repository';
 import { PaymentCallbacksService } from './payment-callbacks.service';
-import { PAYMENT_DRIVERS } from './payment-drivers';
+import { buildPaymentDrivers, PAYMENT_DRIVERS } from './payment-drivers';
 import { PaymentsRepository } from './payments.repository';
 import { PaymentsService } from './payments.service';
 
@@ -34,7 +34,7 @@ import { PaymentsService } from './payments.service';
   ],
   controllers: [PaymentCallbacksController],
   providers: [
-    { provide: PAYMENT_DRIVERS, useValue: [] },
+    { provide: PAYMENT_DRIVERS, useFactory: () => buildPaymentDrivers(loadEnv()) },
     PaymentCallbacksRepository,
     PaymentCallbacksService,
     PaymentsRepository,

@@ -31,12 +31,17 @@ export class ProductSearchIndexService {
     @Inject(AiService) private readonly ai: AiService,
   ) {}
 
-  async index(storeId: string, productId: string): Promise<void> {
+  // A rebuild skips the unchanged-text check: the text is the same but the embed model is not.
+  async index(
+    storeId: string,
+    productId: string,
+    options: { rebuild?: boolean } = {},
+  ): Promise<void> {
     const source = await this.products.findSearchSource(storeId, productId);
     if (!source) return;
     const text = buildSearchText(source);
     const textHash = hashOf(text);
-    if (source.searchTextHash === textHash) return;
+    if (!options.rebuild && source.searchTextHash === textHash) return;
     const {
       embeddings: [embedding],
       model,

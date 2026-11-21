@@ -1,0 +1,14 @@
+{
+  "statusCode": "0000",
+  "statusMessage": "Successful",
+  "paymentID": "TR0011abc",
+  "payerReference": "inv-1",
+  "customerMsisdn": "01619777283",
+  "trxID": "BK1234XYZ",
+  "amount": "120",
+  "transactionStatus": "Completed",
+  "paymentExecuteTime": "2026-11-21T10:01:00:000 GMT+0600",
+  "currency": "BDT",
+  "intent": "sale",
+  "merchantInvoiceNumber": "inv-1"
+}
