@@ -124,6 +124,11 @@ const groups = [
     ],
   },
   {
+    evidence: 'admin/ops-reports.int.spec.ts',
+    boundary: 'staff reads of provider health and AI cost through definer functions, counts only',
+    routes: ['GET /admin/provider-health', 'GET /admin/ai-cost'],
+  },
+  {
     evidence: 'route-access.int.spec.ts; stores/stores.int.spec.ts; admin/support.int.spec.ts',
     boundary: 'public health/catalogue or one-use support handoff (no shop session)',
     routes: ['GET /health', 'GET /plans', 'POST /support/exchange'],
