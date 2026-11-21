@@ -28,10 +28,11 @@ const storeA = randomUUID();
 const storeB = randomUUID();
 const userId = randomUUID();
 const byUser = { actor: { kind: 'user', userId } } as const;
-// 12:00 in Dhaka.
-const NOON = new Date('2026-11-21T06:00:00.000Z');
+// 12:00 in Dhaka tomorrow. Reminder rows take the database clock, so the test clock
+// must stay ahead of real time or the 7-day check sees a reminder from the future.
+const NOON = new Date(new Date().setUTCHours(30, 0, 0, 0));
 // 22:00 in Dhaka.
-const NIGHT = new Date('2026-11-21T16:00:00.000Z');
+const NIGHT = new Date(NOON.getTime() + 10 * 60 * 60 * 1000);
 let now = NOON;
 let app: INestApplicationContext;
 let dueBook: DueBookService;
