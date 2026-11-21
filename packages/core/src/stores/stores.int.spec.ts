@@ -44,6 +44,7 @@ function sendingWith(change: object) {
     quietHours: { startHour: 21, endHour: 9 },
     frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
     onlyOwnersAndAdminsApprove: true,
+    sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
     ...change,
   };
 }
@@ -508,11 +509,13 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
       quietHours: { startHour: 21, endHour: 9 },
       frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
       onlyOwnersAndAdminsApprove: true,
+      sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
     });
     const sending = {
       quietHours: { startHour: 22, endHour: 8 },
       frequencyCap: { perChannelPerDay: 2, perSevenDays: 5 },
       onlyOwnersAndAdminsApprove: false,
+      sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
     };
     const changed = await patch(cookie, { sending });
 

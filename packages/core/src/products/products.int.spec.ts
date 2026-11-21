@@ -50,6 +50,7 @@ describe('ProductsService with Postgres', () => {
           quietHours: { startHour: 21, endHour: 9 },
           frequencyCap: { perChannelPerDay: 1, perSevenDays: 3 },
           onlyOwnersAndAdminsApprove: true,
+          sms: { quietHoursOn: true, dailyLimit: { on: true, perDay: 2000 } },
         },
         stock: { lowStockThreshold: 3 },
       }),
