@@ -137,7 +137,7 @@ it.each(['signup', 'phone', 'email'])(
         await screen.findByLabelText(view === 'phone' ? 'Mobile number' : 'Email'),
         view === 'phone' ? '01712345678' : 'rina@example.test',
       );
-      await user.click(screen.getByRole('button', { name: 'Get a code' }));
+      await user.click(screen.getByRole('button', { name: /Get a code by/ }));
     }
     const label = view === 'signup' ? 'Verification code' : 'Sign-in code';
     const code = await screen.findByLabelText<HTMLInputElement>(label);
@@ -216,11 +216,11 @@ it('returns from Google signup to visible phone sign-in and retains explicit inv
   await user.click(await screen.findByRole('button', { name: 'Continue with Google' }));
   await screen.findByLabelText('Full name');
   await user.click(screen.getByRole('link', { name: 'Already have an account? Sign in' }));
-  await screen.findByRole('heading', { name: 'Sign in' });
+  await screen.findByRole('heading', { name: /^Sign in/ });
   expect(screen.queryByLabelText('Full name')).toBeNull();
   await user.type(screen.getByLabelText('Mobile number'), '01712345678');
   await user.type(screen.getByLabelText('Password'), 'password123');
-  await user.click(screen.getByRole('button', { name: 'Sign in' }));
+  await user.click(screen.getByRole('button', { name: /^Sign in/ }));
   await screen.findByRole('button', { name: 'Accept invitation' });
   expect(network.accepted).toEqual([]);
   await user.click(screen.getByRole('button', { name: 'Accept invitation' }));
