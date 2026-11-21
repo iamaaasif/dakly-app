@@ -106,6 +106,12 @@ const groups = [
     ],
   },
   {
+    evidence: 'admin/shops.int.spec.ts',
+    boundary:
+      'staff shop list and detail through metadata-only definer functions, with the view audited',
+    routes: ['GET /admin/stores', 'GET /admin/stores/:storeId'],
+  },
+  {
     evidence: 'admin/sms-sender-review.int.spec.ts',
     boundary: 'staff review of sender requests: definer-function queue and audited decisions',
     routes: [

@@ -21,6 +21,9 @@ import { BreakGlassService } from './break-glass.service';
 import { OwnerRecoveryHistoryController } from './owner-recovery-history.controller';
 import { OwnerSupportController } from './owner-support.controller';
 import { RiskyActionConfirmation } from './risky-action-confirmation';
+import { ShopsController } from './shops.controller';
+import { ShopsRepository } from './shops.repository';
+import { ShopsService } from './shops.service';
 import { SmsSenderReviewController } from './sms-sender-review.controller';
 import { SmsSenderReviewService } from './sms-sender-review.service';
 import { StaffAccessService } from './staff-access.service';
@@ -84,6 +87,7 @@ import { WalletCreditService } from './wallet-credit.service';
     StaffHistoryController,
     WalletCreditController,
     SmsSenderReviewController,
+    ShopsController,
   ],
   providers: [
     StaffRecoveryService,
@@ -94,6 +98,8 @@ import { WalletCreditService } from './wallet-credit.service';
     BreakGlassService,
     WalletCreditService,
     SmsSenderReviewService,
+    ShopsRepository,
+    ShopsService,
     SupportService,
     SupportOwnerService,
     SupportAuditService,
