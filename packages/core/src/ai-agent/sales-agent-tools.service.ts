@@ -303,13 +303,7 @@ export function describePhotoMatch(
   present: (product: ChatProduct) => object,
   alternatives: ChatProduct[],
 ): object {
-  if (match.kind === 'sure')
-    return {
-      photoMatch: 'sure',
-      rule: 'Answer as this product, with its listed price and stock only.',
-      ...(match.variantId ? { matchedVariantId: match.variantId } : {}),
-      products: [present(match.product)],
-    };
+  if (match.kind === 'sure') return describeSureMatch(match, present);
   if (match.kind === 'unsure')
     return {
       photoMatch: 'unsure',
@@ -326,6 +320,37 @@ export function describePhotoMatch(
     photoMatch: 'none',
     rule: 'No product fits the photo. Do not guess. Ask for the product name or a clearer photo.',
     products: [],
+  };
+}
+
+function describeSureMatch(
+  match: Extract<PhotoMatch, { kind: 'sure' }>,
+  present: (product: ChatProduct) => object,
+) {
+  const products = [present(match.product)];
+  if (match.soldOutVariantId)
+    return {
+      photoMatch: 'sure',
+      rule: 'The photo shows this product but the colour or size in it has no stock. Say so. Offer only the in-stock variants listed here, with their listed prices. Ask "নতুন স্টক এলে জানাবো?" and call join_restock_list with soldOutVariantId only after the customer says yes.',
+      soldOutVariantId: match.soldOutVariantId,
+      products,
+    };
+  if (match.colourMissing)
+    return {
+      photoMatch: 'sure',
+      rule: 'The photo shows this product but the shop has no photo in that colour. Say so and list the colours in the photos. Send a card with withoutPhoto true so another colour is not shown as the one asked for. Price and stock only from the listing.',
+      products,
+    };
+  return {
+    photoMatch: 'sure',
+    rule:
+      'Answer as this product, with its listed price and stock only.' +
+      (match.photoId
+        ? ' Send its card with photoId (and variantId when given) so the customer sees the matching photo.'
+        : ''),
+    ...(match.variantId ? { matchedVariantId: match.variantId } : {}),
+    ...(match.photoId ? { photoId: match.photoId } : {}),
+    products,
   };
 }
 

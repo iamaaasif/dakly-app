@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { photoSearchText } from '@dakly/contracts/chats';
 
+import { evalPhotoKey, evalProducts } from './eval-catalog';
 import { matchEvalPhoto } from './fixture-tools';
 
 function match(photoText: string) {
@@ -9,6 +10,9 @@ function match(photoText: string) {
     photoMatch: string;
     products: { name: string }[];
     matchedVariantId?: string;
+    photoId?: string;
+    soldOutVariantId?: string;
+    rule: string;
   };
 }
 
@@ -52,6 +56,44 @@ describe('photo match over the eval shop', () => {
     const result = match('Photo: shoes');
     expect(result.products.map(({ name }) => name)).not.toContain('লোফার');
     expect(result.products.map(({ name }) => name)).not.toContain('স্নিকার্স');
+  });
+});
+
+describe('photo colour match', () => {
+  const bag = evalProducts.find(({ name }) => name === 'হ্যান্ডব্যাগ')!;
+  const variantTitle = (id: string | undefined) =>
+    bag.variants.find(({ variantId }) => variantId === id)?.title;
+
+  it('finds the red variant and its photo from a Bangla photo', () => {
+    const result = match('Photo: লাল চামড়ার হ্যান্ডব্যাগ, সোনালি ক্ল্যাপ');
+    expect(result.photoMatch).toBe('sure');
+    expect(evalPhotoKey(result.photoId)).toBe('bag-red');
+    expect(variantTitle(result.matchedVariantId)).toBe('লাল');
+  });
+
+  it('finds the blue variant from Banglish "nil"', () => {
+    const result = match('photo: nil handbag, lomba strap. eta koto?');
+    expect(evalPhotoKey(result.photoId)).toBe('bag-blue');
+    expect(variantTitle(result.matchedVariantId)).toBe('নীল');
+  });
+
+  it('never offers the black variant that has no stock', () => {
+    const result = match('photo: kalo handbag, gold clasp. এটা ache?');
+    expect(variantTitle(result.soldOutVariantId)).toBe('কালো');
+    expect(result.matchedVariantId).toBeUndefined();
+    expect(result.photoId).toBeUndefined();
+  });
+
+  it('sends no photo for a colour the shop has no photo of', () => {
+    const result = match('ছবি: sobuj handbag');
+    expect(result.photoMatch).toBe('sure');
+    expect(result.photoId).toBeUndefined();
+    expect(result.rule).toContain('withoutPhoto');
+  });
+
+  it('keeps a product with no colour-tagged photos as before', () => {
+    const result = match('photo: white canvas shoes, lace-up, rubber sole');
+    expect(result.photoId).toBeUndefined();
   });
 });
 

@@ -6,7 +6,13 @@ import type { ChatProduct } from '../../products/products.service';
 // The eval shop of golden-set.bangla.ts, as plain data. Aliases stand in for the names an owner
 // adds to a product, and search matches them the way ProductsRepository.searchForChat does.
 type EvalVariant = { variantId: string; title: string; priceTaka: number; stock: number };
-type EvalPhoto = { photoId: string; key: string; description: string; tags: string[] };
+type EvalPhoto = {
+  photoId: string;
+  key: string;
+  description: string;
+  tags: string[];
+  variantId: string | null;
+};
 export type EvalProduct = {
   productId: string;
   name: string;
@@ -20,25 +26,30 @@ export type EvalProduct = {
 type ProductInput = Omit<EvalProduct, 'productId' | 'variants' | 'photos'> & {
   variants: [title: string, priceTaka: number, stock: number][];
   // Tagged photos as the vision tier would tag them: key, description and tags.
-  photos?: [key: string, description: string, tags: string[]][];
+  // A fourth item names the variant the photo belongs to.
+  photos?: [key: string, description: string, tags: string[], variantTitle?: string][];
 };
 
-const product = ({ variants, photos = [], ...fields }: ProductInput): EvalProduct => ({
-  ...fields,
-  productId: randomUUID(),
-  photos: photos.map(([key, description, tags]) => ({
-    photoId: randomUUID(),
-    key,
-    description,
-    tags,
-  })),
-  variants: variants.map(([title, priceTaka, stock]) => ({
+const product = ({ variants, photos = [], ...fields }: ProductInput): EvalProduct => {
+  const made = variants.map(([title, priceTaka, stock]) => ({
     variantId: randomUUID(),
     title,
     priceTaka,
     stock,
-  })),
-});
+  }));
+  return {
+    ...fields,
+    productId: randomUUID(),
+    photos: photos.map(([key, description, tags, variantTitle]) => ({
+      photoId: randomUUID(),
+      key,
+      description,
+      tags,
+      variantId: made.find(({ title }) => title === variantTitle)?.variantId ?? null,
+    })),
+    variants: made,
+  };
+};
 
 const MIN_WORD_LENGTH = 3;
 
@@ -115,6 +126,38 @@ export const evalProducts: EvalProduct[] = [
     aliases: ['loafer'],
     variants: [['41', 2100, 0]],
   }),
+  // Each colour is a variant with its own tagged photo; the black one has no stock.
+  product({
+    name: 'হ্যান্ডব্যাগ',
+    category: 'ব্যাগ',
+    description: 'মেয়েদের চামড়ার হ্যান্ডব্যাগ',
+    aliases: ['handbag', 'hand bag'],
+    variants: [
+      ['লাল', 1800, 5],
+      ['কালো', 1800, 0],
+      ['নীল', 1800, 4],
+    ],
+    photos: [
+      [
+        'bag-red',
+        'A red leather handbag with a gold clasp.',
+        ['red', 'লাল', 'handbag', 'হ্যান্ডব্যাগ'],
+        'লাল',
+      ],
+      [
+        'bag-black',
+        'A black leather handbag with a gold clasp.',
+        ['black', 'কালো', 'handbag', 'হ্যান্ডব্যাগ'],
+        'কালো',
+      ],
+      [
+        'bag-blue',
+        'A blue leather handbag with a long strap.',
+        ['blue', 'নীল', 'handbag', 'হ্যান্ডব্যাগ'],
+        'নীল',
+      ],
+    ],
+  }),
   product({
     name: 'ডেনিম জ্যাকেট',
     category: 'ছেলেদের পোশাক',
@@ -157,9 +200,9 @@ export const productResult = ({
   name,
   category,
   description,
-  photos: photos.map(({ photoId, description: seen, tags }) => ({
+  photos: photos.map(({ photoId, variantId, description: seen, tags }) => ({
     photoId,
-    variantId: null,
+    variantId,
     description: seen,
     tags,
   })),
@@ -187,9 +230,9 @@ export const evalChatProducts: ChatProduct[] = evalProducts.map((item) => ({
   isStockTracked: true,
   description: item.description,
   category: item.category,
-  photos: item.photos.map(({ photoId, description, tags }) => ({
+  photos: item.photos.map(({ photoId, variantId, description, tags }) => ({
     id: photoId,
-    variantId: null,
+    variantId,
     description,
     tags,
   })),
