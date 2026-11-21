@@ -111,7 +111,7 @@ Every route needs `customers.edit` and works on one page at a time.
 - The read goes through `AiService` on the `vision` tier, so the model is whatever `AI_VISION_MODEL` names. The model returns each name, phone, date and amount as written. Code then converts Bangla and English digits, `৳`, `Tk`, `/-` and lakh grouping into poisha, validates the phone and date, and caps any row it could not fully place at 84 so it stays yellow (SHOP-R7). A row with no name or no readable amount is dropped.
 - Names are kept in the script they were written in. Matching never compares scripts: an exact phone is matched first, then the same phone with one digit different counts only if the contact shares a word with the row's name. A match is a suggestion, never a merge.
 - One scan is charged per page that gives at least one row, as `ai_scan` usage with the page id as the reference, so a rerun is free. A page the model cannot read is `unreadable` and costs nothing. The allowance is the `ai_scan` number in the plan's limits, set in the plan catalogue; a plan without it allows no scans.
-- The photo's file expires after 30 days. Deleting the stored object and the file row is the file purge's job, and the rows stay.
+- The photo's file is set to expire after 30 days, but the file purge skips a file a page still points at. Clearing that reference and deleting the photo is the 30-day purge in KHT-2; the rows stay.
 - Read quality is gated in `khata-row-reading.spec.ts`: a set of Bangla, Banglish and mixed lines, with Bangla and English digits, that must all convert correctly. It tests what the code does with the model's text. How well the model reads real handwriting needs a set of real page photos, which is open until the shop owner supplies them.
 
 #### POS connections
