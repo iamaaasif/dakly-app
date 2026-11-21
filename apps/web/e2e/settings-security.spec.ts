@@ -125,18 +125,32 @@ async function settings(page: Page) {
   await expect(page.getByLabel('Store name')).toHaveValue('Security browser shop');
   await expect(page.getByLabel('Legal name')).toHaveValue('');
   await pictures(page, 'settings-store');
-  await page
-    .getByRole('navigation', { name: 'Settings sections' })
-    .getByRole('link', { name: 'Extensions', exact: true })
-    .click();
-  await page.getByRole('checkbox', { name: 'Sales', exact: true }).check();
-  await page.getByLabel('Chats', { exact: true }).uncheck();
-  await page.getByLabel('Social auto-post', { exact: true }).uncheck();
-  await page.getByRole('button', { name: 'Save extensions' }).click();
-  await expect(page.getByText('Extensions saved.')).toBeVisible();
+  await page.goto('/extensions');
+  await page.getByRole('switch', { name: 'Sales', exact: true }).waitFor();
+  if (
+    (await page
+      .getByRole('switch', { name: 'Sales', exact: true })
+      .getAttribute('aria-checked')) !== 'true'
+  )
+    await page.getByRole('switch', { name: 'Sales', exact: true }).click();
+  await expect(page.getByRole('switch', { name: 'Sales', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  for (const name of ['Chats', 'Social Auto Post']) {
+    const toggle = page.getByRole('switch', { name, exact: true });
+    if ((await toggle.getAttribute('aria-checked')) === 'true') await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  }
   await page.reload();
-  await expect(page.getByRole('checkbox', { name: 'Sales', exact: true })).toBeChecked();
-  await expect(page.getByLabel('Chats', { exact: true })).not.toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Sales', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await expect(page.getByRole('switch', { name: 'Chats', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  );
   await pictures(page, 'settings-extensions');
 }
 
@@ -256,16 +270,15 @@ async function customSettingsAccess(
     'update memberships set built_in_role=null,role_id=$2 where store_id=$1 and user_id=$3',
     [fixture.storeId, result.rows[0].id, fixture.ownerId],
   );
-  await page.goto('/settings?tab=extensions');
-  await expect(page.getByRole('checkbox', { name: 'Sales', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Save extensions' })).toBeHidden();
+  await page.goto('/extensions');
+  await expect(page.getByRole('switch', { name: 'Sales', exact: true })).toBeDisabled();
   const context = await (await page.request.get('/api/me/context')).json();
   const denied = await page.request.patch('/api/store/extensions', {
     data: { extensions: [] },
     headers: { Origin: 'http://localhost:3015', 'X-Session-Context': context.contextTag },
   });
   expect(denied.status()).toBe(403);
-  await page.getByRole('link', { name: 'Store information', exact: true }).click();
+  await page.goto('/settings');
   await expect(page.getByLabel('Store name')).toBeEnabled();
 }
 async function pictures(page: Page, name: string) {

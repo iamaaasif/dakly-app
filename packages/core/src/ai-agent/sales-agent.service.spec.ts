@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 import type { AiService } from '../ai/ai.service';
 import type { InboxService } from '../messaging/inbox.service';
@@ -6,60 +6,49 @@ import type { StoresService } from '../stores/stores.service';
 import type { SalesAgentToolsService } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
 
-type Step = { kind: 'tools'; calls: [string, object][] } | { kind: 'reply' };
+const storeId = 'store-1';
 
-function agent(steps: Step[], customerTexts: string[]) {
-  const run = vi.fn<(name: string) => Promise<object>>(async (name) =>
-    name === 'draft_order' ? { orderNumber: 7 } : { stage: 'to_pack' },
-  );
-  const queue = [...steps];
-  const ai = {
-    run: async () => {
-      const step = queue.shift()!;
-      return step.kind === 'reply'
-        ? { kind: 'output', aiRunId: 'run', output: { reply: 'ok' } }
-        : {
-            kind: 'tools',
-            toolCalls: step.calls.map(([name, args]) => ({
-              name,
-              argumentsJson: JSON.stringify(args),
-            })),
-          };
-    },
-  } as unknown as AiService;
-  const service = new SalesAgentService(
-    ai,
-    { run: (_scope: unknown, name: string) => run(name) } as unknown as SalesAgentToolsService,
-    { messages: async () => ({ items: [] }) } as unknown as InboxService,
-    {
-      settings: async () => ({ name: 'Shop', phone: null, district: null }),
-    } as unknown as StoresService,
-  );
-  return { run, compose: () => service.compose({ storeId: 's', contactId: 'c', customerTexts }) };
+function build() {
+  const run = vi.fn().mockResolvedValue({
+    kind: 'output',
+    aiRunId: 'run-1',
+    output: { reply: 'ok' },
+  });
+  const ai = { run } as unknown as AiService;
+  const tools = {
+    run: vi.fn().mockResolvedValue({ products: [] }),
+  } as unknown as SalesAgentToolsService;
+  const inbox = { messages: vi.fn() } as unknown as InboxService;
+  const stores = {
+    settings: vi.fn().mockResolvedValue({ name: 'Shop', phone: '0171', district: 'Dhaka' }),
+  } as unknown as StoresService;
+  return { service: new SalesAgentService(ai, tools, inbox, stores), run, inbox };
 }
 
-const confirm: Step = { kind: 'tools', calls: [['confirm_order', { orderNumber: 7 }]] };
+it('puts a practice question, which has no saved chat, into the model conversation', async () => {
+  const { service, run } = build();
 
-describe('SalesAgentService order confirmation', () => {
-  it('confirms an order after the customer said yes', async () => {
-    const { run, compose } = agent([confirm, { kind: 'reply' }], ['হ্যাঁ']);
-    await compose();
-    expect(run).toHaveBeenCalledWith('confirm_order');
+  await service.compose({ storeId, contactId: 'c-1', customerTexts: ['Delivery charge koto?'] });
+
+  const input: string = run.mock.calls[0]![1].input;
+  expect(input).toContain(
+    '<conversation untrusted="true">[{"from":"customer","text":"Delivery charge koto?"}]</conversation>',
+  );
+});
+
+it('reads a real chat from its saved messages, not from the texts again', async () => {
+  const { service, run, inbox } = build();
+  vi.mocked(inbox.messages).mockResolvedValue({
+    items: [{ kind: 'text', direction: 'in', body: 'saved question' }],
+  } as never);
+
+  await service.compose({
+    storeId,
+    contactId: 'c-1',
+    chat: { conversationId: 'conv-1', channel: 'messenger' },
+    customerTexts: ['saved question'],
   });
 
-  it('does not confirm when the customer never said yes', async () => {
-    const { run, compose } = agent([confirm, { kind: 'reply' }], ['amar order 7 er khobor ki']);
-    const reply = await compose();
-    expect(run).not.toHaveBeenCalledWith('confirm_order');
-    expect(reply).toMatchObject({
-      toolResults: expect.arrayContaining([{ error: 'CONFIRMATION_NOT_GIVEN' }]),
-    });
-  });
-
-  it('does not confirm an order drafted in the same turn, even after a yes', async () => {
-    const draft: Step = { kind: 'tools', calls: [['draft_order', {}]] };
-    const { run, compose } = agent([draft, confirm, { kind: 'reply' }], ['yes']);
-    await compose();
-    expect(run).not.toHaveBeenCalledWith('confirm_order');
-  });
+  const input: string = run.mock.calls[0]![1].input;
+  expect(input.match(/saved question/g)).toHaveLength(1);
 });

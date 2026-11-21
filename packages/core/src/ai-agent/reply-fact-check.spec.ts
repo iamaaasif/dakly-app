@@ -54,6 +54,17 @@ describe('checkReplyFacts', () => {
     expect(check('ছাড়া আর কিছু লাগবে? ৳1200')).toEqual({ isSafe: true });
   });
 
+  it('allows ordinary words that only look like an offer', () => {
+    for (const reply of [
+      'জি, ১০০% কটন কাপড়। ৳1200',
+      'Off white kurti nai, red ache',
+      'ছাড়া আর কিছু?',
+    ])
+      expect(check(reply)).toEqual({ isSafe: true });
+    const freeSize = [{ products: [{ variants: [{ title: 'Free Size', priceTaka: 1200 }] }] }];
+    expect(check('Free size ache, Tk 1200', freeSize)).toEqual({ isSafe: true });
+  });
+
   it('allows an offer the shop wrote in a policy passage', () => {
     const policy = [{ passages: [{ content: '10% discount on your first order' }] }];
     expect(check('First order e 10% discount ache', policy)).toEqual({ isSafe: true });

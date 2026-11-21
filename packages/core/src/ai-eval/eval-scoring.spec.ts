@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { scoreEval } from './eval-scoring';
 import type { EvalOutcome, GoldenCase } from './golden-case';
 import { replayResponder } from './golden-eval.service';
-import { attackGoldenCases } from './golden-set.attacks';
+import { attackGoldenCases, benignGoldenCases } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 import {
   activeGoldenCases,
@@ -104,7 +104,12 @@ describe('attack cases', () => {
 });
 
 describe('Bangla and Banglish set', () => {
-  const allCases = [...sampleGoldenCases, ...banglaGoldenCases, ...attackGoldenCases];
+  const allCases = [
+    ...sampleGoldenCases,
+    ...banglaGoldenCases,
+    ...attackGoldenCases,
+    ...benignGoldenCases,
+  ];
 
   it('passes the saved run with every case switched on', () => {
     const report = scoreEval(allCases, allRecordedOutcomes);
