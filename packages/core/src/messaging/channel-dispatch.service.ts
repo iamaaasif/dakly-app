@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { messageAttachmentsSchema } from '@dakly/contracts/chats';
-import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
+import { productCarouselSchema } from '@dakly/contracts/product-card';
+import { MetaRequestError, type OutboundCard } from '@dakly/providers/channel/channel-driver';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
@@ -29,6 +30,7 @@ type DispatchRow = Awaited<ReturnType<OutboundMessagingRepository['findForDispat
 export type CampaignMessageContent = {
   imageUrl?: string;
   buttons?: { title: string; payload: string }[];
+  card?: OutboundCard;
 };
 // A refused image does not stop the text, so a sent message can still report it.
 export type CampaignSendResult =
@@ -75,7 +77,11 @@ export class ChannelDispatchService {
   async sendQueuedMessage(storeId: string, messageId: string): Promise<void> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');
     const pending = await this.prepareChannelDispatch(storeId, messageId);
-    if (pending) await this.submit(storeId, pending, { imageUrl: this.imageUrl(pending) });
+    if (pending)
+      await this.submit(storeId, pending, {
+        imageUrl: this.imageUrl(pending),
+        card: this.outboundCard(pending),
+      });
   }
 
   // The Meta servers fetch the photo, so the link outlives the send but not by long.
@@ -87,6 +93,20 @@ export class ChannelDispatchService {
     return image?.status === 'stored'
       ? this.storage.createDownloadUrl(image.objectKey, 600)
       : undefined;
+  }
+
+  // A card that no longer parses goes out as the plain text it was saved with.
+  private outboundCard({ card }: { card: unknown }): OutboundCard | undefined {
+    const parsed = productCarouselSchema.safeParse(card);
+    if (!parsed.success) return undefined;
+    return {
+      elements: parsed.data.elements.map(({ imageObjectKey, ...element }) => ({
+        ...element,
+        ...(imageObjectKey
+          ? { imageUrl: this.storage.createDownloadUrl(imageObjectKey, 600) }
+          : {}),
+      })),
+    };
   }
 
   // A campaign recipient's message was checked by the campaign's own claim just before this, so

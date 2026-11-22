@@ -30,11 +30,20 @@ export class AiAgentSettingsRepository {
           testers: aiAgentSettings.testers,
           claimTimeoutMinutes: aiAgentSettings.claimTimeoutMinutes,
           returnToAiMinutes: aiAgentSettings.returnToAiMinutes,
+          abilities: aiAgentSettings.abilities,
         })
         .from(aiAgentSettings)
         .where(and(eq(aiAgentSettings.storeId, storeId), eq(aiAgentSettings.isAutoReplyOn, true))),
     );
-    return settings && { ...settings, testers: testersSchema.parse(settings.testers) };
+    if (!settings) return undefined;
+    const { productCardStyle } = agentAbilitiesSchema.partial().parse(settings.abilities);
+    return {
+      debounceSeconds: settings.debounceSeconds,
+      testers: testersSchema.parse(settings.testers),
+      claimTimeoutMinutes: settings.claimTimeoutMinutes,
+      returnToAiMinutes: settings.returnToAiMinutes,
+      productCardStyle: productCardStyle ?? defaultAgentAbilities.productCardStyle,
+    };
   }
 
   async testers(storeId: string): Promise<string[]> {

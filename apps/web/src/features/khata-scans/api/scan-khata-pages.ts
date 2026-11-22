@@ -9,6 +9,8 @@ import {
 import { khataKeys } from './khata-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
+const UPLOAD_TIMEOUT_MS = 90_000;
+
 // One page at a time: ask for an upload link, send the file, then queue the read.
 export function useScanKhataPages() {
   const { request, contextTag } = useStoreRequest();
@@ -32,6 +34,8 @@ export function useScanKhataPages() {
           body: file,
           credentials: 'omit',
           headers: { 'Content-Type': parsed.data.contentType },
+          // Without a limit an unreachable file store leaves the page "uploading" forever.
+          signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
         }).catch(() => undefined);
         if (!uploaded?.ok) throw new Error('A page could not upload. Try again.');
         const queued = await request<KhataPageResponse>(

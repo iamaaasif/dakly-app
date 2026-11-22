@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { replyLanguages } from './ai';
 
 export const followUpLevels = ['off', 'hot', 'hot_and_warm'] as const;
+export const productCardStyles = ['buttons', 'text'] as const;
 
 export const agentAbilitiesSchema = z.strictObject({
   answerQuestions: z.boolean(),
@@ -13,6 +14,8 @@ export const agentAbilitiesSchema = z.strictObject({
   askForReview: z.boolean(),
   answerComments: z.boolean(),
   followUp: z.enum(followUpLevels),
+  // Buttons send a card with Order now, See sizes and Talk to a person; text sends photo and text.
+  productCardStyle: z.enum(productCardStyles),
 });
 
 export const handoverRulesSchema = z.strictObject({
@@ -30,6 +33,7 @@ export const defaultAgentAbilities = {
   askForReview: true,
   answerComments: true,
   followUp: 'hot',
+  productCardStyle: 'text',
 } satisfies AgentAbilities;
 
 export const defaultHandoverRules = {
