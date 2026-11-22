@@ -397,6 +397,17 @@ describe('Product editor navigation', () => {
     expect(navigate).toHaveBeenCalledWith('/products/new');
   });
 
+  it('opens the quick add with the cursor in Name', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(within(dialog).getByLabelText('Name')),
+    );
+  });
+
   it('asks for a name before saving the quick add', async () => {
     stubFetch(async () => response({ items: [product], nextCursor: null }));
     show();

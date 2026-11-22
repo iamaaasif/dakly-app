@@ -21,7 +21,7 @@ import { SessionDialog } from '@/components/session-dialog';
 
 const photoTypes = 'image/jpeg,image/png,image/webp';
 
-type Partial = { productId: string; message: string };
+type PartialSave = { productId: string; message: string };
 
 export function QuickAddModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
@@ -43,7 +43,7 @@ export function QuickAddModal({ onClose }: { onClose: () => void }) {
           }}
           className="flex flex-1 flex-col gap-4"
         >
-          <ProductInputField name="name" label="Name" placeholder="e.g. Cotton Panjabi" autoFocus />
+          <ProductInputField name="name" label="Name" placeholder="e.g. Cotton Panjabi" />
           <div className="grid gap-4 sm:grid-cols-2 sm:gap-3">
             <ProductInputField name="pricePoisha" label="Selling price ৳" />
             <ProductPlainStock />
@@ -128,7 +128,12 @@ function useQuickAdd(onClose: () => void) {
   const [photo, setPhoto] = useState<File | null>(null);
   const preview = usePhotoPreview(photo);
   const openAfterSave = useRef(false);
-  const [partial, setPartial] = useState<Partial | null>(null);
+  // The dialog moves focus to its close button when it opens, so Name takes it back afterwards.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => form.setFocus('name'));
+    return () => cancelAnimationFrame(frame);
+  }, [form]);
+  const [partial, setPartial] = useState<PartialSave | null>(null);
 
   const save = form.handleSubmit(({ status: _status, variants, ...product }) => {
     const stock = form.getValues('variants.0.initialStock') ?? 0;
