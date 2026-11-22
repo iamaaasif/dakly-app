@@ -30,6 +30,8 @@ export function useSessionVerification() {
   const revision = useRef(0);
   const acceptedContextTag = useRef<string | undefined>(undefined);
   const switching = useRef(false);
+  const blockedRef = useRef(true);
+  blockedRef.current = blocked;
   const pause = useCallback(() => {
     setBlocked(true);
     return ++revision.current;
@@ -64,6 +66,16 @@ export function useSessionVerification() {
       else setFailure('Could not verify your account and shop. Refresh to continue.');
     }
   }, [client, pause, discard]);
+  // Focus and tab switches check the context without hiding the shell; only a real change blocks it.
+  const verifyQuietly = useCallback(async () => {
+    if (switching.current || blockedRef.current) return verify();
+    try {
+      const fresh = await client.fetchQuery<SessionContext>(freshContextQuery);
+      if (fresh.contextTag !== acceptedContextTag.current) await verify();
+    } catch {
+      await verify();
+    }
+  }, [client, verify]);
   return {
     session,
     client,
@@ -76,6 +88,7 @@ export function useSessionVerification() {
     close,
     pause,
     verify,
+    verifyQuietly,
     switching,
   };
 }

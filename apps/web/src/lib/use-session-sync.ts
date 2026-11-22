@@ -2,12 +2,12 @@ import { useEffect, useRef } from 'react';
 
 export function useSessionSync({
   close,
-  pause,
   verify,
+  verifyQuietly,
 }: {
   close: () => Promise<void>;
-  pause: () => number;
   verify: () => Promise<void>;
+  verifyQuietly: () => Promise<void>;
 }) {
   const channel = useRef<BroadcastChannel | null>(null);
   const changing = useRef(false);
@@ -26,11 +26,10 @@ export function useSessionSync({
       }
     };
     const visible = () => {
-      if (document.visibilityState === 'visible' && !changing.current) void verify();
-      else pause();
+      if (document.visibilityState === 'visible' && !changing.current) void verifyQuietly();
     };
     const refresh = () => {
-      if (!changing.current) void verify();
+      if (!changing.current) void verifyQuietly();
     };
     window.addEventListener('dakly-context-changed', refresh);
     window.addEventListener('focus', refresh);
@@ -42,7 +41,7 @@ export function useSessionSync({
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', visible);
     };
-  }, [close, pause, verify]);
+  }, [close, verify, verifyQuietly]);
   return {
     channel,
     resume: () => {
