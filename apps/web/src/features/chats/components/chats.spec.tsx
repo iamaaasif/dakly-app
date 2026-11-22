@@ -35,9 +35,16 @@ const defaults = chatScreenQuerySchema.parse({});
 
 let paths: string[] = [];
 
+let connectionKinds: string[] = [];
+
 function respond(list: () => Response) {
   vi.stubGlobal('fetch', async (path: string) => {
     paths.push(path);
+    if (path.startsWith('/api/channel-connections'))
+      return Response.json(
+        { items: connectionKinds.map((kind) => ({ kind, status: 'active' })), nextCursor: null },
+        { headers: { 'x-session-context': 'verified' } },
+      );
     if (path.startsWith('/api/conversations/counts'))
       return Response.json(counts, { headers: { 'x-session-context': 'verified' } });
     return list();
@@ -99,6 +106,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   paths = [];
+  connectionKinds = [];
 });
 
 describe('Chat list', () => {
@@ -122,6 +130,27 @@ describe('Chat list', () => {
     const params = new URL(list, 'http://shop.test').searchParams;
     expect(params.get('status')).toBe('needs_you');
     expect(params.get('channel')).toBe('whatsapp');
+  });
+
+  it('lists only the connected channels, with Comments for a Page or Instagram', async () => {
+    connectionKinds = ['facebook_page', 'whatsapp'];
+    respond(() => ok([]));
+    show();
+    expect(await screen.findByRole('link', { name: 'Messenger' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'WhatsApp' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Comments' })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Instagram' })).toBeNull();
+  });
+
+  it('hides the channel filter when only one channel is connected', async () => {
+    connectionKinds = ['whatsapp'];
+    respond(() => ok([]));
+    show();
+    await screen.findByText('No chats here yet.');
+    await waitFor(() =>
+      expect(paths.some((path) => path.startsWith('/api/channel-connections'))).toBe(true),
+    );
+    expect(screen.queryByRole('navigation', { name: 'Channel' })).toBeNull();
   });
 
   it('offers a retry when the list fails', async () => {

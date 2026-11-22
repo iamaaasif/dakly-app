@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { aiFeedbackFilters } from '@dakly/contracts/ai-feedback';
-import { chatChannels } from '@dakly/contracts/channels';
+import { chatChannels, type ChannelConnection } from '@dakly/contracts/channels';
 import type { ConversationListQuery } from '@dakly/contracts/chats';
 
 import { agentTabs } from './agent-tabs';
@@ -40,6 +40,24 @@ export const chatChannelLabels: Record<(typeof chatScreenChannels)[number], stri
   instagram: 'Instagram',
   comments: 'Comments',
 };
+
+const channelOfKind = {
+  facebook_page: 'messenger',
+  instagram: 'instagram',
+  whatsapp: 'whatsapp',
+} as const;
+
+// Only channels the shop has connected get a chip. Comments exist only for a Page or Instagram.
+export function connectedScreenChannels(
+  connections: Pick<ChannelConnection, 'kind' | 'status'>[],
+): (typeof chatScreenChannels)[number][] {
+  const live = connections.filter((connection) => connection.status !== 'disconnected');
+  const channels = new Set(live.map((connection) => channelOfKind[connection.kind]));
+  const hasComments = channels.has('messenger') || channels.has('instagram');
+  return chatScreenChannels.filter((channel) =>
+    channel === 'comments' ? hasComments : channels.has(channel),
+  );
+}
 
 export const chatScreenQuerySchema = z.strictObject({
   tab: z.enum(chatTabs).default('all'),
