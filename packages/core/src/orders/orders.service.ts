@@ -231,6 +231,10 @@ export class OrdersService {
     };
   }
 
+  async stageCounts(storeId: string) {
+    return orderStageCounts(await this.repository.countByStage(storeId));
+  }
+
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
