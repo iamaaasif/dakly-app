@@ -2,10 +2,9 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders';
 
+import { ordersKey } from '@/lib/order-entry/orders-key';
 import { useSessionContext } from '@/lib/session-context';
 import { useStoreRequest } from '@/lib/store-request';
-
-export const ordersKey = ['orders'] as const;
 
 export function ordersSearch(query: Partial<OrderListQuery> & { selected?: string }) {
   const params = new URLSearchParams();
