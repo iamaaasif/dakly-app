@@ -713,6 +713,15 @@ fixture('GET /products/categories', async () => {
     items: ['Accessories'],
   });
 });
+fixture('GET /products/export', async () => {
+  const { a, b } = await pair();
+  await success(a, 'POST', '/products', 201, { name: 'পাঞ্জাবি', pricePoisha: 125000 });
+  await success(b, 'POST', '/products', 201, { name: 'ঘড়ি', pricePoisha: 50000 });
+  const own = (await success(a, 'GET', '/products/export?format=csv', 200)).payload;
+  expect(own).toContain('পাঞ্জাবি');
+  expect(own).not.toContain('ঘড়ি');
+  expect((await f.request(a.owner, 'GET', '/products/export?format=pdf')).statusCode).toBe(400);
+});
 fixture('GET /products/:productId', async () => {
   const { a, b } = await pair(),
     id = await product(a);
