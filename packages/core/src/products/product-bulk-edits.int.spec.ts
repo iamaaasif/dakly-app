@@ -140,6 +140,20 @@ describe('ProductBulkEditsService', () => {
     ).rejects.toMatchObject({ code: 'PRODUCT_BULK_EDIT_NO_CHANGE' });
   });
 
+  it('rejects a price when a size has its own price', async () => {
+    const id = await product(2);
+    await f.connection.pool.query(
+      'update product_variants set price_override_poisha = 99000 where product_id = $1 and position = 1',
+      [id],
+    );
+    await expect(
+      service.apply(f.a, { rows: [{ productId: id, pricePoisha: 130000 }] }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_BULK_EDIT_ROW_INVALID' });
+    await expect(
+      service.apply(f.a, { rows: [{ productId: id, category: 'Shirts' }] }, actor),
+    ).resolves.toMatchObject({ changedValues: 1 });
+  });
+
   it('does not touch another store', async () => {
     const id = await product();
     await expect(

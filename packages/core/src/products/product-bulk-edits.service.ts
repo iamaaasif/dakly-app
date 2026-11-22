@@ -214,7 +214,11 @@ function assertRowAllowed(
   const needsVariant = row.costPoisha !== undefined || row.stock !== undefined;
   const hasOneSize = product.variants.length === 1;
   const stockBlocked = row.stock !== undefined && !product.isStockTracked;
-  if (needsVariant && (!hasOneSize || stockBlocked))
+  // A size with its own price hides the product price from customers, so editing it would mislead.
+  const priceHidden =
+    row.pricePoisha !== undefined &&
+    product.variants.some((variant) => variant.priceOverridePoisha !== null);
+  if ((needsVariant && (!hasOneSize || stockBlocked)) || priceHidden)
     throw productError('PRODUCT_BULK_EDIT_ROW_INVALID');
 }
 

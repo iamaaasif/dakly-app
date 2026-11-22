@@ -391,6 +391,7 @@ On the products list a person selects rows with the checkboxes (up to 100, kept 
 
 - A blank cell never overwrites. Only values that differ from the product are sent, and the API ignores a value equal to the current one.
 - Cost and stock belong to a size, so the grid edits them only for a product with one size and tracked stock. A product with several sizes shows them read-only; they are edited on the product.
+- Price is read-only for a product where any size has its own price, because customers and the AI would not see the product price there. The API refuses it.
 - A stock change asks for one reason (Restock, Recount, Damage, Other) for the whole edit and writes an `adjust` movement of the difference with that reason.
 - Each apply is one transaction and stores the old and new value of every field in `product_bulk_edits`.
 - **Undo** is offered for 24 hours (`POST /products/bulk-edits/:id/undo`). A value that was changed by hand since is left alone and counted as skipped. Stock is corrected by a new `adjust` movement of the opposite difference, so orders placed since keep their effect; if the stock is reserved by then, that row is skipped.
