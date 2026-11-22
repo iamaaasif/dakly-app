@@ -11,13 +11,7 @@ afterEach(cleanup);
 function open(step: AutomationStep) {
   const onChange = vi.fn();
   render(
-    <WorkflowStepPanel
-      step={step}
-      number={2}
-      settingsHref="/automations/abc"
-      onChange={onChange}
-      onClose={() => undefined}
-    />,
+    <WorkflowStepPanel step={step} number={2} onChange={onChange} onClose={() => undefined} />,
   );
   return onChange;
 }
@@ -81,14 +75,31 @@ describe('WorkflowStepPanel', () => {
     );
   });
 
-  it('sends other steps to the workflow settings', () => {
-    open({
-      kind: 'condition',
-      paths: [{ condition: { kind: 'placed_order' }, next: 'end' }],
-      elseNext: 'end',
+  it('moves a channel up in the send order', () => {
+    const onChange = open({
+      kind: 'send',
+      category: 'marketing',
+      channels: ['sms', 'whatsapp'],
+      message: { text: 'Hello', buttons: [] },
+      ifNotReachable: 'skip',
+      reviewBeforeSending: false,
+      next: 'end',
     });
-    expect(screen.getByRole('link', { name: 'workflow settings' }).getAttribute('href')).toBe(
-      '/automations/abc',
+    fireEvent.click(screen.getByRole('button', { name: 'Move WhatsApp up' }));
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ channels: ['whatsapp', 'sms'] }),
+    );
+  });
+
+  it('changes the time of day a wait ends', () => {
+    const onChange = open({
+      kind: 'wait',
+      wait: { until: 'time_of_day', time: '09:00' },
+      next: 'end',
+    });
+    fireEvent.change(screen.getByLabelText('Time of day'), { target: { value: '18:30' } });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ wait: { until: 'time_of_day', time: '18:30' } }),
     );
   });
 });

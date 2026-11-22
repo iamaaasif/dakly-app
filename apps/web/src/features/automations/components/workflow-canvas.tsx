@@ -1,13 +1,12 @@
 'use client';
 
-import Link from 'next/link';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { AutomationDetailResponse } from '@dakly/contracts/automations';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { formatCount } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
-import { Button, buttonVariants } from '@dakly/ui/button';
+import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useRenameAutomation } from '../api/automation-settings';
@@ -24,6 +23,7 @@ import { WorkflowEditorHeader } from './workflow-editor-header';
 import { WorkflowPageHeader } from './workflow-page-header';
 import { WorkflowPalette } from './workflow-palette';
 import { WorkflowPublishDialog } from './workflow-publish-dialog';
+import { WorkflowSettingsSheet } from './workflow-settings-sheet';
 import { WorkflowStatsToggle } from './workflow-stats-toggle';
 import { WorkflowStepPanel } from './workflow-step-panel';
 import { useSessionContext } from '@/lib/session-context';
@@ -76,10 +76,12 @@ function EditorActions({
   workflow,
   editor,
   blocked,
+  onOpenSettings,
 }: {
   workflow: Workflow;
   editor: Editor;
   blocked: boolean;
+  onOpenSettings: () => void;
 }) {
   const draft = workflow.status === 'draft';
   const publishLabel = workflow.status === 'paused' ? 'Publish and enable' : 'Publish changes';
@@ -90,14 +92,9 @@ function EditorActions({
           Saved
         </p>
       )}
-      {!editor.dirty && (
-        <Link
-          href={`/automations/${workflow.id}`}
-          className={buttonVariants({ variant: 'secondary' })}
-        >
-          Workflow settings
-        </Link>
-      )}
+      <Button variant="secondary" onClick={onOpenSettings}>
+        Workflow settings
+      </Button>
       {draft && <SaveDraftButton editor={editor} />}
       <Button
         disabled={editor.pending || blocked}
@@ -130,13 +127,11 @@ function StepPanelHost({
   editor,
   layout,
   stepKey,
-  settingsHref,
   onClose,
 }: {
   editor: Editor;
   layout: CanvasLayout;
   stepKey: string | null;
-  settingsHref: string;
   onClose: () => void;
 }) {
   const step = stepKey ? editor.graph.steps[stepKey] : undefined;
@@ -146,7 +141,6 @@ function StepPanelHost({
       key={stepKey}
       step={step}
       number={layout.stepNumber(stepKey)}
-      settingsHref={settingsHref}
       onChange={(next) => editor.update(stepKey, next)}
       onClose={onClose}
     />
@@ -225,10 +219,12 @@ function EditorTop({
   workflow,
   editor,
   checks,
+  onOpenSettings,
 }: {
   workflow: Workflow;
   editor: Editor;
   checks: WorkflowCheck[];
+  onOpenSettings: () => void;
 }) {
   const rename = useRenameAutomation(workflow.id);
   return (
@@ -247,6 +243,7 @@ function EditorTop({
           workflow={workflow}
           editor={editor}
           blocked={checks.some((check) => check.level === 'block')}
+          onOpenSettings={onOpenSettings}
         />
       </WorkflowEditorHeader>
       <EditorAlerts
@@ -261,6 +258,7 @@ function EditorTop({
 function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Refresh }) {
   const editor = useWorkflowEditor(workflow, refresh);
   const [stepKey, openStep] = useCanvasParam('step');
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const layout = useMemo(() => layoutWorkflow(editor.graph), [editor.graph]);
   const checks = useMemo(
     () => checkWorkflow(editor.graph, layout.stepNumber),
@@ -268,7 +266,12 @@ function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Re
   );
   return (
     <div className="flex h-screen flex-col bg-background">
-      <EditorTop workflow={workflow} editor={editor} checks={checks} />
+      <EditorTop
+        workflow={workflow}
+        editor={editor}
+        checks={checks}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <WorkflowPalette disabled={!editor.canAdd || editor.pending} onAdd={editor.append} />
         <CanvasMain
@@ -282,9 +285,15 @@ function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Re
         editor={editor}
         layout={layout}
         stepKey={stepKey}
-        settingsHref={`/automations/${workflow.id}`}
         onClose={() => openStep(null)}
       />
+      {settingsOpen && (
+        <WorkflowSettingsSheet
+          graph={editor.graph}
+          onChange={editor.apply}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
       {editor.count !== undefined && (
         <WorkflowPublishDialog
           count={editor.count}
