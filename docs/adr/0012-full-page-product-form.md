@@ -1,6 +1,6 @@
 # 0012: Add and edit products on a full page
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-11-22
 
 ## Context
