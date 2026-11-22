@@ -3,6 +3,7 @@ import { Camera, ChevronDown } from 'lucide-react';
 import Image from 'next/image';
 import { useFormContext } from 'react-hook-form';
 
+import { formatMoney } from '@dakly/contracts/money';
 import type { ProductFormValues, ProductVariantResponse } from '@dakly/contracts/products';
 import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
@@ -51,7 +52,7 @@ export function VariantRow(props: VariantRowProps) {
         >
           <span className="min-w-0 flex-1 truncate">{label}</span>
           <span className="shrink-0 font-normal text-text-muted md:hidden">
-            {price ? `৳${price}` : 'No price'}
+            {summaryPrice(price)}
             {showStock ? ` · ${rowStock(variant)} pcs` : ''}
           </span>
           <ChevronDown
@@ -80,6 +81,11 @@ export function VariantRow(props: VariantRowProps) {
       </div>
     </li>
   );
+}
+
+function summaryPrice(taka: string): string {
+  const poisha = Math.round(Number(taka) * 100);
+  return taka.trim() && Number.isFinite(poisha) ? formatMoney(poisha) : 'No price';
 }
 
 type CellProps = VariantRowProps & {
