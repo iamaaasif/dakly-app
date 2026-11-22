@@ -20,7 +20,7 @@ import {
   UsersRound,
   type LucideIcon,
 } from 'lucide-react';
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useId } from 'react';
 
@@ -105,11 +105,29 @@ function NavigationItem({
         current === 'page' && 'bg-primary-soft font-semibold text-action-hover',
         current === 'location' && 'font-semibold text-action-hover hover:bg-surface-muted',
         !current && 'hover:bg-surface-muted',
+        'has-data-[pending=true]:bg-primary-soft has-data-[pending=true]:font-semibold has-data-[pending=true]:text-action-hover',
       )}
     >
-      <Icon aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
-      <span className={cn(collapsed && 'sr-only')}>{label}</span>
+      <NavigationLinkContent icon={Icon} label={label} collapsed={collapsed} />
     </Link>
+  );
+}
+
+// useLinkStatus only works below a Link. The pending flag lets the link highlight on the click,
+// before the next screen has arrived.
+function NavigationLinkContent({
+  icon: Icon,
+  label,
+  collapsed,
+}: { icon: LucideIcon; label: string } & Pick<ShellNavigationProps, 'collapsed'>) {
+  const { pending } = useLinkStatus();
+  return (
+    <>
+      <Icon aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
+      <span className={cn(collapsed && 'sr-only')} data-pending={pending}>
+        {label}
+      </span>
+    </>
   );
 }
 
