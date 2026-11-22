@@ -18,7 +18,13 @@ import { Card } from '@dakly/ui/card';
 import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
-import { ProductFields } from './product-fields';
+import {
+  ProductDescriptionFields,
+  ProductFields,
+  ProductNameFields,
+  ProductPriceFields,
+  ProductStockFields,
+} from './product-fields';
 import { ProductOptions } from './product-options';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
@@ -119,6 +125,15 @@ function useSubmitProduct(
   return { onSubmit, isPending: (product ? change : create).isPending };
 }
 
+function FieldCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Card className="space-y-3.5">
+      <h2 className="text-base font-semibold text-text">{title}</h2>
+      {children}
+    </Card>
+  );
+}
+
 type ProductFormPageLayoutProps = {
   page: ProductFormPage;
   productId?: string;
@@ -144,9 +159,16 @@ function ProductFormPageLayout({
       <div className="grid gap-6 px-4 py-6 md:px-8 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-4">
           <Card>{page.photos}</Card>
-          <Card className="space-y-3.5">
-            <ProductFields productId={productId} />
-          </Card>
+          <FieldCard title="Basics">
+            <ProductNameFields productId={productId} />
+            <ProductDescriptionFields productId={productId} />
+          </FieldCard>
+          <FieldCard title="Price">
+            <ProductPriceFields productId={productId} />
+          </FieldCard>
+          <FieldCard title="Stock">
+            <ProductStockFields productId={productId} />
+          </FieldCard>
           <Card>
             <ProductOptions mode={productId ? 'edit' : 'create'} />
           </Card>

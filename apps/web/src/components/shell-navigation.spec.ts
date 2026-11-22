@@ -13,6 +13,13 @@ const extensions = { href: '/extensions' };
 const team = { href: '/team' };
 
 describe('currentState', () => {
+  it('keeps a link with nested screens highlighted on them', () => {
+    const products = { href: '/products', nested: true };
+    expect(currentState(products, '/products/new', null)).toBe('page');
+    expect(currentState(products, '/products/abc', null)).toBe('page');
+    expect(currentState(products, '/productsx', null)).toBeUndefined();
+    expect(currentState(team, '/team/ownership', null)).toBeUndefined();
+  });
   it('marks Settings as the page on /settings without a tab', () => {
     expect(currentState(settings, '/settings', null)).toBe('page');
     expect(currentState(storeSettings, '/settings', null)).toBeUndefined();
