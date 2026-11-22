@@ -366,6 +366,11 @@ export const createOrderFormSchema = createOrderSchema.extend({
   orderDiscountPoisha: takaInput.default(0),
   advancePaidPoisha: takaInput.default(0),
 });
+// An order made from a chat is for the chat's contact, so the buyer comes from the conversation.
+export const createConversationOrderSchema = createOrderSchema.omit({ buyer: true });
+export const createConversationOrderFormSchema = createOrderFormSchema.omit({ buyer: true });
+export type CreateConversationOrderInput = z.infer<typeof createConversationOrderSchema>;
+export type CreateConversationOrderValues = z.input<typeof createConversationOrderFormSchema>;
 export type CreateOrderValues = z.input<typeof createOrderFormSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
