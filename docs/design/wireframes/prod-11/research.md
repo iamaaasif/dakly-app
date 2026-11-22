@@ -27,3 +27,4 @@ Add:
 7. A phone layout that shows each variant as one line (name, price, stock) and opens the row to edit, not five inputs per card. The bulk bar works on a phone too.
 8. Profit percent per row and a readiness line (photo, price, description) because the AI needs them.
 9. Adding options to a product that already has stock never deletes anything. Existing stock goes to the first value of the new option, and the seller is told.
+10. Suggest options from the title and photos (a size set for the product type, colours seen in the photos), shown as chips the seller accepts or removes. Nothing is added without a tap, and the AI never fills price or stock. None of the tools above do this.
