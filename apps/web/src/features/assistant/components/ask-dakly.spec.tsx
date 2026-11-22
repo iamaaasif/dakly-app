@@ -11,10 +11,17 @@ import { askSuggestions } from '../ask-suggestions';
 import { AskDaklyButton } from './ask-dakly-button';
 import { sessionContextKey } from '@/lib/session-context';
 
-const navigation = vi.hoisted(() => ({ search: '', replaced: [] as string[] }));
+const navigation = vi.hoisted(() => ({
+  search: '',
+  replaced: [] as string[],
+  pushed: [] as string[],
+}));
 vi.mock('next/navigation', () => ({
   usePathname: () => '/dashboard',
-  useRouter: () => ({ replace: (url: string) => navigation.replaced.push(url) }),
+  useRouter: () => ({
+    replace: (url: string) => navigation.replaced.push(url),
+    push: (url: string) => navigation.pushed.push(url),
+  }),
   useSearchParams: () => new URLSearchParams(navigation.search),
 }));
 
@@ -62,6 +69,7 @@ const suggestionName = /\?$|performance$/;
 beforeEach(() => {
   navigation.search = 'ask=open';
   navigation.replaced = [];
+  navigation.pushed = [];
 });
 afterEach(() => {
   cleanup();
@@ -203,5 +211,18 @@ describe('Ask Dakly AI panel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     await userEvent.type(screen.getByLabelText('Ask Dakly AI'), '{Escape}');
     expect(navigation.replaced).toEqual(['/dashboard', '/dashboard']);
+  });
+
+  it('opens a product draft page for the owner to check, and keeps a button to open it again', async () => {
+    const draft = { name: 'Cotton T-shirt', pricePoisha: 120000, options: [], stockEach: 10 };
+    serve(() =>
+      Response.json({ kind: 'product_draft', text: 'Opened the draft.', draft, creditsLeft: 3 }),
+    );
+    show({ canViewOrders: true, canEditProducts: true });
+    await userEvent.type(screen.getByLabelText('Ask Dakly AI'), 'add a cotton T-shirt{Enter}');
+    await waitFor(() => expect(navigation.pushed).toHaveLength(1));
+    const url = new URL(navigation.pushed[0]!, 'https://dakly.test');
+    expect(url.pathname).toBe('/products/new');
+    expect(JSON.parse(url.searchParams.get('assistantDraft')!)).toEqual(draft);
   });
 });

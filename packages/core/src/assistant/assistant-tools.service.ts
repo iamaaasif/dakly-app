@@ -3,6 +3,8 @@ import { ZodError } from 'zod';
 
 import {
   assistantTools,
+  changeProductsTool,
+  draftProductTool,
   getCustomersTool,
   getMarketingResultsTool,
   getOrderCountsTool,
@@ -21,8 +23,13 @@ import { AnalyticsService } from '../analytics/analytics.service';
 import { OrderStageCountsService } from '../orders/order-stage-counts.service';
 import { AppError } from '../platform/errors/app-error';
 import { TeamService } from '../team/team.service';
+import {
+  AssistantProductToolsService,
+  type ProductProposal,
+} from './assistant-product-tools.service';
 
-type Handler = (storeId: string, raw: unknown) => Promise<object>;
+// A product tool also leaves a proposal for the owner to review; it is not sent back to the model.
+type Handler = (storeId: string, raw: unknown, proposals: ProductProposal[]) => Promise<object>;
 type Periods = Awaited<ReturnType<AnalyticsService['periods']>>;
 type Total = { total: bigint };
 
@@ -34,7 +41,7 @@ const calendarLabels = {
 } as const;
 const windowDays = { last_7_days: 7, last_30_days: 30, last_90_days: 90 } as const;
 
-const toLlmTool = (tool: AssistantToolDefinition): LlmTool => ({
+export const toLlmTool = (tool: AssistantToolDefinition): LlmTool => ({
   name: tool.name,
   input: tool.input,
   description: [
@@ -59,16 +66,24 @@ export class AssistantToolsService {
     [getMarketingResultsTool.name]: (storeId, raw) => this.marketingResults(storeId, raw),
     [getCustomersTool.name]: (storeId, raw) => this.customers(storeId, raw),
     [getOrderCountsTool.name]: (storeId, raw) => this.orderCounts(storeId, raw),
+    [draftProductTool.name]: async (_storeId, raw, proposals) =>
+      this.recorded(this.productTools.draft(raw), proposals),
+    [changeProductsTool.name]: async (storeId, raw, proposals) =>
+      this.recorded(await this.productTools.change(storeId, raw), proposals),
   };
 
   constructor(
     @Inject(AnalyticsService) private readonly reports: AnalyticsService,
     @Inject(OrderStageCountsService) private readonly orders: OrderStageCountsService,
     @Inject(TeamService) private readonly team: TeamService,
+    @Inject(AssistantProductToolsService)
+    private readonly productTools: AssistantProductToolsService,
   ) {}
 
   available(access: StoreAccess): AssistantToolDefinition[] {
-    return assistantTools.filter((tool) => this.team.canAccess(access, tool.area, 'view'));
+    return assistantTools.filter((tool) =>
+      this.team.canAccess(access, tool.area, 'level' in tool ? tool.level : 'view'),
+    );
   }
 
   llmTools(access: StoreAccess): LlmTool[] {
@@ -76,17 +91,30 @@ export class AssistantToolsService {
   }
 
   // The result goes back to the model, so a failure it can act on is a result, not a throw.
-  async run(storeId: string, access: StoreAccess, name: string, argumentsJson: string) {
+  async run(
+    storeId: string,
+    access: StoreAccess,
+    { name, argumentsJson }: { name: string; argumentsJson: string },
+    proposals: ProductProposal[] = [],
+  ) {
     const allowed = this.available(access).some((tool) => tool.name === name);
     const handler = allowed && Object.hasOwn(this.handlers, name) ? this.handlers[name] : undefined;
     if (!handler) return { error: 'UNKNOWN_TOOL' };
     try {
-      return await handler(storeId, parseJson(argumentsJson));
+      return await handler(storeId, parseJson(argumentsJson), proposals);
     } catch (error) {
       if (error instanceof ZodError) return { error: 'INVALID_ARGUMENTS' };
       if (error instanceof AppError && error.status < 500) return { error: error.code };
       throw error;
     }
+  }
+
+  private recorded(
+    { result, proposal }: { result: object; proposal?: ProductProposal },
+    proposals: ProductProposal[],
+  ) {
+    if (proposal) proposals.push(proposal);
+    return result;
   }
 
   private async sales(storeId: string, raw: unknown) {

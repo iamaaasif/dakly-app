@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import type { ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
@@ -10,6 +11,7 @@ import { QueryError } from '@dakly/ui/query-error';
 
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
+import { assistantFilledFields } from '../product-assistant-draft';
 import type { QuickAddHandoff } from '../quick-add-handoff';
 import { ChangeStockDialog } from './change-stock-dialog';
 import { ProductChatPreview } from './product-chat-preview';
@@ -19,15 +21,19 @@ import { ProductReadiness } from './product-readiness';
 import { ProductsLoading } from './products-loading';
 import { useSessionContext } from '@/lib/session-context';
 
-export function NewProductPage({ initial }: { initial?: QuickAddHandoff }) {
+type NewProductPageProps = { initial?: QuickAddHandoff; assistantDraft?: AssistantProductDraft };
+
+export function NewProductPage({ initial, assistantDraft }: NewProductPageProps) {
   const router = useRouter();
   return (
     <ProductForm
       initial={initial}
+      assistantDraft={assistantDraft}
       onSaved={(product) => router.replace(`/products/${product.id}`)}
       page={{
         title: 'New product',
         backHref: '/products',
+        notice: assistantDraft ? <AssistantNotice draft={assistantDraft} /> : undefined,
         photos: <p className="text-sm text-text-muted">Save the product to add photos.</p>,
         status: <StatusCard status="hidden" />,
       }}
@@ -86,6 +92,16 @@ function LoadedProductPage({ product, onSaved }: LoadedProductPageProps) {
         ),
       }}
     />
+  );
+}
+
+function AssistantNotice({ draft }: { draft: AssistantProductDraft }) {
+  return (
+    <p role="status" className="rounded-lg border border-ai-soft bg-ai-soft p-3 text-sm text-text">
+      <span className="font-semibold">Filled in by Dakly AI:</span>{' '}
+      {assistantFilledFields(draft).join(', ')}. Check each one. Nothing is saved until you press
+      Save.
+    </p>
   );
 }
 

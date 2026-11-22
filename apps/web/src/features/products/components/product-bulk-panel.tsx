@@ -17,11 +17,13 @@ type Review = { rows: ProductBulkEditRow[]; stockReason: BulkEditStockReason | '
 type ProductBulkPanelProps = {
   products: ProductResponse[];
   preset: 'hide' | 'category' | undefined;
+  // Set when Ask Dakly AI prepared the change; a change without stock opens straight on its review.
+  proposed?: ProductBulkEditRow[];
   onClose: () => void;
 };
 
-export function ProductBulkPanel({ products, preset, onClose }: ProductBulkPanelProps) {
-  const [review, setReview] = useState<Review | null>(null);
+export function ProductBulkPanel({ products, preset, proposed, onClose }: ProductBulkPanelProps) {
+  const [review, setReview] = useState<Review | null>(() => proposedReview(proposed));
   const apply = useApplyProductBulkEdit();
   const applyReview = (current: Review) =>
     apply.mutate(
@@ -30,11 +32,13 @@ export function ProductBulkPanel({ products, preset, onClose }: ProductBulkPanel
     );
   return (
     <div className="space-y-4">
+      {proposed ? <AssistantNotice /> : null}
       <ProductBulkGrid
         // A new review always starts from the grid values, so a changed grid resets it.
         key={products.map((product) => product.id).join()}
         products={products}
         preset={preset}
+        proposed={proposed}
         onReview={(rows, stockReason) => {
           apply.reset();
           setReview({ rows, stockReason });
@@ -71,5 +75,21 @@ export function ProductBulkPanel({ products, preset, onClose }: ProductBulkPanel
         </section>
       ) : null}
     </div>
+  );
+}
+
+// A change without stock needs no reason, so it opens straight on the review.
+function proposedReview(proposed: ProductBulkEditRow[] | undefined): Review | null {
+  return proposed && !proposed.some((row) => row.stock !== undefined)
+    ? { rows: proposed, stockReason: '' }
+    : null;
+}
+
+function AssistantNotice() {
+  return (
+    <p role="status" className="rounded-lg border border-ai-soft bg-ai-soft p-3 text-sm text-text">
+      <span className="font-semibold">Prepared by Dakly AI.</span> Check the old and new values.
+      Nothing changes until you press Apply.
+    </p>
   );
 }

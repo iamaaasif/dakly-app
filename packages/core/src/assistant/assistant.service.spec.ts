@@ -5,8 +5,10 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import type { AiRequest, AiService } from '../ai/ai.service';
 import type { AnalyticsService } from '../analytics/analytics.service';
 import type { OrderStageCountsService } from '../orders/order-stage-counts.service';
+import type { ProductsService } from '../products/products.service';
 import { TeamService } from '../team/team.service';
 import type { UsageService } from '../usage/usage.service';
+import { AssistantProductToolsService } from './assistant-product-tools.service';
 import { AssistantToolsService } from './assistant-tools.service';
 import { AssistantService } from './assistant.service';
 
@@ -88,7 +90,12 @@ function assistant(script: unknown[], credits = 25) {
     hasAllowance: async () => credits > 0,
     remaining: async () => credits,
   } as unknown as UsageService;
-  const service = new AssistantService(ai, new AssistantToolsService(reports, orders, team), usage);
+  const products = new AssistantProductToolsService({} as ProductsService);
+  const service = new AssistantService(
+    ai,
+    new AssistantToolsService(reports, orders, team, products),
+    usage,
+  );
   return { service, requests };
 }
 

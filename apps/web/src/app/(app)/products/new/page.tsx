@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { NewProductPage } from '@/features/products/components/product-page';
 import { parseQuickAddHandoff } from '@/features/products/quick-add-handoff';
+import { parseAssistantDraft } from '@/lib/assistant-product-draft-link';
 import { requireSession } from '@/lib/require-session';
 
 export default async function NewProduct({
@@ -16,5 +17,8 @@ export default async function NewProduct({
         You do not have access to add products in this shop. <Link href="/products">Back</Link>.
       </p>
     );
-  return <NewProductPage initial={parseQuickAddHandoff(await searchParams)} />;
+  const raw = await searchParams;
+  return (
+    <NewProductPage initial={parseQuickAddHandoff(raw)} assistantDraft={parseAssistantDraft(raw)} />
+  );
 }

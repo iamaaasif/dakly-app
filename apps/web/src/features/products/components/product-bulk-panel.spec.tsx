@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ProductBulkEditRow } from '@dakly/contracts/product-bulk-edits';
 import type { ProductResponse } from '@dakly/contracts/products';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
@@ -44,7 +45,7 @@ const products = [
   },
 ] as unknown as ProductResponse[];
 
-function show() {
+function show(proposed?: ProductBulkEditRow[]) {
   const writes: unknown[] = [];
   vi.stubGlobal('fetch', async (_path: string, init?: RequestInit) => {
     if (init?.method === 'POST') writes.push(JSON.parse(String(init.body)));
@@ -63,7 +64,12 @@ function show() {
   const onClose = vi.fn();
   render(
     <QueryClientProvider client={client}>
-      <ProductBulkPanel products={products} preset={undefined} onClose={onClose} />
+      <ProductBulkPanel
+        products={products}
+        preset={undefined}
+        proposed={proposed}
+        onClose={onClose}
+      />
     </QueryClientProvider>,
   );
   return { writes, onClose };
@@ -121,5 +127,22 @@ describe('Product bulk edit', () => {
         { rows: [{ productId: products[0]!.id, stock: 45 }], stockReason: 'Restock' },
       ]),
     );
+  });
+
+  it('opens a change from Ask Dakly AI on the review, and applies only after Apply', async () => {
+    const { writes, onClose } = show([{ productId: products[0]!.id, pricePoisha: 125000 }]);
+    expect(screen.getByText(/Prepared by Dakly AI/)).toBeTruthy();
+    expect(screen.getByText('Price: Cotton T-shirt 1,200 → 1,250.')).toBeTruthy();
+    expect(writes).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(writes).toEqual([{ rows: [{ productId: products[0]!.id, pricePoisha: 125000 }] }]);
+  });
+
+  it('opens a stock change from Ask Dakly AI on the grid, so the owner picks the reason', async () => {
+    const { writes } = show([{ productId: products[0]!.id, stock: 12 }]);
+    expect(screen.queryByText(/Review: /)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Review 1 change' })).toBeTruthy();
+    expect(writes).toEqual([]);
   });
 });
