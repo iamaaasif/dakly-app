@@ -121,6 +121,19 @@ In the saved product editor, choose a tone and language to write three descripti
 
 List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
+### Full page for add and edit (PROD-11, planned)
+
+Decision: [0012](../adr/0012-full-page-product-form.md). Wireframes: `docs/design/wireframes/prod-11/`. This replaces the add modal's long form and the product drawer; the screenshots above stay as layout references for the list.
+
+- **Quick add** (modal): name, price, stock, one photo, **More details**. It saves a hidden product and opens the full page when More details is chosen.
+- **Full page** at `/products/new` and `/products/[productId]`. The top bar stays in view: back, title, Save, Hide product. Desktop has two columns, a phone has one.
+  - Left: Photos (up to 10, first one is the main photo, move earlier), Basics (name, category, description with Write with AI), Price (price, sale price, cost, live profit percent), Variants.
+  - Right: Status (shown or hidden), Where it appears (Chat replies, Shop sales, Order link), Stock settings (warn me at), a preview card. The Stock history tab sits on the same page.
+- **Variants grid**: add Size or Colour as chips (up to three option types, as today). The grid has one row per value or combination with image, price, cost, stock and product code, edited in place. **Set all** fills one column. A blank price uses the product price. Renaming an option keeps the variant ids, prices, codes and stock, as the current editor does.
+- Plain validation messages on every field; a typed cost is kept when options change.
+- Leaving with unsaved changes asks first. Restock and Change stock stay dialogs.
+- On a phone the grid shows one row as a card with the same five fields, and the Save bar sticks to the bottom.
+
 ### Missing design: import products
 
 The prototype capture for this screen shows the Integrations page, so there is no product import design to match. The import dialog follows the customer import dialog (CUS-8) element by element: step bar, file drop area, column mapping, preview, duplicate choice and result counts. Evidence: `docs/design/evidence/prod-5-import/`.
