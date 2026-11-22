@@ -94,7 +94,7 @@ test('picks an AI description without saving the product', async ({ page, contex
     const beforeSave = await context.request.get(productPath, { headers });
     expect((await beforeSave.json()).description).toBe('Original description');
     await page.getByRole('button', { name: 'Save product' }).click();
-    await expect(page.getByRole('button', { name: 'Save product' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Save product' })).toBeDisabled();
     await expect(page.getByText(options[1]!, { exact: true })).toBeVisible();
     expect((await (await context.request.get(productPath, { headers })).json()).description).toBe(
       options[1],
