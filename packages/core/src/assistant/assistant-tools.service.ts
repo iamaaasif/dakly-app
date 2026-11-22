@@ -18,7 +18,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import type { LlmTool } from '@dakly/providers/llm/llm-driver';
 
 import { AnalyticsService } from '../analytics/analytics.service';
-import { OrdersService } from '../orders/orders.service';
+import { OrderStageCountsService } from '../orders/order-stage-counts.service';
 import { AppError } from '../platform/errors/app-error';
 import { TeamService } from '../team/team.service';
 
@@ -63,7 +63,7 @@ export class AssistantToolsService {
 
   constructor(
     @Inject(AnalyticsService) private readonly reports: AnalyticsService,
-    @Inject(OrdersService) private readonly orders: OrdersService,
+    @Inject(OrderStageCountsService) private readonly orders: OrderStageCountsService,
     @Inject(TeamService) private readonly team: TeamService,
   ) {}
 
@@ -173,7 +173,7 @@ export class AssistantToolsService {
       partially_delivered,
       returned,
       cancelled,
-    } = await this.orders.stageCounts(storeId);
+    } = await this.orders.byStage(storeId);
     return {
       pending: to_confirm + on_hold,
       to_confirm,

@@ -4,7 +4,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 
 import type { AiRequest, AiService } from '../ai/ai.service';
 import type { AnalyticsService } from '../analytics/analytics.service';
-import type { OrdersService } from '../orders/orders.service';
+import type { OrderStageCountsService } from '../orders/order-stage-counts.service';
 import { TeamService } from '../team/team.service';
 import type { UsageService } from '../usage/usage.service';
 import { AssistantToolsService } from './assistant-tools.service';
@@ -59,8 +59,8 @@ const reports = {
 } as unknown as AnalyticsService;
 
 const orders = {
-  stageCounts: async () => ({ to_confirm: 5, on_hold: 2, to_pack: 3 }),
-} as unknown as OrdersService;
+  byStage: async () => ({ to_confirm: 5, on_hold: 2, to_pack: 3 }),
+} as unknown as OrderStageCountsService;
 
 const salesCall = {
   kind: 'tool_calls' as const,
