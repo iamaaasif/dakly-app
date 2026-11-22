@@ -106,6 +106,7 @@ export class ProductImportService {
           optionValues,
           priceOverridePoisha,
           costPoisha,
+          lowStockThreshold: null,
         })),
       },
       context.actor,

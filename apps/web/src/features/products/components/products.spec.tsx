@@ -56,6 +56,7 @@ const product: ProductResponse = {
       title: 'Default',
       optionValues: {},
       sku: null,
+      lowStockThreshold: null,
       costPoisha: null,
       priceOverridePoisha: null,
       pricePoisha: 245000,

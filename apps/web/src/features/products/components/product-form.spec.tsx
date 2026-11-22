@@ -26,6 +26,7 @@ const product: ProductResponse = {
       optionValues: {},
       sku: 'PAN-M',
       priceOverridePoisha: null,
+      lowStockThreshold: null,
       costPoisha: 120075,
       title: 'Default',
       isDefault: true,

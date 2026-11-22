@@ -11,6 +11,7 @@ export const stockMovementKinds = [
 ] as const;
 export const restockRequestStatuses = ['waiting', 'notified', 'cancelled'] as const;
 
+export const MAX_STOCK_QUANTITY = 2147483647;
 const money = z
   .number('Enter an amount')
   .int('Enter a whole amount')
@@ -30,6 +31,8 @@ const variantSchema = z.strictObject({
   sku: text.nullable().default(null),
   priceOverridePoisha: money.positive('Enter an amount above zero').nullable().default(null),
   costPoisha: money.nullable().default(null),
+  // Null uses the shop's warning level from the stock settings.
+  lowStockThreshold: z.number().int().min(0).max(MAX_STOCK_QUANTITY).nullable().default(null),
 });
 
 const editVariantSchema = variantSchema.extend({ id: z.uuid().optional() });
@@ -130,6 +133,17 @@ export const takaInput = z
 const optionalTakaInput = z.union([z.literal('').transform(() => null), takaInput], {
   error: takaMessage,
 });
+const optionalCount = z.union(
+  [
+    z.literal('').transform(() => null),
+    z
+      .string()
+      .regex(/^\d+$/, 'Enter a whole number')
+      .transform(Number)
+      .pipe(z.number().int().max(MAX_STOCK_QUANTITY, 'That number is too large')),
+  ],
+  { error: 'Enter a whole number' },
+);
 const optionalTextInput = z
   .string()
   .nullable()
@@ -160,6 +174,7 @@ export const productFormSchema = z
             .pipe(money.positive('Enter an amount above zero').nullable())
             .default(null),
           costPoisha: optionalTakaInput.default(null),
+          lowStockThreshold: optionalCount.default(null),
           initialStock: z
             .number('Enter a stock number')
             .int('Enter a whole number')
@@ -247,7 +262,6 @@ export type ProductListResponse = { items: ProductResponse[]; nextCursor: string
 export type ProductCategoriesResponse = { items: string[] };
 
 export type StockMovementKind = (typeof stockMovementKinds)[number];
-export const MAX_STOCK_QUANTITY = 2147483647;
 export const stockAdjustmentSchema = z.strictObject({
   quantity: z
     .number('Enter how many to add or remove')
