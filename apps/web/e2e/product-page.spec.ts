@@ -53,6 +53,7 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
 
     await page.goto('/products');
     await page.getByRole('button', { name: 'Add product', exact: true }).click();
+    await page.getByRole('button', { name: /More details/ }).click();
     await expect(page).toHaveURL(/\/products\/new$/);
     await expect(page.getByRole('heading', { name: 'New product', exact: true })).toBeVisible();
     await expect(page.getByText('Save the product to add photos.')).toBeVisible();
