@@ -54,7 +54,7 @@ export class OutboundMessagingRepository {
     storeId: string,
     input: Pick<
       OutgoingChannelMessage,
-      'actor' | 'content' | 'identityId' | 'category' | 'aiSources' | 'image'
+      'actor' | 'content' | 'identityId' | 'category' | 'aiSources' | 'image' | 'card'
     > & {
       conversationId: string;
       idempotencyKey: string;
@@ -78,6 +78,7 @@ export class OutboundMessagingRepository {
           authorUserId,
           aiRunId,
           aiSources: input.aiSources,
+          card: input.card,
           attachments: input.image && [
             { kind: 'image', status: 'stored', ...input.image, read: 'done' },
           ],
@@ -118,6 +119,7 @@ export class OutboundMessagingRepository {
           conversationId: messages.conversationId,
           body: messages.body,
           attachments: messages.attachments,
+          card: messages.card,
           identityId: messages.recipientIdentityId,
           category: messages.sendCategory,
           authorType: messages.authorType,

@@ -2,6 +2,11 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
 import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
+import {
+  buildProductCardElement,
+  productCardElementSchema,
+  type ProductCardElement,
+} from '@dakly/contracts/product-card';
 
 import { AiService } from '../ai/ai.service';
 import { ContactMemoryService } from '../contact-memory/contact-memory.service';
@@ -12,6 +17,7 @@ import { customerConfirms } from './order-confirmation';
 import { chatReply } from './prompts/chat-reply.v4';
 import {
   type ToolScope,
+  isOutOfStock,
   SalesAgentToolsService,
   salesAgentLlmTools,
 } from './sales-agent-tools.service';
@@ -45,6 +51,8 @@ export type ComposedReply =
 // The photo is sent before the text; a card with no photo is text only.
 export type ProductCard = {
   text: string;
+  // The same product drawn as a Meta card; absent when it cannot be drawn.
+  element?: ProductCardElement;
   image?: { objectKey: string; contentType: string; sizeBytes: number };
 };
 
@@ -105,17 +113,44 @@ export class SalesAgentService {
     const cards: ProductCard[] = [];
     for (const { tool, result } of results) {
       if (tool !== CARD_TOOL || !('cardText' in result)) continue;
-      const { productId, photoFileId } = result as {
+      const { productId, photoFileId, cardVariantId } = result as {
         productId?: string;
         photoFileId?: string | null;
+        cardVariantId?: string;
       };
       const image =
         productId && photoFileId
           ? await this.products.chatPhotoFile(storeId, productId, photoFileId)
           : undefined;
-      cards.push({ text: String(result.cardText), image });
+      const element = productId
+        ? await this.cardElement(storeId, productId, cardVariantId, image?.objectKey)
+        : undefined;
+      cards.push({ text: String(result.cardText), image, element });
     }
     return cards;
+  }
+
+  // The price line and buttons come from the product again, never from the model's words.
+  private async cardElement(
+    storeId: string,
+    productId: string,
+    onlyVariantId: string | undefined,
+    imageObjectKey: string | undefined,
+  ) {
+    const product = await this.products.getForChat(storeId, productId);
+    const element = buildProductCardElement({
+      productId,
+      name: product.name,
+      variants: product.variants.map((variant) => ({
+        id: variant.id,
+        title: variant.title,
+        pricePoisha: variant.pricePoisha,
+        inStock: !isOutOfStock(product, variant),
+      })),
+      onlyVariantId,
+      imageObjectKey,
+    });
+    return productCardElementSchema.safeParse(element).data;
   }
 
   private async answerToolCalls(

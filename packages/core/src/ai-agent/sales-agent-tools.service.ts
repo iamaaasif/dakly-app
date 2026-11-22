@@ -214,6 +214,7 @@ export class SalesAgentToolsService {
       cardText: productCardText(product, variant),
       photoFileId,
       // A named size with no stock is shown as such, never as something to buy.
+      ...(variant ? { cardVariantId: variant.id } : {}),
       ...(variant && isOutOfStock(product, variant) ? { outOfStock: true } : {}),
       ...productResult(product),
     };
@@ -411,7 +412,7 @@ function cardPhotoId(
 
 type ChatVariant = ChatProduct['variants'][number];
 
-const isOutOfStock = (product: ChatProduct, variant: ChatVariant) =>
+export const isOutOfStock = (product: ChatProduct, variant: ChatVariant) =>
   product.isStockTracked && variant.available <= 0;
 
 function productCardText(product: ChatProduct, only?: ChatVariant) {

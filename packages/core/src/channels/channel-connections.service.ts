@@ -37,13 +37,13 @@ type PreparedMetaSend = {
   externalAccountId: string;
 };
 
-// An image and buttons are Messenger only; Instagram text goes out as it was.
+// Buttons are Messenger only; Instagram gets the text, the image and a product card.
 type MetaMessage = Omit<Extract<OutboundMessage, { channel: 'messenger' }>, 'channel'>;
 
 function toOutbound(channel: OutboundMessage['channel'], message: MetaMessage): OutboundMessage {
   if (channel === 'messenger') return { ...message, channel };
-  const { externalConversationId, text, operationKey, humanAgent, imageUrl } = message;
-  return { channel, externalConversationId, text, operationKey, humanAgent, imageUrl };
+  const { externalConversationId, text, operationKey, humanAgent, imageUrl, card } = message;
+  return { channel, externalConversationId, text, operationKey, humanAgent, imageUrl, card };
 }
 
 @Injectable()

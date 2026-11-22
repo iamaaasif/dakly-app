@@ -45,14 +45,27 @@ export type ChannelReceipt = {
 
 export type OutboundButton = { title: string; payload: string };
 
+// A product card or a swipeable row of up to 10, sent as a Meta generic template.
+export type OutboundCardButton =
+  | { type: 'postback'; title: string; payload: string }
+  | { type: 'link'; title: string; url: string };
+export type OutboundCard = {
+  elements: {
+    title: string;
+    subtitle: string;
+    imageUrl?: string;
+    buttons: OutboundCardButton[];
+  }[];
+};
+
 export type OutboundMessage = {
   externalConversationId: string;
   text: string;
   operationKey: string;
   humanAgent?: boolean;
 } & (
-  | { channel: 'instagram'; imageUrl?: string }
-  | { channel: 'messenger'; imageUrl?: string; buttons?: OutboundButton[] }
+  | { channel: 'instagram'; imageUrl?: string; card?: OutboundCard }
+  | { channel: 'messenger'; imageUrl?: string; buttons?: OutboundButton[]; card?: OutboundCard }
 );
 
 // An expired link is a final answer; an outage is not, so the driver throws for that.
