@@ -53,14 +53,8 @@ function parseParts(text: string, today: Date, order: 'day_first' | 'month_first
   );
   if (!match) return null;
   const [first, second] = [Number(match[1]), Number(match[2])];
-  const day = order === 'day_first' ? first : second;
-  const month = order === 'day_first' ? second : first;
-  const written = match[3];
-  const years =
-    written === undefined
-      ? [today.getUTCFullYear(), today.getUTCFullYear() - 1]
-      : [written.length === 2 ? 2000 + Number(written) : Number(written)];
-  for (const year of years) {
+  const [day, month] = order === 'day_first' ? [first, second] : [second, first];
+  for (const year of candidateYears(match[3], today)) {
     const date = new Date(Date.UTC(year, month - 1, day));
     const isReal =
       date.getUTCFullYear() === year &&
@@ -69,6 +63,11 @@ function parseParts(text: string, today: Date, order: 'day_first' | 'month_first
     if (isReal && date.getTime() <= today.getTime()) return date.toISOString().slice(0, 10);
   }
   return null;
+}
+
+function candidateYears(written: string | undefined, today: Date): number[] {
+  if (written === undefined) return [today.getUTCFullYear(), today.getUTCFullYear() - 1];
+  return [written.length === 2 ? 2000 + Number(written) : Number(written)];
 }
 
 export function readKhataRows(output: KhataModelOutput, today: Date): ReadKhataRow[] {
