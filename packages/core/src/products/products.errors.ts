@@ -26,6 +26,14 @@ const PRODUCT_ERRORS = {
   RESTOCK_VARIANT_STILL_OUT: { status: 409, message: 'This size is still out of stock' },
   RESTOCK_VARIANT_IN_STOCK: { status: 409, message: 'This size is in stock' },
   PRODUCT_SKU_TAKEN: { status: 409, message: 'A variant with this SKU already exists' },
+  PRODUCT_BULK_EDIT_ROW_INVALID: {
+    status: 409,
+    message: 'A product changed or cannot take this edit. Reload the list and review again',
+  },
+  PRODUCT_BULK_EDIT_NO_CHANGE: { status: 400, message: 'Nothing would change' },
+  PRODUCT_BULK_EDIT_NOT_FOUND: { status: 404, message: 'Bulk edit not found' },
+  PRODUCT_BULK_EDIT_UNDO_EXPIRED: { status: 409, message: 'The 24 hours to undo have passed' },
+  PRODUCT_BULK_EDIT_ALREADY_UNDONE: { status: 409, message: 'This edit was already undone' },
 } as const satisfies ErrorCatalog;
 
 export function productError(code: keyof typeof PRODUCT_ERRORS): AppError {

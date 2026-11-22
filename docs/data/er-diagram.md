@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0095_snapshot.json`: **104 tables, 1389 columns, 426 explicit indexes and 328 foreign keys**.
+Built from `packages/db/migrations/meta/0096_snapshot.json`: **105 tables, 1397 columns, 428 explicit indexes and 330 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -864,6 +864,8 @@ erDiagram
     product_variants ||..o{ restock_requests : "store_id, variant_id"
     contacts ||..o{ restock_requests : "store_id, contact_id"
     conversations |o..o{ restock_requests : "store_id, conversation_id"
+    stores ||..o{ product_bulk_edits : "store_id"
+    users |o..o{ product_bulk_edits : "actor_user_id"
     stores ||..o{ delivery_zones : "store_id"
     stores ||..o{ discount_codes : "store_id"
     contacts |o..o{ discount_codes : "contact_id"
@@ -979,6 +981,16 @@ erDiagram
         text status "NOT NULL; text"
         timestamp_with_time_zone notified_at "NULL; timestamp with time zone"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    product_bulk_edits {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid actor_user_id FK "NULL; uuid"
+        jsonb changes "NOT NULL; jsonb"
+        text stock_reason "NULL; text"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone undo_until "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone undone_at "NULL; timestamp with time zone"
     }
     delivery_zones {
         uuid id PK "NOT NULL; uuid"
@@ -2277,6 +2289,8 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `files_uploaded_by_staff_id_staff_users_id_fk`                       | `files(uploaded_by_staff_id)`                             | `staff_users(id)`                           | no action |
 | `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
 | `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
+| `product_bulk_edits_store_id_stores_id_fk`                           | `product_bulk_edits(store_id)`                            | `stores(id)`                                | no action |
+| `product_bulk_edits_actor_user_id_users_id_fk`                       | `product_bulk_edits(actor_user_id)`                       | `users(id)`                                 | no action |
 | `product_variants_store_id_stores_id_fk`                             | `product_variants(store_id)`                              | `stores(id)`                                | no action |
 | `product_variants_product_id_products_id_fk`                         | `product_variants(product_id)`                            | `products(id)`                              | no action |
 | `product_variants_product_id_store_fk`                               | `product_variants(store_id, product_id)`                  | `products(store_id, id)`                    | no action |
