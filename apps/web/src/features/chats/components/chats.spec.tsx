@@ -217,6 +217,16 @@ describe('Conversation', () => {
   });
 });
 
+let pastOrders: unknown[] = [];
+
+function sidebarResponse(path: string) {
+  const verified = { headers: { 'x-session-context': 'verified' } };
+  if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+  if (path.startsWith('/api/orders?buyerContactId'))
+    return Response.json({ items: pastOrders }, verified);
+  return undefined;
+}
+
 describe('Customer panel', () => {
   const chatId = sadia.id;
   const verified = { headers: { 'x-session-context': 'verified' } };
@@ -284,7 +294,8 @@ describe('Customer panel', () => {
       if (path.startsWith('/api/delivery-zones/charge'))
         return Response.json({ chargePoisha: 6000 }, verified);
       if (path.startsWith('/api/areas')) return Response.json(areasFor(path), verified);
-      if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+      const sidebar = sidebarResponse(path);
+      if (sidebar) return sidebar;
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
         return Response.json({ items: [], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
@@ -308,6 +319,37 @@ describe('Customer panel', () => {
     expect(screen.getByRole('link', { name: 'Open profile' }).getAttribute('href')).toBe(
       `/customers/${sadia.contactId}`,
     );
+  });
+
+  it('shows a new customer with no delivery history, and keeps the Media and Ask Dakly tabs off', async () => {
+    pastOrders = [];
+    respondToPanel();
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canViewOrders: true });
+    expect(await screen.findByText('New customer')).toBeTruthy();
+    expect(screen.getByText('No delivery history yet.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Order' }).getAttribute('data-state')).toBe('active');
+    expect((screen.getByRole('tab', { name: 'Media' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('tab', { name: 'Ask Dakly' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("lists the customer's latest orders as their delivery history", async () => {
+    pastOrders = [
+      {
+        id: 'o1',
+        number: 1064,
+        itemPreview: "Women's Kurti (M)",
+        recipientName: 'Sadia',
+        stage: 'to_pack',
+      },
+    ];
+    respondToPanel();
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canViewOrders: true });
+    expect(await screen.findByText('Delivery history')).toBeTruthy();
+    expect(screen.getByText("#1064 Women's Kurti (M)")).toBeTruthy();
+    expect(screen.getByText('To pack')).toBeTruthy();
+    pastOrders = [];
   });
 
   it('makes an order for the chat from the form', async () => {

@@ -4,10 +4,12 @@ import Link from 'next/link';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { cn } from '@dakly/ui/cn';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { useChatContact } from '../api/chat-contact';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { CustomerStatus } from './customer-status';
+import { DeliveryHistory } from './delivery-history';
 import { MakeOrderForm } from './make-order-form';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
@@ -39,12 +41,26 @@ export function CustomerPanel({
       <div className="space-y-3 p-3">
         {contact.data ? <CustomerStatus kind={contact.data.kind} /> : null}
         <CustomerIdentity conversation={conversation} phone={contact.data?.phone} />
+        <DeliveryHistory contactId={conversation.contactId} />
       </div>
-      {session?.currentStore?.canEditOrders ? (
-        <MakeOrderForm conversation={conversation} contactPhone={contact.data?.phone ?? null} />
-      ) : (
-        <p className="p-3 text-text-muted">Making an order needs Edit Orders access.</p>
-      )}
+      <Tabs defaultValue="order">
+        <TabsList className="px-3">
+          <TabsTrigger value="order">Order</TabsTrigger>
+          <TabsTrigger value="media" disabled>
+            Media
+          </TabsTrigger>
+          <TabsTrigger value="ask" disabled>
+            Ask Dakly
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="order" className="pt-0">
+          {session?.currentStore?.canEditOrders ? (
+            <MakeOrderForm conversation={conversation} contactPhone={contact.data?.phone ?? null} />
+          ) : (
+            <p className="p-3 text-text-muted">Making an order needs Edit Orders access.</p>
+          )}
+        </TabsContent>
+      </Tabs>
     </aside>
   );
 }

@@ -6,7 +6,12 @@ import { NestFactory } from '@nestjs/core';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { createOrderSchema, editOrderSchema, type CreateOrderInput } from '@dakly/contracts/orders';
+import {
+  createOrderSchema,
+  editOrderSchema,
+  orderListQuerySchema,
+  type CreateOrderInput,
+} from '@dakly/contracts/orders';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { DeliveryModule } from '../delivery/delivery.module';
@@ -131,6 +136,13 @@ describe('Staff order creation', () => {
       source: 'messenger',
       stage: 'to_confirm',
     });
+    const mine = await orders.list(f.a, orderListQuerySchema.parse({ buyerContactId: contactId }));
+    expect(mine.items.map(({ id }) => id)).toEqual([order.id]);
+    const others = await orders.list(
+      f.a,
+      orderListQuerySchema.parse({ buyerContactId: randomUUID() }),
+    );
+    expect(others.items).toEqual([]);
   });
 
   it('creates and confirms once when staff retry the same key', async () => {

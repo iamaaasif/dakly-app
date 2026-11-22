@@ -202,6 +202,10 @@ fixture('GET /orders', async () => {
     expect(result.json()).toMatchObject({ items: [{ id }], counts: { to_confirm: 1 } });
     expect(result.json().items).toHaveLength(1);
   }
+  for (const shop of [a, b])
+    expect(
+      (await success(shop, 'GET', `/orders?buyerContactId=${randomUUID()}`, 200)).json().items,
+    ).toEqual([]);
   await f.admin.pool.query("update stores set time_zone='America/New_York' where id=$1", [b.id]);
   await f.admin.pool.query(
     `update orders set stage='delivered', source='whatsapp', courier='pathao',

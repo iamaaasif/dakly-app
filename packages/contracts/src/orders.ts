@@ -115,6 +115,8 @@ export const orderListQuerySchema = z
     createdThrough: calendarDate.optional(),
     alert: z.enum(['waiting', 'risk', 'cod']).optional(),
     search: searchText.max(120).optional(),
+    // One customer's orders, for the chat's customer panel.
+    buyerContactId: z.uuid().optional(),
     cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
     limit: z.coerce.number<string>().int().min(1).max(100).default(50),
   })

@@ -103,6 +103,19 @@ test('lists chats by tab and channel and shows the tab counts', async ({
         ],
       );
     }
+    const productId = randomUUID();
+    await database.pool.query(
+      "insert into products(id, store_id, name, is_stock_tracked, price_poisha) values ($1, $2, 'Women''s Kurti', true, 125000)",
+      [productId, storeId],
+    );
+    for (const [title, onHand] of [
+      ['M', 3],
+      ['L', 0],
+    ] as const)
+      await database.pool.query(
+        'insert into product_variants(id, store_id, product_id, title, on_hand) values ($1, $2, $3, $4, $5)',
+        [randomUUID(), storeId, productId, title, onHand],
+      );
     await context.addCookies([
       {
         name: 'dakly_session',
@@ -152,6 +165,10 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await page.getByRole('button', { name: 'Save note' }).click();
     await expect(page.getByText('Call at 5 pm')).toBeVisible();
     await expect(page.getByRole('form', { name: 'Make an order' })).toBeVisible();
+    await expect(page.getByText('No delivery history yet.')).toBeVisible();
+    await page.getByLabel('Product').selectOption({ label: "Women's Kurti" });
+    await expect(page.getByRole('option', { name: 'L · sold out' })).toBeDisabled();
+    await page.getByLabel('Size').selectOption({ label: 'M · only 3 left' });
     await capture(page, 'customer-panel');
     await page.goto('/chats');
 
@@ -172,6 +189,8 @@ test('lists chats by tab and channel and shows the tab counts', async ({
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
   } finally {
+    await database.pool.query('delete from product_variants where store_id = $1', [storeId]);
+    await database.pool.query('delete from products where store_id = $1', [storeId]);
     await database.pool.query('delete from messages where store_id = $1', [storeId]);
     await database.pool.query('delete from contact_identities where store_id = $1', [storeId]);
     await database.pool.query('delete from conversations where store_id = $1', [storeId]);
