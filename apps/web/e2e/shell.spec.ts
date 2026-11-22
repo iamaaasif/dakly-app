@@ -11,7 +11,7 @@ async function verifyOnFocus(page: Page) {
   expect((await response).status()).toBe(200);
 }
 
-async function verifyPausedDraft(page: Page) {
+async function verifyQuietDraft(page: Page) {
   const input = await page.getByLabel('Name', { exact: true }).elementHandle();
   let release!: () => void;
   let entered!: () => void;
@@ -30,13 +30,12 @@ async function verifyPausedDraft(page: Page) {
     const verified = page.waitForResponse((item) => item.url().endsWith('/api/me/context'));
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await requested;
-    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+    // The check runs in the background, so the screen stays usable while it is in flight.
+    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(0);
     expect(
-      await input!.evaluate(
-        (element) => element.isConnected && Boolean(element.closest('[inert]')),
-      ),
+      await input!.evaluate((element) => element.isConnected && !element.closest('[inert]')),
     ).toBe(true);
-    await expect(page.getByLabel('Name', { exact: true })).toBeHidden();
+    await expect(page.getByLabel('Name', { exact: true })).toBeVisible();
     release();
     expect((await verified).status()).toBe(200);
     await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unfinished draft');
@@ -67,6 +66,9 @@ async function verifyPhoneNavigation(page: Page) {
   await expect(trigger).toBeFocused();
   await page.keyboard.press('Enter');
   await verifyOnFocus(page);
+  // An unchanged context leaves the open drawer alone.
+  await expect(drawer).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -114,7 +116,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await page.getByRole('button', { name: /Add manually/ }).click();
     const name = page.getByLabel('Name', { exact: true });
     await name.fill('Unfinished draft');
-    await verifyPausedDraft(page);
+    await verifyQuietDraft(page);
 
     const response = await context.request.get('/api/me/context');
     expect(response.status()).toBe(200);
