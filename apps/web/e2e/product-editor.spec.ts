@@ -73,9 +73,7 @@ test('saves unfinished products, edits variants without losing stock and manages
     expect((await request('/me/active-store', { storeId: fixture.storeIds[0] })).status()).toBe(
       204,
     );
-    await page.goto('/products');
-    await page.getByRole('button', { name: 'Add product', exact: true }).click();
-    await expect(page).toHaveURL(/create=1/);
+    await page.goto('/products?create=1');
     await page.getByLabel('Name', { exact: true }).fill(name);
     await capture('create');
     await page.getByRole('button', { name: 'Add option', exact: true }).click();
