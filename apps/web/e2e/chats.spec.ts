@@ -79,11 +79,30 @@ test('lists chats by tab and channel and shows the tab counts', async ({
        values ($1::uuid, $2, $3, $4, 'messenger', $1::text)`,
       [senderIdentityId, storeId, contactIds[0], connectionId],
     );
-    await database.pool.query(
-      `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body, status, sender_identity_id)
-       values ($1, $2, $3, 'in', 'customer', 'text', 'Kurti ta M size ache?', 'received', $4)`,
-      [randomUUID(), storeId, firstConversationId, senderIdentityId],
-    );
+    const thread = [
+      ['in', 'customer', 'Kurti ta M size ache?', 'received', 20],
+      ['out', 'ai', 'Ji, M size ache. Dam ৳1,200.', 'sent', 19],
+      ['in', 'customer', 'Price koto? Mirpur e delivery charge koto?', 'received', 18],
+    ] as const;
+    for (const [direction, authorType, body, status, minutesAgo] of thread) {
+      await database.pool.query(
+        `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body, status,
+           sender_identity_id, created_at, sent_at)
+         values ($1, $2, $3, $4, $5, 'text', $6, $7, $8, now() - make_interval(mins => $9),
+           case when $4 = 'out' then now() - make_interval(mins => $9) end)`,
+        [
+          randomUUID(),
+          storeId,
+          firstConversationId,
+          direction,
+          authorType,
+          body,
+          status,
+          direction === 'in' ? senderIdentityId : null,
+          minutesAgo,
+        ],
+      );
+    }
     await context.addCookies([
       {
         name: 'dakly_session',
@@ -125,6 +144,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await page.getByRole('link', { name: /Sadia Islam/ }).click();
     await expect(page).toHaveURL(/chat=/);
     await expect(page.getByText('Kurti ta M size ache?')).toBeVisible();
+    await expect(page.getByText('Ji, M size ache. Dam ৳1,200.')).toBeVisible();
     await expect(page.getByLabel('Write a reply')).toBeVisible();
     await capture(page, 'thread');
     await page.getByRole('tab', { name: 'Internal note' }).click();
@@ -140,6 +160,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await page.getByRole('button', { name: 'Filter' }).click();
     await expect(page.getByText('Assigned to')).toBeVisible();
     await capture(page, 'search-filter');
+    await page.getByRole('button', { name: 'Done' }).click();
     await page.getByRole('searchbox', { name: 'Search chats' }).fill('');
     await page.getByRole('combobox', { name: 'Sort chats' }).click();
     await page.getByRole('option', { name: 'Unread first' }).click();
