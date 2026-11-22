@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { webAuthConfig } from './env';
+import { webAllowedDevOrigins, webAuthConfig } from './env';
 
 afterEach(() => vi.unstubAllEnvs());
 describe('Registration configuration', () => {
@@ -22,5 +22,17 @@ describe('Registration configuration', () => {
     vi.stubEnv('WEB_TERMS_URL', 'https://example.test/terms');
     vi.stubEnv('WEB_GOOGLE_CLIENT_ID', 'invalid-client');
     expect(() => webAuthConfig()).toThrow();
+  });
+});
+describe('Development origins', () => {
+  it('reads comma-separated tunnel hosts and allows none by default', () => {
+    vi.stubEnv('WEB_ALLOWED_DEV_ORIGINS', '');
+    expect(webAllowedDevOrigins()).toEqual([]);
+    vi.stubEnv('WEB_ALLOWED_DEV_ORIGINS', '*.ngrok-free.app, shop.example.test');
+    expect(webAllowedDevOrigins()).toEqual(['*.ngrok-free.app', 'shop.example.test']);
+  });
+  it('rejects full URLs, which Next does not match', () => {
+    vi.stubEnv('WEB_ALLOWED_DEV_ORIGINS', 'https://shop.ngrok-free.app');
+    expect(() => webAllowedDevOrigins()).toThrow();
   });
 });
