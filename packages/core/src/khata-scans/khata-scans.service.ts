@@ -29,7 +29,7 @@ import {
   type NewKhataRow,
   type StoredKhataRow,
 } from './khata-scans.repository';
-import { readKhataPage } from './prompts/read-khata-page.v1';
+import { readKhataPage } from './prompts/read-khata-page.v2';
 
 const UPLOAD_LINK_SECONDS = 15 * 60;
 const PHOTO_LINK_SECONDS = 15 * 60;
