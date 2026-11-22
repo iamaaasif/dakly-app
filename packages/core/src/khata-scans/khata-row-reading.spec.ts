@@ -174,6 +174,9 @@ describe('parseAmountPoisha', () => {
     ['1250/-', 125_000],
     ['Tk. 99', 9_900],
     ['৳ ৫,০০০', 500_000],
+    [' - ৫০০', 50_000],
+    [' - ২০০০tk', 200_000],
+    ['২০০০ -', 200_000],
   ])('reads %s', (text, poisha) => expect(parseAmountPoisha(text)).toBe(poisha));
 
   it.each(['', 'abc', '-50', '0', '1.2.3'])('rejects %s', (text) =>
@@ -188,5 +191,55 @@ describe('parseEntryDate', () => {
 
   it('refuses a date in the future', () => {
     expect(parseEntryDate('25/12/2026', today)).toBeNull();
+  });
+});
+
+// The owner's sample photo, as the vision model returned it: a dash before the amount, "tk"
+// stuck to the digits, a month-first date and a trailing comma on a name.
+describe('the sample handwritten page', () => {
+  it('keeps every row, checks the guessed ones and never invents an amount', () => {
+    const rows = readKhataRows(
+      {
+        pageReadable: true,
+        rows: [
+          row({
+            nameText: 'রহিম,',
+            dateText: '৭/১১/২৫',
+            amountText: ' - ৫০০',
+            kind: 'unclear',
+            confidence: 90,
+          }),
+          row({
+            nameText: 'করিম',
+            dateText: '৫/১৩/২৫',
+            amountText: ' - ১০০০ -',
+            kind: 'unclear',
+            confidence: 90,
+          }),
+          row({
+            nameText: 'রবি',
+            dateText: '১০/৫/২০২৫',
+            phoneText: '01818050101',
+            amountText: ' - ২০০০tk',
+            kind: 'unclear',
+            confidence: 90,
+          }),
+        ],
+      },
+      today,
+    );
+    expect(
+      rows.map(({ name, amountPoisha, entryDate, phone }) => [
+        name,
+        amountPoisha,
+        entryDate,
+        phone,
+      ]),
+    ).toEqual([
+      ['রহিম', 50_000, '2025-11-07', null],
+      ['করিম', 100_000, '2025-05-13', null],
+      ['রবি', 200_000, '2025-05-10', '01818050101'],
+    ]);
+    expect(rows.every((read) => read.confidence < KHATA_CONFIDENCE_THRESHOLD)).toBe(true);
   });
 });
