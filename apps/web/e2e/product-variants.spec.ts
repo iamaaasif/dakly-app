@@ -77,11 +77,6 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await expect(page.getByText('Profit')).toBeVisible();
     await capture('no-options');
 
-    await page.getByRole('button', { name: /Suggest options/ }).click();
-    await expect(page.getByRole('button', { name: 'Add all' })).toBeVisible();
-    await capture('suggest-options');
-    await page.getByRole('button', { name: 'Dismiss' }).click();
-
     await page.getByRole('button', { name: 'Add options', exact: true }).click();
     await page.getByLabel('Option 1 name').fill('Colour');
     await addValues('Colour', ['Black', 'White']);
@@ -97,9 +92,6 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
       ['White / M', '20'],
     ];
     for (const [label, stock] of stocks) await page.getByLabel(`Stock for ${label}`).fill(stock);
-    await page.getByLabel('Select Black / S').click();
-    await page.getByLabel('Select Black / M').click();
-    await expect(page.getByText('2 selected')).toBeVisible();
     await capture('grid', async () => {
       await page.getByRole('button', { name: 'Black / L summary' }).click();
     });

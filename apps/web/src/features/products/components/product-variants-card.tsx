@@ -6,10 +6,8 @@ import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { withSuggestions } from '../product-variant-grid';
 import { ProductInputField } from './product-input-field';
 import { ProductOptionEditor, useGridOptions } from './product-option-editor';
-import { ProductSuggestOptions } from './product-suggest-options';
 import { ProductVariantTable } from './product-variant-table';
 import { ProductWarnAtField } from './product-warn-at-field';
 
@@ -28,10 +26,6 @@ export function ProductVariantsCard({ product }: ProductVariantsCardProps) {
       {hasOptions ? null : <PlainStock />}
       <div className="flex flex-wrap items-center gap-2">
         {hasOptions ? null : <AddOptionsButton onClick={addOption} />}
-        <ProductSuggestOptions
-          product={product}
-          onAdd={(suggested) => setOptions(withSuggestions(options, suggested))}
-        />
       </div>
       {hasOptions ? (
         <OptionsAndGrid product={product} onAddOption={addOption} />

@@ -4,7 +4,6 @@ import Image from 'next/image';
 import { useFormContext } from 'react-hook-form';
 
 import type { ProductFormValues, ProductVariantResponse } from '@dakly/contracts/products';
-import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
 
@@ -26,30 +25,22 @@ export type VariantRowProps = {
   productId?: string;
   saved?: ProductVariantResponse;
   showStock: boolean;
-  selected: boolean;
   open: boolean;
-  onSelect: (selected: boolean) => void;
   onToggle: () => void;
   onChange: (field: EditableField, value: string) => void;
 };
 
 export const variantGridColumns =
-  'md:grid-cols-[2rem_3rem_minmax(0,1fr)_6rem_6rem_4rem_5rem_7rem] md:gap-2 md:px-3';
+  'md:grid-cols-[3rem_minmax(0,1fr)_6rem_6rem_4rem_5rem_7rem] md:gap-2 md:px-3';
 
 export function VariantRow(props: VariantRowProps) {
-  const { variant, options, productPrice, saved, showStock, selected, open } = props;
+  const { variant, options, productPrice, saved, showStock, open } = props;
   const label = variantLabel(variant, options);
   const price = variant.priceOverridePoisha || productPrice;
   const profit = profitPercent(price, variant.costPoisha);
   return (
     <li className={cn('border-t border-border md:grid md:items-start md:py-2', variantGridColumns)}>
       <div className="flex items-center gap-2 py-2 md:contents md:py-0">
-        <Checkbox
-          aria-label={`Select ${label}`}
-          checked={selected}
-          onCheckedChange={(value) => props.onSelect(value === true)}
-          className="md:mt-2"
-        />
         <PhotoCell productId={props.productId} saved={saved} label={label} />
         <button
           type="button"

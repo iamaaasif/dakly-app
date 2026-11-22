@@ -6,8 +6,8 @@ export type GridVariant = NonNullable<ProductFormValues['variants']>[number];
 export const MAX_OPTIONS = 3;
 export const MAX_VARIANTS = 100;
 
-export const sizeSuggestions = ['S', 'M', 'L', 'XL', 'XXL'];
-export const colourSuggestions = [
+const sizeSuggestions = ['S', 'M', 'L', 'XL', 'XXL'];
+const colourSuggestions = [
   'Black',
   'White',
   'Red',
@@ -133,24 +133,6 @@ export function removeOptionAt(
   return { options: remaining, variants: sortRows(remaining, moved) };
 }
 
-export function missingCombinations(options: GridOption[], variants: GridVariant[]): number {
-  const present = new Set(variants.map((variant) => combinationKey(variant, options)));
-  return combinations(options).filter(
-    (values) => !present.has(JSON.stringify(values.map((value) => value || null))),
-  ).length;
-}
-
-export function addMissingCombinations(
-  options: GridOption[],
-  variants: GridVariant[],
-): GridVariant[] {
-  const present = new Set(variants.map((variant) => combinationKey(variant, options)));
-  const added = combinations(options)
-    .filter((values) => !present.has(JSON.stringify(values.map((value) => value || null))))
-    .map((values) => blankVariant(options, values, variants[0]));
-  return sortRows(options, [...variants, ...added]).slice(0, MAX_VARIANTS);
-}
-
 export function variantLabel(variant: GridVariant, options: GridOption[]): string {
   return options
     .map((_, position) => valueAt(variant, position))
@@ -185,40 +167,6 @@ export function profitPercent(sellingPrice: string | undefined, cost: string | u
   const spent = takaNumber(cost);
   if (!price || spent === null) return null;
   return Math.round(((price - spent) / price) * 100);
-}
-
-export const pasteColumns: EditableField[] = [
-  'priceOverridePoisha',
-  'costPoisha',
-  'initialStock',
-  'sku',
-];
-
-// One cell is an ordinary paste; tabs or line breaks come from a spreadsheet and fill the grid.
-export function parsePastedCells(text: string): string[][] | null {
-  const lines = text.replace(/\r/g, '').replace(/\n$/, '').split('\n');
-  if (lines.length === 1 && !lines[0]!.includes('\t')) return null;
-  return lines.map((line) => line.split('\t').map((cell) => cell.trim()));
-}
-
-// Spreadsheets copy 1,200 or ৳1,200; the field takes 1200.
-export function cleanPastedNumber(cell: string): string {
-  return cell.replace(/[৳,\s]/g, '');
-}
-
-// Joins suggested values to an option with the same name, or adds the option while there is room.
-export function withSuggestions(options: GridOption[], suggested: GridOption[]): GridOption[] {
-  const next = options.map((option) => ({ ...option, values: [...option.values] }));
-  for (const suggestion of suggested) {
-    const match = next.find(
-      (option) => option.name.trim().toLowerCase() === suggestion.name.toLowerCase(),
-    );
-    if (match) {
-      const known = new Set(match.values.map((value) => value.toLowerCase()));
-      match.values.push(...suggestion.values.filter((value) => !known.has(value.toLowerCase())));
-    } else if (next.length < MAX_OPTIONS) next.push({ ...suggestion });
-  }
-  return next;
 }
 
 export function rowKey(variant: GridVariant): string {

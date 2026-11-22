@@ -1,19 +1,13 @@
 'use client';
 import { ChevronDown } from 'lucide-react';
-import { useState, type ClipboardEvent, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 import type { ProductFormValues, ProductResponse } from '@dakly/contracts/products';
-import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 
 import {
-  addMissingCombinations,
-  cleanPastedNumber,
   groupVariants,
-  missingCombinations,
-  parsePastedCells,
-  pasteColumns,
   rowKey,
   rowStock,
   type EditableField,
@@ -21,7 +15,6 @@ import {
   type VariantGroup,
 } from '../product-variant-grid';
 import { useGridOptions } from './product-option-editor';
-import { ProductVariantBulkBar } from './product-variant-bulk-bar';
 import { VariantRow, variantGridColumns } from './product-variant-row';
 
 const dirty = { shouldDirty: true } as const;
@@ -56,32 +49,10 @@ function useVariantEdits() {
         matches(variant, index) ? { ...variant, [field]: typedValue(field, value) } : variant,
       ),
     );
-  // A paste of one value is an ordinary paste; tabs and line breaks fill the cells below and beside.
-  const paste = (event: ClipboardEvent<HTMLElement>) => {
-    const { gridRow, gridField } = (event.target as HTMLElement).dataset;
-    const cells = parsePastedCells(event.clipboardData.getData('text'));
-    if (!cells || gridRow === undefined || !gridField) return;
-    event.preventDefault();
-    const start = pasteColumns.indexOf(gridField as EditableField);
-    const next = variants.map((variant) => ({ ...variant }));
-    cells.forEach((line, offset) => {
-      const target = next[Number(gridRow) + offset];
-      line.forEach((cell, column) => {
-        const field = pasteColumns[start + column];
-        if (target && field)
-          Object.assign(target, {
-            [field]: typedValue(field, field === 'sku' ? cell : cleanPastedNumber(cell)),
-          });
-      });
-    });
-    setVariants(next);
-  };
   return {
     options,
     variants,
-    setVariants,
     setWhere,
-    paste,
     showStock: form.watch('isStockTracked') !== false,
     productPrice: String(form.watch('pricePoisha') ?? ''),
   };
@@ -90,33 +61,13 @@ function useVariantEdits() {
 type ProductVariantTableProps = { product?: ProductResponse };
 
 export function ProductVariantTable({ product }: ProductVariantTableProps) {
-  const edits = useVariantEdits();
-  const { options, variants, showStock, setVariants, setWhere } = edits;
-  const selected = useKeySet();
+  const { options, variants, showStock, setWhere, productPrice } = useVariantEdits();
   const collapsed = useKeySet();
   const open = useKeySet();
-  const isSelected = (variant: GridVariant) => selected.keys.has(rowKey(variant));
-  const chosen = variants.filter(isSelected);
   return (
     <div className="space-y-3">
-      <ProductVariantBulkBar
-        selectedCount={chosen.length}
-        showStock={showStock}
-        missingCount={missingCombinations(options, variants)}
-        removeBlocked={chosen.length >= variants.length}
-        onSet={(field, value) => setWhere(isSelected, field, value)}
-        onRemove={() => {
-          setVariants(variants.filter((variant) => !isSelected(variant)));
-          selected.replace([]);
-        }}
-        onAddMissing={() => setVariants(addMissingCombinations(options, variants))}
-      />
-      <div className="overflow-hidden rounded-lg border border-border" onPaste={edits.paste}>
-        <TableHeader
-          allSelected={chosen.length === variants.length && variants.length > 0}
-          showStock={showStock}
-          onSelectAll={(on) => selected.replace(on ? variants.map(rowKey) : [])}
-        />
+      <div className="overflow-hidden rounded-lg border border-border">
+        <TableHeader showStock={showStock} />
         {groupVariants(options, variants).map((group) => (
           <GroupSection
             key={group.label}
@@ -131,13 +82,11 @@ export function ProductVariantTable({ product }: ProductVariantTableProps) {
                 index={index}
                 variant={variant}
                 options={options}
-                productPrice={edits.productPrice}
+                productPrice={productPrice}
                 productId={product?.id}
                 saved={product?.variants.find(({ id }) => id === variant.id)}
                 showStock={showStock}
-                selected={selected.keys.has(rowKey(variant))}
                 open={open.keys.has(rowKey(variant))}
-                onSelect={(on) => selected.set(rowKey(variant), on)}
                 onToggle={() => open.set(rowKey(variant), !open.keys.has(rowKey(variant)))}
                 onChange={(field, value) => setWhere((_, at) => at === index, field, value)}
               />
@@ -150,13 +99,7 @@ export function ProductVariantTable({ product }: ProductVariantTableProps) {
   );
 }
 
-type TableHeaderProps = {
-  allSelected: boolean;
-  showStock: boolean;
-  onSelectAll: (on: boolean) => void;
-};
-
-function TableHeader({ allSelected, showStock, onSelectAll }: TableHeaderProps) {
+function TableHeader({ showStock }: { showStock: boolean }) {
   return (
     <div
       className={cn(
@@ -164,11 +107,6 @@ function TableHeader({ allSelected, showStock, onSelectAll }: TableHeaderProps) 
         variantGridColumns,
       )}
     >
-      <Checkbox
-        aria-label="Select all variants"
-        checked={allSelected}
-        onCheckedChange={(value) => onSelectAll(value === true)}
-      />
       <span>Image</span>
       <span>Variant</span>
       <span>Price</span>

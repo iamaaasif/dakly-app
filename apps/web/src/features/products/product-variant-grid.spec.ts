@@ -1,15 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  addMissingCombinations,
   applyOptions,
-  cleanPastedNumber,
   groupVariants,
-  missingCombinations,
-  parsePastedCells,
   profitPercent,
   removeOptionAt,
-  withSuggestions,
   type GridOption,
   type GridVariant,
 } from './product-variant-grid';
@@ -52,18 +47,11 @@ describe('building the variants grid', () => {
       'L/Black',
       'L/White',
     ]);
-    expect(missingCombinations(next, result)).toBe(1);
   });
 
   it('drops the rows of a value that was removed', () => {
     const rows = [row({ 0: 'S' }, { id: 'a' }), row({ 0: 'M' }, { id: 'b' })];
     expect(applyOptions([size('S', 'M')], [size('M')], rows).map(({ id }) => id)).toEqual(['b']);
-  });
-
-  it('adds back removed combinations on request', () => {
-    const options = [size('S', 'M')];
-    const rows = addMissingCombinations(options, [row({ 0: 'M' }, { id: 'b' })]);
-    expect(rows.map(({ optionValues }) => optionValues?.[0])).toEqual(['S', 'M']);
   });
 
   it('closes the gap in option positions when an option is removed', () => {
@@ -87,31 +75,10 @@ describe('building the variants grid', () => {
   });
 });
 
-describe('suggested options', () => {
-  it('joins values to an option with the same name and adds new options up to three', () => {
-    const joined = withSuggestions([size('S')], [size('S', 'M'), colour('Black')]);
-    expect(joined).toEqual([size('S', 'M'), colour('Black')]);
-    const full = withSuggestions(
-      [size('S'), colour('Black'), { name: 'Fabric', values: ['Cotton'] }],
-      [{ name: 'Fit', values: ['Slim'] }],
-    );
-    expect(full).toHaveLength(3);
-  });
-});
-
-describe('profit and paste', () => {
+describe('profit', () => {
   it('rounds profit as a share of the selling price', () => {
     expect(profitPercent('1200', '650')).toBe(46);
     expect(profitPercent('', '650')).toBeNull();
     expect(profitPercent('1200', '')).toBeNull();
-  });
-
-  it('reads spreadsheet cells and ignores a single plain value', () => {
-    expect(parsePastedCells('1,200\t650\r\n1,300\t700\r\n')).toEqual([
-      ['1,200', '650'],
-      ['1,300', '700'],
-    ]);
-    expect(parsePastedCells('1200')).toBeNull();
-    expect(cleanPastedNumber('৳1,200')).toBe('1200');
   });
 });
