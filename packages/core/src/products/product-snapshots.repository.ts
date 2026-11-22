@@ -29,7 +29,7 @@ const productImagesColumn = sql`${sql.identifier(getTableName(products))}.${sql.
 export function variantSnapshot(storeId: string) {
   return sql<CatalogueVariant[]>`(select coalesce(jsonb_agg(jsonb_build_object(
     'id', v.id, 'productId', v.product_id, 'title', v.title, 'optionValues', v.option_values,
-    'sku', v.sku, 'priceOverridePoisha', v.price_override_poisha, 'costPoisha', v.cost_poisha,
+    'sku', v.sku, 'priceOverridePoisha', v.price_override_poisha, 'costPoisha', v.cost_poisha, 'lowStockThreshold', v.low_stock_threshold,
     'onHand', v.on_hand, 'reserved', v.reserved, 'isDefault', v.is_default,
     'imageFileIds', v.image_file_ids,
     'photos', (select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'objectKey', f.object_key, 'contentType', f.content_type, 'sizeBytes', f.size_bytes, 'description', f.photo_description, 'tags', coalesce(to_jsonb(f.photo_tags), '[]'::jsonb))
