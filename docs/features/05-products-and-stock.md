@@ -137,6 +137,14 @@ Decision: [0012](../adr/0012-full-page-product-form.md). Wireframes: `docs/desig
 - On a phone each variant is one line (name, price, stock) that opens to edit its fields, the bulk bar stays, and the Save bar sticks to the bottom.
 - A readiness line shows what the AI still lacks (photo, price, description).
 
+### Catalogue tools beside the full page (planned)
+
+Research: `docs/design/wireframes/prod-11/research.md`. Today the catalogue has a CSV import (PROD-5), a free-text category on each product, no brands, no product export and no bulk edit. Proposed follow-up tasks, each its own PR after the full page ships; none changes the full page.
+
+- **Categories and brands** (PROD-12). A category becomes a row in a store table with a parent (two levels), a name and a sort order, and a brand a row with a name and optional logo; a product has one category and one brand. The product form picks from a list and can add one inline. The migration turns each distinct existing `products.category` text into a category without changing any product. A category path in a file reads `Clothing > T-shirts`. This changes the data model, so it needs a decision before it starts.
+- **Bulk edit on the list** (PROD-13). Select rows (or all rows for the current filters) and edit in a grid: price, sale price, cost, stock, category, brand, status. Stock changes need a reason and go to the stock history. A review step shows each old and new value before saving, and the result keeps an **Undo** for 24 hours for everything except stock, which is corrected by a new movement. A blank cell never overwrites a value.
+- **Export and XLSX** (PROD-14). Export the filtered list as CSV or XLSX with the same columns the import reads, so an export edited in a spreadsheet can be imported again. The import accepts XLSX, reuses the CUS-16 reader, and gets a dry run: a preview of added, changed and rejected rows with a downloadable error report before anything is written, and an editable preview table. Images by public link are not in this task.
+
 ### Missing design: import products
 
 The prototype capture for this screen shows the Integrations page, so there is no product import design to match. The import dialog follows the customer import dialog (CUS-8) element by element: step bar, file drop area, column mapping, preview, duplicate choice and result counts. Evidence: `docs/design/evidence/prod-5-import/`.
