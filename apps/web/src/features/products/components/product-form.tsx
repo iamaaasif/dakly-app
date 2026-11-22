@@ -1,6 +1,8 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { FormProvider, useForm, type FormState } from 'react-hook-form';
+import Link from 'next/link';
+import type { ReactNode } from 'react';
+import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react-hook-form';
 
 import {
   productFormSchema,
@@ -11,31 +13,89 @@ import {
 } from '@dakly/contracts/products';
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
+import { Card } from '@dakly/ui/card';
 
 import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
-import { ProductFields } from './product-fields';
+import {
+  ProductDescriptionFields,
+  ProductFields,
+  ProductNameFields,
+  ProductPriceFields,
+  ProductStockFields,
+} from './product-fields';
 import { ProductOptions } from './product-options';
 import { takaInputFromPoisha } from '@/lib/format-money';
+
+// The full page keeps Save in a top bar that stays in view and puts photos and status beside the fields.
+type ProductFormPage = { title: string; backHref: string; photos: ReactNode; status: ReactNode };
 
 type ProductFormProps = {
   product?: ProductResponse;
   onSaved: (product: ProductResponse, failedSizes: string[]) => void;
   onCancel?: () => void;
+  page?: ProductFormPage;
 };
 
-export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
+export function ProductForm({ product, onSaved, onCancel, page }: ProductFormProps) {
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(productFormSchema),
     defaultValues: formValues(product),
   });
+  const { dirtyFields, errors, isDirty } = form.formState;
+  const { onSubmit, isPending } = useSubmitProduct(form, { product, dirtyFields, onSaved });
+  const actions = (
+    <ProductFormActions
+      isPending={isPending}
+      canSave={!product || isDirty}
+      product={product}
+      onCancel={onCancel}
+      onSetStatus={(status) => form.setValue('status', status)}
+    />
+  );
+  const serverError = errors.root?.server?.message ? (
+    <p role="alert" className="text-danger">
+      {errors.root.server.message}
+    </p>
+  ) : null;
+
+  return (
+    <FormProvider {...form}>
+      <form className={page ? undefined : 'space-y-3.5'} onSubmit={onSubmit}>
+        {page ? (
+          <ProductFormPageLayout
+            page={page}
+            productId={product?.id}
+            actions={actions}
+            serverError={serverError}
+          />
+        ) : (
+          <>
+            <ProductFields productId={product?.id} />
+            <ProductOptions mode={product ? 'edit' : 'create'} />
+            {serverError}
+            {actions}
+          </>
+        )}
+      </form>
+    </FormProvider>
+  );
+}
+
+type SubmitProductArgs = {
+  product?: ProductResponse;
+  dirtyFields: FormState<ProductFormValues>['dirtyFields'];
+  onSaved: ProductFormProps['onSaved'];
+};
+
+function useSubmitProduct(
+  form: UseFormReturn<ProductFormValues, undefined, ProductFormInput>,
+  { product, dirtyFields, onSaved }: SubmitProductArgs,
+) {
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
   const adjustStock = useAdjustStock();
-  const mutation = product ? change : create;
-  const { dirtyFields, errors, isDirty } = form.formState;
-
   const onSubmit = form.handleSubmit((parsed) => {
     const input = product ? parsed : shareCostAcrossSizes(parsed);
     const setError = (error: Error) =>
@@ -62,26 +122,61 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
       },
     });
   });
+  return { onSubmit, isPending: (product ? change : create).isPending };
+}
 
+function FieldCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <FormProvider {...form}>
-      <form className="space-y-3.5" onSubmit={onSubmit}>
-        <ProductFields productId={product?.id} />
-        <ProductOptions mode={product ? 'edit' : 'create'} />
-        {errors.root?.server?.message ? (
-          <p role="alert" className="text-danger">
-            {errors.root.server.message}
-          </p>
-        ) : null}
-        <ProductFormActions
-          isPending={mutation.isPending}
-          canSave={!product || isDirty}
-          product={product}
-          onCancel={onCancel}
-          onSetStatus={(status) => form.setValue('status', status)}
-        />
-      </form>
-    </FormProvider>
+    <Card className="space-y-3.5">
+      <h2 className="text-base font-semibold text-text">{title}</h2>
+      {children}
+    </Card>
+  );
+}
+
+type ProductFormPageLayoutProps = {
+  page: ProductFormPage;
+  productId?: string;
+  actions: ReactNode;
+  serverError: ReactNode;
+};
+
+function ProductFormPageLayout({
+  page,
+  productId,
+  actions,
+  serverError,
+}: ProductFormPageLayoutProps) {
+  return (
+    <>
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-border bg-background px-4 py-3 md:px-8">
+        <Link href={page.backHref} aria-label="Back to products" className="text-text-muted">
+          ←
+        </Link>
+        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-text">{page.title}</h1>
+        {actions}
+      </div>
+      <div className="grid gap-6 px-4 py-6 md:px-8 lg:grid-cols-[2fr_1fr]">
+        <div className="space-y-4">
+          <Card>{page.photos}</Card>
+          <FieldCard title="Basics">
+            <ProductNameFields productId={productId} />
+            <ProductDescriptionFields productId={productId} />
+          </FieldCard>
+          <FieldCard title="Price">
+            <ProductPriceFields productId={productId} />
+          </FieldCard>
+          <FieldCard title="Stock">
+            <ProductStockFields productId={productId} />
+          </FieldCard>
+          <Card>
+            <ProductOptions mode={productId ? 'edit' : 'create'} />
+          </Card>
+          {serverError}
+        </div>
+        <div className="space-y-4">{page.status}</div>
+      </div>
+    </>
   );
 }
 

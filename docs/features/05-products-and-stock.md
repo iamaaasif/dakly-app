@@ -121,9 +121,11 @@ In the saved product editor, choose a tone and language to write three descripti
 
 List with readiness labels (Needs a price, Needs a photo, Hidden, Running low, Out of stock) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
-### Full page for add and edit (PROD-11, planned)
+### Full page for add and edit (PROD-11)
 
 Decision: [0012](../adr/0012-full-page-product-form.md). Wireframes: `docs/design/wireframes/prod-11/`. This replaces the add modal's long form and the product drawer; the screenshots above stay as layout references for the list.
+
+Built so far (part 1): `/products/new` and `/products/[productId]` use the current form fields and options on a page with a top bar that stays in view (back, title, Save as hidden and Save and show, or Save product), photos above the fields and a Status card (Hide or Show product, readiness) beside them. Add product on the list opens the new page; a new product saves hidden or shown and moves to its page, where photos can be added. The old add modal (`?create=1`) and the product drawer still exist until part 4. Members without Edit Products see a plain message on the page. Variants grid, quick add, chat preview, share, insights and the More menu are later parts.
 
 - **Quick add** (modal): name, price, stock, one photo, **More details**. It saves a hidden product and opens the full page when More details is chosen.
 - **Full page** at `/products/new` and `/products/[productId]`. The top bar stays in view: back, title, Save, Hide product. Desktop has two columns, a phone has one.

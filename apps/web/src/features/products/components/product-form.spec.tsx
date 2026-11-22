@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createProductSchema, type ProductResponse } from '@dakly/contracts/products';
@@ -38,7 +39,7 @@ const product: ProductResponse = {
   updatedAt: '2026-11-18T04:00:00Z',
 };
 
-function show(initial?: ProductResponse) {
+function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductForm>['page']) {
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -92,7 +93,7 @@ function show(initial?: ProductResponse) {
   const onSaved = vi.fn();
   const tree = (current?: ProductResponse) => (
     <QueryClientProvider client={client}>
-      <ProductForm product={current} onSaved={onSaved} />
+      <ProductForm product={current} onSaved={onSaved} page={page} />
     </QueryClientProvider>
   );
   const rendered = render(tree(initial));
@@ -102,6 +103,35 @@ function show(initial?: ProductResponse) {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+describe('Product form on a full page', () => {
+  const page = {
+    title: 'New product',
+    backHref: '/products',
+    photos: <p>Save the product to add photos.</p>,
+    status: <p>Hidden</p>,
+  };
+
+  it('keeps the save buttons in the top bar beside the photos and status', () => {
+    show(undefined, page);
+    expect(screen.getByRole('heading', { name: 'New product' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Back to products' }).getAttribute('href')).toBe(
+      '/products',
+    );
+    expect(screen.getByRole('button', { name: 'Save as hidden' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save and show' })).toBeTruthy();
+    expect(screen.getByText('Save the product to add photos.')).toBeTruthy();
+    expect(screen.getByText('Hidden')).toBeTruthy();
+    for (const title of ['Basics', 'Price', 'Stock'])
+      expect(screen.getByRole('heading', { name: title })).toBeTruthy();
+  });
+
+  it('shows one Save product button for a saved product', () => {
+    show(product, { ...page, title: 'Cotton Panjabi' });
+    expect(screen.getByRole('button', { name: 'Save product' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Save as hidden' })).toBeNull();
+  });
 });
 
 describe('Product form', () => {

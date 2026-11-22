@@ -16,10 +16,27 @@ const extraFlags = [
   ['isVisibleInOrderLink', 'Show in the order link'],
 ] as const;
 type ProductFieldsProps = { productId?: string };
+
+// The modal shows every field in one flow; the full page puts the same parts in titled cards.
 export function ProductFields({ productId }: ProductFieldsProps) {
+  return (
+    <>
+      <ProductNameFields productId={productId} />
+      <ProductPriceFields productId={productId} />
+      <ProductDescriptionFields productId={productId} />
+      <ProductStockFields productId={productId} />
+    </>
+  );
+}
+
+function useShowSkuAndCost(productId?: string) {
   const form = useFormContext<ProductFormValues>();
   const simple = !form.watch('options')?.length && form.watch('variants')?.length === 1;
-  const showSkuAndCost = !productId || simple;
+  return { simple, showSkuAndCost: !productId || simple };
+}
+
+export function ProductNameFields({ productId }: ProductFieldsProps) {
+  const { showSkuAndCost } = useShowSkuAndCost(productId);
   return (
     <>
       <ProductInputField
@@ -39,6 +56,14 @@ export function ProductFields({ productId }: ProductFieldsProps) {
           />
         ) : null}
       </div>
+    </>
+  );
+}
+
+export function ProductPriceFields({ productId }: ProductFieldsProps) {
+  const { simple, showSkuAndCost } = useShowSkuAndCost(productId);
+  return (
+    <>
       <div className="grid gap-3 md:grid-cols-3">
         <ProductInputField name="pricePoisha" label="Selling price ৳" />
         <ProductInputField name="compareAtPricePoisha" label="Old price ৳" placeholder="Optional" />
@@ -51,10 +76,24 @@ export function ProductFields({ productId }: ProductFieldsProps) {
         ) : null}
       </div>
       {simple ? <DefaultOverride /> : null}
+    </>
+  );
+}
+
+export function ProductDescriptionFields({ productId }: ProductFieldsProps) {
+  return (
+    <>
       <ProductDescriptionField productId={productId} />
       {productId ? (
         <ProductLinesField name="aliases" label="Other names" hint="One name per line." />
       ) : null}
+    </>
+  );
+}
+
+export function ProductStockFields({ productId }: ProductFieldsProps) {
+  return (
+    <>
       <ProductTrackStock />
       {productId ? <ExtraFlags /> : null}
     </>

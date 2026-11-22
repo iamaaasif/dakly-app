@@ -36,6 +36,8 @@ type NavigationLink = {
   icon: LucideIcon;
   visible?: boolean;
   related?: string[];
+  // Screens under href (a product page under /products) keep this link highlighted.
+  nested?: boolean;
 };
 type NavigationGroup = { heading: string; links: NavigationLink[] };
 
@@ -91,10 +93,15 @@ function NavigationItem({
   label,
   icon: Icon,
   related,
+  nested,
   collapsed,
   onNavigate,
 }: NavigationLink & Pick<ShellNavigationProps, 'collapsed' | 'onNavigate'>) {
-  const current = currentState({ href, related }, usePathname(), useSearchParams().get('tab'));
+  const current = currentState(
+    { href, related, nested },
+    usePathname(),
+    useSearchParams().get('tab'),
+  );
   return (
     <Link
       href={href}
@@ -159,7 +166,13 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
       heading: 'Sales',
       links: [
         { href: '/orders', label: 'Orders', icon: Truck, visible: store?.canViewOrders },
-        { href: '/products', label: 'Products', icon: Package, visible: store?.canViewProducts },
+        {
+          href: '/products',
+          label: 'Products',
+          icon: Package,
+          visible: store?.canViewProducts,
+          nested: true,
+        },
       ],
     },
     physicalShopGroup(store),
@@ -310,12 +323,13 @@ function NavigationGroups({
 // A link with a tab is the page only on that tab. A link that owns several screens (Settings)
 // is the page on its own path without a tab, and the location on the screens it leads to.
 export function currentState(
-  { href, related }: Pick<NavigationLink, 'href' | 'related'>,
+  { href, related, nested }: Pick<NavigationLink, 'href' | 'related' | 'nested'>,
   pathname: string,
   tab: string | null,
 ) {
   const [path, query] = href.split('?');
   const linkTab = new URLSearchParams(query).get('tab');
+  if (nested && pathname.startsWith(`${path}/`)) return 'page';
   if (pathname !== path) return related?.includes(pathname) ? 'location' : undefined;
   if (linkTab) return tab === linkTab ? 'page' : undefined;
   return related && tab ? 'location' : 'page';
