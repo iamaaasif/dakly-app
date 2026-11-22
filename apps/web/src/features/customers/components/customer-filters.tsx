@@ -1,8 +1,6 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Search } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 
 import {
@@ -18,6 +16,8 @@ import { customersSearch } from '../api/customers';
 import { type CustomerColumn, customerColumnsParam } from '../customer-columns';
 import { customerKindLabels } from '../customer-labels';
 import { CustomerColumnsMenu } from './customer-columns-menu';
+import { UrlLink } from '@/components/url-link';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 const filterSchema = contactListQuerySchema.pick({ search: true, tag: true });
 type CustomerFilterInput = Pick<ContactListQuery, 'search' | 'tag'>;
@@ -31,7 +31,7 @@ type CustomerFiltersProps = {
 const optional = { setValueAs: (value: string) => value.trim() || undefined };
 
 export function CustomerFilters({ query, columns, searchError }: CustomerFiltersProps) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const form = useForm<CustomerFilterInput>({
     resolver: zodResolver(filterSchema),
     defaultValues: { search: query.search, tag: query.tag },
@@ -103,14 +103,14 @@ function CustomerKindsNav({
       className="flex gap-2 overflow-x-auto border-b border-border text-sm"
     >
       {[undefined, ...contactKinds].map((kind) => (
-        <Link
+        <UrlLink
           key={kind ?? 'all'}
           href={kindHref(kind)}
           aria-current={query.kind === kind ? 'page' : undefined}
           className="-mb-px inline-flex min-h-10 shrink-0 items-center border-b-2 border-transparent px-3 text-text-muted transition-colors hover:text-text aria-[current=page]:border-action aria-[current=page]:font-semibold aria-[current=page]:text-text"
         >
           {kind ? customerKindLabels[kind] : 'All'}
-        </Link>
+        </UrlLink>
       ))}
     </nav>
   );

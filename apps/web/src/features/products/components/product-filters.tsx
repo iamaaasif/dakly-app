@@ -1,8 +1,6 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Search } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useFormContext, FormProvider, useForm } from 'react-hook-form';
 
 import { productListQuerySchema, type ProductListQuery } from '@dakly/contracts/products';
@@ -12,6 +10,8 @@ import { Label } from '@dakly/ui/label';
 
 import { productsSearch } from '../api/products';
 import { readinessLabels } from '../product-labels';
+import { UrlLink } from '@/components/url-link';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 const searchSchema = productListQuerySchema.pick({ search: true });
 const readinessFilters = [
@@ -25,7 +25,7 @@ const readinessFilters = [
 type ProductFiltersProps = { query: ProductListQuery };
 
 export function ProductFilters({ query }: ProductFiltersProps) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const form = useForm<Pick<ProductListQuery, 'search'>>({
     resolver: zodResolver(searchSchema),
     defaultValues: { search: query.search },
@@ -79,7 +79,7 @@ function ReadinessNav({ query }: ProductFiltersProps) {
   return (
     <nav aria-label="Product readiness" className="flex flex-wrap items-center gap-2">
       {readinessFilters.map((readiness) => (
-        <Link
+        <UrlLink
           key={readiness ?? 'all'}
           href={`/products?${productsSearch({ search: query.search, readiness })}`}
           aria-current={query.readiness === readiness ? 'page' : undefined}
@@ -91,7 +91,7 @@ function ReadinessNav({ query }: ProductFiltersProps) {
           )}
         >
           {readiness ? readinessLabels[readiness] : 'All'}
-        </Link>
+        </UrlLink>
       ))}
     </nav>
   );

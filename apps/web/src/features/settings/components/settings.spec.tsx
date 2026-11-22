@@ -7,6 +7,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { SettingsScreen } from './settings-screen';
 import { sessionContextKey } from '@/lib/session-context';
 
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
+
 const store = {
   id: 'shop',
   name: 'Books',

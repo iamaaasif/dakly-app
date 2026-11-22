@@ -5,7 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { replace, show } from './analytics-fixtures';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace }) }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/lib/use-url-query', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useUrlRouter: () => ({ push: vi.fn(), replace: replace }),
+}));
 
 afterEach(() => {
   cleanup();

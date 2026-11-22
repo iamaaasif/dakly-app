@@ -1,7 +1,5 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useRef, useState, type RefObject } from 'react';
 
 import { orderTabs, type OrderListQuery, type OrderStage } from '@dakly/contracts/orders';
@@ -12,6 +10,7 @@ import { QueryError } from '@dakly/ui/query-error';
 
 import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
+import { parseOrdersScreen } from '../orders-url';
 import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
 import { NewOrderDialog } from './order-editor-dialog';
@@ -19,14 +18,17 @@ import { OrderFilters } from './order-filters';
 import { OrdersList } from './orders-list';
 import { Refreshing } from '@/components/refreshing';
 import { StorePage } from '@/components/store-page';
+import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
+import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 
 type OrdersScreenProps = { query: OrderListQuery; selected?: string };
 
-export function OrdersScreen({ query, selected }: OrdersScreenProps) {
+export function OrdersScreen(initial: OrdersScreenProps) {
+  const { query, selected } = useUrlQuery(initial, parseOrdersScreen);
   const orders = useOrders(query);
   const pendingListRefresh = orders.fetchStatus !== 'idle';
-  const router = useRouter();
+  const router = useUrlRouter();
   const heading = useRef<HTMLHeadingElement>(null);
   const listHref = `/orders?${ordersSearch(query)}`;
 
@@ -134,7 +136,7 @@ function OrderStageNav({ query, counts }: OrderStageNavProps) {
       {orderTabs.map((stage) => {
         const isCurrent = stage === query.stage;
         return (
-          <Link
+          <UrlLink
             key={stage}
             href={`/orders?${ordersSearch({ ...query, stage, alert: undefined, cursor: undefined })}`}
             aria-current={isCurrent ? 'page' : undefined}
@@ -152,7 +154,7 @@ function OrderStageNav({ query, counts }: OrderStageNavProps) {
                 {counts[stage]}
               </Badge>
             ) : null}
-          </Link>
+          </UrlLink>
         );
       })}
     </nav>

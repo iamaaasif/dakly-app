@@ -24,7 +24,14 @@ import { sessionContextKey } from '@/lib/session-context';
 
 const push = vi.fn();
 const replace = vi.fn();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push, replace }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock('@/lib/use-url-query', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useUrlRouter: () => ({ push: push, replace: replace }),
+}));
 
 const contactId = '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e5f';
 const rahima: ContactResponse = {

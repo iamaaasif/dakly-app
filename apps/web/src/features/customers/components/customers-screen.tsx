@@ -1,15 +1,18 @@
 'use client';
-import Link from 'next/link';
 import { useState } from 'react';
 
-import type { ContactListQuery } from '@dakly/contracts/contacts';
+import { contactListQuerySchema, type ContactListQuery } from '@dakly/contracts/contacts';
 import { ApiError } from '@dakly/ui/api-client';
 import { Badge } from '@dakly/ui/badge';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { customersSearch, useCustomers } from '../api/customers';
-import { type CustomerColumn, customerColumnsParam } from '../customer-columns';
+import {
+  type CustomerColumn,
+  customerColumnsParam,
+  parseCustomerColumns,
+} from '../customer-columns';
 import { AddCustomersChooser } from './add-customers-chooser';
 import { CustomerFilters } from './customer-filters';
 import { CustomerList } from './customer-list';
@@ -18,11 +21,22 @@ import { ImportCustomersDialog } from './import-customers-dialog';
 import { NewCustomerForm } from './new-customer-form';
 import { Refreshing } from '@/components/refreshing';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
+import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
+import { useUrlQuery } from '@/lib/use-url-query';
+
+function parseCustomersScreen(raw: Record<string, string>) {
+  const { cursor, kind, tag, search, columns } = raw;
+  const parsed = contactListQuerySchema.safeParse({ cursor, kind, tag, search });
+  return parsed.success
+    ? { query: parsed.data, columns: parseCustomerColumns(columns) }
+    : undefined;
+}
 
 type CustomersScreenProps = { query: ContactListQuery; columns: CustomerColumn[] };
 
-export function CustomersScreen({ query, columns }: CustomersScreenProps) {
+export function CustomersScreen(initial: CustomersScreenProps) {
+  const { query, columns } = useUrlQuery(initial, parseCustomersScreen);
   const [adding, setAdding] = useState<'choose' | 'manual' | 'import' | null>(null);
   const [added, setAdded] = useState(false);
   const customers = useCustomers(query);
@@ -110,20 +124,20 @@ function CustomerResults({ query, columns, customers, hideError }: CustomerResul
       <CustomerList customers={items} columns={columns} />
       <nav aria-label="Customer pages" className="flex gap-4">
         {query.cursor ? (
-          <Link
+          <UrlLink
             className="inline-flex min-h-10 items-center text-action underline"
             href={pageHref()}
           >
             First page
-          </Link>
+          </UrlLink>
         ) : null}
         {nextCursor ? (
-          <Link
+          <UrlLink
             className="inline-flex min-h-10 items-center text-action underline"
             href={pageHref(nextCursor)}
           >
             Next page
-          </Link>
+          </UrlLink>
         ) : null}
       </nav>
     </Refreshing>

@@ -1,13 +1,18 @@
 'use client';
 
-import type { ContentStudioView } from '../content-studio-view';
+import { contentStudioViewSchema, type ContentStudioView } from '../content-studio-view';
 import { BrandProfileTab } from './brand-profile-tab';
 import { ContentStudioTabs } from './content-studio-tabs';
 import { CreateTab } from './create-tab';
 import { CreditsMeter } from './credits-meter';
 import { LibraryTab } from './library-tab';
+import { useUrlQuery } from '@/lib/use-url-query';
 
-export function ContentStudioScreen({ view }: { view: ContentStudioView }) {
+export function ContentStudioScreen(initial: { view: ContentStudioView }) {
+  const { view } = useUrlQuery(initial, (raw) => {
+    const parsed = contentStudioViewSchema.safeParse(raw);
+    return parsed.success ? { view: parsed.data } : undefined;
+  });
   return (
     <main className="space-y-6 p-4 md:p-8">
       <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">

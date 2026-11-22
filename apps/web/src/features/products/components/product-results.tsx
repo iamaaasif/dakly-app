@@ -1,5 +1,4 @@
 'use client';
-import Link from 'next/link';
 
 import type { ProductListQuery } from '@dakly/contracts/products';
 import { QueryError } from '@dakly/ui/query-error';
@@ -8,6 +7,7 @@ import { productsSearch, type useProducts } from '../api/products';
 import { ProductList } from './product-list';
 import { ProductsLoading } from './products-loading';
 import { Refreshing } from '@/components/refreshing';
+import { UrlLink } from '@/components/url-link';
 
 type ProductResultsProps = {
   query: ProductListQuery;
@@ -32,30 +32,30 @@ export function ProductResults({ query, products, onAdjust }: ProductResultsProp
       ) : (
         <div className="space-y-2 rounded-lg border border-border bg-surface p-6">
           <p>No products on this page.</p>
-          <Link
+          <UrlLink
             href="/products"
             className="inline-flex min-h-10 items-center text-action underline"
           >
             Clear filters
-          </Link>
+          </UrlLink>
         </div>
       )}
       <nav aria-label="Product pages" className="flex flex-wrap gap-4">
         {query.cursor ? (
-          <Link
+          <UrlLink
             className="inline-flex min-h-10 items-center text-action underline"
             href={pageHref()}
           >
             First page
-          </Link>
+          </UrlLink>
         ) : null}
         {products.data.nextCursor ? (
-          <Link
+          <UrlLink
             className="inline-flex min-h-10 items-center text-action underline"
             href={pageHref(products.data.nextCursor)}
           >
             Next page
-          </Link>
+          </UrlLink>
         ) : null}
       </nav>
     </Refreshing>

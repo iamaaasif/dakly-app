@@ -1,16 +1,25 @@
 'use client';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { cn } from '@dakly/ui/cn';
 
 import { SettingsContent } from './settings-content';
+import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
+import { useUrlQuery } from '@/lib/use-url-query';
 
 type SettingsLink = { href: string; label: string; current?: boolean };
 
 // The SMS tab's content comes from the integrations feature, so the page passes it in.
-export function SettingsScreen({ tab, sms }: { tab: 'store' | 'sms'; sms?: ReactNode }) {
+export function SettingsScreen({
+  tab: initialTab,
+  sms,
+}: {
+  tab: 'store' | 'sms';
+  sms?: ReactNode;
+}) {
+  const tab = useUrlQuery(initialTab, (raw) => (raw.tab === 'sms' ? 'sms' : 'store'));
   const { data } = useSessionContext();
   const access = data?.currentStore;
   const account: SettingsLink[] = [
@@ -70,7 +79,7 @@ function SettingsGroup({ heading, links }: { heading: string; links: SettingsLin
       <ul className="space-y-1">
         {links.map(({ href, label, current }) => (
           <li key={href}>
-            <Link
+            <SettingsAnchor
               href={href}
               aria-current={current ? 'page' : undefined}
               className={cn(
@@ -81,10 +90,16 @@ function SettingsGroup({ heading, links }: { heading: string; links: SettingsLin
               )}
             >
               {label}
-            </Link>
+            </SettingsAnchor>
           </li>
         ))}
       </ul>
     </div>
   );
+}
+
+// Tabs on this screen change the address in the browser; links to other screens go through Next.js.
+function SettingsAnchor({ href, ...rest }: ComponentProps<typeof Link>) {
+  const Anchor = String(href).startsWith('/settings') ? UrlLink : Link;
+  return <Anchor href={String(href)} {...rest} />;
 }

@@ -59,6 +59,7 @@ export default async function OrdersPage() {
 }
 ```
 
+- Tabs, filters, search and paging on one screen change the address with `UrlLink` or `useUrlRouter` and read it back with `useUrlQuery`, so the click reacts at once and the list comes from the React Query cache. Do not use `router.push` for them: it waits for the server to render the page again. `page.tsx` still parses the address for the first paint and the permission check.
 - Permission checks go in `page.tsx`, never only in `layout.tsx`: layouts do not re-run on client navigation between sibling pages. The API checks again; the page check is for a clear screen, not for security.
 - `export default` only where Next.js needs it (`page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`, `not-found.tsx`). Everything else uses named exports. Lint enforces this.
 - Every route segment with data has a `loading.tsx` (skeleton) and the `(app)` group has an `error.tsx`.

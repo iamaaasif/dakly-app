@@ -1,13 +1,13 @@
 'use client';
 
 import { Bot, CalendarDays, ChartLine, Layers, Megaphone, PiggyBank, Zap } from 'lucide-react';
-import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 
 import type { AnalyticsView } from '@dakly/contracts/analytics';
 import { cn } from '@dakly/ui/cn';
 
 import { analyticsHref } from '../api/analytics-overview';
+import { UrlLink } from '@/components/url-link';
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: ChartLine },
@@ -33,7 +33,7 @@ export function AnalyticsTabs({ view }: { view: AnalyticsView }) {
       className="flex gap-1 overflow-x-auto border-b border-border"
     >
       {tabs.map(({ id, label, icon: Icon }) => (
-        <Link
+        <UrlLink
           key={id}
           href={analyticsHref({ ...view, tab: id })}
           aria-current={view.tab === id ? 'page' : undefined}
@@ -44,7 +44,7 @@ export function AnalyticsTabs({ view }: { view: AnalyticsView }) {
         >
           <Icon aria-hidden="true" size={16} strokeWidth={1.75} className="hidden sm:block" />
           {label}
-        </Link>
+        </UrlLink>
       ))}
     </nav>
   );

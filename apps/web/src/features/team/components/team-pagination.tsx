@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { UrlLink } from '@/components/url-link';
 
 export function TeamPagination({
   path,
@@ -13,17 +13,17 @@ export function TeamPagination({
   return (
     <nav aria-label="Team pages" className="flex gap-4">
       {cursor ? (
-        <Link className="inline-flex min-h-10 items-center text-action underline" href={path}>
+        <UrlLink className="inline-flex min-h-10 items-center text-action underline" href={path}>
           First page
-        </Link>
+        </UrlLink>
       ) : null}
       {nextCursor ? (
-        <Link
+        <UrlLink
           className="inline-flex min-h-10 items-center text-action underline"
           href={`${path}${separator}cursor=${encodeURIComponent(nextCursor)}`}
         >
           Next page
-        </Link>
+        </UrlLink>
       ) : null}
     </nav>
   );

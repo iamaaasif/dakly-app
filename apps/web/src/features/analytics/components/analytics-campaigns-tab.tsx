@@ -1,6 +1,5 @@
 import { ArrowDown, Search } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 import type { AnalyticsCampaignRow, AnalyticsView } from '@dakly/contracts/analytics';
 import { campaignChannels } from '@dakly/contracts/campaigns';
@@ -17,8 +16,10 @@ import { visibleCampaigns } from '../analytics-campaign-rows';
 import { channelLabels } from '../analytics-labels';
 import { analyticsHref, useAnalyticsCampaigns } from '../api/analytics-overview';
 import { ChannelTile } from './channel-tile';
+import { UrlLink } from '@/components/url-link';
 import { formatShortDate } from '@/lib/format-date';
 import { formatWholeTaka } from '@/lib/format-money';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 const columns = [
   { sort: 'date', label: 'Date' },
@@ -72,7 +73,7 @@ export function AnalyticsCampaignsTab({
 }
 
 function Toolbar({ view, count, earned }: { view: AnalyticsView; count: number; earned: bigint }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="relative sm:w-72">
@@ -188,7 +189,7 @@ function SortLink({
 }) {
   const active = view.sort === sort;
   return (
-    <Link
+    <UrlLink
       href={analyticsHref({ ...view, sort })}
       aria-label={`Sort by ${label}`}
       aria-current={active ? 'true' : undefined}
@@ -199,7 +200,7 @@ function SortLink({
     >
       {label}
       {active && <ArrowDown aria-hidden="true" size={14} strokeWidth={1.75} />}
-    </Link>
+    </UrlLink>
   );
 }
 
