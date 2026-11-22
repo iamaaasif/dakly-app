@@ -330,6 +330,7 @@ export class ProductsService {
             sku: null,
             priceOverridePoisha: null,
             costPoisha: null,
+            lowStockThreshold: null,
           },
         ];
     if (variants.some((variant) => variant.id && !current.some((row) => row.id === variant.id)))
@@ -388,7 +389,9 @@ function toResponse(
     readiness.push('out_of_stock');
   else if (
     product.isStockTracked &&
-    variants.some((variant) => variant.available <= lowStockThreshold)
+    variants.some(
+      (variant) => variant.available <= (variant.lowStockThreshold ?? lowStockThreshold),
+    )
   )
     readiness.push('running_low');
   return {

@@ -8,6 +8,7 @@ import type { EvalMeter } from './eval-meter';
 import { dollars, printTable, say } from './eval-output';
 import { runTranscribeEval, runVisionEval, type MediaScore } from './media-eval';
 import { runMemoryEval } from './memory-eval';
+import { runOptionsPhotoEval, runOptionsTitleEval } from './options-eval';
 import { classifyQuestion, composeReply, handoverFor } from './reply-pipeline';
 
 export type JobContext = {
@@ -157,6 +158,26 @@ export function reportVision({ driver, meter }: JobContext, models: string[]) {
     label: 'vision',
     models,
     run: (model) => runVisionEval(driver, meter, model),
+  });
+}
+
+export function reportOptionsFromTitle({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Fast job (product option suggestions from a title)',
+    unit: 'titles',
+    label: 'fast',
+    models,
+    run: (model) => runOptionsTitleEval(driver, meter, model),
+  });
+}
+
+export function reportOptionsFromPhoto({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Vision job (product option suggestions from a photo)',
+    unit: 'photos',
+    label: 'vision',
+    models,
+    run: (model) => runOptionsPhotoEval(driver, meter, model),
   });
 }
 

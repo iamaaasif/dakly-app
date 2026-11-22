@@ -15,5 +15,5 @@ export function stockReadinessFilter(
   const liveVariant = sql`select 1 from product_variants v where v.store_id = ${storeId} and v.product_id = ${productId} and v.status <> 'archived'`;
   const hasAvailable = sql`exists (${liveVariant} and v.on_hand - v.reserved > 0)`;
   if (readiness === 'out_of_stock') return sql`${products.isStockTracked} and not ${hasAvailable}`;
-  return sql`${products.isStockTracked} and exists (${liveVariant} and v.on_hand - v.reserved <= ${lowStockThreshold}) and ${hasAvailable}`;
+  return sql`${products.isStockTracked} and exists (${liveVariant} and v.on_hand - v.reserved <= coalesce(v.low_stock_threshold, ${lowStockThreshold}::int)) and ${hasAvailable}`;
 }

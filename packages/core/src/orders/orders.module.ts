@@ -25,6 +25,7 @@ import { BOT_CHECK_DRIVER, createBotCheckDriver } from './order-link-provider';
 import { OrderLinkController } from './order-link.controller';
 import { OrderLinkService } from './order-link.service';
 import { OrderProductArchiveController } from './order-product-archive.controller';
+import { OrderProductChangesService } from './order-product-changes.service';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
 import { OrderSetupRepository } from './order-setup.repository';
@@ -72,6 +73,7 @@ import { OrdersService } from './orders.service';
     OrderConfirmationRepository,
     OrderConfirmationService,
     OrderLinkService,
+    OrderProductChangesService,
     { provide: BOT_CHECK_DRIVER, useFactory: createBotCheckDriver },
   ],
   exports: [

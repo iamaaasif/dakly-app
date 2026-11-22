@@ -5,6 +5,10 @@ const ORDER_ERRORS = {
     status: 409,
     message: 'Finish or cancel open orders before archiving this product',
   },
+  PRODUCT_VARIANT_IN_OPEN_ORDERS: {
+    status: 409,
+    message: 'Finish or cancel open orders before removing this variant',
+  },
   ORDER_TOTAL_INVALID: {
     status: 400,
     message: 'Order totals are too large or a line discount exceeds its price',
