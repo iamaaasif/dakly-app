@@ -3959,6 +3959,43 @@ fixture('GET /conversations/counts', async () => {
   });
 });
 
+fixture('GET /conversations/summary', async () => {
+  const { a, b } = await pair();
+  for (const [shop, replies, orderNumbers] of [
+    [a, 2, [1001, 1002]],
+    [b, 1, [1001]],
+  ] as const) {
+    const conversationId = await seedConversation(shop);
+    for (let index = 0; index < replies; index += 1)
+      await f.admin.pool.query(
+        `insert into messages(id,store_id,conversation_id,direction,author_type,kind,body,status)
+         values($1,$2,$3,'out','ai','text','Ji, ache','sent')`,
+        [randomUUID(), shop.id, conversationId],
+      );
+    for (const number of orderNumbers)
+      await f.admin.pool.query(
+        `insert into orders (id,store_id,number,source,created_by_type,recipient_name,
+           recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha)
+         values($1,$2,$3,'messenger','user','রিনা',$4,'ধানমন্ডি','Dhaka',9000,9000)`,
+        [randomUUID(), shop.id, number, shop.owner.phone],
+      );
+  }
+  // A partly delivered order counts what was delivered, like the totals shown on orders.
+  await f.admin.pool.query(
+    `insert into orders (id,store_id,number,source,created_by_type,recipient_name,
+       recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,
+       delivered_items_subtotal_poisha,cod_amount_poisha)
+     values($1,$2,1002,'messenger','user','রিনা',$3,'ধানমন্ডি','Dhaka',9000,6000,9000)`,
+    [randomUUID(), b.id, b.owner.phone],
+  );
+  expect((await f.request(b.owner, 'GET', '/conversations/summary')).statusCode).toBe(403);
+  await enableChats(b);
+  expect((await success(b, 'GET', '/conversations/summary', 200)).json()).toEqual({
+    aiRepliesToday: 1,
+    chatOrdersToday: { count: 2, totalPoisha: 15000 },
+  });
+});
+
 fixture('GET /conversations/assignees', async () => {
   const { a, b } = await pair();
   expect((await f.request(b.owner, 'GET', '/conversations/assignees')).statusCode).toBe(403);

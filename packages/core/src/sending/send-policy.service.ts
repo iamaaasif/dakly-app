@@ -10,7 +10,7 @@ import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError, PLATFORM_ERRORS } from '../platform/errors/app-error';
-import { DAY_MS, HOUR_MS } from '../platform/time';
+import { DAY_MS, HOUR_MS, startOfDayIn } from '../platform/time';
 import { type StoreSendingSettings, StoresService } from '../stores/stores.service';
 import { type MarketingSend, SendingRepository } from './sending.repository';
 
@@ -267,7 +267,7 @@ export class SendPolicyService {
     { sms, timeZone }: StoreSendingSettings,
   ): Promise<{ left: number; resetsAt: Date } | undefined> {
     if (channel !== 'sms' || !sms.dailyLimit.on) return undefined;
-    const dayStart = localDayStart(at, timeZone);
+    const dayStart = startOfDayIn(timeZone, at);
     const sent = await this.repository.countChannelSends(storeId, 'sms', {
       after: new Date(dayStart.getTime() - 1),
       until: at,
@@ -341,12 +341,6 @@ function quietEnd(
 ): Date | undefined {
   if (channel === 'sms' && !sms.quietHoursOn) return undefined;
   return quietHoursEnd(at, quietHours, timeZone);
-}
-
-function localDayStart(at: Date, timeZone: string): Date {
-  const local = localClock(at, timeZone);
-  const intoDay = ((local.hour * 60 + local.minute) * 60 + local.second) * 1000;
-  return new Date(at.getTime() - intoDay - at.getUTCMilliseconds());
 }
 
 // Quiet hours always span midnight.

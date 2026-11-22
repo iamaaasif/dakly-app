@@ -200,6 +200,13 @@ export type CreateConversationNoteInput = z.infer<typeof createConversationNoteS
 export type CreateConversationReplyInput = z.infer<typeof createConversationReplySchema>;
 export type TakeOverConversationInput = z.infer<typeof takeOverConversationSchema>;
 
+// What the Chats header shows for the shop's day so far. The order figures are null for members who
+// cannot view orders.
+export type ConversationSummaryResponse = {
+  aiRepliesToday: number;
+  chatOrdersToday: { count: number; totalPoisha: number } | null;
+};
+
 export type ConversationResponse = {
   id: string;
   contactId: string;

@@ -1,4 +1,6 @@
 'use client';
+import { useState } from 'react';
+
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
@@ -6,13 +8,18 @@ import { Skeleton } from '@dakly/ui/skeleton';
 
 import { useConversationCounts, useConversations } from '../api/conversations';
 import { conversationFilters, type ChatScreenQuery } from '../chat-filters';
+import { ChatBulkBar } from './chat-bulk-bar';
 import { ChatChannelFilter } from './chat-channel-filter';
 import { ChatRow } from './chat-row';
 import { ChatSearchBar } from './chat-search-bar';
 import { ChatTabs } from './chat-tabs';
+import { useSessionContext } from '@/lib/session-context';
 
 export function ChatList({ query }: { query: ChatScreenQuery }) {
   const counts = useConversationCounts();
+  const canEdit = Boolean(useSessionContext().data?.currentStore?.canEditChats);
+  // Picking chats is screen state: it is not worth a link and it ends when the person leaves.
+  const [selected, setSelected] = useState<string[] | null>(null);
   return (
     <section
       aria-label="Chat list"
@@ -20,17 +27,31 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
     >
       <ChatTabs query={query} counts={counts.data} />
       <ChatSearchBar query={query} />
-      <div className="shrink-0 border-b border-border p-3">
-        <ChatChannelFilter query={query} />
+      {selected ? <ChatBulkBar selected={selected} onDone={() => setSelected(null)} /> : null}
+      <div className="flex shrink-0 items-center gap-2 border-b border-border p-3">
+        <div className="min-w-0 flex-1">
+          <ChatChannelFilter query={query} />
+        </div>
+        {canEdit && !selected ? (
+          <Button variant="secondary" onClick={() => setSelected([])}>
+            Select
+          </Button>
+        ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ChatRows query={query} />
+        <ChatRows query={query} selected={selected} onSelect={setSelected} />
       </div>
     </section>
   );
 }
 
-function ChatRows({ query }: { query: ChatScreenQuery }) {
+type ChatRowsProps = {
+  query: ChatScreenQuery;
+  selected: string[] | null;
+  onSelect: (selected: string[]) => void;
+};
+
+function ChatRows({ query, selected, onSelect }: ChatRowsProps) {
   const conversations = useConversations(conversationFilters(query));
   if (conversations.error)
     return (
@@ -62,7 +83,12 @@ function ChatRows({ query }: { query: ChatScreenQuery }) {
     <>
       <ul className="divide-y divide-border">
         {items.map((conversation) => (
-          <ChatRow key={conversation.id} conversation={conversation} query={query} />
+          <ChatRow
+            key={conversation.id}
+            conversation={conversation}
+            query={query}
+            selection={selectionFor(conversation.id, selected, onSelect)}
+          />
         ))}
       </ul>
       {conversations.hasNextPage ? (
@@ -79,4 +105,18 @@ function ChatRows({ query }: { query: ChatScreenQuery }) {
       ) : null}
     </>
   );
+}
+
+function selectionFor(
+  id: string,
+  selected: string[] | null,
+  onSelect: (selected: string[]) => void,
+) {
+  if (!selected) return undefined;
+  const isSelected = selected.includes(id);
+  return {
+    selected: isSelected,
+    onToggle: () =>
+      onSelect(isSelected ? selected.filter((other) => other !== id) : [...selected, id]),
+  };
 }

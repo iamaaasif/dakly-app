@@ -4,6 +4,7 @@ import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { BuyerOrdersRepository } from './buyer-orders.repository';
+import { ChatOrderTotalsRepository } from './chat-order-totals.repository';
 import { orderError } from './orders.errors';
 import type { OrderWrite } from './orders.repository';
 import { OrdersService } from './orders.service';
@@ -17,7 +18,12 @@ export class ChatOrdersService {
   constructor(
     @Inject(OrdersService) private readonly orders: OrdersService,
     @Inject(BuyerOrdersRepository) private readonly buyerOrders: BuyerOrdersRepository,
+    @Inject(ChatOrderTotalsRepository) private readonly totals: ChatOrderTotalsRepository,
   ) {}
+
+  totalsSince(storeId: string, since: Date) {
+    return this.totals.since(storeId, since);
+  }
 
   // The order waits in To confirm until the customer says yes. The key makes a retried or
   // repeated draft return the same order.

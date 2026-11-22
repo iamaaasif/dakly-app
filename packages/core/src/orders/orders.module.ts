@@ -10,6 +10,7 @@ import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
 import { BuyerOrdersRepository } from './buyer-orders.repository';
 import { BuyerOrdersService } from './buyer-orders.service';
+import { ChatOrderTotalsRepository } from './chat-order-totals.repository';
 import { ChatOrdersService } from './chat-orders.service';
 import { KhataSalesRepository } from './khata-sales.repository';
 import { KhataSalesService } from './khata-sales.service';
@@ -53,6 +54,7 @@ import { OrdersService } from './orders.service';
   providers: [
     BuyerOrdersRepository,
     BuyerOrdersService,
+    ChatOrderTotalsRepository,
     ChatOrdersService,
     KhataSalesRepository,
     KhataSalesService,
