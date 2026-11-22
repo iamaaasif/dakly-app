@@ -1,12 +1,16 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { metaLoginMessageType } from '@/components/meta-connect/meta-login-message';
 
 // Facebook sends the shop back here. The page passes the result to the Integrations tab and closes.
 export default function MetaLoginReturnPage() {
   const [handedOver, setHandedOver] = useState(true);
+  const sent = useRef(false);
   useEffect(() => {
+    // Development mounts effects twice; a second message would reuse a code and state Meta already spent.
+    if (sent.current) return;
+    sent.current = true;
     const params = new URLSearchParams(window.location.search);
     const state = params.get('state');
     const code = params.get('code');

@@ -14,8 +14,7 @@ export function useMetaLogin() {
   const [problem, setProblem] = useState<string | null>(null);
   const facebook = useRef<Window | null>(null);
   const start = useStartMetaLogin();
-  const list = useListMetaAccounts();
-  const { mutate: listAccounts } = list;
+  const { mutate: listAccounts } = useListMetaAccounts();
 
   // Leaving the dialog, by any route, closes the window Facebook is still showing.
   useEffect(() => () => facebook.current?.close(), []);
@@ -30,6 +29,7 @@ export function useMetaLogin() {
       const message = readMetaLoginMessage(event.data);
       if (event.origin !== window.location.origin || event.source !== facebook.current || !message)
         return;
+      stop(); // A code works once, and the window closes itself after sending.
       if ('error' in message) return back('Facebook did not finish the sign-in. Try again.');
       listAccounts(
         { state: message.state, code: message.code },
@@ -46,11 +46,12 @@ export function useMetaLogin() {
     const watch = window.setInterval(() => {
       if (facebook.current?.closed) back('The Facebook window was closed before you finished.');
     }, 500);
-    window.addEventListener('message', receive);
-    return () => {
+    function stop() {
       window.removeEventListener('message', receive);
       window.clearInterval(watch);
-    };
+    }
+    window.addEventListener('message', receive);
+    return stop;
   }, [step, listAccounts]);
 
   function continueWithFacebook() {
