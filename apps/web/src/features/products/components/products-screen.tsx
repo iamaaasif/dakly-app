@@ -6,6 +6,7 @@ import { Button } from '@dakly/ui/button';
 
 import { productsSearch, useProducts } from '../api/products';
 import { parseProductsScreen } from '../products-url';
+import { ExportProductsButtons } from './export-products-buttons';
 import { ImportProductsDialog } from './import-products-dialog';
 import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
@@ -40,7 +41,12 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   return (
     <StorePage permission="canViewProducts">
       <main className="space-y-6 p-6 md:p-8">
-        <ProductsHeader canEdit={Boolean(canEdit)} listHref={listHref} importing={importing} />
+        <ProductsHeader
+          canEdit={Boolean(canEdit)}
+          query={query}
+          listHref={listHref}
+          importing={importing}
+        />
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
           <ProductFilters key={`${query.search}|${query.readiness}`} query={query} />
           <ProductResults
@@ -79,9 +85,14 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   );
 }
 
-type ProductsHeaderProps = { canEdit: boolean; listHref: string; importing?: '1' };
+type ProductsHeaderProps = {
+  canEdit: boolean;
+  query: ProductListQuery;
+  listHref: string;
+  importing?: '1';
+};
 
-function ProductsHeader({ canEdit, listHref, importing }: ProductsHeaderProps) {
+function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderProps) {
   const router = useUrlRouter();
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
@@ -92,16 +103,19 @@ function ProductsHeader({ canEdit, listHref, importing }: ProductsHeaderProps) {
           and fill your order link.
         </p>
       </div>
-      {canEdit ? (
-        <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
-            Import from a CSV
-          </Button>
-          <Button onClick={() => router.push(`${listHref}&create=1`)}>
-            <span aria-hidden="true">+ </span>Add product
-          </Button>
-        </div>
-      ) : null}
+      <div className="flex flex-wrap gap-3">
+        <ExportProductsButtons query={query} />
+        {canEdit ? (
+          <>
+            <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
+              Import from Excel or CSV
+            </Button>
+            <Button onClick={() => router.push(`${listHref}&create=1`)}>
+              <span aria-hidden="true">+ </span>Add product
+            </Button>
+          </>
+        ) : null}
+      </div>
       {importing && canEdit ? (
         <ImportProductsDialog onClose={() => router.replace(listHref)} />
       ) : null}

@@ -53,6 +53,7 @@ export function ImportProductsDialog({ onClose }: { onClose: () => void }) {
           rowName="products"
           fileLabel="Product file"
           template={template}
+          excel
           onUploaded={(uploaded) => {
             form.reset({
               ...form.getValues(),

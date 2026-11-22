@@ -25,7 +25,7 @@ export type ImportProduct = {
   name: string;
   category: string | null;
   description: string | null;
-  status: 'active' | 'hidden';
+  status: 'active' | 'hidden' | undefined;
   pricePoisha: number;
   options: { name: string; values: string[] }[];
   variants: ImportVariant[];
@@ -93,6 +93,7 @@ export class ProductImportService {
       storeId,
       {
         ...details,
+        status: details.status ?? 'active',
         aliases: [],
         compareAtPricePoisha: null,
         isStockTracked: context.tracksStock,
@@ -117,10 +118,11 @@ export class ProductImportService {
   // reported rather than guessed at, because adding a size belongs in the product editor.
   private async updateExisting(
     storeId: string,
-    { variants, pricePoisha }: ImportProduct,
+    product: ImportProduct,
     matches: Map<string, SkuMatch>,
     context: ImportContext,
   ): Promise<ImportedRow[]> {
+    const { variants } = product;
     // The product price has one target: the product of the first matching SKU.
     const targetProductId = variants.flatMap(({ sku }) => (sku ? (matches.get(sku) ?? []) : []))[0]
       ?.productId;
@@ -138,7 +140,7 @@ export class ProductImportService {
         results.push({ rowNumber, outcome: 'updated' });
       }
     }
-    if (updated > 0) await this.updateProduct(storeId, targetProductId!, pricePoisha);
+    if (updated > 0) await this.updateProduct(storeId, targetProductId!, product);
     return results;
   }
 
@@ -164,10 +166,17 @@ export class ProductImportService {
   private async updateProduct(
     storeId: string,
     productId: string,
-    pricePoisha: number,
+    { pricePoisha, category, description, status }: ImportProduct,
   ): Promise<void> {
-    if (pricePoisha > 0)
-      await this.repository.update(storeId, productId, { pricePoisha }, this.clock.now());
+    // A blank cell never overwrites what the shop already has.
+    const changes = {
+      ...(pricePoisha > 0 ? { pricePoisha } : {}),
+      ...(category === null ? {} : { category }),
+      ...(description === null ? {} : { description }),
+      ...(status === undefined ? {} : { status }),
+    };
+    if (Object.keys(changes).length > 0)
+      await this.repository.update(storeId, productId, changes, this.clock.now());
     await this.outbox.publish({
       type: 'product.updated',
       storeId,

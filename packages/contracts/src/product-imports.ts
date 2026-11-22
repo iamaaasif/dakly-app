@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { importDuplicateModes, MAX_IMPORT_COLUMNS } from './contacts';
-import { MAX_STOCK_QUANTITY, takaInput } from './products';
+import { MAX_STOCK_QUANTITY, productListQuerySchema, takaInput } from './products';
 
 const column = z
   .int()
@@ -66,3 +66,11 @@ export type ProductImportRow = z.infer<typeof productImportRowSchema>;
 export type StartProductImportInput = z.infer<typeof startProductImportSchema>;
 // What a form holds before the schema fills in the default of no option columns.
 export type StartProductImportForm = z.input<typeof startProductImportSchema>;
+
+export const productExportFormats = ['csv', 'xlsx'] as const;
+
+// The file is made for the filters on the products screen, so the shop gets what it is looking at.
+export const productExportQuerySchema = productListQuerySchema
+  .pick({ search: true, readiness: true })
+  .extend({ format: z.enum(productExportFormats).default('xlsx') });
+export type ProductExportQuery = z.infer<typeof productExportQuerySchema>;
