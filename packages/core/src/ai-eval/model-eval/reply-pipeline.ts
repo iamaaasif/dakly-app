@@ -7,7 +7,7 @@ import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/llm-driver';
 
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReply } from '../../ai-agent/prompts/chat-reply.v3';
+import { chatReply } from '../../ai-agent/prompts/chat-reply.v4';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v1';
 import { checkReplyFacts } from '../../ai-agent/reply-fact-check';
 import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';

@@ -41,7 +41,7 @@ export const getProductTool = {
 export const getDeliveryChargeTool = {
   name: 'get_delivery_charge',
   description:
-    'Delivery charge to an area, thana, district or city. Use it for any delivery cost question. Give the place name the customer wrote; up to 3 matching places come back with their charge. When no place matches, the shop’s delivery zones come back instead: use the zone of the locality’s city, and ask the customer when you cannot tell. Your reply names the place the charge is for, such as “Delivery to Dhaka city is ৳60”, so the customer can correct a wrong guess.',
+    'Delivery charge to an area, thana, district or city. Use it for any delivery cost question. Give the place name the customer wrote; up to 3 matching places come back with their charge. When no place matches, the shop’s delivery zones come back instead: use the zone of the locality’s city, and ask the customer when you cannot tell. When no zone fits the place, such as a district outside the shop’s city, call search_knowledge for the delivery rules before handing over. Your reply names the place the charge is for, such as “Delivery to Dhaka city is ৳60”, so the customer can correct a wrong guess.',
   aliases: [
     'ডেলিভারি চার্জ',
     'ডেলিভারি খরচ',
@@ -57,7 +57,7 @@ export const getDeliveryChargeTool = {
 export const searchKnowledgeTool = {
   name: 'search_knowledge',
   description:
-    'Search the shop’s own policies and FAQs: return, exchange, payment methods, delivery time, opening hours. Use it for any shop rule question. If nothing useful comes back, hand over; never guess a policy.',
+    'Search the shop’s own policies and FAQs: return, exchange, payment methods, delivery time, delivery charge outside the shop’s city, opening hours. Use it for any shop rule question. If nothing useful comes back, hand over; never guess a policy.',
   aliases: [
     'রিটার্ন পলিসি',
     'পেমেন্ট',

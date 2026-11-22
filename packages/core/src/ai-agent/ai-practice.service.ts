@@ -127,8 +127,9 @@ export class AiPracticeService {
     return { kind: 'reply', text: composed.text, source: await this.sourceOf(storeId, composed) };
   }
 
-  // Knowledge wins over products, and products over store rules, because an owner's own answer is
-  // the thing they can change from this screen.
+  // Knowledge wins over store rules, and store rules over products, because an owner's own answer is
+  // the thing they can change from this screen. A product search runs on every question, so it only
+  // counts when the model did not look up a delivery charge.
   private async sourceOf(
     storeId: string,
     composed: { toolNames: string[]; sources: { tool: string; refs: string[] }[] },
@@ -138,10 +139,9 @@ export class AiPracticeService {
     const item = itemId ? await this.knowledge.describe(storeId, itemId) : undefined;
     if (item?.kind === 'file') return { kind: 'file', fileName: item.fileName };
     if (item) return { kind: 'answer', question: item.question };
-    // A product search runs on every question, so only one that found a product counts.
+    if (composed.toolNames.includes(getDeliveryChargeTool.name)) return { kind: 'store_rules' };
     const foundProduct = composed.sources.some((source) => productToolNames.includes(source.tool));
     if (foundProduct) return { kind: 'products' };
-    if (composed.toolNames.includes(getDeliveryChargeTool.name)) return { kind: 'store_rules' };
     return { kind: 'general' };
   }
 
