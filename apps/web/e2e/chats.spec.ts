@@ -160,6 +160,10 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByText('Ji, M size ache. Dam ৳1,200.')).toBeVisible();
     await expect(page.getByLabel('Write a reply')).toBeVisible();
     await capture(page, 'thread');
+    await expect(page.getByText('Dakly AI is handling this chat')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Take over' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
+    await capture(page, 'take-over');
     await page.getByRole('tab', { name: 'Internal note' }).click();
     await page.getByLabel('Write an internal note').fill('Call at 5 pm');
     await page.getByRole('button', { name: 'Save note' }).click();
