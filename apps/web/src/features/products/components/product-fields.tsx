@@ -5,17 +5,19 @@ import type { ProductFormValues } from '@dakly/contracts/products';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 
+import { profitPercent } from '../product-variant-grid';
 import { ProductCategoryField } from './product-category-field';
 import { ProductDescriptionField } from './product-description-field';
 import { ProductInputField } from './product-input-field';
 import { ProductLinesField } from './product-lines-field';
 import { ProductTrackStock } from './product-track-stock';
+import { ProductWarnAtField } from './product-warn-at-field';
 
 const extraFlags = [
   ['isVisibleInChats', 'Show in chat replies'],
   ['isVisibleInOrderLink', 'Show in the order link'],
 ] as const;
-type ProductFieldsProps = { productId?: string };
+type ProductFieldsProps = { productId?: string; showCode?: boolean; withWarnAt?: boolean };
 
 // The modal shows every field in one flow; the full page puts the same parts in titled cards.
 export function ProductFields({ productId }: ProductFieldsProps) {
@@ -35,7 +37,7 @@ function useShowSkuAndCost(productId?: string) {
   return { simple, showSkuAndCost: !productId || simple };
 }
 
-export function ProductNameFields({ productId }: ProductFieldsProps) {
+export function ProductNameFields({ productId, showCode = true }: ProductFieldsProps) {
   const { showSkuAndCost } = useShowSkuAndCost(productId);
   return (
     <>
@@ -47,7 +49,7 @@ export function ProductNameFields({ productId }: ProductFieldsProps) {
       />
       <div className="grid gap-3 md:grid-cols-2">
         <ProductCategoryField />
-        {showSkuAndCost ? (
+        {showSkuAndCost && showCode ? (
           <ProductInputField
             name="variants.0.sku"
             label="Product code"
@@ -64,7 +66,7 @@ export function ProductPriceFields({ productId }: ProductFieldsProps) {
   const { simple, showSkuAndCost } = useShowSkuAndCost(productId);
   return (
     <>
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className={simple ? 'grid gap-3 md:grid-cols-4' : 'grid gap-3 md:grid-cols-3'}>
         <ProductInputField name="pricePoisha" label="Selling price ৳" />
         <ProductInputField name="compareAtPricePoisha" label="Old price ৳" placeholder="Optional" />
         {showSkuAndCost ? (
@@ -74,6 +76,7 @@ export function ProductPriceFields({ productId }: ProductFieldsProps) {
             placeholder="Optional"
           />
         ) : null}
+        {simple ? <PlainProfit /> : null}
       </div>
       {simple ? <DefaultOverride /> : null}
     </>
@@ -91,10 +94,13 @@ export function ProductDescriptionFields({ productId }: ProductFieldsProps) {
   );
 }
 
-export function ProductStockFields({ productId }: ProductFieldsProps) {
+export function ProductStockFields({ productId, withWarnAt }: ProductFieldsProps) {
+  const form = useFormContext<ProductFormValues>();
+  const hasOptions = Boolean(form.watch('options')?.length);
   return (
     <>
       <ProductTrackStock />
+      {withWarnAt && hasOptions ? <ProductWarnAtField /> : null}
       {productId ? <ExtraFlags /> : null}
     </>
   );
@@ -123,6 +129,19 @@ function ExtraFlags() {
           )}
         </FormField>
       ))}
+    </div>
+  );
+}
+
+function PlainProfit() {
+  const form = useFormContext<ProductFormValues>();
+  const profit = profitPercent(form.watch('pricePoisha'), form.watch('variants.0.costPoisha'));
+  return (
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-text">Profit</p>
+      <p className="flex min-h-10 items-center text-success">
+        {profit === null ? '' : `${profit}%`}
+      </p>
     </div>
   );
 }
