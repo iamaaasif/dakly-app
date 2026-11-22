@@ -27,7 +27,7 @@ const products = [
     pricePoisha: 120000,
     compareAtPricePoisha: null,
     isStockTracked: true,
-    variants: [variant('v1', 40)],
+    variants: [{ ...variant('v1', 40), priceOverridePoisha: null }],
   },
   {
     id: '019c01ea-cf15-7d31-a7f5-d73d66007a02',
@@ -37,7 +37,10 @@ const products = [
     pricePoisha: 245000,
     compareAtPricePoisha: 295000,
     isStockTracked: true,
-    variants: [variant('v2', 4, 'M'), variant('v3', 2, 'L')],
+    variants: [
+      { ...variant('v2', 4, 'M'), priceOverridePoisha: null },
+      { ...variant('v3', 2, 'L'), priceOverridePoisha: 230000 },
+    ],
   },
 ] as unknown as ProductResponse[];
 
@@ -82,7 +85,7 @@ describe('Product bulk edit', () => {
     await userEvent.clear(price);
     await userEvent.type(price, '1250');
     // A blank cell is not an edit to blank.
-    await userEvent.clear(screen.getByLabelText('Price for Cotton Panjabi'));
+    await userEvent.clear(screen.getByLabelText('Old price for Cotton Panjabi'));
     await userEvent.clear(screen.getByLabelText('Category for Cotton Panjabi'));
     await userEvent.click(screen.getByRole('button', { name: 'Review 1 change' }));
 
@@ -91,6 +94,12 @@ describe('Product bulk edit', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(writes).toEqual([{ rows: [{ productId: products[0]!.id, pricePoisha: 125000 }] }]);
+  });
+
+  it('shows price read-only when a size has its own price', () => {
+    show();
+    expect(screen.queryByLabelText('Price for Cotton Panjabi')).toBeNull();
+    expect(screen.getByLabelText('Price for Cotton T-shirt')).toBeTruthy();
   });
 
   it('asks for one reason when stock changes and does not edit stock of a product with sizes', async () => {

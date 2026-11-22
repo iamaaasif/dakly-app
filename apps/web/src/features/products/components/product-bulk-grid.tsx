@@ -20,6 +20,7 @@ import {
   changedRows,
   countChangedValues,
   gridDefaults,
+  hasSizePrice,
   onlyVariant,
 } from '../product-bulk-edit';
 import { ProductBulkCell } from './product-bulk-cell';
@@ -91,6 +92,7 @@ const columns = [
 ] as const;
 
 function isDisabled(field: BulkEditField, product: ProductResponse) {
+  if (field === 'pricePoisha') return hasSizePrice(product);
   if (field === 'costPoisha') return onlyVariant(product) === undefined;
   return field === 'stock' && !canEditStock(product);
 }

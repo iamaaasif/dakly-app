@@ -16,6 +16,11 @@ export function onlyVariant(product: ProductResponse) {
   return product.variants.length === 1 ? product.variants[0] : undefined;
 }
 
+// A size with its own price hides the product price, so the grid does not edit it.
+export function hasSizePrice(product: ProductResponse) {
+  return product.variants.some((variant) => variant.priceOverridePoisha !== null);
+}
+
 export function canEditStock(product: ProductResponse) {
   return product.isStockTracked && onlyVariant(product) !== undefined;
 }
@@ -60,7 +65,7 @@ export function changedRows(parsed: GridRow[], products: ProductResponse[]): Pro
 
 function changedRow(cell: GridRow, product: ProductResponse): ProductBulkEditRow[] {
   const typed = {
-    pricePoisha: cell.pricePoisha,
+    pricePoisha: hasSizePrice(product) ? undefined : cell.pricePoisha,
     compareAtPricePoisha: cell.compareAtPricePoisha,
     costPoisha: onlyVariant(product) ? cell.costPoisha : undefined,
     stock: canEditStock(product) ? cell.stock : undefined,
