@@ -2,7 +2,7 @@ import { useQuery, type QueryClient } from '@tanstack/react-query';
 
 import type { OrderDetail } from '@dakly/contracts/orders';
 
-import { ordersKey } from './orders';
+import { ordersKey } from '@/lib/order-entry/orders-key';
 import { productsKeys } from '@/lib/product-query-keys';
 import { useSessionContext } from '@/lib/session-context';
 import { useStoreRequest } from '@/lib/store-request';

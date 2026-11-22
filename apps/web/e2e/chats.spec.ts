@@ -131,6 +131,8 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await page.getByLabel('Write an internal note').fill('Call at 5 pm');
     await page.getByRole('button', { name: 'Save note' }).click();
     await expect(page.getByText('Call at 5 pm')).toBeVisible();
+    await expect(page.getByRole('form', { name: 'Make an order' })).toBeVisible();
+    await capture(page, 'customer-panel');
     await page.goto('/chats');
 
     await page.getByRole('searchbox', { name: 'Search chats' }).fill('Habib');

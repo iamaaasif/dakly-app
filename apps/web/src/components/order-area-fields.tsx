@@ -3,7 +3,7 @@ import { useState } from 'react';
 import type { AreaResponse } from '@dakly/contracts/delivery';
 import { FormField } from '@dakly/ui/form-field';
 
-import { useOrderAreas } from '../api/get-areas';
+import { useOrderAreas } from '@/lib/order-entry/get-areas';
 
 export function OrderAreaFields({
   currentDistrict,

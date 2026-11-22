@@ -47,7 +47,7 @@ function respond(list: () => Response) {
 const ok = (items: ConversationResponse[]) =>
   Response.json({ items, nextCursor: null }, { headers: { 'x-session-context': 'verified' } });
 
-function show(query = defaults) {
+function show(query = defaults, access: Partial<SessionContext['currentStore']> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const context: SessionContext = {
     user: { id: 'member', name: 'Member' },
@@ -82,7 +82,8 @@ function show(query = defaults) {
       canViewStoreSettings: false,
       canEditStoreSettings: false,
       canChangeExtensions: false,
-    },
+      ...access,
+    } as NonNullable<SessionContext['currentStore']>,
     contextTag: 'verified',
     hasMemberships: true,
   };
@@ -213,6 +214,127 @@ describe('Conversation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save note' }));
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]!.path).toBe(`/api/conversations/${chatId}/notes`);
+  });
+});
+
+describe('Customer panel', () => {
+  const chatId = sadia.id;
+  const verified = { headers: { 'x-session-context': 'verified' } };
+  const posts: { path: string; body: unknown }[] = [];
+  const kurti = {
+    id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e80',
+    name: "Women's Kurti",
+    isStockTracked: true,
+    variants: [
+      {
+        id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e81',
+        title: 'M',
+        isDefault: false,
+        pricePoisha: 130000,
+        available: 3,
+        photoUrl: null,
+      },
+      {
+        id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e82',
+        title: 'L',
+        isDefault: false,
+        pricePoisha: 130000,
+        available: 0,
+        photoUrl: null,
+      },
+    ],
+  };
+
+  function areasFor(path: string) {
+    const parent = new URL(path, 'http://shop.test').searchParams.get('parentId');
+    const items = parent
+      ? [{ id: 301, name: 'Dhaka', parentId: 1 }]
+      : [{ id: 1, name: 'Dhaka division', parentId: null }];
+    return { items, nextCursor: null };
+  }
+
+  function respondToPanel() {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body)) });
+        return Response.json({ id: 'order-1', number: 1004 }, { status: 201, ...verified });
+      }
+      if (path.startsWith('/api/contacts/'))
+        return Response.json(
+          {
+            id: sadia.contactId,
+            name: 'Sadia Islam',
+            phone: '01712345678',
+            kind: 'chat_only',
+            tags: [],
+            createdAt: '2026-11-19T04:00:00Z',
+          },
+          verified,
+        );
+      if (path.startsWith('/api/orders/catalogue'))
+        return Response.json({ items: [kurti], nextCursor: null }, verified);
+      if (path.startsWith('/api/delivery-zones/charge'))
+        return Response.json({ chargePoisha: 6000 }, verified);
+      if (path.startsWith('/api/areas')) return Response.json(areasFor(path), verified);
+      if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+      if (path.startsWith(`/api/conversations/${chatId}/messages`))
+        return Response.json({ items: [], nextCursor: null }, verified);
+      if (path.startsWith(`/api/conversations/${chatId}`))
+        return Response.json({ ...sadia, unreadCount: 0 }, verified);
+      return ok([sadia]);
+    });
+  }
+
+  afterEach(() => {
+    posts.length = 0;
+  });
+
+  it('shows the customer status, name and phone', async () => {
+    respondToPanel();
+    show(chatScreenQuerySchema.parse({ chat: chatId }), {
+      canViewCustomers: true,
+      canEditOrders: true,
+    });
+    expect(await screen.findByText('Not a lead yet')).toBeTruthy();
+    expect(await screen.findByText('01712345678')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open profile' }).getAttribute('href')).toBe(
+      `/customers/${sadia.contactId}`,
+    );
+  });
+
+  it('makes an order for the chat from the form', async () => {
+    respondToPanel();
+    show(chatScreenQuerySchema.parse({ chat: chatId }), {
+      canViewCustomers: true,
+      canEditOrders: true,
+    });
+    await screen.findByRole('option', { name: "Women's Kurti" });
+    await userEvent.selectOptions(screen.getByLabelText('Product'), kurti.id);
+    expect(await screen.findByRole('option', { name: 'L · sold out' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    await userEvent.selectOptions(screen.getByLabelText('Size'), kurti.variants[0]!.id);
+    await userEvent.type(screen.getByLabelText('Address'), 'Mirpur 10');
+    await userEvent.selectOptions(await screen.findByLabelText('Division'), '1');
+    await userEvent.selectOptions(await screen.findByLabelText('District'), '301');
+    expect(await screen.findByText('৳1,360')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Create order' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.path).toBe(`/api/conversations/${chatId}/orders`);
+    expect(posts[0]!.body).toMatchObject({
+      recipient: { name: 'Sadia Islam', phone: '01712345678', address: 'Mirpur 10', areaId: 301 },
+      items: [{ variantId: kurti.variants[0]!.id, quantity: 1 }],
+    });
+    expect(await screen.findByText(/Order #1004 created/)).toBeTruthy();
   });
 });
 

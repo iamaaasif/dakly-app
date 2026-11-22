@@ -15,6 +15,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { ChatOrdersService } from './chat-orders.service';
 import { OrdersModule } from './orders.module';
 import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
@@ -106,6 +107,29 @@ describe('Staff order creation', () => {
     });
     expect(await orders.createOrder(f.a, input, request)).toEqual(first);
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+  });
+
+  it("places an order for the chat's contact as an order from that channel", async () => {
+    const variantId = await variant(2);
+    const contactId = await buyer('Sadia', null);
+    const { recipient, items } = draft(variantId);
+    const input = { recipient, items };
+    const request = editor();
+    const order = await app.get(ChatOrdersService).placeByStaff(
+      f.a,
+      { ...input, contactId },
+      {
+        channel: 'messenger',
+        userId: request.actor.userId,
+        access: request.access,
+        idempotencyKey: request.idempotencyKey,
+      },
+    );
+    expect(order).toMatchObject({
+      buyerContactId: contactId,
+      source: 'messenger',
+      stage: 'to_confirm',
+    });
   });
 
   it('creates and confirms once when staff retry the same key', async () => {
