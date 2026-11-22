@@ -11,6 +11,7 @@ import { QueryError } from '@dakly/ui/query-error';
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
 import type { QuickAddHandoff } from '../quick-add-handoff';
+import { ChangeStockDialog } from './change-stock-dialog';
 import { ProductChatPreview } from './product-chat-preview';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
@@ -92,6 +93,7 @@ type StatusCardProps = { status: 'active' | 'hidden'; product?: ProductResponse 
 
 function StatusCard({ status, product }: StatusCardProps) {
   const change = useChangeProduct(product?.id ?? '');
+  const [changingStock, setChangingStock] = useState(false);
   return (
     <Card className="space-y-3">
       <h2 className="text-base font-semibold text-text">Status</h2>
@@ -110,6 +112,14 @@ function StatusCard({ status, product }: StatusCardProps) {
           >
             {status === 'hidden' ? 'Show product' : 'Hide product'}
           </Button>
+          {product.isStockTracked ? (
+            <Button type="button" variant="secondary" onClick={() => setChangingStock(true)}>
+              Change stock
+            </Button>
+          ) : null}
+          {changingStock ? (
+            <ChangeStockDialog product={product} onClose={() => setChangingStock(false)} />
+          ) : null}
           {change.error ? (
             <p role="alert" className="text-danger">
               {change.error.message}

@@ -184,6 +184,32 @@ describe('Products screen', () => {
     const links = await screen.findAllByRole('link', { name: product.name });
     expect(links[0]!.getAttribute('href')).toBe(`/products/${product.id}`);
   });
+  it('changes the stock of a size from the list row', async () => {
+    const bodies: unknown[] = [];
+    stubFetch(async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        bodies.push([path, JSON.parse(String(init.body))]);
+        return new Response(null, { status: 204, headers: { 'x-session-context': 'verified' } });
+      }
+      return response({ items: [product], nextCursor: null });
+    });
+    show();
+    await userEvent.click(
+      (await screen.findAllByRole('button', { name: 'Change stock for Cotton Panjabi' }))[0]!,
+    );
+    const dialog = await screen.findByRole('dialog', { name: /Adjust stock: Cotton Panjabi/ });
+    await userEvent.type(within(dialog).getByLabelText('Change in stock'), '-2');
+    await userEvent.type(within(dialog).getByLabelText('Reason'), 'Damaged');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save stock' }));
+    await vi.waitFor(() =>
+      expect(bodies).toEqual([
+        [
+          `/api/variants/${product.variants[0]!.id}/stock-adjustments`,
+          { quantity: -2, reason: 'Damaged' },
+        ],
+      ]),
+    );
+  });
   it('hides the screen without product access', () => {
     stubFetch(() => {
       throw new Error('No product access');

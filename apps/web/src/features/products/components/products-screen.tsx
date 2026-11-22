@@ -7,6 +7,7 @@ import { Button } from '@dakly/ui/button';
 import { productsSearch, useProducts } from '../api/products';
 import { parseProductsScreen } from '../products-url';
 import { useBulkSelection } from '../use-bulk-selection';
+import { ChangeStockDialog } from './change-stock-dialog';
 import { ExportProductsButtons } from './export-products-buttons';
 import { ImportProductsDialog } from './import-products-dialog';
 import { ProductBulkSection } from './product-bulk-section';
@@ -28,8 +29,10 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   const { data: session } = useSessionContext();
   const products = useProducts(query);
   const router = useUrlRouter();
+  const [changingStockOf, setChangingStockOf] = useState<string>();
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
+  const changingStock = products.data?.items.find((item) => item.id === changingStockOf);
   const canEdit = Boolean(session?.currentStore?.canEditProducts);
   const bulk = useBulkSelection(canEdit);
   return (
@@ -43,9 +46,16 @@ export function ProductsScreen(initial: ProductsScreenProps) {
             query={query}
             products={products}
             onAdjust={canEdit ? onAdjust : undefined}
+            onChangeStock={canEdit ? setChangingStockOf : undefined}
             selection={bulk.selection}
           />
         </section>
+        {changingStock ? (
+          <ChangeStockDialog
+            product={changingStock}
+            onClose={() => setChangingStockOf(undefined)}
+          />
+        ) : null}
         <SelectedRestock
           products={products.data}
           variantId={canEdit ? adjust : undefined}

@@ -20,16 +20,27 @@ export type ProductSelection = {
 type ProductListProps = {
   products: ProductResponse[];
   onAdjust?: (variantId: string) => void;
+  onChangeStock?: (productId: string) => void;
   selection?: ProductSelection;
 };
 
-export function ProductList({ products, onAdjust, selection }: ProductListProps) {
+export function ProductList({ products, onAdjust, onChangeStock, selection }: ProductListProps) {
   return (
     <>
       <div className="hidden md:block [&>div]:rounded-t-none [&>div]:border-t-0">
-        <ProductTable products={products} onAdjust={onAdjust} selection={selection} />
+        <ProductTable
+          products={products}
+          onAdjust={onAdjust}
+          onChangeStock={onChangeStock}
+          selection={selection}
+        />
       </div>
-      <ProductCards products={products} onAdjust={onAdjust} selection={selection} />
+      <ProductCards
+        products={products}
+        onAdjust={onAdjust}
+        onChangeStock={onChangeStock}
+        selection={selection}
+      />
     </>
   );
 }
@@ -57,22 +68,40 @@ function lowestStockVariant(variants: ProductResponse['variants']) {
 type ProductRestockButtonProps = {
   product: ProductResponse;
   onAdjust?: (variantId: string) => void;
+  onChangeStock?: (productId: string) => void;
   className?: string;
 };
 
-function ProductRestockButton({ product, onAdjust, className }: ProductRestockButtonProps) {
+function ProductRestockButton({
+  product,
+  onAdjust,
+  onChangeStock,
+  className,
+}: ProductRestockButtonProps) {
   if (!onAdjust || !product.isStockTracked) return null;
   const variant = lowestStockVariant(product.variants);
   if (!variant) return null;
   return (
-    <Button
-      variant="secondary"
-      className={className}
-      aria-label={`Restock ${product.name}`}
-      onClick={() => onAdjust(variant.id)}
-    >
-      + Restock
-    </Button>
+    <div className="flex flex-wrap justify-end gap-2">
+      <Button
+        variant="secondary"
+        className={className}
+        aria-label={`Restock ${product.name}`}
+        onClick={() => onAdjust(variant.id)}
+      >
+        + Restock
+      </Button>
+      {onChangeStock ? (
+        <Button
+          variant="secondary"
+          className={className}
+          aria-label={`Change stock for ${product.name}`}
+          onClick={() => onChangeStock(product.id)}
+        >
+          Change stock
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -104,7 +133,7 @@ function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
   );
 }
 
-function ProductTable({ products, onAdjust, selection }: ProductListProps) {
+function ProductTable({ products, onAdjust, onChangeStock, selection }: ProductListProps) {
   return (
     <Table aria-label="Products">
       <ProductTableHead
@@ -138,6 +167,7 @@ function ProductTable({ products, onAdjust, selection }: ProductListProps) {
                 <ProductRestockButton
                   product={product}
                   onAdjust={onAdjust}
+                  onChangeStock={onChangeStock}
                   className="h-8 min-h-8 rounded-md px-3 text-xs font-medium"
                 />
               </TableCell>
@@ -149,7 +179,7 @@ function ProductTable({ products, onAdjust, selection }: ProductListProps) {
   );
 }
 
-function ProductCards({ products, onAdjust, selection }: ProductListProps) {
+function ProductCards({ products, onAdjust, onChangeStock, selection }: ProductListProps) {
   return (
     <ul aria-label="Products" className="space-y-3 md:hidden">
       {products.map((product) => (
@@ -167,6 +197,7 @@ function ProductCards({ products, onAdjust, selection }: ProductListProps) {
             <ProductRestockButton
               product={product}
               onAdjust={onAdjust}
+              onChangeStock={onChangeStock}
               className="min-h-11 rounded-md px-4 text-sm font-medium"
             />
           </div>
