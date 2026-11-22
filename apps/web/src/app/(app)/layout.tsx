@@ -6,9 +6,10 @@ import { NotificationBell } from '@/features/notifications/components/notificati
 import { requireSession } from '@/lib/require-session';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  await requireSession();
+  const session = await requireSession();
   return (
     <AppShell
+      initialContext={session}
       actions={
         <>
           <AskDaklyButton />

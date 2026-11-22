@@ -1,9 +1,11 @@
+import type { SessionContext } from '@dakly/contracts/sessions';
+
 import { apiPost } from './api-client';
 import { useSessionSync } from './use-session-sync';
 import { useSessionVerification } from './use-session-verification';
 
-export function useSessionBoundary() {
-  const verification = useSessionVerification();
+export function useSessionBoundary(initial?: SessionContext) {
+  const verification = useSessionVerification(initial);
   const { session, client, close, verify, switching, setFailure } = verification;
   const { channel, resume } = useSessionSync({
     close,
