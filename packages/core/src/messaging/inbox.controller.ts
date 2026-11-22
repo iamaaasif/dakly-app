@@ -23,8 +23,10 @@ import {
   type TakeOverConversationInput,
   type UpdateConversationInput,
 } from '@dakly/contracts/chats';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
+import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
@@ -38,9 +40,17 @@ export class InboxController {
   @RequirePermission('chats.view')
   list(
     @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
     @Query(new ZodValidationPipe(conversationListQuerySchema)) query: ConversationListQuery,
   ) {
-    return this.inbox.list(storeId, query);
+    return this.inbox.list(storeId, query, access, { kind: 'user', userId });
+  }
+
+  @Get('assignees')
+  @RequirePermission('chats.view')
+  assignees(@CurrentStore() storeId: string) {
+    return this.inbox.assignees(storeId);
   }
 
   @Get('counts')

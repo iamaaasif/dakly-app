@@ -3950,7 +3950,19 @@ fixture('GET /conversations/counts', async () => {
     needsYou: 0,
     aiHandling: 1,
     followUp: 0,
+    done: 0,
+    notCustomers: 0,
   });
+});
+
+fixture('GET /conversations/assignees', async () => {
+  const { a, b } = await pair();
+  expect((await f.request(b.owner, 'GET', '/conversations/assignees')).statusCode).toBe(403);
+  await enableChats(b);
+  const result = await success(b, 'GET', '/conversations/assignees', 200);
+  const userIds = result.json().map((assignee: { userId: string }) => assignee.userId);
+  expect(userIds).toContain(b.owner.id);
+  expect(JSON.stringify(result.json())).not.toContain(a.owner.id);
 });
 
 fixture('GET /conversations', async () => {
@@ -3960,6 +3972,12 @@ fixture('GET /conversations', async () => {
   expect((await f.request(b.owner, 'GET', '/conversations')).statusCode).toBe(403);
   await enableChats(b);
   await success(b, 'GET', `/conversations?cursor=0000-01-01T00:00:00Z_${own}`, 400);
+  await success(b, 'GET', '/conversations?q=ab', 400);
+  expect((await success(b, 'GET', '/conversations?q=রিনা', 200)).json().items).toMatchObject([
+    { id: own },
+  ]);
+  expect((await success(b, 'GET', '/conversations?q=নেই-কেউ', 200)).json().items).toEqual([]);
+  expect((await success(b, 'GET', '/conversations?sort=unread', 200)).json().items).toHaveLength(1);
   const result = await success(b, 'GET', '/conversations', 200);
   expect(result.json()).toMatchObject({ items: [{ id: own }], nextCursor: null });
   const second = await seedConversation(b);

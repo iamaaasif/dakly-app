@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
+  ConversationAssigneeResponse,
   ConversationCountsResponse,
   ConversationListQuery,
   ConversationMessageListQuery,
@@ -12,8 +13,10 @@ import type {
   UpdateConversationInput,
   handoverReasons,
 } from '@dakly/contracts/chats';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
+import { UsersService } from '../auth/users.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -37,18 +40,34 @@ export class InboxService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(UsersService) private readonly users: UsersService,
   ) {}
 
-  async list(storeId: string, query: ConversationListQuery) {
+  async list(storeId: string, query: ConversationListQuery, access: StoreAccess, actor: UserActor) {
     await this.requireChats(storeId);
-    const rows = await this.repository.list(storeId, query);
-    const items = rows.slice(0, query.limit).map(conversationResponse);
-    const last = items.at(-1);
+    const contactIds = query.q
+      ? await this.contacts.searchIds(storeId, query.q, access, actor)
+      : undefined;
+    if (contactIds && !contactIds.length) return { items: [], nextCursor: null };
+    const rows = await this.repository.list(storeId, query, contactIds);
+    const page = rows.slice(0, query.limit);
+    const items = page.map(({ sortGroup: _group, ...row }) => conversationResponse(row));
+    const last = page.at(-1);
+    if (!last || rows.length <= query.limit) return { items, nextCursor: null };
+    const position = `${last.lastMessageAt ?? 'none'}_${last.id}`;
     return {
       items,
-      nextCursor:
-        last && rows.length > query.limit ? `${last.lastMessageAt ?? 'none'}_${last.id}` : null,
+      nextCursor: query.sort === 'recent' ? position : `${last.sortGroup}_${position}`,
     };
+  }
+
+  async assignees(storeId: string): Promise<ConversationAssigneeResponse[]> {
+    await this.requireChats(storeId);
+    const userIds = await this.team.userIdsWithPermission(storeId, 'chats.view');
+    const profiles = await this.users.profiles(userIds);
+    return profiles
+      .map((profile) => ({ userId: profile.id, name: profile.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async counts(storeId: string): Promise<ConversationCountsResponse> {

@@ -25,6 +25,7 @@ import { ContactIdentitiesRepository, type InboundIdentity } from './contact-ide
 import { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
 import { searchFilter } from './contact-search';
+import { ContactSearchRepository } from './contact-search.repository';
 import { contactError } from './contacts.errors';
 import {
   type AudienceRecipient,
@@ -71,6 +72,7 @@ export class ContactsService {
     @Inject(OrderContactsRepository) private readonly orderContacts: OrderContactsRepository,
     @Inject(ContactDeletionService) private readonly deletion: ContactDeletionService,
     @Inject(ContactPhoneAccessService) private readonly phoneAccess: ContactPhoneAccessService,
+    @Inject(ContactSearchRepository) private readonly contactSearch: ContactSearchRepository,
     @Inject(ContactMatchSuggestionsService)
     private readonly matchSuggestions: ContactMatchSuggestionsService,
   ) {}
@@ -135,6 +137,18 @@ export class ContactsService {
       createdAt: contact.createdAt.toISOString(),
     }));
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+  }
+
+  // The chat list narrows by these ids; phone searches keep the customer list's rules and limit.
+  async searchIds(
+    storeId: string,
+    search: string,
+    { seeFullPhone }: Access,
+    actor: Extract<Actor, { kind: 'user' }>,
+  ): Promise<string[]> {
+    const match = searchFilter(search, seeFullPhone);
+    if (match.phone) await this.phoneAccess.checkLimit(storeId, 'lookup', seeFullPhone, actor);
+    return this.contactSearch.findIds(storeId, match, 500);
   }
 
   async getPhoneForSend(storeId: string, id: string): Promise<string | null> {

@@ -14,6 +14,7 @@ import { ContactIdentitiesService } from './contact-identities.service';
 import { ContactMatchSuggestionsController } from './contact-match-suggestions.controller';
 import { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
+import { ContactSearchRepository } from './contact-search.repository';
 import { ContactsController } from './contacts.controller';
 import { ContactsRepository } from './contacts.repository';
 import { ContactsService } from './contacts.service';
@@ -25,6 +26,7 @@ import { OrderContactsRepository } from './order-contacts.repository';
   imports: [AuditModule, CacheModule, ClockModule, OutboxModule, TeamModule, ContactErasureModule],
   controllers: [ContactsController, ContactMatchSuggestionsController],
   providers: [
+    ContactSearchRepository,
     ContactsService,
     ContactDeletionService,
     KhataCustomersService,

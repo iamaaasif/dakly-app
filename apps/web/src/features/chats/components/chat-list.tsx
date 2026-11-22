@@ -7,6 +7,7 @@ import { useConversationCounts, useConversations } from '../api/conversations';
 import { conversationFilters, type ChatScreenQuery } from '../chat-filters';
 import { ChatChannelFilter } from './chat-channel-filter';
 import { ChatRow } from './chat-row';
+import { ChatSearchBar } from './chat-search-bar';
 import { ChatTabs } from './chat-tabs';
 
 export function ChatList({ query }: { query: ChatScreenQuery }) {
@@ -14,6 +15,7 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
   return (
     <section aria-label="Chat list" className="flex min-h-0 min-w-0 flex-col">
       <ChatTabs query={query} counts={counts.data} />
+      <ChatSearchBar query={query} />
       <div className="shrink-0 border-b border-border p-3">
         <ChatChannelFilter query={query} />
       </div>
@@ -46,7 +48,12 @@ function ChatRows({ query }: { query: ChatScreenQuery }) {
       </div>
     );
   const items = conversations.data.pages.flatMap((page) => page.items);
-  if (!items.length) return <p className="p-4 text-text-muted">No chats here yet.</p>;
+  if (!items.length)
+    return (
+      <p className="p-4 text-text-muted">
+        {query.q || query.assignee ? 'No chats match.' : 'No chats here yet.'}
+      </p>
+    );
   return (
     <>
       <ul className="divide-y divide-border">

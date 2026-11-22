@@ -5,5 +5,6 @@ export const chatsKeys = {
   list: (tag: string | undefined, filters: Partial<ConversationListQuery>) =>
     ['chats', tag, 'list', filters] as const,
   comments: (tag: string | undefined) => ['chats', tag, 'comments'] as const,
+  assignees: (tag: string | undefined) => ['chats', tag, 'assignees'] as const,
   counts: (tag: string | undefined) => ['chats', tag, 'counts'] as const,
 };

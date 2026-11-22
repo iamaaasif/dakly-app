@@ -6,8 +6,8 @@ import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 
 import { useSegmentCount } from '../api/segment-count';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
 import { matchText } from '../segment-labels';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 
 export function LiveCount() {
   const rules = useWatch<CreateSegmentInput, 'rules'>({ name: 'rules' });

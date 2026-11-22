@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gte, isNull, lt, ne, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import type {
   ConversationListQuery,
@@ -37,6 +37,29 @@ const fields = {
   unreadCount: conversations.unreadCount,
 };
 
+// A ranked cursor reads rank_time_id; the plain one reads time_id. A chat with no message has "none".
+function afterCursor(query: ConversationListQuery, group: SQL, activityAt: SQL) {
+  if (!query.cursor) return undefined;
+  const parts = query.cursor.split('_');
+  const rank = parts.length === 3 ? Number(parts.shift()) : 0;
+  const [at, id] = parts;
+  const waitingLongest = query.sort === 'waiting';
+  const noMessage = waitingLongest ? 'infinity' : '-infinity';
+  const cursorAt = at === 'none' ? noMessage : at;
+  const afterInGroup = waitingLongest
+    ? sql`(${activityAt}, ${conversations.id}) > (${cursorAt}::timestamptz, ${id}::uuid)`
+    : sql`(${activityAt}, ${conversations.id}) < (${cursorAt}::timestamptz, ${id}::uuid)`;
+  return or(sql`${group} > ${rank}`, and(sql`${group} = ${rank}`, afterInGroup));
+}
+
+function groupRank(sort: ConversationListQuery['sort']) {
+  if (sort === 'needs_you')
+    return sql`(case when ${conversations.status} = 'needs_you' then 0 else 1 end)`;
+  if (sort === 'unread' || sort === 'waiting')
+    return sql`(case when ${conversations.unreadCount} > 0 then 0 else 1 end)`;
+  return sql`(0)::int`;
+}
+
 const messageFields = {
   id: messages.id,
   direction: messages.direction,
@@ -71,20 +94,15 @@ export class InboxRepository {
     return result.rows;
   }
 
-  list(storeId: string, query: ConversationListQuery) {
-    const [cursorAt, cursorId] = query.cursor?.split('_') ?? [];
-    let beforeCursor: SQL | undefined;
-    if (cursorId)
-      beforeCursor =
-        cursorAt === 'none'
-          ? and(isNull(conversations.lastMessageAt), lt(conversations.id, cursorId))
-          : or(
-              isNull(conversations.lastMessageAt),
-              sql`(${conversations.lastMessageAt}, ${conversations.id}) < (${cursorAt}::timestamptz, ${cursorId}::uuid)`,
-            );
+  list(storeId: string, query: ConversationListQuery, contactIds?: string[]) {
+    const waitingLongest = query.sort === 'waiting';
+    // Chats with no message sort last in both directions.
+    const activityAt = sql`coalesce(${conversations.lastMessageAt}, ${waitingLongest ? sql`'infinity'` : sql`'-infinity'`}::timestamptz)`;
+    const group = groupRank(query.sort);
+    const beforeCursor = afterCursor(query, group, activityAt);
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select(fields)
+        .select({ ...fields, sortGroup: sql<number>`${group}::int` })
         .from(conversations)
         .innerJoin(
           contacts,
@@ -101,12 +119,18 @@ export class InboxRepository {
             query.status ? eq(conversations.status, query.status) : undefined,
             query.responder ? eq(conversations.responder, query.responder) : undefined,
             query.channel ? eq(conversations.channel, query.channel) : undefined,
+            query.contactKind ? eq(contacts.kind, query.contactKind) : undefined,
             query.assigneeUserId
               ? eq(conversations.assigneeUserId, query.assigneeUserId)
               : undefined,
+            contactIds ? inArray(conversations.contactId, contactIds) : undefined,
           ),
         )
-        .orderBy(sql`${conversations.lastMessageAt} desc nulls last`, desc(conversations.id))
+        .orderBy(
+          asc(group),
+          waitingLongest ? asc(activityAt) : desc(activityAt),
+          waitingLongest ? asc(conversations.id) : desc(conversations.id),
+        )
         .limit(query.limit + 1),
     );
   }
@@ -119,6 +143,8 @@ export class InboxRepository {
           needsYou: sql<number>`(count(*) filter (where ${conversations.status} = 'needs_you'))::int`,
           aiHandling: sql<number>`(count(*) filter (where ${conversations.responder} = 'ai'))::int`,
           followUp: sql<number>`(count(*) filter (where ${conversations.status} = 'later'))::int`,
+          done: sql<number>`(count(*) filter (where ${conversations.status} = 'done'))::int`,
+          notCustomers: sql<number>`(count(*) filter (where ${contacts.kind} = 'not_customer'))::int`,
         })
         .from(conversations)
         .innerJoin(

@@ -12,7 +12,7 @@ import { chatScreenQuerySchema } from '../chat-filters';
 import { ChatsScreen } from './chats-screen';
 import { sessionContextKey } from '@/lib/session-context';
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 
 const sadia: ConversationResponse = {
   id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e5f',

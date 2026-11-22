@@ -106,6 +106,21 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page).toHaveURL(/channel=instagram/);
     await expect(page.getByText('Rumana Akter')).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeHidden();
+    await page.getByRole('link', { name: 'All', exact: true }).click();
+
+    await page.getByRole('searchbox', { name: 'Search chats' }).fill('Habib');
+    await expect(page).toHaveURL(/q=Habib/);
+    await expect(page.getByText('Habib Rahman', { exact: true })).toBeVisible();
+    await expect(page.getByText('Sadia Islam')).toBeHidden();
+    await page.getByRole('button', { name: 'Filter' }).click();
+    await expect(page.getByText('Assigned to')).toBeVisible();
+    await capture(page, 'search-filter');
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('searchbox', { name: 'Search chats' }).fill('');
+    await page.getByRole('combobox', { name: 'Sort chats' }).click();
+    await page.getByRole('option', { name: 'Unread first' }).click();
+    await expect(page).toHaveURL(/sort=unread/);
+    await expect(page.getByText('Sadia Islam')).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
