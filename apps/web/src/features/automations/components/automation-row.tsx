@@ -102,7 +102,7 @@ function WorkflowActions({ workflow }: { workflow: AutomationListItem }) {
           </Button>
         )}
         <Link
-          href={`/automations/${workflow.id}`}
+          href={`/automations/${workflow.id}/canvas`}
           className={buttonVariants({ variant: 'secondary' })}
         >
           Edit

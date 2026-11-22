@@ -137,9 +137,9 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
     await page.getByRole('button', { name: 'Zoom out' }).click();
     await expect(zoom).toHaveText(/^\d+%$/);
     await page.getByRole('button', { name: 'Fit to screen' }).click();
-    await page.getByRole('link', { name: 'Workflow settings' }).click();
-    await expect(page).toHaveURL(new RegExp(`/automations/${ids.at(-1)}$`));
-    await page.getByRole('link', { name: 'View canvas' }).click();
+    await page.getByRole('button', { name: 'Workflow settings' }).click();
+    await expect(page.getByRole('dialog', { name: 'Workflow settings' })).toBeVisible();
+    await page.getByRole('button', { name: 'Done' }).click();
     await expect(page).toHaveURL(new RegExp(`/automations/${ids.at(-1)}/canvas$`));
   } finally {
     await db.pool.query('delete from outbox_events where id=$1', [eventId]);

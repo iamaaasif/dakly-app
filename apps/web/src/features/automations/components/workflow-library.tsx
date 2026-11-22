@@ -88,7 +88,7 @@ export function WorkflowLibrary() {
   }
   function create(draft: CreateAutomationInput) {
     action.mutate(draft, {
-      onSuccess: (workflow) => router.push(`/automations/${workflow.id}`),
+      onSuccess: (workflow) => router.push(`/automations/${workflow.id}/canvas`),
     });
   }
   return (

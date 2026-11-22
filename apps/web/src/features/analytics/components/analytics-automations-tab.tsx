@@ -78,7 +78,7 @@ function AutomationRow({ row, biggest }: { row: AnalyticsAutomationRow; biggest:
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <Link
-            href={`/automations/${row.id}`}
+            href={`/automations/${row.id}/canvas`}
             className="font-semibold wrap-anywhere text-text after:absolute after:inset-0 hover:underline focus-visible:outline-hidden focus-visible:after:outline-2 focus-visible:after:-outline-offset-2 focus-visible:after:outline-focus"
           >
             {row.name}

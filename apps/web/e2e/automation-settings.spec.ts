@@ -22,16 +22,31 @@ test('publishes ready settings and keeps a refused draft saved', async ({
   try {
     await page.goto('/automations/new');
     await page.getByRole('button', { name: 'Use workflow Welcome new subscribers' }).click();
-    await expect(page).toHaveURL(/\/automations\/[\da-f-]{36}$/);
-    const id = new URL(page.url()).pathname.split('/').at(-1)!;
+    await expect(page).toHaveURL(/\/automations\/[\da-f-]{36}\/canvas$/);
+    const id = new URL(page.url()).pathname.split('/').at(-2)!;
     ids.push(id);
     await expect(page.getByRole('heading', { name: 'Welcome new subscribers' })).toBeVisible();
-    const delay = page.getByRole('spinbutton', { name: 'Delay' });
-    const unit = page.getByRole('combobox', { name: 'Delay unit' });
-    await expect(delay).toHaveValue('2');
-    await expect(unit).toHaveText('Days');
     const evidence = process.env.CAMP12_SETTINGS_EVIDENCE;
     if (evidence) await mkdir(evidence, { recursive: true });
+    await page.getByRole('button', { name: 'Edit step 2' }).click();
+    const delay = page.getByRole('spinbutton', { name: 'Amount' });
+    const unit = page.getByRole('combobox', { name: 'Unit' });
+    await expect(delay).toHaveValue('2');
+    await expect(unit).toHaveText('days');
+    await unit.click();
+    await page.getByRole('option', { name: 'minutes' }).click();
+    await delay.fill('90');
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Edit step 1' }).click();
+    await page.getByRole('button', { name: 'Move SMS up' }).click();
+    await page.getByRole('button', { name: 'Move SMS up' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Workflow settings' }).click();
+    await page.getByRole('combobox', { name: 'Re-entry' }).click();
+    await page.getByRole('option', { name: 'Once every few days' }).click();
+    await page.getByLabel('Days between entries').fill('15');
+    await page.getByRole('button', { name: 'Add tag exit rule' }).click();
+    await page.getByLabel('Exit tag').fill('vip');
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
@@ -43,16 +58,7 @@ test('publishes ready settings and keeps a refused draft saved', async ({
       if (evidence)
         await page.screenshot({ path: resolve(evidence, `workflow-settings-${width}.png`) });
     }
-    await unit.click();
-    await page.getByRole('option', { name: 'Minutes' }).click();
-    await delay.fill('90');
-    await page.getByRole('combobox', { name: 'Re-entry' }).click();
-    await page.getByRole('option', { name: 'Once every few days' }).click();
-    await page.getByLabel('Days between entries').fill('15');
-    await page.getByRole('button', { name: 'Add tag exit rule' }).click();
-    await page.getByLabel('Exit tag').fill('vip');
-    await page.getByRole('button', { name: 'Move SMS up' }).click();
-    await page.getByRole('button', { name: 'Move SMS up' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
     await page.getByRole('button', { name: 'Start workflow', exact: true }).click();
     await expect(
       page.getByRole('dialog').getByText('0 people are in this workflow now.'),
@@ -79,27 +85,36 @@ test('publishes ready settings and keeps a refused draft saved', async ({
     expect(unready.status()).toBe(201);
     const { id: draftId } = (await unready.json()) as { id: string };
     ids.push(draftId);
-    await page.goto(`/automations/${draftId}`);
-    await expect(unit).toHaveText('Hours');
+    await page.goto(`/automations/${draftId}/canvas`);
+    await page.getByRole('button', { name: 'Edit step 1' }).click();
+    await expect(unit).toHaveText('hours');
     await delay.fill('1.5');
     const savedDelay = page.waitForResponse(
       (response) =>
         response.url().endsWith(`/api/automations/${draftId}`) &&
         response.request().method() === 'PATCH',
     );
-    await page.getByRole('button', { name: 'Save draft' }).click();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Publish changes' }).click();
     expect(await (await savedDelay).json()).toMatchObject({
       graph: { steps: { wait: { wait: { minutes: 90 } } } },
     });
+    await page.getByRole('button', { name: 'Edit step 1' }).click();
     await delay.fill('3');
-    await page.getByRole('button', { name: 'Start workflow', exact: true }).click();
-    const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', { name: 'Publish workflow' }).click();
-    await expect(dialog.getByRole('alert')).toHaveText('The store does not have this trigger yet');
+    await page.getByRole('button', { name: 'Done' }).click();
+    const savedAgain = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/automations/${draftId}`) &&
+        response.request().method() === 'PATCH',
+    );
+    await page.getByRole('button', { name: 'Publish changes' }).click();
+    await savedAgain;
+    // The canvas checks stop a workflow whose trigger source is missing before it is published.
+    await expect(page.getByRole('button', { name: 'Start workflow', exact: true })).toBeDisabled();
     const saved = await context.request.get(`/api/automations/${draftId}`, { headers });
     expect(await saved.json()).toMatchObject({
       status: 'draft',
-      graph: { steps: { wait: { wait: { minutes: 180 } } } },
+      graph: { steps: { wait: { wait: { minutes: 3 } } } },
     });
   } finally {
     await db.pool.query(
