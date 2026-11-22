@@ -66,6 +66,11 @@ const returnChoices = [
 ] as const;
 const returnMinutes = { '60': 60, '1440': 1440, never: null } as const;
 
+const cardStyles = [
+  { value: 'buttons', label: 'Cards with buttons' },
+  { value: 'text', label: 'Photo and text' },
+] as const;
+
 const dirty = { shouldDirty: true } as const;
 const sectionLabel = 'mt-6 mb-2 text-xs font-medium tracking-wide text-text-muted uppercase';
 
@@ -125,6 +130,20 @@ function AbilitySection({ form, disabled }: SectionProps) {
           onChange={(on) => form.setValue(`abilities.${name}`, on, dirty)}
         />
       ))}
+      <div className="py-3">
+        <p className="font-semibold">How products are sent</p>
+        <p className="mb-2 text-sm text-text-muted">
+          Cards show the photo, price and buttons for Order now, See sizes and Talk to a person on
+          Messenger and Instagram. WhatsApp always gets photo and text.
+        </p>
+        <SegmentedChoice
+          label="How products are sent"
+          value={abilities.productCardStyle}
+          options={cardStyles}
+          disabled={disabled || !abilities.showProducts}
+          onChange={(style) => form.setValue('abilities.productCardStyle', style, dirty)}
+        />
+      </div>
       <div className="py-3">
         <p className="font-semibold">Remind quiet customers</p>
         <p className="mb-2 text-sm text-text-muted">

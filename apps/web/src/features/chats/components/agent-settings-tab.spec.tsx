@@ -99,6 +99,16 @@ describe('AI agent settings tab', () => {
     });
   });
 
+  it('saves the product card style the owner picks', async () => {
+    respond(() => Response.json({ ...saved, version: 4 }, { headers }));
+    show();
+    fireEvent.click(await screen.findByRole('radio', { name: 'Photo and text' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('AI agent settings saved.')).toBeTruthy();
+    const put = requests.find((request) => request.method === 'PUT');
+    expect(JSON.parse(put!.body!)).toMatchObject({ abilities: { productCardStyle: 'text' } });
+  });
+
   it('says the settings changed and offers the latest when the save is stale', async () => {
     respond(() =>
       Response.json(

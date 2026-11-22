@@ -1289,7 +1289,7 @@ const settingsBody = (version: number, replyLanguage: 'bn' | 'en') => ({
     askForReview: true,
     answerComments: true,
     followUp: 'hot',
-    productCardStyle: 'text',
+    productCardStyle: 'buttons',
   },
   handoverRules: { damagedOrWrong: true, refundsAndExchanges: true, specialRequests: false },
   returnToAiMinutes: 60,
