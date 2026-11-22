@@ -6,30 +6,16 @@ import type { ImportDuplicateMode } from '@dakly/contracts/contacts';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { matchProblem, type PreviewedRow, previewRows } from './product-import-preview';
+import type { ImportProduct, ImportVariant } from './product-import-types';
 import { ProductStockService } from './product-stock.service';
-import { ProductsRepository, type SkuMatch } from './products.repository';
+import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
+import type { SkuMatch } from './sku-match.repository';
+
+export type { ImportProduct, ImportVariant } from './product-import-types';
 
 type Actor = AuditEntry['actor'];
-
-export type ImportVariant = {
-  rowNumber: number;
-  sku: string | null;
-  optionValues: Record<string, string>;
-  priceOverridePoisha: number | null;
-  costPoisha: number | null;
-  onHand: number | undefined;
-};
-
-export type ImportProduct = {
-  name: string;
-  category: string | null;
-  description: string | null;
-  status: 'active' | 'hidden';
-  pricePoisha: number;
-  options: { name: string; values: string[] }[];
-  variants: ImportVariant[];
-};
 
 export type ImportedRow = {
   rowNumber: number;
@@ -84,6 +70,22 @@ export class ProductImportService {
     });
   }
 
+  // What importBatch would do, read from the shop as it is now. Nothing is written.
+  async preview(
+    storeId: string,
+    batch: ImportProduct[],
+    duplicateMode: ImportDuplicateMode,
+  ): Promise<PreviewedRow[]> {
+    const skus = batch.flatMap(({ variants }) => variants.flatMap(({ sku }) => sku ?? []));
+    const matches = new Map(
+      (skus.length ? await this.repository.findVariantsBySku(storeId, skus) : []).map((match) => [
+        match.sku,
+        match,
+      ]),
+    );
+    return previewRows(batch, matches, duplicateMode);
+  }
+
   private async addProduct(
     storeId: string,
     { variants, ...details }: ImportProduct,
@@ -93,6 +95,7 @@ export class ProductImportService {
       storeId,
       {
         ...details,
+        status: details.status ?? 'active',
         aliases: [],
         compareAtPricePoisha: null,
         isStockTracked: context.tracksStock,
@@ -117,10 +120,11 @@ export class ProductImportService {
   // reported rather than guessed at, because adding a size belongs in the product editor.
   private async updateExisting(
     storeId: string,
-    { variants, pricePoisha }: ImportProduct,
+    product: ImportProduct,
     matches: Map<string, SkuMatch>,
     context: ImportContext,
   ): Promise<ImportedRow[]> {
+    const { variants } = product;
     // The product price has one target: the product of the first matching SKU.
     const targetProductId = variants.flatMap(({ sku }) => (sku ? (matches.get(sku) ?? []) : []))[0]
       ?.productId;
@@ -138,7 +142,7 @@ export class ProductImportService {
         results.push({ rowNumber, outcome: 'updated' });
       }
     }
-    if (updated > 0) await this.updateProduct(storeId, targetProductId!, pricePoisha);
+    if (updated > 0) await this.updateProduct(storeId, targetProductId!, product);
     return results;
   }
 
@@ -164,10 +168,17 @@ export class ProductImportService {
   private async updateProduct(
     storeId: string,
     productId: string,
-    pricePoisha: number,
+    { pricePoisha, category, description, status }: ImportProduct,
   ): Promise<void> {
-    if (pricePoisha > 0)
-      await this.repository.update(storeId, productId, { pricePoisha }, this.clock.now());
+    // A blank cell never overwrites what the shop already has.
+    const changes = {
+      ...(pricePoisha > 0 ? { pricePoisha } : {}),
+      ...(category === null ? {} : { category }),
+      ...(description === null ? {} : { description }),
+      ...(status === undefined ? {} : { status }),
+    };
+    if (Object.keys(changes).length > 0)
+      await this.repository.update(storeId, productId, changes, this.clock.now());
     await this.outbox.publish({
       type: 'product.updated',
       storeId,
@@ -191,11 +202,4 @@ export class ProductImportService {
       reference: { actor, reason: `Product import ${importId}` },
     });
   }
-}
-
-function matchProblem(match: SkuMatch | undefined, targetProductId: string | undefined) {
-  if (!match) return 'A size of an existing product needs a SKU that is already in the shop';
-  if (match.productId !== targetProductId) return 'These SKUs belong to different products';
-  if (match.isArchived) return 'This SKU belongs to an archived product';
-  return undefined;
 }

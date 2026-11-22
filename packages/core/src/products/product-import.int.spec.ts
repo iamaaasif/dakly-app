@@ -237,6 +237,65 @@ describe('ProductImportService with Postgres', () => {
     expect(await price()).toBe(150000);
   });
 
+  it('applies the file fields to a matched product and keeps them when blank', async () => {
+    await importer.importBatch(
+      f.a,
+      [{ ...product([variant('FLD-1')], 'Fields'), category: 'Men', description: 'Old' }],
+      context,
+    );
+    const fields = async () =>
+      (
+        await f.connection.pool.query(
+          "select category, description, status from products where name='Fields'",
+        )
+      ).rows[0];
+    await importer.importBatch(
+      f.a,
+      [{ ...product([variant('FLD-1')], 'Fields'), status: 'hidden', category: 'Kurti' }],
+      context,
+    );
+    expect(await fields()).toEqual({ category: 'Kurti', description: 'Old', status: 'hidden' });
+    await importer.importBatch(
+      f.a,
+      [{ ...product([variant('FLD-1')], 'Fields'), status: undefined }],
+      context,
+    );
+    expect(await fields()).toEqual({ category: 'Kurti', description: 'Old', status: 'hidden' });
+  });
+
+  it('keeps the variant when the file renames its option', async () => {
+    await importer.importBatch(
+      f.a,
+      [
+        {
+          ...product([variant('OPT-1', { optionValues: { Size: 'M' } })], 'Renamed'),
+          options: [{ name: 'Size', values: ['M'] }],
+        },
+      ],
+      context,
+    );
+    const before = await stored(f.a, 'OPT-1');
+    const result = await importer.importBatch(
+      f.a,
+      [
+        {
+          ...product([variant('OPT-1', { optionValues: { Size: 'Medium' } })], 'Renamed'),
+          options: [{ name: 'Size', values: ['Medium'] }],
+        },
+      ],
+      context,
+    );
+    expect(result).toEqual([{ rowNumber: 2, outcome: 'updated' }]);
+    expect((await stored(f.a, 'OPT-1')).id).toBe(before.id);
+    expect(
+      (
+        await f.connection.pool.query(
+          "select count(*)::int as n from product_variants where product_id=(select id from products where name='Renamed')",
+        )
+      ).rows[0].n,
+    ).toBe(1);
+  });
+
   it('reports rows whose skus belong to different products', async () => {
     await importer.importBatch(f.a, [product([variant('TWO-A')], 'First')], context);
     await importer.importBatch(f.a, [product([variant('TWO-B')], 'Second')], context);

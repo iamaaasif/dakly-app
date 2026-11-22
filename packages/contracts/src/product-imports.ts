@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import { importDuplicateModes, MAX_IMPORT_COLUMNS } from './contacts';
-import { MAX_STOCK_QUANTITY, takaInput } from './products';
+import { MAX_STOCK_QUANTITY, productListQuerySchema, takaInput } from './products';
 
 const column = z
   .int()
@@ -66,3 +66,33 @@ export type ProductImportRow = z.infer<typeof productImportRowSchema>;
 export type StartProductImportInput = z.infer<typeof startProductImportSchema>;
 // What a form holds before the schema fills in the default of no option columns.
 export type StartProductImportForm = z.input<typeof startProductImportSchema>;
+
+export const productExportFormats = ['csv', 'xlsx'] as const;
+
+// The file is made for the filters on the products screen, so the shop gets what it is looking at.
+export const productExportQuerySchema = productListQuerySchema
+  .pick({ search: true, readiness: true })
+  .extend({ format: z.enum(productExportFormats).default('xlsx') });
+export type ProductExportQuery = z.infer<typeof productExportQuerySchema>;
+
+// The dry run reads the file and says what an import would do, without writing anything.
+export const productImportDryRunResults = ['added', 'changed', 'skipped', 'rejected'] as const;
+export type ProductImportDryRunResult = (typeof productImportDryRunResults)[number];
+
+export type ProductImportDryRunRow = {
+  rowNumber: number;
+  result: ProductImportDryRunResult;
+  problem: string | null;
+  // The price the shop has now, when the file would change it.
+  wasPricePoisha: number | null;
+  // The file's own cells by field name, or by option name, so a cell can be corrected.
+  cells: Record<string, string>;
+};
+
+export type ProductImportDryRun = {
+  counts: Record<ProductImportDryRunResult, number>;
+  // Rejected rows first, then the others, up to a limit; the counts cover every row.
+  rows: ProductImportDryRunRow[];
+  rowsShown: number;
+  errors: { rowNumber: number; field: string; message: string }[];
+};

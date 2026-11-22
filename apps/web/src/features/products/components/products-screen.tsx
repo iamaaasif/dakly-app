@@ -7,7 +7,10 @@ import { Button } from '@dakly/ui/button';
 
 import { productsSearch, useProducts } from '../api/products';
 import { parseProductsScreen } from '../products-url';
+import { useBulkSelection } from '../use-bulk-selection';
+import { ExportProductsButtons } from './export-products-buttons';
 import { ImportProductsDialog } from './import-products-dialog';
+import { ProductBulkSection } from './product-bulk-section';
 import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
 import { ProductResults } from './product-results';
@@ -37,17 +40,20 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   const [stockError, setStockError] = useState<string | null>(null);
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
-  const canEdit = session?.currentStore?.canEditProducts;
+  const canEdit = Boolean(session?.currentStore?.canEditProducts);
+  const bulk = useBulkSelection(canEdit);
   return (
     <StorePage permission="canViewProducts">
       <main className="space-y-6 p-6 md:p-8">
-        <ProductsHeader canEdit={Boolean(canEdit)} listHref={listHref} importing={importing} />
+        <ProductsHeader canEdit={canEdit} query={query} listHref={listHref} importing={importing} />
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
           <ProductFilters key={`${query.search}|${query.readiness}`} query={query} />
+          <ProductBulkSection bulk={bulk} />
           <ProductResults
             query={query}
             products={products}
             onAdjust={canEdit ? onAdjust : undefined}
+            selection={bulk.selection}
           />
         </section>
         {stockError ? (
@@ -80,9 +86,14 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   );
 }
 
-type ProductsHeaderProps = { canEdit: boolean; listHref: string; importing?: '1' };
+type ProductsHeaderProps = {
+  canEdit: boolean;
+  query: ProductListQuery;
+  listHref: string;
+  importing?: '1';
+};
 
-function ProductsHeader({ canEdit, listHref, importing }: ProductsHeaderProps) {
+function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderProps) {
   const router = useUrlRouter();
   // A new page needs a real navigation; useUrlRouter only rewrites the address on this screen.
   const pageRouter = useRouter();
@@ -95,16 +106,19 @@ function ProductsHeader({ canEdit, listHref, importing }: ProductsHeaderProps) {
           and fill your order link.
         </p>
       </div>
-      {canEdit ? (
-        <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
-            Import from a CSV
-          </Button>
-          <Button onClick={() => pageRouter.push('/products/new')}>
-            <span aria-hidden="true">+ </span>Add product
-          </Button>
-        </div>
-      ) : null}
+      <div className="flex flex-wrap gap-3">
+        <ExportProductsButtons query={query} />
+        {canEdit ? (
+          <>
+            <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
+              Import from Excel or CSV
+            </Button>
+            <Button onClick={() => pageRouter.push('/products/new')}>
+              <span aria-hidden="true">+ </span>Add product
+            </Button>
+          </>
+        ) : null}
+      </div>
       {importing && canEdit ? (
         <ImportProductsDialog onClose={() => router.replace(listHref)} />
       ) : null}

@@ -713,6 +713,15 @@ fixture('GET /products/categories', async () => {
     items: ['Accessories'],
   });
 });
+fixture('GET /products/export', async () => {
+  const { a, b } = await pair();
+  await success(a, 'POST', '/products', 201, { name: 'পাঞ্জাবি', pricePoisha: 125000 });
+  await success(b, 'POST', '/products', 201, { name: 'ঘড়ি', pricePoisha: 50000 });
+  const own = (await success(a, 'GET', '/products/export?format=csv', 200)).payload;
+  expect(own).toContain('পাঞ্জাবি');
+  expect(own).not.toContain('ঘড়ি');
+  expect((await f.request(a.owner, 'GET', '/products/export?format=pdf')).statusCode).toBe(400);
+});
 fixture('GET /products/:productId', async () => {
   const { a, b } = await pair(),
     id = await product(a);
@@ -739,6 +748,47 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('products', foreignId)).toEqual(before);
   });
+fixture('POST /products/bulk-edits', async () => {
+  const { a, b } = await pair(),
+    foreignId = await product(a),
+    own = await product(b);
+  const before = await f.row('products', foreignId);
+  await success(b, 'POST', '/products/bulk-edits', 201, {
+    rows: [{ productId: own, pricePoisha: 150000 }],
+  });
+  expect(await f.row('products', own)).toMatchObject({ price_poisha: 150000 });
+  const foreign = await f.request(b.owner, 'POST', '/products/bulk-edits', {
+    rows: [{ productId: foreignId, pricePoisha: 1 }],
+  });
+  const absent = await f.request(b.owner, 'POST', '/products/bulk-edits', {
+    rows: [{ productId: randomUUID(), pricePoisha: 1 }],
+  });
+  expect(foreign.statusCode, foreign.body).toBe(409);
+  expect(foreign.json()).toEqual(absent.json());
+  expect(await f.row('products', foreignId)).toEqual(before);
+});
+fixture('GET /products/bulk-edits', async () => {
+  const { a, b } = await pair(),
+    aId = await product(a);
+  await success(a, 'POST', '/products/bulk-edits', 201, {
+    rows: [{ productId: aId, status: 'hidden' }],
+  });
+  expect((await success(a, 'GET', '/products/bulk-edits', 200)).json().items).toHaveLength(1);
+  expect((await success(b, 'GET', '/products/bulk-edits', 200)).json().items).toHaveLength(0);
+});
+fixture('POST /products/bulk-edits/:id/undo', async () => {
+  const { a, b } = await pair(),
+    id = await product(a);
+  const edit = (
+    await success(a, 'POST', '/products/bulk-edits', 201, {
+      rows: [{ productId: id, pricePoisha: 150000 }],
+    })
+  ).json();
+  await hidden(b, 'POST', (value) => `/products/bulk-edits/${value}/undo`, edit.id);
+  expect(await f.row('products', id)).toMatchObject({ price_poisha: 150000 });
+  await success(a, 'POST', `/products/bulk-edits/${edit.id}/undo`, 201);
+  expect(await f.row('products', id)).toMatchObject({ price_poisha: 125000 });
+});
 fixture('POST /variants/:variantId/stock-adjustments', async () => {
   const { a, b } = await pair();
   const created = (
@@ -1280,7 +1330,7 @@ const settingsBody = (version: number, replyLanguage: 'bn' | 'en') => ({
     askForReview: true,
     answerComments: true,
     followUp: 'hot',
-    productCardStyle: 'text',
+    productCardStyle: 'buttons',
   },
   handoverRules: { damagedOrWrong: true, refundsAndExchanges: true, specialRequests: false },
   returnToAiMinutes: 60,
@@ -1844,6 +1894,20 @@ fixture('POST /product-imports/:importId/start', async () => {
       () => startProductImport,
     );
   expect(await f.row('imports', foreign)).toEqual(before);
+});
+fixture('POST /product-imports/:importId/dry-run', async () => {
+  const { a, b } = await pair(),
+    foreign = await productImport(a),
+    customers = await customerImport(a);
+  // Another store's import and this store's customer import are both out of reach.
+  for (const id of [foreign, customers])
+    await hidden(
+      id === foreign ? b : a,
+      'POST',
+      (value) => `/product-imports/${value}/dry-run`,
+      id,
+      () => startProductImport,
+    );
 });
 fixture('GET /product-imports/:importId', async () => {
   const { a, b } = await pair(),

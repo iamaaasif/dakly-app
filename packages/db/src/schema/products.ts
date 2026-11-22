@@ -15,6 +15,7 @@ import {
   vector,
 } from 'drizzle-orm/pg-core';
 
+import type { ProductBulkEditChange } from '@dakly/contracts/product-bulk-edits';
 import {
   productStatuses,
   restockRequestStatuses,
@@ -242,5 +243,27 @@ export const restockRequests = pgTable(
     index('restock_requests_contact_id_idx').on(table.contactId),
     index('restock_requests_conversation_id_idx').on(table.conversationId),
     check('restock_requests_status', isOneOf(table.status, restockRequestStatuses)),
+  ],
+);
+
+// One bulk edit on the products list. Kept for 24 hours so the owner can undo it; the changes
+// hold the old and new value of every field, and stock is undone with a new movement.
+export const productBulkEdits = pgTable(
+  'product_bulk_edits',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    actorUserId: uuid('actor_user_id').references(() => users.id),
+    changes: jsonb('changes').$type<ProductBulkEditChange[]>().notNull(),
+    stockReason: text('stock_reason'),
+    createdAt: createdAt(),
+    undoUntil: timestamptz('undo_until').notNull(),
+    undoneAt: timestamptz('undone_at'),
+  },
+  (table) => [
+    index('product_bulk_edits_store_id_created_at_idx').on(table.storeId, table.createdAt),
+    index('product_bulk_edits_actor_user_id_idx').on(table.actorUserId),
   ],
 );

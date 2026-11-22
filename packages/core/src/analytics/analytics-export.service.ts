@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AnalyticsExportQuery } from '@dakly/contracts/analytics';
+import { poishaToTakaText } from '@dakly/contracts/money';
 
 import { AuditService } from '../audit/audit.service';
 import { csvCell } from '../platform/csv-cell';
@@ -78,10 +79,10 @@ export class AnalyticsExportService {
           row.sent,
           row.delivered,
           row.read,
-          taka(row.costPoisha),
+          poishaToTakaText(row.costPoisha),
           row.tapPercent,
           row.orders,
-          taka(row.revenuePoisha),
+          poishaToTakaText(row.revenuePoisha),
           row.returnPerTaka,
         ]),
       },
@@ -113,9 +114,9 @@ export class AnalyticsExportService {
           row.channels.join(' '),
           row.entered,
           row.sent,
-          taka(row.costPoisha),
+          poishaToTakaText(row.costPoisha),
           row.orders,
-          taka(row.revenuePoisha),
+          poishaToTakaText(row.revenuePoisha),
           row.orderedPercent,
           row.returnPerTaka,
         ]),
@@ -141,15 +142,15 @@ export class AnalyticsExportService {
       ],
       rows: channels.map((row) => [
         row.channel,
-        taka(row.revenuePoisha),
+        poishaToTakaText(row.revenuePoisha),
         row.orders,
         row.sharePercent,
         row.sent,
         row.deliveredPercent,
         row.readPercent,
         row.tapPercent,
-        taka(row.costPoisha),
-        row.costPerMessagePoisha === null ? null : taka(row.costPerMessagePoisha),
+        poishaToTakaText(row.costPoisha),
+        row.costPerMessagePoisha === null ? null : poishaToTakaText(row.costPerMessagePoisha),
         row.returnPerTaka,
       ]),
     };
@@ -182,12 +183,4 @@ export class AnalyticsExportService {
     };
     return { range: current, table };
   }
-}
-
-// Whole taka with two decimals from integer poisha, without going through a float.
-function taka(poisha: string): string {
-  const value = BigInt(poisha);
-  const sign = value < 0n ? '-' : '';
-  const absolute = value < 0n ? -value : value;
-  return `${sign}${absolute / 100n}.${(absolute % 100n).toString().padStart(2, '0')}`;
 }

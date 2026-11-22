@@ -33,7 +33,7 @@ export const defaultAgentAbilities = {
   askForReview: true,
   answerComments: true,
   followUp: 'hot',
-  productCardStyle: 'text',
+  productCardStyle: 'buttons',
 } satisfies AgentAbilities;
 
 export const defaultHandoverRules = {

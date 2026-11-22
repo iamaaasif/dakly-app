@@ -173,11 +173,19 @@ Today the dashboard assistant is read-only and every action opens a screen pre-f
 
 The prototype capture for this screen shows the Integrations page, so there is no product import design to match. The import dialog follows the customer import dialog (CUS-8) element by element: step bar, file drop area, column mapping, preview, duplicate choice and result counts. Evidence: `docs/design/evidence/prod-5-import/`.
 
-The Import from a CSV button sits beside Add product for members who can edit products, and opens the dialog at `/products?import=1`. Steps: Upload, Map fields, Preview, Duplicates, Results.
+The Import from Excel or CSV button sits beside Add product for members who can edit products, and opens the dialog at `/products?import=1`. Steps: Upload, Map fields, Dry run, Results.
 
+- Upload: a CSV file or the first sheet of an Excel (.xlsx) file; the browser turns the sheet into CSV before it uploads, as for customers (CUS-16).
 - Mapping: Product name and Price are required. Category, description, status, SKU, cost and on hand are optional. Up to three option columns (such as Size or Colour) are named in the dialog; columns called Size, Color or Colour are suggested.
-- Duplicates: update or skip, by SKU. The step says a stock count in the file replaces the shop's count and is recorded in the stock history, and that a product imported without a count is not tracked for stock.
+- Duplicates: update or skip, by SKU, chosen above the dry run's table. A stock count in the file replaces the shop's count and is recorded in the stock history, and a product imported without a count is not tracked for stock.
+- Dry run (PROD-14): `POST /product-imports/:importId/dry-run` reads the uploaded file with the mapping and the duplicate choice and writes nothing. It returns counts of added, changed, skipped and rejected rows and up to 300 rows, rejected first, with the file's cells and a plain problem for each rejected row (a row with no change is skipped with "Nothing to change"; a changed price shows what it was). The owner can edit any cell in the table; Check the changes writes the edits into the CSV in the browser, uploads it as a new import and runs the dry run again, so what is checked is what is imported. Confirm and import starts only the checked import. Download error report saves every rejected row as a CSV.
 - Results: added, updated, skipped and failed counts and the error report. There is no Undo (see the import rules above).
+- A blank cell never overwrites. For a product already in the shop, the file's non-blank category, description, status and price replace the stored ones, and a blank status keeps the product as it is. A file row is matched by SKU, so renaming an option value in the file keeps the variant, its id, price and stock. Rows with no SKU are added as new products.
+- A row whose option cells are all blank is a product without options, so a catalogue that mixes optioned and plain products imports in one file. Rows of one product must fill the same options.
+
+### Export products (PROD-14)
+
+The Export to Excel and Export to CSV buttons on the products list download the products the search and readiness filter show, for anyone who can view products. `GET /products/export?format=xlsx|csv&search=&readiness=` writes one row per variant with the import's columns (Name, Price, Category, Description, Status, SKU, Cost, On hand) and one column per option name, so an export edited in a spreadsheet imports again. Prices are plain taka text, the CSV starts with a byte order mark so Excel reads Bangla, and a CSV cell that starts with `=`, `+`, `-` or `@` gets a leading quote. On hand is blank for a product that does not track stock. Each download is saved in the audit log with its row count.
 
 ### How it works
 
@@ -378,3 +386,15 @@ A product cannot be archived while any of its variants appears in an order in To
 ## Open questions
 
 None.
+
+## Bulk edit (PROD-13)
+
+On the products list a person selects rows with the checkboxes (up to 100, kept while paging) and the bar offers **Edit in grid**, **Hide** and **Set category**. The grid shows price, old price, cost, stock, category and status. **Review** lists each old and new value; nothing is saved until **Apply**.
+
+- A blank cell never overwrites. Only values that differ from the product are sent, and the API ignores a value equal to the current one.
+- Cost and stock belong to a size, so the grid edits them only for a product with one size and tracked stock. A product with several sizes shows them read-only; they are edited on the product.
+- Price is read-only for a product where any size has its own price, because customers and the AI would not see the product price there. The API refuses it.
+- A stock change asks for one reason (Restock, Recount, Damage, Other) for the whole edit and writes an `adjust` movement of the difference with that reason.
+- Each apply is one transaction and stores the old and new value of every field in `product_bulk_edits`.
+- **Undo** is offered for 24 hours (`POST /products/bulk-edits/:id/undo`). A value that was changed by hand since is left alone and counted as skipped. Stock is corrected by a new `adjust` movement of the opposite difference, so orders placed since keep their effect; if the stock is reserved by then, that row is skipped.
+- Brand and "select all matching the filters" from the design wait for PROD-12 and a later task.

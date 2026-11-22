@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { FormProvider, useForm, useFormContext } from 'react-hook-form';
+import { FormProvider, useForm } from 'react-hook-form';
 
 import {
   type StartProductImportForm,
@@ -9,11 +9,9 @@ import {
   startProductImportSchema,
 } from '@dakly/contracts/product-imports';
 
-import { useStartProductImport } from '../api/start-product-import';
 import { guessProductImportMapping } from '../product-import-fields';
-import { ProductImportDuplicatesStep } from './product-import-duplicates-step';
+import { ProductImportDryRunStep } from './product-import-dry-run-step';
 import { ProductImportMappingStep } from './product-import-mapping-step';
-import { ProductImportPreviewStep } from './product-import-preview-step';
 import { ProductImportResultStep } from './product-import-result-step';
 import { ImportStepHeader } from '@/components/import-step-header';
 import { ImportUploadStep } from '@/components/import-upload-step';
@@ -25,9 +23,9 @@ const template = {
   filename: 'dakly-products-template.csv',
   csv: 'Name,Price,Category,SKU,Cost,On hand,Size\r\nCotton kurti,1200,Kurti,KURTI-M,700,10,M\r\nCotton kurti,1200,Kurti,KURTI-L,700,6,L\r\n',
 };
-const steps = ['Upload', 'Map fields', 'Preview', 'Duplicates', 'Results'] as const;
+const steps = ['Upload', 'Map fields', 'Dry run', 'Results'] as const;
 
-type Upload = { importId: string; preview: ImportFileSummary };
+type Upload = { importId: string; preview: ImportFileSummary; csv: File };
 
 export function ImportProductsDialog({ onClose }: { onClose: () => void }) {
   const client = useQueryClient();
@@ -53,12 +51,17 @@ export function ImportProductsDialog({ onClose }: { onClose: () => void }) {
           rowName="products"
           fileLabel="Product file"
           template={template}
+          excel
           onUploaded={(uploaded) => {
             form.reset({
               ...form.getValues(),
               mapping: guessProductImportMapping(uploaded.preview.header),
             });
-            setUpload(uploaded);
+            setUpload({
+              importId: uploaded.importId,
+              preview: uploaded.preview,
+              csv: uploaded.csv,
+            });
             setStep(1);
           }}
         />
@@ -68,6 +71,7 @@ export function ImportProductsDialog({ onClose }: { onClose: () => void }) {
             step={step}
             upload={upload}
             setStep={setStep}
+            replace={(replaced) => setUpload({ ...upload, ...replaced })}
             restart={() => {
               setUpload(undefined);
               setStep(0);
@@ -84,17 +88,12 @@ type ImportStepsProps = {
   step: number;
   upload: Upload;
   setStep: (step: number) => void;
+  replace: (upload: Pick<Upload, 'importId' | 'csv'>) => void;
   restart: () => void;
   onDone: () => void;
 };
 
-function ImportSteps({ step, upload, setStep, restart, onDone }: ImportStepsProps) {
-  const { handleSubmit } = useFormContext<
-    StartProductImportForm,
-    unknown,
-    StartProductImportInput
-  >();
-  const start = useStartProductImport(upload.importId);
+function ImportSteps({ step, upload, setStep, replace, restart, onDone }: ImportStepsProps) {
   if (step === 1)
     return (
       <ProductImportMappingStep
@@ -105,23 +104,13 @@ function ImportSteps({ step, upload, setStep, restart, onDone }: ImportStepsProp
     );
   if (step === 2)
     return (
-      <ProductImportPreviewStep
-        preview={upload.preview}
+      <ProductImportDryRunStep
+        importId={upload.importId}
+        csv={upload.csv}
+        onReplaced={replace}
         onBack={() => setStep(1)}
-        onNext={() => setStep(3)}
+        onStarted={() => setStep(3)}
       />
-    );
-  if (step === 3)
-    return (
-      <form
-        onSubmit={handleSubmit((input) => start.mutate(input, { onSuccess: () => setStep(4) }))}
-      >
-        <ProductImportDuplicatesStep
-          error={start.error}
-          loading={start.isPending}
-          onBack={() => setStep(2)}
-        />
-      </form>
     );
   return <ProductImportResultStep importId={upload.importId} onDone={onDone} />;
 }
