@@ -1,5 +1,6 @@
 'use client';
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
@@ -13,7 +14,10 @@ import { ChatTabs } from './chat-tabs';
 export function ChatList({ query }: { query: ChatScreenQuery }) {
   const counts = useConversationCounts();
   return (
-    <section aria-label="Chat list" className="flex min-h-0 min-w-0 flex-col">
+    <section
+      aria-label="Chat list"
+      className={cn('min-h-0 min-w-0 flex-col', query.chat ? 'hidden lg:flex' : 'flex')}
+    >
       <ChatTabs query={query} counts={counts.data} />
       <ChatSearchBar query={query} />
       <div className="shrink-0 border-b border-border p-3">
@@ -58,7 +62,7 @@ function ChatRows({ query }: { query: ChatScreenQuery }) {
     <>
       <ul className="divide-y divide-border">
         {items.map((conversation) => (
-          <ChatRow key={conversation.id} conversation={conversation} />
+          <ChatRow key={conversation.id} conversation={conversation} query={query} />
         ))}
       </ul>
       {conversations.hasNextPage ? (

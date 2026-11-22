@@ -15,11 +15,13 @@ import {
   conversationListQuerySchema,
   conversationMessageListQuerySchema,
   createConversationNoteSchema,
+  createConversationReplySchema,
   takeOverConversationSchema,
   updateConversationSchema,
   type ConversationListQuery,
   type ConversationMessageListQuery,
   type CreateConversationNoteInput,
+  type CreateConversationReplyInput,
   type TakeOverConversationInput,
   type UpdateConversationInput,
 } from '@dakly/contracts/chats';
@@ -30,11 +32,15 @@ import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { ConversationReplyService } from './conversation-reply.service';
 import { InboxService } from './inbox.service';
 
 @Controller('conversations')
 export class InboxController {
-  constructor(@Inject(InboxService) private readonly inbox: InboxService) {}
+  constructor(
+    @Inject(InboxService) private readonly inbox: InboxService,
+    @Inject(ConversationReplyService) private readonly replies: ConversationReplyService,
+  ) {}
 
   @Get()
   @RequirePermission('chats.view')
@@ -85,6 +91,24 @@ export class InboxController {
     @Body(new ZodValidationPipe(updateConversationSchema)) input: UpdateConversationInput,
   ) {
     return this.inbox.update(storeId, id, userId, input);
+  }
+
+  @Post(':conversationId/read')
+  @RequirePermission('chats.view')
+  @HttpCode(200)
+  markRead(@CurrentStore() storeId: string, @Param('conversationId', ParseUUIDPipe) id: string) {
+    return this.inbox.markRead(storeId, id);
+  }
+
+  @Post(':conversationId/replies')
+  @RequirePermission('chats.edit')
+  reply(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('conversationId', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(createConversationReplySchema)) input: CreateConversationReplyInput,
+  ) {
+    return this.replies.reply(storeId, id, userId, input);
   }
 
   @Post(':conversationId/notes')

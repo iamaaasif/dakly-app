@@ -136,6 +136,86 @@ describe('Chat list', () => {
   });
 });
 
+describe('Conversation', () => {
+  const chatId = sadia.id;
+  const inbound = {
+    id: 'm1',
+    kind: 'text',
+    direction: 'in',
+    body: 'Price koto?',
+    authorType: 'customer',
+    authorUserId: null,
+    status: 'received',
+    sourceType: 'chat',
+    createdAt: '2026-11-19T04:03:00.000000Z',
+    sentAt: null,
+  };
+  const verified = { headers: { 'x-session-context': 'verified' } };
+  const posts: { path: string; body: unknown }[] = [];
+
+  function respondToThread(windowExpiresAt: string | null) {
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) });
+        return Response.json({ messageId: 'sent' }, verified);
+      }
+      if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+      if (path.startsWith(`/api/conversations/${chatId}/messages`))
+        return Response.json({ items: [inbound], nextCursor: null }, verified);
+      if (path.startsWith(`/api/conversations/${chatId}`))
+        return Response.json({ ...sadia, unreadCount: 0, windowExpiresAt }, verified);
+      if (path.startsWith('/api/saved-replies'))
+        return Response.json(
+          {
+            items: [
+              { id: 's1', title: 'Delivery time', body: 'Dhaka te 2 din lagbe', shortcut: null },
+            ],
+          },
+          verified,
+        );
+      return ok([sadia]);
+    });
+  }
+
+  afterEach(() => {
+    posts.length = 0;
+  });
+
+  it('shows the thread with the reply window and sends a reply', async () => {
+    respondToThread(new Date(Date.now() + 22 * 3_600_000).toISOString());
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    expect(await screen.findByText('Price koto?')).toBeTruthy();
+    expect(await screen.findByText('Reply within 22 h')).toBeTruthy();
+    await userEvent.type(screen.getByLabelText('Write a reply'), 'Ji, 1300 taka');
+    await userEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.path).toBe(`/api/conversations/${chatId}/replies`);
+    expect(posts[0]!.body).toMatchObject({ body: 'Ji, 1300 taka' });
+  });
+
+  it('fills the box from a saved reply the staff member picks', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Saved replies' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Delivery time/ }));
+    expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe(
+      'Dhaka te 2 din lagbe',
+    );
+  });
+
+  it('saves an internal note and keeps the reply box off when the window is closed', async () => {
+    respondToThread(null);
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    expect(await screen.findByText('Reply window closed')).toBeTruthy();
+    expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole('tab', { name: 'Internal note' }));
+    await userEvent.type(screen.getByLabelText('Write an internal note'), 'Call at 5');
+    await userEvent.click(screen.getByRole('button', { name: 'Save note' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]!.path).toBe(`/api/conversations/${chatId}/notes`);
+  });
+});
+
 const kurtiComment: CommentResponse = {
   id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e70',
   channel: 'messenger',
