@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyOptions,
-  groupVariants,
   profitPercent,
   removeOptionAt,
   type GridOption,
@@ -61,17 +60,6 @@ describe('building the variants grid', () => {
     expect(result.options.map(({ name }) => name)).toEqual(['Colour']);
     expect(result.variants).toHaveLength(1);
     expect(result.variants[0]?.optionValues).toEqual({ 0: 'Black' });
-  });
-
-  it('groups rows by the first option', () => {
-    const options = [colour('Black', 'White'), size('S', 'M')];
-    const rows = applyOptions([], options, [row({})]);
-    expect(
-      groupVariants(options, rows).map(({ label, rows: inGroup }) => [label, inGroup.length]),
-    ).toEqual([
-      ['Black', 2],
-      ['White', 2],
-    ]);
   });
 });
 

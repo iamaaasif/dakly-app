@@ -79,7 +79,6 @@ export function ProductForm({ product, initial, onSaved, onCancel, page }: Produ
             productId={product?.id}
             actions={actions}
             serverError={serverError}
-            product={product}
           />
         ) : (
           <>
@@ -166,7 +165,6 @@ function FieldCard({ title, children }: { title: string; children: ReactNode }) 
 
 type ProductFormPageLayoutProps = {
   page: ProductFormPage;
-  product?: ProductResponse;
   productId?: string;
   actions: ReactNode;
   serverError: ReactNode;
@@ -174,7 +172,6 @@ type ProductFormPageLayoutProps = {
 
 function ProductFormPageLayout({
   page,
-  product,
   productId,
   actions,
   serverError,
@@ -199,7 +196,7 @@ function ProductFormPageLayout({
             <ProductPriceFields productId={productId} />
           </FieldCard>
           <Card>
-            <ProductVariantsCard product={product} />
+            <ProductVariantsCard />
           </Card>
           <FieldCard title="Stock settings">
             <ProductStockFields productId={productId} withWarnAt />
