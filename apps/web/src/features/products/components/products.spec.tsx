@@ -347,7 +347,7 @@ describe('Products screen', () => {
 
 describe('Product editor navigation', () => {
   it('sends Add product to the full page', async () => {
-    vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
     show();
     await screen.findByRole('table');
     await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
