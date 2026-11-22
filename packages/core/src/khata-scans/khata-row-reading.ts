@@ -30,8 +30,11 @@ const toEnglishDigits = (text: string) =>
 export function parseAmountPoisha(text: string): number | null {
   const cleaned = toEnglishDigits(text)
     .toLowerCase()
-    .replace(/৳|taka|tk\.?|টাকা|\/-|-$/g, '')
-    .replace(/[,\s]/g, '');
+    .replace(/৳|taka|tk\.?|টাকা|\/=|\/-/g, '')
+    // Pages write "name - 500" or "500 -": a dash set apart by space is a separator, not a sign.
+    .replace(/^\s*[-–—:=]+\s+/, '')
+    .replace(/[,\s]/g, '')
+    .replace(/[-–—:=.]+$/, '');
   if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
   const taka = Number(cleaned);
   if (taka <= 0 || taka > MAX_AMOUNT_TAKA) return null;
@@ -41,12 +44,17 @@ export function parseAmountPoisha(text: string): number | null {
 // Day first, as shops write it: 12/11/26, ১২-১১-২০২৬, 12.11. A page often has no year, so the
 // latest such day that is not in the future is used.
 export function parseEntryDate(text: string, today: Date): string | null {
+  return parseParts(text, today, 'day_first');
+}
+
+function parseParts(text: string, today: Date, order: 'day_first' | 'month_first'): string | null {
   const match = /^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2}|\d{4}))?$/.exec(
     toEnglishDigits(text.trim()),
   );
   if (!match) return null;
-  const day = Number(match[1]);
-  const month = Number(match[2]);
+  const [first, second] = [Number(match[1]), Number(match[2])];
+  const day = order === 'day_first' ? first : second;
+  const month = order === 'day_first' ? second : first;
   const written = match[3];
   const years =
     written === undefined
@@ -83,15 +91,18 @@ function readPhone(text: string | null): { phone: string | null; isBad: boolean 
 function readDate(text: string | null, today: Date): { entryDate: string | null; isBad: boolean } {
   const trimmed = text?.trim() ?? '';
   if (trimmed === '') return { entryDate: null, isBad: false };
-  const entryDate = parseEntryDate(trimmed, today);
-  return { entryDate, isBad: entryDate === null };
+  const dayFirst = parseEntryDate(trimmed, today);
+  if (dayFirst) return { entryDate: dayFirst, isBad: false };
+  // "৬/১৩/২৫" cannot be day first; some owners write month first. The owner checks the guess.
+  const monthFirst = parseParts(trimmed, today, 'month_first');
+  return { entryDate: monthFirst, isBad: true };
 }
 
 function readRow(
   row: KhataModelOutput['rows'][number],
   today: Date,
 ): Omit<ReadKhataRow, 'rowNumber'> | undefined {
-  const name = row.nameText.trim();
+  const name = row.nameText.trim().replace(/^[\s,.:;\-–—]+|[\s,.:;\-–—]+$/g, '');
   const amountPoisha = parseAmountPoisha(row.amountText);
   // No name or no amount is no row at all: there is nothing the owner could confirm.
   if (name === '' || amountPoisha === null) return undefined;
