@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useCallback, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useCallback, useRef, useState } from 'react';
 
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { ApiError } from '@dakly/ui/api-client';
@@ -19,6 +19,26 @@ function isAuthRequired(error: unknown) {
 
 const freshContextQuery = { queryKey: sessionContextKey, staleTime: 0 };
 
+type DiscardOptions = {
+  client: QueryClient;
+  pause: () => number;
+  setAvailable: (value: boolean) => void;
+  setGeneration: Dispatch<SetStateAction<number>>;
+};
+
+function useAccountDiscard({ client, pause, setAvailable, setGeneration }: DiscardOptions) {
+  const discard = useCallback(async () => {
+    setAvailable(false);
+    setGeneration((value) => value + 1);
+    await discardAccountCache(client);
+  }, [client, setAvailable, setGeneration]);
+  const close = useCallback(async () => {
+    pause();
+    await discard();
+  }, [pause, discard]);
+  return { discard, close };
+}
+
 export function useSessionVerification() {
   const session = useSessionContext();
   const client = useQueryClient();
@@ -30,21 +50,11 @@ export function useSessionVerification() {
   const revision = useRef(0);
   const acceptedContextTag = useRef<string | undefined>(undefined);
   const switching = useRef(false);
-  const blockedRef = useRef(true);
-  blockedRef.current = blocked;
   const pause = useCallback(() => {
     setBlocked(true);
     return ++revision.current;
   }, []);
-  const discard = useCallback(async () => {
-    setAvailable(false);
-    setGeneration((value) => value + 1);
-    await discardAccountCache(client);
-  }, [client]);
-  const close = useCallback(async () => {
-    pause();
-    await discard();
-  }, [pause, discard]);
+  const { discard, close } = useAccountDiscard({ client, pause, setAvailable, setGeneration });
   const verify = useCallback(async () => {
     if (switching.current) return;
     const current = pause();
@@ -66,16 +76,6 @@ export function useSessionVerification() {
       else setFailure('Could not verify your account and shop. Refresh to continue.');
     }
   }, [client, pause, discard]);
-  // Focus and tab switches check the context without hiding the shell; only a real change blocks it.
-  const verifyQuietly = useCallback(async () => {
-    if (switching.current || blockedRef.current) return verify();
-    try {
-      const fresh = await client.fetchQuery<SessionContext>(freshContextQuery);
-      if (fresh.contextTag !== acceptedContextTag.current) await verify();
-    } catch {
-      await verify();
-    }
-  }, [client, verify]);
   return {
     session,
     client,
@@ -88,7 +88,7 @@ export function useSessionVerification() {
     close,
     pause,
     verify,
-    verifyQuietly,
     switching,
+    acceptedContextTag,
   };
 }

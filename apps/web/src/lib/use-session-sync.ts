@@ -1,14 +1,46 @@
-import { useEffect, useRef } from 'react';
+import { type QueryClient } from '@tanstack/react-query';
+import { type RefObject, useCallback, useEffect, useRef } from 'react';
 
-export function useSessionSync({
-  close,
-  verify,
-  verifyQuietly,
-}: {
+import type { SessionContext } from '@dakly/contracts/sessions';
+
+import { sessionContextKey } from './session-context';
+
+type SessionSyncOptions = {
   close: () => Promise<void>;
   verify: () => Promise<void>;
-  verifyQuietly: () => Promise<void>;
-}) {
+  client: QueryClient;
+  switching: RefObject<boolean>;
+  blocked: boolean;
+  acceptedContextTag: RefObject<string | undefined>;
+};
+
+function useQuietVerify({
+  verify,
+  client,
+  switching,
+  blocked,
+  acceptedContextTag,
+}: SessionSyncOptions) {
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
+  // Focus and tab switches check the context without hiding the shell; only a real change blocks it.
+  return useCallback(async () => {
+    if (switching.current || blockedRef.current) return verify();
+    try {
+      const fresh = await client.fetchQuery<SessionContext>({
+        queryKey: sessionContextKey,
+        staleTime: 0,
+      });
+      if (fresh.contextTag !== acceptedContextTag.current) await verify();
+    } catch {
+      await verify();
+    }
+  }, [verify, client, switching, acceptedContextTag]);
+}
+
+export function useSessionSync(options: SessionSyncOptions) {
+  const { close, verify } = options;
+  const verifyQuietly = useQuietVerify(options);
   const channel = useRef<BroadcastChannel | null>(null);
   const changing = useRef(false);
   useEffect(() => {
