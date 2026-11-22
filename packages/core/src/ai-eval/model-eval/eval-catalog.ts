@@ -167,10 +167,15 @@ export const evalProducts: EvalProduct[] = [
   }),
 ];
 
-export const deliveryZones = [
-  { name: 'Dhaka', chargeTaka: 60, isDefault: true },
-  { name: 'Outside Dhaka', chargeTaka: 120, isDefault: false },
-];
+// Only Dhaka is a zone. The outside-Dhaka charge and days are in the shop's policy file, as in a
+// shop that has not set up its other zones, so the model has to read the knowledge passage.
+export const deliveryZones = [{ name: 'Dhaka', chargeTaka: 60, isDefault: true }];
+
+export const deliveryPolicyPassage = {
+  itemId: 'eval-delivery-policy',
+  content:
+    'Delivery inside Dhaka is ৳60 and takes 1-2 days. Outside Dhaka is ৳120 and takes 3-5 days.',
+};
 
 // Matches when any word of the query is in a product's name, alias or description. The shop's
 // real search is an exact substring match until AI-10 adds fuzzy search; this stands in for it, so

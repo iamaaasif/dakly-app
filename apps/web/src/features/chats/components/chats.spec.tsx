@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import type { CommentResponse } from '@dakly/contracts/comments';
 import type { SessionContext } from '@dakly/contracts/sessions';
+import { ToastProvider } from '@dakly/ui/toast';
 
 import { chatScreenQuerySchema } from '../chat-filters';
 import { ChatsScreen } from './chats-screen';
@@ -36,23 +37,44 @@ const defaults = chatScreenQuerySchema.parse({});
 let paths: string[] = [];
 
 let connectionKinds: string[] = [];
+let connectionsForbidden = false;
 
 function respond(list: () => Response) {
   vi.stubGlobal('fetch', async (path: string) => {
     paths.push(path);
+    if (path.startsWith('/api/channel-connections') && connectionsForbidden)
+      return Response.json(
+        { error: { code: 'FORBIDDEN', message: 'No access' } },
+        { status: 403, headers: { 'x-session-context': 'verified' } },
+      );
     if (path.startsWith('/api/channel-connections'))
       return Response.json(
         { items: connectionKinds.map((kind) => ({ kind, status: 'active' })), nextCursor: null },
         { headers: { 'x-session-context': 'verified' } },
       );
-    if (path.startsWith('/api/conversations/counts'))
-      return Response.json(counts, { headers: { 'x-session-context': 'verified' } });
-    return list();
+    return sidebarResponse(path) ?? list();
   });
 }
 
 const ok = (items: ConversationResponse[]) =>
   Response.json({ items, nextCursor: null }, { headers: { 'x-session-context': 'verified' } });
+
+let pastOrders: unknown[] = [];
+let summary: unknown = { aiRepliesToday: 49, chatOrdersToday: { count: 7, totalPoisha: 2478000 } };
+let autoReplyOn = true;
+
+// The answers every chats screen asks for besides the chat itself.
+function sidebarResponse(path: string) {
+  const verified = { headers: { 'x-session-context': 'verified' } };
+  if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+  if (path.startsWith('/api/conversations/summary')) return Response.json(summary, verified);
+  if (path.startsWith('/api/conversations/assignees')) return Response.json([], verified);
+  if (path.startsWith('/api/ai-agent/settings'))
+    return Response.json({ version: 1, isAutoReplyOn: autoReplyOn }, verified);
+  if (path.startsWith('/api/orders?buyerContactId'))
+    return Response.json({ items: pastOrders }, verified);
+  return undefined;
+}
 
 function show(query = defaults, access: Partial<SessionContext['currentStore']> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -97,7 +119,9 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
   client.setQueryData(sessionContextKey, context);
   return render(<ChatsScreen query={query} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
     ),
   });
 }
@@ -107,6 +131,92 @@ afterEach(() => {
   vi.unstubAllGlobals();
   paths = [];
   connectionKinds = [];
+  connectionsForbidden = false;
+  pastOrders = [];
+  autoReplyOn = true;
+  summary = { aiRepliesToday: 49, chatOrdersToday: { count: 7, totalPoisha: 2478000 } };
+});
+
+describe('Header pills', () => {
+  it('shows how many chats need you, the AI auto-reply state and the orders from chats today', async () => {
+    respond(() => ok([sadia]));
+    show();
+    expect(await screen.findByText('1 need you')).toBeTruthy();
+    expect(await screen.findByText('AI auto-reply on · 49 replies today')).toBeTruthy();
+    expect(await screen.findByText('7 orders from chats today · ৳24,780')).toBeTruthy();
+  });
+
+  it('says the auto-reply is off and leaves out the order figures a member may not see', async () => {
+    autoReplyOn = false;
+    summary = { aiRepliesToday: 0, chatOrdersToday: null };
+    respond(() => ok([sadia]));
+    show();
+    expect(await screen.findByText('AI auto-reply off · 0 replies today')).toBeTruthy();
+    expect(screen.queryByText(/orders from chats today/)).toBeNull();
+  });
+});
+
+describe('Bulk select', () => {
+  const verified = { headers: { 'x-session-context': 'verified' } };
+  const rumana = { ...sadia, id: 'chat-rumana', contactName: 'Rumana Akter' };
+  const patches: { path: string; body: unknown }[] = [];
+
+  function respondToList(failFor?: string) {
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        patches.push({ path, body: JSON.parse(String(init.body)) });
+        if (failFor && path.endsWith(failFor))
+          return Response.json({ message: 'No' }, { status: 409, ...verified });
+        return Response.json(sadia, verified);
+      }
+      return (
+        sidebarResponse(path) ??
+        (path.startsWith('/api/conversations/assignees')
+          ? Response.json([{ userId: 'rina', name: 'Rina' }], verified)
+          : ok([sadia, rumana]))
+      );
+    });
+  }
+
+  afterEach(() => {
+    patches.length = 0;
+  });
+
+  it('marks the ticked chats done and leaves select mode', async () => {
+    respondToList();
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+    expect(screen.getByText('0 selected')).toBeTruthy();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Sadia Islam' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Rumana Akter' }));
+    expect(screen.getByText('2 selected')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Mark done' }));
+    await waitFor(() => expect(patches).toHaveLength(2));
+    expect(patches.map(({ path }) => path)).toEqual([
+      `/api/conversations/${sadia.id}`,
+      '/api/conversations/chat-rumana',
+    ]);
+    expect(patches[0]!.body).toEqual({ status: 'done' });
+    await waitFor(() => expect(screen.queryByText('2 selected')).toBeNull());
+  });
+
+  it('keeps the chats selected and says so when some could not change', async () => {
+    respondToList('chat-rumana');
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Sadia Islam' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Rumana Akter' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mark done' }));
+    expect(await screen.findByText(/1 of 2 chats could not be changed/)).toBeTruthy();
+    expect(screen.getByText('2 selected')).toBeTruthy();
+  });
+
+  it('offers no Select button to a member who can only read chats', async () => {
+    respondToList();
+    show(defaults, { canEditChats: false });
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+  });
 });
 
 describe('Chat list', () => {
@@ -140,6 +250,15 @@ describe('Chat list', () => {
     expect(screen.getByRole('link', { name: 'WhatsApp' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Comments' })).toBeTruthy();
     expect(screen.queryByRole('link', { name: 'Instagram' })).toBeNull();
+  });
+
+  it('shows every channel to staff who cannot read the channel connections', async () => {
+    connectionsForbidden = true;
+    respond(() => ok([]));
+    show();
+    expect(await screen.findByRole('link', { name: 'Instagram' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'WhatsApp' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Comments' })).toBeTruthy();
   });
 
   it('hides the channel filter when only one channel is connected', async () => {
@@ -189,8 +308,8 @@ describe('Conversation', () => {
         posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) });
         return Response.json({ messageId: 'sent' }, verified);
       }
-      if (path.startsWith('/api/conversations/assignees')) return Response.json([], verified);
-      if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+      const sidebar = sidebarResponse(path);
+      if (sidebar) return sidebar;
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
         return Response.json({ items: [inbound], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
@@ -293,6 +412,9 @@ describe('Conversation actions', () => {
       method: 'POST',
       path: `/api/conversations/${chatId}/take-over`,
     });
+    expect(
+      await screen.findByText("You're handling this chat. Dakly AI paused here."),
+    ).toBeTruthy();
   });
 
   it('hands a chat back to the AI', async () => {
@@ -301,6 +423,7 @@ describe('Conversation actions', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Hand back to Dakly AI' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.path).toBe(`/api/conversations/${chatId}/return-to-ai`);
+    expect(await screen.findByText('Dakly AI is handling this chat again.')).toBeTruthy();
   });
 
   it('marks a chat done, and offers Reopen once it is', async () => {
@@ -324,17 +447,6 @@ describe('Conversation actions', () => {
     expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
   });
 });
-
-let pastOrders: unknown[] = [];
-
-function sidebarResponse(path: string) {
-  const verified = { headers: { 'x-session-context': 'verified' } };
-  if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
-  if (path.startsWith('/api/orders?buyerContactId'))
-    return Response.json({ items: pastOrders }, verified);
-  if (path.startsWith('/api/conversations/assignees')) return Response.json([], verified);
-  return undefined;
-}
 
 describe('Customer panel', () => {
   const chatId = sadia.id;

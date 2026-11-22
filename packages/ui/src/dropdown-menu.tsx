@@ -23,7 +23,7 @@ export function DropdownMenuContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          'z-50 min-w-40 rounded-lg border border-border bg-surface p-1 text-text shadow-overlay',
+          'motion-popover z-50 min-w-40 rounded-lg border border-border bg-surface p-1 text-text shadow-overlay',
           className,
         )}
       />

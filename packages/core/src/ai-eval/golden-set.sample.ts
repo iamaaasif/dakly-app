@@ -7,6 +7,10 @@ import {
 } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 import { memoryGoldenCases, memoryRecordedOutcomes } from './golden-set.memory';
+import {
+  stockDeliveryGoldenCases,
+  stockDeliveryRecordedOutcomes,
+} from './golden-set.stock-delivery';
 
 // A small starter set. The 200 anonymised beta chats replace it at M7.
 export const sampleGoldenCases: GoldenCase[] = [
@@ -72,6 +76,7 @@ export const activeGoldenCases = [
   ...attackGoldenCases,
   ...benignGoldenCases,
   ...memoryGoldenCases,
+  ...stockDeliveryGoldenCases,
 ].filter((golden) => !golden.dependsOn || !pendingTasks.includes(golden.dependsOn));
 
 export const allRecordedOutcomes = {
@@ -80,4 +85,5 @@ export const allRecordedOutcomes = {
   ...attackRecordedOutcomes,
   ...benignRecordedOutcomes,
   ...memoryRecordedOutcomes,
+  ...stockDeliveryRecordedOutcomes,
 };

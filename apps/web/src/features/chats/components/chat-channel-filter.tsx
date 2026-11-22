@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useChatChannels } from '../api/chat-channels';
 import {
   chatChannelLabels,
+  chatScreenChannels,
   connectedScreenChannels,
   chatsHref,
   type ChatScreenQuery,
@@ -10,7 +11,10 @@ import {
 
 export function ChatChannelFilter({ query }: { query: ChatScreenQuery }) {
   const connections = useChatChannels();
-  const connected = connectedScreenChannels(connections.data?.items ?? []);
+  // Chat staff without settings access cannot read the connections, so they see every channel.
+  const connected = connections.isError
+    ? chatScreenChannels
+    : connectedScreenChannels(connections.data?.items ?? []);
   // The open channel stays listed so a link to it can still be cleared.
   const channels =
     query.channel && !connected.includes(query.channel) ? [...connected, query.channel] : connected;

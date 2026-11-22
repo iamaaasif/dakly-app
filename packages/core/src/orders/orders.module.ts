@@ -10,6 +10,7 @@ import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
 import { BuyerOrdersRepository } from './buyer-orders.repository';
 import { BuyerOrdersService } from './buyer-orders.service';
+import { ChatOrderTotalsRepository } from './chat-order-totals.repository';
 import { ChatOrdersService } from './chat-orders.service';
 import { KhataSalesRepository } from './khata-sales.repository';
 import { KhataSalesService } from './khata-sales.service';
@@ -28,6 +29,7 @@ import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
 import { OrderSetupRepository } from './order-setup.repository';
 import { OrderSetupService } from './order-setup.service';
+import { OrderStageCountsService } from './order-stage-counts.service';
 import { OrdersController } from './orders.controller';
 import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
@@ -53,10 +55,12 @@ import { OrdersService } from './orders.service';
   providers: [
     BuyerOrdersRepository,
     BuyerOrdersService,
+    ChatOrderTotalsRepository,
     ChatOrdersService,
     KhataSalesRepository,
     KhataSalesService,
     OrdersRepository,
+    OrderStageCountsService,
     OrdersService,
     OrderAdvancesService,
     OrderSetupRepository,
@@ -75,6 +79,7 @@ import { OrdersService } from './orders.service';
     OrderAdvancesService,
     ChatOrdersService,
     KhataSalesService,
+    OrderStageCountsService,
     OrdersService,
     OrderSetupService,
     OrderReportingService,

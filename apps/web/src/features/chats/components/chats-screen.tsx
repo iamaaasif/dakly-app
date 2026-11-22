@@ -7,6 +7,7 @@ import { buttonVariants } from '@dakly/ui/button';
 
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
+import { ChatHeaderPills } from './chat-header-pills';
 import { ChatList } from './chat-list';
 import { CommentsView } from './comments-view';
 import { ConversationPanel } from './conversation-panel';
@@ -16,21 +17,24 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
   const withoutAgent = { ...query, agent: undefined, feedback: undefined };
   return (
     <main className="flex h-[calc(100dvh-9.25rem)] min-h-[32rem] flex-col gap-4 p-4 md:h-[calc(100dvh-4.25rem)] md:p-8">
-      <header className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-        <div>
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <div className="max-w-xs">
           <h1 className="text-xl font-bold">Chats</h1>
           <p className="text-base text-text-muted">
             Messenger, WhatsApp, Instagram and post comments in one place. Turn each chat into an
             order.
           </p>
         </div>
-        <Link
-          href={chatsHref({ ...query, agent: 'settings' })}
-          className={buttonVariants({ variant: 'secondary' })}
-        >
-          <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />
-          AI agent
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <ChatHeaderPills />
+          <Link
+            href={chatsHref({ ...query, agent: 'settings' })}
+            className={buttonVariants({ variant: 'secondary' })}
+          >
+            <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />
+            AI agent
+          </Link>
+        </div>
       </header>
       <div
         data-chat={query.chat ? 'open' : undefined}

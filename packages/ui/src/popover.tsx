@@ -20,7 +20,7 @@ export function PopoverContent({
         sideOffset={sideOffset}
         align={align}
         className={cn(
-          'z-50 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-surface p-3 shadow-overlay',
+          'motion-popover z-50 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-surface p-3 shadow-overlay',
           className,
         )}
         {...props}

@@ -78,4 +78,189 @@
     --text-2xl--line-height: 1.5;
     line-height: 1.5;
   }
+
+  /* Controls answer the pointer at once; disabled ones say they cannot be used. */
+  button,
+  summary,
+  select,
+  label[for],
+  [role='button'],
+  [role='tab'],
+  [role='menuitem'],
+  [role='option'],
+  [role='checkbox'],
+  [role='switch'],
+  a[href] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  [aria-disabled='true'],
+  [data-disabled] {
+    cursor: not-allowed;
+  }
+
+  button,
+  a[href],
+  input,
+  select,
+  textarea,
+  [role='tab'],
+  [role='menuitem'],
+  [role='option'],
+  [role='checkbox'],
+  [role='switch'] {
+    transition-property: color, background-color, border-color, opacity, box-shadow;
+    transition-duration: var(--motion-duration);
+    transition-timing-function: var(--motion-ease);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+}
+
+:root {
+  --motion-duration: 150ms;
+  --motion-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes motion-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+  }
+}
+
+@keyframes motion-pop-out {
+  to {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+  }
+}
+
+@keyframes motion-slide-in-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes motion-slide-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes motion-slide-in-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes motion-slide-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@layer components {
+  /* Radix keeps a closing overlay mounted until its exit animation ends. */
+  .motion-overlay[data-state='open'] {
+    animation: motion-fade-in 200ms var(--motion-ease);
+  }
+  .motion-overlay[data-state='closed'] {
+    animation: motion-fade-out 150ms var(--motion-ease) forwards;
+  }
+
+  .motion-modal[data-state='open'] {
+    animation: motion-pop-in 200ms var(--motion-ease);
+  }
+  .motion-modal[data-state='closed'] {
+    animation: motion-pop-out 150ms var(--motion-ease) forwards;
+  }
+
+  .motion-drawer-right[data-state='open'] {
+    animation: motion-slide-in-right 250ms var(--motion-ease);
+  }
+  .motion-drawer-right[data-state='closed'] {
+    animation: motion-slide-out-right 200ms var(--motion-ease) forwards;
+  }
+  .motion-drawer-left[data-state='open'] {
+    animation: motion-slide-in-left 250ms var(--motion-ease);
+  }
+  .motion-drawer-left[data-state='closed'] {
+    animation: motion-slide-out-left 200ms var(--motion-ease) forwards;
+  }
+
+  .motion-popover[data-state='open'],
+  .motion-toast[data-state='open'] {
+    animation: motion-fade-in var(--motion-duration) var(--motion-ease);
+  }
+  .motion-popover[data-state='closed'],
+  .motion-toast[data-state='closed'] {
+    animation: motion-fade-out 100ms var(--motion-ease) forwards;
+  }
+
+  /* The native dialog is not unmounted on close, so it fades with transitions instead. */
+  dialog.motion-dialog {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+    transition:
+      opacity 150ms var(--motion-ease),
+      transform 150ms var(--motion-ease),
+      display 150ms allow-discrete,
+      overlay 150ms allow-discrete;
+  }
+  dialog.motion-dialog[open] {
+    opacity: 1;
+    transform: none;
+    transition-duration: 200ms;
+  }
+  @starting-style {
+    dialog.motion-dialog[open] {
+      opacity: 0;
+      transform: translateY(0.5rem) scale(0.98);
+    }
+  }
+  dialog.motion-dialog::backdrop {
+    opacity: 0;
+    transition:
+      opacity 150ms var(--motion-ease),
+      display 150ms allow-discrete,
+      overlay 150ms allow-discrete;
+  }
+  dialog.motion-dialog[open]::backdrop {
+    opacity: 1;
+  }
+  @starting-style {
+    dialog.motion-dialog[open]::backdrop {
+      opacity: 0;
+    }
+  }
+}
+
+/* Reduced motion keeps the state change and drops the movement. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

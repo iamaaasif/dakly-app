@@ -3,6 +3,8 @@ import Link from 'next/link';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Badge } from '@dakly/ui/badge';
+import { Checkbox } from '@dakly/ui/checkbox';
+import { cn } from '@dakly/ui/cn';
 
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { formatDate, formatTime } from '@/lib/format-date';
@@ -15,38 +17,76 @@ const channelIcons: Record<ConversationResponse['channel'], { icon: LucideIcon; 
   whatsapp: { icon: MessageCircle, label: 'WhatsApp' },
 };
 
-type ChatRowProps = { conversation: ConversationResponse; query: ChatScreenQuery };
+type ChatRowProps = {
+  conversation: ConversationResponse;
+  query: ChatScreenQuery;
+  // Set while picking chats for a bulk action: the row then ticks instead of opening.
+  selection?: { selected: boolean; onToggle: () => void };
+};
 
-export function ChatRow({ conversation, query }: ChatRowProps) {
+const rowClasses = 'flex gap-3 border-l-4 border-transparent p-3 hover:bg-surface-muted';
+
+export function ChatRow({ conversation, query, selection }: ChatRowProps) {
   const name = conversation.contactName ?? 'No name';
+  const content = <ChatRowContent conversation={conversation} name={name} />;
+  if (selection)
+    return (
+      <li>
+        <label className={cn(rowClasses, 'cursor-pointer items-center')}>
+          <Checkbox
+            aria-label={`Select ${name}`}
+            checked={selection.selected}
+            onCheckedChange={selection.onToggle}
+          />
+          {content}
+        </label>
+      </li>
+    );
   return (
     <li>
       <Link
         href={chatsHref({ ...query, chat: conversation.id })}
         aria-current={query.chat === conversation.id ? 'true' : undefined}
-        className="flex gap-3 border-l-4 border-transparent p-3 hover:bg-surface-muted aria-[current=true]:border-action aria-[current=true]:bg-primary-soft"
+        className={cn(
+          rowClasses,
+          'aria-[current=true]:border-action aria-[current=true]:bg-primary-soft',
+        )}
       >
-        <Avatar name={name} channel={conversation.channel} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="truncate font-semibold">{name}</p>
-            {conversation.lastMessageAt ? (
-              <time
-                dateTime={conversation.lastMessageAt}
-                className="shrink-0 text-sm text-text-muted"
-              >
-                <LastActivity value={conversation.lastMessageAt} />
-              </time>
-            ) : null}
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-text-muted">{conversation.lastMessagePreview ?? ''}</p>
-            <UnreadCount count={conversation.unreadCount} />
-          </div>
-          <ChatRowBadges conversation={conversation} />
-        </div>
+        {content}
       </Link>
     </li>
+  );
+}
+
+function ChatRowContent({
+  conversation,
+  name,
+}: {
+  conversation: ConversationResponse;
+  name: string;
+}) {
+  return (
+    <>
+      <Avatar name={name} channel={conversation.channel} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="truncate font-semibold">{name}</p>
+          {conversation.lastMessageAt ? (
+            <time
+              dateTime={conversation.lastMessageAt}
+              className="shrink-0 text-sm text-text-muted"
+            >
+              <LastActivity value={conversation.lastMessageAt} />
+            </time>
+          ) : null}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="truncate text-text-muted">{conversation.lastMessagePreview ?? ''}</p>
+          <UnreadCount count={conversation.unreadCount} />
+        </div>
+        <ChatRowBadges conversation={conversation} />
+      </div>
+    </>
   );
 }
 

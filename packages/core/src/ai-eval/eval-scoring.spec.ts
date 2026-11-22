@@ -13,6 +13,7 @@ import {
   sampleGoldenCases,
   sampleRecordedOutcomes,
 } from './golden-set.sample';
+import { stockDeliveryGoldenCases } from './golden-set.stock-delivery';
 
 describe('scoreEval', () => {
   it('passes the saved sample run', () => {
@@ -111,6 +112,7 @@ describe('Bangla and Banglish set', () => {
     ...attackGoldenCases,
     ...benignGoldenCases,
     ...memoryGoldenCases,
+    ...stockDeliveryGoldenCases,
   ];
 
   it('passes the saved run with every case switched on', () => {
