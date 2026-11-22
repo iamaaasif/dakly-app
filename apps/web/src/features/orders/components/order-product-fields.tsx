@@ -10,7 +10,7 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 
-import { useOrderCatalogue } from '../api/order-catalogue';
+import { useOrderCatalogue } from '@/lib/order-entry/order-catalogue';
 
 export type VariantChoice = {
   productId?: string;
