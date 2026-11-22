@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import type { CommentResponse } from '@dakly/contracts/comments';
 import type { SessionContext } from '@dakly/contracts/sessions';
+import { ToastProvider } from '@dakly/ui/toast';
 
 import { chatScreenQuerySchema } from '../chat-filters';
 import { ChatsScreen } from './chats-screen';
@@ -105,7 +106,9 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
   client.setQueryData(sessionContextKey, context);
   return render(<ChatsScreen query={query} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
     ),
   });
 }
@@ -364,6 +367,9 @@ describe('Conversation actions', () => {
       method: 'POST',
       path: `/api/conversations/${chatId}/take-over`,
     });
+    expect(
+      await screen.findByText("You're handling this chat. Dakly AI paused here."),
+    ).toBeTruthy();
   });
 
   it('hands a chat back to the AI', async () => {
@@ -372,6 +378,7 @@ describe('Conversation actions', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Hand back to Dakly AI' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.path).toBe(`/api/conversations/${chatId}/return-to-ai`);
+    expect(await screen.findByText('Dakly AI is handling this chat again.')).toBeTruthy();
   });
 
   it('marks a chat done, and offers Reopen once it is', async () => {
