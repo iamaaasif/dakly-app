@@ -15,7 +15,7 @@ export class ChatOrderTotalsRepository {
       tx
         .select({
           count: count(),
-          totalPoisha: sql<string>`coalesce(sum(${orders.itemsSubtotalPoisha} - ${orders.orderDiscountPoisha} + ${orders.deliveryChargePoisha}), 0)::text`,
+          totalPoisha: sql<string>`coalesce(sum(coalesce(${orders.deliveredItemsSubtotalPoisha}, ${orders.itemsSubtotalPoisha}) - coalesce(${orders.deliveredOrderDiscountPoisha}, ${orders.orderDiscountPoisha}) + ${orders.deliveryChargePoisha}), 0)::text`,
         })
         .from(orders)
         .where(

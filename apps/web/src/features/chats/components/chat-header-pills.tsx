@@ -1,4 +1,7 @@
 'use client';
+import { ShoppingBag, Sparkles, TriangleAlert, type LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+
 import { formatCount, formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
 
@@ -16,25 +19,25 @@ export function ChatHeaderPills() {
     <ul className="flex flex-wrap items-center gap-2">
       {counts.data ? (
         <li>
-          <Badge variant={counts.data.needsYou > 0 ? 'warning' : 'neutral'}>
+          <Pill variant={counts.data.needsYou > 0 ? 'warning' : 'neutral'} icon={TriangleAlert}>
             {formatCount(counts.data.needsYou)} need you
-          </Badge>
+          </Pill>
         </li>
       ) : null}
       {settings.data ? (
         <li>
-          <Badge variant={settings.data.isAutoReplyOn ? 'success' : 'neutral'}>
+          <Pill variant={settings.data.isAutoReplyOn ? 'success' : 'neutral'} icon={Sparkles}>
             {settings.data.isAutoReplyOn ? 'AI auto-reply on' : 'AI auto-reply off'}
             {summary.data ? ` · ${repliesToday(summary.data.aiRepliesToday)}` : ''}
-          </Badge>
+          </Pill>
         </li>
       ) : null}
       {orders ? (
         <li>
-          <Badge variant="success">
+          <Pill variant="success" icon={ShoppingBag}>
             {formatCount(orders.count)} {orders.count === 1 ? 'order' : 'orders'} from chats today ·{' '}
             {formatMoney(orders.totalPoisha)}
-          </Badge>
+          </Pill>
         </li>
       ) : null}
     </ul>
@@ -43,4 +46,22 @@ export function ChatHeaderPills() {
 
 function repliesToday(count: number) {
   return `${formatCount(count)} ${count === 1 ? 'reply' : 'replies'} today`;
+}
+
+// The same height as the AI agent button beside it, with body-size text.
+function Pill({
+  variant,
+  icon: Icon,
+  children,
+}: {
+  variant: 'warning' | 'success' | 'neutral';
+  icon: LucideIcon;
+  children: ReactNode;
+}) {
+  return (
+    <Badge variant={variant} className="min-h-10 gap-2 rounded-full px-3 py-2 text-base">
+      <Icon aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0" />
+      <span>{children}</span>
+    </Badge>
+  );
 }

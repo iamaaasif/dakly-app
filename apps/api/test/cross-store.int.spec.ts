@@ -3980,11 +3980,19 @@ fixture('GET /conversations/summary', async () => {
         [randomUUID(), shop.id, number, shop.owner.phone],
       );
   }
+  // A partly delivered order counts what was delivered, like the totals shown on orders.
+  await f.admin.pool.query(
+    `insert into orders (id,store_id,number,source,created_by_type,recipient_name,
+       recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,
+       delivered_items_subtotal_poisha,cod_amount_poisha)
+     values($1,$2,1002,'messenger','user','রিনা',$3,'ধানমন্ডি','Dhaka',9000,6000,9000)`,
+    [randomUUID(), b.id, b.owner.phone],
+  );
   expect((await f.request(b.owner, 'GET', '/conversations/summary')).statusCode).toBe(403);
   await enableChats(b);
   expect((await success(b, 'GET', '/conversations/summary', 200)).json()).toEqual({
     aiRepliesToday: 1,
-    chatOrdersToday: { count: 1, totalPoisha: 9000 },
+    chatOrdersToday: { count: 2, totalPoisha: 15000 },
   });
 });
 

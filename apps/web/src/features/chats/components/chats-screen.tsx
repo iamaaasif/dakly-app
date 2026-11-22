@@ -17,8 +17,8 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
   const withoutAgent = { ...query, agent: undefined, feedback: undefined };
   return (
     <main className="flex h-[calc(100dvh-9.25rem)] min-h-[32rem] flex-col gap-4 p-4 md:h-[calc(100dvh-4.25rem)] md:p-8">
-      <header className="flex shrink-0 flex-wrap items-start justify-between gap-3">
-        <div>
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+        <div className="max-w-xs">
           <h1 className="text-xl font-bold">Chats</h1>
           <p className="text-base text-text-muted">
             Messenger, WhatsApp, Instagram and post comments in one place. Turn each chat into an
