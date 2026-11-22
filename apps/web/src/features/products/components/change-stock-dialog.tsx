@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
@@ -10,7 +11,12 @@ import { StockAdjustmentForm } from './stock-adjustment-form';
 type ChangeStockDialogProps = { product: ProductResponse; onClose: () => void };
 
 // A product with one variant goes straight to the form; with several, the seller picks the variant first.
-export function ChangeStockDialog({ product, onClose }: ChangeStockDialogProps) {
+export function ChangeStockDialog(props: ChangeStockDialogProps) {
+  // The page opens this from inside the product form; a portal keeps its form out of that form.
+  return createPortal(<ChangeStockContent {...props} />, document.body);
+}
+
+function ChangeStockContent({ product, onClose }: ChangeStockDialogProps) {
   const [variantId, setVariantId] = useState(
     product.variants.length === 1 ? product.variants[0]!.id : undefined,
   );

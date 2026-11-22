@@ -55,7 +55,7 @@ export function EditProductPage({ productId }: { productId: string }) {
   // After a save the form starts again from what the server holds, so new rows have their ids.
   return (
     <LoadedProductPage
-      key={`${data.id}:${saves}`}
+      key={`${data.id}:${saves}:${data.variants.map((variant) => variant.onHand).join(',')}`}
       product={data}
       onSaved={async () => {
         await refetch();

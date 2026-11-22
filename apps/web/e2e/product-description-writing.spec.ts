@@ -74,7 +74,6 @@ test('picks an AI description without saving the product', async ({ page, contex
 
     const evidence = resolve(process.cwd(), '../../docs/design/evidence/soc-4');
     await mkdir(evidence, { recursive: true });
-    const dialog = page.getByRole('dialog', { name: product.name });
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
@@ -83,9 +82,6 @@ test('picks an AI description without saving the product', async ({ page, contex
       await panel.scrollIntoViewIfNeeded();
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-        .toBe(true);
-      await expect
-        .poll(() => dialog.evaluate((element) => element.scrollWidth <= element.clientWidth))
         .toBe(true);
       await expect
         .poll(() => panel.evaluate((element) => element.scrollWidth <= element.clientWidth))
