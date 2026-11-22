@@ -1,4 +1,5 @@
-import { StickyNote } from 'lucide-react';
+import { Check, Copy, StickyNote } from 'lucide-react';
+import { useState } from 'react';
 
 import type { ConversationMessageResponse } from '@dakly/contracts/chats';
 import { Badge } from '@dakly/ui/badge';
@@ -28,7 +29,9 @@ const statusLabels: Record<ConversationMessageResponse['status'], string> = {
 
 function bubbleStyle({ kind, direction }: ConversationMessageResponse) {
   if (kind === 'note') return 'border border-warning bg-warning-soft text-text';
-  return direction === 'out' ? 'bg-primary text-on-primary' : 'bg-surface-muted text-text';
+  return direction === 'out'
+    ? 'bg-primary text-on-primary'
+    : 'border border-border bg-surface text-text';
 }
 
 export function MessageBubble({ message }: { message: ConversationMessageResponse }) {
@@ -39,7 +42,7 @@ export function MessageBubble({ message }: { message: ConversationMessageRespons
     <li className={cn('flex flex-col gap-1', outgoing ? 'items-end' : 'items-start')}>
       <div
         className={cn(
-          'rounded-2xl max-w-[85%] px-4 py-2 text-base break-words whitespace-pre-wrap',
+          'max-w-[85%] rounded-xl px-4 py-2 text-base break-words whitespace-pre-wrap',
           bubbleStyle(message),
         )}
       >
@@ -63,6 +66,27 @@ function MessageMeta({ message }: { message: ConversationMessageResponse }) {
       {message.authorType === 'ai' ? <Badge variant="ai">AI</Badge> : null}
       <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
       {delivery ? <span>{statusLabels[message.status]}</span> : null}
+      {message.body ? <CopyMessageButton body={message.body} /> : null}
     </div>
+  );
+}
+
+function CopyMessageButton({ body }: { body: string }) {
+  const [copied, setCopied] = useState(false);
+  const Icon = copied ? Check : Copy;
+  return (
+    <button
+      type="button"
+      aria-label="Copy message"
+      className="inline-flex size-6 items-center justify-center rounded-sm hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
+      onClick={() => {
+        void navigator.clipboard.writeText(body).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+    >
+      <Icon aria-hidden="true" size={14} strokeWidth={1.75} />
+    </button>
   );
 }
