@@ -155,4 +155,3 @@ export function profitPercent(sellingPrice: string | undefined, cost: string | u
 export function rowKey(variant: GridVariant): string {
   return variant.id ?? `new:${JSON.stringify(variant.optionValues)}`;
 }
-

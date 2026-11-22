@@ -183,9 +183,12 @@ function ProductFormPageLayout({
           ←
         </Link>
         <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-text">{page.title}</h1>
-        {actions}
+        {/* On a phone the save buttons sit in a bar at the bottom so the title keeps its room. */}
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-4 py-3 md:static md:z-auto md:border-0 md:bg-transparent md:p-0">
+          {actions}
+        </div>
       </div>
-      <div className="grid gap-6 px-4 py-6 md:px-8 lg:grid-cols-[2fr_1fr]">
+      <div className="grid gap-6 px-4 pt-6 pb-24 md:px-8 md:pb-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-4">
           <Card>{page.photos}</Card>
           <FieldCard title="Basics">
