@@ -1,16 +1,28 @@
 import Link from 'next/link';
 
+import { useChatChannels } from '../api/chat-channels';
 import {
   chatChannelLabels,
   chatScreenChannels,
+  connectedScreenChannels,
   chatsHref,
   type ChatScreenQuery,
 } from '../chat-filters';
 
 export function ChatChannelFilter({ query }: { query: ChatScreenQuery }) {
+  const connections = useChatChannels();
+  // Chat staff without settings access cannot read the connections, so they see every channel.
+  const connected = connections.isError
+    ? chatScreenChannels
+    : connectedScreenChannels(connections.data?.items ?? []);
+  // The open channel stays listed so a link to it can still be cleared.
+  const channels =
+    query.channel && !connected.includes(query.channel) ? [...connected, query.channel] : connected;
+  // One channel means nothing to choose between.
+  if (channels.length < 2) return null;
   return (
     <nav aria-label="Channel" className="flex gap-2 overflow-x-auto">
-      {[undefined, ...chatScreenChannels].map((channel) => (
+      {[undefined, ...channels].map((channel) => (
         <Link
           key={channel ?? 'all'}
           href={chatsHref({ ...query, channel, post: undefined })}
