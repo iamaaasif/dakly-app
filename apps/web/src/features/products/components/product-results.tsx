@@ -29,12 +29,7 @@ export function ProductResults({ query, products, onAdjust, selection }: Product
   return (
     <Refreshing active={products.isPlaceholderData}>
       {products.data.items.length ? (
-        <ProductList
-          query={query}
-          products={products.data.items}
-          onAdjust={onAdjust}
-          selection={selection}
-        />
+        <ProductList products={products.data.items} onAdjust={onAdjust} selection={selection} />
       ) : (
         <div className="space-y-2 rounded-lg border border-border bg-surface p-6">
           <p>No products on this page.</p>

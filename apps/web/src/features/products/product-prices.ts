@@ -24,16 +24,3 @@ export function firstVariantProfitPercent(product: ProductResponse): string | nu
   );
   return `${profit}% profit`;
 }
-
-export function firstVariantProfitAmount(product: ProductResponse): string {
-  const variant = firstVariantWithCost(product);
-  if (!variant || variant.costPoisha === null) return '—';
-  const profitPoisha = variant.pricePoisha - variant.costPoisha;
-  return formatMoney(profitPoisha);
-}
-
-export function firstVariantCostAmount(product: ProductResponse): string {
-  const variant = firstVariantWithCost(product);
-  if (!variant || variant.costPoisha === null) return 'Not set';
-  return formatMoney(variant.costPoisha);
-}

@@ -220,20 +220,14 @@ export const productListQuerySchema = z.strictObject({
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
-export const productTabValues = ['overview', 'stock'] as const;
-export type ProductTab = (typeof productTabValues)[number];
 
 export const productScreenQuerySchema = productListQuerySchema
   .extend({
     adjust: z.uuid().optional(),
-    product: z.uuid().optional(),
-    productTab: z.enum(productTabValues).optional(),
-    create: z.literal('1').optional(),
     import: z.literal('1').optional(),
   })
   .refine(
-    (query) =>
-      [query.adjust, query.product, query.create, query.import].filter(Boolean).length <= 1,
+    (query) => [query.adjust, query.import].filter(Boolean).length <= 1,
     'Choose one product action at a time',
   );
 export type ProductOption = z.infer<typeof optionSchema>;

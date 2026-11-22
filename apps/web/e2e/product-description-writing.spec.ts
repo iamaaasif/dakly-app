@@ -64,8 +64,7 @@ test('picks an AI description without saving the product', async ({ page, contex
       await route.fulfill({ json: result, headers: { 'x-session-context': contextTag } });
     });
 
-    await page.goto(`/products?product=${product.id}`);
-    await page.getByRole('button', { name: 'Edit product' }).click();
+    await page.goto(`/products/${product.id}`);
     await page.getByRole('button', { name: 'Write with AI' }).click();
     const panel = page.getByRole('region', { name: 'Write with AI' });
     await panel.getByRole('button', { name: 'Write 3 options' }).click();
@@ -99,7 +98,7 @@ test('picks an AI description without saving the product', async ({ page, contex
     const beforeSave = await context.request.get(productPath, { headers });
     expect((await beforeSave.json()).description).toBe('Original description');
     await page.getByRole('button', { name: 'Save product' }).click();
-    await expect(page.getByRole('button', { name: 'Edit product' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save product' })).toBeEnabled();
     await expect(page.getByText(options[1]!, { exact: true })).toBeVisible();
     expect((await (await context.request.get(productPath, { headers })).json()).description).toBe(
       options[1],

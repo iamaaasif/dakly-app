@@ -1,16 +1,16 @@
+import Link from 'next/link';
+
 import { formatMoney } from '@dakly/contracts/money';
-import type { ProductListQuery, ProductResponse } from '@dakly/contracts/products';
+import type { ProductResponse } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
-import { productsSearch } from '../api/products';
 import { firstVariantProfitPercent, productPriceRange } from '../product-prices';
 import { ProductReadiness } from './product-readiness';
 import { ProductThumbnail } from './product-thumbnail';
-import { UrlLink } from '@/components/url-link';
 
 export type ProductSelection = {
   selectedIds: ReadonlySet<string>;
@@ -19,18 +19,17 @@ export type ProductSelection = {
 };
 type ProductListProps = {
   products: ProductResponse[];
-  query: ProductListQuery;
   onAdjust?: (variantId: string) => void;
   selection?: ProductSelection;
 };
 
-export function ProductList({ products, query, onAdjust, selection }: ProductListProps) {
+export function ProductList({ products, onAdjust, selection }: ProductListProps) {
   return (
     <>
       <div className="hidden md:block [&>div]:rounded-t-none [&>div]:border-t-0">
-        <ProductTable products={products} query={query} onAdjust={onAdjust} selection={selection} />
+        <ProductTable products={products} onAdjust={onAdjust} selection={selection} />
       </div>
-      <ProductCards products={products} query={query} onAdjust={onAdjust} selection={selection} />
+      <ProductCards products={products} onAdjust={onAdjust} selection={selection} />
     </>
   );
 }
@@ -105,12 +104,12 @@ function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
   );
 }
 
-function ProductTable({ products, query, onAdjust, selection }: ProductListProps) {
+function ProductTable({ products, onAdjust, selection }: ProductListProps) {
   return (
     <Table aria-label="Products">
       <ProductTableHead
         products={products}
-        query={query}
+
         onAdjust={onAdjust}
         selection={selection}
       />
@@ -123,7 +122,7 @@ function ProductTable({ products, query, onAdjust, selection }: ProductListProps
               </TableCell>
             ) : null}
             <TableCell>
-              <ProductIdentity product={product} query={query} />
+              <ProductIdentity product={product} />
             </TableCell>
             <TableCell className="text-right tabular-nums">
               <ProductPrice product={product} />
@@ -150,14 +149,14 @@ function ProductTable({ products, query, onAdjust, selection }: ProductListProps
   );
 }
 
-function ProductCards({ products, query, onAdjust, selection }: ProductListProps) {
+function ProductCards({ products, onAdjust, selection }: ProductListProps) {
   return (
     <ul aria-label="Products" className="space-y-3 md:hidden">
       {products.map((product) => (
         <li key={product.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">
           <div className="flex items-start justify-between gap-3">
             <SelectProduct product={product} selection={selection} />
-            <ProductIdentity product={product} query={query} />
+            <ProductIdentity product={product} />
             <div className="shrink-0 text-right tabular-nums">
               <ProductPrice product={product} />
             </div>
@@ -179,18 +178,18 @@ function ProductCards({ products, query, onAdjust, selection }: ProductListProps
 
 type ProductPartProps = { product: ProductResponse };
 
-function ProductIdentity({ product, query }: ProductPartProps & { query: ProductListQuery }) {
-  const href = `/products?${productsSearch(query)}&product=${product.id}`;
+function ProductIdentity({ product }: ProductPartProps) {
+  const href = `/products/${product.id}`;
   const code = product.variants.find((v) => v.sku)?.sku;
   const subtitle = [product.category, code].filter(Boolean).join(' · ');
   return (
-    <UrlLink href={href} aria-label={product.name} className="flex min-w-0 items-center gap-3">
+    <Link href={href} aria-label={product.name} className="flex min-w-0 items-center gap-3">
       <ProductThumbnail product={product} />
       <div className="min-w-0">
         <p className="font-semibold break-words text-text hover:text-action">{product.name}</p>
         {subtitle ? <p className="text-xs break-words text-text-muted">{subtitle}</p> : null}
       </div>
-    </UrlLink>
+    </Link>
   );
 }
 

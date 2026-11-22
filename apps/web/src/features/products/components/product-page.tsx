@@ -11,6 +11,7 @@ import { QueryError } from '@dakly/ui/query-error';
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
 import type { QuickAddHandoff } from '../quick-add-handoff';
+import { ProductChatPreview } from './product-chat-preview';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
 import { ProductReadiness } from './product-readiness';
@@ -76,7 +77,12 @@ function LoadedProductPage({ product, onSaved }: LoadedProductPageProps) {
         title: product.name,
         backHref: '/products',
         photos: <ProductPhotos product={product} />,
-        status: <StatusCard status={product.status} product={product} />,
+        status: (
+          <>
+            <StatusCard status={product.status} product={product} />
+            <ProductChatPreview product={product} />
+          </>
+        ),
       }}
     />
   );

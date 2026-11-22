@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 
 import { ProductsScreen } from '@/features/products/components/products-screen';
 import { parseProductsScreen } from '@/features/products/products-url';
@@ -16,7 +17,11 @@ export default async function ProductsPage({
         You do not have Products access in this shop.
       </p>
     );
-  const screen = parseProductsScreen(await searchParams);
+  const raw = await searchParams;
+  // Old bookmarks opened the drawer and the add modal; both are now full pages.
+  if (typeof raw.product === 'string') redirect(`/products/${encodeURIComponent(raw.product)}`);
+  if (raw.create === '1') redirect('/products/new');
+  const screen = parseProductsScreen(raw);
   if (!screen)
     return (
       <p role="alert" className="p-6">
