@@ -14,6 +14,7 @@ describe('chat filters', () => {
     const assignee = '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e5f';
     const query = chatScreenQuerySchema.parse({ q: 'Sadia', sort: 'unread', assignee });
     expect(chatsHref(query)).toBe(`/chats?sort=unread&q=Sadia&assignee=${assignee}`);
+    expect(chatsHref({ ...query, label: 'VIP' })).toContain('&label=VIP');
     expect(chatsHref(chatScreenQuerySchema.parse({}))).toBe('/chats');
   });
 

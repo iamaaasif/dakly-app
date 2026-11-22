@@ -19,6 +19,7 @@ const sadia: ConversationResponse = {
   id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e5f',
   contactId: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e60',
   contactName: 'Sadia Islam',
+  labels: [],
   channel: 'messenger',
   status: 'open',
   responder: 'ai',
@@ -56,6 +57,8 @@ function sidebarResponse(path: string) {
   if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
   if (path.startsWith('/api/conversations/summary')) return Response.json(summary, verified);
   if (path.startsWith('/api/conversations/assignees')) return Response.json([], verified);
+  if (path.startsWith('/api/conversations/labels'))
+    return Response.json(['VIP', 'Wholesale'], verified);
   if (path.startsWith('/api/ai-agent/settings'))
     return Response.json({ version: 1, isAutoReplyOn: autoReplyOn }, verified);
   if (path.startsWith('/api/orders?buyerContactId'))
@@ -336,6 +339,8 @@ describe('Conversation actions', () => {
         });
         return Response.json({ ...sadia, ...chat }, verified);
       }
+      if (path.startsWith('/api/conversations/labels'))
+        return Response.json(['VIP', 'Wholesale'], verified);
       if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
       if (path.startsWith('/api/conversations/assignees'))
         return Response.json(
@@ -370,6 +375,28 @@ describe('Conversation actions', () => {
     expect(
       await screen.findByText("You're handling this chat. Dakly AI paused here."),
     ).toBeTruthy();
+  });
+
+  it('adds, creates and removes labels', async () => {
+    respondToActions({ labels: ['VIP'] });
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Label/ }));
+    expect(
+      (await screen.findByRole('checkbox', { name: 'VIP' })).getAttribute('aria-checked'),
+    ).toBe('true');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Wholesale' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({
+      path: `/api/conversations/${chatId}/labels`,
+      body: { label: 'Wholesale', change: 'add' },
+    });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'VIP' }));
+    await waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1]!.body).toEqual({ label: 'VIP', change: 'remove' });
+    await userEvent.type(screen.getByLabelText('New label'), ' Eid ');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(sent).toHaveLength(3));
+    expect(sent[2]!.body).toEqual({ label: 'Eid', change: 'add' });
   });
 
   it('hands a chat back to the AI', async () => {

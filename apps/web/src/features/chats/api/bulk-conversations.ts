@@ -4,15 +4,26 @@ import type { ConversationResponse, UpdateConversationInput } from '@dakly/contr
 
 import { useStoreRequest } from '@/lib/store-request';
 
-// One request per chat on the existing update route; the result says how many did not change.
+export type BulkChange = { change: UpdateConversationInput } | { label: string };
+
+// One request per chat on the existing update and label routes; the result says how many did not
+// change.
 export function useBulkUpdateConversations() {
   const { request, contextTag } = useStoreRequest();
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async ({ ids, change }: { ids: string[]; change: UpdateConversationInput }) => {
+    mutationFn: async ({ ids, ...action }: { ids: string[] } & BulkChange) => {
       const results = await Promise.allSettled(
         ids.map((id) =>
-          request<ConversationResponse>(`/conversations/${id}`, { method: 'PATCH', body: change }),
+          'label' in action
+            ? request<ConversationResponse>(`/conversations/${id}/labels`, {
+                method: 'POST',
+                body: { label: action.label, change: 'add' },
+              })
+            : request<ConversationResponse>(`/conversations/${id}`, {
+                method: 'PATCH',
+                body: action.change,
+              }),
         ),
       );
       return { failed: results.filter((result) => result.status === 'rejected').length };

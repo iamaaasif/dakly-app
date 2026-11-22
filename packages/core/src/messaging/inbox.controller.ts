@@ -14,11 +14,13 @@ import {
 
 import {
   conversationListQuerySchema,
+  changeConversationLabelSchema,
   conversationMessageListQuerySchema,
   createConversationNoteSchema,
   createConversationReplySchema,
   takeOverConversationSchema,
   updateConversationSchema,
+  type ChangeConversationLabelInput,
   type ConversationListQuery,
   type ConversationMessageListQuery,
   type CreateConversationNoteInput,
@@ -65,6 +67,12 @@ export class InboxController {
   @RequirePermission('chats.view')
   assignees(@CurrentStore() storeId: string) {
     return this.inbox.assignees(storeId);
+  }
+
+  @Get('labels')
+  @RequirePermission('chats.view')
+  labels(@CurrentStore() storeId: string) {
+    return this.inbox.labels(storeId);
   }
 
   @Get('counts')
@@ -148,6 +156,18 @@ export class InboxController {
     @Body(new ZodValidationPipe(createConversationNoteSchema)) input: CreateConversationNoteInput,
   ) {
     return this.inbox.addNote(storeId, id, { kind: 'user', userId }, input);
+  }
+
+  @Post(':conversationId/labels')
+  @RequirePermission('chats.edit')
+  @HttpCode(200)
+  changeLabel(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('conversationId', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(changeConversationLabelSchema)) input: ChangeConversationLabelInput,
+  ) {
+    return this.inbox.changeLabel(storeId, id, { kind: 'user', userId }, input);
   }
 
   @Post(':conversationId/take-over')

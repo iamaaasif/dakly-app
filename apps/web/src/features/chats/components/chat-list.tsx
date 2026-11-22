@@ -76,7 +76,7 @@ function ChatRows({ query, selected, onSelect }: ChatRowsProps) {
   if (!items.length)
     return (
       <p className="p-4 text-text-muted">
-        {query.q || query.assignee ? 'No chats match.' : 'No chats here yet.'}
+        {query.q || query.assignee || query.label ? 'No chats match.' : 'No chats here yet.'}
       </p>
     );
   return (

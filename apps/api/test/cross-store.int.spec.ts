@@ -4006,6 +4006,42 @@ fixture('GET /conversations/assignees', async () => {
   expect(JSON.stringify(result.json())).not.toContain(a.owner.id);
 });
 
+fixture('GET /conversations/labels', async () => {
+  const { a, b } = await pair();
+  await seedConversation(a);
+  const own = await seedConversation(b);
+  expect((await f.request(b.owner, 'GET', '/conversations/labels')).statusCode).toBe(403);
+  await enableChats(b);
+  await f.admin.pool.query("update contacts set tags = array['Other shop'] where store_id = $1", [
+    a.id,
+  ]);
+  await success(b, 'POST', `/conversations/${own}/labels`, 200, { label: 'VIP', change: 'add' });
+  expect((await success(b, 'GET', '/conversations/labels', 200)).json()).toEqual(['VIP']);
+});
+
+fixture('POST /conversations/:conversationId/labels', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/labels`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  await hidden(b, 'POST', url, foreign, () => ({ label: 'VIP', change: 'add' }));
+  await success(b, 'POST', url(own), 400, { label: ' ', change: 'add' });
+  const added = await success(b, 'POST', url(own), 200, { label: 'VIP', change: 'add' });
+  expect(added.json()).toMatchObject({ id: own, labels: ['VIP'] });
+  expect(
+    (await success(b, 'POST', url(own), 200, { label: 'VIP', change: 'add' })).json().labels,
+  ).toEqual(['VIP']);
+  expect((await success(b, 'GET', '/conversations?label=VIP', 200)).json().items).toMatchObject([
+    { id: own },
+  ]);
+  expect((await success(b, 'GET', '/conversations?label=Other', 200)).json().items).toEqual([]);
+  expect(
+    (await success(b, 'POST', url(own), 200, { label: 'VIP', change: 'remove' })).json(),
+  ).toMatchObject({ labels: [] });
+  expect(await f.row('conversations', foreign)).toMatchObject({ responder: 'ai' });
+});
+
 fixture('GET /conversations', async () => {
   const { a, b } = await pair();
   await seedConversation(a);

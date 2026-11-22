@@ -6,6 +6,7 @@ export const chatsKeys = {
     ['chats', tag, 'list', filters] as const,
   comments: (tag: string | undefined) => ['chats', tag, 'comments'] as const,
   assignees: (tag: string | undefined) => ['chats', tag, 'assignees'] as const,
+  labels: (tag: string | undefined) => ['chats', tag, 'labels'] as const,
   conversation: (tag: string | undefined, id: string) =>
     ['chats', tag, 'conversation', id] as const,
   messages: (tag: string | undefined, id: string) => ['chats', tag, 'messages', id] as const,
