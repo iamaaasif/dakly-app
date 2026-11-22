@@ -160,6 +160,7 @@ describe('Conversation', () => {
         posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) });
         return Response.json({ messageId: 'sent' }, verified);
       }
+      if (path.startsWith('/api/conversations/assignees')) return Response.json([], verified);
       if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
         return Response.json({ items: [inbound], nextCursor: null }, verified);
@@ -216,6 +217,91 @@ describe('Conversation', () => {
     expect(posts[0]!.path).toBe(`/api/conversations/${chatId}/notes`);
   });
 });
+
+describe('Conversation actions', () => {
+  const verified = { headers: { 'x-session-context': 'verified' } };
+  const chatId = sadia.id;
+  const sent: { method: string; path: string; body: unknown }[] = [];
+
+  function respondToActions(chat: Partial<ConversationResponse>) {
+    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+      if (init?.method && init.method !== 'GET') {
+        sent.push({
+          method: init.method,
+          path,
+          body: init.body ? JSON.parse(String(init.body)) : null,
+        });
+        return Response.json({ ...sadia, ...chat }, verified);
+      }
+      if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+      if (path.startsWith('/api/conversations/assignees'))
+        return Response.json(
+          [
+            { userId: 'member', name: 'Member' },
+            { userId: 'rina', name: 'Rina' },
+          ],
+          verified,
+        );
+      if (path.startsWith(`/api/conversations/${chatId}/messages`))
+        return Response.json({ items: [], nextCursor: null }, verified);
+      if (path.startsWith(`/api/conversations/${chatId}`))
+        return Response.json({ ...sadia, unreadCount: 0, ...chat }, verified);
+      return ok([sadia]);
+    });
+  }
+
+  afterEach(() => {
+    sent.length = 0;
+  });
+
+  it('takes over a chat the AI is handling', async () => {
+    respondToActions({});
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    expect(await screen.findByText('Dakly AI is handling this chat')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      path: `/api/conversations/${chatId}/take-over`,
+    });
+  });
+
+  it('hands a chat back to the AI', async () => {
+    respondToActions({ responder: 'human' });
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Hand back to Dakly AI' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]!.path).toBe(`/api/conversations/${chatId}/return-to-ai`);
+  });
+
+  it('marks a chat done, and offers Reopen once it is', async () => {
+    respondToActions({});
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ method: 'PATCH', body: { status: 'done' } });
+    cleanup();
+    respondToActions({ status: 'done' });
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    expect(await screen.findByRole('button', { name: 'Reopen' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+  });
+
+  it('shows no actions to a member who can only read chats', async () => {
+    respondToActions({});
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canEditChats: false });
+    expect(await screen.findByText('Dakly AI is handling this chat')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Take over' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Done' })).toBeNull();
+  });
+});
+
+function sidebarResponse(path: string) {
+  const verified = { headers: { 'x-session-context': 'verified' } };
+  if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+  if (path.startsWith('/api/conversations/assignees')) return Response.json([], verified);
+  return undefined;
+}
 
 describe('Customer panel', () => {
   const chatId = sadia.id;
@@ -284,7 +370,8 @@ describe('Customer panel', () => {
       if (path.startsWith('/api/delivery-zones/charge'))
         return Response.json({ chargePoisha: 6000 }, verified);
       if (path.startsWith('/api/areas')) return Response.json(areasFor(path), verified);
-      if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
+      const sidebar = sidebarResponse(path);
+      if (sidebar) return sidebar;
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
         return Response.json({ items: [], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))

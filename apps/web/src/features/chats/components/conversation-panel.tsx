@@ -18,8 +18,11 @@ import {
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { replyWindow } from '../reply-window';
 import { ChatComposer } from './chat-composer';
+import { ConversationActions } from './conversation-actions';
 import { CustomerPanel } from './customer-panel';
 import { MessageBubble } from './message-bubble';
+import { ResponderBanner } from './responder-banner';
+import { useSessionContext } from '@/lib/session-context';
 
 const channelNames: Record<ConversationResponse['channel'], string> = {
   messenger: 'Messenger',
@@ -31,6 +34,7 @@ export function ConversationPanel({ query, id }: { query: ChatScreenQuery; id: s
   const conversation = useConversation(id);
   const messages = useConversationMessages(id);
   const markRead = useMarkConversationRead();
+  const canEdit = Boolean(useSessionContext().data?.currentStore?.canEditChats);
   const unread = conversation.data?.unreadCount ?? 0;
   const { mutate: read } = markRead;
   useEffect(() => {
@@ -46,25 +50,7 @@ export function ConversationPanel({ query, id }: { query: ChatScreenQuery; id: s
           query.panel ? 'hidden xl:flex' : 'flex',
         )}
       >
-        <div className="flex shrink-0 items-center gap-2 border-b border-border p-3">
-          <Link
-            href={chatsHref({ ...query, chat: undefined })}
-            aria-label="Back to chats"
-            className="inline-flex size-10 items-center justify-center rounded-md hover:bg-surface-muted lg:hidden"
-          >
-            <ArrowLeft aria-hidden="true" size={18} strokeWidth={1.75} />
-          </Link>
-          {conversation.data ? <ConversationHeader conversation={conversation.data} /> : null}
-          <Link
-            href={chatsHref({ ...query, panel: 'customer' })}
-            className={buttonVariants({
-              variant: 'secondary',
-              className: 'ml-auto shrink-0 xl:hidden',
-            })}
-          >
-            Customer
-          </Link>
-        </div>
+        <ConversationTopBar query={query} conversation={conversation.data} canEdit={canEdit} />
         {conversation.error ? (
           <div className="p-3">
             <QueryError
@@ -75,6 +61,9 @@ export function ConversationPanel({ query, id }: { query: ChatScreenQuery; id: s
           </div>
         ) : (
           <>
+            {conversation.data ? (
+              <ResponderBanner conversation={conversation.data} canEdit={canEdit} />
+            ) : null}
             <MessageList query={query} id={id} messages={messages} />
             {conversation.data ? <ChatComposer conversation={conversation.data} /> : null}
           </>
@@ -82,6 +71,43 @@ export function ConversationPanel({ query, id }: { query: ChatScreenQuery; id: s
       </section>
       {conversation.data ? <CustomerPanel conversation={conversation.data} query={query} /> : null}
     </>
+  );
+}
+
+function ConversationTopBar({
+  query,
+  conversation,
+  canEdit,
+}: {
+  query: ChatScreenQuery;
+  conversation: ConversationResponse | undefined;
+  canEdit: boolean;
+}) {
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3">
+      <Link
+        href={chatsHref({ ...query, chat: undefined })}
+        aria-label="Back to chats"
+        className="inline-flex size-10 items-center justify-center rounded-md hover:bg-surface-muted lg:hidden"
+      >
+        <ArrowLeft aria-hidden="true" size={18} strokeWidth={1.75} />
+      </Link>
+      {conversation ? <ConversationHeader conversation={conversation} /> : null}
+      {conversation && canEdit ? (
+        <div className="ml-auto">
+          <ConversationActions conversation={conversation} />
+        </div>
+      ) : null}
+      <Link
+        href={chatsHref({ ...query, panel: 'customer' })}
+        className={buttonVariants({
+          variant: 'secondary',
+          className: 'shrink-0 xl:hidden',
+        })}
+      >
+        Customer
+      </Link>
+    </div>
   );
 }
 
