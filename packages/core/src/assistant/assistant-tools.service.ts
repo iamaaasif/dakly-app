@@ -5,6 +5,7 @@ import {
   assistantTools,
   getCustomersTool,
   getMarketingResultsTool,
+  getOrderCountsTool,
   getSalesThisMonthTool,
   getSalesTodayTool,
   getSalesTool,
@@ -17,6 +18,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import type { LlmTool } from '@dakly/providers/llm/llm-driver';
 
 import { AnalyticsService } from '../analytics/analytics.service';
+import { OrderStageCountsService } from '../orders/order-stage-counts.service';
 import { AppError } from '../platform/errors/app-error';
 import { TeamService } from '../team/team.service';
 
@@ -56,10 +58,12 @@ export class AssistantToolsService {
     [getTopProductsTool.name]: (storeId, raw) => this.topProducts(storeId, raw),
     [getMarketingResultsTool.name]: (storeId, raw) => this.marketingResults(storeId, raw),
     [getCustomersTool.name]: (storeId, raw) => this.customers(storeId, raw),
+    [getOrderCountsTool.name]: (storeId, raw) => this.orderCounts(storeId, raw),
   };
 
   constructor(
     @Inject(AnalyticsService) private readonly reports: AnalyticsService,
+    @Inject(OrderStageCountsService) private readonly orders: OrderStageCountsService,
     @Inject(TeamService) private readonly team: TeamService,
   ) {}
 
@@ -155,6 +159,31 @@ export class AssistantToolsService {
       orders: Number(orders.current),
       previousOrders: Number(orders.previous),
       ordersChangePercent: changePercent(orders.current, orders.previous),
+    };
+  }
+
+  private async orderCounts(storeId: string, raw: unknown) {
+    getOrderCountsTool.input.parse(raw ?? {});
+    const {
+      to_confirm,
+      on_hold,
+      to_pack,
+      with_courier,
+      delivered,
+      partially_delivered,
+      returned,
+      cancelled,
+    } = await this.orders.byStage(storeId);
+    return {
+      pending: to_confirm + on_hold,
+      to_confirm,
+      on_hold,
+      to_pack,
+      with_courier,
+      delivered,
+      partially_delivered,
+      returned,
+      cancelled,
     };
   }
 

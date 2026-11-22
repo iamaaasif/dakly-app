@@ -46,6 +46,7 @@ describe('Ask Dakly AI tools', () => {
   it('ask for today, yesterday and this month with no argument at all', () => {
     const calendarTools = assistantTools.filter(({ input }) => input.safeParse({}).success);
     expect(calendarTools.map(({ name }) => name)).toEqual([
+      'get_order_counts',
       'get_sales_today',
       'get_sales_yesterday',
       'get_sales_this_month',
