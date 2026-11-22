@@ -18,6 +18,7 @@ import {
   Truck,
   Users,
   UsersRound,
+  Zap,
   type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -144,17 +145,7 @@ export function navigationGroups(session: SessionContext): NavigationGroup[] {
       ],
     },
     physicalShopGroup(store),
-    {
-      heading: 'Marketing',
-      links: [
-        {
-          href: '/campaigns',
-          label: 'Campaigns',
-          icon: Megaphone,
-          visible: store?.canViewCampaigns,
-        },
-      ],
-    },
+    marketingGroup(store),
     socialGroup(store),
     {
       heading: 'Intelligence',
@@ -176,6 +167,16 @@ function physicalShopGroup(store: SessionContext['currentStore']): NavigationGro
     heading: 'Physical shop',
     links: [
       { href: '/due-book', label: 'Due book', icon: BookOpen, visible: store?.canViewDueBook },
+    ],
+  };
+}
+
+function marketingGroup(store: SessionContext['currentStore']): NavigationGroup {
+  return {
+    heading: 'Marketing',
+    links: [
+      { href: '/campaigns', label: 'Campaigns', icon: Megaphone, visible: store?.canViewCampaigns },
+      { href: '/automations', label: 'Automations', icon: Zap, visible: store?.canViewAutomations },
     ],
   };
 }

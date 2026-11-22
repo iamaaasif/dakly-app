@@ -36,6 +36,8 @@ describe('navigationGroups', () => {
     canViewProducts?: boolean;
     canViewSocial?: boolean;
     canViewDueBook?: boolean;
+    canViewCampaigns?: boolean;
+    canViewAutomations?: boolean;
   }): SessionContext {
     return {
       user: { id: 'user-1', name: 'Test User' },
@@ -49,13 +51,13 @@ describe('navigationGroups', () => {
         canEditOrders: false,
         canViewDueBook: permissions.canViewDueBook ?? false,
         canEditDueBook: false,
-        canViewCampaigns: false,
+        canViewCampaigns: permissions.canViewCampaigns ?? false,
         canViewAnalytics: false,
         canChangeAttributionWindow: false,
         canEditCampaigns: false,
         canViewSocial: permissions.canViewSocial ?? false,
         canEditSocial: false,
-        canViewAutomations: false,
+        canViewAutomations: permissions.canViewAutomations ?? false,
         canEditAutomations: false,
         canViewCustomers: true,
         canCreateCustomer: false,
@@ -122,6 +124,20 @@ describe('navigationGroups', () => {
         .map((link) => link.href);
     expect(links(true)).toEqual(['/social', '/social/posts', '/content-studio']);
     expect(links(false)).toEqual([]);
+  });
+
+  it('lists Automations after Campaigns under Marketing only to people who can view automations', () => {
+    const links = (permissions: Parameters<typeof makeSession>[0]) =>
+      navigationGroups(makeSession(permissions))
+        .find((group) => group.heading === 'Marketing')
+        ?.links.filter((link) => link.visible)
+        .map((link) => link.href);
+    expect(links({ canViewCampaigns: true, canViewAutomations: true })).toEqual([
+      '/campaigns',
+      '/automations',
+    ]);
+    expect(links({ canViewCampaigns: true })).toEqual(['/campaigns']);
+    expect(links({ canViewAutomations: true })).toEqual(['/automations']);
   });
 
   it('shows Due book under Physical shop only to people who can view it', () => {
