@@ -1,19 +1,7 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Inject,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Get, Inject, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
 
 import {
   createProductSchema,
-  changeProductSchema,
-  type ChangeProductInput,
   productListQuerySchema,
   type CreateProductInput,
   type ProductCategoriesResponse,
@@ -64,16 +52,5 @@ export class ProductsController {
     @Body(new ZodValidationPipe(createProductSchema)) input: CreateProductInput,
   ): Promise<ProductResponse> {
     return this.service.create(storeId, input, { kind: 'user', userId });
-  }
-
-  @Patch(':productId')
-  @RequirePermission('products.edit')
-  edit(
-    @CurrentStore() storeId: string,
-    @CurrentUser() userId: string,
-    @Param('productId', ParseUUIDPipe) productId: string,
-    @Body(new ZodValidationPipe(changeProductSchema)) input: ChangeProductInput,
-  ): Promise<ProductResponse> {
-    return this.service.edit(storeId, productId, input, { kind: 'user', userId });
   }
 }

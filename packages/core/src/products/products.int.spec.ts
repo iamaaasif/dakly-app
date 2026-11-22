@@ -387,6 +387,31 @@ describe('ProductsService with Postgres', () => {
     ).toEqual([]);
   });
 
+  it('warns at the variant level when one is set and at the shop level when not', async () => {
+    const created = await service.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Own warning level',
+        pricePoisha: 10000,
+        variants: [{ lowStockThreshold: 10 }],
+      }),
+      actor,
+    );
+    await f.connection.pool.query('update product_variants set on_hand=8 where id=$1', [
+      created.variants[0]!.id,
+    ]);
+    const warned = await service.getById(f.a, created.id);
+    expect(warned.variants[0]?.lowStockThreshold).toBe(10);
+    expect(warned.readiness).toContain('running_low');
+    const cleared = await service.edit(
+      f.a,
+      created.id,
+      { variants: [{ id: created.variants[0]!.id, optionValues: {}, lowStockThreshold: null }] },
+      actor,
+    );
+    expect(cleared.readiness).not.toContain('running_low');
+  });
+
   it('lists by cursor with literal name searches and readiness filters', async () => {
     const input = createProductSchema.parse({ name: 'Unique_50%', pricePoisha: 0 });
     const first = await service.create(f.b, input, actor);

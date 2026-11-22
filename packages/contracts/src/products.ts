@@ -11,6 +11,7 @@ export const stockMovementKinds = [
 ] as const;
 export const restockRequestStatuses = ['waiting', 'notified', 'cancelled'] as const;
 
+export const MAX_STOCK_QUANTITY = 2147483647;
 const money = z
   .number('Enter an amount')
   .int('Enter a whole amount')
@@ -30,6 +31,8 @@ const variantSchema = z.strictObject({
   sku: text.nullable().default(null),
   priceOverridePoisha: money.positive('Enter an amount above zero').nullable().default(null),
   costPoisha: money.nullable().default(null),
+  // Null uses the shop's warning level from the stock settings.
+  lowStockThreshold: z.number().int().min(0).max(MAX_STOCK_QUANTITY).nullable().default(null),
 });
 
 const editVariantSchema = variantSchema.extend({ id: z.uuid().optional() });
@@ -130,6 +133,17 @@ export const takaInput = z
 const optionalTakaInput = z.union([z.literal('').transform(() => null), takaInput], {
   error: takaMessage,
 });
+const optionalCount = z.union(
+  [
+    z.literal('').transform(() => null),
+    z
+      .string()
+      .regex(/^\d+$/, 'Enter a whole number')
+      .transform(Number)
+      .pipe(z.number().int().max(MAX_STOCK_QUANTITY, 'That number is too large')),
+  ],
+  { error: 'Enter a whole number' },
+);
 const optionalTextInput = z
   .string()
   .nullable()
@@ -160,6 +174,7 @@ export const productFormSchema = z
             .pipe(money.positive('Enter an amount above zero').nullable())
             .default(null),
           costPoisha: optionalTakaInput.default(null),
+          lowStockThreshold: optionalCount.default(null),
           initialStock: z
             .number('Enter a stock number')
             .int('Enter a whole number')
@@ -247,7 +262,6 @@ export type ProductListResponse = { items: ProductResponse[]; nextCursor: string
 export type ProductCategoriesResponse = { items: string[] };
 
 export type StockMovementKind = (typeof stockMovementKinds)[number];
-export const MAX_STOCK_QUANTITY = 2147483647;
 export const stockAdjustmentSchema = z.strictObject({
   quantity: z
     .number('Enter how many to add or remove')
@@ -287,3 +301,23 @@ export const productPhotoTagsSchema = z.strictObject({
   tags: z.array(z.string().min(1).max(40)).max(12),
 });
 export type ProductPhotoTags = z.infer<typeof productPhotoTagsSchema>;
+
+// A name is enough on a new product; a saved product can also have its photos read.
+export const suggestProductOptionsSchema = z
+  .strictObject({
+    name: z.string().trim().max(200).default(''),
+    productId: z.uuid().optional(),
+  })
+  .refine((input) => input.name || input.productId, 'Enter a product name or add a photo first');
+export type SuggestProductOptionsInput = z.infer<typeof suggestProductOptionsSchema>;
+export const suggestedOptionsOutputSchema = z.strictObject({
+  options: z
+    .array(
+      z.strictObject({
+        name: z.string().trim().min(1).max(40),
+        values: z.array(z.string().trim().min(1).max(40)).max(12),
+      }),
+    )
+    .max(3),
+});
+export type SuggestedOptionsResponse = z.infer<typeof suggestedOptionsOutputSchema>;

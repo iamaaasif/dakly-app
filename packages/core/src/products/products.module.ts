@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AiModule } from '../ai/ai.module';
 import { AuditModule } from '../audit/audit.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { MessagingModule } from '../messaging/messaging.module';
@@ -13,7 +14,10 @@ import { ProductBulkEditsService } from './product-bulk-edits.service';
 import { ProductExportController } from './product-export.controller';
 import { ProductExportService } from './product-export.service';
 import { ProductImportService } from './product-import.service';
+import { ProductOptionSuggestionsController } from './product-option-suggestions.controller';
+import { ProductOptionSuggestionsService } from './product-option-suggestions.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
+import { ProductPhotoTagsRepository } from './product-photo-tags.repository';
 import { ProductPhotosController } from './product-photos.controller';
 import { ProductSearchSourceService } from './product-search-source.service';
 import { ProductSearchRepository } from './product-search.repository';
@@ -32,6 +36,7 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
 
 @Module({
   imports: [
+    AiModule,
     AuditModule,
     ClockModule,
     ContactsModule,
@@ -43,6 +48,7 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
   controllers: [
     ProductBulkEditsController,
     ProductExportController,
+    ProductOptionSuggestionsController,
     ProductsController,
     ProductPhotosController,
     ProductVariantPhotosController,
@@ -59,6 +65,8 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductVariantPhotosService,
     ProductImportService,
     ProductExportService,
+    ProductOptionSuggestionsService,
+    ProductPhotoTagsRepository,
     ProductStockRepository,
     ProductStockService,
     RestockRequestsRepository,
