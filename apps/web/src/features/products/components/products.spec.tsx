@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -330,6 +330,14 @@ describe('Products screen', () => {
 });
 
 describe('Product editor navigation', () => {
+  it('sends Add product to the full page', async () => {
+    vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    expect(push).toHaveBeenCalledWith('/products/new');
+  });
+
   it('opens creation from the list and selects the saved product', async () => {
     vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
       if (path.endsWith('/categories')) return response({ items: ['Cotton'] });
@@ -339,7 +347,7 @@ describe('Product editor navigation', () => {
     });
     show();
     await screen.findByRole('table');
-    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    act(() => push('/products?create=1'));
     const dialog = await screen.findByRole('dialog', { name: 'Add product' });
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save as hidden' }));
@@ -380,7 +388,7 @@ describe('Product editor navigation', () => {
     });
     show();
     await screen.findByRole('table');
-    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    act(() => push('/products?create=1'));
     const dialog = await screen.findByRole('dialog', { name: 'Add product' });
     await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add size' }));

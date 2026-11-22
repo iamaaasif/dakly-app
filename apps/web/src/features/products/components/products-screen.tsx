@@ -97,7 +97,7 @@ function ProductsHeader({ canEdit, listHref, importing }: ProductsHeaderProps) {
           <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
             Import from a CSV
           </Button>
-          <Button onClick={() => router.push(`${listHref}&create=1`)}>
+          <Button onClick={() => router.push('/products/new')}>
             <span aria-hidden="true">+ </span>Add product
           </Button>
         </div>
