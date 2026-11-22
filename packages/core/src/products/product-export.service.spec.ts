@@ -67,7 +67,17 @@ describe('product export', () => {
     expect(file.rowCount).toBe(3);
     expect(await readSheet(file.body)).toEqual([
       ['Name', 'Price', 'Category', 'Description', 'Status', 'SKU', 'Cost', 'On hand', 'Size'],
-      ['Cotton কুর্তি, premium', '1200', 'Kurti', '=SUM(1,1)', 'hidden', 'KURTI-M', '700', '10', 'M'],
+      [
+        'Cotton কুর্তি, premium',
+        '1200.00',
+        'Kurti',
+        '=SUM(1,1)',
+        'hidden',
+        'KURTI-M',
+        '700.00',
+        '10',
+        'M',
+      ],
       [
         'Cotton কুর্তি, premium',
         '1250.50',
@@ -79,7 +89,7 @@ describe('product export', () => {
         '0',
         'L',
       ],
-      ['Scarf', '450', null, null, 'active', null, null, null, null],
+      ['Scarf', '450.00', null, null, 'active', null, null, null, null],
     ]);
   });
 
@@ -88,9 +98,9 @@ describe('product export', () => {
     expect(file.type).toBe('text/csv; charset=utf-8');
     expect(file.body.toString().split('\r\n')).toEqual([
       `${String.fromCharCode(0xfeff)}"Name","Price","Category","Description","Status","SKU","Cost","On hand","Size"`,
-      `"Cotton কুর্তি, premium","1200","Kurti","'=SUM(1,1)","hidden","KURTI-M","700","10","M"`,
-      `"Cotton কুর্তি, premium","1250.50","Kurti","'=SUM(1,1)","hidden","KURTI-L","700","0","L"`,
-      '"Scarf","450","","","active","","","",""',
+      `"Cotton কুর্তি, premium","1200.00","Kurti","'=SUM(1,1)","hidden","KURTI-M","700.00","10","M"`,
+      `"Cotton কুর্তি, premium","1250.50","Kurti","'=SUM(1,1)","hidden","KURTI-L","700.00","0","L"`,
+      '"Scarf","450.00","","","active","","","",""',
       '',
     ]);
   });

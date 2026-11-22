@@ -521,4 +521,68 @@ describe('MetaGraphChannelDriver', () => {
       });
     });
   });
+  const card = {
+    elements: [
+      {
+        title: 'কটন পাঞ্জাবি',
+        subtitle: '৳1,250',
+        imageUrl: 'https://files.example.test/a.jpg',
+        buttons: [
+          { type: 'postback', title: 'Order now', payload: 'card:order:p1' },
+          { type: 'link', title: 'Order link', url: 'https://shop.example.test/o/p1' },
+        ],
+      },
+    ],
+  } as const;
+
+  it('sends a card as a generic template with its buttons', async () => {
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      expect(await new Request(url, init).json()).toEqual({
+        recipient: { id: '999' },
+        message: {
+          attachment: {
+            type: 'template',
+            payload: {
+              template_type: 'generic',
+              elements: [
+                {
+                  title: 'কটন পাঞ্জাবি',
+                  subtitle: '৳1,250',
+                  image_url: 'https://files.example.test/a.jpg',
+                  buttons: [
+                    { type: 'postback', title: 'Order now', payload: 'card:order:p1' },
+                    { type: 'web_url', title: 'Order link', url: 'https://shop.example.test/o/p1' },
+                  ],
+                },
+              ],
+            },
+          },
+          metadata: messengerReply.operationKey,
+        },
+        messaging_type: 'RESPONSE',
+      });
+      return Response.json({ message_id: 'm_card', recipient_id: '999' });
+    });
+    await expect(driver.send(pageCredentials, { ...messengerReply, card })).resolves.toEqual({
+      externalMessageId: 'm_card',
+    });
+  });
+
+  it('sends the plain text when Meta refuses the card', async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      const body = await new Request(url, init).json();
+      bodies.push(body);
+      if (bodies.length === 1)
+        return Response.json(
+          { error: { code: 100, message: 'Invalid parameter' } },
+          { status: 400 },
+        );
+      return Response.json({ message_id: 'm_text', recipient_id: '999' });
+    });
+    await expect(driver.send(pageCredentials, { ...messengerReply, card })).resolves.toEqual({
+      externalMessageId: 'm_text',
+    });
+    expect(bodies[1]).toMatchObject({ message: { text: messengerReply.text } });
+  });
 });
