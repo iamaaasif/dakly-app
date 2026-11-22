@@ -14,6 +14,7 @@ import {
   reportEmbed,
   reportFast,
   reportMemory,
+  reportAssistantProducts,
   reportOptionsFromPhoto,
   reportOptionsFromTitle,
   reportReply,
@@ -22,13 +23,14 @@ import {
   type JobContext,
 } from './job-reports';
 
-const jobs = ['fast', 'reply', 'vision', 'transcribe', 'embed', 'memory'] as const;
+const jobs = ['fast', 'reply', 'assistant', 'vision', 'transcribe', 'embed', 'memory'] as const;
 type Job = (typeof jobs)[number];
 
 const chatModels = ['gpt-6-luna', 'gpt-5.6-luna', 'gpt-6.1-terra', 'gpt-5.6-terra'];
 const defaultModels: Record<Job, string[]> = {
   fast: chatModels,
   reply: chatModels,
+  assistant: chatModels,
   vision: chatModels,
   transcribe: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'gpt-transcribe'],
   embed: ['text-embedding-3-small', 'text-embedding-3-large'],
@@ -78,6 +80,7 @@ async function main() {
       await reportOptionsFromTitle(context, modelsFor('fast'));
     },
     reply: () => reportReply(context, modelsFor('reply'), baselineFastModel),
+    assistant: () => reportAssistantProducts(context, modelsFor('assistant')),
     vision: async () => {
       await reportVision(context, modelsFor('vision'));
       await reportOptionsFromPhoto(context, modelsFor('vision'));

@@ -10,12 +10,14 @@ import { useBulkSelection } from '../use-bulk-selection';
 import { ChangeStockDialog } from './change-stock-dialog';
 import { ExportProductsButtons } from './export-products-buttons';
 import { ImportProductsDialog } from './import-products-dialog';
+import { ProductBulkPanel } from './product-bulk-panel';
 import { ProductBulkSection } from './product-bulk-section';
 import { ProductFilters } from './product-filters';
 import { ProductResults } from './product-results';
 import { QuickAddModal } from './quick-add-modal';
 import { RestockDialog } from './restock-dialog';
 import { StorePage } from '@/components/store-page';
+import { handOffProductChange, useHandedOffProductChange } from '@/lib/assistant-product-handoff';
 import { useSessionContext } from '@/lib/session-context';
 import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 
@@ -41,6 +43,7 @@ export function ProductsScreen(initial: ProductsScreenProps) {
         <ProductsHeader canEdit={canEdit} query={query} listHref={listHref} importing={importing} />
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
           <ProductFilters key={`${query.search}|${query.readiness}`} query={query} />
+          <AssistantChange canEdit={canEdit} />
           <ProductBulkSection bulk={bulk} />
           <ProductResults
             query={query}
@@ -103,6 +106,21 @@ function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderP
         <ImportProductsDialog onClose={() => router.replace(listHref)} />
       ) : null}
     </header>
+  );
+}
+
+// A change Ask Dakly AI prepared opens here as the bulk edit review, over the list.
+function AssistantChange({ canEdit }: { canEdit: boolean }) {
+  const change = useHandedOffProductChange();
+  if (!change || !canEdit) return null;
+  return (
+    <ProductBulkPanel
+      key={change.rows.map((row) => row.productId).join()}
+      products={change.products}
+      preset={undefined}
+      proposed={change.rows}
+      onClose={() => handOffProductChange(undefined)}
+    />
   );
 }
 

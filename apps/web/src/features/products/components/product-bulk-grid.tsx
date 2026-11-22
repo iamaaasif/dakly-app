@@ -28,14 +28,22 @@ import { ProductBulkCell } from './product-bulk-cell';
 type ProductBulkGridProps = {
   products: ProductResponse[];
   preset: 'hide' | 'category' | undefined;
+  // Values Ask Dakly AI prepared; they show as changed cells until the owner reviews them.
+  proposed?: ProductBulkEditRow[];
   onReview: (rows: ProductBulkEditRow[], stockReason: BulkEditStockReason | '') => void;
   onCancel: () => void;
 };
 
-export function ProductBulkGrid({ products, preset, onReview, onCancel }: ProductBulkGridProps) {
+export function ProductBulkGrid({
+  products,
+  preset,
+  proposed,
+  onReview,
+  onCancel,
+}: ProductBulkGridProps) {
   const form = useForm<ProductBulkEditFormValues, unknown, ProductBulkEditFormInput>({
     resolver: zodResolver(productBulkEditFormSchema),
-    defaultValues: gridDefaults(products, preset === 'hide' ? 'hide' : undefined),
+    defaultValues: gridDefaults(products, preset === 'hide' ? 'hide' : undefined, proposed),
   });
   const values = useWatch({ control: form.control });
   const parsed = productBulkEditFormSchema.safeParse(values);

@@ -12,9 +12,10 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { AiService } from '../ai/ai.service';
 import { UsageService } from '../usage/usage.service';
 import { numbersAreFromTools } from './assistant-answer-check';
+import type { ProductProposal } from './assistant-product-tools.service';
 import { AssistantToolsService } from './assistant-tools.service';
 import { assistantError } from './assistant.errors';
-import { askDaklyV1 } from './prompts/ask-dakly.v1';
+import { askDaklyV2 } from './prompts/ask-dakly.v2';
 
 const MAX_ROUNDS = 4;
 const ASK_BUDGET_MS = 20_000;
@@ -27,13 +28,16 @@ const sourceLabels: Record<string, string> = {
   get_order_counts: 'Orders',
   get_marketing_results: 'Marketing results',
   get_customers: 'Customers',
+  draft_product: 'Your products',
+  change_products: 'Your products',
 };
 const CANNOT_ANSWER =
   'I can’t answer that yet. I can answer questions about your orders, sales, marketing results and customers.';
 
 type ToolResult = { tool: string; result: object };
 
-// Runs the model and the read-only report tools. It changes nothing and holds no transaction.
+// Runs the model, the report tools and the tools that prepare a product draft or review. It saves
+// nothing and holds no transaction; the owner's page does the saving.
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -61,23 +65,25 @@ export class AssistantService {
       `<question untrusted="true">${JSON.stringify(question)}</question>`,
     ].join('\n');
     const results: ToolResult[] = [];
+    const proposals: ProductProposal[] = [];
     let transcript = '';
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         purpose: 'ask',
         usageReference,
         tier: 'reply',
-        prompt: askDaklyV1,
+        prompt: askDaklyV2,
         input: context + transcript,
         output: askDaklyOutputSchema,
         tools: llmTools,
         signal,
       });
       if (attempt.kind === 'failure') return this.failed(attempt.code);
-      if (attempt.kind === 'output') return this.answer(storeId, attempt.output.reply, results);
+      if (attempt.kind === 'output')
+        return this.answer(storeId, attempt.output.reply, results, proposals.at(-1));
       const answered: ToolResult[] = [];
       for (const call of attempt.toolCalls) {
-        const result = await this.tools.run(storeId, access, call.name, call.argumentsJson);
+        const result = await this.tools.run(storeId, access, call, proposals);
         answered.push({ tool: call.name, result });
       }
       results.push(...answered);
@@ -90,6 +96,7 @@ export class AssistantService {
     storeId: string,
     reply: string,
     results: ToolResult[],
+    proposal: ProductProposal | undefined,
   ): Promise<AskDaklyAnswer> {
     const found = results.filter(({ result }) => !('error' in result));
     if (
@@ -100,11 +107,16 @@ export class AssistantService {
     )
       return this.unanswered(storeId);
     if (!found.length) return { kind: 'cannot_answer', text: reply };
+    const creditsLeft = await this.usage.remaining(storeId, 'ai_ask');
+    if (proposal?.kind === 'draft')
+      return { kind: 'product_draft', text: reply, draft: proposal.draft, creditsLeft };
+    if (proposal?.kind === 'change')
+      return { kind: 'product_change', text: reply, change: proposal.change, creditsLeft };
     return {
       kind: 'answer',
       text: reply,
       sources: sourcesOf(found),
-      creditsLeft: await this.usage.remaining(storeId, 'ai_ask'),
+      creditsLeft,
     };
   }
 

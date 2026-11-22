@@ -3,6 +3,7 @@ import type { LlmDriver } from '@dakly/providers/llm/llm-driver';
 import { screenCustomerTexts } from '../../ai-agent/manipulation-screen';
 import { MIN_HANDOVER_ACCURACY, scoreEval } from '../eval-scoring';
 import type { EvalOutcome, GoldenCase } from '../golden-case';
+import { runAssistantProductEval } from './assistant-product-eval';
 import { runEmbeddingEval } from './embedding-eval';
 import type { EvalMeter } from './eval-meter';
 import { dollars, printTable, say } from './eval-output';
@@ -178,6 +179,16 @@ export function reportOptionsFromPhoto({ driver, meter }: JobContext, models: st
     label: 'vision',
     models,
     run: (model) => runOptionsPhotoEval(driver, meter, model),
+  });
+}
+
+export function reportAssistantProducts({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Ask Dakly AI (product drafts and changes)',
+    unit: 'prompts',
+    label: 'reply',
+    models,
+    run: (model) => runAssistantProductEval(driver, meter, model),
   });
 }
 

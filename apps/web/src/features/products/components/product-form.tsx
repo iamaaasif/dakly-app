@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRef, useState, type ReactNode } from 'react';
 import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react-hook-form';
 
+import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import {
   productFormSchema,
   type ChangeProductInput,
@@ -18,6 +19,7 @@ import { Card } from '@dakly/ui/card';
 import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
+import { assistantDraftValues } from '../product-assistant-draft';
 import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
 import type { QuickAddHandoff } from '../quick-add-handoff';
 import {
@@ -33,21 +35,36 @@ import { StockReasonDialog } from './stock-reason-dialog';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
 // The full page keeps Save in a top bar that stays in view and puts photos and status beside the fields.
-type ProductFormPage = { title: string; backHref: string; photos: ReactNode; status: ReactNode };
+type ProductFormPage = {
+  title: string;
+  backHref: string;
+  photos: ReactNode;
+  status: ReactNode;
+  notice?: ReactNode;
+};
 
 type ProductFormProps = {
   product?: ProductResponse;
   // Values typed in the quick add, used only for a new product.
   initial?: QuickAddHandoff;
+  // Details Ask Dakly AI filled in from the owner's prompt; nothing is saved until Save.
+  assistantDraft?: AssistantProductDraft;
   onSaved: (product: ProductResponse, failedStock: string[]) => void;
   onCancel?: () => void;
   page?: ProductFormPage;
 };
 
-export function ProductForm({ product, initial, onSaved, onCancel, page }: ProductFormProps) {
+export function ProductForm({
+  product,
+  initial,
+  assistantDraft,
+  onSaved,
+  onCancel,
+  page,
+}: ProductFormProps) {
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: formValues(product, initial),
+    defaultValues: formValues(product, initial, assistantDraft),
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
@@ -193,6 +210,7 @@ function ProductFormPageLayout({
       </div>
       <div className="grid gap-6 px-4 pt-6 pb-24 md:px-8 md:pb-6 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-4">
+          {page.notice}
           <Card>{page.photos}</Card>
           <FieldCard title="Basics">
             <ProductNameFields productId={productId} showCode={false} />
@@ -273,7 +291,12 @@ function ProductFormActions({
   );
 }
 
-function formValues(product?: ProductResponse, initial?: QuickAddHandoff): ProductFormValues {
+function formValues(
+  product?: ProductResponse,
+  initial?: QuickAddHandoff,
+  assistantDraft?: AssistantProductDraft,
+): ProductFormValues {
+  if (!product && assistantDraft) return assistantDraftValues(assistantDraft);
   if (!product)
     return {
       name: initial?.name ?? '',

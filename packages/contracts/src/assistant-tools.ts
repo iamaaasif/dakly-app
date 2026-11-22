@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 import type { AiToolDefinition } from './ai-agent-tools';
-import type { PermissionArea } from './team';
+import { MAX_STOCK_QUANTITY } from './products';
+import type { AccessLevel, PermissionArea } from './team';
 
 export const reportWindows = ['last_7_days', 'last_30_days', 'last_90_days'] as const;
 export type ReportWindow = (typeof reportWindows)[number];
@@ -11,7 +12,11 @@ const windowWords =
   'window is one of last_7_days, last_30_days, last_90_days; every number also comes for the window right before it, so you can say how it changed.';
 
 // Each tool names the area a member must be able to view, so the model never sees a report the member cannot open.
-export type AssistantToolDefinition = AiToolDefinition & { area: PermissionArea };
+// A tool that opens a draft or a review needs edit access; a report tool needs view.
+export type AssistantToolDefinition = AiToolDefinition & {
+  area: PermissionArea;
+  level?: Extract<AccessLevel, 'edit'>;
+};
 
 export const getSalesTool = {
   name: 'get_sales',
@@ -180,6 +185,89 @@ export const getOrderCountsTool = {
   },
 } satisfies AssistantToolDefinition;
 
+const MAX_AMOUNT = 10_000_000;
+const productOption = z.strictObject({
+  name: z.string().trim().min(1).max(100),
+  values: z.array(z.string().trim().min(1).max(100)).min(1).max(30),
+});
+
+export const draftProductTool = {
+  name: 'draft_product',
+  area: 'products',
+  level: 'edit',
+  description:
+    'Open the Add product page with the details the owner gave filled in, for the owner to check and save. Nothing is saved. Use it when the owner asks to add or create a new product. Pass only what the owner said; use null for anything they did not say, and an empty list for options they did not give.',
+  aliases: [
+    'প্রোডাক্ট যোগ করো',
+    'নতুন পণ্য',
+    'add product',
+    'new product',
+    'product add koro',
+    'tshirt add kore dao',
+  ],
+  input: z.strictObject({
+    name: z.string().trim().min(1).max(200),
+    priceTaka: z.number().positive().max(MAX_AMOUNT).nullable(),
+    category: z.string().trim().min(1).max(200).nullable(),
+    description: z.string().trim().min(1).max(2000).nullable(),
+    options: z.array(productOption).max(3),
+    stockEach: z.number().int().min(0).max(MAX_STOCK_QUANTITY).nullable(),
+  }),
+  units: {
+    priceTaka:
+      'taka as a plain number: 1200 for "1,200 taka", "১২০০" or "twelve hundred"; the price of the product',
+    options: 'such as Size with S, M, L, XL, or Colour with Black',
+    stockEach: 'pieces in stock of every size or colour combination',
+  },
+} satisfies AssistantToolDefinition;
+
+export const priceChangeHows = [
+  'set',
+  'raise_by',
+  'lower_by',
+  'raise_percent',
+  'lower_percent',
+] as const;
+
+export const changeProductsTool = {
+  name: 'change_products',
+  area: 'products',
+  level: 'edit',
+  description:
+    'Open the bulk edit review for products whose name contains the given words, with the old and new price or stock. Use null for a price change or a stock count the owner did not ask for. Nothing is applied until the owner presses Apply. Use it when the owner asks to raise, lower or set prices, give a discount, or set stock for products. The shop works out each new price; never work it out yourself.',
+  aliases: [
+    'দাম বাড়াও',
+    'দাম কমাও',
+    'ডিসকাউন্ট দাও',
+    'স্টক ঠিক করো',
+    'price barao',
+    'dam komao',
+    'discount dao',
+    'stock set koro',
+    'raise prices',
+  ],
+  input: z
+    .strictObject({
+      productName: z.string().trim().min(3).max(200),
+      priceChange: z
+        .strictObject({
+          how: z.enum(priceChangeHows),
+          amount: z.number().positive().max(MAX_AMOUNT),
+        })
+        .nullable(),
+      stock: z.number().int().min(0).max(MAX_STOCK_QUANTITY).nullable(),
+    })
+    .refine(({ priceChange, stock }) => priceChange !== null || stock !== null, {
+      message: 'Give a price change or a stock count',
+    }),
+  units: {
+    productName: 'words in the product name, such as "T-shirt"; the shop finds the products',
+    'priceChange.amount':
+      'taka for set, raise_by and lower_by (500 for "five hundred taka" or "৫০০ টাকা"); percent for raise_percent and lower_percent (10 for "10%" or "দশ শতাংশ")',
+    stock: 'pieces on hand for every matched product with one size that counts stock',
+  },
+} satisfies AssistantToolDefinition;
+
 export const assistantTools = [
   getOrderCountsTool,
   getSalesTool,
@@ -189,4 +277,6 @@ export const assistantTools = [
   getTopProductsTool,
   getMarketingResultsTool,
   getCustomersTool,
+  draftProductTool,
+  changeProductsTool,
 ] as const;

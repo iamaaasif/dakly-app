@@ -1,9 +1,14 @@
 'use client';
 import { Send, Sparkles, X } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 
-import { askDaklyRequestSchema } from '@dakly/contracts/assistant';
+import {
+  askDaklyRequestSchema,
+  type AskDaklyAnswer,
+  type AssistantProductChange,
+  type AssistantProductDraft,
+} from '@dakly/contracts/assistant';
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
@@ -11,10 +16,17 @@ import { Input } from '@dakly/ui/input';
 import { useAskDakly } from '../api/ask-dakly';
 import { takeHandedOffQuestion, useHandedOffQuestion } from '../ask-handoff';
 import { askSuggestions, MAX_SUGGESTIONS } from '../ask-suggestions';
+import { assistantDraftHref } from '@/lib/assistant-product-draft-link';
+import { handOffProductChange } from '@/lib/assistant-product-handoff';
 import { useSessionContext } from '@/lib/session-context';
 
+// A product proposal stays on its turn, so the owner can open it again after closing the page.
+export type ProductProposalTurn =
+  | { kind: 'draft'; draft: AssistantProductDraft }
+  | { kind: 'change'; change: AssistantProductChange };
 export type Turn =
-  { role: 'user'; text: string } | { role: 'assistant'; text: string; sources: string[] };
+  | { role: 'user'; text: string }
+  | { role: 'assistant'; text: string; sources: string[]; proposal?: ProductProposalTurn };
 
 type AskDaklyPanelProps = {
   turns: Turn[];
@@ -42,6 +54,17 @@ export function AskDaklyPanel({ turns, onTurns, onClose }: AskDaklyPanelProps) {
   const [question, setQuestion] = useState('');
   const [creditsLeft, setCreditsLeft] = useState<number>();
   const ask = useAskDakly();
+  const router = useRouter();
+
+  // The proposal opens a page the owner reviews; this panel saves nothing.
+  function openProposal(proposal: ProductProposalTurn) {
+    if (proposal.kind === 'draft') router.push(assistantDraftHref(proposal.draft));
+    else {
+      handOffProductChange(proposal.change);
+      router.push('/products');
+    }
+    onClose();
+  }
 
   function send(text: string) {
     const parsed = askDaklyRequestSchema.safeParse({
@@ -54,9 +77,11 @@ export function AskDaklyPanel({ turns, onTurns, onClose }: AskDaklyPanelProps) {
     setQuestion('');
     ask.mutate(parsed.data, {
       onSuccess: (answer) => {
-        if (answer.kind === 'answer') setCreditsLeft(answer.creditsLeft);
+        if ('creditsLeft' in answer) setCreditsLeft(answer.creditsLeft);
+        const proposal = proposalOf(answer);
         const sources = answer.kind === 'answer' ? answer.sources : [];
-        onTurns([...asked, { role: 'assistant', text: answer.text, sources }]);
+        onTurns([...asked, { role: 'assistant', text: answer.text, sources, proposal }]);
+        if (proposal) openProposal(proposal);
       },
       // The typed question comes back, so a retry is one tap.
       onError: () => setQuestion(parsed.data.question),
@@ -79,7 +104,7 @@ export function AskDaklyPanel({ turns, onTurns, onClose }: AskDaklyPanelProps) {
       className="fixed inset-y-0 right-0 z-50 flex h-dvh w-full max-w-100 flex-col border-l border-border bg-surface text-text shadow-overlay"
     >
       <PanelHeader titleId={titleId} pageName={pageName} onClose={onClose} />
-      <Conversation turns={turns} ask={ask} onPick={send} />
+      <Conversation turns={turns} ask={ask} onPick={send} onOpen={openProposal} />
       <Composer
         question={question}
         onQuestion={setQuestion}
@@ -127,10 +152,12 @@ function Conversation({
   turns,
   ask,
   onPick,
+  onOpen,
 }: {
   turns: Turn[];
   ask: ReturnType<typeof useAskDakly>;
   onPick: (text: string) => void;
+  onOpen: (proposal: ProductProposalTurn) => void;
 }) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -145,7 +172,7 @@ function Conversation({
       {turns.length === 0 ? (
         <Suggestions onPick={onPick} disabled={ask.isPending} />
       ) : (
-        turns.map((turn, index) => <TurnView key={index} turn={turn} />)
+        turns.map((turn, index) => <TurnView key={index} turn={turn} onOpen={onOpen} />)
       )}
       {ask.isPending ? (
         <p role="status" className="text-sm text-text-muted">
@@ -230,7 +257,19 @@ function Suggestions({ onPick, disabled }: { onPick: (text: string) => void; dis
   );
 }
 
-function TurnView({ turn }: { turn: Turn }) {
+function proposalOf(answer: AskDaklyAnswer): ProductProposalTurn | undefined {
+  if (answer.kind === 'product_draft') return { kind: 'draft', draft: answer.draft };
+  if (answer.kind === 'product_change') return { kind: 'change', change: answer.change };
+  return undefined;
+}
+
+function TurnView({
+  turn,
+  onOpen,
+}: {
+  turn: Turn;
+  onOpen: (proposal: ProductProposalTurn) => void;
+}) {
   if (turn.role === 'user')
     return (
       <p className="ml-auto w-fit max-w-[85%] rounded-lg bg-inverse px-3 py-2 text-base wrap-anywhere text-on-primary">
@@ -242,6 +281,11 @@ function TurnView({ turn }: { turn: Turn }) {
       <p className="text-base wrap-anywhere whitespace-pre-line">{turn.text}</p>
       {turn.sources.length ? (
         <p className="text-xs text-text-muted">From {turn.sources.join(', ')}</p>
+      ) : null}
+      {turn.proposal ? (
+        <Button variant="secondary" onClick={() => onOpen(turn.proposal!)}>
+          {turn.proposal.kind === 'draft' ? 'Open the draft' : 'Open the review'}
+        </Button>
       ) : null}
     </div>
   );

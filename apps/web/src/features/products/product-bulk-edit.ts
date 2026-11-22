@@ -36,22 +36,35 @@ export function editableValue(field: BulkEditField, value: number | string | nul
 export function gridDefaults(
   products: ProductResponse[],
   preset: 'hide' | undefined,
+  proposed: ProductBulkEditRow[] = [],
 ): ProductBulkEditFormValues {
+  const proposals = new Map(proposed.map((row) => [row.productId, row]));
   return {
     stockReason: '',
-    rows: products.map((product) => {
-      const variant = onlyVariant(product);
-      return {
-        productId: product.id,
-        pricePoisha: editableValue('pricePoisha', product.pricePoisha),
-        compareAtPricePoisha: editableValue('compareAtPricePoisha', product.compareAtPricePoisha),
-        costPoisha: editableValue('costPoisha', variant?.costPoisha ?? null),
-        stock: canEditStock(product) && variant ? String(variant.onHand) : '',
-        category: product.category ?? '',
-        status: preset === 'hide' ? 'hidden' : product.status,
-      };
-    }),
+    rows: products.map((product) => defaultRow(product, preset, proposals.get(product.id))),
   };
+}
+
+function defaultRow(
+  product: ProductResponse,
+  preset: 'hide' | undefined,
+  next: ProductBulkEditRow | undefined,
+) {
+  const variant = onlyVariant(product);
+  return {
+    productId: product.id,
+    pricePoisha: editableValue('pricePoisha', next?.pricePoisha ?? product.pricePoisha),
+    compareAtPricePoisha: editableValue('compareAtPricePoisha', product.compareAtPricePoisha),
+    costPoisha: editableValue('costPoisha', variant?.costPoisha ?? null),
+    stock: stockCell(product, next?.stock),
+    category: product.category ?? '',
+    status: preset === 'hide' ? ('hidden' as const) : product.status,
+  };
+}
+
+function stockCell(product: ProductResponse, proposed: number | undefined) {
+  const variant = onlyVariant(product);
+  return canEditStock(product) && variant ? String(proposed ?? variant.onHand) : '';
 }
 
 // Only values that differ from the product are sent, so an untouched or blank cell never writes.
