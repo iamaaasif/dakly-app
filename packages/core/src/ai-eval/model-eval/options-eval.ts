@@ -9,8 +9,8 @@ import {
   suggestOptionsFromTitle,
 } from '../../products/prompts/suggest-product-options.v1';
 import type { EvalMeter } from './eval-meter';
-import { meteredRespond } from './reply-pipeline';
 import type { MediaScore } from './media-eval';
+import { meteredRespond } from './reply-pipeline';
 
 const fixtures = path.resolve(__dirname, '../../../src/ai-eval/model-eval/fixtures');
 const TIMEOUT_MS = 90_000;
@@ -43,6 +43,13 @@ const forbiddenName = /price|cost|stock|code|sku|দাম|স্টক/i;
 const named = (options: Option[], name: string) =>
   options.find((option) => option.name.toLowerCase() === name);
 
+function sizeProblems(options: Option[], size: TitleCase['size']) {
+  const hasSize = Boolean(named(options, 'size'));
+  if (size === 'required' && !hasSize) return ['no Size'];
+  if (size === 'forbidden' && hasSize) return ['Size on a product without sizes'];
+  return [];
+}
+
 function problemsWith(
   options: Option[],
   { size, colourNamed, forbiddenValue }: Omit<TitleCase, 'title'>,
@@ -53,9 +60,7 @@ function problemsWith(
     problems.push('price, code or stock option');
   if (options.some((option) => option.values.includes(forbiddenValue ?? '')))
     problems.push(`value ${forbiddenValue} taken from the title`);
-  const hasSize = Boolean(named(options, 'size'));
-  if (size === 'required' && !hasSize) problems.push('no Size');
-  if (size === 'forbidden' && hasSize) problems.push('Size on a product without sizes');
+  problems.push(...sizeProblems(options, size));
   if (!colourNamed && (named(options, 'colour') || named(options, 'color')))
     problems.push('Colour that the title did not name');
   return problems;
