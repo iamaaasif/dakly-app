@@ -215,7 +215,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
       detail.getByText(/Returned \d+ of \d+ parcels\. Ask for an advance\./),
     ).toBeVisible();
     await expect(detail.getByText('Line discount')).toBeVisible();
-    await verifyDrawerWhileSessionIsBlocked(page, detail);
+    await verifyDrawerWhileSessionIsChecked(page, detail);
     const confirm = detail.getByRole('button', { name: 'Confirm' });
     await capture('detail');
     await expect(confirm).toBeInViewport({ ratio: 1 });
@@ -309,7 +309,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
   }
 });
 
-async function verifyDrawerWhileSessionIsBlocked(page: Page, detail: Locator) {
+async function verifyDrawerWhileSessionIsChecked(page: Page, detail: Locator) {
   let release!: () => void;
   let entered!: () => void;
   const held = new Promise<void>((resolve) => {
@@ -327,8 +327,9 @@ async function verifyDrawerWhileSessionIsBlocked(page: Page, detail: Locator) {
     const verified = page.waitForResponse((response) => response.url().endsWith('/api/me/context'));
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await requested;
-    await expect(detail).toBeHidden();
-    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+    // An unchanged context is checked in the background, so the open order stays usable.
+    await expect(detail).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(0);
     release();
     expect((await verified).status()).toBe(200);
     await expect(detail).toBeVisible();
