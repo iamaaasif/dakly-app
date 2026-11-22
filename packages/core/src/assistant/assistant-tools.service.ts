@@ -18,8 +18,8 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import type { LlmTool } from '@dakly/providers/llm/llm-driver';
 
 import { AnalyticsService } from '../analytics/analytics.service';
-import { AppError } from '../platform/errors/app-error';
 import { OrdersService } from '../orders/orders.service';
+import { AppError } from '../platform/errors/app-error';
 import { TeamService } from '../team/team.service';
 
 type Handler = (storeId: string, raw: unknown) => Promise<object>;
