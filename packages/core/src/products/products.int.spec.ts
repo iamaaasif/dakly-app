@@ -363,7 +363,7 @@ describe('ProductsService with Postgres', () => {
       createProductSchema.parse({ name: 'Readiness labels', status: 'hidden' }),
       actor,
     );
-    expect(product.readiness).toEqual(['needs_price', 'needs_photo', 'hidden', 'running_low']);
+    expect(product.readiness).toEqual(['needs_price', 'needs_photo', 'hidden', 'out_of_stock']);
     await f.connection.pool.query('update product_variants set on_hand=5,reserved=1 where id=$1', [
       product.variants[0]!.id,
     ]);

@@ -17,6 +17,9 @@ function getProductStatus(product: ProductReadinessProps['product']): {
   if (product.readiness.includes('hidden')) {
     return { label: readinessLabels.hidden, variant: 'neutral' };
   }
+  if (product.readiness.includes('out_of_stock')) {
+    return { label: readinessLabels.out_of_stock, variant: 'danger' };
+  }
   if (product.readiness.includes('running_low')) {
     return { label: readinessLabels.running_low, variant: 'warning' };
   }

@@ -380,7 +380,16 @@ function toResponse(
   if (variants.some((variant) => variant.pricePoisha === 0)) readiness.push('needs_price');
   if (!product.imageFileIds.length) readiness.push('needs_photo');
   if (product.status === 'hidden') readiness.push('hidden');
-  if (product.isStockTracked && variants.some((variant) => variant.available <= lowStockThreshold))
+  if (
+    product.isStockTracked &&
+    variants.length &&
+    variants.every((variant) => variant.available <= 0)
+  )
+    readiness.push('out_of_stock');
+  else if (
+    product.isStockTracked &&
+    variants.some((variant) => variant.available <= lowStockThreshold)
+  )
     readiness.push('running_low');
   return {
     ...product,

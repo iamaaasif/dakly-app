@@ -68,17 +68,26 @@ export function ProductSizes({ onAddOption }: ProductSizesProps) {
   );
 }
 
+// The cost field above the sizes edits the first variant, so new sizes start with the same cost.
+function newSizeVariant(form: UseFormReturn<ProductFormValues>, size: string) {
+  return {
+    optionValues: { 0: size },
+    sku: null,
+    priceOverridePoisha: '',
+    costPoisha: form.getValues('variants.0.costPoisha') ?? '',
+    initialStock: 0,
+  };
+}
+
 function applySizesPreset(form: UseFormReturn<ProductFormValues>, presetSizes: readonly string[]) {
   const list = [...presetSizes];
   form.setValue('options', [{ name: 'Size', values: list }], { shouldDirty: true });
+  const first = form.getValues('variants.0');
   form.setValue(
     'variants',
-    list.map((size) => ({
-      optionValues: { 0: size },
-      sku: null,
-      priceOverridePoisha: '',
-      costPoisha: '',
-      initialStock: 0,
+    list.map((size, index) => ({
+      ...newSizeVariant(form, size),
+      sku: index === 0 ? (first?.sku ?? null) : null,
     })),
     { shouldDirty: true },
   );
@@ -87,26 +96,22 @@ function applySizesPreset(form: UseFormReturn<ProductFormValues>, presetSizes: r
 function addSizeRow(form: UseFormReturn<ProductFormValues>, sizes: string[]) {
   const list = sizes.length ? [...sizes, ''] : [''];
   form.setValue('options', [{ name: 'Size', values: list }], { shouldDirty: true });
-  const current = sizes.length === 0 ? [] : (form.getValues('variants') ?? []);
-  form.setValue(
-    'variants',
-    [
-      ...current,
-      {
-        optionValues: { 0: '' },
-        sku: null,
-        priceOverridePoisha: '',
-        costPoisha: '',
-        initialStock: 0,
-      },
-    ],
-    { shouldDirty: true },
-  );
+  const current = form.getValues('variants') ?? [];
+  const added = newSizeVariant(form, '');
+  if (sizes.length === 0) {
+    // The plain product variant becomes the first size, so its cost and code stay.
+    form.setValue('variants', [{ ...current[0], ...added, sku: current[0]?.sku ?? null }], {
+      shouldDirty: true,
+    });
+    return;
+  }
+  form.setValue('variants', [...current, added], { shouldDirty: true });
 }
 
 function removeSizeRow(form: UseFormReturn<ProductFormValues>, sizes: string[], index: number) {
   const remaining = sizes.filter((_, i) => i !== index);
   const current = form.getValues('variants') ?? [];
+  const kept = current[0];
   const updated = current.filter((_, i) => i !== index);
   form.setValue('options', remaining.length ? [{ name: 'Size', values: remaining }] : [], {
     shouldDirty: true,
@@ -118,9 +123,9 @@ function removeSizeRow(form: UseFormReturn<ProductFormValues>, sizes: string[], 
       : [
           {
             optionValues: {},
-            sku: null,
+            sku: kept?.sku ?? null,
             priceOverridePoisha: '',
-            costPoisha: '',
+            costPoisha: kept?.costPoisha ?? '',
             initialStock: 0,
           },
         ],

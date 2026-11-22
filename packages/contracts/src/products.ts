@@ -11,20 +11,24 @@ export const stockMovementKinds = [
 ] as const;
 export const restockRequestStatuses = ['waiting', 'notified', 'cancelled'] as const;
 
-const money = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
-const text = z.string().trim().min(1).max(200);
+const money = z
+  .number('Enter an amount')
+  .int('Enter a whole amount')
+  .min(0, 'The amount cannot be negative')
+  .max(Number.MAX_SAFE_INTEGER, 'That amount is too large');
+const text = z.string().trim().min(1, 'Enter a value').max(200, 'Use 200 characters or fewer');
 const optionSchema = z.strictObject({
   name: text,
   values: z
     .array(text)
-    .min(1)
-    .max(100)
-    .refine((values) => new Set(values).size === values.length, 'Repeated option value'),
+    .min(1, 'Add at least one value')
+    .max(100, 'Use 100 values or fewer')
+    .refine((values) => new Set(values).size === values.length, 'Each value must be different'),
 });
 const variantSchema = z.strictObject({
   optionValues: z.record(z.string(), text).default({}),
   sku: text.nullable().default(null),
-  priceOverridePoisha: money.positive().nullable().default(null),
+  priceOverridePoisha: money.positive('Enter an amount above zero').nullable().default(null),
   costPoisha: money.nullable().default(null),
 });
 
@@ -32,8 +36,13 @@ const editVariantSchema = variantSchema.extend({ id: z.uuid().optional() });
 
 export const createProductSchema = z
   .strictObject({
-    name: text,
-    description: z.string().trim().max(10000).nullable().default(null),
+    name: z.string().trim().min(1, 'Enter a product name').max(200, 'Use 200 characters or fewer'),
+    description: z
+      .string()
+      .trim()
+      .max(10000, 'Use 10,000 characters or fewer')
+      .nullable()
+      .default(null),
     category: text.nullable().default(null),
     aliases: z.array(text).max(100).default([]),
     pricePoisha: money.default(0),
@@ -75,7 +84,7 @@ function validateVariants(
     context.addIssue({
       code: 'custom',
       path: ['variants'],
-      message: 'Use distinct variants that match the product options',
+      message: 'Each size or option combination must be different',
     });
 }
 
@@ -109,15 +118,18 @@ export const changeProductSchema = z
 
 export type ChangeProductInput = z.infer<typeof changeProductSchema>;
 
+const takaMessage = 'Enter Taka with at most two decimal places';
 export const takaInput = z
   .string()
-  .regex(/^\d+(?:\.\d{1,2})?$/, 'Enter Taka with at most two decimal places')
+  .regex(/^\d+(?:\.\d{1,2})?$/, takaMessage)
   .transform((value) => {
     const [whole, fraction = ''] = value.split('.');
     return Number(BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0')));
   })
   .pipe(money);
-const optionalTakaInput = z.union([z.literal('').transform(() => null), takaInput]);
+const optionalTakaInput = z.union([z.literal('').transform(() => null), takaInput], {
+  error: takaMessage,
+});
 const optionalTextInput = z
   .string()
   .nullable()
@@ -135,16 +147,24 @@ export const productFormSchema = z
       .transform((values) => values.filter((value) => value.trim()))
       .pipe(createProductSchema.shape.aliases.unwrap())
       .default([]),
-    pricePoisha: z.union([z.literal('').transform(() => 0), takaInput]).default(0),
+    pricePoisha: z
+      .union([z.literal('').transform(() => 0), takaInput], { error: takaMessage })
+      .default(0),
     compareAtPricePoisha: optionalTakaInput.default(null),
     variants: z
       .array(
         z.strictObject({
           ...editVariantSchema.shape,
           sku: optionalTextInput.pipe(editVariantSchema.shape.sku.unwrap()).default(null),
-          priceOverridePoisha: optionalTakaInput.pipe(money.positive().nullable()).default(null),
+          priceOverridePoisha: optionalTakaInput
+            .pipe(money.positive('Enter an amount above zero').nullable())
+            .default(null),
           costPoisha: optionalTakaInput.default(null),
-          initialStock: z.number().int().min(0).default(0),
+          initialStock: z
+            .number('Enter a stock number')
+            .int('Enter a whole number')
+            .min(0, 'Stock cannot be negative')
+            .default(0),
         }),
       )
       .max(100)
@@ -167,7 +187,13 @@ export const productFormSchema = z
 export type ProductFormValues = z.input<typeof productFormSchema>;
 export type ProductFormInput = z.output<typeof productFormSchema>;
 
-const productReadinessValues = ['needs_price', 'needs_photo', 'hidden', 'running_low'] as const;
+const productReadinessValues = [
+  'needs_price',
+  'needs_photo',
+  'hidden',
+  'running_low',
+  'out_of_stock',
+] as const;
 export type ProductReadiness = (typeof productReadinessValues)[number];
 
 export const productListQuerySchema = z.strictObject({
@@ -224,12 +250,12 @@ export type StockMovementKind = (typeof stockMovementKinds)[number];
 export const MAX_STOCK_QUANTITY = 2147483647;
 export const stockAdjustmentSchema = z.strictObject({
   quantity: z
-    .number()
-    .int()
-    .min(-MAX_STOCK_QUANTITY)
-    .max(MAX_STOCK_QUANTITY)
-    .refine((value) => value !== 0, 'Use a nonzero quantity'),
-  reason: z.string().trim().min(1).max(500),
+    .number('Enter how many to add or remove')
+    .int('Enter a whole number')
+    .min(-MAX_STOCK_QUANTITY, 'That is too many to remove at once')
+    .max(MAX_STOCK_QUANTITY, 'That is too many to add at once')
+    .refine((value) => value !== 0, 'Enter a number other than zero'),
+  reason: z.string().trim().min(1, 'Enter a reason').max(500, 'Use 500 characters or fewer'),
 });
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
 export const MAX_PRODUCT_PHOTOS = 10;

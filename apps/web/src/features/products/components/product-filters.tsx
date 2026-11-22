@@ -17,6 +17,7 @@ const searchSchema = productListQuerySchema.pick({ search: true });
 const readinessFilters = [
   undefined,
   'running_low',
+  'out_of_stock',
   'needs_price',
   'needs_photo',
   'hidden',

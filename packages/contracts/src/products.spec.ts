@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   changeProductSchema,
   createProductSchema,
+  productFormSchema,
   productListQuerySchema,
   stockAdjustmentSchema,
 } from './products';
@@ -75,6 +76,23 @@ describe('product contracts', () => {
         stockAdjustmentSchema.safeParse({ quantity, reason: 'Count correction' }).success,
       ).toBe(false);
     expect(stockAdjustmentSchema.safeParse({ quantity: 1, reason: '' }).success).toBe(false);
+  });
+
+  it('explains invalid fields in plain words', () => {
+    const messages = (result: { error?: { issues: { message: string }[] } }) =>
+      result.error?.issues.map((issue) => issue.message);
+    expect(messages(stockAdjustmentSchema.safeParse({ quantity: 2, reason: '' }))).toEqual([
+      'Enter a reason',
+    ]);
+    expect(
+      messages(stockAdjustmentSchema.safeParse({ quantity: Number.NaN, reason: 'x' })),
+    ).toEqual(['Enter how many to add or remove']);
+    expect(messages(createProductSchema.safeParse({ name: ' ' }))).toEqual([
+      'Enter a product name',
+    ]);
+    expect(messages(productFormSchema.safeParse({ name: 'Shirt', pricePoisha: 'abc' }))).toEqual([
+      'Enter Taka with at most two decimal places',
+    ]);
   });
 
   it('bounds lists and rejects unknown readiness filters', () => {

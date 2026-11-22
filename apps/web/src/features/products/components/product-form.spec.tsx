@@ -414,8 +414,27 @@ describe('Product form', () => {
     show(optioned);
     await userEvent.click(screen.getByRole('button', { name: 'Remove option 1' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
-    expect((await screen.findByRole('alert')).textContent).toContain('distinct variants');
+    expect((await screen.findByRole('alert')).textContent).toContain('must be different');
     expect(submitted).toBe(false);
+  });
+
+  it('keeps a cost typed before choosing sizes and applies it to every size', async () => {
+    const bodies: { variants: { costPoisha: number | null }[] }[] = [];
+    vi.stubGlobal('fetch', async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') bodies.push(JSON.parse(String(init.body)));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show();
+    await userEvent.type(screen.getByLabelText('Name'), 'T-Shirt');
+    await userEvent.type(screen.getByLabelText('Selling price ৳'), '500');
+    await userEvent.type(screen.getByLabelText('Your cost ৳'), '300');
+    await userEvent.click(screen.getByRole('button', { name: 'S, M, L, XL' }));
+    expect((screen.getByLabelText('Your cost ৳') as HTMLInputElement).value).toBe('300');
+    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(bodies[0]!.variants.map((variant) => variant.costPoisha)).toEqual([
+      30000, 30000, 30000, 30000,
+    ]);
   });
 
   it('adjusts stock only for retained sizes after deleting a size row', async () => {
