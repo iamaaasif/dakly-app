@@ -129,10 +129,11 @@ Decision: [0012](../adr/0012-full-page-product-form.md). Wireframes: `docs/desig
 - **Full page** at `/products/new` and `/products/[productId]`. The top bar stays in view: back, title, Save, Hide product. Desktop has two columns, a phone has one.
   - Left: Photos (up to 10, first one is the main photo, move earlier), Basics (name, category, description with Write with AI), Price (price, sale price, cost, live profit percent), Variants.
   - Right: Status (shown or hidden), Where it appears (Chat replies, Shop sales, Order link), Stock settings (warn me at), a preview card. The Stock history tab sits on the same page.
-- **Variants grid**: add Size or Colour as chips (up to three option types, as today). The grid has one row per value or combination with image, price, cost, stock and product code, edited in place. **Set all** fills one column. A blank price uses the product price. Renaming an option keeps the variant ids, prices, codes and stock, as the current editor does.
+- **Variants grid** (research: `docs/design/wireframes/prod-11/research.md`): up to three options, typed as values or picked from suggestions (S, M, L, XL, XXL, common colours). The grid is built as values are added, with no save step in between. Rows are grouped by the first option and can be collapsed. Each row has a checkbox, image, price, cost, profit percent, stock and product code, edited in place. The bulk bar sets price, cost or stock for the chosen rows, and a paste from a spreadsheet fills the grid. A blank price uses the product price. A removed combination returns with **Add missing combinations**. Renaming an option keeps the variant ids, prices, codes and stock. Adding an option to a product that has stock moves the existing stock to the first value of the new option and says so. Stock edits in the grid are written to the stock history with one reason asked on save.
 - Plain validation messages on every field; a typed cost is kept when options change.
 - Leaving with unsaved changes asks first. Restock and Change stock stay dialogs.
-- On a phone the grid shows one row as a card with the same five fields, and the Save bar sticks to the bottom.
+- On a phone each variant is one line (name, price, stock) that opens to edit its fields, the bulk bar stays, and the Save bar sticks to the bottom.
+- A readiness line shows what the AI still lacks (photo, price, description).
 
 ### Missing design: import products
 
