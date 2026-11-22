@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders';
 
@@ -22,5 +22,6 @@ export function useOrders(query: OrderListQuery) {
     queryFn: ({ signal }) =>
       request<OrderListResponse>(`/orders?${ordersSearch(query)}`, { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewOrders),
+    placeholderData: keepPreviousData,
   });
 }

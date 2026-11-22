@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import type { CampaignListQuery } from '@dakly/contracts/campaigns';
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { campaignListHref, useCampaigns } from '../api/campaigns';
@@ -62,7 +63,11 @@ function CampaignListState({
     );
   const { items, nextCursor } = campaigns.data;
   return (
-    <section className="space-y-4" aria-label="Campaign list">
+    <section
+      className={cn('space-y-4 transition-opacity', campaigns.isPlaceholderData && 'opacity-60')}
+      aria-busy={campaigns.isPlaceholderData}
+      aria-label="Campaign list"
+    >
       {items.length ? (
         <CampaignTable campaigns={items} />
       ) : (

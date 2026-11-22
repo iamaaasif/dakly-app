@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type { CampaignListQuery, CampaignListResponse } from '@dakly/contracts/campaigns';
 
@@ -20,5 +20,6 @@ export function useCampaigns(query: CampaignListQuery) {
     queryKey: [...campaignKeys.list(contextTag), query],
     queryFn: ({ signal }) => request<CampaignListResponse>(campaignListHref(query), { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewCampaigns),
+    placeholderData: keepPreviousData,
   });
 }

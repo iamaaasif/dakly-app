@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type { ContactListQuery, ContactListResponse } from '@dakly/contracts/contacts';
 
@@ -12,6 +12,7 @@ export function useCustomers(query: ContactListQuery) {
     queryFn: ({ signal }) =>
       request<ContactListResponse>(`/contacts?${customersSearch(query)}`, { signal }),
     enabled: Boolean(contextTag),
+    placeholderData: keepPreviousData,
     retry: false,
   });
 }

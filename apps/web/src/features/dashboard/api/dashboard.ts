@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type { DashboardQuery, DashboardResponse } from '@dakly/contracts/dashboard';
 
@@ -12,5 +12,6 @@ export function useDashboard(period: DashboardQuery['period'], hasStore: boolean
     queryKey: [...dashboardKeys.all, contextTag, period],
     queryFn: ({ signal }) => request<DashboardResponse>(`/dashboard?period=${period}`, { signal }),
     enabled: Boolean(contextTag && hasStore),
+    placeholderData: keepPreviousData,
   });
 }

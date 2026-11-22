@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type {
   AnalyticsAiAgentResponse,
@@ -33,6 +33,7 @@ export function useAnalyticsOverview(period: AnalyticsView['period']) {
     queryFn: ({ signal }) =>
       request<AnalyticsOverviewResponse>(`/analytics/overview?period=${period}`, { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewAnalytics),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -46,6 +47,7 @@ function useAnalyticsTab<Response>(
     queryKey: ['analytics', contextTag, tab, period],
     queryFn: ({ signal }) => request<Response>(`/analytics/${tab}?period=${period}`, { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewAnalytics),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -16,6 +16,7 @@ import { CustomerList } from './customer-list';
 import { CustomersHeader } from './customers-header';
 import { ImportCustomersDialog } from './import-customers-dialog';
 import { NewCustomerForm } from './new-customer-form';
+import { Refreshing } from '@/components/refreshing';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -105,7 +106,7 @@ function CustomerResults({ query, columns, customers, hideError }: CustomerResul
   const pageHref = (cursor?: string) =>
     `/customers?${customersSearch({ kind: query.kind, search: query.search, tag: query.tag, columns: customerColumnsParam(columns), cursor })}`;
   return (
-    <>
+    <Refreshing active={customers.isPlaceholderData}>
       <CustomerList customers={items} columns={columns} />
       <nav aria-label="Customer pages" className="flex gap-4">
         {query.cursor ? (
@@ -125,7 +126,7 @@ function CustomerResults({ query, columns, customers, hideError }: CustomerResul
           </Link>
         ) : null}
       </nav>
-    </>
+    </Refreshing>
   );
 }
 

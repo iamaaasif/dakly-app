@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import type {
   ConversationCountsResponse,
@@ -24,6 +24,7 @@ export function useConversations(filters: Partial<ConversationListQuery>) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled: Boolean(contextTag),
+    placeholderData: keepPreviousData,
     retry: false,
   });
 }
