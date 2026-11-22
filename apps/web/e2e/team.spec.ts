@@ -268,8 +268,9 @@ async function pausedDialog(page: Page) {
   try {
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await requested;
-    await expect(page.locator('dialog[open]')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toBeVisible();
+    // An unchanged context is checked in the background, so the open dialog stays usable.
+    await expect(page.locator('dialog[open]')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(0);
     release();
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByLabel('Mobile number')).toHaveValue('01712345678');
