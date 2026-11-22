@@ -7,6 +7,7 @@ import { buttonVariants } from '@dakly/ui/button';
 
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
+import { ChatHeaderPills } from './chat-header-pills';
 import { ChatList } from './chat-list';
 import { CommentsView } from './comments-view';
 import { ConversationPanel } from './conversation-panel';
@@ -24,13 +25,16 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
             order.
           </p>
         </div>
-        <Link
-          href={chatsHref({ ...query, agent: 'settings' })}
-          className={buttonVariants({ variant: 'secondary' })}
-        >
-          <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />
-          AI agent
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <ChatHeaderPills />
+          <Link
+            href={chatsHref({ ...query, agent: 'settings' })}
+            className={buttonVariants({ variant: 'secondary' })}
+          >
+            <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />
+            AI agent
+          </Link>
+        </div>
       </header>
       <div
         data-chat={query.chat ? 'open' : undefined}

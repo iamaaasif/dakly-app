@@ -264,6 +264,24 @@ export class InboxRepository {
     return row;
   }
 
+  async aiRepliesSince(storeId: string, since: Date) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ replies: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(messages.direction, 'out'),
+            eq(messages.authorType, 'ai'),
+            inArray(messages.status, ['sent', 'delivered', 'read']),
+            gte(messages.createdAt, since),
+          ),
+        ),
+    );
+    return row?.replies ?? 0;
+  }
+
   async firstAiReplySince(storeId: string, contactId: string, since: Date) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx

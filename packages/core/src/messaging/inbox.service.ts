@@ -5,6 +5,7 @@ import type {
   ConversationAssigneeResponse,
   ConversationCountsResponse,
   ConversationListQuery,
+  ConversationSummaryResponse,
   ConversationMessageListQuery,
   ConversationMessageResponse,
   ConversationResponse,
@@ -18,9 +19,10 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { AuditService } from '../audit/audit.service';
 import { UsersService } from '../auth/users.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { ChatOrdersService } from '../orders/chat-orders.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
-import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { DAY_MS, MINUTE_MS, startOfDayIn } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { InboxRepository } from './inbox.repository';
@@ -41,6 +43,7 @@ export class InboxService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(UsersService) private readonly users: UsersService,
+    @Inject(ChatOrdersService) private readonly chatOrders: ChatOrdersService,
   ) {}
 
   async list(storeId: string, query: ConversationListQuery, access: StoreAccess, actor: UserActor) {
@@ -73,6 +76,17 @@ export class InboxService {
   async counts(storeId: string): Promise<ConversationCountsResponse> {
     await this.requireChats(storeId);
     return this.repository.counts(storeId);
+  }
+
+  async summary(storeId: string, access: StoreAccess): Promise<ConversationSummaryResponse> {
+    await this.requireChats(storeId);
+    const since = startOfDayIn(await this.stores.timeZone(storeId), this.clock.now());
+    return {
+      aiRepliesToday: await this.repository.aiRepliesSince(storeId, since),
+      chatOrdersToday: access.areas.orders
+        ? await this.chatOrders.totalsSince(storeId, since)
+        : null,
+    };
   }
 
   async get(storeId: string, id: string): Promise<ConversationResponse> {
