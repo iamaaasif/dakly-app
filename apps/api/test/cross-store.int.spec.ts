@@ -5340,6 +5340,42 @@ fixture('POST /content-pieces/generate', async () => {
   }
 });
 
+fixture('POST /products/suggest-options', async () => {
+  const { a, b } = await pair();
+  const create = async (shop: Shop, name: string) =>
+    (await success(shop, 'POST', '/products', 201, { name, pricePoisha: 125000 })).json()
+      .id as string;
+  const foreign = await create(a, 'Hidden silk scarf');
+  const driver = app.get<{
+    respond(request: { input: string; model: string }): Promise<WriterResponse>;
+  }>(LLM_DRIVER);
+  const model = vi.spyOn(driver, 'respond').mockImplementation(async ({ model: name }) => ({
+    kind: 'output',
+    output: { options: [{ name: 'Size', values: ['S', 'M'] }] },
+    model: name,
+    responseId: randomUUID(),
+    usage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 },
+  }));
+  try {
+    const own = await success(b, 'POST', '/products/suggest-options', 200, { name: 'T-shirt' });
+    expect(own.json().options).toEqual([{ name: 'Size', values: ['S', 'M'] }]);
+    await hidden(
+      b,
+      'POST',
+      () => '/products/suggest-options',
+      foreign,
+      (id) => ({
+        productId: id,
+      }),
+    );
+    expect(
+      (await f.request(b.member, 'POST', '/products/suggest-options', { name: 'x' })).statusCode,
+    ).toBe(403);
+  } finally {
+    model.mockRestore();
+  }
+});
+
 fixture('POST /products/:productId/write-description', async () => {
   const { a, b } = await pair();
   await allowContentCredits();
