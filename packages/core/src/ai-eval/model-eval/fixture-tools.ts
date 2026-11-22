@@ -4,6 +4,7 @@ import { decidePhotoMatch } from '../../product-search/product-photo-match';
 import { nameScores, parseQuery } from '../../product-search/product-search-ranking';
 import type { ChatProduct } from '../../products/products.service';
 import {
+  deliveryPolicyPassage,
   deliveryZones,
   evalChatProducts,
   evalProducts,
@@ -101,7 +102,11 @@ const handlers: Record<string, (args: Args) => object> = {
   find_alternatives: findAlternatives,
   join_restock_list: joinRestockList,
   get_delivery_charge: () => ({ places: [], zones: deliveryZones }),
-  search_knowledge: () => ({ passages: [] }),
+  search_knowledge: ({ question }) => ({
+    passages: /deliver|ডেলিভারি|charge|চার্জ|din|দিন/iu.test(String(question ?? ''))
+      ? [deliveryPolicyPassage]
+      : [],
+  }),
   get_my_orders: () => ({ orders: [] }),
   get_order_status: () => ({ error: 'ORDER_NOT_FOUND' }),
   draft_order: () => ({ error: 'NOT_IN_A_CHAT' }),
