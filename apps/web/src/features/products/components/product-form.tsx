@@ -1,7 +1,7 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react-hook-form';
 
 import {
@@ -18,6 +18,7 @@ import { Card } from '@dakly/ui/card';
 import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
+import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
 import {
   ProductDescriptionFields,
   ProductFields,
@@ -26,6 +27,8 @@ import {
   ProductStockFields,
 } from './product-fields';
 import { ProductOptions } from './product-options';
+import { ProductVariantsCard } from './product-variants-card';
+import { StockReasonDialog } from './stock-reason-dialog';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
 // The full page keeps Save in a top bar that stays in view and puts photos and status beside the fields.
@@ -33,7 +36,7 @@ type ProductFormPage = { title: string; backHref: string; photos: ReactNode; sta
 
 type ProductFormProps = {
   product?: ProductResponse;
-  onSaved: (product: ProductResponse, failedSizes: string[]) => void;
+  onSaved: (product: ProductResponse, failedStock: string[]) => void;
   onCancel?: () => void;
   page?: ProductFormPage;
 };
@@ -44,7 +47,11 @@ export function ProductForm({ product, onSaved, onCancel, page }: ProductFormPro
     defaultValues: formValues(product),
   });
   const { dirtyFields, errors, isDirty } = form.formState;
-  const { onSubmit, isPending } = useSubmitProduct(form, { product, dirtyFields, onSaved });
+  const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
+    product,
+    dirtyFields,
+    onSaved,
+  });
   const actions = (
     <ProductFormActions
       isPending={isPending}
@@ -69,6 +76,7 @@ export function ProductForm({ product, onSaved, onCancel, page }: ProductFormPro
             productId={product?.id}
             actions={actions}
             serverError={serverError}
+            product={product}
           />
         ) : (
           <>
@@ -79,6 +87,7 @@ export function ProductForm({ product, onSaved, onCancel, page }: ProductFormPro
           </>
         )}
       </form>
+      {dialog}
     </FormProvider>
   );
 }
@@ -96,33 +105,51 @@ function useSubmitProduct(
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
   const adjustStock = useAdjustStock();
+  const [askReason, setAskReason] = useState(false);
+  const reason = useRef<string | null>(null);
   const onSubmit = form.handleSubmit((parsed) => {
     const input = product ? parsed : shareCostAcrossSizes(parsed);
+    if (product && reason.current === null && hasStockEdits(form.getValues(), product)) {
+      setAskReason(true);
+      return;
+    }
     const setError = (error: Error) =>
       form.setError(productErrorField(error, input.variants.length), {
         message: error.message,
       });
+    const writeStock = async (saved: ProductResponse) => {
+      const failed = await writeStockChanges(
+        stockChanges(saved, form.getValues(), product),
+        reason.current ?? 'Initial stock',
+        adjustStock.mutateAsync,
+      );
+      reason.current = null;
+      if (failed.length)
+        form.setError('root.server', {
+          message: `Saved, but the stock for ${failed.join(', ')} could not be updated. Use Change stock on the list.`,
+        });
+      onSaved(saved, failed);
+    };
     if (product) {
       change.mutate(productChanges(input, dirtyFields), {
-        onSuccess: (saved) => onSaved(saved, []),
+        onSuccess: writeStock,
         onError: setError,
       });
       return;
     }
-    create.mutate(input, {
-      onError: setError,
-      onSuccess: async (saved) => {
-        const failed = await saveInitialStocks({
-          saved,
-          input,
-          formVariants: form.getValues('variants'),
-          adjustStock: adjustStock.mutateAsync,
-        });
-        onSaved(saved, failed);
-      },
-    });
+    create.mutate(input, { onError: setError, onSuccess: writeStock });
   });
-  return { onSubmit, isPending: (product ? change : create).isPending };
+  const dialog = askReason ? (
+    <StockReasonDialog
+      onCancel={() => setAskReason(false)}
+      onConfirm={(text) => {
+        reason.current = text;
+        setAskReason(false);
+        void onSubmit();
+      }}
+    />
+  ) : null;
+  return { onSubmit, dialog, isPending: (product ? change : create).isPending };
 }
 
 function FieldCard({ title, children }: { title: string; children: ReactNode }) {
@@ -136,6 +163,7 @@ function FieldCard({ title, children }: { title: string; children: ReactNode }) 
 
 type ProductFormPageLayoutProps = {
   page: ProductFormPage;
+  product?: ProductResponse;
   productId?: string;
   actions: ReactNode;
   serverError: ReactNode;
@@ -143,6 +171,7 @@ type ProductFormPageLayoutProps = {
 
 function ProductFormPageLayout({
   page,
+  product,
   productId,
   actions,
   serverError,
@@ -160,18 +189,18 @@ function ProductFormPageLayout({
         <div className="space-y-4">
           <Card>{page.photos}</Card>
           <FieldCard title="Basics">
-            <ProductNameFields productId={productId} />
+            <ProductNameFields productId={productId} showCode={false} />
             <ProductDescriptionFields productId={productId} />
           </FieldCard>
           <FieldCard title="Price">
             <ProductPriceFields productId={productId} />
           </FieldCard>
-          <FieldCard title="Stock">
-            <ProductStockFields productId={productId} />
-          </FieldCard>
           <Card>
-            <ProductOptions mode={productId ? 'edit' : 'create'} />
+            <ProductVariantsCard product={product} />
           </Card>
+          <FieldCard title="Stock settings">
+            <ProductStockFields productId={productId} withWarnAt />
+          </FieldCard>
           {serverError}
         </div>
         <div className="space-y-4">{page.status}</div>
@@ -191,56 +220,6 @@ function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
       costPoisha: variant.costPoisha ?? cost,
     })),
   };
-}
-
-type SaveInitialStocksArgs = {
-  saved: ProductResponse;
-  input: ProductFormInput;
-  formVariants: ProductFormValues['variants'];
-  adjustStock: (args: {
-    variantId: string;
-    input: { quantity: number; reason: string };
-  }) => Promise<unknown>;
-};
-
-async function saveInitialStocks({
-  saved,
-  input,
-  formVariants,
-  adjustStock,
-}: SaveInitialStocksArgs): Promise<string[]> {
-  const failed: string[] = [];
-  const sizeOption = input.options[0]?.name ?? '';
-  const adjustments = (formVariants ?? []).flatMap((variant, index) => {
-    const quantity = variant.initialStock ?? 0;
-    if (quantity <= 0) return [];
-    const sizeName = input.options[0]?.values[index] ?? '';
-    const variantId = saved.variants.find((v) => v.optionValues[sizeOption] === sizeName)?.id;
-    if (!variantId) {
-      failed.push(sizeName);
-      return [];
-    }
-    return [{ sizeName, variantId, quantity }];
-  });
-
-  if (adjustments.length === 0) return failed;
-
-  const results = await Promise.allSettled(
-    adjustments.map((item) =>
-      adjustStock({
-        variantId: item.variantId,
-        input: { quantity: item.quantity, reason: 'Initial stock' },
-      }),
-    ),
-  );
-
-  for (const [index, result] of results.entries()) {
-    if (result.status === 'rejected') {
-      failed.push(adjustments[index]!.sizeName);
-    }
-  }
-
-  return failed;
 }
 
 type ProductFormActionsProps = {
@@ -294,7 +273,16 @@ function formValues(product?: ProductResponse): ProductFormValues {
       name: '',
       options: [],
       pricePoisha: '',
-      variants: [{ optionValues: {}, sku: null, priceOverridePoisha: '', costPoisha: '' }],
+      variants: [
+        {
+          optionValues: {},
+          sku: null,
+          priceOverridePoisha: '',
+          costPoisha: '',
+          lowStockThreshold: '',
+          initialStock: 0,
+        },
+      ],
       isStockTracked: true,
       status: 'hidden',
     };
@@ -307,7 +295,7 @@ function formValues(product?: ProductResponse): ProductFormValues {
     pricePoisha: takaInputFromPoisha(product.pricePoisha),
     compareAtPricePoisha: takaInputFromPoisha(product.compareAtPricePoisha),
     variants: product.variants.map(
-      ({ id, optionValues, sku, priceOverridePoisha, costPoisha }) => ({
+      ({ id, optionValues, sku, priceOverridePoisha, costPoisha, lowStockThreshold, onHand }) => ({
         id,
         optionValues: Object.fromEntries(
           product.options.map(({ name }, index) => [index, optionValues[name]!]),
@@ -315,6 +303,8 @@ function formValues(product?: ProductResponse): ProductFormValues {
         sku,
         priceOverridePoisha: takaInputFromPoisha(priceOverridePoisha),
         costPoisha: takaInputFromPoisha(costPoisha),
+        lowStockThreshold: lowStockThreshold === null ? '' : String(lowStockThreshold),
+        initialStock: onHand,
       }),
     ),
     isStockTracked: product.isStockTracked,
@@ -337,6 +327,8 @@ function productErrorField(
   error: Error,
   variantCount: number,
 ): 'root.server' | 'variants' | 'variants.0.sku' {
+  if (error instanceof ApiError && error.code === 'PRODUCT_VARIANT_IN_OPEN_ORDERS')
+    return 'variants';
   if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
   return variantCount === 1 ? 'variants.0.sku' : 'variants';
 }

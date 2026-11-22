@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 import type { ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
@@ -32,6 +33,7 @@ export function NewProductPage() {
 
 export function EditProductPage({ productId }: { productId: string }) {
   const { data, error, isPending, refetch } = useGetProduct(productId);
+  const [saves, setSaves] = useState(0);
   const { data: session } = useSessionContext();
   if (error)
     return (
@@ -46,16 +48,28 @@ export function EditProductPage({ productId }: { productId: string }) {
         You can view products but not edit them. <Link href="/products">Back to products</Link>.
       </p>
     );
-  return <LoadedProductPage product={data} />;
+  // After a save the form starts again from what the server holds, so new rows have their ids.
+  return (
+    <LoadedProductPage
+      key={`${data.id}:${saves}`}
+      product={data}
+      onSaved={async () => {
+        await refetch();
+        setSaves((count) => count + 1);
+      }}
+    />
+  );
 }
 
-function LoadedProductPage({ product }: { product: ProductResponse }) {
-  const router = useRouter();
+type LoadedProductPageProps = { product: ProductResponse; onSaved: () => Promise<void> };
+
+function LoadedProductPage({ product, onSaved }: LoadedProductPageProps) {
   return (
     <ProductForm
-      key={product.id}
       product={product}
-      onSaved={() => router.refresh()}
+      onSaved={(_saved, failedStock) => {
+        if (!failedStock.length) void onSaved();
+      }}
       page={{
         title: product.name,
         backHref: '/products',

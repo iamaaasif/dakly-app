@@ -124,7 +124,7 @@ describe('Product form on a full page', () => {
     expect(screen.getByRole('button', { name: 'Save and show' })).toBeTruthy();
     expect(screen.getByText('Save the product to add photos.')).toBeTruthy();
     expect(screen.getByText('Hidden')).toBeTruthy();
-    for (const title of ['Basics', 'Price', 'Stock'])
+    for (const title of ['Basics', 'Price', 'Variants', 'Stock settings'])
       expect(screen.getByRole('heading', { name: title })).toBeTruthy();
   });
 
