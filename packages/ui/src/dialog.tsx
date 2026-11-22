@@ -43,7 +43,7 @@ export function Dialog(props: DialogProps) {
       }}
       onKeyDown={trapFocus}
       className={cn(
-        'fixed inset-0 m-auto max-h-full w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text backdrop:bg-inverse/50',
+        'motion-dialog fixed inset-0 m-auto max-h-full w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text backdrop:bg-inverse/50',
         className,
       )}
     >

@@ -15,7 +15,7 @@ export function Tooltip({ content, children }: TooltipProps) {
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
             sideOffset={4}
-            className="z-50 max-w-xs rounded-sm bg-inverse px-2 py-1 text-xs text-on-primary shadow-overlay"
+            className="motion-popover z-50 max-w-xs rounded-sm bg-inverse px-2 py-1 text-xs text-on-primary shadow-overlay"
           >
             {content}
           </TooltipPrimitive.Content>

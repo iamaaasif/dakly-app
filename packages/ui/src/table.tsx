@@ -30,7 +30,10 @@ export function TableRow({ className, ...props }: TableRowProps) {
   return (
     <tr
       {...props}
-      className={cn('border-b border-border data-[state=selected]:bg-surface-muted', className)}
+      className={cn(
+        'border-b border-border transition-colors hover:bg-surface-muted/60 data-[state=selected]:bg-surface-muted',
+        className,
+      )}
     />
   );
 }

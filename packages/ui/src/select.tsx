@@ -35,7 +35,7 @@ export function SelectContent({ className, children, ...props }: SelectContentPr
       <SelectPrimitive.Content
         {...props}
         className={cn(
-          'z-50 overflow-hidden rounded-lg border border-border bg-surface p-1 text-text shadow-overlay',
+          'motion-popover z-50 overflow-hidden rounded-lg border border-border bg-surface p-1 text-text shadow-overlay',
           className,
         )}
       >
