@@ -7,6 +7,7 @@ import { OpenAiLlmDriver } from '@dakly/providers/llm/openai/openai-llm-driver';
 import { banglaGoldenCases } from '../golden-set.bangla';
 import { memoryGoldenCases } from '../golden-set.memory';
 import { sampleGoldenCases } from '../golden-set.sample';
+import { stockDeliveryGoldenCases } from '../golden-set.stock-delivery';
 import { EvalMeter } from './eval-meter';
 import { say } from './eval-output';
 import {
@@ -48,9 +49,12 @@ const { values } = parseArgs({
 
 function selectedCases() {
   const pending = values.pending?.split(',') ?? [];
-  return [...sampleGoldenCases, ...banglaGoldenCases, ...memoryGoldenCases].filter(
-    (golden) => !golden.dependsOn || !pending.includes(golden.dependsOn),
-  );
+  return [
+    ...sampleGoldenCases,
+    ...banglaGoldenCases,
+    ...memoryGoldenCases,
+    ...stockDeliveryGoldenCases,
+  ].filter((golden) => !golden.dependsOn || !pending.includes(golden.dependsOn));
 }
 
 async function main() {
