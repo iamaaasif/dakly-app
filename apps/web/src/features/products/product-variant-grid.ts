@@ -140,6 +140,23 @@ export function variantLabel(variant: GridVariant, options: GridOption[]): strin
     .join(' / ');
 }
 
+export type VariantGroup = { label: string; rows: { variant: GridVariant; index: number }[] };
+
+export function groupVariants(options: GridOption[], variants: GridVariant[]): VariantGroup[] {
+  const groups = new Map<string, VariantGroup>();
+  variants.forEach((variant, index) => {
+    const label = valueAt(variant, 0) ?? '';
+    const group = groups.get(label) ?? { label, rows: [] };
+    group.rows.push({ variant, index });
+    groups.set(label, group);
+  });
+  return options.length ? [...groups.values()] : [];
+}
+
+export function rowStock(variant: GridVariant): number {
+  return Number(variant.initialStock) || 0;
+}
+
 function takaNumber(text: string | undefined): number | null {
   const value = Number((text ?? '').trim());
   return text?.trim() && Number.isFinite(value) ? value : null;
@@ -155,3 +172,5 @@ export function profitPercent(sellingPrice: string | undefined, cost: string | u
 export function rowKey(variant: GridVariant): string {
   return variant.id ?? `new:${JSON.stringify(variant.optionValues)}`;
 }
+
+export type EditableField = 'priceOverridePoisha' | 'costPoisha' | 'initialStock' | 'sku';

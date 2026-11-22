@@ -96,20 +96,19 @@ describe('Variants card', () => {
     expect(screen.queryByRole('table')).toBeNull();
   });
 
-  it('lists the rows as values are typed', async () => {
+  it('builds the grid as values are typed and moves the stock to the first value', async () => {
     show(saved);
     await userEvent.click(screen.getByRole('button', { name: 'Add options' }));
     await userEvent.type(screen.getByLabelText('Option 1 name'), 'Size');
     await addValues('Size', 'S', 'M', 'L');
-    const card = screen.getByRole('heading', { name: 'Variants' }).parentElement!;
-    expect(
-      within(card)
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual(expect.arrayContaining(['S', 'M', 'L']));
+    const first = screen.getByLabelText('Stock for S') as HTMLInputElement;
+    expect(first.value).toBe('12');
+    expect((screen.getByLabelText('Code for S') as HTMLInputElement).value).toBe('TS-1');
+    expect((screen.getByLabelText('Stock for M') as HTMLInputElement).value).toBe('0');
+    expect((screen.getByLabelText('Cost for L') as HTMLInputElement).value).toBe('650.00');
   });
 
-  it('suggests common values and builds the combinations of two options', async () => {
+  it('suggests common sizes and groups rows by the first option', async () => {
     show(saved);
     await userEvent.click(screen.getByRole('button', { name: 'Add options' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add Colour' }));
@@ -119,12 +118,11 @@ describe('Variants card', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add Size' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add S' }));
     await userEvent.click(screen.getByRole('button', { name: 'Add M' }));
-    const card = screen.getByRole('heading', { name: 'Variants' }).parentElement!;
-    expect(
-      within(card)
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual(['Black / S', 'Black / M', 'White / S', 'White / M']);
+    const black = screen.getByRole('region', { name: 'Black variants' });
+    expect(within(black).getAllByRole('listitem')).toHaveLength(2);
+    await userEvent.click(within(black).getByRole('button', { name: /^Black2 variants/ }));
+    expect(within(black).queryAllByRole('listitem')).toHaveLength(0);
+    expect(screen.getByRole('region', { name: 'White variants' })).toBeTruthy();
   });
 
   it('asks for one reason on save and writes the stock difference to the history', async () => {
