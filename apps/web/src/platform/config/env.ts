@@ -8,6 +8,18 @@ export function webApiUrl(): string {
   return apiOrigin.parse(process.env.WEB_API_URL ?? 'http://localhost:4000');
 }
 
+const devHost = z
+  .string()
+  .regex(
+    /^(\*\.)?[a-z0-9.-]+$/i,
+    'WEB_ALLOWED_DEV_ORIGINS takes host names such as *.ngrok-free.app',
+  );
+// Next dev blocks its own assets for hosts other than localhost, which breaks testing through a tunnel.
+export function webAllowedDevOrigins(): string[] {
+  const hosts = process.env.WEB_ALLOWED_DEV_ORIGINS?.split(',').map((host) => host.trim());
+  return z.array(devHost).parse(hosts?.filter(Boolean) ?? []);
+}
+
 const publishedUrl = z.url().refine((value) => {
   const url = new URL(value);
   return url.protocol === 'https:' && !url.username && !url.password;
