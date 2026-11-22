@@ -5,7 +5,8 @@ import { useEffect } from 'react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
+import { Button, buttonVariants } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
@@ -17,6 +18,7 @@ import {
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { replyWindow } from '../reply-window';
 import { ChatComposer } from './chat-composer';
+import { CustomerPanel } from './customer-panel';
 import { MessageBubble } from './message-bubble';
 
 const channelNames: Record<ConversationResponse['channel'], string> = {
@@ -36,35 +38,50 @@ export function ConversationPanel({ query, id }: { query: ChatScreenQuery; id: s
   }, [id, unread, read]);
 
   return (
-    <section
-      aria-label="Conversation"
-      className="flex min-h-0 min-w-0 flex-col border-l border-border"
-    >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border p-3">
-        <Link
-          href={chatsHref({ ...query, chat: undefined })}
-          aria-label="Back to chats"
-          className="inline-flex size-10 items-center justify-center rounded-md hover:bg-surface-muted lg:hidden"
-        >
-          <ArrowLeft aria-hidden="true" size={18} strokeWidth={1.75} />
-        </Link>
-        {conversation.data ? <ConversationHeader conversation={conversation.data} /> : null}
-      </div>
-      {conversation.error ? (
-        <div className="p-3">
-          <QueryError
-            message={conversation.error.message}
-            onRetry={() => void conversation.refetch()}
-            retryLabel="Retry chat"
-          />
+    <>
+      <section
+        aria-label="Conversation"
+        className={cn(
+          'min-h-0 min-w-0 flex-col border-l border-border',
+          query.panel ? 'hidden xl:flex' : 'flex',
+        )}
+      >
+        <div className="flex shrink-0 items-center gap-2 border-b border-border p-3">
+          <Link
+            href={chatsHref({ ...query, chat: undefined })}
+            aria-label="Back to chats"
+            className="inline-flex size-10 items-center justify-center rounded-md hover:bg-surface-muted lg:hidden"
+          >
+            <ArrowLeft aria-hidden="true" size={18} strokeWidth={1.75} />
+          </Link>
+          {conversation.data ? <ConversationHeader conversation={conversation.data} /> : null}
+          <Link
+            href={chatsHref({ ...query, panel: 'customer' })}
+            className={buttonVariants({
+              variant: 'secondary',
+              className: 'ml-auto shrink-0 xl:hidden',
+            })}
+          >
+            Customer
+          </Link>
         </div>
-      ) : (
-        <>
-          <MessageList query={query} id={id} messages={messages} />
-          {conversation.data ? <ChatComposer conversation={conversation.data} /> : null}
-        </>
-      )}
-    </section>
+        {conversation.error ? (
+          <div className="p-3">
+            <QueryError
+              message={conversation.error.message}
+              onRetry={() => void conversation.refetch()}
+              retryLabel="Retry chat"
+            />
+          </div>
+        ) : (
+          <>
+            <MessageList query={query} id={id} messages={messages} />
+            {conversation.data ? <ChatComposer conversation={conversation.data} /> : null}
+          </>
+        )}
+      </section>
+      {conversation.data ? <CustomerPanel conversation={conversation.data} query={query} /> : null}
+    </>
   );
 }
 

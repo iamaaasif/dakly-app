@@ -8,11 +8,11 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { useOrderDelivery } from '../api/get-delivery-charge';
 import { useSetupDeliveryZones } from '../api/setup-delivery-zones';
-import { OrderAreaFields } from './order-area-fields';
 import { OrderBuyerFields } from './order-buyer-fields';
+import { OrderAreaFields } from '@/components/order-area-fields';
 import { takaInputFromPoisha } from '@/lib/format-money';
+import { useOrderDelivery } from '@/lib/order-entry/get-delivery-charge';
 import { useSessionContext } from '@/lib/session-context';
 
 export function OrderRecipientFields({ order }: { order?: OrderDetail }) {

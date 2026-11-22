@@ -34,7 +34,7 @@ it('lets staff change a draft after a replay proves the order was refused', asyn
   for (const error of [...unanswered, refused]) request.mockRejectedValueOnce(error);
   request.mockResolvedValueOnce({ id: 'saved-order' });
   const client = new QueryClient();
-  const { result, unmount } = renderHook(useCreateOrder, {
+  const { result, unmount } = renderHook(() => useCreateOrder(), {
     wrapper: ({ children }: PropsWithChildren) => (
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
     ),

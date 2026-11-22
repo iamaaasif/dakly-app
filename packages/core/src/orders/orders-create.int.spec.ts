@@ -112,20 +112,19 @@ describe('Staff order creation', () => {
   it("places an order for the chat's contact as an order from that channel", async () => {
     const variantId = await variant(2);
     const contactId = await buyer('Sadia', null);
-    const { buyer: _buyer, ...input } = draft(variantId);
+    const { recipient, items } = draft(variantId);
+    const input = { recipient, items };
     const request = editor();
-    const order = await app
-      .get(ChatOrdersService)
-      .placeByStaff(
-        f.a,
-        { ...input, contactId },
-        {
-          channel: 'messenger',
-          userId: request.actor.userId,
-          access: request.access,
-          idempotencyKey: request.idempotencyKey,
-        },
-      );
+    const order = await app.get(ChatOrdersService).placeByStaff(
+      f.a,
+      { ...input, contactId },
+      {
+        channel: 'messenger',
+        userId: request.actor.userId,
+        access: request.access,
+        idempotencyKey: request.idempotencyKey,
+      },
+    );
     expect(order).toMatchObject({
       buyerContactId: contactId,
       source: 'messenger',

@@ -4,19 +4,20 @@ import { useRef, useState } from 'react';
 import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
 import { ApiError } from '@dakly/ui/api-client';
 
-import { ordersKey } from './orders';
+import { ordersKey } from './orders-key';
 import { productsKeys } from '@/lib/product-query-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
-export function useCreateOrder() {
+// The path is /orders, or a chat's own orders route when the order is made from a conversation.
+export function useCreateOrder<Body = CreateOrderInput>(path = '/orders') {
   const { request } = useStoreRequest();
   const client = useQueryClient();
   const key = useRef<string | undefined>(undefined);
   const [mustRetry, setMustRetry] = useState(false);
   const create = useMutation({
-    mutationFn: (body: CreateOrderInput) => {
+    mutationFn: (body: Body) => {
       key.current ??= crypto.randomUUID();
-      return request<OrderDetail>('/orders', { body, idempotencyKey: key.current });
+      return request<OrderDetail>(path, { body, idempotencyKey: key.current });
     },
     onError: (error) => {
       const reply = error instanceof ApiError ? error : undefined;

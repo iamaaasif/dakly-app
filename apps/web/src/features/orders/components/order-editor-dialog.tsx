@@ -26,9 +26,6 @@ import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { QueryError } from '@dakly/ui/query-error';
 
-import { useCreateOrder } from '../api/create-order';
-import { useOrderDelivery } from '../api/get-delivery-charge';
-import { useOrderCatalogueProducts, useOrderCatalogueStock } from '../api/order-catalogue';
 import {
   OrderProductFields,
   orderVariantChoices,
@@ -36,6 +33,12 @@ import {
 } from './order-product-fields';
 import { OrderRecipientFields } from './order-recipient-fields';
 import { SessionDialog } from '@/components/session-dialog';
+import { useCreateOrder } from '@/lib/order-entry/create-order';
+import { useOrderDelivery } from '@/lib/order-entry/get-delivery-charge';
+import {
+  useOrderCatalogueProducts,
+  useOrderCatalogueStock,
+} from '@/lib/order-entry/order-catalogue';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
 const newOrderDefaults: CreateOrderValues = {

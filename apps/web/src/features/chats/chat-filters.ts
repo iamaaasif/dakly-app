@@ -50,6 +50,8 @@ export const chatScreenQuerySchema = z.strictObject({
   assignee: z.uuid().optional(),
   // The conversation open beside the list.
   chat: z.uuid().optional(),
+  // On a narrow screen the customer panel takes the place of the thread.
+  panel: z.literal('customer').optional(),
   // The post open in the Comments view: its id on Meta.
   post: z.string().min(1).max(200).optional(),
   // The open AI agent drawer tab; absent when the drawer is closed.
@@ -92,6 +94,7 @@ export function chatsHref(query: Partial<ChatScreenQuery>) {
     ['q', query.q],
     ['assignee', query.assignee],
     ['chat', query.channel === 'comments' ? undefined : query.chat],
+    ['panel', query.chat ? query.panel : undefined],
     ['post', query.channel === 'comments' ? query.post : undefined],
     ['agent', query.agent],
     ['feedback', query.agent ? query.feedback : undefined],
