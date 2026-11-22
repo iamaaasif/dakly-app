@@ -78,8 +78,11 @@ export function VariantRow(props: VariantRowProps) {
           placeholder={productPrice}
         />
         <Cell {...props} field="costPoisha" label="Cost" name={label} />
-        <p className="text-sm text-success md:mt-2.5" aria-label={`Profit for ${label}`}>
-          {profit === null ? '' : `Profit ${profit}%`}
+        <p
+          className="order-last col-span-2 text-sm text-success md:order-none md:col-span-1 md:mt-2.5"
+          aria-label={`Profit for ${label}`}
+        >
+          {profit === null ? '' : <ProfitText percent={profit} />}
         </p>
         {showStock ? <Cell {...props} field="initialStock" label="Stock" name={label} /> : <span />}
         <Cell {...props} field="sku" label="Code" name={label} placeholder="Code" />
@@ -180,5 +183,14 @@ function SavedPhotoCell({
         }}
       />
     </label>
+  );
+}
+
+function ProfitText({ percent }: { percent: number }) {
+  return (
+    <>
+      <span className="md:hidden">Profit </span>
+      {percent}%
+    </>
   );
 }

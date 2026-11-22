@@ -140,6 +140,7 @@ function OptionRow({ index, option, canRemove, onChange, onRemove }: OptionRowPr
       <ValueBox title={title} onAdd={addValues} />
       {valueSuggestions(option.name)
         .filter((value) => !known.has(value.toLowerCase()))
+        .slice(0, 3)
         .map((value) => (
           <SuggestionButton key={value} label={value} onClick={() => addValues([value])} />
         ))}

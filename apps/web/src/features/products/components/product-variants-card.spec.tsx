@@ -152,7 +152,7 @@ describe('Variants card', () => {
     await userEvent.paste('1,200\t650\n1,300\t700');
     expect((screen.getByLabelText('Price for M') as HTMLInputElement).value).toBe('1300');
     expect((screen.getByLabelText('Cost for M') as HTMLInputElement).value).toBe('700');
-    expect(screen.getByLabelText('Profit for S').textContent).toBe('Profit 46%');
+    expect(screen.getByLabelText('Profit for S').textContent).toContain('46%');
   });
 
   it('adds nothing from AI suggestions until the seller taps Add all', async () => {

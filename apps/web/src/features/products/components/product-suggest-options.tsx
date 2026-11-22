@@ -49,7 +49,7 @@ export function ProductSuggestOptions({ product, onAdd }: ProductSuggestOptionsP
     );
   };
   return (
-    <div className="space-y-2">
+    <div className="contents">
       <Button
         type="button"
         variant="secondary"
@@ -91,7 +91,7 @@ function SuggestionBox({ suggestion, onAdd, onDismiss }: SuggestionBoxProps) {
     );
   const chosen = options.filter((option) => option.values.length);
   return (
-    <div className="space-y-2 rounded-lg border border-ai-soft bg-ai-soft p-3">
+    <div className="w-full space-y-2 rounded-lg border border-ai-soft bg-ai-soft p-3">
       <p className="text-sm text-ai">
         <span aria-hidden="true">✦ </span>
         {suggestion.fromAi ? 'Suggested from the title and photos' : 'Common options to start from'}
