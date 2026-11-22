@@ -85,7 +85,7 @@ describe('product export', () => {
         '=SUM(1,1)',
         'hidden',
         'KURTI-L',
-        '700',
+        '700.00',
         '0',
         'L',
       ],
