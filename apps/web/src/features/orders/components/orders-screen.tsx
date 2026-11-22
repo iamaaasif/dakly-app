@@ -17,6 +17,7 @@ import { OrderDetailSheet } from './order-detail-sheet';
 import { NewOrderDialog } from './order-editor-dialog';
 import { OrderFilters } from './order-filters';
 import { OrdersList } from './orders-list';
+import { Refreshing } from '@/components/refreshing';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -47,7 +48,11 @@ export function OrdersScreen({ query, selected }: OrdersScreenProps) {
             retryLabel="Retry orders"
           />
         ) : null}
-        {orders.data ? <OrdersList page={orders.data} query={query} /> : null}
+        {orders.data ? (
+          <Refreshing active={orders.isPlaceholderData}>
+            <OrdersList page={orders.data} query={query} />
+          </Refreshing>
+        ) : null}
         <p className="text-xs text-text-muted">Return risk is based on your past orders.</p>
         {selected ? (
           <OrderDetailSheet

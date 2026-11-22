@@ -7,6 +7,7 @@ import { QueryError } from '@dakly/ui/query-error';
 import { productsSearch, type useProducts } from '../api/products';
 import { ProductList } from './product-list';
 import { ProductsLoading } from './products-loading';
+import { Refreshing } from '@/components/refreshing';
 
 type ProductResultsProps = {
   query: ProductListQuery;
@@ -25,7 +26,7 @@ export function ProductResults({ query, products, onAdjust }: ProductResultsProp
     );
   const pageHref = (cursor?: string) => `/products?${productsSearch({ ...query, cursor })}`;
   return (
-    <>
+    <Refreshing active={products.isPlaceholderData}>
       {products.data.items.length ? (
         <ProductList query={query} products={products.data.items} onAdjust={onAdjust} />
       ) : (
@@ -57,6 +58,6 @@ export function ProductResults({ query, products, onAdjust }: ProductResultsProp
           </Link>
         ) : null}
       </nav>
-    </>
+    </Refreshing>
   );
 }

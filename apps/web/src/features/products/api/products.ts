@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 
 import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
 
@@ -20,5 +20,6 @@ export function useProducts(query: ProductListQuery) {
     queryFn: ({ signal }) =>
       request<ProductListResponse>(`/products?${productsSearch(query)}`, { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewProducts),
+    placeholderData: keepPreviousData,
   });
 }
