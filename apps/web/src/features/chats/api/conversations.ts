@@ -1,6 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
 import type {
+  ConversationAssigneeResponse,
   ConversationCountsResponse,
   ConversationListQuery,
   ConversationResponse,
@@ -36,6 +37,18 @@ export function useConversationCounts() {
     queryFn: ({ signal }) =>
       request<ConversationCountsResponse>('/conversations/counts', { signal }),
     enabled: Boolean(contextTag),
+    retry: false,
+  });
+}
+
+export function useConversationAssignees() {
+  const { request, contextTag } = useStoreRequest();
+  return useQuery({
+    queryKey: chatsKeys.assignees(contextTag),
+    queryFn: ({ signal }) =>
+      request<ConversationAssigneeResponse[]>('/conversations/assignees', { signal }),
+    enabled: Boolean(contextTag),
+    staleTime: 60_000,
     retry: false,
   });
 }

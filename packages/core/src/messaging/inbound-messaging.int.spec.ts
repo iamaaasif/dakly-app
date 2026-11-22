@@ -6,6 +6,7 @@ import { Module, type INestApplicationContext } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
+import type { StoreAccess } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 
 import { ContactsService } from '../contacts/contacts.service';
@@ -281,15 +282,24 @@ it('counts the inbox tabs for one shop and shows the contact name in the list', 
     needsYou: 1,
     aiHandling: 2,
     followUp: 1,
+    done: 0,
+    notCustomers: 0,
   });
   expect(await inbox.counts(otherStore)).toEqual({
     all: 0,
     needsYou: 0,
     aiHandling: 0,
     followUp: 0,
+    done: 0,
+    notCustomers: 0,
   });
   await admin.pool.query("update contacts set name = 'Sadia Islam' where store_id = $1", [storeId]);
-  const { items } = await inbox.list(storeId, { limit: 10 });
+  const { items } = await inbox.list(
+    storeId,
+    { limit: 10, sort: 'recent' },
+    { seeFullPhone: true } as StoreAccess,
+    { kind: 'user', userId: randomUUID() },
+  );
   expect(items.map((item) => item.contactName)).toEqual(Array(3).fill('Sadia Islam'));
 });
 

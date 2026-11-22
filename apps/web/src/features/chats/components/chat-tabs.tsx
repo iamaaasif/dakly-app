@@ -9,6 +9,8 @@ const countKeys: Record<(typeof chatTabs)[number], keyof ConversationCountsRespo
   'needs-you': 'needsYou',
   'ai-handling': 'aiHandling',
   'follow-up': 'followUp',
+  done: 'done',
+  'not-customers': 'notCustomers',
 };
 
 type ChatTabsProps = { query: ChatScreenQuery; counts: ConversationCountsResponse | undefined };

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { chatChannels } from './channels';
+import { contactKinds } from './contacts';
 import { searchText } from './search-text';
 
 export const conversationStatuses = ['open', 'needs_you', 'later', 'done'] as const;
@@ -154,8 +155,21 @@ export const conversationMessageListQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
+export const conversationSorts = ['recent', 'needs_you', 'unread', 'waiting'] as const;
+const conversationCursorSchema = z.union([
+  messageCursorSchema,
+  z.templateLiteral(['none_', z.uuid()]),
+  // The sorts that put some chats first lead with that group: 0 first, 1 after.
+  z.templateLiteral([z.literal([0, 1]), '_', messageCursorSchema]),
+  z.templateLiteral([z.literal([0, 1]), '_none_', z.uuid()]),
+]);
+
 export const conversationListQuerySchema = conversationMessageListQuerySchema.extend({
-  cursor: z.union([messageCursorSchema, z.templateLiteral(['none_', z.uuid()])]).optional(),
+  cursor: conversationCursorSchema.optional(),
+  sort: z.enum(conversationSorts).default('recent'),
+  // A name, a full phone number, or the start of a number for members who see full phones.
+  q: z.string().trim().min(1).max(120).optional(),
+  contactKind: z.enum(contactKinds).optional(),
   status: z.enum(conversationStatuses).optional(),
   responder: z.enum(conversationResponders).optional(),
   channel: z.enum(chatChannels).optional(),
@@ -215,4 +229,8 @@ export type ConversationCountsResponse = {
   needsYou: number;
   aiHandling: number;
   followUp: number;
+  done: number;
+  notCustomers: number;
 };
+
+export type ConversationAssigneeResponse = { userId: string; name: string };
