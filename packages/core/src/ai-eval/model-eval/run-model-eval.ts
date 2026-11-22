@@ -14,6 +14,8 @@ import {
   reportEmbed,
   reportFast,
   reportMemory,
+  reportOptionsFromPhoto,
+  reportOptionsFromTitle,
   reportReply,
   reportTranscribe,
   reportVision,
@@ -71,9 +73,15 @@ async function main() {
   if (values.models && selected.length > 1) throw new Error('--models needs a single --jobs value');
   const modelsFor = (job: Job) => values.models?.split(',') ?? defaultModels[job];
   const runners: Record<Job, () => Promise<void>> = {
-    fast: () => reportFast(context, modelsFor('fast')),
+    fast: async () => {
+      await reportFast(context, modelsFor('fast'));
+      await reportOptionsFromTitle(context, modelsFor('fast'));
+    },
     reply: () => reportReply(context, modelsFor('reply'), baselineFastModel),
-    vision: () => reportVision(context, modelsFor('vision')),
+    vision: async () => {
+      await reportVision(context, modelsFor('vision'));
+      await reportOptionsFromPhoto(context, modelsFor('vision'));
+    },
     transcribe: () => reportTranscribe(context, modelsFor('transcribe')),
     embed: () => reportEmbed(context, modelsFor('embed')),
     memory: () => reportMemory(context, modelsFor('memory')),
