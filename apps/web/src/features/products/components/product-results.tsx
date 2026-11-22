@@ -4,7 +4,7 @@ import type { ProductListQuery } from '@dakly/contracts/products';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { productsSearch, type useProducts } from '../api/products';
-import { ProductList } from './product-list';
+import { ProductList, type ProductSelection } from './product-list';
 import { ProductsLoading } from './products-loading';
 import { Refreshing } from '@/components/refreshing';
 import { UrlLink } from '@/components/url-link';
@@ -13,8 +13,9 @@ type ProductResultsProps = {
   query: ProductListQuery;
   products: ReturnType<typeof useProducts>;
   onAdjust?: (variantId: string) => void;
+  selection?: ProductSelection;
 };
-export function ProductResults({ query, products, onAdjust }: ProductResultsProps) {
+export function ProductResults({ query, products, onAdjust, selection }: ProductResultsProps) {
   if (products.isPending) return <ProductsLoading />;
   if (products.error)
     return (
@@ -28,7 +29,12 @@ export function ProductResults({ query, products, onAdjust }: ProductResultsProp
   return (
     <Refreshing active={products.isPlaceholderData}>
       {products.data.items.length ? (
-        <ProductList query={query} products={products.data.items} onAdjust={onAdjust} />
+        <ProductList
+          query={query}
+          products={products.data.items}
+          onAdjust={onAdjust}
+          selection={selection}
+        />
       ) : (
         <div className="space-y-2 rounded-lg border border-border bg-surface p-6">
           <p>No products on this page.</p>
