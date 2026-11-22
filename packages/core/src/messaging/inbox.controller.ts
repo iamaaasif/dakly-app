@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
   Inject,
   Param,
@@ -25,6 +26,11 @@ import {
   type TakeOverConversationInput,
   type UpdateConversationInput,
 } from '@dakly/contracts/chats';
+import {
+  createConversationOrderSchema,
+  orderIdempotencyKeySchema,
+  type CreateConversationOrderInput,
+} from '@dakly/contracts/orders';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
@@ -32,6 +38,7 @@ import { CurrentAccess } from '../platform/tenancy/current-access.decorator';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { ConversationOrdersService } from './conversation-orders.service';
 import { ConversationReplyService } from './conversation-reply.service';
 import { InboxService } from './inbox.service';
 
@@ -40,6 +47,7 @@ export class InboxController {
   constructor(
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(ConversationReplyService) private readonly replies: ConversationReplyService,
+    @Inject(ConversationOrdersService) private readonly orders: ConversationOrdersService,
   ) {}
 
   @Get()
@@ -109,6 +117,20 @@ export class InboxController {
     @Body(new ZodValidationPipe(createConversationReplySchema)) input: CreateConversationReplyInput,
   ) {
     return this.replies.reply(storeId, id, userId, input);
+  }
+
+  @Post(':conversationId/orders')
+  @RequirePermission('orders.edit')
+  placeOrder(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @CurrentAccess() access: StoreAccess,
+    @Param('conversationId', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(createConversationOrderSchema)) input: CreateConversationOrderInput,
+    @Headers('idempotency-key') key: string | undefined,
+  ) {
+    const idempotencyKey = new ZodValidationPipe(orderIdempotencyKeySchema).transform(key);
+    return this.orders.place(storeId, id, { userId, access, idempotencyKey }, input);
   }
 
   @Post(':conversationId/notes')

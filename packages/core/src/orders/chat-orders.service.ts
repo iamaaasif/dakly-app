@@ -1,13 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { CreateOrderInput, OrderDetail } from '@dakly/contracts/orders';
+import type { StoreAccess } from '@dakly/contracts/team';
 
 import { BuyerOrdersRepository } from './buyer-orders.repository';
 import { orderError } from './orders.errors';
 import type { OrderWrite } from './orders.repository';
 import { OrdersService } from './orders.service';
 
-type ChatOrderChannel = Extract<OrderWrite['source'], 'messenger' | 'instagram'>;
+type ChatOrderChannel = Extract<OrderWrite['source'], 'messenger' | 'instagram' | 'whatsapp'>;
 const access = { seeFullPhone: false };
 
 // What the AI sales agent may do to orders in a chat. Every method acts for the chat's own contact.
@@ -35,6 +36,30 @@ export class ChatOrdersService {
         actor: { kind: 'system' },
         source: chat.channel,
         createdByType: 'ai',
+      },
+    );
+  }
+
+  // A person makes the order for the chat's contact. It is counted as an order from that channel.
+  placeByStaff(
+    storeId: string,
+    input: Omit<CreateOrderInput, 'buyer'> & { contactId: string },
+    placed: {
+      channel: ChatOrderChannel;
+      userId: string;
+      access: StoreAccess;
+      idempotencyKey: string;
+    },
+  ): Promise<OrderDetail> {
+    const { contactId, ...rest } = input;
+    return this.orders.createOrder(
+      storeId,
+      { ...rest, buyer: { contactId } },
+      {
+        idempotencyKey: placed.idempotencyKey,
+        access: placed.access,
+        actor: { kind: 'user', userId: placed.userId },
+        source: placed.channel,
       },
     );
   }
