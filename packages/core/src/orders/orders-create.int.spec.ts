@@ -112,8 +112,9 @@ describe('Staff order creation', () => {
   it("places an order for the chat's contact as an order from that channel", async () => {
     const variantId = await variant(2);
     const contactId = await buyer('Sadia', null);
-    const { recipient, items } = draft(variantId);
-    const input = { recipient, items };
+    // The chat's contact is the buyer, so the draft's own buyer is dropped.
+    const { buyer: draftedBuyer, ...input } = draft(variantId);
+    expect(draftedBuyer).toBeDefined();
     const request = editor();
     const order = await app.get(ChatOrdersService).placeByStaff(
       f.a,
