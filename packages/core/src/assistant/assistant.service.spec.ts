@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import type { AiRequest, AiService } from '../ai/ai.service';
-import type { OrdersService } from '../orders/orders.service';
 import type { AnalyticsService } from '../analytics/analytics.service';
+import type { OrdersService } from '../orders/orders.service';
 import { TeamService } from '../team/team.service';
 import type { UsageService } from '../usage/usage.service';
 import { AssistantToolsService } from './assistant-tools.service';
