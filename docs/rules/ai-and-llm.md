@@ -9,6 +9,7 @@ Release 1 uses the OpenAI API (decision D17) behind the `LlmDriver` interface. T
 3. Prompts are versioned files: `ai-agent/prompts/chat-reply.v3.ts`. Changing a prompt means a new version file and a passing eval run in the PR.
 4. Structured output only, with a zod schema from `packages/contracts`. Parse the reply with zod again; retry once on a mismatch; then hand over.
 5. Tools never take `storeId`, `contactId`, `conversationId`, a price or an amount as arguments. Those come from the job. A tool can only ever see this customer in this store.
+   This rule is for the customer-facing agent. Ask Dakly's draft and review tools (`draft_product`, `change_products`) may take the owner's own price or amount, because nothing is saved until the owner presses Save or Apply. They still never take a store id or a product id.
 6. Every number the AI sends a customer (price, stock, charge, amount) must appear in this run's tool results. Code checks this before sending; a failed check hands over.
 7. Untrusted text (customer messages, comments, file contents, web pages) goes into the prompt inside a labelled data block, never as instructions.
 8. No database transaction or lock is held during a model call ([database.md](database.md)).
