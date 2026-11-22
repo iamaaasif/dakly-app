@@ -1,17 +1,19 @@
 'use client';
 import { useFormContext } from 'react-hook-form';
 
-import type { ProductFormValues } from '@dakly/contracts/products';
+import type { ProductFormValues, ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { rowKey, variantLabel } from '../product-variant-grid';
 import { ProductInputField } from './product-input-field';
 import { ProductOptionEditor, useGridOptions } from './product-option-editor';
+import { ProductVariantTable } from './product-variant-table';
 import { ProductWarnAtField } from './product-warn-at-field';
 
-export function ProductVariantsCard() {
+type ProductVariantsCardProps = { product?: ProductResponse };
+
+export function ProductVariantsCard({ product }: ProductVariantsCardProps) {
   const form = useFormContext<ProductFormValues>();
   const { options, setOptions } = useGridOptions();
   const errors = form.formState.errors.variants;
@@ -26,7 +28,7 @@ export function ProductVariantsCard() {
         {hasOptions ? null : <AddOptionsButton onClick={addOption} />}
       </div>
       {hasOptions ? (
-        <OptionsAndGrid onAddOption={addOption} />
+        <OptionsAndGrid product={product} onAddOption={addOption} />
       ) : (
         <p className="text-sm text-text-muted">
           This product has no sizes or colours. Adding the first option turns this stock and code
@@ -42,31 +44,19 @@ export function ProductVariantsCard() {
   );
 }
 
-type OptionsAndGridProps = { onAddOption: () => void };
+type OptionsAndGridProps = { product?: ProductResponse; onAddOption: () => void };
 
-function OptionsAndGrid({ onAddOption }: OptionsAndGridProps) {
+function OptionsAndGrid({ product, onAddOption }: OptionsAndGridProps) {
   const { options } = useGridOptions();
   return (
     <>
       <ProductOptionEditor onAddOption={onAddOption} />
       {options.some((option) => option.values.length) ? (
-        <VariantSummary />
+        <ProductVariantTable product={product} />
       ) : (
         <p className="text-sm text-text-muted">Type a value above and the grid builds itself.</p>
       )}
     </>
-  );
-}
-
-// The grid that edits each row comes in the next change; until then rows are listed.
-function VariantSummary() {
-  const { options, variants } = useGridOptions();
-  return (
-    <ul className="space-y-1 text-sm text-text">
-      {variants.map((variant) => (
-        <li key={rowKey(variant)}>{variantLabel(variant, options)}</li>
-      ))}
-    </ul>
   );
 }
 

@@ -8,7 +8,11 @@ import { createDatabase } from '@dakly/db/client';
 
 test.use({ screenshot: 'off' });
 
-test('builds options and saves the variants', async ({ page, context, baseURL }) => {
+test('builds a variants grid, saves it and writes one stock reason', async ({
+  page,
+  context,
+  baseURL,
+}) => {
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
     token: string;
     storeIds: [string, string];
@@ -88,9 +92,19 @@ test('builds options and saves the variants', async ({ page, context, baseURL })
     await page.getByRole('button', { name: /Add option \(max 3\)/ }).click();
     await page.getByLabel('Option 2 name').fill('Size');
     await addValues('Size', ['S', 'M', 'L']);
-    await expect(page.getByText('Black / S', { exact: true })).toBeVisible();
-    await expect(page.getByText('White / L', { exact: true })).toBeVisible();
-    await capture('options');
+    await expect(page.getByLabel('Stock for Black / S')).toHaveValue('12');
+    await expect(page.getByLabel('Code for Black / S')).toHaveValue('UT-TS-01');
+    const stocks: [string, string][] = [
+      ['Black / M', '20'],
+      ['Black / L', '8'],
+      ['White / S', '12'],
+      ['White / M', '20'],
+    ];
+    for (const [label, stock] of stocks) await page.getByLabel(`Stock for ${label}`).fill(stock);
+    await capture('grid', async () => {
+      await expect(page.getByRole('button', { name: 'Black / L summary' })).toContainText('৳');
+      await page.getByRole('button', { name: 'Black / L summary' }).click();
+    });
 
     const created = page.waitForResponse(
       (response) =>
@@ -101,9 +115,28 @@ test('builds options and saves the variants', async ({ page, context, baseURL })
     await page.getByRole('button', { name: 'Save as hidden', exact: true }).click();
     productId = ((await (await created).json()) as ProductResponse).id;
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
+    await expect(page.getByLabel('Stock for Black / S')).toHaveValue('12');
     const first = await loadProduct();
     expect(first.variants).toHaveLength(6);
-    expect(first.variants.find(({ title }) => title === 'Black / S')?.onHand).toBe(12);
+    expect(first.variants.find(({ title }) => title === 'Black / M')?.onHand).toBe(20);
+
+    await page.getByLabel('Stock for Black / S').fill('9');
+    await page.getByRole('button', { name: 'Save product', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Why did the stock change?' })).toBeVisible();
+    await capture('stock-reason');
+    await page.getByLabel('Reason').fill('Counted the shelf');
+    await page.getByRole('button', { name: 'Save with this reason' }).click();
+    await expect(page.getByRole('heading', { name: 'Why did the stock change?' })).toBeHidden();
+    await expect
+      .poll(async () => (await loadProduct()).variants.find((v) => v.title === 'Black / S')?.onHand)
+      .toBe(9);
+    const reasons = await database.pool.query(
+      `select m.reason, m.quantity from stock_movements m join product_variants v on v.id = m.variant_id
+       where v.product_id = $1 and m.kind = 'adjust' and m.reason = 'Counted the shelf'`,
+      [productId],
+    );
+    expect(reasons.rows).toHaveLength(1);
+    expect(Number(reasons.rows[0].quantity)).toBe(-3);
   } finally {
     try {
       if (productId) {
