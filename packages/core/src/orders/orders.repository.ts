@@ -363,8 +363,16 @@ const itemPreview = sql<string | null>`(
 
 const parcelOutcome = sql`${orders.stage} in ('delivered', 'partially_delivered', 'returned')`;
 
-function orderFilters({ source, courier, createdFrom, createdThrough, timeZone }: OrderFilters) {
+function orderFilters({
+  source,
+  courier,
+  buyerContactId,
+  createdFrom,
+  createdThrough,
+  timeZone,
+}: OrderFilters) {
   return and(
+    buyerContactId ? eq(orders.buyerContactId, buyerContactId) : undefined,
     source ? eq(orders.source, source) : undefined,
     courier ? eq(orders.courier, courier) : undefined,
     createdFrom

@@ -115,6 +115,8 @@ export const orderListQuerySchema = z
     createdThrough: calendarDate.optional(),
     alert: z.enum(['waiting', 'risk', 'cod']).optional(),
     search: searchText.max(120).optional(),
+    // One customer's orders, for the chat's customer panel.
+    buyerContactId: z.uuid().optional(),
     cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
     limit: z.coerce.number<string>().int().min(1).max(100).default(50),
   })
@@ -366,6 +368,11 @@ export const createOrderFormSchema = createOrderSchema.extend({
   orderDiscountPoisha: takaInput.default(0),
   advancePaidPoisha: takaInput.default(0),
 });
+// An order made from a chat is for the chat's contact, so the buyer comes from the conversation.
+export const createConversationOrderSchema = createOrderSchema.omit({ buyer: true });
+export const createConversationOrderFormSchema = createOrderFormSchema.omit({ buyer: true });
+export type CreateConversationOrderInput = z.infer<typeof createConversationOrderSchema>;
+export type CreateConversationOrderValues = z.input<typeof createConversationOrderFormSchema>;
 export type CreateOrderValues = z.input<typeof createOrderFormSchema>;
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 

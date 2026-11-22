@@ -202,6 +202,10 @@ fixture('GET /orders', async () => {
     expect(result.json()).toMatchObject({ items: [{ id }], counts: { to_confirm: 1 } });
     expect(result.json().items).toHaveLength(1);
   }
+  for (const shop of [a, b])
+    expect(
+      (await success(shop, 'GET', `/orders?buyerContactId=${randomUUID()}`, 200)).json().items,
+    ).toEqual([]);
   await f.admin.pool.query("update stores set time_zone='America/New_York' where id=$1", [b.id]);
   await f.admin.pool.query(
     `update orders set stage='delivered', source='whatsapp', courier='pathao',
@@ -4375,6 +4379,39 @@ for (const [path, status] of [
     });
   });
 }
+
+fixture('POST /conversations/:conversationId/orders', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  await deliveryZone(b);
+  await f.admin.pool.query('insert into store_counters(store_id) values ($1)', [b.id]);
+  const ownVariant = await orderVariant(b);
+  const foreignVariant = await orderVariant(a);
+  const url = (id: string) => `/conversations/${id}/orders`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  const input = (variantId: string) => ({
+    recipient: { name: 'রিনা', phone: b.owner.phone, address: 'ধানমন্ডি', areaId: 301 },
+    items: [{ variantId, quantity: 1 }],
+  });
+  const place = (id: string, variantId: string, key = randomUUID()) =>
+    f.request(b.owner, 'POST', url(id), input(variantId), { 'idempotency-key': key });
+  const denied = await place(foreign, ownVariant);
+  const absent = await place(randomUUID(), ownVariant);
+  expect(denied.statusCode, denied.body).toBe(404);
+  expect(denied.json()).toEqual(absent.json());
+  expect((await place(own, foreignVariant)).statusCode).toBe(404);
+  expect((await f.request(b.owner, 'POST', url(own), input(ownVariant))).statusCode).toBe(400);
+  const key = randomUUID();
+  const placed = await place(own, ownVariant, key);
+  expect(placed.statusCode, placed.body).toBe(201);
+  const { contact_id: contactId } = await f.row('conversations', own);
+  expect(placed.json()).toMatchObject({ buyerContactId: contactId, source: 'messenger' });
+  expect((await place(own, ownVariant, key)).json()).toEqual(placed.json());
+  expect(
+    (await f.admin.pool.query('select 1 from orders where store_id = $1', [a.id])).rowCount,
+  ).toBe(0);
+});
 
 fixture('POST /conversations/:conversationId/read', async () => {
   const { a, b } = await pair();

@@ -6,7 +6,12 @@ import { NestFactory } from '@nestjs/core';
 import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { createOrderSchema, editOrderSchema, type CreateOrderInput } from '@dakly/contracts/orders';
+import {
+  createOrderSchema,
+  editOrderSchema,
+  orderListQuerySchema,
+  type CreateOrderInput,
+} from '@dakly/contracts/orders';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { DeliveryModule } from '../delivery/delivery.module';
@@ -15,6 +20,7 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { ChatOrdersService } from './chat-orders.service';
 import { OrdersModule } from './orders.module';
 import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
@@ -106,6 +112,37 @@ describe('Staff order creation', () => {
     });
     expect(await orders.createOrder(f.a, input, request)).toEqual(first);
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+  });
+
+  it("places an order for the chat's contact as an order from that channel", async () => {
+    const variantId = await variant(2);
+    const contactId = await buyer('Sadia', null);
+    // The chat's contact is the buyer, so the draft's own buyer is dropped.
+    const { buyer: draftedBuyer, ...input } = draft(variantId);
+    expect(draftedBuyer).toBeDefined();
+    const request = editor();
+    const order = await app.get(ChatOrdersService).placeByStaff(
+      f.a,
+      { ...input, contactId },
+      {
+        channel: 'messenger',
+        userId: request.actor.userId,
+        access: request.access,
+        idempotencyKey: request.idempotencyKey,
+      },
+    );
+    expect(order).toMatchObject({
+      buyerContactId: contactId,
+      source: 'messenger',
+      stage: 'to_confirm',
+    });
+    const mine = await orders.list(f.a, orderListQuerySchema.parse({ buyerContactId: contactId }));
+    expect(mine.items.map(({ id }) => id)).toEqual([order.id]);
+    const others = await orders.list(
+      f.a,
+      orderListQuerySchema.parse({ buyerContactId: randomUUID() }),
+    );
+    expect(others.items).toEqual([]);
   });
 
   it('creates and confirms once when staff retry the same key', async () => {

@@ -32,7 +32,10 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
           AI agent
         </Link>
       </header>
-      <div className="grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-surface lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+      <div
+        data-chat={query.chat ? 'open' : undefined}
+        className="grid min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-surface lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] xl:data-[chat=open]:grid-cols-[minmax(0,24rem)_minmax(0,1fr)_minmax(0,22rem)]"
+      >
         {query.channel === 'comments' ? (
           <CommentsView query={query} />
         ) : (
