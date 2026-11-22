@@ -62,6 +62,9 @@ export function ProductBulkGrid({ products, preset, onReview, onCancel }: Produc
       </h2>
       <FormProvider {...form}>
         <form className="space-y-4" noValidate onSubmit={form.handleSubmit(submit)}>
+          <p className="text-sm text-text-muted md:hidden">
+            Swipe sideways to edit Price, Old price, Cost, Stock, Category and Status.
+          </p>
           <GridTable products={products} preset={preset} />
           <p className="text-sm text-text-muted">
             Changed cells are bold. A blank cell never overwrites. Cost and stock are edited on the
@@ -102,7 +105,9 @@ function GridTable({ products, preset }: Pick<ProductBulkGridProps, 'products' |
     <Table aria-label="Edit products in a grid">
       <TableHeader>
         <TableRow>
-          <TableHead>Product</TableHead>
+          <TableHead className="sticky left-0 z-10 border-r border-border bg-surface-muted">
+            Product
+          </TableHead>
           {columns.map(({ label }) => (
             <TableHead key={label}>{label}</TableHead>
           ))}
@@ -111,7 +116,9 @@ function GridTable({ products, preset }: Pick<ProductBulkGridProps, 'products' |
       <TableBody>
         {products.map((product, index) => (
           <TableRow key={product.id}>
-            <TableCell className="min-w-40 font-medium">{product.name}</TableCell>
+            <TableCell className="sticky left-0 z-10 min-w-28 border-r border-border bg-surface font-medium md:min-w-40">
+              {product.name}
+            </TableCell>
             {columns.map(({ field, label }) => (
               <ProductBulkCell
                 key={field}
