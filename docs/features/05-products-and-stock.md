@@ -171,11 +171,18 @@ Today the dashboard assistant is read-only and every action opens a screen pre-f
 
 The prototype capture for this screen shows the Integrations page, so there is no product import design to match. The import dialog follows the customer import dialog (CUS-8) element by element: step bar, file drop area, column mapping, preview, duplicate choice and result counts. Evidence: `docs/design/evidence/prod-5-import/`.
 
-The Import from a CSV button sits beside Add product for members who can edit products, and opens the dialog at `/products?import=1`. Steps: Upload, Map fields, Preview, Duplicates, Results.
+The Import from Excel or CSV button sits beside Add product for members who can edit products, and opens the dialog at `/products?import=1`. Steps: Upload, Map fields, Preview, Duplicates, Results.
 
+- Upload: a CSV file or the first sheet of an Excel (.xlsx) file; the browser turns the sheet into CSV before it uploads, as for customers (CUS-16).
 - Mapping: Product name and Price are required. Category, description, status, SKU, cost and on hand are optional. Up to three option columns (such as Size or Colour) are named in the dialog; columns called Size, Color or Colour are suggested.
 - Duplicates: update or skip, by SKU. The step says a stock count in the file replaces the shop's count and is recorded in the stock history, and that a product imported without a count is not tracked for stock.
 - Results: added, updated, skipped and failed counts and the error report. There is no Undo (see the import rules above).
+- A blank cell never overwrites. For a product already in the shop, the file's non-blank category, description, status and price replace the stored ones, and a blank status keeps the product as it is. A file row is matched by SKU, so renaming an option value in the file keeps the variant, its id, price and stock. Rows with no SKU are added as new products.
+- A row whose option cells are all blank is a product without options, so a catalogue that mixes optioned and plain products imports in one file. Rows of one product must fill the same options.
+
+### Export products (PROD-14)
+
+The Export to Excel and Export to CSV buttons on the products list download the products the search and readiness filter show, for anyone who can view products. `GET /products/export?format=xlsx|csv&search=&readiness=` writes one row per variant with the import's columns (Name, Price, Category, Description, Status, SKU, Cost, On hand) and one column per option name, so an export edited in a spreadsheet imports again. Prices are plain taka text, the CSV starts with a byte order mark so Excel reads Bangla, and a CSV cell that starts with `=`, `+`, `-` or `@` gets a leading quote. On hand is blank for a product that does not track stock. Each download is saved in the audit log with its row count.
 
 ### How it works
 

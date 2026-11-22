@@ -25,7 +25,8 @@ export type ProductImportProduct = {
   name: string;
   category: string | null;
   description: string | null;
-  status: 'active' | 'hidden';
+  // Blank means the file did not say, so a new product is shown and an existing one is left as is.
+  status: 'active' | 'hidden' | undefined;
   pricePoisha: number;
   options: { name: string; values: string[] }[];
   variants: ProductImportVariant[];
@@ -87,13 +88,17 @@ function parseRow(cells: string[], mapping: ProductImportMapping) {
       message: issue.message,
     }));
   const optionValues: Record<string, string> = {};
-  const issues: { field: string; message: string }[] = [];
   for (const option of mapping.options) {
     const value = cell(option.column).trim();
     if (value) optionValues[option.name] = value;
-    else issues.push({ field: option.name, message: `${option.name} is empty` });
   }
-  return issues.length > 0 ? issues : { row: parsed.data, optionValues };
+  // A product with no options leaves every option cell blank, as an exported catalogue does.
+  const missing = mapping.options.find(
+    ({ name }) => !optionValues[name] && Object.keys(optionValues).length > 0,
+  );
+  return missing
+    ? [{ field: missing.name, message: `${missing.name} is empty` }]
+    : { row: parsed.data, optionValues };
 }
 
 function buildProduct(
@@ -102,16 +107,19 @@ function buildProduct(
   { seenSkus, errors }: { seenSkus: Set<string>; errors: ProductImportRowError[] },
 ): ProductImportProduct {
   const first = rows[0]!.row;
+  const optionNames = Object.keys(rows[0]!.optionValues);
   const variants: ProductImportVariant[] = [];
   const seenCombinations = new Set<string>();
   for (const { rowNumber, row, optionValues } of rows) {
-    const problem = variantProblem(row, optionValues, {
-      first,
-      hasOptions: mapping.options.length > 0,
-      variants: variants.length,
-      seenSkus,
-      seenCombinations,
-    });
+    const problem =
+      optionSetProblem(optionValues, optionNames) ??
+      variantProblem(row, optionValues, {
+        first,
+        optionNames,
+        variants: variants.length,
+        seenSkus,
+        seenCombinations,
+      });
     if (problem) {
       errors.push({ rowNumber, ...problem });
       continue;
@@ -132,9 +140,9 @@ function buildProduct(
     name: first.name,
     category: first.category,
     description: first.description,
-    status: first.status ?? 'active',
+    status: first.status,
     pricePoisha: first.price,
-    options: mapping.options.map(({ name }) => ({
+    options: optionNames.map((name) => ({
       name,
       values: [...new Set(variants.map((variant) => variant.optionValues[name]!))],
     })),
@@ -142,18 +150,25 @@ function buildProduct(
   };
 }
 
+function optionSetProblem(optionValues: Record<string, string>, optionNames: string[]) {
+  return Object.keys(optionValues).length === optionNames.length
+    ? undefined
+    : { field: 'options', message: 'Rows of one product need the same options' };
+}
+
 function variantProblem(
   row: ProductImportRow,
   optionValues: Record<string, string>,
   context: {
     first: ProductImportRow;
-    hasOptions: boolean;
+    optionNames: string[];
     variants: number;
     seenSkus: Set<string>;
     seenCombinations: Set<string>;
   },
 ): { field: string; message: string } | undefined {
-  const { first, hasOptions, variants, seenSkus, seenCombinations } = context;
+  const { first, optionNames, variants, seenSkus, seenCombinations } = context;
+  const hasOptions = optionNames.length > 0;
   const changed = (['category', 'description', 'status'] as const).find(
     (field) => row[field] && row[field] !== first[field],
   );

@@ -25,7 +25,7 @@ describe('readProductImportRows', () => {
     expect(products[0]).toMatchObject({
       name: 'Panjabi',
       category: 'Men',
-      status: 'active',
+      status: undefined,
       pricePoisha: 125050,
       options: [{ name: 'Size', values: ['M', 'L'] }],
     });
@@ -59,9 +59,20 @@ describe('readProductImportRows', () => {
     expect(errors).toEqual([
       { rowNumber: 2, field: 'price', message: 'Enter Taka with at most two decimal places' },
       { rowNumber: 3, field: 'onHand', message: 'Enter a whole number' },
-      { rowNumber: 4, field: 'Size', message: 'Size is empty' },
     ]);
-    expect(products.map(({ name }) => name)).toEqual(['Cap']);
+    expect(products.map(({ name }) => name)).toEqual(['Shirt', 'Cap']);
+  });
+
+  it('reads a row with every option blank as a product without options', () => {
+    const { products, errors } = readProductImportRows(
+      `${header}Scarf,450,,,,\r\nShirt,500,S-1,,,M\r\nShirt,500,S-2,,,\r\n`,
+      mapping,
+    );
+    expect(products[0]).toMatchObject({ name: 'Scarf', options: [] });
+    expect(products[1]?.variants).toHaveLength(1);
+    expect(errors).toEqual([
+      { rowNumber: 4, field: 'options', message: 'Rows of one product need the same options' },
+    ]);
   });
 
   it('refuses a repeated sku, a repeated size and a changed category', () => {
