@@ -46,18 +46,15 @@ export function OrderAreaFields({
           onChange(id || undefined);
         }}
       />
-      {upazilas.data?.items.length ? (
-        <AreaSelect
-          name="upazila"
-          label="Upazila"
-          items={upazilas.data.items}
-          value={upazila}
-          onChange={(id) => {
-            setUpazila(id);
-            onChange(id || district);
-          }}
-        />
-      ) : null}
+      <UpazilaSelect
+        upazilas={upazilas.data?.items}
+        district={districts.data?.items.find(({ id }) => id === district)}
+        value={upazila}
+        onChange={(id) => {
+          setUpazila(id);
+          onChange(id || district);
+        }}
+      />
       {error && (
         <p role="alert" className="text-danger">
           {error.message}
@@ -67,10 +64,41 @@ export function OrderAreaFields({
   );
 }
 
+function UpazilaSelect({
+  upazilas,
+  district,
+  value,
+  onChange,
+}: {
+  upazilas?: AreaResponse[];
+  district?: AreaResponse;
+  value: number;
+  onChange: (id: number) => void;
+}) {
+  if (!upazilas?.length) return null;
+  return (
+    <AreaSelect
+      name="upazila"
+      label="Upazila"
+      items={upazilas}
+      emptyLabel={wholeDistrictLabel(district)}
+      value={value}
+      onChange={onChange}
+    />
+  );
+}
+
+// The upazila list holds only the suburbs, so the empty choice is the city itself and must say so.
+function wholeDistrictLabel(district?: AreaResponse) {
+  if (district?.name === 'Dhaka') return 'Dhaka city';
+  return district ? `Rest of ${district.name}` : 'Choose upazila';
+}
+
 function AreaSelect({
   name,
   label,
   items,
+  emptyLabel,
   value,
   current,
   onChange,
@@ -78,6 +106,7 @@ function AreaSelect({
   name: string;
   label: string;
   items?: AreaResponse[];
+  emptyLabel?: string;
   value: number;
   current?: string;
   onChange: (id: number) => void;
@@ -92,7 +121,7 @@ function AreaSelect({
           disabled={!items?.length}
           onChange={(event) => onChange(Number(event.target.value))}
         >
-          <option value={0}>{current ?? `Choose ${label.toLowerCase()}`}</option>
+          <option value={0}>{current ?? emptyLabel ?? `Choose ${label.toLowerCase()}`}</option>
           {items?.map((area) => (
             <option key={area.id} value={area.id}>
               {area.name}

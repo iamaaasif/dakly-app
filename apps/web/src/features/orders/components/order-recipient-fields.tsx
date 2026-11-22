@@ -1,5 +1,6 @@
 import { useFormContext, useWatch } from 'react-hook-form';
 
+import { formatMoney } from '@dakly/contracts/money';
 import type { OrderDetail, OrderEditorValues } from '@dakly/contracts/orders';
 import { bdMobileSchema } from '@dakly/contracts/phone';
 import { ApiError } from '@dakly/ui/api-client';
@@ -132,6 +133,7 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
           )}
         </FormField>
       </div>
+      <ChargeHint chargePoisha={charge} />
       {missingZones && <SetupDeliveryZones retryQuote={() => void refetch()} />}
       {error && !missingZones && (
         <p role="alert" className="text-danger">
@@ -139,6 +141,17 @@ function DeliveryChargeFields({ order }: { order?: OrderDetail }) {
         </p>
       )}
     </>
+  );
+}
+
+function ChargeHint({ chargePoisha }: { chargePoisha?: number }) {
+  const { control } = useFormContext<OrderEditorValues>();
+  const typed = useWatch({ control, name: 'deliveryChargePoisha' });
+  if (chargePoisha === undefined || typed) return null;
+  return (
+    <p className="text-text-muted">
+      Delivery for this area is {formatMoney(chargePoisha)}. Type a charge to change it.
+    </p>
   );
 }
 
