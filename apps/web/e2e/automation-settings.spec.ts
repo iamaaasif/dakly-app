@@ -114,7 +114,7 @@ test('publishes ready settings and keeps a refused draft saved', async ({
     const saved = await context.request.get(`/api/automations/${draftId}`, { headers });
     expect(await saved.json()).toMatchObject({
       status: 'draft',
-      graph: { steps: { wait: { wait: { minutes: 180 } } } },
+      graph: { steps: { wait: { wait: { minutes: 3 } } } },
     });
   } finally {
     await db.pool.query(
