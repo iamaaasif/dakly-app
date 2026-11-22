@@ -1,5 +1,5 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useCallback, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useCallback, useRef, useState } from 'react';
 
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { ApiError } from '@dakly/ui/api-client';
@@ -17,7 +17,30 @@ function isAuthRequired(error: unknown) {
   return error instanceof ApiError && error.code === 'AUTH_REQUIRED';
 }
 
+// Cancelling the first load's own request would send a second identical one.
+const hasContext = (client: QueryClient) => client.getQueryData(sessionContextKey) !== undefined;
+
 const freshContextQuery = { queryKey: sessionContextKey, staleTime: 0 };
+
+type DiscardOptions = {
+  client: QueryClient;
+  pause: () => number;
+  setAvailable: (value: boolean) => void;
+  setGeneration: Dispatch<SetStateAction<number>>;
+};
+
+function useAccountDiscard({ client, pause, setAvailable, setGeneration }: DiscardOptions) {
+  const discard = useCallback(async () => {
+    setAvailable(false);
+    setGeneration((value) => value + 1);
+    await discardAccountCache(client);
+  }, [client, setAvailable, setGeneration]);
+  const close = useCallback(async () => {
+    pause();
+    await discard();
+  }, [pause, discard]);
+  return { discard, close };
+}
 
 export function useSessionVerification() {
   const session = useSessionContext();
@@ -34,19 +57,11 @@ export function useSessionVerification() {
     setBlocked(true);
     return ++revision.current;
   }, []);
-  const discard = useCallback(async () => {
-    setAvailable(false);
-    setGeneration((value) => value + 1);
-    await discardAccountCache(client);
-  }, [client]);
-  const close = useCallback(async () => {
-    pause();
-    await discard();
-  }, [pause, discard]);
+  const { discard, close } = useAccountDiscard({ client, pause, setAvailable, setGeneration });
   const verify = useCallback(async () => {
     if (switching.current) return;
     const current = pause();
-    await client.cancelQueries({ queryKey: sessionContextKey });
+    if (hasContext(client)) await client.cancelQueries({ queryKey: sessionContextKey });
     if (revision.current !== current) return;
     try {
       const verified = await client.fetchQuery<SessionContext>(freshContextQuery);
@@ -77,5 +92,6 @@ export function useSessionVerification() {
     pause,
     verify,
     switching,
+    acceptedContextTag,
   };
 }
