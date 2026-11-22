@@ -36,7 +36,8 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
   const mutation = product ? change : create;
   const { dirtyFields, errors, isDirty } = form.formState;
 
-  const onSubmit = form.handleSubmit((input) => {
+  const onSubmit = form.handleSubmit((parsed) => {
+    const input = product ? parsed : shareCostAcrossSizes(parsed);
     const setError = (error: Error) =>
       form.setError(productErrorField(error, input.variants.length), {
         message: error.message,
@@ -82,6 +83,19 @@ export function ProductForm({ product, onSaved, onCancel }: ProductFormProps) {
       </form>
     </FormProvider>
   );
+}
+
+// On a new product the cost field edits the first variant only, so sizes left without a cost use it.
+function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
+  const cost = input.variants[0]?.costPoisha ?? null;
+  if (cost === null) return input;
+  return {
+    ...input,
+    variants: input.variants.map((variant) => ({
+      ...variant,
+      costPoisha: variant.costPoisha ?? cost,
+    })),
+  };
 }
 
 type SaveInitialStocksArgs = {

@@ -5,4 +5,5 @@ export const readinessLabels: Record<ProductReadiness, string> = {
   needs_photo: 'Needs a photo',
   hidden: 'Hidden',
   running_low: 'Running low',
+  out_of_stock: 'Out of stock',
 };

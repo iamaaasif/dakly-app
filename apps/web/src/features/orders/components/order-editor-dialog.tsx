@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   FormProvider,
   useFieldArray,
@@ -69,6 +69,14 @@ export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
     defaultValues: newOrderDefaults,
   });
   const busy = create.isPending || create.mustRetry;
+  const { reset: clearCreateError } = create;
+  // A stock error is about the lines as they were saved, so it goes once a line changes.
+  useEffect(() => {
+    const subscription = form.watch((_values, { name }) => {
+      if (name?.startsWith('items')) clearCreateError();
+    });
+    return () => subscription.unsubscribe();
+  }, [form, clearCreateError]);
   function save(input: CreateOrderInput) {
     create.mutate(input, { onSuccess: (order) => onSaved(order.id) });
   }

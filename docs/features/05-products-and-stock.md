@@ -49,13 +49,13 @@ Products holds prices, sizes and stock so chats, the shop counter and the order 
 
 ### Business rules
 
-| ID      | Rule                                                                                                                                                         |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ORD-R3  | A tracked item's quantity can't exceed available stock unless a person ticks "Allow even though out of stock". The AI can never oversell.                    |
-| PROD-R1 | Prices must be greater than 0 to appear in chats, shop sales or the order link. Products without price are "Needs a price" and the AI hands over when asked. |
-| PROD-R2 | Profit % = (price − cost) ÷ price, shown only when cost is set. Stock value = sum of stock × cost.                                                           |
-| PROD-R3 | Running low = any tracked size with 3 or fewer available (threshold editable).                                                                               |
-| PROD-R4 | Hiding a product removes it from chats, shop and order link; past orders keep it.                                                                            |
+| ID      | Rule                                                                                                                                                            |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ORD-R3  | A tracked item's quantity can't exceed available stock unless a person ticks "Allow even though out of stock". The AI can never oversell.                       |
+| PROD-R1 | Prices must be greater than 0 to appear in chats, shop sales or the order link. Products without price are "Needs a price" and the AI hands over when asked.    |
+| PROD-R2 | Profit % = (price − cost) ÷ price, shown only when cost is set. Stock value = sum of stock × cost.                                                              |
+| PROD-R3 | Running low = any tracked size with 3 or fewer available (threshold editable) while some size is still available. Out of stock = every size has none available. |
+| PROD-R4 | Hiding a product removes it from chats, shop and order link; past orders keep it.                                                                               |
 
 ### States and edge cases
 
@@ -119,7 +119,7 @@ In the saved product editor, choose a tone and language to write three descripti
 
 ![Products](../design/screenshots/products.webp)
 
-List with readiness labels (Needs a price, Needs a photo, Hidden, Running low) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
+List with readiness labels (Needs a price, Needs a photo, Hidden, Running low, Out of stock) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
 ### Missing design: import products
 
@@ -166,7 +166,7 @@ counter, ledger and event writes.
 
 Readiness labels are computed from the effective variant prices, confirmed photo
 ids, visibility and available stock. `settings.stock.lowStockThreshold` defaults to
-3 and can be changed through Store settings. Lists accept the `running_low` filter.
+3 and can be changed through Store settings. Lists accept the `running_low` and `out_of_stock` filters.
 A `variant.restocked` event means availability crossed from zero or less to positive;
 PROD-6 sends the approved notification.
 

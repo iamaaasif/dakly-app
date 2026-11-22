@@ -19,6 +19,7 @@ import {
   type Variant,
   variantSnapshot,
 } from './product-snapshots.repository';
+import { stockReadinessFilter } from './product-stock-readiness-filter.repository';
 
 // Drizzle strips qualifiers in SELECT expressions; this must refer to the outer product.
 const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.id.name)}`;
@@ -128,9 +129,7 @@ export class ProductsRepository {
             query.readiness === 'needs_price'
               ? sql`exists (select 1 from product_variants v where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived' and coalesce(v.price_override_poisha, ${products.pricePoisha}) = 0)`
               : undefined,
-            query.readiness === 'running_low'
-              ? sql`${products.isStockTracked} and exists (select 1 from product_variants v where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived' and v.on_hand - v.reserved <= ${lowStockThreshold})`
-              : undefined,
+            stockReadinessFilter(storeId, query.readiness, lowStockThreshold),
             query.cursor ? lt(products.id, query.cursor) : undefined,
           ),
         )
