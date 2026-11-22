@@ -6,7 +6,12 @@ import { productBulkEdits, products, productVariants } from '@dakly/db/schema/pr
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 
-export type BulkEditVariant = { id: string; costPoisha: number | null; onHand: number };
+export type BulkEditVariant = {
+  id: string;
+  costPoisha: number | null;
+  priceOverridePoisha: number | null;
+  onHand: number;
+};
 export type BulkEditProduct = {
   id: string;
   pricePoisha: number;
@@ -71,6 +76,7 @@ export class ProductBulkEditsRepository {
               id: productVariants.id,
               productId: productVariants.productId,
               costPoisha: productVariants.costPoisha,
+              priceOverridePoisha: productVariants.priceOverridePoisha,
               onHand: productVariants.onHand,
             })
             .from(productVariants)
