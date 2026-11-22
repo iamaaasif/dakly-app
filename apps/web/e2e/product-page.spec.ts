@@ -21,7 +21,10 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
   const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-11-page');
   const name = 'Cotton shirt page fixture';
   let productId: string | undefined;
+  // CI keeps only e2e-artifacts, so each screenshot is also written there.
+  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-11-page');
   await mkdir(evidence, { recursive: true });
+  await mkdir(ciCopy, { recursive: true });
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -35,7 +38,8 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true);
-      await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`) });
+      for (const directory of [evidence, ciCopy])
+        await page.screenshot({ path: resolve(directory, `${screen}-${width}.png`) });
     }
   }
   try {
