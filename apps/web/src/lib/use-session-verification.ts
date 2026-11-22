@@ -42,16 +42,16 @@ function useAccountDiscard({ client, pause, setAvailable, setGeneration }: Disca
   return { discard, close };
 }
 
-export function useSessionVerification() {
-  const session = useSessionContext();
+export function useSessionVerification(initial?: SessionContext) {
+  const session = useSessionContext(initial);
   const client = useQueryClient();
-  const [blocked, setBlocked] = useState(true);
-  const [available, setAvailable] = useState(false);
+  const [blocked, setBlocked] = useState(!initial);
+  const [available, setAvailable] = useState(Boolean(initial));
   const [failure, setFailure] = useState('');
   const [expired, setExpired] = useState(false);
   const [generation, setGeneration] = useState(0);
   const revision = useRef(0);
-  const acceptedContextTag = useRef<string | undefined>(undefined);
+  const acceptedContextTag = useRef(initial?.contextTag);
   const switching = useRef(false);
   const pause = useCallback(() => {
     setBlocked(true);

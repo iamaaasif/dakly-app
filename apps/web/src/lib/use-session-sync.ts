@@ -46,7 +46,7 @@ export function useSessionSync(options: SessionSyncOptions) {
   useEffect(() => {
     const connection = new BroadcastChannel('dakly-session');
     channel.current = connection;
-    void verify();
+    void verifyQuietly();
     connection.onmessage = (event: MessageEvent<string>) => {
       if (event.data === 'changing') {
         changing.current = true;

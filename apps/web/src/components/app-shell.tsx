@@ -1,6 +1,7 @@
 'use client';
 import { type ReactNode } from 'react';
 
+import type { SessionContext } from '@dakly/contracts/sessions';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { SessionInteraction } from './session-interaction';
@@ -8,8 +9,11 @@ import { SessionVerificationStatus } from './session-verification-status';
 import { ShellFrame } from './shell-frame';
 import { useSessionBoundary } from '@/lib/use-session-boundary';
 
-export function AppShell({ actions, children }: { actions: ReactNode; children: ReactNode }) {
-  const boundary = useSessionBoundary();
+type AppShellProps = { initialContext: SessionContext; actions: ReactNode; children: ReactNode };
+
+// The server just verified this context, so the first paint shows the real shell; a quiet check follows.
+export function AppShell({ initialContext, actions, children }: AppShellProps) {
+  const boundary = useSessionBoundary(initialContext);
   const { data, error, isPending } = boundary.session;
   if (isPending && !boundary.available)
     return (
