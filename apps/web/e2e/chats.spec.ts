@@ -115,6 +115,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await page.getByRole('button', { name: 'Filter' }).click();
     await expect(page.getByText('Assigned to')).toBeVisible();
     await capture(page, 'search-filter');
+    await page.getByRole('button', { name: 'Done' }).click();
     await page.getByRole('searchbox', { name: 'Search chats' }).fill('');
     await page.getByRole('combobox', { name: 'Sort chats' }).click();
     await page.getByRole('option', { name: 'Unread first' }).click();

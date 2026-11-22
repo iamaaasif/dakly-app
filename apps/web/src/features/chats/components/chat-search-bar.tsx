@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { useConversationAssignees } from '../api/conversations';
@@ -17,7 +18,6 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
   const router = useRouter();
   const [words, setWords] = useState(query.q ?? '');
   const settled = useDebouncedValue(words.trim(), 300);
-  const [filterOpen, setFilterOpen] = useState(Boolean(query.assignee));
 
   useEffect(() => {
     if (settled === (query.q ?? '')) return;
@@ -44,14 +44,17 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
         />
       </div>
       <div className="flex gap-2">
-        <Button
-          variant="secondary"
-          aria-expanded={filterOpen}
-          onClick={() => setFilterOpen((open) => !open)}
-        >
-          <Filter aria-hidden="true" size={16} strokeWidth={1.75} />
-          Filter
-        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="secondary">
+              <Filter aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0" />
+              Filter
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent aria-label="Filter chats">
+            <ChatFilterPanel query={query} />
+          </PopoverContent>
+        </Popover>
         <Select
           value={query.sort}
           onValueChange={(sort) =>
@@ -70,7 +73,6 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
           </SelectContent>
         </Select>
       </div>
-      {filterOpen ? <ChatFilterPanel query={query} /> : null}
     </div>
   );
 }
@@ -79,7 +81,7 @@ function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
   const router = useRouter();
   const assignees = useConversationAssignees();
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-surface p-3">
+    <div className="space-y-3">
       <div className="space-y-1">
         <p id="chat-assignee-label" className="text-sm font-semibold">
           Assigned to
@@ -105,13 +107,19 @@ function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
           </SelectContent>
         </Select>
       </div>
-      <Button
-        variant="secondary"
-        disabled={!query.assignee}
-        onClick={() => router.replace(chatsHref({ ...query, assignee: undefined }))}
-      >
-        Clear
-      </Button>
+      <div className="flex items-center justify-between">
+        <Button
+          variant="link"
+          className="text-text-muted"
+          disabled={!query.assignee}
+          onClick={() => router.replace(chatsHref({ ...query, assignee: undefined }))}
+        >
+          Clear
+        </Button>
+        <PopoverClose asChild>
+          <Button className="bg-inverse text-on-primary hover:bg-inverse/90">Done</Button>
+        </PopoverClose>
+      </div>
     </div>
   );
 }
