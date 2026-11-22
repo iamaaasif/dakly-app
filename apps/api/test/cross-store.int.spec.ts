@@ -5813,6 +5813,37 @@ describe('every production shop route isolates its data', () => {
       expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
     }
   });
+  it('PATCH /products/:productId keeps a variant that an open order uses', async () => {
+    const { b } = await pair();
+    const created = await success(b, 'POST', '/products', 201, {
+      name: 'টি-শার্ট',
+      pricePoisha: 100000,
+      isStockTracked: false,
+      options: [{ name: 'Size', values: ['S', 'M'] }],
+      variants: [{ optionValues: { Size: 'S' } }, { optionValues: { Size: 'M' } }],
+    });
+    const product = created.json();
+    const [small, medium] = product.variants as { id: string }[];
+    const orderId = await order(b);
+    await f.admin.pool.query(
+      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,quantity,unit_price_poisha,is_stock_tracked)
+       values($1,$2,$3,$4,'টি-শার্ট','S',1,100000,false)`,
+      [randomUUID(), b.id, orderId, small!.id],
+    );
+    const url = `/products/${product.id}`;
+    const keepMediumOnly = {
+      options: [{ name: 'Size', values: ['M'] }],
+      variants: [{ id: medium!.id, optionValues: { Size: 'M' } }],
+    };
+    const denied = await f.request(b.owner, 'PATCH', url, keepMediumOnly);
+    expect(denied.statusCode, denied.body).toBe(409);
+    expect(denied.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_IN_OPEN_ORDERS' } });
+    await success(b, 'POST', `/orders/${orderId}/stage`, 200, {
+      to: 'cancelled',
+      reason: 'customer_cancelled',
+    });
+    await success(b, 'PATCH', url, 200, keepMediumOnly);
+  });
   it('requires one photo for a story draft even without any targets', async () => {
     const shop = await f.shop();
     const story = await f.request(

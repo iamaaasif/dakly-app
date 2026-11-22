@@ -11,6 +11,7 @@ import {
   type OrderStageChange,
 } from '@dakly/contracts/orders';
 import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
+import type { ChangeProductInput, ProductResponse } from '@dakly/contracts/products';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
@@ -80,6 +81,29 @@ export class OrdersService {
       if (await this.repository.hasItemsInStages(storeId, variantIds, productArchiveStages))
         throw orderError('PRODUCT_HAS_OPEN_ORDERS');
       await this.products.remove(storeId, productId, actor);
+    });
+  }
+
+  // A variant left out of the saved list is archived, so one that an open order still needs stays.
+  changeProduct(
+    storeId: string,
+    productId: string,
+    input: ChangeProductInput,
+    actor: AuditEntry['actor'],
+  ): Promise<ProductResponse> {
+    return this.transaction.run(storeId, async () => {
+      if (input.variants) {
+        await this.products.lockArchiveVariants(storeId, productId);
+        const kept = new Set(input.variants.map((variant) => variant.id));
+        const { variants: current } = await this.products.getById(storeId, productId);
+        const removedIds = current.map(({ id }) => id).filter((id) => !kept.has(id));
+        if (
+          removedIds.length &&
+          (await this.repository.hasItemsInStages(storeId, removedIds, productArchiveStages))
+        )
+          throw orderError('PRODUCT_VARIANT_IN_OPEN_ORDERS');
+      }
+      return this.products.edit(storeId, productId, input, actor);
     });
   }
 

@@ -680,6 +680,13 @@
       "when": 1795353256338,
       "tag": "0096_product_bulk_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1795359047195,
+      "tag": "0097_suggest_product_options_purpose",
+      "breakpoints": true
     }
   ]
 }

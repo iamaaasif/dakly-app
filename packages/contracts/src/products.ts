@@ -287,3 +287,23 @@ export const productPhotoTagsSchema = z.strictObject({
   tags: z.array(z.string().min(1).max(40)).max(12),
 });
 export type ProductPhotoTags = z.infer<typeof productPhotoTagsSchema>;
+
+// A name is enough on a new product; a saved product can also have its photos read.
+export const suggestProductOptionsSchema = z
+  .strictObject({
+    name: z.string().trim().max(200).default(''),
+    productId: z.uuid().optional(),
+  })
+  .refine((input) => input.name || input.productId, 'Enter a product name or add a photo first');
+export type SuggestProductOptionsInput = z.infer<typeof suggestProductOptionsSchema>;
+export const suggestedOptionsOutputSchema = z.strictObject({
+  options: z
+    .array(
+      z.strictObject({
+        name: z.string().trim().min(1).max(40),
+        values: z.array(z.string().trim().min(1).max(40)).max(12),
+      }),
+    )
+    .max(3),
+});
+export type SuggestedOptionsResponse = z.infer<typeof suggestedOptionsOutputSchema>;
