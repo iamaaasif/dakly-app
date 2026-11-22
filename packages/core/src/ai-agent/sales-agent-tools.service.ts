@@ -415,7 +415,7 @@ type ChatVariant = ChatProduct['variants'][number];
 export const isOutOfStock = (product: ChatProduct, variant: ChatVariant) =>
   product.isStockTracked && variant.available <= 0;
 
-function productCardText(product: ChatProduct, only?: ChatVariant) {
+export function productCardText(product: ChatProduct, only?: ChatVariant) {
   const lines = (only ? [only] : product.variants).map(
     (variant) =>
       `${variant.title}: ${formatMoney(variant.pricePoisha)}${isOutOfStock(product, variant) ? ' · স্টক নেই (out of stock)' : ''}`,

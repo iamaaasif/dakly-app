@@ -100,3 +100,22 @@ export function buildProductCardElement(input: ProductCardInput): ProductCardEle
     buttons,
   };
 }
+
+export type CardTap =
+  | { kind: 'order'; productId: string; variantId?: string }
+  | { kind: 'sizes'; productId: string }
+  | { kind: 'human' };
+
+// Reads back what productCardPayload wrote; any other payload (a campaign button, say) is not ours.
+export function parseCardTap(payload: string): CardTap | undefined {
+  const [prefix, action, productId, variantId] = payload.split(':');
+  if (prefix !== 'card') return undefined;
+  if (action === 'human') return { kind: 'human' };
+  if (!productId || !z.uuid().safeParse(productId).success) return undefined;
+  if (action === 'sizes') return { kind: 'sizes', productId };
+  if (action !== 'order') return undefined;
+  if (variantId === undefined) return { kind: 'order', productId };
+  return z.uuid().safeParse(variantId).success
+    ? { kind: 'order', productId, variantId }
+    : undefined;
+}

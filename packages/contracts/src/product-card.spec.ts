@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildProductCardElement, productCardElementSchema } from './product-card';
+import {
+  buildProductCardElement,
+  parseCardTap,
+  productCardElementSchema,
+  productCardPayload,
+} from './product-card';
 
 const sizes = [
   { id: 'v-m', title: 'M', pricePoisha: 125000, inStock: true },
@@ -84,5 +89,34 @@ describe('buildProductCardElement', () => {
     });
     expect(element.title.length).toBeLessThanOrEqual(80);
     expect(productCardElementSchema.safeParse(element).success).toBe(true);
+  });
+});
+
+describe('parseCardTap', () => {
+  const product = '2f0f3c1e-6c1b-4f55-9a52-0a4b8a3f6c11';
+  const variant = '7d9a5a10-1f43-4c7e-8d3b-3d1c1f0f9a22';
+
+  it('reads back every payload the builder writes', () => {
+    expect(parseCardTap(productCardPayload.order(product))).toEqual({
+      kind: 'order',
+      productId: product,
+    });
+    expect(parseCardTap(productCardPayload.order(product, variant))).toEqual({
+      kind: 'order',
+      productId: product,
+      variantId: variant,
+    });
+    expect(parseCardTap(productCardPayload.sizes(product))).toEqual({
+      kind: 'sizes',
+      productId: product,
+    });
+    expect(parseCardTap(productCardPayload.human)).toEqual({ kind: 'human' });
+  });
+
+  it('ignores a campaign button and a damaged payload', () => {
+    expect(parseCardTap('campaign:abc:0')).toBeUndefined();
+    expect(parseCardTap('card:order:not-an-id')).toBeUndefined();
+    expect(parseCardTap(`card:order:${product}:nope`)).toBeUndefined();
+    expect(parseCardTap('card:refund')).toBeUndefined();
   });
 });
