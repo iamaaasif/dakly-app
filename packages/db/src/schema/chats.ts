@@ -152,6 +152,8 @@ export const messages = pgTable(
     body: text('body'),
     // Object keys in R2 plus type and size for each attachment.
     attachments: jsonb('attachments'),
+    // A product card or carousel sent as a Meta template; body holds the same facts as plain text.
+    card: jsonb('card'),
     // Voice transcript or image description, so staff and the AI read the same text.
     mediaText: text('media_text'),
     externalId: text('external_id'),

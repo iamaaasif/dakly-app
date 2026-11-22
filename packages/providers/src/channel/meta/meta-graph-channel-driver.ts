@@ -9,6 +9,7 @@ import {
   type MetaAuthorizationDriver,
   type MetaPage,
   type MetaTokenHealthDriver,
+  type OutboundCard,
   type OutboundMessage,
 } from '../channel-driver';
 
@@ -80,6 +81,24 @@ function sendResponseError(code: number, subcode?: number): MetaRequestError {
 
 function permissionDenied(code: number): boolean {
   return code === 10 || (code >= 200 && code <= 299);
+}
+
+function cardContent(message: OutboundMessage, card: OutboundCard) {
+  const elements = card.elements.map(({ title, subtitle, imageUrl, buttons }) => ({
+    title,
+    subtitle,
+    ...(imageUrl ? { image_url: imageUrl } : {}),
+    buttons: buttons.map((button) =>
+      button.type === 'link'
+        ? { type: 'web_url', title: button.title, url: button.url }
+        : { type: 'postback', title: button.title, payload: button.payload },
+    ),
+  }));
+  return {
+    attachment: { type: 'template', payload: { template_type: 'generic', elements } },
+    // Instagram does not take the operation reference.
+    ...(message.channel === 'messenger' ? { metadata: message.operationKey } : {}),
+  };
 }
 
 function messageContent(message: OutboundMessage) {
@@ -255,6 +274,15 @@ export class MetaGraphChannelDriver
     // Messenger cannot put an image and a text with buttons in one message, so the image goes
     // first. Only the text message carries the operation key, so one send echoes one key.
     // A refused image does not stop the text, but an uncertain one does: it may have gone out.
+    // Meta can refuse a template (for example a photo it cannot fetch). The same facts then go out
+    // as plain text, with the photo first, so the customer is not left without an answer.
+    if (message.card) {
+      try {
+        return await this.post(credentials, message, cardContent(message, message.card));
+      } catch (error) {
+        if (!(error instanceof MetaRequestError) || error.code !== 'rejected') throw error;
+      }
+    }
     let imageRejected = false;
     if (message.imageUrl) {
       try {
