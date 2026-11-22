@@ -84,7 +84,7 @@ function BestAutomation({ automation }: { automation: Best['automation'] }) {
   return (
     <>
       <Link
-        href={`/automations/${automation.id}`}
+        href={`/automations/${automation.id}/canvas`}
         className="font-semibold text-text hover:underline"
       >
         {automation.name}
