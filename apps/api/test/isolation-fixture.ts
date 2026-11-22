@@ -239,6 +239,7 @@ export class IsolationFixture {
       'channel_connections',
       'contact_merges',
       'contacts',
+      'product_bulk_edits',
       'stock_movements',
       'delivery_zones',
       'store_counters',

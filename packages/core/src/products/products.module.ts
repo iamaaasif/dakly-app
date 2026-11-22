@@ -7,6 +7,9 @@ import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
+import { ProductBulkEditsController } from './product-bulk-edits.controller';
+import { ProductBulkEditsRepository } from './product-bulk-edits.repository';
+import { ProductBulkEditsService } from './product-bulk-edits.service';
 import { ProductExportController } from './product-export.controller';
 import { ProductExportService } from './product-export.service';
 import { ProductImportService } from './product-import.service';
@@ -38,6 +41,7 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     FileStorageModule,
   ],
   controllers: [
+    ProductBulkEditsController,
     ProductExportController,
     ProductsController,
     ProductPhotosController,
@@ -46,6 +50,8 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     RestockRequestsController,
   ],
   providers: [
+    ProductBulkEditsRepository,
+    ProductBulkEditsService,
     ProductsRepository,
     ProductOrderVariantsRepository,
     ProductsService,
