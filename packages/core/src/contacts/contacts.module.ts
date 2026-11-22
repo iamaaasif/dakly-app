@@ -15,6 +15,8 @@ import { ContactMatchSuggestionsController } from './contact-match-suggestions.c
 import { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
 import { ContactSearchRepository } from './contact-search.repository';
+import { ContactTagsRepository } from './contact-tags.repository';
+import { ContactTagsService } from './contact-tags.service';
 import { ContactsController } from './contacts.controller';
 import { ContactsRepository } from './contacts.repository';
 import { ContactsService } from './contacts.service';
@@ -27,6 +29,8 @@ import { OrderContactsRepository } from './order-contacts.repository';
   controllers: [ContactsController, ContactMatchSuggestionsController],
   providers: [
     ContactSearchRepository,
+    ContactTagsRepository,
+    ContactTagsService,
     ContactsService,
     ContactDeletionService,
     KhataCustomersService,
@@ -42,6 +46,7 @@ import { OrderContactsRepository } from './order-contacts.repository';
   ],
   exports: [
     ContactsService,
+    ContactTagsService,
     KhataCustomersService,
     ContactIdentitiesService,
     ContactMatchSuggestionsService,

@@ -41,6 +41,17 @@ export function useConversationCounts() {
   });
 }
 
+export function useConversationLabels() {
+  const { request, contextTag } = useStoreRequest();
+  return useQuery({
+    queryKey: chatsKeys.labels(contextTag),
+    queryFn: ({ signal }) => request<string[]>('/conversations/labels', { signal }),
+    enabled: Boolean(contextTag),
+    staleTime: 60_000,
+    retry: false,
+  });
+}
+
 export function useConversationAssignees() {
   const { request, contextTag } = useStoreRequest();
   return useQuery({

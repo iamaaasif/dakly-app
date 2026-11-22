@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
+  ChangeConversationLabelInput,
   ConversationAssigneeResponse,
   ConversationCountsResponse,
   ConversationListQuery,
@@ -18,6 +19,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
 import { UsersService } from '../auth/users.service';
+import { ContactTagsService } from '../contacts/contact-tags.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { ChatOrdersService } from '../orders/chat-orders.service';
 import { Clock } from '../platform/clock';
@@ -37,6 +39,7 @@ export class InboxService {
   constructor(
     @Inject(InboxRepository) private readonly repository: InboxRepository,
     @Inject(ContactsService) private readonly contacts: ContactsService,
+    @Inject(ContactTagsService) private readonly contactTags: ContactTagsService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -87,6 +90,29 @@ export class InboxService {
         ? await this.chatOrders.totalsSince(storeId, since)
         : null,
     };
+  }
+
+  async labels(storeId: string): Promise<string[]> {
+    await this.requireChats(storeId);
+    return this.contactTags.inUse(storeId);
+  }
+
+  // Labels are contact tags, so the customer profile and segments see them too.
+  async changeLabel(
+    storeId: string,
+    id: string,
+    actor: UserActor,
+    input: ChangeConversationLabelInput,
+  ): Promise<ConversationResponse> {
+    await this.requireChats(storeId);
+    const { contactId } = await this.find(storeId, id);
+    await this.contacts.changeTag(
+      storeId,
+      contactId,
+      { tag: input.label, change: input.change },
+      actor,
+    );
+    return conversationResponse(await this.find(storeId, id));
   }
 
   async get(storeId: string, id: string): Promise<ConversationResponse> {

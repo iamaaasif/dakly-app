@@ -1,6 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import type { ConversationResponse, UpdateConversationInput } from '@dakly/contracts/chats';
+import type {
+  ChangeConversationLabelInput,
+  ConversationResponse,
+  UpdateConversationInput,
+} from '@dakly/contracts/chats';
 
 import { useStoreRequest } from '@/lib/store-request';
 
@@ -19,6 +23,12 @@ function useChatAction<Input>(
 export function useUpdateConversation(id: string) {
   return useChatAction<UpdateConversationInput>((request, body) =>
     request<ConversationResponse>(`/conversations/${id}`, { method: 'PATCH', body }),
+  );
+}
+
+export function useChangeLabel(id: string) {
+  return useChatAction<ChangeConversationLabelInput>((request, body) =>
+    request<ConversationResponse>(`/conversations/${id}/labels`, { method: 'POST', body }),
   );
 }
 

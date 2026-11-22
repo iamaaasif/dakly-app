@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { useUpdateConversation } from '../api/conversation-actions';
 import { useConversationAssignees } from '../api/conversations';
+import { LabelMenu } from './label-menu';
 import { useSessionContext } from '@/lib/session-context';
 
 const nobody = 'nobody';
@@ -18,6 +19,7 @@ export function ConversationActions({ conversation }: { conversation: Conversati
   return (
     <div className="flex flex-wrap items-center gap-2">
       <AssigneePicker conversation={conversation} />
+      <LabelMenu conversation={conversation} />
       {status === 'later' || done ? (
         <Button
           variant="secondary"

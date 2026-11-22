@@ -8,11 +8,12 @@ import { Input } from '@dakly/ui/input';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
-import { useConversationAssignees } from '../api/conversations';
+import { useConversationAssignees, useConversationLabels } from '../api/conversations';
 import { chatSortLabels, chatSorts, chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
 const anyone = 'anyone';
+const anyLabel = 'any-label';
 
 export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
   const router = useRouter();
@@ -107,12 +108,15 @@ function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
           </SelectContent>
         </Select>
       </div>
+      <LabelFilter query={query} />
       <div className="flex items-center justify-between">
         <Button
           variant="link"
           className="text-text-muted"
-          disabled={!query.assignee}
-          onClick={() => router.replace(chatsHref({ ...query, assignee: undefined }))}
+          disabled={!query.assignee && !query.label}
+          onClick={() =>
+            router.replace(chatsHref({ ...query, assignee: undefined, label: undefined }))
+          }
         >
           Clear
         </Button>
@@ -120,6 +124,36 @@ function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
           <Button className="bg-inverse text-on-primary hover:bg-inverse/90">Done</Button>
         </PopoverClose>
       </div>
+    </div>
+  );
+}
+
+function LabelFilter({ query }: { query: ChatScreenQuery }) {
+  const router = useRouter();
+  const labels = useConversationLabels();
+  return (
+    <div className="space-y-1">
+      <p id="chat-label-label" className="text-sm font-semibold">
+        Label
+      </p>
+      <Select
+        value={query.label ?? anyLabel}
+        onValueChange={(label) =>
+          router.replace(chatsHref({ ...query, label: label === anyLabel ? undefined : label }))
+        }
+      >
+        <SelectTrigger aria-labelledby="chat-label-label">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={anyLabel}>Any label</SelectItem>
+          {labels.data?.map((label) => (
+            <SelectItem key={label} value={label}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

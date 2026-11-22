@@ -48,6 +48,8 @@ export const chatScreenQuerySchema = z.strictObject({
   // The list's search words; a name, a phone number or the start of one.
   q: z.string().trim().min(1).max(120).optional(),
   assignee: z.uuid().optional(),
+  // A label is a contact tag.
+  label: z.string().trim().min(1).max(50).optional(),
   // The conversation open beside the list.
   chat: z.uuid().optional(),
   // On a narrow screen the customer panel takes the place of the thread.
@@ -78,6 +80,7 @@ export function conversationFilters(query: ChatScreenQuery): Partial<Conversatio
     sort: query.sort,
     q: canSearch(query.q) ? query.q : undefined,
     assigneeUserId: query.assignee,
+    label: query.label,
   };
 }
 
@@ -93,6 +96,7 @@ export function chatsHref(query: Partial<ChatScreenQuery>) {
     ['sort', query.sort === 'needs_you' ? undefined : query.sort],
     ['q', query.q],
     ['assignee', query.assignee],
+    ['label', query.label],
     ['chat', query.channel === 'comments' ? undefined : query.chat],
     ['panel', query.chat ? query.panel : undefined],
     ['post', query.channel === 'comments' ? query.post : undefined],

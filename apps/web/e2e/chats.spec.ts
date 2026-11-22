@@ -170,6 +170,12 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByRole('button', { name: 'Take over' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
     await capture(page, 'take-over');
+    await page.getByRole('button', { name: /^Label/ }).click();
+    await page.getByLabel('New label').fill('VIP');
+    await page.getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByRole('checkbox', { name: 'VIP' })).toBeChecked();
+    await capture(page, 'labels');
+    await page.keyboard.press('Escape');
     await page.getByRole('tab', { name: 'Internal note' }).click();
     await page.getByLabel('Write an internal note').fill('Call at 5 pm');
     await page.getByRole('button', { name: 'Save note' }).click();

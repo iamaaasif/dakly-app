@@ -22,6 +22,10 @@ const fields = {
   contactName: sql<
     string | null
   >`(select ${contacts.name} from ${contacts} where ${contacts.storeId} = ${conversations.storeId} and ${contacts.id} = ${conversations.contactId})`,
+  // The shop's labels on a chat are the contact's tags.
+  labels: sql<
+    string[]
+  >`(select ${contacts.tags} from ${contacts} where ${contacts.storeId} = ${conversations.storeId} and ${contacts.id} = ${conversations.contactId})`,
   status: conversations.status,
   responder: conversations.responder,
   assigneeUserId: conversations.assigneeUserId,
@@ -120,6 +124,7 @@ export class InboxRepository {
             query.responder ? eq(conversations.responder, query.responder) : undefined,
             query.channel ? eq(conversations.channel, query.channel) : undefined,
             query.contactKind ? eq(contacts.kind, query.contactKind) : undefined,
+            query.label ? sql`${query.label} = any(${contacts.tags})` : undefined,
             query.assigneeUserId
               ? eq(conversations.assigneeUserId, query.assigneeUserId)
               : undefined,

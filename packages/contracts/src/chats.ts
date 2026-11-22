@@ -164,6 +164,9 @@ const conversationCursorSchema = z.union([
   z.templateLiteral([z.literal([0, 1]), '_none_', z.uuid()]),
 ]);
 
+// A label is a contact tag, so it has the same limit.
+const labelText = z.string().trim().min(1).max(50);
+
 export const conversationListQuerySchema = conversationMessageListQuerySchema.extend({
   cursor: conversationCursorSchema.optional(),
   sort: z.enum(conversationSorts).default('recent'),
@@ -174,6 +177,7 @@ export const conversationListQuerySchema = conversationMessageListQuerySchema.ex
   responder: z.enum(conversationResponders).optional(),
   channel: z.enum(chatChannels).optional(),
   assigneeUserId: z.uuid().optional(),
+  label: labelText.optional(),
 });
 
 export const updateConversationSchema = z
@@ -183,6 +187,10 @@ export const updateConversationSchema = z
   })
   .refine((change) => Object.keys(change).length > 0, 'Change at least one field');
 
+export const changeConversationLabelSchema = z.strictObject({
+  label: labelText,
+  change: z.enum(['add', 'remove']),
+});
 export const createConversationNoteSchema = z.strictObject({ body: searchText.max(4000) });
 export const createConversationReplySchema = z.strictObject({
   body: searchText.max(2000),
@@ -195,6 +203,7 @@ export const takeOverConversationSchema = z
 
 export type ConversationListQuery = z.infer<typeof conversationListQuerySchema>;
 export type ConversationMessageListQuery = z.infer<typeof conversationMessageListQuerySchema>;
+export type ChangeConversationLabelInput = z.infer<typeof changeConversationLabelSchema>;
 export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
 export type CreateConversationNoteInput = z.infer<typeof createConversationNoteSchema>;
 export type CreateConversationReplyInput = z.infer<typeof createConversationReplySchema>;
@@ -211,6 +220,7 @@ export type ConversationResponse = {
   id: string;
   contactId: string;
   contactName: string | null;
+  labels: string[];
   channel: (typeof chatChannels)[number];
   status: (typeof conversationStatuses)[number];
   responder: (typeof conversationResponders)[number];
