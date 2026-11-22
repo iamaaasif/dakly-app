@@ -1,6 +1,5 @@
 'use client';
 import { Columns2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
 import type { ContactListQuery } from '@dakly/contracts/contacts';
 import { Button } from '@dakly/ui/button';
@@ -18,11 +17,12 @@ import {
   customerColumns,
   customerColumnsParam,
 } from '../customer-columns';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 type CustomerColumnsMenuProps = { query: ContactListQuery; columns: CustomerColumn[] };
 
 export function CustomerColumnsMenu({ query, columns }: CustomerColumnsMenuProps) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const choose = (column: CustomerColumn, on: boolean) => {
     const chosen = customerColumns.filter((each) =>
       each === column ? on : columns.includes(each),

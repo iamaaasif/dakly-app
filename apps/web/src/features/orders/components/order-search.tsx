@@ -1,15 +1,15 @@
 import { Search } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { FormEvent } from 'react';
 
 import type { OrderListQuery } from '@dakly/contracts/orders';
 import { Input } from '@dakly/ui/input';
 
 import { ordersSearch } from '../api/orders';
+import { UrlLink } from '@/components/url-link';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 export function OrderSearch({ query }: { query: OrderListQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const filtered = (search?: string) =>
     `/orders?${ordersSearch({ ...query, search, cursor: undefined })}`;
 
@@ -48,12 +48,12 @@ export function OrderSearch({ query }: { query: OrderListQuery }) {
         </div>
       </div>
       {query.search ? (
-        <Link
+        <UrlLink
           href={filtered()}
           className="inline-flex min-h-10 min-w-10 items-center text-action underline"
         >
           Clear search
-        </Link>
+        </UrlLink>
       ) : null}
     </form>
   );

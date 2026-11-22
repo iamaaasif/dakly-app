@@ -2,7 +2,6 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { SlidersHorizontal } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import { FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
@@ -15,6 +14,7 @@ import { Input } from '@dakly/ui/input';
 
 import { campaignListHref } from '../api/campaigns';
 import { campaignChannelLabels, campaignStatusLabels } from '../campaign-labels';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 const { status, channel } = campaignListQuerySchema.shape;
 const empty = z.literal('');
@@ -42,7 +42,7 @@ const campaignFilterSchema = filterFields
   .pipe(campaignListQuerySchema);
 
 export function CampaignFilters({ query }: { query: CampaignListQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const [expanded, setExpanded] = useState(false);
   const advancedId = useId();
   const { search = '', status = '', channel = '', createdFrom = '', createdThrough = '' } = query;

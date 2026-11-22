@@ -1,11 +1,11 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import type { ProductListQuery, ProductListResponse, ProductTab } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 
 import { productsSearch, useProducts } from '../api/products';
+import { parseProductsScreen } from '../products-url';
 import { ImportProductsDialog } from './import-products-dialog';
 import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
@@ -15,6 +15,7 @@ import { RestockDialog } from './restock-dialog';
 import { SessionDialog } from '@/components/session-dialog';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
+import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 
 type ProductsScreenProps = {
   query: ProductListQuery;
@@ -24,17 +25,14 @@ type ProductsScreenProps = {
   create?: '1';
   importing?: '1';
 };
-export function ProductsScreen({
-  query,
-  adjust,
-  productId,
-  productTab,
-  create,
-  importing,
-}: ProductsScreenProps) {
+export function ProductsScreen(initial: ProductsScreenProps) {
+  const { query, adjust, productId, productTab, create, importing } = useUrlQuery(
+    initial,
+    parseProductsScreen,
+  );
   const { data: session } = useSessionContext();
   const products = useProducts(query);
-  const router = useRouter();
+  const router = useUrlRouter();
   const [stockError, setStockError] = useState<string | null>(null);
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
@@ -84,7 +82,7 @@ export function ProductsScreen({
 type ProductsHeaderProps = { canEdit: boolean; listHref: string; importing?: '1' };
 
 function ProductsHeader({ canEdit, listHref, importing }: ProductsHeaderProps) {
-  const router = useRouter();
+  const router = useUrlRouter();
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -118,7 +116,7 @@ function AddProductModal({
   listHref: string;
   onStockError: (error: string) => void;
 }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   return (
     <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
       <ProductForm
@@ -161,7 +159,7 @@ function SelectedProductSheet({
   query,
   onClose,
 }: SelectedProductSheetProps) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const onTab = (nextTab: ProductTab) => {
     const params = new URLSearchParams(productsSearch(query));
     params.set('product', productId);

@@ -1,9 +1,8 @@
-import Link from 'next/link';
-
 import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders';
 
 import { ordersSearch } from '../api/orders';
 import { OrderRow } from './order-row';
+import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
 
 const linkStyle = 'inline-flex min-h-10 min-w-10 items-center text-action underline';
@@ -35,14 +34,14 @@ export function OrdersList({ page, query }: OrdersListProps) {
       </ul>
       <nav aria-label="Order pages" className="flex gap-4">
         {query.cursor ? (
-          <Link href={pageHref()} className={linkStyle}>
+          <UrlLink href={pageHref()} className={linkStyle}>
             First page
-          </Link>
+          </UrlLink>
         ) : null}
         {page.nextCursor ? (
-          <Link href={pageHref(page.nextCursor)} className={linkStyle}>
+          <UrlLink href={pageHref(page.nextCursor)} className={linkStyle}>
             Next page
-          </Link>
+          </UrlLink>
         ) : null}
       </nav>
     </>

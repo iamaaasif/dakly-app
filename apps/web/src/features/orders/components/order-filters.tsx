@@ -1,6 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { SlidersHorizontal } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 import { useId, useRef, useState, useTransition, type ReactNode } from 'react';
 import { Controller, FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
@@ -19,6 +18,7 @@ import { Input } from '@dakly/ui/input';
 import { ordersSearch } from '../api/orders';
 import { courierLabels, orderSourceLabels } from '../order-labels';
 import { OrderSearch } from './order-search';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 const filterFormSchema = orderListQuerySchema.safeExtend({ onlyCancelled: z.boolean() });
 type FilterFormValues = z.input<typeof filterFormSchema>;
@@ -76,7 +76,7 @@ type FilterFormProps = {
 };
 
 function FilterForm({ query, applied, closeFilters }: FilterFormProps) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const [pending, startTransition] = useTransition();
   const { source, courier, createdFrom, createdThrough, ...other } = query;
   const onlyCancelled = query.stage === 'cancelled';

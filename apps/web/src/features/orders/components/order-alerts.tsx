@@ -1,10 +1,11 @@
 import { Clock, PackageCheck, ShieldAlert } from 'lucide-react';
-import Link from 'next/link';
 
 import { formatMoney } from '@dakly/contracts/money';
 import type { OrderAlerts as Alerts } from '@dakly/contracts/orders';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
+
+import { UrlLink } from '@/components/url-link';
 
 type OrderAlertsProps = { alerts: Alerts };
 
@@ -53,13 +54,13 @@ export function OrderAlerts({ alerts }: OrderAlertsProps) {
               {title}
             </h2>
             <p className="flex-1 text-sm text-text">{detail}</p>
-            <Link
+            <UrlLink
               href={href}
               aria-label={accessibleAction}
               className="inline-flex min-h-10 min-w-10 items-center gap-1 rounded-sm text-sm font-semibold hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             >
               {actionLabel} <span aria-hidden="true">›</span>
-            </Link>
+            </UrlLink>
           </Card>
         ),
       )}

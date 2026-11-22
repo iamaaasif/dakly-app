@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 import type { OrderListItem } from '@dakly/contracts/orders';
 
 import { useOrderStage } from '../api/change-order-stage';
@@ -9,6 +7,7 @@ import {
   canMarkOrderDelivered,
   isFinishedOrder,
 } from '../order-actions';
+import { UrlLink } from '@/components/url-link';
 
 const actionStyle =
   'inline-flex min-h-11 w-fit items-center justify-center rounded-md bg-inverse px-3.5 text-sm font-medium text-on-primary hover:bg-inverse/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:h-9 md:min-h-9';
@@ -41,14 +40,14 @@ export function OrderRowAction({ order, href, canEdit }: OrderRowActionProps) {
   if (isFinishedOrder(order.stage)) return null;
   const { text, accessibleName } = linkLabels(order, canEdit);
   return (
-    <Link
+    <UrlLink
       href={href}
       data-order-row-action={order.id}
       aria-label={accessibleName}
       className={`col-start-2 md:col-start-auto ${actionStyle}`}
     >
       {text}
-    </Link>
+    </UrlLink>
   );
 }
 

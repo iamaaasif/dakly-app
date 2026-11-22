@@ -7,7 +7,6 @@ import {
   ShoppingBag,
   type LucideIcon,
 } from 'lucide-react';
-import Link from 'next/link';
 
 import { formatMoney } from '@dakly/contracts/money';
 import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
@@ -19,6 +18,7 @@ import { orderStageLabels } from '../order-labels';
 import { OrderRiskBadge } from './order-risk-badge';
 import { OrderRowAction } from './order-row-action';
 import { OrderRowParcel } from './order-row-parcel';
+import { UrlLink } from '@/components/url-link';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 
 type SourceStyle = { icon: LucideIcon; bgClass: string; textClass: string };
@@ -59,12 +59,12 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
       </span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <Link
+          <UrlLink
             href={href}
             className="inline-flex min-h-11 max-w-full items-center font-semibold wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:min-h-fit"
           >
             {order.recipientName}
-          </Link>
+          </UrlLink>
           <span className="text-xs text-text-muted">
             #{order.number} ·{' '}
             <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>

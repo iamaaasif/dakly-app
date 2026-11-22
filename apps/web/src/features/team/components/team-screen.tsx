@@ -1,12 +1,27 @@
+'use client';
 import Link from 'next/link';
 
+import { memberListQuerySchema } from '@dakly/contracts/team';
 import { cn } from '@dakly/ui/cn';
 
 import { MembersScreen } from './members-screen';
 import { RolesScreen } from './roles-screen';
 import { StorePage } from '@/components/store-page';
+import { UrlLink } from '@/components/url-link';
+import { useUrlQuery } from '@/lib/use-url-query';
 
-export function TeamScreen({ tab, cursor }: { tab: 'members' | 'roles'; cursor?: string }) {
+type TeamScreenProps = { tab: 'members' | 'roles'; cursor?: string };
+
+export function TeamScreen(initial: TeamScreenProps) {
+  const { tab, cursor } = useUrlQuery(initial, (raw) => {
+    const parsed = memberListQuerySchema.safeParse({ cursor: raw.cursor });
+    return parsed.success
+      ? {
+          tab: raw.tab === 'roles' ? ('roles' as const) : ('members' as const),
+          cursor: parsed.data.cursor,
+        }
+      : undefined;
+  });
   return (
     <StorePage permission="canViewTeam">
       <main className="space-y-6 p-4 md:p-8">
@@ -18,7 +33,7 @@ export function TeamScreen({ tab, cursor }: { tab: 'members' | 'roles'; cursor?:
         </div>
         <nav aria-label="Team sections" className="flex gap-6 border-b border-border">
           {(['members', 'roles'] as const).map((item) => (
-            <Link
+            <UrlLink
               key={item}
               href={`/team?tab=${item}`}
               aria-current={tab === item ? 'page' : undefined}
@@ -30,7 +45,7 @@ export function TeamScreen({ tab, cursor }: { tab: 'members' | 'roles'; cursor?:
               )}
             >
               {item === 'members' ? 'Members' : 'Roles'}
-            </Link>
+            </UrlLink>
           ))}
           <Link
             href="/team/ownership"

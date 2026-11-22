@@ -12,7 +12,11 @@ import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
 const push = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push, replace: push }) }));
+vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/lib/use-url-query', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useUrlRouter: () => ({ push: push, replace: push }),
+}));
 const product: ProductResponse = {
   id: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
   name: 'Cotton Panjabi',

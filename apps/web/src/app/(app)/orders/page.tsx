@@ -1,8 +1,7 @@
 import Link from 'next/link';
 
-import { orderScreenQuerySchema } from '@dakly/contracts/orders';
-
 import { OrdersScreen } from '@/features/orders/components/orders-screen';
+import { parseOrdersScreen } from '@/features/orders/orders-url';
 import { requireSession } from '@/lib/require-session';
 
 export default async function OrdersPage({
@@ -17,8 +16,8 @@ export default async function OrdersPage({
         You do not have Orders access in this shop.
       </p>
     );
-  const parsed = orderScreenQuerySchema.safeParse(await searchParams);
-  if (!parsed.success)
+  const screen = parseOrdersScreen(await searchParams);
+  if (!screen)
     return (
       <p role="alert" className="p-6">
         This address is invalid.{' '}
@@ -28,11 +27,5 @@ export default async function OrdersPage({
         .
       </p>
     );
-  const { selected, ...query } = parsed.data;
-  return (
-    <OrdersScreen
-      query={{ ...query, stage: query.stage ?? (query.alert ? undefined : 'to_confirm') }}
-      selected={selected}
-    />
-  );
+  return <OrdersScreen {...screen} />;
 }

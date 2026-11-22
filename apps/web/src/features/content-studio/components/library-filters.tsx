@@ -1,7 +1,5 @@
 'use client';
 import { Search } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { cn } from '@dakly/ui/cn';
@@ -12,6 +10,8 @@ import {
   type ContentStudioView,
   type LibraryGroup,
 } from '../content-studio-view';
+import { UrlLink } from '@/components/url-link';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 const groups: { id: LibraryGroup; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -23,7 +23,7 @@ const groups: { id: LibraryGroup; label: string }[] = [
 type LibraryFiltersProps = { view: ContentStudioView; counts: Record<LibraryGroup, number> };
 
 export function LibraryFilters({ view, counts }: LibraryFiltersProps) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const [text, setText] = useState(view.q);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -32,7 +32,7 @@ export function LibraryFilters({ view, counts }: LibraryFiltersProps) {
         className="flex flex-wrap gap-1 rounded-md bg-surface-muted p-1"
       >
         {groups.map(({ id, label }) => (
-          <Link
+          <UrlLink
             key={id}
             href={contentStudioHref({ ...view, tab: 'library', group: id })}
             aria-current={view.group === id ? 'page' : undefined}
@@ -42,7 +42,7 @@ export function LibraryFilters({ view, counts }: LibraryFiltersProps) {
             )}
           >
             {label} <span className="text-text-muted">{counts[id]}</span>
-          </Link>
+          </UrlLink>
         ))}
       </nav>
       <div className="relative w-full sm:w-72">

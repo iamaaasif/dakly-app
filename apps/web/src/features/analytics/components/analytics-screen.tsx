@@ -1,10 +1,8 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import type { AnalyticsView } from '@dakly/contracts/analytics';
+import { analyticsViewSchema, type AnalyticsView } from '@dakly/contracts/analytics';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
@@ -16,9 +14,15 @@ import { analyticsHref, useAnalyticsOverview } from '../api/analytics-overview';
 import { AnalyticsDownloadButton } from './analytics-download-button';
 import { AnalyticsReport } from './analytics-report';
 import { HowDaklyCountsOrders } from './how-dakly-counts-orders';
+import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
+import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 
-export function AnalyticsScreen({ view }: { view: AnalyticsView }) {
+export function AnalyticsScreen(initial: { view: AnalyticsView }) {
+  const { view } = useUrlQuery(initial, (raw) => {
+    const parsed = analyticsViewSchema.safeParse(raw);
+    return parsed.success ? { view: parsed.data } : undefined;
+  });
   const overview = useAnalyticsOverview(view.period);
   const attribution = useAttributionSettings();
   const { data: session } = useSessionContext();
@@ -63,7 +67,7 @@ export function AnalyticsScreen({ view }: { view: AnalyticsView }) {
 }
 
 function AnalyticsHeader({ view }: { view: AnalyticsView }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   return (
     <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div className="lg:max-w-sm">
@@ -87,7 +91,7 @@ function AnalyticsHeader({ view }: { view: AnalyticsView }) {
           className="flex w-fit max-w-full flex-wrap gap-1 rounded-md bg-surface-muted p-1 lg:flex-nowrap"
         >
           {periodChoices.map(({ days, label }) => (
-            <Link
+            <UrlLink
               key={days}
               href={analyticsHref({ ...view, period: days })}
               aria-current={view.period === days ? 'page' : undefined}
@@ -97,7 +101,7 @@ function AnalyticsHeader({ view }: { view: AnalyticsView }) {
               )}
             >
               {label}
-            </Link>
+            </UrlLink>
           ))}
         </nav>
         <AnalyticsDownloadButton view={view} />

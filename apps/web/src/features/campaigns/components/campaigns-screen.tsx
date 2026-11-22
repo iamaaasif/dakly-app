@@ -3,7 +3,7 @@
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
 
-import type { CampaignListQuery } from '@dakly/contracts/campaigns';
+import { campaignListQuerySchema, type CampaignListQuery } from '@dakly/contracts/campaigns';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { Skeleton } from '@dakly/ui/skeleton';
@@ -11,9 +11,15 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { campaignListHref, useCampaigns } from '../api/campaigns';
 import { CampaignFilters } from './campaign-filters';
 import { CampaignTable } from './campaign-table';
+import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
+import { useUrlQuery } from '@/lib/use-url-query';
 
-export function CampaignsScreen({ query }: { query: CampaignListQuery }) {
+export function CampaignsScreen(initial: { query: CampaignListQuery }) {
+  const { query } = useUrlQuery(initial, (raw) => {
+    const parsed = campaignListQuerySchema.safeParse(raw);
+    return parsed.success ? { query: parsed.data } : undefined;
+  });
   const { data: session } = useSessionContext();
   const campaigns = useCampaigns(query);
   return (
@@ -92,20 +98,20 @@ function CampaignPages({
   return (
     <nav aria-label="Campaign pages" className="flex justify-between gap-4">
       {query.cursor && (
-        <Link
+        <UrlLink
           className="min-h-10 text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           href={campaignListHref({ ...query, cursor: undefined })}
         >
           First page
-        </Link>
+        </UrlLink>
       )}
       {nextCursor && (
-        <Link
+        <UrlLink
           className="ml-auto min-h-10 text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           href={campaignListHref({ ...query, cursor: nextCursor })}
         >
           Next page
-        </Link>
+        </UrlLink>
       )}
     </nav>
   );

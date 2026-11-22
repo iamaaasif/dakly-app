@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 import { formatMoney } from '@dakly/contracts/money';
 import type { ProductListQuery, ProductResponse } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
@@ -11,6 +9,7 @@ import { productsSearch } from '../api/products';
 import { firstVariantProfitPercent, productPriceRange } from '../product-prices';
 import { ProductReadiness } from './product-readiness';
 import { ProductThumbnail } from './product-thumbnail';
+import { UrlLink } from '@/components/url-link';
 
 type ProductListProps = {
   products: ProductResponse[];
@@ -137,13 +136,13 @@ function ProductIdentity({ product, query }: ProductPartProps & { query: Product
   const code = product.variants.find((v) => v.sku)?.sku;
   const subtitle = [product.category, code].filter(Boolean).join(' · ');
   return (
-    <Link href={href} aria-label={product.name} className="flex min-w-0 items-center gap-3">
+    <UrlLink href={href} aria-label={product.name} className="flex min-w-0 items-center gap-3">
       <ProductThumbnail product={product} />
       <div className="min-w-0">
         <p className="font-semibold break-words text-text hover:text-action">{product.name}</p>
         {subtitle ? <p className="text-xs break-words text-text-muted">{subtitle}</p> : null}
       </div>
-    </Link>
+    </UrlLink>
   );
 }
 
