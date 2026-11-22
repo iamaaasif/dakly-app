@@ -18,3 +18,11 @@ export function formatMoney(amountPoisha: number | bigint): string {
   const sign = amount < 0n ? '-' : '';
   return `${sign}৳${wholeTaka}${fraction}`;
 }
+
+// Plain taka with two decimals for a file or an input, such as 1250.50. It goes through bigint, so
+// a large amount never turns into a float.
+export function poishaToTakaText(amountPoisha: number | bigint | string): string {
+  const amount = BigInt(amountPoisha);
+  const magnitude = amount < 0n ? -amount : amount;
+  return `${amount < 0n ? '-' : ''}${magnitude / 100n}.${(magnitude % 100n).toString().padStart(2, '0')}`;
+}

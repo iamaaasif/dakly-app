@@ -121,6 +121,52 @@ In the saved product editor, choose a tone and language to write three descripti
 
 List with readiness labels (Needs a price, Needs a photo, Hidden, Running low, Out of stock) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
+### Full page for add and edit (PROD-11, planned)
+
+Decision: [0012](../adr/0012-full-page-product-form.md). Wireframes: `docs/design/wireframes/prod-11/`. This replaces the add modal's long form and the product drawer; the screenshots above stay as layout references for the list.
+
+- **Quick add** (modal): name, price, stock, one photo, **More details**. It saves a hidden product and opens the full page when More details is chosen.
+- **Full page** at `/products/new` and `/products/[productId]`. The top bar stays in view: back, title, Save, Hide product. Desktop has two columns, a phone has one.
+  - Left: Photos (up to 10, first one is the main photo, move earlier), Basics (name, category, description with Write with AI), Price (price, sale price, cost, live profit percent), Variants.
+  - Right: Status (shown or hidden), Where it appears (Chat replies, Shop sales, Order link), Stock settings (warn me at), a preview card. The Stock history tab sits on the same page.
+- **Variants grid** (research: `docs/design/wireframes/prod-11/research.md`): up to three options, typed as values or picked from suggestions (S, M, L, XL, XXL, common colours). The grid is built as values are added, with no save step in between. Rows are grouped by the first option and can be collapsed. Each row has a checkbox, image, price, cost, profit percent, stock and product code, edited in place. The bulk bar sets price, cost or stock for the chosen rows, and a paste from a spreadsheet fills the grid. A blank price uses the product price. A removed combination returns with **Add missing combinations**. Renaming an option keeps the variant ids, prices, codes and stock. Adding an option to a product that has stock moves the existing stock to the first value of the new option and says so. Stock edits in the grid are written to the stock history with one reason asked on save.
+- **Suggested options**: once the product has a title or a photo, the Variants card offers **Suggest options**. Photos go to the `vision` tier and the title to the `fast` tier through `AiService` (PROD-8 already reads colour from photos). The suggestion is a list of option names and values, such as Size S to XL for a T-shirt or Colour Black and White from the photos. It is shown as chips with an Add all button and each chip can be removed first. Nothing is added without a tap, the AI never sets a price, stock or code. It follows the same allowance rule as photo tagging (PROD-8). Without a title or photo, or when the AI is unavailable, the seller still gets the plain suggestions list (S, M, L, XL, XXL and common colours).
+- **No options**: most products have none. The Variants card then shows only **Add options** (with Suggest options), no grid. Stock, product code and the warn-at level sit in the Price and Stock settings cards as plain fields, so a simple product needs no variant step. Adding the first option turns the product's stock and code into the first row of the grid, as the rule above says; removing every option back to none is allowed only when one row is left.
+- **Look and flow**: the page uses the app shell (sidebar, store header, Ask Dakly AI) and the tokens in [theme](../design/theme.md): `--color-action` for Save and Add, `--color-surface-muted` for table headers and group rows, `--color-ai-soft` for the suggestion box, status badges with their soft fills, 12 px card radius, forms at most 640 px wide on the quick add modal. Fields, labels and wording follow the prototype's Add product modal (Name, Category, Product code, Selling price, Old price, Your cost, Description with Write with AI, Track stock, Warn me when stock is at). Wireframes are drawn in these tokens.
+- **Parcel weight** (proposed, needs a decision): an optional Weight in grams on the Delivery card for courier parcels. No weight exists on products today, so this adds a column and is not part of the first build until approved.
+- **How it looks in chat**: the right column shows a live preview of what a customer gets. Today `send_product_card` sends the chosen photo as an image (the variant's own, else the colour match, else the first product photo) and a plain text message: the product name, then one line per size with its selling price, and sold-out sizes marked and never offered. There are no buttons and no order link in the card. The preview uses the same text builder as the AI, so the page and the chat cannot differ. Name, sale price, variant titles, stock and photos feed the card; description, other names and category feed the AI's answers and search, not the card. Wireframe: `chat-product-card-360.png`.
+- **Kept from the current editor and the prototype** (checked against the existing doc; each of these must be on the page before the drawer is removed):
+  - **Other names** for the AI search ("kurti", "কুর্তি", "three piece"), one per line, in Basics.
+  - **Save actions**: a new product has **Save as hidden** and **Save and show**; an existing one has **Save product** and **Hide product** or **Show product**. Removing a variant row that appears in an open order is blocked with a plain message, and Archive product is blocked while any variant is in an open order (offer Hide instead).
+  - **More actions menu**: Duplicate product (copies everything except stock, photos tags and history), Archive product.
+  - **Share**: Copy for chat, Copy order link, Post on Facebook.
+  - **Insights on the page**: sales by channel, times asked in chats, and the restock waiting list for each size, shown on the Waiting list tab and in the right column.
+  - **Photos**: up to 10 of up to 5 MB (JPEG, PNG, WebP), move earlier, remove with a confirm, photos for each variant, and a retry button when an upload fails. On a phone, **Take photo** opens the camera.
+  - **Permissions**: members without Edit Products see the same page read-only, with no Save bar.
+  - **Two people editing**: if the product changed since the page was opened, Save says so and offers to reload, and the typed values stay on screen.
+  - **Needs a price and Needs a photo** labels, and the AI readiness line, stay on the page and the list.
+- Plain validation messages on every field; a typed cost is kept when options change.
+- Leaving with unsaved changes asks first. Restock and Change stock stay dialogs.
+- On a phone each variant is one line (name, price, stock) that opens to edit its fields, the bulk bar stays, and the Save bar sticks to the bottom.
+- A readiness line shows what the AI still lacks (photo, price, description).
+
+### Catalogue tools beside the full page (planned)
+
+Research: `docs/design/wireframes/prod-11/research.md`. Today the catalogue has a CSV import (PROD-5), a free-text category on each product, no brands, no product export and no bulk edit. Proposed follow-up tasks, each its own PR after the full page ships; none changes the full page.
+
+- **Categories and brands** (PROD-12). A category becomes a row in a store table with a parent (two levels), a name and a sort order, and a brand a row with a name and optional logo; a product has one category and one brand. The product form picks from a list and can add one inline. The migration turns each distinct existing `products.category` text into a category without changing any product. A category path in a file reads `Clothing > T-shirts`. This changes the data model, so it needs a decision before it starts.
+- **Bulk edit on the list** (PROD-13). Select rows (or all rows for the current filters) and edit in a grid: price, sale price, cost, stock, category, brand, status. Stock changes need a reason and go to the stock history. A review step shows each old and new value before saving, and the result keeps an **Undo** for 24 hours for everything except stock, which is corrected by a new movement. A blank cell never overwrites a value.
+- **Export and XLSX** (PROD-14). Export the filtered list as CSV or XLSX with the same columns the import reads, so an export edited in a spreadsheet can be imported again. The import accepts XLSX, reuses the CUS-16 reader, and gets a dry run: a preview of added, changed and rejected rows with a downloadable error report before anything is written, and an editable preview table. Images by public link are not in this task.
+
+### Ask Dakly for product changes (PROD-15, planned)
+
+Today the dashboard assistant is read-only and every action opens a screen pre-filled for the owner (feature 10). This keeps that rule: the assistant proposes, the owner saves.
+
+- **Create**: a prompt such as "add a black cotton T-shirt, 1,200 taka, S to XL, 10 of each" opens `/products/new` as a draft with the name, price, options and stock filled in. The photo is attached from the chat or the page. Nothing is saved until the owner presses Save, and the page shows which fields the assistant filled.
+- **Change**: a prompt such as "raise all T-shirt prices by 50 taka" or "set Panjabi stock to 12" opens the PROD-13 review step with the old and new values for every product it matched. Nothing applies until the owner presses Apply, and Undo works as for any bulk edit.
+- Tools take names and values only, never a store id or a product id the model chose by itself: the service matches products by name and shows the list it matched. A request that matches nothing or too many (more than 50) asks the owner to narrow it down. Prices and discounts from the model are always shown for review, never applied directly.
+- Evals before release: Bangla, Banglish and mixed prompts, prices written in words and in Bangla digits, and a check that no prompt changes a price, stock or discount without the review step.
+
 ### Missing design: import products
 
 The prototype capture for this screen shows the Integrations page, so there is no product import design to match. The import dialog follows the customer import dialog (CUS-8) element by element: step bar, file drop area, column mapping, preview, duplicate choice and result counts. Evidence: `docs/design/evidence/prod-5-import/`.

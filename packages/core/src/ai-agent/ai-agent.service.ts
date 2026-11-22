@@ -8,6 +8,8 @@ import {
   messageAttachmentsSchema,
   type handoverReasons,
 } from '@dakly/contracts/chats';
+import { parseCardTap } from '@dakly/contracts/product-card';
+import type { ProductCarousel } from '@dakly/contracts/product-card';
 
 import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
@@ -30,6 +32,8 @@ import { MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
+import { cardMessages } from './card-messages';
+import { CardTapRepliesService } from './card-tap-replies.service';
 import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v1';
@@ -53,6 +57,8 @@ type EligibleTurn = {
   };
   debounceSeconds: number;
   claimTimeoutMinutes: number | null;
+  productCardStyle: 'buttons' | 'text';
+  takeOrders: boolean;
 };
 
 @Injectable()
@@ -70,6 +76,7 @@ export class AiAgentService {
     @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
     @Inject(ConsentService) private readonly consent: ConsentService,
     @Inject(UsageService) private readonly usage: UsageService,
+    @Inject(CardTapRepliesService) private readonly tapReplies: CardTapRepliesService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
     @Inject(Clock) private readonly clock: Clock,
@@ -208,6 +215,8 @@ export class AiAgentService {
       target,
       debounceSeconds: settings.debounceSeconds,
       claimTimeoutMinutes: settings.claimTimeoutMinutes,
+      productCardStyle: settings.productCardStyle,
+      takeOrders: settings.takeOrders,
     };
   }
 
@@ -288,6 +297,33 @@ export class AiAgentService {
     });
   }
 
+  // A tap on a card button is answered from the product's own data, with no model. A shop that
+  // does not take orders in chat hands an order tap to a person instead.
+  async answerCardTap(storeId: string, conversationId: string, tapId: string, postback: string) {
+    const tap = parseCardTap(postback);
+    const before = tap && (await this.eligibleTurn(storeId, conversationId));
+    if (!tap || !before) return;
+    if (tap.kind === 'human' || (tap.kind === 'order' && !before.takeOrders))
+      return this.handOver(
+        storeId,
+        conversationId,
+        before,
+        tap.kind === 'human' ? 'asked_for_person' : 'ready_to_buy',
+      );
+    const content = await this.tapReplies.reply(storeId, tap);
+    await this.transaction.runLocked(storeId, async () => {
+      const current = await this.lockCurrent(storeId, conversationId, before);
+      if (!current) return;
+      await this.messaging.queueChannelMessage(storeId, {
+        ...current.target,
+        category: 'staff_reply',
+        actor: { kind: 'system' },
+        content,
+        operationKey: `card-tap:${tapId}`,
+      });
+    });
+  }
+
   // Sends the product cards, then the reply, and spends one AI conversation unit with them.
   private async send(
     storeId: string,
@@ -305,8 +341,11 @@ export class AiAgentService {
         const send = (
           content: string,
           key: string,
-          aiSources?: typeof sources,
-          image?: ProductCard['image'],
+          extra: {
+            aiSources?: typeof sources;
+            image?: ProductCard['image'];
+            card?: ProductCarousel;
+          } = {},
         ) =>
           this.messaging.queueChannelMessage(storeId, {
             ...current.target,
@@ -314,12 +353,11 @@ export class AiAgentService {
             actor: { kind: 'ai', aiRunId },
             content,
             operationKey: `ai-reply:${latestId}:${key}`,
-            aiSources,
-            image,
+            ...extra,
           });
-        for (const [index, card] of cards.entries())
-          await send(card.text, `card-${index}`, undefined, card.image);
-        await send(text, 'reply', sources);
+        for (const { content, key, image, card } of cardMessages(cards, before.productCardStyle))
+          await send(content, key, { image, card });
+        await send(text, 'reply', { aiSources: sources });
         // After queuing, so the window starts at the earliest saved AI reply.
         await this.usage.consume(storeId, {
           unit: 'ai_conversation',

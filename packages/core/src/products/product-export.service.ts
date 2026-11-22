@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
+import { poishaToTakaText } from '@dakly/contracts/money';
 import type { ProductExportQuery } from '@dakly/contracts/product-imports';
 import type { ProductResponse } from '@dakly/contracts/products';
 
@@ -82,22 +83,16 @@ export class ProductExportService {
 function productRows(product: ProductResponse, optionNames: string[]): string[][] {
   return product.variants.map((variant) => [
     product.name,
-    taka(variant.pricePoisha),
+    poishaToTakaText(variant.pricePoisha),
     product.category ?? '',
     product.description ?? '',
     product.status,
     variant.sku ?? '',
-    variant.costPoisha === null ? '' : taka(variant.costPoisha),
+    variant.costPoisha === null ? '' : poishaToTakaText(variant.costPoisha),
     // An untracked product has no count to bring back.
     product.isStockTracked ? String(variant.onHand) : '',
     ...optionNames.map((name) => variant.optionValues[name] ?? ''),
   ]);
-}
-
-function taka(poisha: number): string {
-  const whole = Math.trunc(poisha / 100);
-  const fraction = poisha % 100;
-  return fraction === 0 ? String(whole) : `${whole}.${String(fraction).padStart(2, '0')}`;
 }
 
 function toCsv(rows: string[][]): string {

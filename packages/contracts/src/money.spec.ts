@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatMoney } from './money';
+import { formatMoney, poishaToTakaText } from './money';
 
 describe('formatMoney', () => {
   it.each([
@@ -15,5 +15,14 @@ describe('formatMoney', () => {
 
   it('refuses a fractional amount of poisha', () => {
     expect(() => formatMoney(1.5)).toThrow(RangeError);
+  });
+});
+
+describe('poishaToTakaText', () => {
+  it('writes plain taka with two decimals, from numbers, bigints and strings', () => {
+    expect(poishaToTakaText(125050)).toBe('1250.50');
+    expect(poishaToTakaText(100n)).toBe('1.00');
+    expect(poishaToTakaText('5')).toBe('0.05');
+    expect(poishaToTakaText(-1234)).toBe('-12.34');
   });
 });
