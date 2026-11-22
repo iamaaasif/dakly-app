@@ -12,7 +12,11 @@ import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
 const push = vi.hoisted(() => vi.fn());
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
+const navigate = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: navigate }),
+}));
 vi.mock('@/lib/use-url-query', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useUrlRouter: () => ({ push: push, replace: push }),
@@ -155,6 +159,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   push.mockReset();
+  navigate.mockReset();
 });
 
 describe('Products screen', () => {
@@ -335,7 +340,7 @@ describe('Product editor navigation', () => {
     show();
     await screen.findByRole('table');
     await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
-    expect(push).toHaveBeenCalledWith('/products/new');
+    expect(navigate).toHaveBeenCalledWith('/products/new');
   });
 
   it('opens creation from the list and selects the saved product', async () => {

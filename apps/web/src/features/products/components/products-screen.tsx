@@ -1,4 +1,5 @@
 'use client';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import type { ProductListQuery, ProductListResponse, ProductTab } from '@dakly/contracts/products';
@@ -83,6 +84,8 @@ type ProductsHeaderProps = { canEdit: boolean; listHref: string; importing?: '1'
 
 function ProductsHeader({ canEdit, listHref, importing }: ProductsHeaderProps) {
   const router = useUrlRouter();
+  // A new page needs a real navigation; useUrlRouter only rewrites the address on this screen.
+  const pageRouter = useRouter();
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -97,7 +100,7 @@ function ProductsHeader({ canEdit, listHref, importing }: ProductsHeaderProps) {
           <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
             Import from a CSV
           </Button>
-          <Button onClick={() => router.push('/products/new')}>
+          <Button onClick={() => pageRouter.push('/products/new')}>
             <span aria-hidden="true">+ </span>Add product
           </Button>
         </div>
