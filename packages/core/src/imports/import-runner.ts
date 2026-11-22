@@ -125,6 +125,18 @@ export class ImportRunner<Row> {
     });
   }
 
+  // Reads an uploaded file with the given mapping for a dry run. Nothing is saved, and a file
+  // that has started importing is refused, because its rows are already being written.
+  async readBeforeStart(storeId: string, importId: string, columnMapping: unknown) {
+    const found = await this.findImport(storeId, importId);
+    if (found.status !== 'uploaded') throw importError('IMPORT_ALREADY_STARTED');
+    const text = await this.download(found.uploadKey);
+    return {
+      text,
+      file: this.kind.readFile(text, { columnMapping: columnMapping as Import['columnMapping'] }),
+    };
+  }
+
   async get(storeId: string, importId: string): Promise<ImportResponse> {
     const found = await this.findImport(storeId, importId);
     return {

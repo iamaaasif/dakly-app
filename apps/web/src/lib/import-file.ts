@@ -79,7 +79,7 @@ export function readImportFile(bytes: ArrayBuffer, rowName: string): ImportFileS
 
 // Enough of RFC 4180 for a preview: quoted cells may hold commas, line breaks and doubled quotes.
 // The import job reads the file again and reports any row it cannot use.
-function* csvRecords(text: string): Generator<string[]> {
+export function* csvRecords(text: string): Generator<string[]> {
   const token = /("(?:[^"]|"")*"|[^",\r\n]*)(,|\r\n|\n|\r|$)/y;
   let cells: string[] = [];
   while (token.lastIndex < text.length) {

@@ -12,6 +12,8 @@ export type UploadedImport = {
   importId: string;
   preview: ImportFileSummary;
   file: { name: string; size: number };
+  // The CSV that was uploaded, which a screen can correct and upload again.
+  csv: File;
 };
 
 type ImportUploadStepProps = {
@@ -78,6 +80,7 @@ export function ImportUploadStep({
                 importId,
                 preview: chosen.preview,
                 file: { name: chosen.source.name, size: chosen.source.size },
+                csv: chosen.file,
               }),
           })
         }

@@ -20,6 +20,7 @@ import {
   variantSnapshot,
 } from './product-snapshots.repository';
 import { stockReadinessFilter } from './product-stock-readiness-filter.repository';
+import { type SkuMatch, skuMatchColumns } from './sku-match.repository';
 
 // Drizzle strips qualifiers in SELECT expressions; this must refer to the outer product.
 const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.identifier(products.id.name)}`;
@@ -71,12 +72,6 @@ export type Product = ProductDetails & {
   updatedAt: Date;
 };
 export type { CatalogueVariant, Variant };
-export type SkuMatch = {
-  id: string;
-  productId: string;
-  sku: string;
-  isArchived: boolean;
-};
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
   position: number;
@@ -333,12 +328,7 @@ export class ProductsRepository {
   findVariantsBySku(storeId: string, skus: string[]): Promise<SkuMatch[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({
-          id: productVariants.id,
-          productId: productVariants.productId,
-          sku: sql<string>`${productVariants.sku}`,
-          isArchived: sql<boolean>`${productVariants.status} = 'archived' or ${products.status} = 'archived'`,
-        })
+        .select(skuMatchColumns)
         .from(productVariants)
         .innerJoin(products, eq(products.id, productVariants.productId))
         .where(

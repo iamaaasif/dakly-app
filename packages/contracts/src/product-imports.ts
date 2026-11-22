@@ -74,3 +74,25 @@ export const productExportQuerySchema = productListQuerySchema
   .pick({ search: true, readiness: true })
   .extend({ format: z.enum(productExportFormats).default('xlsx') });
 export type ProductExportQuery = z.infer<typeof productExportQuerySchema>;
+
+// The dry run reads the file and says what an import would do, without writing anything.
+export const productImportDryRunResults = ['added', 'changed', 'skipped', 'rejected'] as const;
+export type ProductImportDryRunResult = (typeof productImportDryRunResults)[number];
+
+export type ProductImportDryRunRow = {
+  rowNumber: number;
+  result: ProductImportDryRunResult;
+  problem: string | null;
+  // The price the shop has now, when the file would change it.
+  wasPricePoisha: number | null;
+  // The file's own cells by field name, or by option name, so a cell can be corrected.
+  cells: Record<string, string>;
+};
+
+export type ProductImportDryRun = {
+  counts: Record<ProductImportDryRunResult, number>;
+  // Rejected rows first, then the others, up to a limit; the counts cover every row.
+  rows: ProductImportDryRunRow[];
+  rowsShown: number;
+  errors: { rowNumber: number; field: string; message: string }[];
+};
