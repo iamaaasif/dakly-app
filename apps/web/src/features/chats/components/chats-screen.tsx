@@ -9,6 +9,7 @@ import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
 import { ChatList } from './chat-list';
 import { CommentsView } from './comments-view';
+import { ConversationPanel } from './conversation-panel';
 
 export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
   const router = useRouter();
@@ -37,13 +38,17 @@ export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
         ) : (
           <>
             <ChatList query={query} />
-            <section
-              aria-label="Conversation"
-              className="hidden flex-col items-center justify-center gap-2 border-l border-border p-6 text-center text-text-muted lg:flex"
-            >
-              <MessageSquare aria-hidden="true" size={28} strokeWidth={1.5} />
-              <p>Choose a chat to read it.</p>
-            </section>
+            {query.chat ? (
+              <ConversationPanel key={query.chat} query={query} id={query.chat} />
+            ) : (
+              <section
+                aria-label="Conversation"
+                className="hidden flex-col items-center justify-center gap-2 border-l border-border p-6 text-center text-text-muted lg:flex"
+              >
+                <MessageSquare aria-hidden="true" size={28} strokeWidth={1.5} />
+                <p>Choose a chat to read it.</p>
+              </section>
+            )}
           </>
         )}
       </div>

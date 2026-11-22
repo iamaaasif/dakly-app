@@ -106,6 +106,14 @@ export class InboxService {
     });
   }
 
+  async markRead(storeId: string, id: string): Promise<ConversationResponse> {
+    await this.requireChats(storeId);
+    await this.find(storeId, id);
+    const row = await this.repository.markRead(storeId, id);
+    if (!row) throw messagingError('CONVERSATION_NOT_FOUND');
+    return conversationResponse(row);
+  }
+
   update(storeId: string, id: string, userId: string, input: UpdateConversationInput) {
     return this.transaction.run(storeId, async () => {
       await this.requireChats(storeId);

@@ -13,7 +13,12 @@ export function useEventStream() {
   const contextTag = useSessionContext().data?.contextTag;
 
   useEffect(() => {
-    const refresh = () => void client.invalidateQueries({ queryKey: notificationsKeys.all });
+    // A chat that needs a person arrives as a notification, so the inbox reads again too. The key is
+    // the Chats feature's root; features cannot import each other.
+    const refresh = () => {
+      void client.invalidateQueries({ queryKey: notificationsKeys.all });
+      void client.invalidateQueries({ queryKey: ['chats'] });
+    };
     let source: EventSource;
     let poll: ReturnType<typeof setInterval> | undefined;
     const open = () => {

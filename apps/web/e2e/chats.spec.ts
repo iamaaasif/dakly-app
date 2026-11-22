@@ -35,6 +35,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const connectionId = randomUUID();
   const contactIds: string[] = [];
+  let firstConversationId = '';
   try {
     await database.pool.query(
       "update stores set extensions = array['sales', 'chats', 'social_auto_post', 'physical_shop'] where id = $1",
@@ -52,12 +53,14 @@ test('lists chats by tab and channel and shows the tab counts', async ({
         "insert into contacts (id, store_id, name, source, kind) values ($1, $2, $3, 'messenger', 'chat_only')",
         [contactId, storeId, name],
       );
+      const conversationId = randomUUID();
+      if (index === 0) firstConversationId = conversationId;
       await database.pool.query(
         `insert into conversations (id, store_id, contact_id, channel_connection_id, channel, status,
-           responder, unread_count, last_message_at, last_message_preview)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, now() - make_interval(mins => $9), $10)`,
+           responder, unread_count, last_message_at, last_message_preview, window_expires_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, now() - make_interval(mins => $9), $10, now() + interval '23 hours')`,
         [
-          randomUUID(),
+          conversationId,
           storeId,
           contactId,
           connectionId,
@@ -70,6 +73,17 @@ test('lists chats by tab and channel and shows the tab counts', async ({
         ],
       );
     }
+    const senderIdentityId = randomUUID();
+    await database.pool.query(
+      `insert into contact_identities (id, store_id, contact_id, channel_connection_id, channel, external_id)
+       values ($1::uuid, $2, $3, $4, 'messenger', $1::text)`,
+      [senderIdentityId, storeId, contactIds[0], connectionId],
+    );
+    await database.pool.query(
+      `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body, status, sender_identity_id)
+       values ($1, $2, $3, 'in', 'customer', 'text', 'Kurti ta M size ache?', 'received', $4)`,
+      [randomUUID(), storeId, firstConversationId, senderIdentityId],
+    );
     await context.addCookies([
       {
         name: 'dakly_session',
@@ -108,6 +122,17 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByText('Sadia Islam')).toBeHidden();
     await page.getByRole('link', { name: 'All', exact: true }).click();
 
+    await page.getByRole('link', { name: /Sadia Islam/ }).click();
+    await expect(page).toHaveURL(/chat=/);
+    await expect(page.getByText('Kurti ta M size ache?')).toBeVisible();
+    await expect(page.getByLabel('Write a reply')).toBeVisible();
+    await capture(page, 'thread');
+    await page.getByRole('tab', { name: 'Internal note' }).click();
+    await page.getByLabel('Write an internal note').fill('Call at 5 pm');
+    await page.getByRole('button', { name: 'Save note' }).click();
+    await expect(page.getByText('Call at 5 pm')).toBeVisible();
+    await page.goto('/chats');
+
     await page.getByRole('searchbox', { name: 'Search chats' }).fill('Habib');
     await expect(page).toHaveURL(/q=Habib/);
     await expect(page.getByText('Habib Rahman', { exact: true })).toBeVisible();
@@ -124,6 +149,8 @@ test('lists chats by tab and channel and shows the tab counts', async ({
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
   } finally {
+    await database.pool.query('delete from messages where store_id = $1', [storeId]);
+    await database.pool.query('delete from contact_identities where store_id = $1', [storeId]);
     await database.pool.query('delete from conversations where store_id = $1', [storeId]);
     await database.pool.query('delete from contacts where id = any($1::uuid[])', [contactIds]);
     await database.pool.query('delete from channel_connections where id = $1', [connectionId]);
