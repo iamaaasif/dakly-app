@@ -18,6 +18,7 @@ import { Card } from '@dakly/ui/card';
 import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
+import type { QuickAddHandoff } from '../quick-add-handoff';
 import {
   ProductDescriptionFields,
   ProductFields,
@@ -26,6 +27,7 @@ import {
   ProductStockFields,
 } from './product-fields';
 import { ProductOptions } from './product-options';
+import { ProductPlainStock } from './product-plain-stock';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
 // The full page keeps Save in a top bar that stays in view and puts photos and status beside the fields.
@@ -33,15 +35,17 @@ type ProductFormPage = { title: string; backHref: string; photos: ReactNode; sta
 
 type ProductFormProps = {
   product?: ProductResponse;
+  // Values typed in the quick add, used only for a new product.
+  initial?: QuickAddHandoff;
   onSaved: (product: ProductResponse, failedSizes: string[]) => void;
   onCancel?: () => void;
   page?: ProductFormPage;
 };
 
-export function ProductForm({ product, onSaved, onCancel, page }: ProductFormProps) {
+export function ProductForm({ product, initial, onSaved, onCancel, page }: ProductFormProps) {
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: formValues(product),
+    defaultValues: formValues(product, initial),
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   const { onSubmit, isPending } = useSubmitProduct(form, { product, dirtyFields, onSaved });
@@ -168,6 +172,7 @@ function ProductFormPageLayout({
           </FieldCard>
           <FieldCard title="Stock">
             <ProductStockFields productId={productId} />
+            {productId ? null : <ProductPlainStock />}
           </FieldCard>
           <Card>
             <ProductOptions mode={productId ? 'edit' : 'create'} />
@@ -215,7 +220,9 @@ async function saveInitialStocks({
     const quantity = variant.initialStock ?? 0;
     if (quantity <= 0) return [];
     const sizeName = input.options[0]?.values[index] ?? '';
-    const variantId = saved.variants.find((v) => v.optionValues[sizeOption] === sizeName)?.id;
+    const variantId = sizeOption
+      ? saved.variants.find((v) => v.optionValues[sizeOption] === sizeName)?.id
+      : saved.variants[0]?.id;
     if (!variantId) {
       failed.push(sizeName);
       return [];
@@ -288,13 +295,21 @@ function ProductFormActions({
   );
 }
 
-function formValues(product?: ProductResponse): ProductFormValues {
+function formValues(product?: ProductResponse, initial?: QuickAddHandoff): ProductFormValues {
   if (!product)
     return {
-      name: '',
+      name: initial?.name ?? '',
       options: [],
-      pricePoisha: '',
-      variants: [{ optionValues: {}, sku: null, priceOverridePoisha: '', costPoisha: '' }],
+      pricePoisha: initial?.price ?? '',
+      variants: [
+        {
+          optionValues: {},
+          sku: null,
+          priceOverridePoisha: '',
+          costPoisha: '',
+          initialStock: Number(initial?.stock || 0),
+        },
+      ],
       isStockTracked: true,
       status: 'hidden',
     };

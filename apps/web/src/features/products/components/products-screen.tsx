@@ -1,5 +1,4 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import type { ProductListQuery, ProductListResponse, ProductTab } from '@dakly/contracts/products';
@@ -15,6 +14,7 @@ import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
 import { ProductResults } from './product-results';
 import { ProductSheet } from './product-sheet';
+import { QuickAddModal } from './quick-add-modal';
 import { RestockDialog } from './restock-dialog';
 import { SessionDialog } from '@/components/session-dialog';
 import { StorePage } from '@/components/store-page';
@@ -95,8 +95,7 @@ type ProductsHeaderProps = {
 
 function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderProps) {
   const router = useUrlRouter();
-  // A new page needs a real navigation; useUrlRouter only rewrites the address on this screen.
-  const pageRouter = useRouter();
+  const [quickAdding, setQuickAdding] = useState(false);
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -113,12 +112,13 @@ function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderP
             <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
               Import from Excel or CSV
             </Button>
-            <Button onClick={() => pageRouter.push('/products/new')}>
+            <Button onClick={() => setQuickAdding(true)}>
               <span aria-hidden="true">+ </span>Add product
             </Button>
           </>
         ) : null}
       </div>
+      {quickAdding && canEdit ? <QuickAddModal onClose={() => setQuickAdding(false)} /> : null}
       {importing && canEdit ? (
         <ImportProductsDialog onClose={() => router.replace(listHref)} />
       ) : null}
