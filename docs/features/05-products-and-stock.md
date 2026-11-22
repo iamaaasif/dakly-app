@@ -145,6 +145,15 @@ Research: `docs/design/wireframes/prod-11/research.md`. Today the catalogue has 
 - **Bulk edit on the list** (PROD-13). Select rows (or all rows for the current filters) and edit in a grid: price, sale price, cost, stock, category, brand, status. Stock changes need a reason and go to the stock history. A review step shows each old and new value before saving, and the result keeps an **Undo** for 24 hours for everything except stock, which is corrected by a new movement. A blank cell never overwrites a value.
 - **Export and XLSX** (PROD-14). Export the filtered list as CSV or XLSX with the same columns the import reads, so an export edited in a spreadsheet can be imported again. The import accepts XLSX, reuses the CUS-16 reader, and gets a dry run: a preview of added, changed and rejected rows with a downloadable error report before anything is written, and an editable preview table. Images by public link are not in this task.
 
+### Ask Dakly for product changes (PROD-15, planned)
+
+Today the dashboard assistant is read-only and every action opens a screen pre-filled for the owner (feature 10). This keeps that rule: the assistant proposes, the owner saves.
+
+- **Create**: a prompt such as "add a black cotton T-shirt, 1,200 taka, S to XL, 10 of each" opens `/products/new` as a draft with the name, price, options and stock filled in. The photo is attached from the chat or the page. Nothing is saved until the owner presses Save, and the page shows which fields the assistant filled.
+- **Change**: a prompt such as "raise all T-shirt prices by 50 taka" or "set Panjabi stock to 12" opens the PROD-13 review step with the old and new values for every product it matched. Nothing applies until the owner presses Apply, and Undo works as for any bulk edit.
+- Tools take names and values only, never a store id or a product id the model chose by itself: the service matches products by name and shows the list it matched. A request that matches nothing or too many (more than 50) asks the owner to narrow it down. Prices and discounts from the model are always shown for review, never applied directly.
+- Evals before release: Bangla, Banglish and mixed prompts, prices written in words and in Bangla digits, and a check that no prompt changes a price, stock or discount without the review step.
+
 ### Missing design: import products
 
 The prototype capture for this screen shows the Integrations page, so there is no product import design to match. The import dialog follows the customer import dialog (CUS-8) element by element: step bar, file drop area, column mapping, preview, duplicate choice and result counts. Evidence: `docs/design/evidence/prod-5-import/`.
