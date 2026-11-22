@@ -11,6 +11,8 @@ import { QueryError } from '@dakly/ui/query-error';
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
 import type { QuickAddHandoff } from '../quick-add-handoff';
+import { ChangeStockDialog } from './change-stock-dialog';
+import { ProductChatPreview } from './product-chat-preview';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
 import { ProductReadiness } from './product-readiness';
@@ -53,7 +55,7 @@ export function EditProductPage({ productId }: { productId: string }) {
   // After a save the form starts again from what the server holds, so new rows have their ids.
   return (
     <LoadedProductPage
-      key={`${data.id}:${saves}`}
+      key={`${data.id}:${saves}:${data.variants.map((variant) => variant.onHand).join(',')}`}
       product={data}
       onSaved={async () => {
         await refetch();
@@ -76,7 +78,12 @@ function LoadedProductPage({ product, onSaved }: LoadedProductPageProps) {
         title: product.name,
         backHref: '/products',
         photos: <ProductPhotos product={product} />,
-        status: <StatusCard status={product.status} product={product} />,
+        status: (
+          <>
+            <StatusCard status={product.status} product={product} />
+            <ProductChatPreview product={product} />
+          </>
+        ),
       }}
     />
   );
@@ -86,6 +93,7 @@ type StatusCardProps = { status: 'active' | 'hidden'; product?: ProductResponse 
 
 function StatusCard({ status, product }: StatusCardProps) {
   const change = useChangeProduct(product?.id ?? '');
+  const [changingStock, setChangingStock] = useState(false);
   return (
     <Card className="space-y-3">
       <h2 className="text-base font-semibold text-text">Status</h2>
@@ -104,6 +112,14 @@ function StatusCard({ status, product }: StatusCardProps) {
           >
             {status === 'hidden' ? 'Show product' : 'Hide product'}
           </Button>
+          {product.isStockTracked ? (
+            <Button type="button" variant="secondary" onClick={() => setChangingStock(true)}>
+              Change stock
+            </Button>
+          ) : null}
+          {changingStock ? (
+            <ChangeStockDialog product={product} onClose={() => setChangingStock(false)} />
+          ) : null}
           {change.error ? (
             <p role="alert" className="text-danger">
               {change.error.message}

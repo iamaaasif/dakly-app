@@ -129,7 +129,7 @@ function useSubmitProduct(
       reason.current = null;
       if (failed.length)
         form.setError('root.server', {
-          message: `Saved, but the stock for ${failed.join(', ')} could not be updated. Use Change stock on the list.`,
+          message: `Saved, but the stock for ${failed.join(', ')} could not be updated. Use Restock on the list.`,
         });
       onSaved(saved, failed);
     };

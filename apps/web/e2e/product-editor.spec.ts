@@ -8,7 +8,7 @@ import { createDatabase } from '@dakly/db/client';
 
 test.use({ screenshot: 'off' });
 
-test('saves unfinished products, edits variants without losing stock and manages visibility', async ({
+test('creates a product on its page, manages photos, edits it and changes stock', async ({
   page,
   context,
   baseURL,
@@ -18,13 +18,14 @@ test('saves unfinished products, edits variants without losing stock and manages
     storeIds: [string, string];
   };
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-4-editor');
-  const photoEvidence = resolve(process.cwd(), '../../docs/design/evidence/prod-4-photos');
+  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-11-remove-old-editor');
+  // CI keeps only e2e-artifacts, so each screenshot is also written there.
+  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-11-remove-old-editor');
   const name = 'Silk scarf editor fixture';
   let productId: string | undefined;
   const fileIds: string[] = [];
   await mkdir(evidence, { recursive: true });
-  await mkdir(photoEvidence, { recursive: true });
+  await mkdir(ciCopy, { recursive: true });
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
@@ -36,53 +37,39 @@ test('saves unfinished products, edits variants without losing stock and manages
       headers: { Origin: baseURL!, 'X-Session-Context': session.contextTag },
     });
   }
-  async function capture(screen: string, directory = evidence, title?: string) {
+  async function saved() {
+    return (await (
+      await request(`/products/${productId}`, undefined, 'GET')
+    ).json()) as ProductResponse;
+  }
+  async function capture(screen: string) {
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
-      const dialog = page.getByRole('dialog', { name: title });
-      await dialog.evaluate((element) => {
-        element.scrollTop = 0;
-      });
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
         .toBe(true);
-      await expect
-        .poll(() => dialog.evaluate((element) => element.scrollWidth <= element.clientWidth))
-        .toBe(true);
-      await page.screenshot({ path: resolve(directory, `${screen}-${width}.png`) });
+      for (const directory of [evidence, ciCopy])
+        await page.screenshot({ path: resolve(directory, `${screen}-${width}.png`) });
     }
   }
-  async function reopenWithCatalogPhoto(fileId: string) {
-    await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
-    const productLink = page.getByRole('link', { name, exact: true });
-    const thumbnail = productLink.getByRole('img', { name, exact: true });
-    await expect(thumbnail).toHaveAttribute('src', new RegExp(`/${fileId}\\?`));
-    await expect
-      .poll(() => thumbnail.evaluate((image: HTMLImageElement) => image.naturalWidth))
-      .toBeGreaterThan(0);
-    await expect(
-      page.getByRole('button', { name: `Adjust stock for ${name}, Default` }),
-    ).toHaveText('Default 3');
-    await productLink.click();
+  async function changeStockOnPage(quantity: string, reason: string) {
+    await page.getByRole('button', { name: 'Change stock', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: /Adjust stock/ });
+    await dialog.getByLabel('Change in stock').fill(quantity);
+    await dialog.getByLabel('Reason').fill(reason);
+    await dialog.getByRole('button', { name: 'Save stock', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
   }
   try {
     expect((await request('/me/active-store', { storeId: fixture.storeIds[0] })).status()).toBe(
       204,
     );
-    await page.goto('/products?create=1');
+    await page.goto('/products/new');
     await page.getByLabel('Name', { exact: true }).fill(name);
-    await capture('create');
-    await page.getByRole('button', { name: 'Add option', exact: true }).click();
-    await page.getByLabel('Option 1 name', { exact: true }).fill('Fabric');
-    await page.getByLabel('Option 1 values', { exact: true }).fill('Cotton\nSilk');
-    const fabric = page.getByRole('combobox', { name: 'Fabric for variant 1' });
-    await fabric.selectOption('Silk');
-    await expect(fabric).toHaveValue('Silk');
-    await page.getByRole('button', { name: 'Remove option 1' }).click();
     const createdResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/products') &&
@@ -93,13 +80,7 @@ test('saves unfinished products, edits variants without losing stock and manages
     const created = (await (await createdResponse).json()) as ProductResponse;
     productId = created.id;
     expect(created.status).toBe('hidden');
-    expect(created.pricePoisha).toBe(0);
-    expect(created.variants).toHaveLength(1);
-    expect(created.variants[0]!.isDefault).toBe(true);
-    expect(created.readiness).toEqual(
-      expect.arrayContaining(['needs_price', 'needs_photo', 'hidden']),
-    );
-    await expect(page.getByRole('dialog', { name })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
     expect(
       (
         await request(`/variants/${created.variants[0]!.id}/stock-adjustments`, {
@@ -108,6 +89,7 @@ test('saves unfinished products, edits variants without losing stock and manages
         })
       ).status(),
     ).toBe(204);
+    await page.reload();
 
     const png = resolve(process.cwd(), 'e2e/fixtures/silk-scarf.png');
     for (const count of [1, 2]) {
@@ -118,13 +100,10 @@ test('saves unfinished products, edits variants without losing stock and manages
       const choosing = page.waitForEvent('filechooser');
       await page.getByText('Add', { exact: true }).click();
       await (await choosing).setFiles(png);
-      const saved = (await (await confirmed).json()) as ProductResponse;
-      fileIds.push(saved.photos[count - 1]!.id);
-      await expect(page.getByRole('heading', { name: 'Photos', exact: true })).toBeVisible();
+      const withPhoto = (await (await confirmed).json()) as ProductResponse;
+      fileIds.push(withPhoto.photos[count - 1]!.id);
       await expect(page.getByText(`${count} photo`)).toBeVisible();
     }
-    await reopenWithCatalogPhoto(fileIds[0]!);
-    await capture('gallery', photoEvidence);
 
     const reordered = page.waitForResponse(
       (response) =>
@@ -139,127 +118,62 @@ test('saves unfinished products, edits variants without losing stock and manages
       fileIds[1],
       fileIds[0],
     ]);
-    await expect(page.getByRole('button', { name: 'Remove photo 1' })).toBeFocused();
-    await reopenWithCatalogPhoto(fileIds[1]!);
+
     await page.getByRole('button', { name: 'Remove photo 1' }).click();
-    const removalTitle = `Remove photo from ${name}?`;
-    const removal = page.getByRole('dialog', { name: removalTitle });
+    const removal = page.getByRole('dialog', { name: `Remove photo from ${name}?` });
     await expect(removal).toBeVisible();
-    await capture('remove', photoEvidence, removalTitle);
     await page.keyboard.press('Escape');
     await expect(removal).toHaveCount(0);
-    await expect(page.getByRole('dialog', { name, exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Remove photo 1' }).click();
-
-    let releaseRemoval: () => void = () => undefined;
-    const removalGate = new Promise<void>((resolve) => {
-      releaseRemoval = resolve;
-    });
-    const removalPath = `**/api/products/${productId}/photos/${fileIds[1]}`;
-    await page.route(removalPath, async (route) => {
-      await removalGate;
-      await route.continue();
-    });
     const removed = page.waitForResponse(
       (response) => response.url().endsWith(`/photos/${fileIds[1]}`) && response.status() === 204,
     );
-    try {
-      await removal.getByRole('button', { name: 'Remove photo', exact: true }).click();
-      await expect(removal.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
-      await page.keyboard.press('Escape');
-      await expect(removal).toBeVisible();
-    } finally {
-      releaseRemoval();
-    }
+    await removal.getByRole('button', { name: 'Remove photo', exact: true }).click();
     await removed;
-    await page.unroute(removalPath);
-    await expect(page.getByRole('heading', { name: 'Photos', exact: true })).toBeVisible();
     await expect(page.getByText('1 photo')).toBeVisible();
-    const afterRemoval = (await (
-      await request(`/products/${productId}`, undefined, 'GET')
-    ).json()) as ProductResponse;
-    expect(afterRemoval.imageFileIds).toEqual([fileIds[0]]);
-    await reopenWithCatalogPhoto(fileIds[0]!);
-    await expect(page.getByRole('img', { name: `${name} photo 1` })).toBeVisible();
+    expect((await saved()).imageFileIds).toEqual([fileIds[0]]);
+    await capture('photos');
 
-    await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+    await changeStockOnPage('-1', 'Damaged');
+    await expect.poll(async () => (await saved()).variants[0]!.onHand).toBe(2);
+
     await page.getByLabel('Selling price ৳', { exact: true }).fill('2450.50');
     await page.getByLabel('Description', { exact: true }).fill('Cotton fabric with a regular fit.');
     await page.getByLabel('Other names', { exact: true }).fill('স্কার্ফ\nScarf');
-    await page.getByRole('button', { name: 'Add option', exact: true }).click();
-    await page.getByLabel('Option 1 name', { exact: true }).fill('Size (U.S.)');
-    await page.getByLabel('Option 1 values', { exact: true }).fill('M\nL');
-    await page
-      .getByRole('combobox', { name: 'Size (U.S.) for variant 1', exact: true })
-      .selectOption('M');
-    await page.getByLabel('Product code for variant 1', { exact: true }).fill('SCARF-M');
-    await page.getByRole('button', { name: 'Add variant', exact: true }).click();
-    await page
-      .getByRole('combobox', { name: 'Size (U.S.) for variant 2', exact: true })
-      .selectOption('L');
-    await page.getByLabel('Price override for variant 2 (Taka)', { exact: true }).fill('2700.25');
-    await capture('edit', photoEvidence);
     await page.getByRole('button', { name: 'Save product', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
-    const changed = (await (
-      await request(`/products/${productId}`, undefined, 'GET')
-    ).json()) as ProductResponse;
+    await expect(page.getByRole('button', { name: 'Save product', exact: true })).toBeDisabled();
+    const changed = await saved();
     expect(changed.status).toBe('hidden');
     expect(changed.pricePoisha).toBe(245050);
     expect(changed.aliases).toEqual(['স্কার্ফ', 'Scarf']);
-    expect(changed.variants[0]).toMatchObject({
-      id: created.variants[0]!.id,
-      onHand: 3,
-      optionValues: { 'Size (U.S.)': 'M' },
-      pricePoisha: 245050,
-    });
-    expect(changed.variants[1]).toMatchObject({ priceOverridePoisha: 270025, pricePoisha: 270025 });
+    expect(changed.variants[0]).toMatchObject({ id: created.variants[0]!.id, onHand: 2 });
+    await capture('edited');
 
     await page.getByRole('button', { name: 'Show product', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Hide product', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Hide product', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Show product', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Edit product', exact: true }).click();
-    await page.getByLabel('Name', { exact: true }).fill('A'.repeat(200));
-    await page.getByRole('button', { name: 'Save product', exact: true }).click();
-    const longDialog = page.getByRole('dialog', { name: 'A'.repeat(200) });
-    await expect(longDialog).toBeVisible();
-    await expect
-      .poll(() => longDialog.evaluate((element) => element.scrollWidth <= element.clientWidth))
-      .toBe(true);
-    const close = longDialog.getByRole('button', { name: 'Close dialog', exact: true });
-    expect(
-      await close.evaluate((element) => {
-        const button = element.getBoundingClientRect();
-        const panel = element.closest('dialog')!.getBoundingClientRect();
-        return (
-          button.left >= panel.left &&
-          button.right <= panel.right &&
-          button.width >= 40 &&
-          button.height >= 40
-        );
-      }),
-    ).toBe(true);
 
-    await page.getByRole('button', { name: 'Edit product', exact: true }).click();
-    await page.getByLabel('Name', { exact: true }).fill('Unsaved name stays in this shop');
-    const contextPath = '**/api/me/context';
-    await page.route(contextPath, (route) => route.abort());
-    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(
-      page.getByText('Could not verify your account and shop. Refresh to continue.'),
-    ).toBeVisible();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await page.unroute(contextPath);
-    await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await expect(page.getByLabel('Name', { exact: true })).toHaveValue(
-      'Unsaved name stays in this shop',
-    );
-    expect((await request('/me/active-store', { storeId: fixture.storeIds[1] })).status()).toBe(
-      204,
-    );
-    await page.evaluate(() => window.dispatchEvent(new Event('dakly-context-changed')));
-    await expect(page.getByLabel('Name', { exact: true })).toHaveCount(0);
+    // The list opens the same page, and its row has Change stock as a dialog.
+    await page.goto(`/products?search=${encodeURIComponent('Silk scarf editor')}`);
+    await page.getByRole('link', { name, exact: true }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
+    await page.goBack();
+    await page
+      .getByRole('button', { name: `Change stock for ${name}`, exact: true })
+      .filter({ visible: true })
+      .click();
+    const dialog = page.getByRole('dialog', { name: /Adjust stock/ });
+    await dialog.getByLabel('Change in stock').fill('2');
+    await dialog.getByLabel('Reason').fill('Recount');
+    await dialog.getByRole('button', { name: 'Save stock', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await saved()).variants[0]!.onHand).toBe(4);
+    await capture('list-change-stock');
+
+    // Old addresses for the removed modal and drawer land on the full pages.
+    await page.goto(`/products?product=${productId}`);
+    await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
+    await page.goto('/products?create=1');
+    await expect(page).toHaveURL(/\/products\/new$/);
   } finally {
     try {
       await request('/me/active-store', { storeId: fixture.storeIds[0] });

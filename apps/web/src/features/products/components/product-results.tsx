@@ -13,9 +13,16 @@ type ProductResultsProps = {
   query: ProductListQuery;
   products: ReturnType<typeof useProducts>;
   onAdjust?: (variantId: string) => void;
+  onChangeStock?: (productId: string) => void;
   selection?: ProductSelection;
 };
-export function ProductResults({ query, products, onAdjust, selection }: ProductResultsProps) {
+export function ProductResults({
+  query,
+  products,
+  onAdjust,
+  onChangeStock,
+  selection,
+}: ProductResultsProps) {
   if (products.isPending) return <ProductsLoading />;
   if (products.error)
     return (
@@ -30,9 +37,9 @@ export function ProductResults({ query, products, onAdjust, selection }: Product
     <Refreshing active={products.isPlaceholderData}>
       {products.data.items.length ? (
         <ProductList
-          query={query}
           products={products.data.items}
           onAdjust={onAdjust}
+          onChangeStock={onChangeStock}
           selection={selection}
         />
       ) : (

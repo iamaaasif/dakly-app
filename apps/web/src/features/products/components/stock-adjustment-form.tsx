@@ -34,9 +34,13 @@ export function StockAdjustmentForm({ productName, variant, onClose }: StockAdju
       <FormProvider {...form}>
         <form
           className="space-y-4"
-          onSubmit={form.handleSubmit((input) =>
-            adjustment.mutate({ variantId: variant.id, input }, { onSuccess: onClose }),
-          )}
+          onSubmit={(event) => {
+            // React bubbles submit through a portal to the product form, which would save it too.
+            event.stopPropagation();
+            void form.handleSubmit((input) =>
+              adjustment.mutate({ variantId: variant.id, input }, { onSuccess: onClose }),
+            )(event);
+          }}
         >
           <FormField
             name="quantity"

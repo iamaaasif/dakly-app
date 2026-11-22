@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import type { ProductListQuery, ProductResponse, ProductTab } from '@dakly/contracts/products';
+import type { ProductListQuery, ProductResponse } from '@dakly/contracts/products';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { ProductsScreen } from './products-screen';
@@ -77,16 +77,10 @@ function show(
     edit = true,
     view = true,
     adjust,
-    productId,
-    productTab,
-    create,
   }: {
     edit?: boolean;
     view?: boolean;
     adjust?: string;
-    productId?: string;
-    productTab?: ProductTab;
-    create?: '1';
   } = {},
 ) {
   vi.stubGlobal(
@@ -139,22 +133,13 @@ function show(
   client.setQueryData(productsKeys.categories(context.contextTag), { items: ['Cotton'] });
   const content = () => (
     <QueryClientProvider client={client}>
-      <ProductsScreen
-        query={query}
-        adjust={adjust}
-        productId={productId}
-        productTab={productTab}
-        create={create}
-      />
+      <ProductsScreen query={query} adjust={adjust} />
     </QueryClientProvider>
   );
   const rendered = render(content());
   push.mockImplementation((href: string) => {
     const parameters = new URL(href, 'http://localhost').searchParams;
     adjust = parameters.get('adjust') ?? undefined;
-    productId = parameters.get('product') ?? undefined;
-    productTab = (parameters.get('productTab') as ProductTab) ?? undefined;
-    create = parameters.get('create') === '1' ? '1' : undefined;
     rendered.rerender(content());
   });
   return { client, ...rendered };
@@ -192,6 +177,38 @@ describe('Products screen', () => {
     expect(screen.queryByRole('button', { name: /Adjust stock/ })).toBeNull();
     expect(screen.queryByText(/asked|Best seller|Stock value/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Import|AI/ })).toBeNull();
+  });
+  it('links each product to its full page', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
+    show();
+    const links = await screen.findAllByRole('link', { name: product.name });
+    expect(links[0]!.getAttribute('href')).toBe(`/products/${product.id}`);
+  });
+  it('changes the stock of a size from the list row', async () => {
+    const bodies: unknown[] = [];
+    stubFetch(async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        bodies.push([path, JSON.parse(String(init.body))]);
+        return new Response(null, { status: 204, headers: { 'x-session-context': 'verified' } });
+      }
+      return response({ items: [product], nextCursor: null });
+    });
+    show();
+    await userEvent.click(
+      (await screen.findAllByRole('button', { name: 'Change stock for Cotton Panjabi' }))[0]!,
+    );
+    const dialog = await screen.findByRole('dialog', { name: /Adjust stock: Cotton Panjabi/ });
+    await userEvent.type(within(dialog).getByLabelText('Change in stock'), '-2');
+    await userEvent.type(within(dialog).getByLabelText('Reason'), 'Damaged');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save stock' }));
+    await vi.waitFor(() =>
+      expect(bodies).toEqual([
+        [
+          `/api/variants/${product.variants[0]!.id}/stock-adjustments`,
+          { quantity: -2, reason: 'Damaged' },
+        ],
+      ]),
+    );
   });
   it('hides the screen without product access', () => {
     stubFetch(() => {
@@ -419,125 +436,6 @@ describe('Product editor navigation', () => {
     expect(await within(dialog).findByText('Enter a product name')).toBeTruthy();
   });
 
-  it('opens creation from the list and selects the saved product', async () => {
-    stubFetch(async (path: string, init?: RequestInit) => {
-      if (path.endsWith('/categories')) return response({ items: ['Cotton'] });
-      return init?.method === 'POST' || path === `/api/products/${product.id}`
-        ? response(product)
-        : response({ items: [product], nextCursor: null });
-    });
-    show();
-    await screen.findByRole('table');
-    act(() => push('/products?create=1'));
-    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
-    await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save as hidden' }));
-    expect(await screen.findByRole('dialog', { name: product.name })).toBeTruthy();
-    expect(
-      new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('product'),
-    ).toBe(product.id);
-  });
-
-  it('shows an alert when initial stock adjustment fails and clears it on sheet close', async () => {
-    const savedProduct = {
-      ...product,
-      options: [{ name: 'Size', values: ['L'] }],
-      variants: [
-        {
-          ...product.variants[0]!,
-          id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
-          optionValues: { Size: 'L' },
-        },
-      ],
-    };
-    stubFetch(async (path: string, init?: RequestInit) => {
-      if (init?.method === 'POST') {
-        if (path.includes('/stock-adjustments')) {
-          return Response.json(
-            { error: { message: 'Stock adjustment failed' } },
-            { status: 500, headers: { 'x-session-context': 'verified' } },
-          );
-        }
-        return response(savedProduct);
-      }
-      if (path.endsWith('/categories')) return response({ items: ['Cotton'] });
-      return response(
-        path === `/api/products/${savedProduct.id}`
-          ? savedProduct
-          : { items: [savedProduct], nextCursor: null },
-      );
-    });
-    show();
-    await screen.findByRole('table');
-    act(() => push('/products?create=1'));
-    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
-    await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Add size' }));
-    await userEvent.type(within(dialog).getByLabelText('Size 1'), 'L');
-    await userEvent.type(within(dialog).getByLabelText('Stock for size L'), '3');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save as hidden' }));
-
-    expect((await screen.findByRole('alert')).textContent).toContain(
-      'Could not set initial stock for: L',
-    );
-    const sheet = await screen.findByRole('dialog', { name: savedProduct.name });
-    await userEvent.click(within(sheet).getByRole('button', { name: /Close/ }));
-    expect(screen.queryByRole('alert')).toBeNull();
-  });
-
-  it('shows a saved product to viewers without edit or upload controls', async () => {
-    stubFetch(async (path: string) =>
-      response(
-        path === `/api/products/${product.id}` ? product : { items: [product], nextCursor: null },
-      ),
-    );
-    show({ limit: 50 }, { edit: false, productId: product.id });
-    const dialog = await screen.findByRole('dialog', { name: product.name });
-    const header = within(dialog).getByRole('banner');
-    expect(within(header).getByText('৳2,450')).toBeTruthy();
-    expect(within(dialog).queryByRole('button', { name: 'Edit product' })).toBeNull();
-    expect(within(dialog).queryByRole('button', { name: 'Edit' })).toBeNull();
-    expect(within(dialog).queryByLabelText('Add photo')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add product' })).toBeNull();
-  });
-
-  it('shows the effective variant price when the product base price is zero', async () => {
-    const priced = {
-      ...product,
-      pricePoisha: 0,
-      variants: [{ ...product.variants[0]!, priceOverridePoisha: 45025, pricePoisha: 45025 }],
-    };
-    stubFetch(async (path: string) =>
-      response(
-        path === `/api/products/${product.id}` ? priced : { items: [priced], nextCursor: null },
-      ),
-    );
-    show({ limit: 50 }, { productId: product.id, edit: false });
-    const dialog = await screen.findByRole('dialog', { name: product.name });
-    const header = within(dialog).getByRole('banner');
-    expect(within(header).getByText('৳450.25')).toBeTruthy();
-  });
-
-  it('retries a failed selected product without losing its address', async () => {
-    let failed = true;
-    stubFetch(async (path: string) => {
-      if (path === `/api/products/${product.id}`)
-        return failed
-          ? Response.json(
-              { error: { code: 'UNAVAILABLE', message: 'Product could not load' } },
-              { status: 503 },
-            )
-          : response(product);
-      return response({ items: [], nextCursor: null });
-    });
-    show({ limit: 50 }, { productId: product.id });
-    expect((await screen.findByRole('alert')).textContent).toContain('Product could not load');
-    failed = false;
-    await userEvent.click(screen.getByRole('button', { name: 'Retry product' }));
-    expect(await screen.findByRole('dialog', { name: product.name })).toBeTruthy();
-    expect(push).not.toHaveBeenCalled();
-  });
-
   it('shows profit percentage, size chips, and restock button', async () => {
     const itemWithProfit: ProductResponse = {
       ...product,
@@ -595,60 +493,5 @@ describe('Product editor navigation', () => {
     expect(screen.getByRole('link', { name: 'Hidden' })).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Category' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Sort' })).toBeNull();
-  });
-
-  it('renders product detail sheet with header controls, tabs, overview tiles and bottom actions', async () => {
-    let sentStatus = '';
-    stubFetch(async (path: string, init?: RequestInit) => {
-      if (init?.method === 'PATCH') {
-        sentStatus = JSON.parse(String(init.body)).status;
-        return response({ ...product, status: sentStatus });
-      }
-      return response(
-        path === `/api/products/${product.id}` ? product : { items: [product], nextCursor: null },
-      );
-    });
-    show({ limit: 50 }, { edit: true, productId: product.id });
-    const dialog = await screen.findByRole('dialog', { name: product.name });
-
-    expect(within(dialog).getByText(product.name)).toBeTruthy();
-    expect(within(dialog).getByText(product.category!)).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: 'Edit product' })).toBeTruthy();
-    expect(within(dialog).getByRole('button', { name: 'Close dialog' })).toBeTruthy();
-    expect(within(dialog).getByText('Running low')).toBeTruthy();
-
-    expect(within(dialog).getByRole('tab', { name: 'Overview' })).toBeTruthy();
-    expect(within(dialog).getByRole('tab', { name: 'Stock' })).toBeTruthy();
-    expect(within(dialog).queryByRole('tab', { name: 'Sales' })).toBeNull();
-    expect(within(dialog).queryByRole('tab', { name: 'Customers' })).toBeNull();
-    expect(within(dialog).getByText('Description')).toBeTruthy();
-    expect(within(dialog).getByText('Selling price')).toBeTruthy();
-    expect(within(dialog).getByText('Your cost')).toBeTruthy();
-    expect(within(dialog).getByText('Profit each')).toBeTruthy();
-    expect(within(dialog).getByText('In stock')).toBeTruthy();
-    expect(within(dialog).queryByText('Low stock alert')).toBeNull();
-
-    await userEvent.click(within(dialog).getByRole('tab', { name: 'Stock' }));
-    expect(
-      new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('productTab'),
-    ).toBe('stock');
-    expect(within(dialog).getByText(/available · 2 reserved · 5 on hand/)).toBeTruthy();
-
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Change stock for Default' }));
-    expect(
-      await screen.findByRole('dialog', { name: /Adjust stock: Cotton Panjabi/ }),
-    ).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    await userEvent.click(within(dialog).getByRole('tab', { name: 'Overview' }));
-    expect(
-      new URL(push.mock.calls.at(-1)![0], 'http://localhost').searchParams.get('productTab'),
-    ).toBeNull();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Hide product' }));
-    expect(sentStatus).toBe('hidden');
-
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Close dialog' }));
-    const closedUrl = new URL(push.mock.calls.at(-1)![0], 'http://localhost');
-    expect(closedUrl.searchParams.get('product')).toBeNull();
-    expect(closedUrl.searchParams.get('productTab')).toBeNull();
   });
 });

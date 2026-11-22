@@ -1,22 +1,20 @@
 'use client';
 import { useState } from 'react';
 
-import type { ProductListQuery, ProductListResponse, ProductTab } from '@dakly/contracts/products';
+import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 
 import { productsSearch, useProducts } from '../api/products';
 import { parseProductsScreen } from '../products-url';
 import { useBulkSelection } from '../use-bulk-selection';
+import { ChangeStockDialog } from './change-stock-dialog';
 import { ExportProductsButtons } from './export-products-buttons';
 import { ImportProductsDialog } from './import-products-dialog';
 import { ProductBulkSection } from './product-bulk-section';
 import { ProductFilters } from './product-filters';
-import { ProductForm } from './product-form';
 import { ProductResults } from './product-results';
-import { ProductSheet } from './product-sheet';
 import { QuickAddModal } from './quick-add-modal';
 import { RestockDialog } from './restock-dialog';
-import { SessionDialog } from '@/components/session-dialog';
 import { StorePage } from '@/components/store-page';
 import { useSessionContext } from '@/lib/session-context';
 import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
@@ -24,22 +22,17 @@ import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 type ProductsScreenProps = {
   query: ProductListQuery;
   adjust?: string;
-  productId?: string;
-  productTab?: ProductTab;
-  create?: '1';
   importing?: '1';
 };
 export function ProductsScreen(initial: ProductsScreenProps) {
-  const { query, adjust, productId, productTab, create, importing } = useUrlQuery(
-    initial,
-    parseProductsScreen,
-  );
+  const { query, adjust, importing } = useUrlQuery(initial, parseProductsScreen);
   const { data: session } = useSessionContext();
   const products = useProducts(query);
   const router = useUrlRouter();
-  const [stockError, setStockError] = useState<string | null>(null);
+  const [changingStockOf, setChangingStockOf] = useState<string>();
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
+  const changingStock = products.data?.items.find((item) => item.id === changingStockOf);
   const canEdit = Boolean(session?.currentStore?.canEditProducts);
   const bulk = useBulkSelection(canEdit);
   return (
@@ -53,27 +46,14 @@ export function ProductsScreen(initial: ProductsScreenProps) {
             query={query}
             products={products}
             onAdjust={canEdit ? onAdjust : undefined}
+            onChangeStock={canEdit ? setChangingStockOf : undefined}
             selection={bulk.selection}
           />
         </section>
-        {stockError ? (
-          <p role="alert" className="text-danger">
-            {stockError}
-          </p>
-        ) : null}
-        {create && canEdit ? (
-          <AddProductModal listHref={listHref} onStockError={setStockError} />
-        ) : null}
-        {productId ? (
-          <SelectedProductSheet
-            key={productId}
-            productId={productId}
-            productTab={productTab}
-            query={query}
-            onClose={() => {
-              setStockError(null);
-              router.replace(listHref);
-            }}
+        {changingStock ? (
+          <ChangeStockDialog
+            product={changingStock}
+            onClose={() => setChangingStockOf(undefined)}
           />
         ) : null}
         <SelectedRestock
@@ -126,29 +106,6 @@ function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderP
   );
 }
 
-function AddProductModal({
-  listHref,
-  onStockError,
-}: {
-  listHref: string;
-  onStockError: (error: string) => void;
-}) {
-  const router = useUrlRouter();
-  return (
-    <SessionDialog title="Add product" open onClose={() => router.replace(listHref)}>
-      <ProductForm
-        onSaved={(product, failedSizes) => {
-          router.replace(`${listHref}&product=${product.id}`);
-          if (failedSizes.length > 0) {
-            onStockError(`Could not set initial stock for: ${failedSizes.join(', ')}`);
-          }
-        }}
-        onCancel={() => router.replace(listHref)}
-      />
-    </SessionDialog>
-  );
-}
-
 type SelectedRestockProps = {
   products?: ProductListResponse;
   variantId?: string;
@@ -161,35 +118,4 @@ function SelectedRestock({ products, variantId, onClose }: SelectedRestockProps)
   );
   if (!product) return <p role="alert">That product is not on this page.</p>;
   return <RestockDialog product={product} onClose={onClose} />;
-}
-
-type SelectedProductSheetProps = {
-  productId: string;
-  productTab?: ProductTab;
-  query: ProductListQuery;
-  onClose: () => void;
-};
-
-function SelectedProductSheet({
-  productId,
-  productTab,
-  query,
-  onClose,
-}: SelectedProductSheetProps) {
-  const router = useUrlRouter();
-  const onTab = (nextTab: ProductTab) => {
-    const params = new URLSearchParams(productsSearch(query));
-    params.set('product', productId);
-    if (nextTab !== 'overview') params.set('productTab', nextTab);
-    router.push(`/products?${params.toString()}`);
-  };
-
-  return (
-    <ProductSheet
-      productId={productId}
-      tab={productTab ?? 'overview'}
-      onTab={onTab}
-      onClose={onClose}
-    />
-  );
 }
