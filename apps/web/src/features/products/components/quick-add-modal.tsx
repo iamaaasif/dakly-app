@@ -154,11 +154,12 @@ function useQuickAdd(onClose: () => void) {
       openAfterSave.current = true;
       return void save();
     }
+    const stock = form.getValues('variants.0.initialStock') ?? 0;
     router.push(
       quickAddHandoffHref({
         name: form.getValues('name'),
         price: form.getValues('pricePoisha') ?? '',
-        stock: String(form.getValues('variants.0.initialStock') ?? ''),
+        stock: stock > 0 ? String(stock) : '',
       }),
     );
   }

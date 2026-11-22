@@ -387,6 +387,16 @@ describe('Product editor navigation', () => {
     expect(navigate).toHaveBeenCalledWith('/products/new?name=Cotton+Panjabi&price=1250&stock=6');
   });
 
+  it('opens the plain full page with More details when nothing was typed', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await userEvent.click(within(dialog).getByRole('button', { name: /More details/ }));
+    expect(navigate).toHaveBeenCalledWith('/products/new');
+  });
+
   it('asks for a name before saving the quick add', async () => {
     stubFetch(async () => response({ items: [product], nextCursor: null }));
     show();
