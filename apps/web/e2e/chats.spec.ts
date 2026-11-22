@@ -34,6 +34,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
   const [storeId] = fixture.storeIds;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const connectionId = randomUUID();
+  const extraConnectionIds: string[] = [];
   const contactIds: string[] = [];
   let firstConversationId = '';
   try {
@@ -46,6 +47,16 @@ test('lists chats by tab and channel and shows the tab counts', async ({
        values ($1::uuid, $2, 'facebook_page', $3, 'Dhaka Threads')`,
       [connectionId, storeId, connectionId],
     );
+    // The channel filter lists only connected channels, so each channel in the fixture needs one.
+    for (const kind of ['instagram', 'whatsapp']) {
+      const extraId = randomUUID();
+      extraConnectionIds.push(extraId);
+      await database.pool.query(
+        `insert into channel_connections (id, store_id, kind, external_account_id, display_name)
+         values ($1::uuid, $2, $3, $1::text, $3)`,
+        [extraId, storeId, kind],
+      );
+    }
     for (const [index, [name, channel, responder, status, preview, unread]] of people.entries()) {
       const contactId = randomUUID();
       contactIds.push(contactId);
@@ -199,7 +210,9 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await database.pool.query('delete from contact_identities where store_id = $1', [storeId]);
     await database.pool.query('delete from conversations where store_id = $1', [storeId]);
     await database.pool.query('delete from contacts where id = any($1::uuid[])', [contactIds]);
-    await database.pool.query('delete from channel_connections where id = $1', [connectionId]);
+    await database.pool.query('delete from channel_connections where id = any($1::uuid[])', [
+      [connectionId, ...extraConnectionIds],
+    ]);
     await database.pool.end();
   }
 });
