@@ -9,8 +9,8 @@ import { cn } from './cn';
 const widthClasses = { default: 'max-w-sm', wide: 'max-w-xl' };
 
 const sideClasses = {
-  left: 'left-0 border-r',
-  right: 'right-0 border-l',
+  left: 'motion-drawer-left left-0 border-r',
+  right: 'motion-drawer-right right-0 border-l',
 };
 
 export type SheetProps = {
@@ -43,7 +43,7 @@ export function Sheet({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-inverse/50" />
+        <DialogPrimitive.Overlay className="motion-overlay fixed inset-0 z-40 bg-inverse/50" />
         <DialogPrimitive.Content
           {...(!description && { 'aria-describedby': undefined })}
           // Radix returns focus only to its own Trigger; callers open the sheet from their own state.
@@ -129,11 +129,11 @@ export function SheetDialog({
     <DialogPrimitive.Root open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
       {trigger && <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>}
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-60 bg-inverse/50" />
+        <DialogPrimitive.Overlay className="motion-overlay fixed inset-0 z-60 bg-inverse/50" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
           className={cn(
-            'fixed inset-0 z-70 m-auto h-fit max-h-dvh w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text shadow-overlay',
+            'motion-modal fixed inset-0 z-70 m-auto h-fit max-h-dvh w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface p-6 text-text shadow-overlay',
             className,
           )}
         >

@@ -27,7 +27,7 @@ export function ToastProvider({ children }: ToastProviderProps) {
           <ToastPrimitive.Root
             key={toast.id}
             onOpenChange={(isOpen) => !isOpen && removeToast(toast.id)}
-            className="flex items-center justify-between gap-3 rounded-lg bg-inverse py-2 pr-2 pl-4 text-base text-on-primary shadow-overlay"
+            className="motion-toast flex items-center justify-between gap-3 rounded-lg bg-inverse py-2 pr-2 pl-4 text-base text-on-primary shadow-overlay"
           >
             <ToastPrimitive.Title>{toast.message}</ToastPrimitive.Title>
             <ToastPrimitive.Close
