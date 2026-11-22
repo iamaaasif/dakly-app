@@ -266,12 +266,15 @@ async function pausedDialog(page: Page) {
     await route.continue();
   });
   try {
+    const verified = page.waitForResponse((response) => response.url().endsWith('/api/me/context'));
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await requested;
     // An unchanged context is checked in the background, so the open dialog stays usable.
     await expect(page.locator('dialog[open]')).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Refresh', exact: true })).toHaveCount(0);
     release();
+    // A focus while this check is in flight joins it, so the failing check below must start after it.
+    expect((await verified).status()).toBe(200);
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByLabel('Mobile number')).toHaveValue('01712345678');
     expect(
