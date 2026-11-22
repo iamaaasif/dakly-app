@@ -346,12 +346,76 @@ describe('Products screen', () => {
 });
 
 describe('Product editor navigation', () => {
-  it('sends Add product to the full page', async () => {
+  it('opens the quick add from Add product and saves a hidden product with stock', async () => {
+    const requests: { path: string; body: unknown }[] = [];
+    stubFetch(async (path: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        requests.push({ path, body: JSON.parse(String(init.body)) });
+        return response(path === '/api/products' ? product : {});
+      }
+      return response({ items: [product], nextCursor: null });
+    });
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
+    await userEvent.type(within(dialog).getByLabelText('Selling price ৳'), '1250');
+    await userEvent.type(within(dialog).getByLabelText('Stock'), '6');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save product' }));
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(requests[0]).toMatchObject({
+      path: '/api/products',
+      body: { name: 'Cotton Panjabi', pricePoisha: 125000, status: 'hidden', options: [] },
+    });
+    expect(requests[1]).toEqual({
+      path: `/api/variants/${product.variants[0]!.id}/stock-adjustments`,
+      body: { quantity: 6, reason: 'Initial stock' },
+    });
+  });
+
+  it('carries the typed values to the full page with More details', async () => {
     stubFetch(async () => response({ items: [product], nextCursor: null }));
     show();
     await screen.findByRole('table');
     await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Cotton Panjabi');
+    await userEvent.type(within(dialog).getByLabelText('Selling price ৳'), '1250');
+    await userEvent.type(within(dialog).getByLabelText('Stock'), '6');
+    await userEvent.click(within(dialog).getByRole('button', { name: /More details/ }));
+    expect(navigate).toHaveBeenCalledWith('/products/new?name=Cotton+Panjabi&price=1250&stock=6');
+  });
+
+  it('opens the plain full page with More details when nothing was typed', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await userEvent.click(within(dialog).getByRole('button', { name: /More details/ }));
     expect(navigate).toHaveBeenCalledWith('/products/new');
+  });
+
+  it('opens the quick add with the cursor in Name', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(within(dialog).getByLabelText('Name')),
+    );
+  });
+
+  it('asks for a name before saving the quick add', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
+    show();
+    await screen.findByRole('table');
+    await userEvent.click(screen.getByRole('button', { name: 'Add product' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add product' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save product' }));
+    expect(await within(dialog).findByText('Enter a product name')).toBeTruthy();
   });
 
   it('opens creation from the list and selects the saved product', async () => {
