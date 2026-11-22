@@ -2,6 +2,7 @@ import { formatMoney } from '@dakly/contracts/money';
 import type { ProductListQuery, ProductResponse } from '@dakly/contracts/products';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
+import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
@@ -11,20 +12,40 @@ import { ProductReadiness } from './product-readiness';
 import { ProductThumbnail } from './product-thumbnail';
 import { UrlLink } from '@/components/url-link';
 
+export type ProductSelection = {
+  selectedIds: ReadonlySet<string>;
+  onToggle: (product: ProductResponse) => void;
+  onTogglePage: (products: ProductResponse[], selected: boolean) => void;
+};
 type ProductListProps = {
   products: ProductResponse[];
   query: ProductListQuery;
   onAdjust?: (variantId: string) => void;
+  selection?: ProductSelection;
 };
 
-export function ProductList({ products, query, onAdjust }: ProductListProps) {
+export function ProductList({ products, query, onAdjust, selection }: ProductListProps) {
   return (
     <>
       <div className="hidden md:block [&>div]:rounded-t-none [&>div]:border-t-0">
-        <ProductTable products={products} query={query} onAdjust={onAdjust} />
+        <ProductTable products={products} query={query} onAdjust={onAdjust} selection={selection} />
       </div>
-      <ProductCards products={products} query={query} onAdjust={onAdjust} />
+      <ProductCards products={products} query={query} onAdjust={onAdjust} selection={selection} />
     </>
+  );
+}
+
+function SelectProduct({
+  product,
+  selection,
+}: { product: ProductResponse } & Pick<ProductListProps, 'selection'>) {
+  if (!selection) return null;
+  return (
+    <Checkbox
+      aria-label={`Select ${product.name}`}
+      checked={selection.selectedIds.has(product.id)}
+      onCheckedChange={() => selection.onToggle(product)}
+    />
   );
 }
 
@@ -56,25 +77,51 @@ function ProductRestockButton({ product, onAdjust, className }: ProductRestockBu
   );
 }
 
-function ProductTable({ products, query, onAdjust }: ProductListProps) {
+function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
+  const allSelected = products.every((product) => selection?.selectedIds.has(product.id));
+  return (
+    <TableHeader>
+      <TableRow>
+        {selection ? (
+          <TableHead className="w-10">
+            <Checkbox
+              aria-label="Select all products on this page"
+              checked={allSelected}
+              onCheckedChange={(checked) => selection.onTogglePage(products, checked === true)}
+            />
+          </TableHead>
+        ) : null}
+        <TableHead>Product</TableHead>
+        <TableHead className="text-right">Price</TableHead>
+        <TableHead>Stock</TableHead>
+        <TableHead>Status</TableHead>
+        {onAdjust ? (
+          <TableHead className="w-28 text-right">
+            <span className="sr-only">Actions</span>
+          </TableHead>
+        ) : null}
+      </TableRow>
+    </TableHeader>
+  );
+}
+
+function ProductTable({ products, query, onAdjust, selection }: ProductListProps) {
   return (
     <Table aria-label="Products">
-      <TableHeader>
-        <TableRow>
-          <TableHead>Product</TableHead>
-          <TableHead className="text-right">Price</TableHead>
-          <TableHead>Stock</TableHead>
-          <TableHead>Status</TableHead>
-          {onAdjust ? (
-            <TableHead className="w-28 text-right">
-              <span className="sr-only">Actions</span>
-            </TableHead>
-          ) : null}
-        </TableRow>
-      </TableHeader>
+      <ProductTableHead
+        products={products}
+        query={query}
+        onAdjust={onAdjust}
+        selection={selection}
+      />
       <TableBody>
         {products.map((product) => (
           <TableRow key={product.id}>
+            {selection ? (
+              <TableCell>
+                <SelectProduct product={product} selection={selection} />
+              </TableCell>
+            ) : null}
             <TableCell>
               <ProductIdentity product={product} query={query} />
             </TableCell>
@@ -103,12 +150,13 @@ function ProductTable({ products, query, onAdjust }: ProductListProps) {
   );
 }
 
-function ProductCards({ products, query, onAdjust }: ProductListProps) {
+function ProductCards({ products, query, onAdjust, selection }: ProductListProps) {
   return (
     <ul aria-label="Products" className="space-y-3 md:hidden">
       {products.map((product) => (
         <li key={product.id} className="space-y-3 rounded-lg border border-border bg-surface p-4">
           <div className="flex items-start justify-between gap-3">
+            <SelectProduct product={product} selection={selection} />
             <ProductIdentity product={product} query={query} />
             <div className="shrink-0 text-right tabular-nums">
               <ProductPrice product={product} />

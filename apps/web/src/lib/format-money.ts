@@ -18,3 +18,8 @@ export function formatCompactTaka(amountPoisha: bigint): string {
   if (taka >= 1_000) return `৳${(taka / 1_000).toFixed(1)}K`;
   return `৳${taka}`;
 }
+
+// Grid cells and review lines show Taka without the symbol, as the column header already says Taka.
+export function formatTakaNumber(amountPoisha: number): string {
+  return formatMoney(amountPoisha).replace('৳', '');
+}

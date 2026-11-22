@@ -11,6 +11,17 @@ import { ProductsScreen } from './products-screen';
 import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
+// The screen also asks for undoable bulk edits; these tests are about the list.
+function stubFetch(handler: (path: string, init: RequestInit) => unknown) {
+  vi.stubGlobal('fetch', (path: string, init?: RequestInit) =>
+    String(path).includes('/products/bulk-edits')
+      ? Promise.resolve(
+          Response.json({ items: [] }, { headers: { 'x-session-context': 'verified' } }),
+        )
+      : handler(path, init ?? {}),
+  );
+}
+
 const push = vi.hoisted(() => vi.fn());
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/use-url-query', async (importOriginal) => ({
@@ -159,12 +170,12 @@ afterEach(() => {
 
 describe('Products screen', () => {
   it('shows the loading state while products are requested', () => {
-    vi.stubGlobal('fetch', () => new Promise(() => undefined));
+    stubFetch(() => new Promise(() => undefined));
     show();
     expect(screen.getByRole('status').textContent).toContain('Loading products');
   });
   it('shows effective prices, available stock and readiness without unsupported counts or edit controls', async () => {
-    vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
     show({ limit: 50 }, { edit: false, adjust: product.variants[0]!.id });
     const table = await screen.findByRole('table');
     expect(within(table).getByText('৳2,450')).toBeTruthy();
@@ -177,7 +188,7 @@ describe('Products screen', () => {
     expect(screen.queryByRole('button', { name: /Import|AI/ })).toBeNull();
   });
   it('hides the screen without product access', () => {
-    vi.stubGlobal('fetch', () => {
+    stubFetch(() => {
       throw new Error('No product access');
     });
     show({ limit: 50 }, { edit: false, view: false });
@@ -186,7 +197,7 @@ describe('Products screen', () => {
   });
   it('shows an empty state and retries a failed request', async () => {
     let failed = true;
-    vi.stubGlobal('fetch', async () =>
+    stubFetch(async () =>
       failed
         ? Response.json(
             { error: { code: 'UNAVAILABLE', message: 'Products could not load' } },
@@ -206,7 +217,7 @@ describe('Products screen', () => {
   it('keeps search and readiness in cursor links and clears the cursor when filters change', async () => {
     const cursor = '019c01ea-cf15-7d31-a7f5-d73d66007ae4';
     let requested = '';
-    vi.stubGlobal('fetch', async (path: string) => {
+    stubFetch(async (path: string) => {
       requested = path;
       return response({ items: [product], nextCursor: cursor });
     });
@@ -233,7 +244,7 @@ describe('Products screen', () => {
     expect(searchQuery.get('cursor')).toBeNull();
   });
   it('opens a selected variant from the address and clears it on close', async () => {
-    vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
     show({ limit: 50 }, { adjust: product.variants[0]!.id });
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
@@ -244,7 +255,7 @@ describe('Products screen', () => {
   });
   it('refreshes stock counts without replacing an open restock draft', async () => {
     let refreshed = false;
-    vi.stubGlobal('fetch', async (path: string) =>
+    stubFetch(async (path: string) =>
       path.endsWith('/restock-waiting')
         ? response({ items: [] })
         : response({
@@ -276,7 +287,7 @@ describe('Products screen', () => {
   });
   it('restocks a size and refreshes the available stock', async () => {
     let changed = false;
-    vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
+    stubFetch(async (path: string, init: RequestInit) => {
       if (path.endsWith('/restock-waiting')) return response({ items: [] });
       if (init.method === 'POST') {
         expect(JSON.parse(String(init.body))).toEqual({ quantity: 2, reason: 'Restock' });
@@ -309,7 +320,7 @@ describe('Products screen', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
   it('keeps a rejected restock and its error visible', async () => {
-    vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
+    stubFetch(async (path: string, init: RequestInit) => {
       if (path.endsWith('/restock-waiting')) return response({ items: [] });
       if (init.method !== 'POST') return response({ items: [product], nextCursor: null });
       return Response.json(
@@ -331,7 +342,7 @@ describe('Products screen', () => {
 
 describe('Product editor navigation', () => {
   it('opens creation from the list and selects the saved product', async () => {
-    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+    stubFetch(async (path: string, init?: RequestInit) => {
       if (path.endsWith('/categories')) return response({ items: ['Cotton'] });
       return init?.method === 'POST' || path === `/api/products/${product.id}`
         ? response(product)
@@ -361,7 +372,7 @@ describe('Product editor navigation', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+    stubFetch(async (path: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
         if (path.includes('/stock-adjustments')) {
           return Response.json(
@@ -397,7 +408,7 @@ describe('Product editor navigation', () => {
   });
 
   it('shows a saved product to viewers without edit or upload controls', async () => {
-    vi.stubGlobal('fetch', async (path: string) =>
+    stubFetch(async (path: string) =>
       response(
         path === `/api/products/${product.id}` ? product : { items: [product], nextCursor: null },
       ),
@@ -418,7 +429,7 @@ describe('Product editor navigation', () => {
       pricePoisha: 0,
       variants: [{ ...product.variants[0]!, priceOverridePoisha: 45025, pricePoisha: 45025 }],
     };
-    vi.stubGlobal('fetch', async (path: string) =>
+    stubFetch(async (path: string) =>
       response(
         path === `/api/products/${product.id}` ? priced : { items: [priced], nextCursor: null },
       ),
@@ -431,7 +442,7 @@ describe('Product editor navigation', () => {
 
   it('retries a failed selected product without losing its address', async () => {
     let failed = true;
-    vi.stubGlobal('fetch', async (path: string) => {
+    stubFetch(async (path: string) => {
       if (path === `/api/products/${product.id}`)
         return failed
           ? Response.json(
@@ -463,7 +474,7 @@ describe('Product editor navigation', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', async () => response({ items: [itemWithProfit], nextCursor: null }));
+    stubFetch(async () => response({ items: [itemWithProfit], nextCursor: null }));
     show({ limit: 50 });
     const table = await screen.findByRole('table');
     expect(within(table).getByText('Men · UT-PJ-01')).toBeTruthy();
@@ -486,9 +497,7 @@ describe('Product editor navigation', () => {
       name: 'No Price Shoes',
       readiness: ['needs_price'],
     };
-    vi.stubGlobal('fetch', async () =>
-      response({ items: [sellingItem, noPriceItem], nextCursor: null }),
-    );
+    stubFetch(async () => response({ items: [sellingItem, noPriceItem], nextCursor: null }));
     show({ limit: 50 });
     const table = await screen.findByRole('table');
     expect(within(table).getByText('Selling')).toBeTruthy();
@@ -496,7 +505,7 @@ describe('Product editor navigation', () => {
   });
 
   it('renders inline toolbar with search input and all readiness chips', async () => {
-    vi.stubGlobal('fetch', async () => response({ items: [product], nextCursor: null }));
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
     show({ limit: 50 });
     await screen.findByRole('table');
     expect(screen.getByRole('searchbox', { name: 'Search products' })).toBeTruthy();
@@ -512,7 +521,7 @@ describe('Product editor navigation', () => {
 
   it('renders product detail sheet with header controls, tabs, overview tiles and bottom actions', async () => {
     let sentStatus = '';
-    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+    stubFetch(async (path: string, init?: RequestInit) => {
       if (init?.method === 'PATCH') {
         sentStatus = JSON.parse(String(init.body)).status;
         return response({ ...product, status: sentStatus });

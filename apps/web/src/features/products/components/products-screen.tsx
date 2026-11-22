@@ -6,8 +6,10 @@ import { Button } from '@dakly/ui/button';
 
 import { productsSearch, useProducts } from '../api/products';
 import { parseProductsScreen } from '../products-url';
+import { useBulkSelection } from '../use-bulk-selection';
 import { ExportProductsButtons } from './export-products-buttons';
 import { ImportProductsDialog } from './import-products-dialog';
+import { ProductBulkSection } from './product-bulk-section';
 import { ProductFilters } from './product-filters';
 import { ProductForm } from './product-form';
 import { ProductResults } from './product-results';
@@ -37,22 +39,20 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   const [stockError, setStockError] = useState<string | null>(null);
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
-  const canEdit = session?.currentStore?.canEditProducts;
+  const canEdit = Boolean(session?.currentStore?.canEditProducts);
+  const bulk = useBulkSelection(canEdit);
   return (
     <StorePage permission="canViewProducts">
       <main className="space-y-6 p-6 md:p-8">
-        <ProductsHeader
-          canEdit={Boolean(canEdit)}
-          query={query}
-          listHref={listHref}
-          importing={importing}
-        />
+        <ProductsHeader canEdit={canEdit} query={query} listHref={listHref} importing={importing} />
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
           <ProductFilters key={`${query.search}|${query.readiness}`} query={query} />
+          <ProductBulkSection bulk={bulk} />
           <ProductResults
             query={query}
             products={products}
             onAdjust={canEdit ? onAdjust : undefined}
+            selection={bulk.selection}
           />
         </section>
         {stockError ? (
