@@ -7,6 +7,7 @@ import type {
   ImportUploadResponse,
 } from '@dakly/contracts/contacts';
 import {
+  type ProductImportDryRun,
   type StartProductImportInput,
   productImportMappingSchema,
 } from '@dakly/contracts/product-imports';
@@ -22,6 +23,7 @@ import {
   type ImportProduct,
   ProductImportService,
 } from '../products/product-import.service';
+import { readCsvLines } from './csv-records';
 import { type ImportRun, ImportRunner } from './import-runner';
 import type { ImportCounts, ImportReportLine as ReportLine } from './imports.repository';
 import { readProductImportRows } from './product-import-rows';
@@ -47,6 +49,17 @@ const COUNT_FOR_OUTCOME = {
   skipped: 'rowsSkipped',
   failed: 'rowsFailed',
 } as const satisfies Record<ImportedRow['outcome'], keyof ImportCounts>;
+
+const MAX_DRY_RUN_ROWS = 300;
+
+// The file's cells under the names the screen shows: field labels, and option names as typed.
+function rawCells(cells: string[], { mapping }: StartProductImportInput): Record<string, string> {
+  const { options, ...fields } = mapping;
+  return Object.fromEntries([
+    ...Object.entries(fields).map(([field, column]) => [field, cells[column] ?? '']),
+    ...options.map(({ name, column }) => [`option:${name}`, cells[column] ?? '']),
+  ]);
+}
 
 @Injectable()
 export class ProductImportsService {
@@ -105,6 +118,41 @@ export class ProductImportsService {
 
   get(storeId: string, importId: string): Promise<ImportResponse> {
     return this.runner.get(storeId, importId);
+  }
+
+  // Says what the import would do, row by row, and writes nothing. The rows shown are limited,
+  // rejected ones first, so a bad row is never hidden behind good ones.
+  async dryRun(
+    storeId: string,
+    importId: string,
+    input: StartProductImportInput,
+  ): Promise<ProductImportDryRun> {
+    const { text, file } = await this.runner.readBeforeStart(storeId, importId, input.mapping);
+    const previewed = await this.products.preview(storeId, file.rows, input.duplicateMode);
+    const rejected = file.errors.map((error) => ({
+      rowNumber: error.rowNumber ?? 0,
+      result: 'rejected' as const,
+      problem: error.message,
+      wasPricePoisha: null,
+    }));
+    const all = [...previewed, ...rejected];
+    const counts = { added: 0, changed: 0, skipped: 0, rejected: 0 };
+    for (const { result } of all) counts[result] += 1;
+    const raw = new Map(readCsvLines(text).lines.map((line) => [line.rowNumber, line.cells]));
+    const shown = [...all]
+      .sort((a, b) => Number(b.result === 'rejected') - Number(a.result === 'rejected'))
+      .slice(0, MAX_DRY_RUN_ROWS)
+      .sort((a, b) => a.rowNumber - b.rowNumber);
+    return {
+      counts,
+      rows: shown.map((row) => ({ ...row, cells: rawCells(raw.get(row.rowNumber) ?? [], input) })),
+      rowsShown: shown.length,
+      errors: file.errors.map(({ rowNumber, field, message }) => ({
+        rowNumber: rowNumber ?? 0,
+        field: field ? (FIELD_LABELS[field as keyof typeof FIELD_LABELS] ?? field) : '',
+        message,
+      })),
+    };
   }
 
   run(storeId: string, importId: string): Promise<void> {

@@ -1854,6 +1854,20 @@ fixture('POST /product-imports/:importId/start', async () => {
     );
   expect(await f.row('imports', foreign)).toEqual(before);
 });
+fixture('POST /product-imports/:importId/dry-run', async () => {
+  const { a, b } = await pair(),
+    foreign = await productImport(a),
+    customers = await customerImport(a);
+  // Another store's import and this store's customer import are both out of reach.
+  for (const id of [foreign, customers])
+    await hidden(
+      id === foreign ? b : a,
+      'POST',
+      (value) => `/product-imports/${value}/dry-run`,
+      id,
+      () => startProductImport,
+    );
+});
 fixture('GET /product-imports/:importId', async () => {
   const { a, b } = await pair(),
     id = await productImport(a);

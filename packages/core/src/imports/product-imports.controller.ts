@@ -16,6 +16,7 @@ import {
   createImportSchema,
 } from '@dakly/contracts/contacts';
 import {
+  type ProductImportDryRun,
   type StartProductImportInput,
   startProductImportSchema,
 } from '@dakly/contracts/product-imports';
@@ -52,6 +53,18 @@ export class ProductImportsController {
     @Body(new ZodValidationPipe(startProductImportSchema)) input: StartProductImportInput,
   ): Promise<ImportResponse> {
     return this.importsService.start(storeId, importId, input, { kind: 'user', userId });
+  }
+
+  // Reads the file with the mapping and reports what an import would do. Nothing is written.
+  @Post(':importId/dry-run')
+  @RequirePermission('products.edit')
+  @HttpCode(200)
+  dryRun(
+    @CurrentStore() storeId: string,
+    @Param('importId', ParseUUIDPipe) importId: string,
+    @Body(new ZodValidationPipe(startProductImportSchema)) input: StartProductImportInput,
+  ): Promise<ProductImportDryRun> {
+    return this.importsService.dryRun(storeId, importId, input);
   }
 
   @Get(':importId')

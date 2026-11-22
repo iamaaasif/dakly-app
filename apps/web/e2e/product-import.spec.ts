@@ -81,11 +81,10 @@ test('imports products from a CSV, sets stock through the ledger and reports the
     await expect(page.getByLabel('Option name')).toHaveValue('Size');
     await capture('map');
     await page.getByRole('button', { name: 'Continue' }).click();
-    await expect(page.getByText('Woven cap')).toBeVisible();
-    await capture('preview');
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await capture('duplicates');
-    await page.getByRole('button', { name: 'Start import' }).click();
+    await expect(page.getByLabel('Product name, row 5')).toHaveValue('Woven cap');
+    await expect(page.getByRole('button', { name: 'Download error report' })).toBeVisible();
+    await capture('dry-run');
+    await page.getByRole('button', { name: /Confirm and import/ }).click();
 
     await expect(page.getByText('Import finished.')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByText('Added').locator('xpath=following-sibling::dd')).toHaveText('2');

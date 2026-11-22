@@ -83,7 +83,7 @@ function ProductImportOptionFields({ columns }: { columns: ReactNode[] }) {
     <fieldset className="space-y-3">
       <legend className="text-sm font-semibold">Size, colour and other options</legend>
       <p className="text-sm text-text-muted">
-        Name each option and choose its column. Every row must fill it in.
+        Name each option and choose its column. Leave it blank on a product that has no options.
       </p>
       {options.fields.map((option, index) => (
         <div key={option.id} className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
