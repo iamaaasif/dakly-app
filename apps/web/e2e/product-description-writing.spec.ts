@@ -95,10 +95,13 @@ test('picks an AI description without saving the product', async ({ page, contex
     expect((await beforeSave.json()).description).toBe('Original description');
     await page.getByRole('button', { name: 'Save product' }).click();
     await expect(page.getByRole('button', { name: 'Save product' })).toBeDisabled();
-    await expect(page.getByText(options[1]!, { exact: true })).toBeVisible();
-    expect((await (await context.request.get(productPath, { headers })).json()).description).toBe(
-      options[1],
-    );
+    await expect(page.getByRole('textbox', { name: 'Description' })).toHaveValue(options[1]!);
+    await expect
+      .poll(
+        async () =>
+          (await (await context.request.get(productPath, { headers })).json()).description,
+      )
+      .toBe(options[1]);
   } finally {
     const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
     try {
