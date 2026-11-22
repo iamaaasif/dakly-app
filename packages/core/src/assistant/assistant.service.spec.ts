@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import type { AiRequest, AiService } from '../ai/ai.service';
+import type { OrdersService } from '../orders/orders.service';
 import type { AnalyticsService } from '../analytics/analytics.service';
 import { TeamService } from '../team/team.service';
 import type { UsageService } from '../usage/usage.service';
@@ -57,6 +58,10 @@ const reports = {
   ],
 } as unknown as AnalyticsService;
 
+const orders = {
+  stageCounts: async () => ({ to_confirm: 5, on_hold: 2, to_pack: 3 }),
+} as unknown as OrdersService;
+
 const salesCall = {
   kind: 'tool_calls' as const,
   aiRunId: 'run-1',
@@ -83,7 +88,7 @@ function assistant(script: unknown[], credits = 25) {
     hasAllowance: async () => credits > 0,
     remaining: async () => credits,
   } as unknown as UsageService;
-  const service = new AssistantService(ai, new AssistantToolsService(reports, team), usage);
+  const service = new AssistantService(ai, new AssistantToolsService(reports, orders, team), usage);
   return { service, requests };
 }
 
@@ -115,6 +120,21 @@ describe('Ask Dakly AI', () => {
       kind: 'answer',
       sources: ['Orders, today'],
     });
+  });
+
+  it('answers how many orders are pending from the stage counts', async () => {
+    const { service, requests } = assistant([
+      {
+        ...salesCall,
+        toolCalls: [{ id: 'call-1', name: 'get_order_counts', argumentsJson: '{}' }],
+      },
+      reply('7 orders are pending: 5 to confirm and 2 on hold.'),
+    ]);
+    expect(await service.ask(storeId, salesOnly, question)).toMatchObject({
+      kind: 'answer',
+      sources: ['Orders'],
+    });
+    expect(requests[1]!.input).toContain('"pending":7');
   });
 
   it('answers the best sellers from the top products report', async () => {
@@ -170,6 +190,7 @@ describe('Ask Dakly AI', () => {
     const { service, requests } = assistant([reply('I can’t answer that yet.')]);
     await service.ask(storeId, salesOnly, question);
     expect(requests[0]!.tools?.map((tool) => tool.name)).toEqual([
+      'get_order_counts',
       'get_sales',
       'get_sales_today',
       'get_sales_yesterday',

@@ -24,6 +24,7 @@ const sourceLabels: Record<string, string> = {
   get_sales_yesterday: 'Orders',
   get_sales_this_month: 'Orders',
   get_top_products: 'Orders',
+  get_order_counts: 'Orders',
   get_marketing_results: 'Marketing results',
   get_customers: 'Customers',
 };

@@ -155,7 +155,33 @@ export const getTopProductsTool = {
   },
 } satisfies AssistantToolDefinition;
 
+export const getOrderCountsTool = {
+  name: 'get_order_counts',
+  area: 'orders',
+  description:
+    'How many orders are in each stage right now, all time, not a window. Use it for questions about pending orders, orders waiting to be confirmed, orders to pack, orders with the courier. Pending means to_confirm plus on_hold. It takes no arguments.',
+  aliases: [
+    'পেন্ডিং অর্ডার',
+    'কয়টা অর্ডার বাকি',
+    'কনফার্ম হয়নি',
+    'pending orders',
+    'koyta order pending',
+    'order confirm baki',
+    'orders to pack',
+  ],
+  input: calendarInput,
+  units: {
+    pending: 'count of orders waiting for the shop: to_confirm plus on_hold',
+    to_confirm: 'count of orders not yet confirmed',
+    on_hold: 'count of orders on hold',
+    to_pack: 'count of confirmed orders waiting to be packed',
+    with_courier: 'count of orders handed to a courier',
+    'delivered, partially_delivered, returned, cancelled': 'count of orders in that stage',
+  },
+} satisfies AssistantToolDefinition;
+
 export const assistantTools = [
+  getOrderCountsTool,
   getSalesTool,
   getSalesTodayTool,
   getSalesYesterdayTool,
