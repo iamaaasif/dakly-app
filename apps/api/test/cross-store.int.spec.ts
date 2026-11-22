@@ -4376,6 +4376,62 @@ for (const [path, status] of [
   });
 }
 
+fixture('POST /conversations/:conversationId/read', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/read`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  await f.admin.pool.query('update conversations set unread_count = 3 where id = any($1::uuid[])', [
+    [foreign, own],
+  ]);
+  await hidden(b, 'POST', url, foreign);
+  expect(await f.row('conversations', foreign)).toMatchObject({ unread_count: 3 });
+  await success(b, 'POST', url(own), 200);
+  expect(await f.row('conversations', own)).toMatchObject({ unread_count: 0, version: 0 });
+});
+
+fixture('POST /conversations/:conversationId/replies', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/replies`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  const reply = () => ({ body: 'জি, দাম ১৩০০ টাকা।', operationKey: randomUUID() });
+  await hidden(b, 'POST', url, foreign, reply);
+  await success(b, 'POST', url(own), 400, { body: '   ', operationKey: randomUUID() });
+  // The seeded chat has no sender yet, so nobody can be messaged.
+  await success(b, 'POST', url(own), 404, reply());
+  const { contact_id: contactId, channel_connection_id: connectionId } = await f.row(
+    'conversations',
+    own,
+  );
+  await f.admin.pool.query(
+    `insert into contact_identities(id,store_id,contact_id,channel_connection_id,channel,external_id)
+     values($1::uuid,$2,$3,$4,'messenger',$1::text)`,
+    [randomUUID(), b.id, contactId, connectionId],
+  );
+  await success(b, 'POST', url(own), 409, reply());
+  await f.admin.pool.query(
+    "update conversations set window_expires_at = now() + interval '1 hour' where id = $1",
+    [own],
+  );
+  const input = reply();
+  const sent = await success(b, 'POST', url(own), 201, input);
+  expect((await success(b, 'POST', url(own), 201, input)).json()).toEqual(sent.json());
+  const messages = await f.admin.pool.query(
+    "select author_type, author_user_id, status, body from messages where conversation_id = $1 and direction = 'out'",
+    [own],
+  );
+  expect(messages.rows).toEqual([
+    { author_type: 'user', author_user_id: b.owner.id, status: 'queued', body: input.body },
+  ]);
+  expect(
+    (await f.admin.pool.query('select 1 from messages where conversation_id = $1', [foreign]))
+      .rowCount,
+  ).toBe(0);
+});
+
 fixture('POST /conversations/:conversationId/notes', async () => {
   const { a, b } = await pair();
   await enableChats(b);

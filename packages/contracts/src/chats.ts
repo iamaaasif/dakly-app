@@ -184,6 +184,11 @@ export const updateConversationSchema = z
   .refine((change) => Object.keys(change).length > 0, 'Change at least one field');
 
 export const createConversationNoteSchema = z.strictObject({ body: searchText.max(4000) });
+export const createConversationReplySchema = z.strictObject({
+  body: searchText.max(2000),
+  // One per send press, so a retried request does not send the reply twice.
+  operationKey: z.uuid(),
+});
 export const takeOverConversationSchema = z
   .strictObject({ returnAfterMinutes: z.literal([30, 60, 360]).optional() })
   .default({});
@@ -192,6 +197,7 @@ export type ConversationListQuery = z.infer<typeof conversationListQuerySchema>;
 export type ConversationMessageListQuery = z.infer<typeof conversationMessageListQuerySchema>;
 export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
 export type CreateConversationNoteInput = z.infer<typeof createConversationNoteSchema>;
+export type CreateConversationReplyInput = z.infer<typeof createConversationReplySchema>;
 export type TakeOverConversationInput = z.infer<typeof takeOverConversationSchema>;
 
 export type ConversationResponse = {

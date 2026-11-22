@@ -170,6 +170,33 @@ export class InboxRepository {
     return row;
   }
 
+  async replyRoute(storeId: string, id: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          contactId: conversations.contactId,
+          channel: conversations.channel,
+          connectionId: conversations.channelConnectionId,
+          windowExpiresAt: conversations.windowExpiresAt,
+        })
+        .from(conversations)
+        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, id))),
+    );
+    return row;
+  }
+
+  // Opening a chat reads it; no new version, so a take-over in progress is not disturbed.
+  async markRead(storeId: string, id: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(conversations)
+        .set({ unreadCount: 0 })
+        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, id)))
+        .returning(fields),
+    );
+    return row;
+  }
+
   aiReplyTurn(storeId: string, id: string, lock: boolean) {
     return this.database.forStore(storeId, async (tx) => {
       const query = tx

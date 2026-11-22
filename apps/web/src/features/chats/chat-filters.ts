@@ -48,6 +48,8 @@ export const chatScreenQuerySchema = z.strictObject({
   // The list's search words; a name, a phone number or the start of one.
   q: z.string().trim().min(1).max(120).optional(),
   assignee: z.uuid().optional(),
+  // The conversation open beside the list.
+  chat: z.uuid().optional(),
   // The post open in the Comments view: its id on Meta.
   post: z.string().min(1).max(200).optional(),
   // The open AI agent drawer tab; absent when the drawer is closed.
@@ -89,6 +91,7 @@ export function chatsHref(query: Partial<ChatScreenQuery>) {
     ['sort', query.sort === 'needs_you' ? undefined : query.sort],
     ['q', query.q],
     ['assignee', query.assignee],
+    ['chat', query.channel === 'comments' ? undefined : query.chat],
     ['post', query.channel === 'comments' ? query.post : undefined],
     ['agent', query.agent],
     ['feedback', query.agent ? query.feedback : undefined],

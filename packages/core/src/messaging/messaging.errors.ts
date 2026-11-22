@@ -6,6 +6,14 @@ const MESSAGING_ERRORS = {
   AI_REPLY_NOT_BAD: { status: 409, message: 'Only a reply rated bad can be fixed' },
   AI_REPLY_ALREADY_FIXED: { status: 409, message: 'This reply is already fixed' },
   CONVERSATION_NOT_FOUND: { status: 404, message: 'Conversation not found' },
+  CONVERSATION_REPLY_UNSUPPORTED: {
+    status: 422,
+    message: 'Replies to this channel are not available yet',
+  },
+  CONVERSATION_REPLY_BLOCKED: {
+    status: 409,
+    message: 'This customer cannot be messaged now. Their reply window may be closed',
+  },
   CONVERSATION_ASSIGNEE_INVALID: { status: 400, message: 'Choose an active team member' },
   MESSAGING_PREPARATION_FAILED: { status: 503, message: 'The message could not be prepared' },
   MESSAGING_CONTACT_HAS_NO_PHONE: { status: 422, message: 'This contact has no phone number' },
