@@ -19,6 +19,7 @@ import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
 import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
+import type { QuickAddHandoff } from '../quick-add-handoff';
 import {
   ProductDescriptionFields,
   ProductFields,
@@ -36,15 +37,17 @@ type ProductFormPage = { title: string; backHref: string; photos: ReactNode; sta
 
 type ProductFormProps = {
   product?: ProductResponse;
+  // Values typed in the quick add, used only for a new product.
+  initial?: QuickAddHandoff;
   onSaved: (product: ProductResponse, failedStock: string[]) => void;
   onCancel?: () => void;
   page?: ProductFormPage;
 };
 
-export function ProductForm({ product, onSaved, onCancel, page }: ProductFormProps) {
+export function ProductForm({ product, initial, onSaved, onCancel, page }: ProductFormProps) {
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(productFormSchema),
-    defaultValues: formValues(product),
+    defaultValues: formValues(product, initial),
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
@@ -267,12 +270,12 @@ function ProductFormActions({
   );
 }
 
-function formValues(product?: ProductResponse): ProductFormValues {
+function formValues(product?: ProductResponse, initial?: QuickAddHandoff): ProductFormValues {
   if (!product)
     return {
-      name: '',
+      name: initial?.name ?? '',
       options: [],
-      pricePoisha: '',
+      pricePoisha: initial?.price ?? '',
       variants: [
         {
           optionValues: {},
@@ -280,7 +283,7 @@ function formValues(product?: ProductResponse): ProductFormValues {
           priceOverridePoisha: '',
           costPoisha: '',
           lowStockThreshold: '',
-          initialStock: 0,
+          initialStock: Number(initial?.stock || 0),
         },
       ],
       isStockTracked: true,

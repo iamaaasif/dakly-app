@@ -10,16 +10,18 @@ import { QueryError } from '@dakly/ui/query-error';
 
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
+import type { QuickAddHandoff } from '../quick-add-handoff';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
 import { ProductReadiness } from './product-readiness';
 import { ProductsLoading } from './products-loading';
 import { useSessionContext } from '@/lib/session-context';
 
-export function NewProductPage() {
+export function NewProductPage({ initial }: { initial?: QuickAddHandoff }) {
   const router = useRouter();
   return (
     <ProductForm
+      initial={initial}
       onSaved={(product) => router.replace(`/products/${product.id}`)}
       page={{
         title: 'New product',
