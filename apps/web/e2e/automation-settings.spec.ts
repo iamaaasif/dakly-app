@@ -102,10 +102,15 @@ test('publishes ready settings and keeps a refused draft saved', async ({
     await page.getByRole('button', { name: 'Edit step 1' }).click();
     await delay.fill('3');
     await page.getByRole('button', { name: 'Done' }).click();
-    await page.getByRole('button', { name: 'Start workflow', exact: true }).click();
-    const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', { name: 'Publish workflow' }).click();
-    await expect(dialog.getByRole('alert')).toHaveText('The store does not have this trigger yet');
+    const savedAgain = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/automations/${draftId}`) &&
+        response.request().method() === 'PATCH',
+    );
+    await page.getByRole('button', { name: 'Publish changes' }).click();
+    await savedAgain;
+    // The canvas checks stop a workflow whose trigger source is missing before it is published.
+    await expect(page.getByRole('button', { name: 'Start workflow', exact: true })).toBeDisabled();
     const saved = await context.request.get(`/api/automations/${draftId}`, { headers });
     expect(await saved.json()).toMatchObject({
       status: 'draft',
