@@ -7,7 +7,6 @@ import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { ClockModule } from '../platform/clock.module';
 import { ProductsModule } from '../products/products.module';
-import { StoresModule } from '../stores/stores.module';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { AiPracticeService } from './ai-practice.service';
 import { SalesAgentModule } from './sales-agent.module';
@@ -23,7 +22,6 @@ import { SalesAgentModule } from './sales-agent.module';
     MetaAuthorizationModule,
     ProductsModule,
     SalesAgentModule,
-    StoresModule,
   ],
   providers: [AiAgentSettingsRepository, AiPracticeService],
   exports: [AiPracticeService],

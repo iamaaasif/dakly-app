@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { getProductTool } from '@dakly/contracts/ai-agent-tools';
 import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
 import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import {
@@ -8,13 +9,27 @@ import {
   type ProductCardElement,
 } from '@dakly/contracts/product-card';
 
+import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
 import { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import { InboxService } from '../messaging/inbox.service';
+import { loadEnv } from '../platform/config/env';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
+import {
+  conversationEntries,
+  type HistoryMessage,
+  MATCH_PHOTO_TOOL,
+  PRODUCTS_IN_CHAT_TOOL,
+  productsInChat,
+  productsInChatVersion,
+  recentlyShownProductIds,
+  SHOWN_PRODUCTS_SOURCE,
+  shownProductIds,
+} from './chat-memory';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV5 } from './prompts/chat-reply.v5';
+import { chatReplyV6 } from './prompts/chat-reply.v6';
+import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
   isOutOfStock,
@@ -68,21 +83,59 @@ export class SalesAgentService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(ContactMemoryService) private readonly memory: ContactMemoryService,
+    @Inject(AiRunsService) private readonly runs: AiRunsService,
   ) {}
 
+  // A reply that fails the fact check is written once more with the failure named, so a slip such
+  // as an invented amount does not cost the customer a person's wait. A second failure hands over.
   async compose(input: ComposeInput): Promise<ComposedReply> {
+    const first = await this.composeOnce(input);
+    const failed = first.kind === 'reply' && (await this.factCheckFailure(input, first));
+    if (first.kind !== 'reply' || !failed) return first;
+    await this.runs.setOutcome(input.storeId, first.aiRunId, 'failed_check', failed);
+    const second = await this.composeOnce(input, { failure: failed, reply: first.text });
+    const failedAgain = second.kind === 'reply' && (await this.factCheckFailure(input, second));
+    if (second.kind !== 'reply' || !failedAgain) return second;
+    await this.runs.setOutcome(input.storeId, second.aiRunId, 'failed_check', failedAgain);
+    return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  private async factCheckFailure(
+    input: ComposeInput,
+    composed: Extract<ComposedReply, { kind: 'reply' }>,
+  ): Promise<FactCheckFailure | false> {
+    const shop = await this.stores.settings(input.storeId);
+    const checked = checkReplyFacts(
+      composed.text,
+      composed.toolResults,
+      { phone: shop.phone, linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL },
+      input.customerTexts,
+    );
+    return !checked.isSafe && checked.failure;
+  }
+
+  private async composeOnce(
+    input: ComposeInput,
+    rejected?: { failure: FactCheckFailure; reply: string },
+  ): Promise<ComposedReply> {
     const { storeId } = input;
     const signal = AbortSignal.timeout(REPLY_BUDGET_MS);
     const results: ToolResult[] = [];
+    // A practice question has no saved conversation, so the question itself is the whole history.
+    const history = input.chat
+      ? await this.inbox.replyHistory(storeId, input.chat.conversationId, HISTORY_LENGTH)
+      : undefined;
+    const inChat = history ? await this.readProductsInChat(input, history) : undefined;
+    if (inChat) results.push(inChat);
     const candidates = await this.productCandidates(input);
     if (candidates) results.push(candidates);
-    const context = await this.context(input, candidates);
-    let transcript = '';
+    const context = await this.context(input, history, inChat, candidates);
+    let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: chatReplyV5,
+        prompt: promptWith(chatReplyV6, inChat),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -100,7 +153,10 @@ export class SalesAgentService {
           cards: await this.cards(storeId, results),
           toolResults: results.map(({ result }) => result),
           toolNames: results.map(({ tool }) => tool),
-          sources: sourcesOf(results),
+          sources: withShownProducts(
+            sourcesOf(results),
+            shownProductIds(results, attempt.output.reply),
+          ),
         };
       const outcome = await this.answerToolCalls(input, attempt.toolCalls, results);
       if ('handover' in outcome) return { kind: 'handover', reason: outcome.handover };
@@ -174,36 +230,51 @@ export class SalesAgentService {
   // Search the customer's own words first, so the model starts with likely products.
   private async productCandidates(input: ComposeInput): Promise<ToolResult | undefined> {
     const photo = photoQuery(input.customerTexts);
-    if (photo) return { tool: 'match_photo', result: await this.tools.matchPhoto(input, photo) };
+    if (photo) return { tool: MATCH_PHOTO_TOOL, result: await this.tools.matchPhoto(input, photo) };
     const query = input.customerTexts.join(' ').slice(0, 100).trim();
     if (query.length < 3) return undefined;
     const result = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
     return { tool: 'search_products', result };
   }
 
+  // Read again now, so a price or stock count is never an old one from the earlier message.
+  private async readProductsInChat(
+    input: ComposeInput,
+    history: readonly HistoryMessage[],
+  ): Promise<ToolResult | undefined> {
+    const products: object[] = [];
+    for (const productId of recentlyShownProductIds(history)) {
+      const product = await this.tools.run(
+        input,
+        getProductTool.name,
+        JSON.stringify({ productId }),
+      );
+      if (!('error' in product)) products.push(product);
+    }
+    return products.length
+      ? { tool: PRODUCTS_IN_CHAT_TOOL, result: productsInChat(products) }
+      : undefined;
+  }
+
   // Stable parts first so the provider's prompt cache can reuse them.
-  private async context(input: ComposeInput, candidates: ToolResult | undefined) {
+  private async context(
+    input: ComposeInput,
+    history: readonly HistoryMessage[] | undefined,
+    inChat: ToolResult | undefined,
+    candidates: ToolResult | undefined,
+  ) {
     const shop = await this.stores.settings(input.storeId);
     const memory = await this.memory.contextFor(input.storeId, input.contactId);
-    // A practice question has no saved conversation, so the question itself is the whole history.
-    const history = input.chat
-      ? await this.inbox.messages(input.storeId, input.chat.conversationId, {
-          limit: HISTORY_LENGTH,
-        })
-      : undefined;
     const conversation = history
-      ? history.items
-          .filter((message) => message.kind !== 'note' && message.body)
-          .reverse()
-          .map((message) => ({
-            from: message.direction === 'in' ? 'customer' : 'shop',
-            text: message.body?.slice(0, 2000),
-          }))
+      ? conversationEntries(history)
       : input.customerTexts.map((text) => ({ from: 'customer', text: text.slice(0, 2000) }));
     return [
       `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
       ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
       `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
+      ...(inChat
+        ? [`<products_in_this_chat>${JSON.stringify(inChat.result)}</products_in_this_chat>`]
+        : []),
       `<product_candidates>${JSON.stringify(candidates?.result ?? { products: [] })}</product_candidates>`,
     ].join('\n');
   }
@@ -232,6 +303,21 @@ function isUnconfirmed(
       call.argumentsJson.includes(String(result.orderNumber)),
   );
   return drafted;
+}
+
+// The retry's first lines tell the model why its last reply was not sent.
+function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | undefined) {
+  return rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
+}
+
+// A run that was shown the products block records its version with the reply prompt's.
+function promptWith(prompt: typeof chatReplyV6, inChat: ToolResult | undefined) {
+  return inChat ? { ...prompt, version: `${prompt.version}+${productsInChatVersion}` } : prompt;
+}
+
+// Saved with the reply, so the next turn knows which products "this one" can mean.
+function withShownProducts(sources: { tool: string; refs: string[] }[], shown: string[]) {
+  return shown.length ? [...sources, { tool: SHOWN_PRODUCTS_SOURCE, refs: shown }] : sources;
 }
 
 function sourcesOf(results: ToolResult[]) {

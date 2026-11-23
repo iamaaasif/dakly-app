@@ -1,7 +1,11 @@
 import { Controller, Get, Inject, Query, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
-import { facebookStartSchema, type FacebookStartInput } from '@dakly/contracts/auth';
+import {
+  facebookCallbackSchema,
+  facebookStartSchema,
+  type FacebookStartInput,
+} from '@dakly/contracts/auth';
 
 import { loadEnv } from '../platform/config/env';
 import { AppError } from '../platform/errors/app-error';
@@ -51,17 +55,19 @@ export class FacebookController {
 
   @Get('callback')
   async callback(
-    @Query() query: { code?: string; state?: string; error?: string },
+    @Query() rawQuery: unknown,
     @Req() request: FastifyRequest,
     @Res() reply: FastifyReply,
   ) {
     reply.clearCookie(STATE_COOKIE, { path: '/' });
-    // The person pressed Cancel on Facebook.
-    if (query.error || typeof query.code !== 'string' || typeof query.state !== 'string')
+    // The person pressed Cancel on Facebook, or the return trip is malformed.
+    const query = facebookCallbackSchema.safeParse(rawQuery);
+    if (!query.success || query.data.error || !query.data.code || !query.data.state)
       return reply.redirect('/sign-in?facebook=cancelled', 302);
+    const { code, state } = query.data;
     try {
       const result = await this.facebook.finish(
-        { code: query.code, state: query.state, cookieNonce: request.cookies[STATE_COOKIE] },
+        { code, state, cookieNonce: request.cookies[STATE_COOKIE] },
         { ip: request.ip, userAgent: request.headers['user-agent'] },
       );
       if ('token' in result) {
