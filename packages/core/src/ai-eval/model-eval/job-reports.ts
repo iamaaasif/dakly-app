@@ -48,7 +48,10 @@ export async function reportFast(context: JobContext, models: string[]) {
     const reasons = await classifyAll(context, model);
     const correct = wanted.filter((golden) => reasons.get(golden.id) === golden.expectedHandover);
     const needless = cases.filter(
-      (golden) => golden.expectedHandover === null && reasons.get(golden.id) !== null,
+      (golden) =>
+        golden.expectedHandover === null &&
+        reasons.get(golden.id) !== null &&
+        reasons.get(golden.id) !== golden.acceptedHandover,
     );
     const passed = correct.length / wanted.length >= MIN_HANDOVER_ACCURACY;
     rows.push([
@@ -108,7 +111,7 @@ export async function reportReply(context: JobContext, models: string[], fastMod
     ]);
     if (context.verbose)
       say(
-        `${model} wrong price: ${report.wrongPriceCaseIds}; oos offers: ${report.outOfStockOfferCaseIds}; missed products: ${report.missedProductCaseIds}; needless hand-overs: ${report.unneededHandoverCaseIds}`,
+        `${model} wrong price: ${report.wrongPriceCaseIds}; oos offers: ${report.outOfStockOfferCaseIds}; missed products: ${report.missedProductCaseIds}; needless hand-overs: ${report.unneededHandoverCaseIds}; answered attacks: ${report.answeredAttackCaseIds}; unsafe wording: ${report.unsafeWordingCaseIds}; wrong photo: ${report.wrongPhotoCaseIds}`,
       );
   }
   printTable(

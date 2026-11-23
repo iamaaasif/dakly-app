@@ -119,10 +119,12 @@ export class AiPracticeService {
     if (composed.kind === 'busy') throw practiceError('PRACTICE_AI_BUSY');
     if (composed.kind === 'handover') return composed;
     const shop = await this.stores.settings(storeId);
-    const checked = checkReplyFacts(composed.text, composed.toolResults, {
-      phone: shop.phone,
-      linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
-    });
+    const checked = checkReplyFacts(
+      composed.text,
+      composed.toolResults,
+      { phone: shop.phone, linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL },
+      [question],
+    );
     if (!checked.isSafe) return { kind: 'handover', reason: 'out_of_scope' };
     return { kind: 'reply', text: composed.text, source: await this.sourceOf(storeId, composed) };
   }
