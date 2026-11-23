@@ -21,6 +21,7 @@ import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductStockService } from '../products/product-stock.service';
+import { parcelWeightGrams } from './order-parcel-weight';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
@@ -236,6 +237,11 @@ export class OrdersService {
     if (!order) throw orderError('ORDER_NOT_FOUND');
     const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
     const timeline = await orderStageHistory(storeId, orderId, this.audit);
+    const items = await this.repository.items(storeId, orderId);
+    const weights = await this.products.variantWeights(
+      storeId,
+      items.map(({ variantId }) => variantId),
+    );
     return {
       ...order,
       recipientPhone:
@@ -252,7 +258,8 @@ export class OrdersService {
       codCollectedAt: isoTime(order.codCollectedAt),
       totalPoisha: orderTotalPoisha(order),
       ...orderRiskFields(outcomes[0]),
-      items: await this.repository.items(storeId, orderId),
+      items,
+      parcelWeightGrams: parcelWeightGrams(items, weights),
       timeline,
     };
   }

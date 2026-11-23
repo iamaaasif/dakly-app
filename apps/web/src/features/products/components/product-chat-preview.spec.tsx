@@ -28,6 +28,7 @@ const product = (overrides: Partial<ProductResponse>): ProductResponse => ({
   name: 'Cotton Panjabi',
   description: null,
   category: null,
+  weightGrams: null,
   aliases: [],
   pricePoisha: 245000,
   compareAtPricePoisha: null,

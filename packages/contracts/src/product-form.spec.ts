@@ -62,4 +62,15 @@ describe('product form', () => {
         .success,
     ).toBe(false);
   });
+
+  it('reads parcel weight in grams and treats blank as not set', () => {
+    expect(productFormSchema.parse({ ...input, weightGrams: '750' }).weightGrams).toBe(750);
+    expect(productFormSchema.parse({ ...input, weightGrams: '' }).weightGrams).toBeNull();
+  });
+
+  it('refuses a weight that is zero, fractional or above 100 kg', () => {
+    for (const weightGrams of ['0', '1.5', '100001', 'abc'])
+      expect(productFormSchema.safeParse({ ...input, weightGrams }).success).toBe(false);
+    expect(changeProductSchema.safeParse({ weightGrams: null }).success).toBe(true);
+  });
 });

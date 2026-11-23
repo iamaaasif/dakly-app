@@ -1,0 +1,2 @@
+ALTER TABLE "products" ADD COLUMN "weight_grams" integer;--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_weight_grams" CHECK ("products"."weight_grams" is null or "products"."weight_grams" between 1 and 100000);

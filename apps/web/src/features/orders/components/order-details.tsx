@@ -10,6 +10,7 @@ import { OrderItems } from './order-items';
 import { OrderRiskBadge } from './order-risk-badge';
 import { OrderTimeline } from './order-timeline';
 import { formatPhone } from '@/lib/format-phone';
+import { formatWeight } from '@/lib/format-weight';
 import { useSessionContext } from '@/lib/session-context';
 
 export type OrderDetailsProps = {
@@ -196,6 +197,9 @@ function ParcelDetails({ order }: ParcelDetailsProps) {
         <p className="wrap-anywhere">
           Courier {order.courierOtherName ?? courierLabels[order.courier]}
         </p>
+      )}
+      {order.parcelWeightGrams !== null && (
+        <p>Parcel weight {formatWeight(order.parcelWeightGrams)}</p>
       )}
       {order.trackingCode && <p className="wrap-anywhere">Tracking code {order.trackingCode}</p>}
       {order.returnReason && <p className="wrap-anywhere">Return reason: {order.returnReason}</p>}

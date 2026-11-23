@@ -687,6 +687,13 @@
       "when": 1795359047195,
       "tag": "0097_suggest_product_options_purpose",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1795393248790,
+      "tag": "0098_product_weight_grams",
+      "breakpoints": true
     }
   ]
 }

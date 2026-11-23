@@ -37,6 +37,13 @@ const variantSchema = z.strictObject({
 
 const editVariantSchema = variantSchema.extend({ id: z.uuid().optional() });
 
+export const MAX_WEIGHT_GRAMS = 100_000;
+const weightGrams = z
+  .number()
+  .int('Enter a whole number of grams')
+  .min(1, 'Enter a weight above zero')
+  .max(MAX_WEIGHT_GRAMS, 'Use 100 kg or less');
+
 export const createProductSchema = z
   .strictObject({
     name: z.string().trim().min(1, 'Enter a product name').max(200, 'Use 200 characters or fewer'),
@@ -47,6 +54,7 @@ export const createProductSchema = z
       .nullable()
       .default(null),
     category: text.nullable().default(null),
+    weightGrams: weightGrams.nullable().default(null),
     aliases: z.array(text).max(100).default([]),
     pricePoisha: money.default(0),
     compareAtPricePoisha: money.nullable().default(null),
@@ -96,6 +104,7 @@ export const changeProductSchema = z
     name: text.optional(),
     description: z.string().trim().max(10000).nullable().optional(),
     category: text.nullable().optional(),
+    weightGrams: weightGrams.nullable().optional(),
     aliases: z.array(text).max(100).optional(),
     pricePoisha: money.optional(),
     compareAtPricePoisha: money.nullable().optional(),
@@ -149,6 +158,14 @@ const optionalTextInput = z
   .nullable()
   .transform((value) => value?.trim() || null);
 
+const optionalWeightInput = z.union(
+  [
+    z.literal('').transform(() => null),
+    z.string().regex(/^\d+$/, 'Enter a whole number of grams').transform(Number).pipe(weightGrams),
+  ],
+  { error: 'Enter a whole number of grams' },
+);
+
 export const productFormSchema = z
   .strictObject({
     ...createProductSchema.shape,
@@ -165,6 +182,7 @@ export const productFormSchema = z
       .union([z.literal('').transform(() => 0), takaInput], { error: takaMessage })
       .default(0),
     compareAtPricePoisha: optionalTakaInput.default(null),
+    weightGrams: optionalWeightInput.default(null),
     variants: z
       .array(
         z.strictObject({

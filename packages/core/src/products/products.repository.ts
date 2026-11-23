@@ -30,6 +30,7 @@ const productColumns = {
   name: products.name,
   description: products.description,
   category: products.category,
+  weightGrams: products.weightGrams,
   aliases: products.aliases,
   pricePoisha: products.pricePoisha,
   compareAtPricePoisha: products.compareAtPricePoisha,

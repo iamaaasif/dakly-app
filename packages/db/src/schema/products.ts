@@ -38,6 +38,8 @@ export const products = pgTable(
     name: text('name').notNull(),
     description: text('description'),
     category: text('category'),
+    // Packed parcel weight in grams for courier charges; null means the seller has not set one.
+    weightGrams: integer('weight_grams'),
     // Words customers use for it ("kurti", "কুর্তি", "three piece"), for AI search.
     aliases: text('aliases')
       .array()
@@ -84,6 +86,10 @@ export const products = pgTable(
     check(
       'products_price',
       sql`${table.pricePoisha} >= 0 and coalesce(${table.compareAtPricePoisha}, 0) >= 0`,
+    ),
+    check(
+      'products_weight_grams',
+      sql`${table.weightGrams} is null or ${table.weightGrams} between 1 and 100000`,
     ),
     check('products_name_length', sql`char_length(${table.name}) between 1 and 200`),
   ],
