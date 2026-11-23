@@ -115,6 +115,17 @@ export type CommentDriver = {
   ): Promise<void>;
 };
 
+// Meta gives a name only; it never gives a phone number or an email address.
+export type ContactProfile = { name: string | null };
+
+export type ProfileDriver = {
+  // Null when Meta refuses the lookup, for example a missing permission or a blocked user.
+  fetchProfile(
+    accessToken: string,
+    target: { channel: Exclude<ChannelKind, 'whatsapp'>; externalId: string },
+  ): Promise<ContactProfile | null>;
+};
+
 export type ChannelDriver = {
   readonly kind: ChannelKind;
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string): boolean;

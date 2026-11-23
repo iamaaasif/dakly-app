@@ -470,6 +470,41 @@ describe('MetaGraphChannelDriver', () => {
     });
   });
 
+  describe('fetchProfile', () => {
+    it('joins the first and last name Meta gives for a Messenger sender', async () => {
+      vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+        expect(url.pathname).toMatch(/\/999$/);
+        expect(url.searchParams.get('fields')).toBe('first_name,last_name');
+        expect(new Headers(init.headers).get('authorization')).toBe('Bearer test-page-credential');
+        return Response.json({ first_name: 'Karim', last_name: 'Uddin', id: '999' });
+      });
+      await expect(
+        driver.fetchProfile('test-page-credential', { channel: 'messenger', externalId: '999' }),
+      ).resolves.toEqual({ name: 'Karim Uddin' });
+    });
+
+    it('uses the name or the username for an Instagram sender', async () => {
+      vi.stubGlobal('fetch', async () => Response.json({ username: 'karim_shop', id: '1' }));
+      await expect(
+        driver.fetchProfile('t', { channel: 'instagram', externalId: '1' }),
+      ).resolves.toEqual({ name: 'karim_shop' });
+    });
+
+    it('returns nothing when Meta refuses for a missing permission', async () => {
+      vi.stubGlobal('fetch', async () => Response.json({ error: { code: 230 } }, { status: 400 }));
+      await expect(
+        driver.fetchProfile('t', { channel: 'messenger', externalId: '999' }),
+      ).resolves.toBeNull();
+    });
+
+    it('throws on an outage so the lookup is retried', async () => {
+      vi.stubGlobal('fetch', async () => Response.json({ error: { code: 2 } }, { status: 500 }));
+      await expect(
+        driver.fetchProfile('t', { channel: 'messenger', externalId: '999' }),
+      ).rejects.toMatchObject({ code: 'unavailable' });
+    });
+  });
+
   describe('downloadMedia', () => {
     const url = 'https://scontent.xx.fbcdn.net/photo.jpg';
 

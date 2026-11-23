@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, inArray, notLike } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, notLike } from 'drizzle-orm';
 
 import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
@@ -99,6 +99,48 @@ export class ContactIdentitiesRepository {
         .set({ externalId: `deleted:${id}`, profileName: null })
         .where(and(eq(contactIdentities.storeId, storeId), eq(contactIdentities.id, id))),
     );
+  }
+
+  findUnnamedMetaIdentities(storeId: string, contactId: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: contactIdentities.id,
+          connectionId: contactIdentities.channelConnectionId,
+          channel: contactIdentities.channel,
+          externalId: contactIdentities.externalId,
+        })
+        .from(contactIdentities)
+        .where(
+          and(
+            eq(contactIdentities.storeId, storeId),
+            eq(contactIdentities.contactId, contactId),
+            isNull(contactIdentities.profileName),
+            ne(contactIdentities.channel, 'whatsapp'),
+            notLike(contactIdentities.externalId, 'deleted:%'),
+          ),
+        ),
+    );
+  }
+
+  // A name a person typed on the customer is never replaced by the one Meta gives.
+  recordProfileName(
+    storeId: string,
+    { identityId, contactId, name }: { identityId: string; contactId: string; name: string },
+    now: Date,
+  ) {
+    return this.database.forStore(storeId, async (tx) => {
+      await tx
+        .update(contactIdentities)
+        .set({ profileName: name })
+        .where(and(eq(contactIdentities.storeId, storeId), eq(contactIdentities.id, identityId)));
+      await tx
+        .update(contacts)
+        .set({ name, updatedAt: now })
+        .where(
+          and(eq(contacts.storeId, storeId), eq(contacts.id, contactId), isNull(contacts.name)),
+        );
+    });
   }
 
   createInboundIdentity(storeId: string, input: InboundIdentity, now: Date) {
