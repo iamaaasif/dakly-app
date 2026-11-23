@@ -19,9 +19,7 @@ export const createKhataPageSchema = z.strictObject({
   sizeBytes: z.number().int().positive().max(KHATA_PAGE_MAX_BYTES),
 });
 
-// Rule 3: the owner decides every row. A row under the confidence threshold is imported only when
-// the owner lists it as `import`. A merge target is the owner's own choice (rule 4).
-// Rule 3: the owner can correct what Dakly read before it is imported. Only the fields the owner
+// The owner can correct what Dakly read before it is imported. Only the fields the owner
 // changed are sent; the stored reading stays as it was.
 export const khataRowEditSchema = z.strictObject({
   entryDate: z.iso.date().nullable().optional(),
@@ -36,6 +34,8 @@ export const khataRowEditSchema = z.strictObject({
     .optional(),
 });
 
+// Rule 3: the owner decides every row. A row under the confidence threshold is imported only when
+// the owner lists it as `import`. A merge target is the owner's own choice (rule 4).
 export const importKhataPageSchema = z.strictObject({
   rows: z
     .array(

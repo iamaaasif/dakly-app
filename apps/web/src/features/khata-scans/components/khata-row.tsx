@@ -7,14 +7,13 @@ import {
   confidenceTone,
   readRow,
   rowStatus,
-  takaText,
   type RowChoice,
   type RowDraft,
   type RowFieldName,
   type RowReading,
 } from '../khata-review';
 import { SuggestedCustomer } from './suggested-customer';
-import { formatWholeTaka } from '@/lib/format-money';
+import { formatWholeTaka, takaInputFromPoisha } from '@/lib/format-money';
 
 export const rowColumns =
   'grid grid-cols-[132px_minmax(110px,1.2fr)_130px_minmax(90px,1fr)_96px_64px_90px] gap-1.5';
@@ -127,7 +126,7 @@ function RowFields({ row, choice, reading, onEdit }: RowFieldsProps) {
       {input('name', row.name)}
       {input('phone', row.phone ?? '')}
       {input('item', row.item ?? '')}
-      {input('amount', takaText(row.amountPoisha))}
+      {input('amount', takaInputFromPoisha(row.amountPoisha))}
       <span
         className={cn(
           'justify-self-start rounded-full px-2 py-0.5 text-xs font-bold',

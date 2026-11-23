@@ -5,6 +5,7 @@ import {
   type KhataRowResponse,
 } from '@dakly/contracts/khata-scans';
 import { bdMobileSchema } from '@dakly/contracts/phone';
+import { takaInput } from '@dakly/contracts/products';
 
 // What the owner typed into a cell, as text. A key is present only once the owner changed it.
 export type RowDraft = {
@@ -30,22 +31,17 @@ export const untouchedChoice: RowChoice = {
 };
 
 export type RowFieldName = 'entryDate' | 'name' | 'phone' | 'item' | 'amount';
+const MAX_AMOUNT_POISHA = 10_000_000 * 100;
+
 type RowErrors = Partial<Record<RowFieldName, string>>;
 
-const MAX_AMOUNT_TAKA = 10_000_000;
-
-export function takaText(amountPoisha: number): string {
-  const taka = amountPoisha / 100;
-  return Number.isInteger(taka) ? String(taka) : taka.toFixed(2);
-}
-
+// takaInput is integer-safe but takes plain digits, so Bangla digits, commas and ৳ are removed first.
 function parseTakaText(text: string): number | null {
-  const cleaned = text
+  const plain = text
     .replace(/[০-৯]/g, (digit) => String(digit.charCodeAt(0) - '০'.charCodeAt(0)))
     .replace(/[,\s৳]/g, '');
-  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
-  const taka = Number(cleaned);
-  return taka > 0 && taka <= MAX_AMOUNT_TAKA ? Math.round(taka * 100) : null;
+  const parsed = takaInput.safeParse(plain);
+  return parsed.success && parsed.data > 0 && parsed.data <= MAX_AMOUNT_POISHA ? parsed.data : null;
 }
 
 export type RowReading = {
