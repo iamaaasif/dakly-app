@@ -51,7 +51,9 @@ export function hasWrongAmount(
   return quoted.length === 0 || quoted.some(({ value }) => value > budget);
 }
 
-const number = String.raw`(\d[\d,]*(?:\.\d+)?)`;
+// A comma belongs to the number only between digits, so "size 41, ৳1500" holds 41 and 1500.
+export const numberPattern = String.raw`(\d+(?:,\d+)*(?:\.\d+)?)`;
+const number = numberPattern;
 // Amounts and limits in a reply, with Bangla digits already turned into ASCII.
 export const amountPatterns = [
   new RegExp(String.raw`৳\s*${number}`, 'giu'),

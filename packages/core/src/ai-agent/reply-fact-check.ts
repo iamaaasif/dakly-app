@@ -2,12 +2,13 @@ import {
   amountPatterns,
   hasWrongAmount,
   leaksInstructions,
+  numberPattern,
   offerWords,
 } from '@dakly/contracts/reply-wording';
 
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
-const number = String.raw`(\d[\d,]*(?:\.\d+)?)`;
+const number = numberPattern;
 const stockWord = String.raw`(?:in stock|stock|available|আছে|ache|বাকি|baki|স্টক)`;
 const stockPatterns = [
   new RegExp(
