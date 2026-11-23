@@ -88,7 +88,7 @@ function AdCard({ ad, canEdit }: { ad: AdListItem; canEdit: boolean }) {
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-2">
             <span className="truncate font-medium">
-              {ad.title ?? (ad.source === 'ad' ? 'Ad' : 'Post')} {ad.externalId}
+              {ad.title ?? `${ad.source === 'ad' ? 'Ad' : 'Post'} ${ad.externalId}`}
             </span>
             <Badge variant={statusVariants[ad.status]} className="shrink-0 whitespace-nowrap">
               {statusLabels[ad.status]}
