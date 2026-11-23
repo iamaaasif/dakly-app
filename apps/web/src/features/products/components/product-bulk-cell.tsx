@@ -97,7 +97,7 @@ type ListSelectProps = ComponentProps<'select'> & {
 
 // A product's category or brand is picked from the shop's list; blank keeps what it has.
 const ListSelect = forwardRef<HTMLSelectElement, ListSelectProps>(function ListSelect(
-  { field, label, ...rest },
+  { field, label, className, ...rest },
   ref,
 ) {
   const { data: categories } = useProductCategories();
@@ -107,7 +107,7 @@ const ListSelect = forwardRef<HTMLSelectElement, ListSelectProps>(function ListS
       ? categoryOptions(categories?.items ?? [])
       : (brands?.items ?? []).map(({ id, name }) => ({ value: id, label: name }));
   return (
-    <select ref={ref} aria-label={label} {...rest}>
+    <select ref={ref} aria-label={label} {...rest} className={cn(className, 'min-w-36')}>
       <option value="">{field === 'categoryId' ? 'No category' : 'No brand'}</option>
       {options.map((option) => (
         <option key={option.value} value={option.value}>
