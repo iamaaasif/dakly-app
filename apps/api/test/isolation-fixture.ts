@@ -243,6 +243,7 @@ export class IsolationFixture {
       'stock_movements',
       'delivery_zones',
       'store_counters',
+      'ad_product_links',
       'product_variants',
       'products',
       'product_categories',
