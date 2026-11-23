@@ -123,9 +123,23 @@ function hasWrongPriceReply({ golden, outcome }: Scored) {
   );
 }
 
+// Saying a size or product is sold out is right and is not an offer. A clause counts as an offer
+// when it names the term without an out-of-stock phrase, or says the term is there.
 function offersOutOfStock({ golden, outcome }: Scored) {
-  return outcome.kind === 'reply' && mentionsAny(outcome.text, golden.neverOffer ?? []);
+  if (outcome.kind !== 'reply') return false;
+  return outcome.text
+    .split(clauseBreak)
+    .some(
+      (clause) =>
+        mentionsAny(clause, golden.neverOffer ?? []) &&
+        (!outOfStockPhrase.test(clause) || inStockPhrase.test(clause)),
+    );
 }
+
+const clauseBreak = /[।.!?,;\n]|\s(?:তবে|কিন্তু|but|kintu|tobe)\s/iu;
+const outOfStockPhrase =
+  /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\bnei\b|\bnai\b|out of stock|sold out|not available|unavailable/iu;
+const inStockPhrase = /আছে|\bache\b|\bin stock\b|(?<!not |un)available/iu;
 
 function hasWrongPhoto({ golden, outcome }: Scored) {
   return (

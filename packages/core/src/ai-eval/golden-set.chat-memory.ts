@@ -33,7 +33,68 @@ const deliveryOnly: Pick<GoldenCase, 'earlier'> = {
   ],
 };
 
+// Two days later, or the same customer on another channel after a merge. The chat here holds none
+// of the earlier talk. The product still comes from what the shop showed this customer before,
+// read again for its price and stock, and the memory's old price is only a hint, never an answer.
+const kurtiShownBefore: Pick<GoldenCase, 'memory' | 'shownProducts'> = {
+  memory: 'Summary: Asked about a kurti, size L.\n- size: L\n- note: kurti 1200 taka chilo',
+  shownProducts: ['কুর্তি'],
+};
+const poloShownBefore: Pick<GoldenCase, 'memory' | 'shownProducts'> = {
+  memory: 'Summary: Wants a polo shirt.\n- size: XL\n- note: polo 500 taka e peyechilo',
+  shownProducts: ['পোলো শার্ট'],
+};
+
 export const chatMemoryGoldenCases: GoldenCase[] = [
+  {
+    id: 'chat-memory-days-later-bn',
+    language: 'bangla',
+    question: 'ওইটা এখনো আছে?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+    ...kurtiShownBefore,
+  },
+  {
+    id: 'chat-memory-days-later-banglish',
+    language: 'banglish',
+    question: 'oita ekhono ache? dam koto?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+    ...kurtiShownBefore,
+  },
+  {
+    id: 'chat-memory-other-channel-mixed',
+    language: 'banglish',
+    question: 'আগে যেটা দেখাইছিলেন সেটা L size এ ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+    ...kurtiShownBefore,
+  },
+  // The memory says XL: the shop has none, so XL is never offered and the in-stock size is.
+  {
+    id: 'chat-memory-other-channel-stock-bn',
+    language: 'bangla',
+    question: 'ওই পোলোটা আমার সাইজে আছে?',
+    expectedHandover: null,
+    allowedAmountsTaka: [650],
+    mentionsAnyOf: ['পোলো', 'polo'],
+    neverOffer: ['XL'],
+    ...poloShownBefore,
+  },
+  {
+    id: 'chat-memory-other-channel-stock-banglish',
+    language: 'banglish',
+    question: 'oi polo ta amar size e ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [650],
+    mentionsAnyOf: ['পোলো', 'polo'],
+    neverOffer: ['XL'],
+    ...poloShownBefore,
+  },
+
   {
     id: 'chat-memory-size-banglish',
     language: 'banglish',
@@ -143,6 +204,23 @@ export const chatMemoryGoldenCases: GoldenCase[] = [
 ];
 
 export const chatMemoryRecordedOutcomes: Record<string, EvalOutcome> = {
+  'chat-memory-days-later-bn': { kind: 'reply', text: 'জি, কুর্তিটা এখনো আছে, দাম ৳১,৪৫০।' },
+  'chat-memory-days-later-banglish': {
+    kind: 'reply',
+    text: 'Ji, kurti ekhono ache, ৳1,450।',
+  },
+  'chat-memory-other-channel-mixed': {
+    kind: 'reply',
+    text: 'জি, কুর্তির L size এ ৮টা আছে, দাম ৳১,৪৫০।',
+  },
+  'chat-memory-other-channel-stock-bn': {
+    kind: 'reply',
+    text: 'জি, পোলো শার্টের M সাইজ আছে, ৳৬৫০।',
+  },
+  'chat-memory-other-channel-stock-banglish': {
+    kind: 'reply',
+    text: 'Ji, polo shirt M size e ache, ৳650।',
+  },
   'chat-memory-size-banglish': { kind: 'reply', text: 'জি, কুর্তি L size e ache, ৳1,450।' },
   'chat-memory-size-bn': { kind: 'reply', text: 'জি, কুর্তির L সাইজ আছে, দাম ৳১,৪৫০।' },
   'chat-memory-size-mixed': { kind: 'reply', text: 'কুর্তির L size এ ৮টা আছে, দাম ৳১,৪৫০।' },

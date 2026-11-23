@@ -27,6 +27,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS, MINUTE_MS, startOfDayIn } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
+import { InboxShownProductsRepository } from './inbox-shown-products.repository';
 import { InboxRepository } from './inbox.repository';
 import { messagingError } from './messaging.errors';
 
@@ -47,6 +48,8 @@ export class InboxService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(ChatOrdersService) private readonly chatOrders: ChatOrdersService,
+    @Inject(InboxShownProductsRepository)
+    private readonly shownProducts: InboxShownProductsRepository,
   ) {}
 
   async list(storeId: string, query: ConversationListQuery, access: StoreAccess, actor: UserActor) {
@@ -138,6 +141,14 @@ export class InboxService {
     await this.requireChats(storeId);
     await this.find(storeId, id);
     return this.repository.replyHistory(storeId, id, limit);
+  }
+
+  // Where the AI finds "the product we showed": the AI replies of all this customer's chats, so
+  // "ওইটা এখনো আছে?" works days later and on another channel after a merge.
+  async shownProductHistory(storeId: string, id: string, limit: number) {
+    await this.requireChats(storeId);
+    await this.find(storeId, id);
+    return this.shownProducts.shownProductHistory(storeId, id, limit);
   }
 
   addNote(storeId: string, id: string, actor: UserActor, input: CreateConversationNoteInput) {
