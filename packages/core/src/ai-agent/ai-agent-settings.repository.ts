@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 
 import {
   agentAbilitiesSchema,
@@ -31,6 +32,7 @@ export class AiAgentSettingsRepository {
           claimTimeoutMinutes: aiAgentSettings.claimTimeoutMinutes,
           returnToAiMinutes: aiAgentSettings.returnToAiMinutes,
           abilities: aiAgentSettings.abilities,
+          handoverRules: aiAgentSettings.handoverRules,
         })
         .from(aiAgentSettings)
         .where(and(eq(aiAgentSettings.storeId, storeId), eq(aiAgentSettings.isAutoReplyOn, true))),
@@ -46,6 +48,7 @@ export class AiAgentSettingsRepository {
       returnToAiMinutes: settings.returnToAiMinutes,
       productCardStyle: productCardStyle ?? defaultAgentAbilities.productCardStyle,
       takeOrders: takeOrders ?? defaultAgentAbilities.takeOrders,
+      handOverDiscounts: handOverDiscounts(settings.handoverRules),
     };
   }
 
@@ -88,6 +91,7 @@ export class AiAgentSettingsRepository {
     );
     return {
       hasHandoverRules: Object.keys(settings?.handoverRules ?? {}).length > 0,
+      handOverDiscounts: handOverDiscounts(settings?.handoverRules ?? {}),
       testQuestions: testQuestionsSchema.parse(settings?.testQuestions ?? []),
     };
   }
@@ -175,6 +179,10 @@ export class AiAgentSettingsRepository {
   }
 }
 
+const discountRuleSchema = z.object({ discounts: handoverRulesSchema.shape.discounts.optional() });
+const handOverDiscounts = (rules: unknown) =>
+  discountRuleSchema.parse(rules).discounts ?? defaultHandoverRules.discounts;
+
 // Only the choices on the screen are offered; the engine's 30 minute default shows as 1 hour.
 function choice(minutes: number | null): 60 | 1440 | null {
   if (minutes === null) return null;
@@ -199,8 +207,9 @@ function toResponse(row: typeof aiAgentSettings.$inferSelect): AgentSettingsResp
     isAutoReplyOn: row.isAutoReplyOn,
     replyLanguage: row.replyLanguage,
     abilities: { ...defaultAgentAbilities, ...agentAbilitiesSchema.partial().parse(row.abilities) },
+    // Rules saved before a rule existed take that rule's default.
     handoverRules: handoverRulesSaved
-      ? handoverRulesSchema.parse(row.handoverRules)
+      ? { ...defaultHandoverRules, ...handoverRulesSchema.partial().parse(row.handoverRules) }
       : defaultHandoverRules,
     returnToAiMinutes: choice(row.returnToAiMinutes),
     extraRules: row.extraRules,

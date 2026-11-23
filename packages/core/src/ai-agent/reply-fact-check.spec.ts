@@ -151,6 +151,32 @@ describe('checkReplyFacts', () => {
     expect(check('Free size ache, Tk 1200', freeSize)).toEqual({ isSafe: true });
   });
 
+  it('allows a reply that refuses a discount and holds the price', () => {
+    for (const reply of [
+      'দুঃখিত, ছাড় নেই। কুর্তির দাম ৳1200 ফিক্সড।',
+      'এই দামে ছাড় দেওয়া যাবে না, দাম ১২০০ টাকা',
+      'ছাড়ের সুযোগ নেই, তবে অর্ডার করতে চাইলে বলুন',
+      'Sorry, no discount. The price is fixed at ৳1200.',
+      'We cannot offer any discount on this kurti.',
+      'Discount nai apu, dam 1200 taka fixed.',
+      'Sorry vaia, discount dite parbo na. Order korben?',
+      'আমরা কোনো ছাড় দিই না, দাম ফিক্সড।',
+    ])
+      expect(check(reply), reply).toEqual({ isSafe: true });
+  });
+
+  it('still rejects a real offer next to a refusal', () => {
+    for (const reply of [
+      '10% ছাড় দিচ্ছি',
+      'ছাড় নেই, তবে free delivery দেব',
+      'No discount on panjabi, but 10% off on kurti',
+      'discount dite parbo na keno, dibo',
+      'Discount dibo apu, ৳1200 er jaygay',
+      'ছাড় পাবেন, অর্ডার করুন',
+    ])
+      expect(check(reply), reply).toEqual({ isSafe: false, failure: 'offer' });
+  });
+
   it('allows an offer the shop wrote in a policy passage', () => {
     const policy = [{ passages: [{ content: '10% discount on your first order' }] }];
     expect(check('First order e 10% discount ache', policy)).toEqual({ isSafe: true });

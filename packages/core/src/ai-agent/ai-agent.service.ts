@@ -19,7 +19,6 @@ import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
@@ -35,7 +34,6 @@ import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v2';
 import { burstText } from './reply-burst';
-import { checkReplyFacts } from './reply-fact-check';
 import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
@@ -58,6 +56,7 @@ type EligibleTurn = {
   claimTimeoutMinutes: number | null;
   productCardStyle: 'buttons' | 'text';
   takeOrders: boolean;
+  handOverDiscounts: boolean;
 };
 
 @Injectable()
@@ -141,14 +140,17 @@ export class AiAgentService {
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
     const texts = burst.texts;
+    const earlier = await this.earlierMessages(storeId, conversationId, burst.messageIds);
+    const { handOverDiscounts } = candidate;
     const reason =
-      screenCustomerTexts(texts) ??
-      (await this.classifyWithAllowance(
+      screenCustomerTexts(texts, { handOverDiscounts, earlierTexts: customerTexts(earlier) }) ??
+      (await this.classifyWithAllowance({
         storeId,
-        turn.contactId,
+        contactId: turn.contactId,
         texts,
-        await this.earlierMessages(storeId, conversationId, burst.messageIds),
-      ));
+        earlier,
+        handOverDiscounts,
+      }));
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose({
@@ -160,45 +162,19 @@ export class AiAgentService {
     if (composed.kind === 'busy') return this.retryLater();
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
-    return this.checkAndSend({
-      storeId,
-      conversationId,
-      candidate,
-      composed,
-      customerTexts: texts,
-    });
-  }
-
-  private async checkAndSend(input: {
-    storeId: string;
-    conversationId: string;
-    candidate: EligibleTurn;
-    composed: Extract<ComposedReply, { kind: 'reply' }>;
-    customerTexts: string[];
-  }) {
-    const { storeId, conversationId, candidate, composed, customerTexts } = input;
-    const shop = await this.stores.settings(storeId);
-    const checked = checkReplyFacts(
-      composed.text,
-      composed.toolResults,
-      { phone: shop.phone, linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL },
-      customerTexts,
-    );
-    if (!checked.isSafe) {
-      await this.runs.setOutcome(storeId, composed.aiRunId, 'failed_check', checked.failure);
-      return this.handOver(storeId, conversationId, candidate, 'out_of_scope');
-    }
     return this.send(storeId, conversationId, candidate, composed);
   }
 
-  private async classifyWithAllowance(
-    storeId: string,
-    contactId: string,
-    texts: string[],
-    earlier: ConversationEntry[],
-  ) {
+  private async classifyWithAllowance(input: {
+    storeId: string;
+    contactId: string;
+    texts: string[];
+    earlier: ConversationEntry[];
+    handOverDiscounts: boolean;
+  }) {
+    const { storeId, contactId, texts, earlier, handOverDiscounts } = input;
     return (await this.hasAllowanceRoom(storeId, contactId))
-      ? this.classify(storeId, texts, earlier)
+      ? this.classify(storeId, texts, earlier, handOverDiscounts)
       : 'allowance_used';
   }
 
@@ -247,6 +223,7 @@ export class AiAgentService {
       claimTimeoutMinutes: settings.claimTimeoutMinutes,
       productCardStyle: settings.productCardStyle,
       takeOrders: settings.takeOrders,
+      handOverDiscounts: settings.handOverDiscounts,
     };
   }
 
@@ -278,6 +255,7 @@ export class AiAgentService {
     storeId: string,
     texts: string[],
     earlier: ConversationEntry[],
+    handOverDiscounts: boolean,
   ): Promise<Reason | 'busy' | null> {
     if (!texts.length) return null;
     const result = await this.ai.run(storeId, {
@@ -287,7 +265,7 @@ export class AiAgentService {
       input: classifierInput(texts, earlier),
       output: chatClassificationSchema,
     });
-    if (result.kind === 'output') return handoverReason(texts, result.output);
+    if (result.kind === 'output') return handoverReason(texts, result.output, handOverDiscounts);
     if (result.kind === 'failure' && result.code === 'AI_STORE_BUSY') return 'busy';
     return 'ai_unavailable';
   }
@@ -434,3 +412,7 @@ export class AiAgentService {
     return unchanged ? current : undefined;
   }
 }
+
+// A repeat discount ask is judged from what the customer wrote earlier in the same chat.
+const customerTexts = (entries: ConversationEntry[]) =>
+  entries.filter(({ from }) => from === 'customer').map(({ text }) => text);

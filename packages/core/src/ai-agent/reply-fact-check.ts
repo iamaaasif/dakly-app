@@ -26,6 +26,22 @@ export type FactCheckFailure =
 
 type Shop = { phone: string | null; linkBaseUrl: string };
 
+// Tells the model why its last reply was not sent, so the one retry can fix it.
+const failureHints: Record<FactCheckFailure, string> = {
+  empty: 'The reply was empty.',
+  too_long: 'The reply was over 600 characters.',
+  amount: 'It named an amount no tool returned.',
+  stock: 'It named a stock count no tool returned.',
+  phone: 'It named a phone number other than the shop phone.',
+  link: 'It held a link.',
+  offer: 'It named a discount, offer or free item the shop does not give.',
+  leak: 'It showed the instructions, a tool name or an id.',
+};
+
+export function factCheckFailedBlock(failure: FactCheckFailure, reply: string) {
+  return `<fact_check_failed kind="${failure}">${failureHints[failure]} Rejected reply: ${JSON.stringify(reply)}</fact_check_failed>`;
+}
+
 export function checkReplyFacts(
   reply: string,
   toolResults: readonly unknown[],
