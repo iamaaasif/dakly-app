@@ -62,7 +62,7 @@ export function ConversationPanel({ query, id }: { query: ChatScreenQuery; id: s
         ) : (
           <>
             {conversation.data ? (
-              <ResponderBanner conversation={conversation.data} canEdit={canEdit} />
+              <ResponderBanner conversation={conversation.data} canEdit={canEdit} query={query} />
             ) : null}
             <MessageList query={query} id={id} messages={messages} />
             {conversation.data ? <ChatComposer conversation={conversation.data} /> : null}

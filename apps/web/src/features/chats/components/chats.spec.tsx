@@ -397,9 +397,6 @@ describe('Conversation actions', () => {
         });
         return Response.json({ ...sadia, ...chat }, verified);
       }
-      if (path.startsWith('/api/conversations/labels'))
-        return Response.json(['VIP', 'Wholesale'], verified);
-      if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
       if (path.startsWith('/api/conversations/assignees'))
         return Response.json(
           [
@@ -412,7 +409,7 @@ describe('Conversation actions', () => {
         return Response.json({ items: [], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
         return Response.json({ ...sadia, unreadCount: 0, ...chat }, verified);
-      return ok([sadia]);
+      return sidebarResponse(path) ?? ok([sadia]);
     });
   }
 
@@ -455,6 +452,29 @@ describe('Conversation actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(sent).toHaveLength(3));
     expect(sent[2]!.body).toEqual({ label: 'Eid', change: 'add' });
+  });
+
+  it('says so when the AI is assigned the chat but auto-reply is off', async () => {
+    autoReplyOn = false;
+    respondToActions({});
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canEditStoreSettings: true });
+    expect(
+      await screen.findByText(/AI auto-reply is off, so Dakly AI will not answer/),
+    ).toBeTruthy();
+    expect(screen.queryByText('Dakly AI is handling this chat')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Turn on AI auto-reply' })).toBeTruthy();
+    autoReplyOn = true;
+  });
+
+  it('shows the auto-reply-off notice without a link to someone who cannot change settings', async () => {
+    autoReplyOn = false;
+    respondToActions({});
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canEditStoreSettings: false });
+    expect(
+      await screen.findByText(/AI auto-reply is off, so Dakly AI will not answer/),
+    ).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Turn on AI auto-reply' })).toBeNull();
+    autoReplyOn = true;
   });
 
   it('hands a chat back to the AI', async () => {

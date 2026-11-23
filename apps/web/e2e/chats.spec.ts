@@ -114,6 +114,10 @@ test('lists chats by tab and channel and shows the tab counts', async ({
         ],
       );
     }
+    await database.pool.query(
+      'insert into ai_agent_settings (store_id, is_auto_reply_on) values ($1, true)',
+      [storeId],
+    );
     const productId = randomUUID();
     await database.pool.query(
       "insert into products(id, store_id, name, is_stock_tracked, price_poisha) values ($1, $2, 'Women''s Kurti', true, 125000)",
@@ -165,7 +169,12 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByText('Sadia Islam')).toBeHidden();
 
     await page.getByRole('link', { name: /^All\s*4$/ }).click();
-    await page.getByRole('link', { name: 'Instagram' }).click();
+    // Wait for the tab to clear, or the Instagram link is clicked with the old tab still in it.
+    await expect(page).not.toHaveURL(/tab=/);
+    await page
+      .getByRole('navigation', { name: 'Channel' })
+      .getByRole('link', { name: 'Instagram' })
+      .click();
     await expect(page).toHaveURL(/channel=instagram/);
     await expect(page.getByText('Rumana Akter')).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeHidden();
@@ -181,6 +190,20 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByRole('button', { name: 'Take over' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
     await capture(page, 'take-over');
+    await database.pool.query(
+      'update ai_agent_settings set is_auto_reply_on = false where store_id = $1',
+      [storeId],
+    );
+    await page.reload();
+    await expect(page.getByText(/AI auto-reply is off, so Dakly AI will not answer/)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Turn on AI auto-reply' })).toBeVisible();
+    await capture(page, 'auto-reply-off');
+    await database.pool.query(
+      'update ai_agent_settings set is_auto_reply_on = true where store_id = $1',
+      [storeId],
+    );
+    await page.reload();
+    await expect(page.getByText('Dakly AI is handling this chat')).toBeVisible();
     await page.getByRole('button', { name: /^Label/ }).click();
     await page.getByLabel('New label').fill('VIP');
     await page.getByRole('button', { name: 'Add' }).click();
@@ -216,6 +239,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
   } finally {
+    await database.pool.query('delete from ai_agent_settings where store_id = $1', [storeId]);
     await database.pool.query('delete from product_variants where store_id = $1', [storeId]);
     await database.pool.query('delete from products where store_id = $1', [storeId]);
     await database.pool.query('delete from messages where store_id = $1', [storeId]);
