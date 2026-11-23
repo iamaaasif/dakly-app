@@ -397,6 +397,32 @@ describe('KhataImportsService (Postgres)', () => {
     expect(dated.rows).toEqual([{ day: '2026-11-12', source: 'khata_import' }]);
   });
 
+  it('imports the owner corrections instead of what was read', async () => {
+    const { storeId, userId } = await shop(5);
+    const page = await readPageOf(storeId, userId, [
+      baki({ phoneText: null, dateText: '৭/১১', confidence: 60 }),
+    ]);
+    const row = page.rows[0]!;
+
+    await imports.importPage(storeId, userId, page.id, {
+      rows: [
+        {
+          rowId: row.id,
+          action: 'import',
+          isChecked: true,
+          edit: { phone: '01911223344', amountPoisha: 40_000, entryDate: '2025-11-07' },
+        },
+      ],
+    });
+
+    expect(await balanceOf(storeId, '01911223344')).toBe(40_000);
+    const dated = await admin.pool.query(
+      "select to_char(occurred_at at time zone 'Asia/Dhaka', 'YYYY-MM-DD') as day from due_entries where store_id=$1",
+      [storeId],
+    );
+    expect(dated.rows).toEqual([{ day: '2025-11-07' }]);
+  });
+
   it('refuses a second import of the same page and a decision list that misses a row', async () => {
     const { storeId, userId } = await shop(5);
     const page = await readPageOf(storeId, userId, [baki(), baki({ phoneText: '01811111111' })]);

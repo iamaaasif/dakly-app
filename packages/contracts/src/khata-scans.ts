@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { bdMobileSchema } from './phone';
+
 // Feature 13, Khata Scanner rules 1 to 3: up to 10 photos or PDF pages of 10 MB each.
 export const KHATA_PAGE_MAX_BYTES = 10 * 1024 * 1024;
 export const KHATA_CONFIDENCE_THRESHOLD = 85;
@@ -19,6 +21,21 @@ export const createKhataPageSchema = z.strictObject({
 
 // Rule 3: the owner decides every row. A row under the confidence threshold is imported only when
 // the owner lists it as `import`. A merge target is the owner's own choice (rule 4).
+// Rule 3: the owner can correct what Dakly read before it is imported. Only the fields the owner
+// changed are sent; the stored reading stays as it was.
+export const khataRowEditSchema = z.strictObject({
+  entryDate: z.iso.date().nullable().optional(),
+  name: z.string().trim().min(1).max(120).optional(),
+  phone: bdMobileSchema.nullable().optional(),
+  item: z.string().trim().max(200).nullable().optional(),
+  amountPoisha: z
+    .number()
+    .int()
+    .positive()
+    .max(10_000_000 * 100)
+    .optional(),
+});
+
 export const importKhataPageSchema = z.strictObject({
   rows: z
     .array(
@@ -28,6 +45,7 @@ export const importKhataPageSchema = z.strictObject({
         // Required to import a row under the confidence threshold (SHOP-R7).
         isChecked: z.boolean().optional(),
         mergeContactId: z.uuid().optional(),
+        edit: khataRowEditSchema.optional(),
       }),
     )
     .min(1)
@@ -53,6 +71,7 @@ export const khataModelOutputSchema = z.strictObject({
   ),
 });
 
+export type KhataRowEdit = z.infer<typeof khataRowEditSchema>;
 export type ImportKhataPageInput = z.infer<typeof importKhataPageSchema>;
 export type KhataRowOutcome = (typeof khataRowOutcomes)[number];
 export type KhataImportStatus = (typeof khataImportStatuses)[number];
