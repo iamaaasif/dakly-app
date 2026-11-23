@@ -42,7 +42,12 @@ export function ChatComposer({ conversation }: { conversation: ConversationRespo
         disabled={blocked}
         pending={sending.isPending}
         onChange={setText}
-        onSend={() => sending.mutate(text.trim(), { onSuccess: () => setText('') })}
+        onSend={() => {
+          // The box clears at once, like a chat app; a failed send puts the words back.
+          const body = text.trim();
+          setText('');
+          sending.mutate(body, { onError: () => setText(body) });
+        }}
       />
       {sending.error ? (
         <p role="alert" className="text-danger">

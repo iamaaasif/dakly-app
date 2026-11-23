@@ -1,4 +1,10 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useRef } from 'react';
 
 import type { ConversationMessageResponse, ConversationResponse } from '@dakly/contracts/chats';
@@ -46,9 +52,11 @@ export function useMarkConversationRead() {
   });
 }
 
+// The reply shows in the thread the moment it is sent, as a queued message the thread read replaces.
 export function useSendReply(id: string) {
   const { request, contextTag } = useStoreRequest();
   const client = useQueryClient();
+  const messagesKey = chatsKeys.messages(contextTag, id);
   // One key per attempt: a retry after a lost answer reuses it, so the customer gets one message.
   const key = useRef<string | undefined>(undefined);
   return useMutation({
@@ -59,14 +67,42 @@ export function useSendReply(id: string) {
         body: { body, operationKey: key.current },
       });
     },
+    onMutate: async (body) => {
+      await client.cancelQueries({ queryKey: messagesKey });
+      const before = client.getQueryData<InfiniteData<MessagePage>>(messagesKey);
+      const now = new Date().toISOString();
+      const pending: ConversationMessageResponse = {
+        id: `pending-${key.current ?? crypto.randomUUID()}`,
+        kind: 'text',
+        direction: 'out',
+        body,
+        authorType: 'user',
+        authorUserId: null,
+        status: 'queued',
+        sourceType: 'chat',
+        createdAt: now,
+        sentAt: null,
+      };
+      // The list is newest first, so the new message goes at the front of the first page.
+      if (before?.pages[0])
+        client.setQueryData<InfiniteData<MessagePage>>(messagesKey, {
+          ...before,
+          pages: [
+            { ...before.pages[0], items: [pending, ...before.pages[0].items] },
+            ...before.pages.slice(1),
+          ],
+        });
+      return { before };
+    },
     onSuccess: () => {
       key.current = undefined;
-      return client.invalidateQueries({ queryKey: chatsKeys.messages(contextTag, id) });
     },
-    onError: (error) => {
+    onError: (error, _body, context) => {
+      if (context?.before) client.setQueryData(messagesKey, context.before);
       if (error instanceof ApiError && error.status !== undefined && error.status < 500)
         key.current = undefined;
     },
+    onSettled: () => client.invalidateQueries({ queryKey: messagesKey }),
   });
 }
 
