@@ -16,4 +16,4 @@ Entry format:
 
 ## Entries
 
-None yet.
+None open. The three entries from the auth screens were built in ACC-19 parts 5 and 6: sign-up saves the source, business name, website and offering and creates the first shop, Continue with Facebook is a real redirect flow, and the reset code error shows on the password step. See [01-account-and-team.md](../features/01-account-and-team.md).

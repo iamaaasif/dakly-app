@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PasswordReset } from './password-reset';
 import { SignInScreen } from './sign-in-screen';
+import { SignUpBusinessStep } from './sign-up-business-step';
 import { SignUpScreen } from './sign-up-screen';
 
 afterEach(() => {
@@ -179,6 +180,25 @@ describe('Sign in', () => {
     expect(screen.queryByRole('button', { name: 'Send verification code' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Terms' })).toBeNull();
   });
+  it('asks for the email, a valid password and a source before the business step', async () => {
+    show(
+      <SignUpScreen
+        config={{
+          legal: { termsUrl: '/terms', privacyUrl: '/privacy', termsVersion: 'v1' },
+          googleClientId: null,
+        }}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Enter your email address.')).toBeTruthy();
+    expect(screen.getByText('Use at least 8 characters.')).toBeTruthy();
+    expect(screen.getByText('Tell us how you heard about Dakly.')).toBeTruthy();
+    await user.type(screen.getByLabelText('Password'), 'abcdefgh');
+    expect(await screen.findByText('Add at least one number.')).toBeTruthy();
+    const facebook = screen.getByRole('link', { name: 'Sign up with Facebook' });
+    expect(facebook.getAttribute('href')).toBe('/api/auth/facebook/start?termsVersion=v1');
+  });
   it('requires the second factor after a password reset', async () => {
     vi.stubGlobal('fetch', async (url: string) =>
       url.endsWith('/password-reset/confirm')
@@ -230,5 +250,49 @@ describe('Sign in', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Enter the code again' }));
     expect(await screen.findByLabelText('6-digit code')).toBeTruthy();
+  });
+  it('sends how the owner heard about Dakly with the sign-up code and keeps the shop details', async () => {
+    const requests: unknown[] = [];
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      requests.push(JSON.parse(String(init.body)));
+      return new Response(null, { status: 204 });
+    });
+    let sent: unknown;
+    show(
+      <SignUpBusinessStep
+        account={{
+          email: 'owner@example.com',
+          password: 'abcdefg1',
+          source: 'other',
+          sourceOther: 'A friend',
+        }}
+        legal={{ termsUrl: '/terms', privacyUrl: '/privacy', termsVersion: 'v1' }}
+        onSent={(value) => {
+          sent = value;
+        }}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Your name'), 'Rina Akter');
+    await user.type(screen.getByLabelText('Business name'), 'Urban Trend');
+    await user.type(screen.getByLabelText('Phone number'), '01712345678');
+    await user.type(screen.getByLabelText(/Website or Facebook Page/), 'facebook.com/urbantrend');
+    await user.click(screen.getByRole('radio', { name: /^Both/ }));
+    await user.click(screen.getByRole('button', { name: 'Create a free account' }));
+    await waitFor(() => expect(sent).toBeTruthy());
+    expect(requests[0]).toMatchObject({
+      purpose: 'sign_up',
+      phone: '01712345678',
+      email: 'owner@example.com',
+      source: 'other',
+      sourceOther: 'A friend',
+    });
+    expect(sent).toMatchObject({
+      shop: {
+        businessName: 'Urban Trend',
+        websiteUrl: 'facebook.com/urbantrend',
+        offering: 'both',
+      },
+    });
   });
 });
