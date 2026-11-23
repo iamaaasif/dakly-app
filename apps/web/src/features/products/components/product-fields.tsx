@@ -83,6 +83,22 @@ export function ProductPriceFields({ productId }: ProductFieldsProps) {
   );
 }
 
+export function ProductDeliveryFields() {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      <ProductInputField
+        name="weightGrams"
+        label="Parcel weight (grams)"
+        placeholder="e.g. 500"
+        optional
+      />
+      <p className="self-end pb-2 text-sm text-text-muted">
+        Used for courier charges. Orders add it up so you do not retype it.
+      </p>
+    </div>
+  );
+}
+
 export function ProductDescriptionFields({ productId }: ProductFieldsProps) {
   return (
     <>

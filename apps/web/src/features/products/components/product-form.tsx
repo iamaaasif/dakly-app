@@ -23,6 +23,7 @@ import { assistantDraftValues } from '../product-assistant-draft';
 import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
 import type { QuickAddHandoff } from '../quick-add-handoff';
 import {
+  ProductDeliveryFields,
   ProductDescriptionFields,
   ProductFields,
   ProductNameFields,
@@ -219,6 +220,9 @@ function ProductFormPageLayout({
           <FieldCard title="Price">
             <ProductPriceFields productId={productId} />
           </FieldCard>
+          <FieldCard title="Delivery">
+            <ProductDeliveryFields />
+          </FieldCard>
           <Card>
             <ProductVariantsCard product={product} />
           </Card>
@@ -319,6 +323,7 @@ function formValues(
     name: product.name,
     description: product.description,
     category: product.category,
+    weightGrams: weightText(product.weightGrams),
     aliases: product.aliases,
     options: product.options,
     pricePoisha: takaInputFromPoisha(product.pricePoisha),
@@ -340,6 +345,10 @@ function formValues(
     isVisibleInChats: product.isVisibleInChats,
     isVisibleInOrderLink: product.isVisibleInOrderLink,
   };
+}
+
+function weightText(grams: number | null) {
+  return grams === null ? '' : String(grams);
 }
 
 function productChanges(

@@ -37,6 +37,7 @@ const product: ProductResponse = {
   name: 'Cotton Panjabi',
   description: null,
   category: 'Men',
+  weightGrams: null,
   aliases: [],
   pricePoisha: 245000,
   compareAtPricePoisha: 295000,

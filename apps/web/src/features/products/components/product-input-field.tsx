@@ -12,6 +12,11 @@ type ProductInputFieldProps = {
   autoFocus?: boolean;
 };
 
+function inputModeFor(name: string) {
+  if (name.endsWith('Poisha')) return 'decimal';
+  return name === 'weightGrams' ? 'numeric' : undefined;
+}
+
 export function ProductInputField({
   name,
   label,
@@ -27,7 +32,7 @@ export function ProductInputField({
           {...control}
           autoFocus={autoFocus}
           placeholder={placeholder}
-          inputMode={name.endsWith('Poisha') ? 'decimal' : undefined}
+          inputMode={inputModeFor(name)}
           {...register(name)}
         />
       )}
