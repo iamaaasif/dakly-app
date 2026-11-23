@@ -88,8 +88,9 @@ export const websiteUrlSchema = z
 
 export const createStoreSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
-  businessType: z.string().trim().min(1).max(100),
-  district: z.string().trim().min(1).max(100),
+  // The setup screen requires both; sign-up creates the first shop before it knows either.
+  businessType: z.string().trim().min(1).max(100).optional(),
+  district: z.string().trim().min(1).max(100).optional(),
   howYouSell: z.array(z.enum(howYouSellOptions)).min(1).max(4),
   customerListSize: z.enum(customerListSizes),
   planCode: z.string().trim().min(1).max(100),
@@ -98,6 +99,8 @@ export const createStoreSchema = z.strictObject({
   offering: z.enum(storeOfferings).optional(),
 });
 export type CreateStoreInput = z.infer<typeof createStoreSchema>;
+// The setup screen still asks for both.
+export const setupStoreSchema = createStoreSchema.required({ businessType: true, district: true });
 export type SetupProfile = {
   howYouSell: (typeof howYouSellOptions)[number][];
   extensions: string[];

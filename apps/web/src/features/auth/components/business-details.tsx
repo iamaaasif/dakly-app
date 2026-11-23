@@ -2,13 +2,13 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, FormProvider } from 'react-hook-form';
 
-import { createStoreSchema } from '@dakly/contracts/stores';
+import { setupStoreSchema } from '@dakly/contracts/stores';
 import { Button } from '@dakly/ui/button';
 
 import type { BusinessDraft } from '../auth.types';
 import { BusinessFields } from './business-fields';
 
-const businessSchema = createStoreSchema.omit({ planCode: true, billingCycle: true });
+const businessSchema = setupStoreSchema.omit({ planCode: true, billingCycle: true });
 export function BusinessDetails({
   draft,
   onNext,

@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
 import type { PlansResponse } from '@dakly/contracts/billing';
-import { createStoreSchema } from '@dakly/contracts/stores';
+import { setupStoreSchema } from '@dakly/contracts/stores';
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 
@@ -27,7 +27,7 @@ export function PlanForm({ draft, onBack, onCreated, plans }: PlanFormProps) {
   const cycle: 'monthly' | 'yearly' =
     useSearchParams().get('cycle') === 'yearly' ? 'yearly' : 'monthly';
   const form = useForm({
-    resolver: zodResolver(createStoreSchema),
+    resolver: zodResolver(setupStoreSchema),
     defaultValues: { ...draft, planCode: '', billingCycle: cycle },
   });
   function chooseCycle(value: 'monthly' | 'yearly') {
