@@ -2,6 +2,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
+import type { HandoverRules } from '@dakly/contracts/ai-agent-settings';
 import { chatClassificationSchema } from '@dakly/contracts/chat-classification';
 import type { handoverReasons } from '@dakly/contracts/chats';
 import { parseCardTap } from '@dakly/contracts/product-card';
@@ -35,6 +36,7 @@ import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v2';
 import { burstText } from './reply-burst';
 import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
+import type { ShopRules } from './shop-rules';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
@@ -55,8 +57,7 @@ type EligibleTurn = {
   debounceSeconds: number;
   claimTimeoutMinutes: number | null;
   productCardStyle: 'buttons' | 'text';
-  takeOrders: boolean;
-  handOverDiscounts: boolean;
+  rules: ShopRules;
 };
 
 @Injectable()
@@ -141,15 +142,18 @@ export class AiAgentService {
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
     const texts = burst.texts;
     const earlier = await this.earlierMessages(storeId, conversationId, burst.messageIds);
-    const { handOverDiscounts } = candidate;
+    const { rules } = candidate;
     const reason =
-      screenCustomerTexts(texts, { handOverDiscounts, earlierTexts: customerTexts(earlier) }) ??
+      screenCustomerTexts(texts, {
+        handOverDiscounts: rules.handover.discounts,
+        earlierTexts: customerTexts(earlier),
+      }) ??
       (await this.classifyWithAllowance({
         storeId,
         contactId: turn.contactId,
         texts,
         earlier,
-        handOverDiscounts,
+        rules: rules.handover,
       }));
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
@@ -158,6 +162,7 @@ export class AiAgentService {
       contactId: turn.contactId,
       chat: { conversationId, channel: candidate.target.channel },
       customerTexts: texts,
+      rules,
     });
     if (composed.kind === 'busy') return this.retryLater();
     if (composed.kind === 'handover')
@@ -170,11 +175,11 @@ export class AiAgentService {
     contactId: string;
     texts: string[];
     earlier: ConversationEntry[];
-    handOverDiscounts: boolean;
+    rules: HandoverRules;
   }) {
-    const { storeId, contactId, texts, earlier, handOverDiscounts } = input;
+    const { storeId, contactId, texts, earlier, rules } = input;
     return (await this.hasAllowanceRoom(storeId, contactId))
-      ? this.classify(storeId, texts, earlier, handOverDiscounts)
+      ? this.classify(storeId, texts, earlier, rules)
       : 'allowance_used';
   }
 
@@ -222,8 +227,7 @@ export class AiAgentService {
       debounceSeconds: settings.debounceSeconds,
       claimTimeoutMinutes: settings.claimTimeoutMinutes,
       productCardStyle: settings.productCardStyle,
-      takeOrders: settings.takeOrders,
-      handOverDiscounts: settings.handOverDiscounts,
+      rules: settings.rules,
     };
   }
 
@@ -255,7 +259,7 @@ export class AiAgentService {
     storeId: string,
     texts: string[],
     earlier: ConversationEntry[],
-    handOverDiscounts: boolean,
+    rules: HandoverRules,
   ): Promise<Reason | 'busy' | null> {
     if (!texts.length) return null;
     const result = await this.ai.run(storeId, {
@@ -265,7 +269,7 @@ export class AiAgentService {
       input: classifierInput(texts, earlier),
       output: chatClassificationSchema,
     });
-    if (result.kind === 'output') return handoverReason(texts, result.output, handOverDiscounts);
+    if (result.kind === 'output') return handoverReason(texts, result.output, rules);
     if (result.kind === 'failure' && result.code === 'AI_STORE_BUSY') return 'busy';
     return 'ai_unavailable';
   }
@@ -315,7 +319,7 @@ export class AiAgentService {
     const tap = parseCardTap(postback);
     const before = tap && (await this.eligibleTurn(storeId, conversationId));
     if (!tap || !before) return;
-    if (tap.kind === 'human' || (tap.kind === 'order' && !before.takeOrders))
+    if (tap.kind === 'human' || (tap.kind === 'order' && !before.rules.takeOrders))
       return this.handOver(
         storeId,
         conversationId,

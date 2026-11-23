@@ -91,8 +91,11 @@ export class AiPracticeService {
   }
 
   async ask(storeId: string, question: string): Promise<TestAnswerResponse> {
-    const { handOverDiscounts } = await this.settings.practice(storeId);
-    const screened = screenCustomerTexts([question], { handOverDiscounts, earlierTexts: [] });
+    const { rules } = await this.settings.practice(storeId);
+    const screened = screenCustomerTexts([question], {
+      handOverDiscounts: rules.handover.discounts,
+      earlierTexts: [],
+    });
     if (screened) return { kind: 'handover', reason: screened };
     const classified = await this.ai.run(storeId, {
       tier: 'fast',
@@ -105,7 +108,7 @@ export class AiPracticeService {
       throw practiceError('PRACTICE_AI_BUSY');
     const reason =
       classified.kind === 'output'
-        ? handoverReason([question], classified.output, handOverDiscounts)
+        ? handoverReason([question], classified.output, rules.handover)
         : 'ai_unavailable';
     if (reason) return { kind: 'handover', reason };
     const composed = await this.sales.compose({
@@ -113,6 +116,7 @@ export class AiPracticeService {
       // Matches no real contact, so the order tools find nothing.
       contactId: randomUUID(),
       customerTexts: [question],
+      rules,
     });
     if (composed.kind === 'busy') throw practiceError('PRACTICE_AI_BUSY');
     if (composed.kind === 'handover') return composed;

@@ -99,6 +99,20 @@ describe('AI agent settings tab', () => {
     });
   });
 
+  it('lets the owner keep the price on a first discount ask and saves it', async () => {
+    respond(() => Response.json({ ...saved, version: 4 }, { headers }));
+    show();
+    const discounts = await screen.findByRole('switch', { name: /Discount requests/ });
+    expect(discounts.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(discounts);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('AI agent settings saved.')).toBeTruthy();
+    const put = requests.find((request) => request.method === 'PUT');
+    expect(JSON.parse(put!.body!)).toMatchObject({
+      handoverRules: { discounts: false, refundsAndExchanges: true },
+    });
+  });
+
   it('saves the product card style the owner picks', async () => {
     respond(() => Response.json({ ...saved, version: 4 }, { headers }));
     show();

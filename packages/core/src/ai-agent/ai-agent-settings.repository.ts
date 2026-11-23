@@ -1,6 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
-import { z } from 'zod';
 
 import {
   agentAbilitiesSchema,
@@ -18,6 +17,7 @@ import {
 import { aiAgentSettings, aiRuleChanges } from '@dakly/db/schema/ai';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { shopRulesFrom } from './shop-rules';
 
 @Injectable()
 export class AiAgentSettingsRepository {
@@ -33,22 +33,21 @@ export class AiAgentSettingsRepository {
           returnToAiMinutes: aiAgentSettings.returnToAiMinutes,
           abilities: aiAgentSettings.abilities,
           handoverRules: aiAgentSettings.handoverRules,
+          replyLanguage: aiAgentSettings.replyLanguage,
+          extraRules: aiAgentSettings.extraRules,
         })
         .from(aiAgentSettings)
         .where(and(eq(aiAgentSettings.storeId, storeId), eq(aiAgentSettings.isAutoReplyOn, true))),
     );
     if (!settings) return undefined;
-    const { productCardStyle, takeOrders } = agentAbilitiesSchema
-      .partial()
-      .parse(settings.abilities);
+    const { productCardStyle } = agentAbilitiesSchema.partial().parse(settings.abilities);
     return {
       debounceSeconds: settings.debounceSeconds,
       testers: testersSchema.parse(settings.testers),
       claimTimeoutMinutes: settings.claimTimeoutMinutes,
       returnToAiMinutes: settings.returnToAiMinutes,
       productCardStyle: productCardStyle ?? defaultAgentAbilities.productCardStyle,
-      takeOrders: takeOrders ?? defaultAgentAbilities.takeOrders,
-      handOverDiscounts: handOverDiscounts(settings.handoverRules),
+      rules: shopRulesFrom(settings),
     };
   }
 
@@ -84,6 +83,9 @@ export class AiAgentSettingsRepository {
       tx
         .select({
           handoverRules: aiAgentSettings.handoverRules,
+          abilities: aiAgentSettings.abilities,
+          replyLanguage: aiAgentSettings.replyLanguage,
+          extraRules: aiAgentSettings.extraRules,
           testQuestions: aiAgentSettings.testQuestions,
         })
         .from(aiAgentSettings)
@@ -91,7 +93,7 @@ export class AiAgentSettingsRepository {
     );
     return {
       hasHandoverRules: Object.keys(settings?.handoverRules ?? {}).length > 0,
-      handOverDiscounts: handOverDiscounts(settings?.handoverRules ?? {}),
+      rules: shopRulesFrom(settings ?? { abilities: {}, handoverRules: {} }),
       testQuestions: testQuestionsSchema.parse(settings?.testQuestions ?? []),
     };
   }
@@ -178,10 +180,6 @@ export class AiAgentSettingsRepository {
     );
   }
 }
-
-const discountRuleSchema = z.object({ discounts: handoverRulesSchema.shape.discounts.optional() });
-const handOverDiscounts = (rules: unknown) =>
-  discountRuleSchema.parse(rules).discounts ?? defaultHandoverRules.discounts;
 
 // Only the choices on the screen are offered; the engine's 30 minute default shows as 1 hour.
 function choice(minutes: number | null): 60 | 1440 | null {
