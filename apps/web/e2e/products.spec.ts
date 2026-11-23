@@ -231,6 +231,9 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
         fixture.storeIds[0],
         ids,
       ]);
+      await database.pool.query('delete from product_categories where store_id=$1', [
+        fixture.storeIds[0],
+      ]);
       await database.pool.query('delete from files where store_id=$1 and id=any($2::uuid[])', [
         fixture.storeIds[0],
         fileIds,
