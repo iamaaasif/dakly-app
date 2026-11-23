@@ -7,9 +7,24 @@ const offerPattern =
 const leakPattern =
   /system prompt|my instructions|untrusted|hand_over|draft_order|confirm_order|search_products|get_product|search_knowledge|send_product_card|tool_results|product_candidates|<\/?(?:shop|conversation)\b|সিস্টেম প্রম্পট|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu;
 
+// "ছাড় নেই", "discount dite parbo na" and "no discount" refuse an offer, so a reply that holds the
+// price can name the word. A number with a percent is never treated as refused.
+const refusedAfter = new RegExp(
+  String.raw`^[\p{L}\p{M}]*(?:\s+(?:কোনো|দেওয়া|দেয়া|দিতে|দেওয়ার|দেবার|দেব|দেবো|দিব|দিবো|দিই|দেই|করা|যাবে|পারব|পারবো|পারছি|পারি|হবে|হয়|সম্ভব|সুযোগ|dewa|deya|deoa|dite|dibo|debo|dei|kora|jabe|parbo|parchi|pari|hobe|hoy|sombhob|sujog|possible))*\s+(?:না|নেই|নাই|na|nai|nei)(?![\p{L}\p{M}])(?!\s*(?:কেন|keno|ken)(?![\p{L}\p{M}]))`,
+  'iu',
+);
+const refusedBefore =
+  /(?:\bno|\bnot|\bcannot|n't|\bnever|\bwithout)(?:\s+(?:give|offer|have|provide|do|any|a|an|extra|further|more|other))*\s+$/iu;
+const isRefused = (reply: string, start: number, word: string) =>
+  !/^\d/.test(word) &&
+  (refusedAfter.test(reply.slice(start + word.length, start + word.length + 60)) ||
+    refusedBefore.test(reply.slice(Math.max(0, start - 40), start)));
+
 export const leaksInstructions = (reply: string) => leakPattern.test(reply);
 export const offerWords = (reply: string) =>
-  (reply.match(offerPattern) ?? []).map((word) => word.toLowerCase());
+  [...reply.matchAll(offerPattern)]
+    .filter((match) => !isRefused(reply, match.index, match[0]))
+    .map((match) => match[0].toLowerCase());
 
 // A customer's own budget may be repeated as a limit ("under 2000 taka"), never as a price.
 const budgetPattern =

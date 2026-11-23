@@ -5,6 +5,7 @@ import type { EvalOutcome, GoldenCase } from './golden-case';
 import { replayResponder } from './golden-eval.service';
 import { attackGoldenCases, benignGoldenCases } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
+import { bargainingGoldenCases, unclearGoldenCases } from './golden-set.bargaining';
 import { chatMemoryGoldenCases, chatMemoryRecordedOutcomes } from './golden-set.chat-memory';
 import { memoryGoldenCases } from './golden-set.memory';
 import {
@@ -114,6 +115,8 @@ describe('Bangla and Banglish set', () => {
     ...benignGoldenCases,
     ...memoryGoldenCases,
     ...stockDeliveryGoldenCases,
+    ...bargainingGoldenCases,
+    ...unclearGoldenCases,
   ];
 
   it('passes the saved run with every case switched on', () => {

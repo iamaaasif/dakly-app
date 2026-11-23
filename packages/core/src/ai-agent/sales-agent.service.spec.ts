@@ -1,5 +1,6 @@
-import { expect, it, vi } from 'vitest';
+import { beforeAll, expect, it, vi } from 'vitest';
 
+import type { AiRunsService } from '../ai/ai-runs.service';
 import type { AiService } from '../ai/ai.service';
 import type { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import type { InboxService } from '../messaging/inbox.service';
@@ -9,6 +10,11 @@ import type { SalesAgentToolsService } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
 
 const storeId = 'store-1';
+
+beforeAll(() => {
+  vi.stubEnv('DATABASE_URL', 'postgres://localhost/dakly');
+  vi.stubEnv('REDIS_URL', 'redis://localhost');
+});
 
 function build(memoryText: string | undefined = undefined) {
   const run = vi.fn().mockResolvedValue({
@@ -28,9 +34,11 @@ function build(memoryText: string | undefined = undefined) {
   const memory = {
     contextFor: vi.fn().mockResolvedValue(memoryText),
   } as unknown as ContactMemoryService;
+  const runs = { setOutcome: vi.fn() } as unknown as AiRunsService;
   return {
-    service: new SalesAgentService(ai, tools, inbox, stores, products, memory),
+    service: new SalesAgentService(ai, tools, inbox, stores, products, memory, runs),
     run,
+    runs,
     tools,
     inbox,
     memory,
@@ -123,7 +131,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v5+products-in-chat.v1');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v6+products-in-chat.v1');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
@@ -159,7 +167,7 @@ it('adds no shown products when the chat has none, so the model still asks which
   await service.compose({ storeId, contactId: 'c-1', chat, customerTexts: ['L ache?'] });
 
   expect(run.mock.calls[0]![1].input).not.toContain('products_in_this_chat');
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v5');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v6');
   expect(tools.run).not.toHaveBeenCalledWith(expect.anything(), 'get_product', expect.anything());
 });
 
@@ -183,4 +191,43 @@ it('saves the product a reply names with its sources, for the next turn', async 
     tool: 'shown_products',
     refs: ['p-kurti'],
   });
+});
+
+const reply = (text: string, aiRunId: string) => ({
+  kind: 'output',
+  aiRunId,
+  output: { reply: text },
+});
+
+it.each([
+  ['bangla', '১০% ছাড় দিচ্ছি, অর্ডার করুন', 'দুঃখিত, ছাড় নেই। অর্ডার করতে চাইলে সাইজ বলুন।'],
+  ['banglish', 'Ok apu, 10% discount dilam', 'Sorry apu, discount dite parbo na. Size bolben?'],
+  ['mixed', 'ঠিক আছে, free delivery দিবো', 'Delivery charge আছে, ছাড় নেই। Order korben?'],
+])(
+  'writes a %s reply that failed the fact check once more and sends the second',
+  async (_language, first, second) => {
+    const { service, run, runs } = build();
+    run.mockResolvedValueOnce(reply(first, 'run-1')).mockResolvedValueOnce(reply(second, 'run-2'));
+
+    const composed = await service.compose({ storeId, contactId: 'c-1', customerTexts: ['ছাড়?'] });
+
+    expect(composed).toMatchObject({ kind: 'reply', text: second, aiRunId: 'run-2' });
+    expect(runs.setOutcome).toHaveBeenCalledWith(storeId, 'run-1', 'failed_check', 'offer');
+    const retryInput: string = run.mock.calls[1]![1].input;
+    expect(retryInput).toContain('<fact_check_failed kind="offer">');
+  },
+);
+
+it('hands over when the second reply fails the fact check too, and records both', async () => {
+  const { service, run, runs } = build();
+  run
+    .mockResolvedValueOnce(reply('Panjabi ৳900', 'run-1'))
+    .mockResolvedValueOnce(reply('Panjabi ৳850', 'run-2'));
+
+  const composed = await service.compose({ storeId, contactId: 'c-1', customerTexts: ['dam?'] });
+
+  expect(composed).toEqual({ kind: 'handover', reason: 'out_of_scope' });
+  expect(runs.setOutcome).toHaveBeenCalledWith(storeId, 'run-1', 'failed_check', 'amount');
+  expect(runs.setOutcome).toHaveBeenCalledWith(storeId, 'run-2', 'failed_check', 'amount');
+  expect(run).toHaveBeenCalledTimes(2);
 });

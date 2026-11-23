@@ -22,6 +22,9 @@ export const handoverRulesSchema = z.strictObject({
   damagedOrWrong: z.boolean(),
   refundsAndExchanges: z.boolean(),
   specialRequests: z.boolean(),
+  // On, every discount ask goes to a person. Off, the AI says the price is fixed once and a repeat
+  // ask goes to a person. On by default until the bargaining evals pass.
+  discounts: z.boolean(),
 });
 
 export const defaultAgentAbilities = {
@@ -40,6 +43,7 @@ export const defaultHandoverRules = {
   damagedOrWrong: true,
   refundsAndExchanges: true,
   specialRequests: true,
+  discounts: true,
 } satisfies HandoverRules;
 
 export const saveAgentSettingsSchema = z.strictObject({
