@@ -1,15 +1,18 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { BriefcaseBusiness, ChevronRight, Layers, ShoppingBag } from 'lucide-react';
+import type { KeyboardEvent } from 'react';
 import { Controller, useForm, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 
 import { signUpSchema, type SignUpInput } from '@dakly/contracts/auth';
+import { storeOfferings } from '@dakly/contracts/stores';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 
 import { useRequestCode } from '../api/request-code';
 import type { AuthConfig } from '../auth.types';
+import type { BusinessDetails as ShopDetails } from '../first-shop';
 import { authButtonClass, authFieldClass, authPrefixedFieldClass } from './auth-control-class';
 import type { AccountDetails } from './sign-up-account-step';
 import { offerings } from './sign-up-options';
@@ -26,18 +29,18 @@ const businessSchema = z.object({
     .refine((value) => !value || /^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i.test(value), {
       message: 'Enter a full link, like facebook.com/yourpage.',
     }),
-  offering: z.string().min(1, 'Choose what your business offers.'),
+  offering: z.enum(storeOfferings, { error: 'Choose what your business offers.' }),
 });
 type BusinessDetails = z.infer<typeof businessSchema>;
 type SignUpBusinessStepProps = {
   account: AccountDetails;
   legal: NonNullable<AuthConfig['legal']>;
-  onSent: (sent: { registration: SignUpInput; password: string }) => void;
+  onSent: (sent: { registration: SignUpInput; password: string; shop: ShopDetails }) => void;
 };
 export function SignUpBusinessStep({ account, legal, onSent }: SignUpBusinessStepProps) {
   const form = useForm({
     resolver: zodResolver(businessSchema),
-    defaultValues: { name: '', businessName: '', phone: '', websiteUrl: '', offering: '' },
+    defaultValues: { name: '', businessName: '', phone: '', websiteUrl: '' },
   });
   const request = useRequestCode();
   const errors = form.formState.errors;
@@ -45,18 +48,23 @@ export function SignUpBusinessStep({ account, legal, onSent }: SignUpBusinessSte
     <form
       method="post"
       className="space-y-5.5"
-      onSubmit={form.handleSubmit(async ({ name, phone }) => {
-        // TODO(backend): the business name, website, offering and source have no field on sign-up yet.
+      onSubmit={form.handleSubmit(async ({ name, phone, businessName, websiteUrl, offering }) => {
         const registration = {
           purpose: 'sign_up' as const,
           name,
           phone,
           email: account.email,
           termsVersion: legal.termsVersion,
+          source: account.source,
+          sourceOther: account.source === 'other' ? account.sourceOther || undefined : undefined,
         };
         try {
           await request.mutateAsync(registration);
-          onSent({ registration, password: account.password });
+          onSent({
+            registration,
+            password: account.password,
+            shop: { businessName, websiteUrl: websiteUrl || undefined, offering },
+          });
         } catch (error) {
           formError(error, form.setError);
         }
@@ -136,12 +144,20 @@ function OfferingPicker({ form }: { form: UseFormReturn<BusinessDetails> }) {
         control={form.control}
         name="offering"
         render={({ field }) => (
-          <div role="radiogroup" aria-labelledby="offering-label" className="space-y-2.5">
-            {offerings.map((offering) => (
+          <div
+            role="radiogroup"
+            aria-labelledby="offering-label"
+            aria-required="true"
+            className="space-y-2.5"
+            onKeyDown={(event) => moveOffering(event, field.value, field.onChange)}
+          >
+            {offerings.map((offering, index) => (
               <OfferingCard
                 key={offering.value}
                 {...offering}
                 on={field.value === offering.value}
+                // One stop in the tab order, like a native radio group.
+                tabbable={field.value ? field.value === offering.value : index === 0}
                 onPick={() => field.onChange(offering.value)}
               />
             ))}
@@ -162,18 +178,21 @@ type OfferingCardProps = {
   label: string;
   hint: string;
   on: boolean;
+  tabbable: boolean;
   onPick: () => void;
 };
-function OfferingCard({ value, label, hint, on, onPick }: OfferingCardProps) {
+function OfferingCard({ value, label, hint, on, tabbable, onPick }: OfferingCardProps) {
   const Icon = icons[value];
   return (
     <button
       type="button"
       role="radio"
       aria-checked={on}
+      tabIndex={tabbable ? 0 : -1}
+      data-offering={value}
       onClick={onPick}
       className={cn(
-        'flex w-full items-center gap-3 rounded-lg border p-3.5 text-left',
+        'flex w-full items-center gap-3 rounded-lg border p-3.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
         on ? 'border-inverse bg-background ring-1 ring-inverse' : 'border-border-strong',
       )}
     >
@@ -198,4 +217,19 @@ function OfferingCard({ value, label, hint, on, onPick }: OfferingCardProps) {
       />
     </button>
   );
+}
+
+// Arrow keys move the choice and the focus, as in a native radio group.
+function moveOffering(
+  event: KeyboardEvent<HTMLDivElement>,
+  current: string | undefined,
+  choose: (value: string) => void,
+) {
+  const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[event.key];
+  if (!step) return;
+  event.preventDefault();
+  const at = offerings.findIndex((offering) => offering.value === current);
+  const next = offerings[(at + step + offerings.length) % offerings.length]!;
+  choose(next.value);
+  event.currentTarget.querySelector<HTMLElement>(`[data-offering="${next.value}"]`)?.focus();
 }

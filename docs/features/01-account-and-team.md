@@ -1146,6 +1146,8 @@ sign-up screen uses them to create the first shop on the free plan, so a new own
 dashboard without the setup screen. `businessType` and `district` are optional on `POST /stores`
 for that reason; the setup screen still requires both.
 
+The sign-up page has three steps: email, password and source; name, business name, phone, website and what the business offers; then the SMS code. After the code is right the page creates the first shop (free plan, "social media" as how they sell, under 500 customers) and opens the dashboard. If creating the shop fails the owner lands on the setup screen instead. A Google or Facebook sign-up has no business step and goes to setup. The sign-in page has one "Email or mobile number" field because accounts made by SMS have no email. A wrong reset code shows on the password step with a link back to the code step.
+
 ### Continue with Facebook (ACC-19, part 6)
 
 Facebook sign-in and sign-up is an authorization-code redirect handled by the API, not a token

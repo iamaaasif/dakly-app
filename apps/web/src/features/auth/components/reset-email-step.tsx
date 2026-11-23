@@ -31,13 +31,12 @@ export function ResetEmailStep({ onSent }: { onSent: (identifier: string) => voi
         }
       })}
     >
-      {/* Accounts made with a mobile number only can still enter it here. */}
       <AuthField
-        label="Email"
+        label="Email or mobile number"
         field={form.register('identifier')}
         error={errors.identifier}
         autoComplete="username"
-        placeholder="you@business.com"
+        placeholder="you@business.com or 01712345678"
         className={authFieldClass}
       />
       {errors.root ? (

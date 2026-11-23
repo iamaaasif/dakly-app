@@ -15,7 +15,7 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as {
     registration: { phone: string; name: string; planCode: string };
   };
-  const { phone, name, planCode } = fixture.registration;
+  const { phone, name } = fixture.registration;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const seen = new Set<string>();
   const password = 'Browser-pass123';
@@ -40,45 +40,36 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
     await page.getByLabel('Your name').fill(name);
     await page.getByLabel('Business name').fill('Dhaka Stationery');
     await privateInput(page, 'phone', phone);
-    await page.getByRole('radio', { name: /Products/ }).click();
+    await page.getByLabel('Website or Facebook Page URL (optional)').fill('dhakastationery.test');
+    await page.getByRole('radio', { name: /^Products/ }).click();
     await page.getByRole('button', { name: 'Create a free account' }).click();
     await expect(page.getByRole('heading', { name: 'Enter the code we sent you' })).toBeVisible();
     const text = await messageText(phone, /\b\d{6}\b/, seen);
     await privateInput(page, 'code', text.match(/\b\d{6}\b/)![0]);
     await page.getByRole('button', { name: 'Verify mobile', exact: true }).click();
-    await expect(page).toHaveURL(`${baseURL}/setup`);
+    // The shop is created from the business step, so the owner skips the setup screen.
+    await expect(page).toHaveURL(`${baseURL}/dashboard`);
+    await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
     const user = await database.pool.query(
-      'select id, terms_version from users where phone=$1 and name=$2',
+      'select id, terms_version, sign_up_source from users where phone=$1 and name=$2',
       [phone, name],
     );
     expect(user.rowCount).toBe(1);
     const userId = user.rows[0].id as string;
     expect(user.rows[0].terms_version).toBe('browser-fixture-v1');
-    expect(
-      (await database.pool.query('select id from memberships where user_id=$1', [userId])).rowCount,
-    ).toBe(0);
-    await page.reload();
-    await page.getByLabel('Business name').fill('Dhaka Stationery');
-    await page.getByLabel('What you sell').selectOption('Books and stationery');
-    await page.getByLabel('District', { exact: true }).selectOption('Dhaka');
-    await page.getByLabel('Online store', { exact: true }).check();
-    await page.getByLabel('Customer list size').selectOption('under_500');
-    await page.getByRole('button', { name: 'Choose a plan' }).click();
-    expect(
-      (await database.pool.query('select id from memberships where user_id=$1', [userId])).rowCount,
-    ).toBe(0);
-    await page.getByRole('button', { name: 'Start Browser Free', exact: true }).click();
-    await expect(page).toHaveURL(`${baseURL}/dashboard`);
-    await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+    expect(user.rows[0].sign_up_source).toBe('facebook');
     const store = await database.pool.query(
-      'select m.store_id, m.built_in_role, s.status, p.code from memberships m join subscriptions s on s.store_id=m.store_id join plans p on p.id=s.plan_id where m.user_id=$1',
+      'select s.name, s.website_url, s.offering, m.built_in_role, sub.status, p.code from memberships m join stores s on s.id=m.store_id join subscriptions sub on sub.store_id=m.store_id join plans p on p.id=sub.plan_id where m.user_id=$1',
       [userId],
     );
     expect(store.rowCount).toBe(1);
     expect(store.rows[0]).toMatchObject({
+      name: 'Dhaka Stationery',
+      website_url: 'https://dhakastationery.test',
+      offering: 'products',
       built_in_role: 'owner',
       status: 'active',
-      code: planCode,
+      code: 'free',
     });
     await screenshots(page);
     otherPage = await context.newPage();
