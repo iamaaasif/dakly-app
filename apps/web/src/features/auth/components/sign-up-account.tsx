@@ -1,5 +1,6 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ChevronRight } from 'lucide-react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -8,6 +9,7 @@ import { Button } from '@dakly/ui/button';
 
 import { useRequestCode } from '../api/request-code';
 import type { AuthConfig } from '../auth.types';
+import { authButtonClass } from './auth-control-class';
 import { SignUpConsent } from './sign-up-consent';
 import { SignUpFields } from './sign-up-fields';
 import { formError } from '@/lib/form-error';
@@ -65,8 +67,9 @@ export function SignUpAccount({
           Before verification, reloading clears these details. After verification, you can sign in
           again to finish shop setup.
         </p>
-        <Button type="submit" loading={request.isPending}>
+        <Button type="submit" loading={request.isPending} className={authButtonClass}>
           Send verification code
+          <ChevronRight aria-hidden="true" size={16} />
         </Button>
       </form>
     </FormProvider>

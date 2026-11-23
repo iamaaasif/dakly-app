@@ -2,6 +2,7 @@ import { useFormContext } from 'react-hook-form';
 
 import { type SignUpInput } from '@dakly/contracts/auth';
 
+import { authFieldClass } from './auth-control-class';
 import { PasswordStrength } from './password-strength';
 import { FormField as AuthField } from '@/components/form-field';
 
@@ -12,12 +13,14 @@ export function SignUpFields() {
   return (
     <>
       <AuthField
+        className={authFieldClass}
         label="Full name"
         field={form.register('name')}
         error={errors.name}
         autoComplete="name"
       />
       <AuthField
+        className={authFieldClass}
         label="Mobile number"
         field={form.register('phone')}
         error={errors.phone}
@@ -26,6 +29,7 @@ export function SignUpFields() {
         hint="+880 · Use your own Bangladeshi mobile number."
       />
       <AuthField
+        className={authFieldClass}
         label="Email (optional)"
         field={form.register('email')}
         error={errors.email}
@@ -33,6 +37,7 @@ export function SignUpFields() {
         autoComplete="email"
       />
       <AuthField
+        className={authFieldClass}
         label="Password (optional)"
         field={form.register('password')}
         error={errors.password}
