@@ -207,6 +207,12 @@ export class ProductsService {
     });
   }
 
+  async variantWeights(storeId: string, variantIds: string[]) {
+    if (!variantIds.length) return new Map<string, number | null>();
+    const rows = await this.orderVariantRepository.weights(storeId, variantIds);
+    return new Map(rows.map(({ variantId, weightGrams }) => [variantId, weightGrams]));
+  }
+
   async orderVariantStock(storeId: string, variantIds: string[]): Promise<OrderCatalogueStock> {
     const rows = await this.orderVariantRepository.stock(storeId, variantIds);
     return rows.map(({ variantId, onHand, reserved }) => ({

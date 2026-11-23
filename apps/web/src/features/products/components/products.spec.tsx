@@ -40,6 +40,7 @@ const product: ProductResponse = {
   category: 'Men',
   brandId: null,
   brand: null,
+  weightGrams: null,
   aliases: [],
   pricePoisha: 245000,
   compareAtPricePoisha: 295000,

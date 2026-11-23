@@ -102,6 +102,7 @@ export class ProductImportService {
         brandId: null,
         status: details.status ?? 'active',
         aliases: [],
+        weightGrams: null,
         compareAtPricePoisha: null,
         isStockTracked: context.tracksStock,
         isVisibleInChats: true,

@@ -58,6 +58,19 @@ export class ProductOrderVariantsRepository {
     );
   }
 
+  weights(storeId: string, variantIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ variantId: productVariants.id, weightGrams: products.weightGrams })
+        .from(productVariants)
+        .innerJoin(
+          products,
+          and(eq(products.id, productVariants.productId), eq(products.storeId, storeId)),
+        )
+        .where(and(eq(productVariants.storeId, storeId), inArray(productVariants.id, variantIds))),
+    );
+  }
+
   orderVariants(storeId: string, variantIds: string[]) {
     return this.database.forStore(storeId, (tx) =>
       tx

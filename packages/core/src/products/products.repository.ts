@@ -34,6 +34,7 @@ const productColumns = {
   category: categoryPathSql,
   brandId: products.brandId,
   brand: brandNameSql,
+  weightGrams: products.weightGrams,
   aliases: products.aliases,
   pricePoisha: products.pricePoisha,
   compareAtPricePoisha: products.compareAtPricePoisha,

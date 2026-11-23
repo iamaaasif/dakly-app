@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0098_snapshot.json`: **107 tables, 1410 columns, 434 explicit indexes and 335 foreign keys**.
+Built from `packages/db/migrations/meta/0099_snapshot.json`: **107 tables, 1411 columns, 434 explicit indexes and 335 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -941,6 +941,7 @@ erDiagram
         text description "NULL; text"
         uuid category_id FK "NULL; uuid"
         uuid brand_id FK "NULL; uuid"
+        integer weight_grams "NULL; integer"
         text__ aliases "NOT NULL; text[]"
         bigint price_poisha "NOT NULL; bigint"
         bigint compare_at_price_poisha "NULL; bigint"

@@ -31,6 +31,7 @@ const product = (overrides: Partial<ProductResponse>): ProductResponse => ({
   category: null,
   brandId: null,
   brand: null,
+  weightGrams: null,
   aliases: [],
   pricePoisha: 245000,
   compareAtPricePoisha: null,
