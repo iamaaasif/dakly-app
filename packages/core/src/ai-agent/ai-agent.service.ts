@@ -3,11 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
 import { chatClassificationSchema } from '@dakly/contracts/chat-classification';
-import {
-  isAwaitingReading,
-  messageAttachmentsSchema,
-  type handoverReasons,
-} from '@dakly/contracts/chats';
+import type { handoverReasons } from '@dakly/contracts/chats';
 import { parseCardTap } from '@dakly/contracts/product-card';
 import type { ProductCarousel } from '@dakly/contracts/product-card';
 
@@ -27,21 +23,24 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { QUEUES } from '../platform/queue/queues';
-import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { cardMessages } from './card-messages';
 import { CardTapRepliesService } from './card-tap-replies.service';
+import { classifierInput, type ConversationEntry, conversationEntries } from './chat-memory';
 import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
-import { classifyChat } from './prompts/classify-chat.v1';
+import { classifyChat } from './prompts/classify-chat.v2';
+import { burstText } from './reply-burst';
 import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
-const MEDIA_WAIT_LIMIT_MS = 3 * MINUTE_MS;
 const MEDIA_WAIT_MS = 3000;
+// Enough to see the product or question the latest messages answer, few enough to stay cheap.
+const CLASSIFY_HISTORY_LENGTH = 6;
 const HOLDING_REPLY = 'একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।';
 type Reason = (typeof handoverReasons)[number];
 type Turn = NonNullable<Awaited<ReturnType<InboxService['aiReplyTurn']>>>;
@@ -140,11 +139,18 @@ export class AiAgentService {
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
-    const { texts, earlierTexts } = burst;
+    const texts = burst.texts;
+    const earlier = await this.earlierMessages(storeId, conversationId, burst.messageIds);
     const { handOverDiscounts } = candidate;
     const reason =
-      screenCustomerTexts(texts, { handOverDiscounts, earlierTexts }) ??
-      (await this.classifyWithAllowance(storeId, turn.contactId, texts, handOverDiscounts));
+      screenCustomerTexts(texts, { handOverDiscounts, earlierTexts: customerTexts(earlier) }) ??
+      (await this.classifyWithAllowance(
+        storeId,
+        turn.contactId,
+        texts,
+        earlier,
+        handOverDiscounts,
+      ));
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose({
@@ -163,11 +169,23 @@ export class AiAgentService {
     storeId: string,
     contactId: string,
     texts: string[],
+    earlier: ConversationEntry[],
     handOverDiscounts: boolean,
   ) {
     return (await this.hasAllowanceRoom(storeId, contactId))
-      ? this.classify(storeId, texts, handOverDiscounts)
+      ? this.classify(storeId, texts, earlier, handOverDiscounts)
       : 'allowance_used';
+  }
+
+  // The chat before the burst being classified, oldest first.
+  private async earlierMessages(storeId: string, conversationId: string, burstIds: string[]) {
+    const history = await this.inbox.replyHistory(
+      storeId,
+      conversationId,
+      CLASSIFY_HISTORY_LENGTH + burstIds.length,
+    );
+    const before = history.filter(({ id }) => !burstIds.includes(id));
+    return conversationEntries(before).slice(-CLASSIFY_HISTORY_LENGTH);
   }
 
   // A window that already holds a unit finishes even when the allowance is used up.
@@ -235,6 +253,7 @@ export class AiAgentService {
   private async classify(
     storeId: string,
     texts: string[],
+    earlier: ConversationEntry[],
     handOverDiscounts: boolean,
   ): Promise<Reason | 'busy' | null> {
     if (!texts.length) return null;
@@ -242,7 +261,7 @@ export class AiAgentService {
       tier: 'fast',
       purpose: 'classify',
       prompt: classifyChat,
-      input: JSON.stringify({ customer_messages: texts }),
+      input: classifierInput(texts, earlier),
       output: chatClassificationSchema,
     });
     if (result.kind === 'output') return handoverReason(texts, result.output, handOverDiscounts);
@@ -393,40 +412,6 @@ export class AiAgentService {
   }
 }
 
-function burstText(turn: Turn, delay: number, now: Date) {
-  const texts: string[] = [];
-  let awaitingMedia = false;
-  let messageCount = 0;
-  let previous = turn.latest.createdAt.getTime();
-  for (const message of turn.inbound) {
-    if (message.senderIdentityId !== turn.latest.senderIdentityId) break;
-    const receivedAt = message.createdAt.getTime();
-    if (previous - receivedAt > delay) break;
-    if (message.mediaText) texts.push(message.mediaText.slice(0, 2000));
-    if (message.body) texts.push(message.body.slice(0, 2000));
-    const unread = messageAttachmentsSchema
-      .parse(message.attachments ?? [])
-      .some(isAwaitingReading);
-    if (unread && now.getTime() - receivedAt < MEDIA_WAIT_LIMIT_MS) awaitingMedia = true;
-    previous = receivedAt;
-    messageCount += 1;
-  }
-  return {
-    texts: texts.reverse(),
-    awaitingMedia,
-    earlierTexts: earlierTexts(turn, messageCount, now),
-  };
-}
-
-// The same customer's messages from the last day before the burst tell a repeat discount ask
-// from a first one.
-function earlierTexts(turn: Turn, burstLength: number, now: Date) {
-  return turn.inbound
-    .slice(burstLength)
-    .filter(
-      (message) =>
-        message.senderIdentityId === turn.latest.senderIdentityId &&
-        now.getTime() - message.createdAt.getTime() <= DAY_MS,
-    )
-    .flatMap((message) => (message.body ? [message.body.slice(0, 2000)] : []));
-}
+// A repeat discount ask is judged from what the customer wrote earlier in the same chat.
+const customerTexts = (entries: ConversationEntry[]) =>
+  entries.filter(({ from }) => from === 'customer').map(({ text }) => text);

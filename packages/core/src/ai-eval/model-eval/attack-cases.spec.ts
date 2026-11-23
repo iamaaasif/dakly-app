@@ -43,7 +43,9 @@ describe('bargaining golden cases', () => {
     for (const golden of bargainingGoldenCases) {
       const discounts = {
         handOverDiscounts: false,
-        earlierTexts: golden.earlierMessages ?? [],
+        earlierTexts: (golden.earlier ?? [])
+          .filter(({ from }) => from === 'customer')
+          .map(({ text }) => text),
       };
       expect(screenCustomerTexts([golden.question], discounts), golden.id).toBe(
         golden.expectedHandover,

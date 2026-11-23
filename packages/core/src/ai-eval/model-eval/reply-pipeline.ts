@@ -6,9 +6,10 @@ import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
 import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/llm-driver';
 
+import { classifierInput, productsInChat } from '../../ai-agent/chat-memory';
 import { handoverReason } from '../../ai-agent/handover-reason';
 import { chatReplyV6 } from '../../ai-agent/prompts/chat-reply.v6';
-import { classifyChat } from '../../ai-agent/prompts/classify-chat.v1';
+import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
 import {
   checkReplyFacts,
   factCheckFailedBlock,
@@ -16,7 +17,7 @@ import {
 } from '../../ai-agent/reply-fact-check';
 import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
 import type { EvalOutcome, GoldenCase } from '../golden-case';
-import { evalPhotoKey, evalShop } from './eval-catalog';
+import { evalPhotoKey, evalProducts, evalShop } from './eval-catalog';
 import type { EvalMeter } from './eval-meter';
 import { matchEvalPhoto, runFixtureTool } from './fixture-tools';
 
@@ -46,13 +47,13 @@ export async function classifyQuestion(
   driver: LlmDriver,
   meter: EvalMeter,
   model: string,
-  question: string,
+  { question, earlier = [] }: Pick<GoldenCase, 'question' | 'earlier'>,
 ): Promise<ChatClassification | undefined> {
   try {
     const result = await meteredRespond(driver, meter, `fast:${model}`, {
       model,
       instructions: classifyChat.instructions,
-      input: JSON.stringify({ customer_messages: [question] }),
+      input: classifierInput([question], earlier),
       output: chatClassificationSchema,
       timeoutMs: TIMEOUT_MS,
     });
@@ -66,7 +67,7 @@ export async function classifyQuestion(
 }
 
 export function handoverFor(
-  golden: GoldenCase,
+  golden: Pick<GoldenCase, 'question' | 'holdsPrice'>,
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
@@ -77,23 +78,31 @@ export function handoverFor(
 type Run = { driver: LlmDriver; meter: EvalMeter; model: string };
 type Note = (note: string) => void;
 type ToolCall = { name: string; argumentsJson: string };
-type Asked = Pick<GoldenCase, 'question' | 'memory' | 'earlierMessages' | 'shopAsked'>;
 
-function replyContext(
-  { question, memory, earlierMessages = [], shopAsked }: Asked,
-  candidates: object,
-) {
-  const conversation = [
-    ...earlierMessages.map((text) => ({ from: 'customer', text })),
-    ...(shopAsked ? [{ from: 'shop', text: shopAsked }] : []),
-    { from: 'customer', text: question },
-  ];
+type ReplyCase = Pick<GoldenCase, 'question' | 'memory' | 'earlier' | 'shownProducts'>;
+
+function replyContext(golden: ReplyCase, inChat: object | undefined, candidates: object) {
+  const conversation = [...(golden.earlier ?? []), { from: 'customer', text: golden.question }];
   return [
     `<shop>${JSON.stringify(evalShop)}</shop>`,
-    ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
+    ...(golden.memory
+      ? [`<customer_memory untrusted="true">${golden.memory}</customer_memory>`]
+      : []),
     `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
+    ...(inChat ? [`<products_in_this_chat>${JSON.stringify(inChat)}</products_in_this_chat>`] : []),
     `<product_candidates>${JSON.stringify(candidates)}</product_candidates>`,
   ].join('\n');
+}
+
+// The shown products read from the eval catalog, as the agent reads them from the shop.
+function evalProductsInChat(names: readonly string[] | undefined) {
+  const products = (names ?? []).flatMap((name) => {
+    const found = evalProducts.find((product) => product.name === name);
+    return found
+      ? [runFixtureTool('get_product', JSON.stringify({ productId: found.productId }))]
+      : [];
+  });
+  return products.length ? productsInChat(products) : undefined;
 }
 
 // The key of the photo on the last product card the run sent, or null for a card with no photo.
@@ -142,17 +151,17 @@ function replyCandidates(question: string): object | undefined {
 // more with the failure named, and a second failure hands over.
 export async function composeReply(
   run: Run,
-  asked: Asked,
+  golden: ReplyCase,
   note: Note = () => undefined,
 ): Promise<EvalOutcome> {
-  const first = await composeOnce(run, asked, note);
+  const first = await composeOnce(run, golden, note);
   if (first.kind !== 'reply') return first.outcome;
-  const failure = factCheckFailure(first.text, first.toolResults, asked.question);
+  const failure = factCheckFailure(first.text, first.toolResults, golden.question);
   if (!failure) return replyOutcome(first);
   note(`fact check ${failure}: ${first.text}`);
-  const second = await composeOnce(run, asked, note, { failure, reply: first.text });
+  const second = await composeOnce(run, golden, note, { failure, reply: first.text });
   if (second.kind !== 'reply') return second.outcome;
-  const failedAgain = factCheckFailure(second.text, second.toolResults, asked.question);
+  const failedAgain = factCheckFailure(second.text, second.toolResults, golden.question);
   if (!failedAgain) return replyOutcome(second);
   note(`fact check ${failedAgain} again: ${second.text}`);
   return { kind: 'handover', reason: 'out_of_scope' };
@@ -167,17 +176,21 @@ const replyOutcome = ({ text, toolResults }: { text: string; toolResults: object
   cardPhoto: sentCardPhoto(toolResults),
 });
 
+// One pass of the loop, with fixture tools instead of the database.
 async function composeOnce(
   { driver, meter, model }: Run,
-  asked: Asked,
+  golden: ReplyCase,
   note: Note,
   rejected?: { failure: FactCheckFailure; reply: string },
 ): Promise<Composed> {
   const ended = (outcome: EvalOutcome): Composed => ({ kind: 'ended', outcome });
+  const { question } = golden;
   const toolResults: object[] = [];
-  const candidates = replyCandidates(asked.question);
+  const inChat = evalProductsInChat(golden.shownProducts);
+  if (inChat) toolResults.push(inChat);
+  const candidates = replyCandidates(question);
   if (candidates) toolResults.push(candidates);
-  const context = replyContext(asked, candidates ?? { products: [] });
+  const context = replyContext(golden, inChat, candidates ?? { products: [] });
   let transcript = rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {

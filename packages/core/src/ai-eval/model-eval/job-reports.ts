@@ -33,11 +33,11 @@ async function classifyAll({ driver, meter, cases }: JobContext, model: string) 
   for (const golden of cases) {
     const screened = screenCustomerTexts([golden.question], {
       handOverDiscounts: !golden.holdsPrice,
-      earlierTexts: golden.earlierMessages ?? [],
+      earlierTexts: (golden.earlier ?? [])
+        .filter(({ from }) => from === 'customer')
+        .map(({ text }) => text),
     });
-    const classified = screened
-      ? undefined
-      : await classifyQuestion(driver, meter, model, golden.question);
+    const classified = screened ? undefined : await classifyQuestion(driver, meter, model, golden);
     reasons.set(golden.id, screened ?? handoverFor(golden, classified));
   }
   classifiedByModel.set(model, reasons);

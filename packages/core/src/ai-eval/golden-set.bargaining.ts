@@ -56,7 +56,10 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: 'discount',
     allowedAmountsTaka: [],
     holdsPrice: true,
-    earlierMessages: ['kurti last price koto?'],
+    earlier: [
+      { from: 'customer', text: 'kurti last price koto?' },
+      { from: 'shop', text: 'কুর্তির দাম ৳1450, ছাড় নেই। কোন সাইজ নেবেন?' },
+    ],
   },
   {
     id: 'bargain-repeat-bn',
@@ -65,7 +68,11 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: 'discount',
     allowedAmountsTaka: [],
     holdsPrice: true,
-    earlierMessages: ['লাল পাঞ্জাবিতে কিছু ছাড় দেওয়া যাবে?', 'M size'],
+    earlier: [
+      { from: 'customer', text: 'লাল পাঞ্জাবিতে কিছু ছাড় দেওয়া যাবে?' },
+      { from: 'shop', text: 'দুঃখিত, দাম ৳১,২০০ ফিক্সড। কোন সাইজ লাগবে?' },
+      { from: 'customer', text: 'M size' },
+    ],
   },
   {
     id: 'bargain-repeat-mixed',
@@ -74,7 +81,10 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: 'discount',
     allowedAmountsTaka: [],
     holdsPrice: true,
-    earlierMessages: ['শাড়িতে discount pabo?'],
+    earlier: [
+      { from: 'customer', text: 'শাড়িতে discount pabo?' },
+      { from: 'shop', text: 'Sorry apu, শাড়ির দাম ৳2800 fixed। Order korben?' },
+    ],
   },
   {
     id: 'bargain-owner-said-banglish',
@@ -125,8 +135,10 @@ export const unclearGoldenCases: GoldenCase[] = [
     question: 'ei je oita, bujhlen na?',
     expectedHandover: 'out_of_scope',
     allowedAmountsTaka: [],
-    earlierMessages: ['ota ta ache?'],
-    shopAsked: 'আপনি কোন পণ্যটির কথা বলছেন? নামটা একটু লিখবেন?',
+    earlier: [
+      { from: 'customer', text: 'ota ta ache?' },
+      { from: 'shop', text: 'আপনি কোন পণ্যটির কথা বলছেন? নামটা একটু লিখবেন?' },
+    ],
   },
   {
     id: 'unclear-second-bn',
@@ -134,8 +146,10 @@ export const unclearGoldenCases: GoldenCase[] = [
     question: 'আরে ওইটাই তো, বুঝলেন না?',
     expectedHandover: 'out_of_scope',
     allowedAmountsTaka: [],
-    earlierMessages: ['ওইটার কী খবর?'],
-    shopAsked: 'কোন পণ্যের কথা বলছেন, একটু বলবেন?',
+    earlier: [
+      { from: 'customer', text: 'ওইটার কী খবর?' },
+      { from: 'shop', text: 'কোন পণ্যের কথা বলছেন, একটু বলবেন?' },
+    ],
   },
   {
     id: 'unclear-second-mixed',
@@ -143,8 +157,10 @@ export const unclearGoldenCases: GoldenCase[] = [
     question: 'eta eta, ওই যে apu, bujhen na?',
     expectedHandover: 'out_of_scope',
     allowedAmountsTaka: [],
-    earlierMessages: ['apu eta কি possible?'],
-    shopAsked: 'Apu, ki possible jante chaichen ektu bolben?',
+    earlier: [
+      { from: 'customer', text: 'apu eta কি possible?' },
+      { from: 'shop', text: 'Apu, ki possible jante chaichen ektu bolben?' },
+    ],
   },
 ];
 

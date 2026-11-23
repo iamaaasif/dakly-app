@@ -28,9 +28,10 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { ProductsService } from '../products/products.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { practiceError } from './ai-practice.errors';
+import { classifierInput } from './chat-memory';
 import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
-import { classifyChat } from './prompts/classify-chat.v1';
+import { classifyChat } from './prompts/classify-chat.v2';
 import { gradeTestAnswer } from './prompts/grade-test-answer.v1';
 import { SalesAgentService } from './sales-agent.service';
 
@@ -97,7 +98,7 @@ export class AiPracticeService {
       tier: 'fast',
       purpose: 'classify',
       prompt: classifyChat,
-      input: JSON.stringify({ customer_messages: [question] }),
+      input: classifierInput([question], []),
       output: chatClassificationSchema,
     });
     if (classified.kind === 'failure' && classified.code === 'AI_STORE_BUSY')

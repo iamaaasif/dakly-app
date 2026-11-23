@@ -29,10 +29,12 @@ export const goldenCaseSchema = z.strictObject({
   // The shop keeps its price on a first discount ask (hand-over rule `discounts` off): the AI says
   // the price is fixed and keeps selling, and a repeat ask goes to a person.
   holdsPrice: z.literal(true).optional(),
-  // What the same customer wrote earlier in the chat, oldest first.
-  earlierMessages: z.array(z.string().min(1)).optional(),
-  // What the shop asked after those messages, so the case can test the second unclear message.
-  shopAsked: z.string().min(1).optional(),
+  // The chat before the question, oldest first, as the agent reads it from the inbox.
+  earlier: z
+    .array(z.strictObject({ from: z.enum(['customer', 'shop']), text: z.string().min(1) }))
+    .optional(),
+  // Products the shop already showed in that chat, newest first, by name in the eval catalog.
+  shownProducts: z.array(z.string().min(1)).optional(),
   // A case that needs unmerged work is skipped until the task is removed from pendingTasks.
   dependsOn: z.enum(['AI-10', 'AI-11', 'AI-12']).optional(),
 });
