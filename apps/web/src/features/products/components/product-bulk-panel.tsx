@@ -9,6 +9,7 @@ import {
 import type { ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 
+import { useListNames } from '../api/get-categories';
 import { useApplyProductBulkEdit } from '../api/product-bulk-edits';
 import { countChangedValues, reviewLines } from '../product-bulk-edit';
 import { ProductBulkGrid } from './product-bulk-grid';
@@ -25,6 +26,7 @@ type ProductBulkPanelProps = {
 export function ProductBulkPanel({ products, preset, proposed, onClose }: ProductBulkPanelProps) {
   const [review, setReview] = useState<Review | null>(() => proposedReview(proposed));
   const apply = useApplyProductBulkEdit();
+  const names = useListNames();
   const applyReview = (current: Review) =>
     apply.mutate(
       { rows: current.rows, stockReason: current.stockReason || undefined },
@@ -55,9 +57,11 @@ export function ProductBulkPanel({ products, preset, proposed, onClose }: Produc
             {countChangedValues(review.rows) === 1 ? 'change' : 'changes'}
           </h2>
           <ul className="space-y-1 text-sm text-text-muted">
-            {reviewLines(review.rows, products, review.stockReason).map((line) => (
-              <li key={line}>{line}</li>
-            ))}
+            {reviewLines(review.rows, products, { stockReason: review.stockReason, names }).map(
+              (line) => (
+                <li key={line}>{line}</li>
+              ),
+            )}
           </ul>
           {apply.error ? (
             <p role="alert" className="text-danger">

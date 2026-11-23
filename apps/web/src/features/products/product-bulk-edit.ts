@@ -57,7 +57,8 @@ function defaultRow(
     compareAtPricePoisha: editableValue('compareAtPricePoisha', product.compareAtPricePoisha),
     costPoisha: editableValue('costPoisha', variant?.costPoisha ?? null),
     stock: stockCell(product, next?.stock),
-    category: product.category ?? '',
+    categoryId: product.categoryId ?? '',
+    brandId: product.brandId ?? '',
     status: preset === 'hide' ? ('hidden' as const) : product.status,
   };
 }
@@ -82,7 +83,8 @@ function changedRow(cell: GridRow, product: ProductResponse): ProductBulkEditRow
     compareAtPricePoisha: cell.compareAtPricePoisha,
     costPoisha: onlyVariant(product) ? cell.costPoisha : undefined,
     stock: canEditStock(product) ? cell.stock : undefined,
-    category: cell.category,
+    categoryId: cell.categoryId,
+    brandId: cell.brandId,
     status: cell.status,
   };
   const changes = bulkEditFields.flatMap((field) => {
@@ -101,13 +103,18 @@ const fieldLabels: Record<BulkEditField, string> = {
   compareAtPricePoisha: 'Old price',
   costPoisha: 'Cost',
   stock: 'Stock',
-  category: 'Category',
+  categoryId: 'Category',
+  brandId: 'Brand',
   status: 'Status',
 };
 const statusLabels = { active: 'Selling', hidden: 'Hidden' } as const;
 
-function show(field: BulkEditField, value: number | string | null) {
+// Category and brand values are ids; this maps each to the name the owner sees.
+export type ListNames = Map<string, string>;
+
+function show(field: BulkEditField, value: number | string | null, names: ListNames) {
   if (value === null || value === '') return '-';
+  if (field === 'categoryId' || field === 'brandId') return names.get(String(value)) ?? '-';
   if (field === 'status') return statusLabels[value as 'active' | 'hidden'];
   if (typeof value === 'number' && field !== 'stock') return formatTakaNumber(value);
   return String(value);
@@ -120,20 +127,25 @@ export function currentValue(product: ProductResponse, field: BulkEditField) {
     compareAtPricePoisha: product.compareAtPricePoisha,
     costPoisha: variant?.costPoisha ?? null,
     stock: variant?.onHand ?? null,
-    category: product.category,
+    categoryId: product.categoryId,
+    brandId: product.brandId,
     status: product.status,
   }[field];
 }
 
-export function displayValue(field: BulkEditField, value: number | string | null) {
-  return show(field, value);
+export function displayValue(
+  field: BulkEditField,
+  value: number | string | null,
+  names: ListNames,
+) {
+  return show(field, value, names);
 }
 
 // One line per field, as in the design: "Price: Cotton T-shirt 1,200 → 1,250 · Leather sandal ...".
 export function reviewLines(
   rows: ProductBulkEditRow[],
   products: ProductResponse[],
-  stockReason: string,
+  { stockReason, names }: { stockReason: string; names: ListNames },
 ) {
   const byId = new Map(products.map((product) => [product.id, product]));
   return (Object.keys(fieldLabels) as BulkEditField[]).flatMap((field) => {
@@ -141,7 +153,7 @@ export function reviewLines(
       const next = row[field];
       const product = byId.get(row.productId);
       if (next === undefined || !product) return [];
-      const text = `${product.name} ${show(field, currentValue(product, field))} → ${show(field, next)}`;
+      const text = `${product.name} ${show(field, currentValue(product, field), names)} → ${show(field, next, names)}`;
       return [field === 'stock' && stockReason ? `${text} (${stockReason})` : text];
     });
     return parts.length ? [`${fieldLabels[field]}: ${parts.join(' · ')}.`] : [];

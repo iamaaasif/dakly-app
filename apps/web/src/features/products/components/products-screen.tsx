@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
@@ -42,7 +43,10 @@ export function ProductsScreen(initial: ProductsScreenProps) {
       <main className="space-y-6 p-6 md:p-8">
         <ProductsHeader canEdit={canEdit} query={query} listHref={listHref} importing={importing} />
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
-          <ProductFilters key={`${query.search}|${query.readiness}`} query={query} />
+          <ProductFilters
+            key={`${query.search}|${query.readiness}|${query.categoryId}|${query.brandId}`}
+            query={query}
+          />
           <AssistantChange canEdit={canEdit} />
           <ProductBulkSection bulk={bulk} />
           <ProductResults
@@ -89,6 +93,12 @@ function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderP
         </p>
       </div>
       <div className="flex flex-wrap gap-3">
+        <Link
+          href="/products/lists"
+          className="inline-flex min-h-10 items-center rounded-md border border-input-border bg-surface px-4 text-base font-medium text-text hover:bg-surface-muted"
+        >
+          Categories and brands
+        </Link>
         <ExportProductsButtons query={query} />
         {canEdit ? (
           <>

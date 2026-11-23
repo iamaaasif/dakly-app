@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, sql } from 'drizzle-orm';
 
 import type { ProductBrandResponse } from '@dakly/contracts/product-lists';
-import { productBrands } from '@dakly/db/schema/products';
+import { productBrands, products } from '@dakly/db/schema/products';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -55,12 +55,42 @@ export class ProductBrandsRepository {
     return rows[0];
   }
 
+  async hasProducts(storeId: string, id: string): Promise<boolean> {
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.storeId, storeId), eq(products.brandId, id)))
+        .limit(1),
+    );
+    return rows.length > 0;
+  }
+
   // Returns false when another brand of the shop already has the name.
   async insert(storeId: string, input: ProductBrand): Promise<boolean> {
     return this.writeNamed(() =>
       this.database.forStore(storeId, (tx) =>
         tx.insert(productBrands).values({ storeId, ...input }),
       ),
+    );
+  }
+
+  rename(storeId: string, id: string, name: string): Promise<boolean> {
+    return this.writeNamed(() =>
+      this.database.forStore(storeId, (tx) =>
+        tx
+          .update(productBrands)
+          .set({ name })
+          .where(and(eq(productBrands.storeId, storeId), eq(productBrands.id, id))),
+      ),
+    );
+  }
+
+  async delete(storeId: string, id: string): Promise<void> {
+    await this.database.forStore(storeId, (tx) =>
+      tx
+        .delete(productBrands)
+        .where(and(eq(productBrands.storeId, storeId), eq(productBrands.id, id))),
     );
   }
 

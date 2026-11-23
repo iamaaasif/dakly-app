@@ -235,6 +235,9 @@ export const productListQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().trim().min(3).max(200).optional(),
   readiness: z.enum(productReadinessValues).optional(),
+  // A parent category also shows the products in its sub-categories.
+  categoryId: z.uuid().optional(),
+  brandId: z.uuid().optional(),
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;

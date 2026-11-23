@@ -47,3 +47,13 @@ export function categoryOptions(categories: ProductCategoryResponse[]) {
       })),
   ]);
 }
+
+// Every category (with its parent) and brand by id, for showing what an edit changes.
+export function useListNames(): Map<string, string> {
+  const { data: categories } = useProductCategories();
+  const { data: brands } = useProductBrands();
+  return new Map([
+    ...categoryOptions(categories?.items ?? []).map(({ value, label }) => [value, label] as const),
+    ...(brands?.items ?? []).map(({ id, name }) => [id, name] as const),
+  ]);
+}

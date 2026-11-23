@@ -29,6 +29,28 @@ export class ProductBrandsService {
     });
   }
 
+  rename(storeId: string, id: string, { name }: ProductBrandInput): Promise<ProductBrandResponse> {
+    return this.transaction.run(storeId, async () => {
+      await this.assertExists(storeId, id);
+      const taken = await this.repository.findByName(storeId, name);
+      if (taken && taken.id !== id) throw productError('PRODUCT_BRAND_NAME_TAKEN');
+      if (!(await this.repository.rename(storeId, id, name)))
+        throw productError('PRODUCT_BRAND_NAME_TAKEN');
+      const renamed = (await this.repository.list(storeId)).find((item) => item.id === id);
+      if (!renamed) throw productError('PRODUCT_BRAND_NOT_FOUND');
+      return renamed;
+    });
+  }
+
+  remove(storeId: string, id: string): Promise<void> {
+    return this.transaction.run(storeId, async () => {
+      await this.assertExists(storeId, id);
+      if (await this.repository.hasProducts(storeId, id))
+        throw productError('PRODUCT_BRAND_IN_USE');
+      await this.repository.delete(storeId, id);
+    });
+  }
+
   async assertExists(storeId: string, id: string): Promise<void> {
     if (!(await this.repository.find(storeId, id))) throw productError('PRODUCT_BRAND_NOT_FOUND');
   }

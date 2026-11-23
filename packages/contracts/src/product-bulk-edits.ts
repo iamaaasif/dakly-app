@@ -12,7 +12,8 @@ export const bulkEditFields = [
   'compareAtPricePoisha',
   'costPoisha',
   'stock',
-  'category',
+  'categoryId',
+  'brandId',
   'status',
 ] as const;
 export type BulkEditField = (typeof bulkEditFields)[number];
@@ -36,7 +37,8 @@ const bulkEditRowSchema = z
       .min(0, 'Stock cannot be negative')
       .max(MAX_STOCK_QUANTITY)
       .optional(),
-    category: z.string().trim().min(1).max(200, 'Use 200 characters or fewer').optional(),
+    categoryId: z.uuid().optional(),
+    brandId: z.uuid().optional(),
     status: z.enum(['active', 'hidden']).optional(),
   })
   .refine((row) => Object.keys(row).length > 1, 'Change at least one value');
@@ -105,11 +107,8 @@ export const productBulkEditFormSchema = z.strictObject({
       compareAtPricePoisha: gridTaka,
       costPoisha: gridTaka,
       stock: gridCount,
-      category: z
-        .string()
-        .trim()
-        .max(200, 'Use 200 characters or fewer')
-        .transform((value) => value || undefined),
+      categoryId: z.uuid().or(z.literal('').transform(() => undefined)),
+      brandId: z.uuid().or(z.literal('').transform(() => undefined)),
       status: z.enum(['active', 'hidden']),
     }),
   ),

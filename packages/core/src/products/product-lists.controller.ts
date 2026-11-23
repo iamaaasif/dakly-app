@@ -1,8 +1,21 @@
-import { Body, Controller, Get, Inject, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 
 import {
+  changeProductCategorySchema,
   createProductCategorySchema,
   productBrandSchema,
+  type ChangeProductCategoryInput,
   type CreateProductCategoryInput,
   type ProductBrandInput,
   type ProductBrandListResponse,
@@ -39,6 +52,26 @@ export class ProductListsController {
     return this.categories.create(storeId, input);
   }
 
+  @Patch('categories/:categoryId')
+  @RequirePermission('products.edit')
+  changeCategory(
+    @CurrentStore() storeId: string,
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Body(new ZodValidationPipe(changeProductCategorySchema)) input: ChangeProductCategoryInput,
+  ): Promise<ProductCategoryResponse> {
+    return this.categories.change(storeId, categoryId, input);
+  }
+
+  @Delete('categories/:categoryId')
+  @HttpCode(204)
+  @RequirePermission('products.edit')
+  removeCategory(
+    @CurrentStore() storeId: string,
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+  ): Promise<void> {
+    return this.categories.remove(storeId, categoryId);
+  }
+
   @Get('brands')
   @RequirePermission('products.view')
   listBrands(@CurrentStore() storeId: string): Promise<ProductBrandListResponse> {
@@ -52,5 +85,25 @@ export class ProductListsController {
     @Body(new ZodValidationPipe(productBrandSchema)) input: ProductBrandInput,
   ): Promise<ProductBrandResponse> {
     return this.brands.create(storeId, input);
+  }
+
+  @Patch('brands/:brandId')
+  @RequirePermission('products.edit')
+  renameBrand(
+    @CurrentStore() storeId: string,
+    @Param('brandId', ParseUUIDPipe) brandId: string,
+    @Body(new ZodValidationPipe(productBrandSchema)) input: ProductBrandInput,
+  ): Promise<ProductBrandResponse> {
+    return this.brands.rename(storeId, brandId, input);
+  }
+
+  @Delete('brands/:brandId')
+  @HttpCode(204)
+  @RequirePermission('products.edit')
+  removeBrand(
+    @CurrentStore() storeId: string,
+    @Param('brandId', ParseUUIDPipe) brandId: string,
+  ): Promise<void> {
+    return this.brands.remove(storeId, brandId);
   }
 }
