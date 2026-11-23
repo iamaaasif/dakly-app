@@ -7,7 +7,7 @@ import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/llm-driver';
 
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReply } from '../../ai-agent/prompts/chat-reply.v5';
+import { chatReplyV5 } from '../../ai-agent/prompts/chat-reply.v5';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v1';
 import { checkReplyFacts } from '../../ai-agent/reply-fact-check';
 import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
@@ -138,7 +138,7 @@ export async function composeReply(
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {
       model,
-      instructions: chatReply.instructions,
+      instructions: chatReplyV5.instructions,
       input: context + transcript,
       output: chatReplyOutputSchema,
       tools: salesAgentLlmTools,

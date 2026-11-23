@@ -69,9 +69,54 @@ export const stockDeliveryGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [120],
   },
+  // A photo with a sure or sold-out match is answered as that product, without searching again.
+  {
+    id: 'photo-match-sure-bn',
+    language: 'bangla',
+    question: 'ছবি: লাল রঙের কুর্তি, সাদা ফুলের নকশা। দাম কত?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি'],
+    cardPhoto: 'kurti-red',
+  },
+  {
+    id: 'photo-match-sure-banglish',
+    language: 'banglish',
+    question: 'photo: nil handbag, lomba strap. stock ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1800],
+    mentionsAnyOf: ['হ্যান্ডব্যাগ', 'ব্যাগ', 'handbag', 'bag'],
+    cardPhoto: 'bag-blue',
+  },
+  {
+    id: 'photo-match-sold-out-bn',
+    language: 'bangla',
+    question: 'ছবি: বাদামী চামড়ার লোফার জুতা। কত দাম?',
+    expectedHandover: null,
+    allowedAmountsTaka: [2100, 1500],
+    mentionsAnyOf: ['নেই', 'স্টক'],
+    neverOffer: ['স্নিকার্স', 'sneakers'],
+  },
+  {
+    id: 'photo-match-sold-out-mixed',
+    language: 'banglish',
+    question: 'photo: white sports sneakers, lace-up. size ৪১ ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500, 1800],
+    mentionsAnyOf: ['নেই', 'nai', 'স্টক', 'stock'],
+    neverOffer: ['লোফার', 'loafer'],
+  },
 ];
 
 export const stockDeliveryRecordedOutcomes: Record<string, EvalOutcome> = {
+  'photo-match-sure-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।', cardPhoto: 'kurti-red' },
+  'photo-match-sure-banglish': {
+    kind: 'reply',
+    text: 'Nil handbag ache, 1800 tk.',
+    cardPhoto: 'bag-blue',
+  },
+  'photo-match-sold-out-bn': { kind: 'reply', text: 'এই লোফারটা এখন স্টকে নেই।' },
+  'photo-match-sold-out-mixed': { kind: 'reply', text: 'এই স্নিকার্স এখন স্টকে নেই।' },
   'stock-no-product-banglish': {
     kind: 'reply',
     text: 'কোন প্রোডাক্টের L সাইজের কথা বলছেন? নামটা বললে স্টক দেখে জানাবো।',
