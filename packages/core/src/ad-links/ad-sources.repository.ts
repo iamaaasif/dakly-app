@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 
 import type { AdLinkSource, AdReadState, AdSuggestionOrigin } from '@dakly/contracts/ad-links';
 import { adProductSuggestions, adSources } from '@dakly/db/schema/ad-links';
@@ -79,6 +79,53 @@ export class AdSourcesRepository {
           ),
         );
     });
+  }
+
+  list(storeId: string, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          source: adSources.source,
+          externalId: adSources.externalId,
+          title: adSources.title,
+          photoUrl: adSources.photoUrl,
+          lastSeenAt: adSources.lastSeenAt,
+        })
+        .from(adSources)
+        .where(eq(adSources.storeId, storeId))
+        .orderBy(desc(adSources.lastSeenAt))
+        .limit(limit),
+    );
+  }
+
+  listAllSuggestions(storeId: string): Promise<(Key & { productId: string })[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          source: adProductSuggestions.source,
+          externalId: adProductSuggestions.externalId,
+          productId: adProductSuggestions.productId,
+        })
+        .from(adProductSuggestions)
+        .where(eq(adProductSuggestions.storeId, storeId))
+        .orderBy(asc(adProductSuggestions.position)),
+    );
+  }
+
+  async clearSuggestions(storeId: string, { source, externalId }: Key): Promise<boolean> {
+    const removed = await this.database.forStore(storeId, (tx) =>
+      tx
+        .delete(adProductSuggestions)
+        .where(
+          and(
+            eq(adProductSuggestions.storeId, storeId),
+            eq(adProductSuggestions.source, source),
+            eq(adProductSuggestions.externalId, externalId),
+          ),
+        )
+        .returning({ id: adProductSuggestions.id }),
+    );
+    return removed.length > 0;
   }
 
   async listSuggestedProductIds(storeId: string, { source, externalId }: Key): Promise<string[]> {

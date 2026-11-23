@@ -25,3 +25,22 @@ export type AdLink = {
 
 export type AdReadState = (typeof adReadStates)[number];
 export type AdSuggestionOrigin = (typeof adSuggestionOrigins)[number];
+
+export const adStatuses = ['confirmed', 'suggested', 'unlinked'] as const;
+export type AdStatus = (typeof adStatuses)[number];
+
+type AdProduct = { productId: string; name: string };
+
+// One ad or post a customer came from. Only `products` is used in replies; `suggestions` wait for the owner.
+export type AdListItem = {
+  source: AdLinkSource;
+  externalId: string;
+  title: string | null;
+  photoUrl: string | null;
+  status: AdStatus;
+  products: AdProduct[];
+  suggestions: AdProduct[];
+  lastSeenAt: string;
+};
+
+export type AdList = { items: AdListItem[] };
