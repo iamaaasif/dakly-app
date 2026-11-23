@@ -17,6 +17,10 @@ import {
 } from '../khata-review';
 import { KhataRow, rowColumns } from './khata-row';
 
+function mergeChoice(choice: RowChoice, patch: Partial<RowChoice>): RowChoice {
+  return { ...choice, ...patch, draft: { ...choice.draft, ...patch.draft } };
+}
+
 export type PageImport = {
   result: KhataImportResponse;
   matched: number;
@@ -42,7 +46,7 @@ export function KhataReviewPage({ page, tabs, onImported }: ReviewPageProps) {
   const change = (rowId: string, patch: Partial<RowChoice>) =>
     setChoices((current) => ({
       ...current,
-      [rowId]: { ...(current[rowId] ?? untouchedChoice), ...patch },
+      [rowId]: mergeChoice(current[rowId] ?? untouchedChoice, patch),
     }));
 
   return (
@@ -111,7 +115,7 @@ type RowTableProps = {
 function RowTable({ rows, choiceOf, onChange }: RowTableProps) {
   return (
     <div className="min-w-0 flex-[999_1_600px] overflow-x-auto rounded-lg border border-border bg-surface">
-      <div className="min-w-[840px]">
+      <div className="min-w-[960px]">
         <div
           className={cn(
             rowColumns,

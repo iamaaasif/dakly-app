@@ -110,3 +110,32 @@ describe('rowStatus', () => {
     expect(rowStatus(row(), untouchedChoice).label).toBe('Looks right');
   });
 });
+
+describe('owner corrections', () => {
+  const draft = (patch: Partial<typeof untouchedChoice.draft>) => ({
+    ...untouchedChoice,
+    draft: patch,
+  });
+
+  it('sends only the corrections, with the phone and amount normalised', () => {
+    const input = buildImportInput([row()], {
+      [rowId(1)]: draft({ entryDate: '2025-11-07', phone: '+8801712345678', amount: '১,২৫০' }),
+    });
+    expect(input.rows[0]).toMatchObject({
+      edit: { entryDate: '2025-11-07', phone: '01712345678', amountPoisha: 125000 },
+    });
+  });
+
+  it('holds the import while a typed phone or amount is invalid', () => {
+    expect(needsAttention(row(), draft({ phone: '12345' }))).toBe(true);
+    expect(needsAttention(row(), draft({ amount: 'abc' }))).toBe(true);
+    expect(rowStatus(row(), draft({ amount: '0' })).label).toBe('Fix this');
+    expect(needsAttention(row(), draft({ phone: '01712345678', amount: '300.50' }))).toBe(false);
+  });
+
+  it('lets a typed phone unblock a baki row that had none', () => {
+    const baki = row({ kind: 'baki', phone: null, confidence: 90 });
+    expect(needsAttention(baki, untouchedChoice)).toBe(true);
+    expect(needsAttention(baki, draft({ phone: '01712345678' }))).toBe(false);
+  });
+});

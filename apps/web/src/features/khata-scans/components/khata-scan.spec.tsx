@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -124,7 +124,7 @@ afterEach(() => {
 // Opens the review of one page, as the address `?pages=` does, and returns the row of "Hasan".
 async function reviewHasan() {
   show([pageId]);
-  return (await screen.findByText('Hasan')).closest('li')!;
+  return (await screen.findByDisplayValue('Hasan')).closest('li')!;
 }
 
 describe('Khata Scanner', () => {
@@ -149,6 +149,38 @@ describe('Khata Scanner', () => {
         { rowId: rowIds[0], action: 'import', isChecked: false },
         { rowId: rowIds[1], action: 'import', isChecked: true },
         { rowId: rowIds[2], action: 'import', isChecked: false, mergeContactId: mituId },
+      ],
+    });
+  });
+
+  it('sends a corrected date, phone and amount and blocks import while one is invalid', async () => {
+    respond();
+    const user = userEvent.setup();
+    const hasan = await reviewHasan();
+
+    await user.click(within(hasan).getByRole('button', { name: 'Looks right' }));
+    const phone = within(hasan).getByLabelText('Phone, row 2');
+    await user.type(phone, '123');
+    expect(within(hasan).getByText('Fix this')).toBeTruthy();
+    expect(
+      (screen.getByRole('button', { name: 'Import 3 rows' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    await user.clear(phone);
+    await user.type(phone, '01712345678');
+    fireEvent.change(within(hasan).getByLabelText('Date, row 2'), {
+      target: { value: '2025-11-07' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Yes, link' }));
+    await user.click(screen.getByRole('button', { name: 'Import 3 rows' }));
+
+    await screen.findByText('Your khata is now in Dakly');
+    const imported = sent.find((call) => call.path.endsWith(`/pages/${pageId}/import`));
+    expect(imported?.body).toMatchObject({
+      rows: [
+        {},
+        { edit: { phone: '01712345678', entryDate: '2025-11-07' } },
+        { mergeContactId: mituId },
       ],
     });
   });
@@ -184,7 +216,7 @@ describe('Khata Scanner', () => {
     const user = userEvent.setup();
     show([pageId, pageId2], 2);
 
-    expect(await screen.findAllByText('Hasan')).toHaveLength(2);
+    expect(await screen.findAllByDisplayValue('Hasan')).toHaveLength(2);
     expect(screen.getByRole('button', { name: 'Page 2' }).getAttribute('aria-pressed')).toBe(
       'true',
     );
@@ -199,6 +231,6 @@ describe('Khata Scanner', () => {
     show([pageId]);
 
     expect(await screen.findByText('This page is imported.')).toBeTruthy();
-    expect(screen.queryByText('Hasan')).toBeNull();
+    expect(screen.queryByDisplayValue('Hasan')).toBeNull();
   });
 });
