@@ -3,6 +3,13 @@ import sharp from 'sharp';
 // Large enough to read small handwriting, small enough for the model to take.
 const LONG_SIDE_PIXELS = 2600;
 
+export type KhataTurn = 0 | 90 | 180 | 270;
+// The model can name the wrong way for a sideways page, then finds it upside down; adding its
+// later advice to the turn already made settles on the right one.
+export const MAX_KHATA_READS = 3;
+export const addKhataTurn = (made: KhataTurn, advised: KhataTurn) =>
+  ((made + advised) % 360) as KhataTurn;
+
 export type KhataPhoto = { contentType: 'image/jpeg'; bytes: Uint8Array };
 
 // Phones store a sideways photo as upright pixels plus an EXIF turn flag, which the model never
@@ -10,7 +17,7 @@ export type KhataPhoto = { contentType: 'image/jpeg'; bytes: Uint8Array };
 // Undefined when the bytes are not an image that can be decoded.
 export async function prepareKhataPhoto(
   bytes: Uint8Array,
-  extraTurnClockwiseDegrees: 0 | 90 | 180 | 270 = 0,
+  extraTurnClockwiseDegrees: KhataTurn = 0,
 ): Promise<KhataPhoto | undefined> {
   try {
     const upright = await sharp(bytes).rotate().toBuffer();

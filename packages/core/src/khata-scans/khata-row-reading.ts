@@ -22,6 +22,10 @@ const UNSURE_CONFIDENCE = KHATA_CONFIDENCE_THRESHOLD - 1;
 const MAX_ROWS_PER_PAGE = 200;
 const MAX_AMOUNT_TAKA = 10_000_000;
 
+// ৳ and ৮ look alike in handwriting, so "৳২০০" can come back as "৮২০০". An amount that starts with
+// ৮ and has three or more digits after it is checked by the owner, whatever the model's confidence.
+const SIGN_LOOKALIKE_AMOUNT = /^\s*৮[০-৯0-9,]{3,}/;
+
 const BANGLA_DIGITS = /[০-৯]/g;
 const toEnglishDigits = (text: string) =>
   text.replace(BANGLA_DIGITS, (digit) => String(digit.charCodeAt(0) - '০'.charCodeAt(0)));
@@ -116,7 +120,8 @@ function candidateYears(written: string | undefined, today: Date): number[] {
 }
 
 export function readKhataRows(output: KhataModelOutput, today: Date): ReadKhataRow[] {
-  if (!output.pageReadable) return [];
+  // Rows read from a page the model still finds sideways are never kept.
+  if (!output.pageReadable || output.turnClockwiseDegrees !== 0) return [];
   const rows: ReadKhataRow[] = [];
   for (const row of output.rows.slice(0, MAX_ROWS_PER_PAGE)) {
     const read = readRow(row, today);
@@ -142,6 +147,10 @@ function readDate(text: string | null, today: Date): { entryDate: string | null;
   return { entryDate: monthFirst, isBad: true };
 }
 
+function isDoubtfulRow(row: KhataModelOutput['rows'][number], name: string): boolean {
+  return NOT_A_NAME.has(name.toLowerCase()) || SIGN_LOOKALIKE_AMOUNT.test(row.amountText);
+}
+
 function readRow(
   row: KhataModelOutput['rows'][number],
   today: Date,
@@ -152,8 +161,7 @@ function readRow(
   if (name === '' || amountPoisha === null) return undefined;
   const { phone, isBad: isPhoneBad } = readPhone(row.phoneText);
   const { entryDate, isBad: isDateBad } = readDate(row.dateText, today);
-  const isUnsure =
-    row.kind === 'unclear' || isPhoneBad || isDateBad || NOT_A_NAME.has(name.toLowerCase());
+  const isUnsure = row.kind === 'unclear' || isPhoneBad || isDateBad || isDoubtfulRow(row, name);
   return {
     entryDate,
     name,

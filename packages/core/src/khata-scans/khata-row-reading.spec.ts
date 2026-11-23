@@ -208,6 +208,24 @@ describe('reading khata rows', () => {
     expect(rows.map((read) => read.confidence < KHATA_CONFIDENCE_THRESHOLD)).toEqual([true, true]);
   });
 
+  it('checks an amount that starts with ৮, which may be a ৳ sign read as a digit', () => {
+    const [read] = readKhataRows(
+      {
+        pageReadable: true,
+        turnClockwiseDegrees: 0,
+        rows: [row({ amountText: '৮২০০', confidence: 95 })],
+      },
+      today,
+    );
+    expect(read?.confidence).toBeLessThan(KHATA_CONFIDENCE_THRESHOLD);
+  });
+
+  it('keeps no rows from a page the model still finds sideways', () => {
+    expect(
+      readKhataRows({ pageReadable: true, turnClockwiseDegrees: 90, rows: [row({})] }, today),
+    ).toEqual([]);
+  });
+
   it('never reads a phone number as an amount', () => {
     expect(parseAmountPoisha('01712345678')).toBeNull();
   });

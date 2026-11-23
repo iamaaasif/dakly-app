@@ -21,7 +21,7 @@ import { AppError } from '../platform/errors/app-error';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { UsageService } from '../usage/usage.service';
-import { prepareKhataPhoto } from './khata-photo';
+import { addKhataTurn, MAX_KHATA_READS, prepareKhataPhoto, type KhataTurn } from './khata-photo';
 import { readKhataRows, type ReadKhataRow } from './khata-row-reading';
 import { khataScanError } from './khata-scans.errors';
 import {
@@ -132,11 +132,18 @@ export class KhataScansService {
       return;
     }
     // No transaction is open here: the model call can take a minute (docs/rules/database.md).
-    let result = await this.readWithModel(storeId, original, 0);
-    // A page the model finds sideways is turned and read again once; rows read from a page the
-    // model could not hold upright are never kept.
-    if (result.kind === 'output' && result.output.turnClockwiseDegrees !== 0) {
-      result = await this.readWithModel(storeId, original, result.output.turnClockwiseDegrees);
+    let turn: KhataTurn = 0;
+    let result = await this.readWithModel(storeId, original, turn);
+    // A sideways page is turned and read again, up to MAX_KHATA_READS times in all.
+    for (
+      let reads = 1;
+      reads < MAX_KHATA_READS &&
+      result.kind === 'output' &&
+      result.output.turnClockwiseDegrees !== 0;
+      reads++
+    ) {
+      turn = addKhataTurn(turn, result.output.turnClockwiseDegrees);
+      result = await this.readWithModel(storeId, original, turn);
     }
     if (result.kind !== 'output') {
       const code = result.kind === 'failure' ? result.code : undefined;
@@ -164,7 +171,7 @@ export class KhataScansService {
   private async readWithModel(
     storeId: string,
     original: { contentType: string; bytes: Uint8Array },
-    turnClockwiseDegrees: 0 | 90 | 180 | 270,
+    turnClockwiseDegrees: KhataTurn,
   ) {
     // A PDF page is sent as it is; a photo is stood upright and sized first.
     const photo =

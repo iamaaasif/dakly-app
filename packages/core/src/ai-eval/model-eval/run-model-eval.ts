@@ -13,6 +13,7 @@ import { say } from './eval-output';
 import {
   reportEmbed,
   reportFast,
+  reportKhata,
   reportMemory,
   reportAssistantProducts,
   reportOptionsFromPhoto,
@@ -23,7 +24,16 @@ import {
   type JobContext,
 } from './job-reports';
 
-const jobs = ['fast', 'reply', 'assistant', 'vision', 'transcribe', 'embed', 'memory'] as const;
+const jobs = [
+  'fast',
+  'reply',
+  'assistant',
+  'vision',
+  'khata',
+  'transcribe',
+  'embed',
+  'memory',
+] as const;
 type Job = (typeof jobs)[number];
 
 const chatModels = ['gpt-6-luna', 'gpt-5.6-luna', 'gpt-6.1-terra', 'gpt-5.6-terra'];
@@ -32,6 +42,7 @@ const defaultModels: Record<Job, string[]> = {
   reply: chatModels,
   assistant: chatModels,
   vision: chatModels,
+  khata: chatModels,
   transcribe: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'gpt-transcribe'],
   embed: ['text-embedding-3-small', 'text-embedding-3-large'],
   memory: chatModels,
@@ -85,6 +96,7 @@ async function main() {
       await reportVision(context, modelsFor('vision'));
       await reportOptionsFromPhoto(context, modelsFor('vision'));
     },
+    khata: () => reportKhata(context, modelsFor('khata')),
     transcribe: () => reportTranscribe(context, modelsFor('transcribe')),
     embed: () => reportEmbed(context, modelsFor('embed')),
     memory: () => reportMemory(context, modelsFor('memory')),
