@@ -63,6 +63,9 @@ import { InboundAttachmentsModule } from '@dakly/core/messaging/inbound-attachme
 import { CopyMessageAttachmentsJob } from '@dakly/core/messaging/jobs/copy-message-attachments.job';
 import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
 import { MessagingModule } from '@dakly/core/messaging/messaging.module';
+import { StreamInboxOnHandedOver } from '@dakly/core/notifications/jobs/stream-inbox-on-handed-over.job';
+import { StreamInboxOnMessageReceived } from '@dakly/core/notifications/jobs/stream-inbox-on-message-received.job';
+import { StreamInboxOnMessageSent } from '@dakly/core/notifications/jobs/stream-inbox-on-message-sent.job';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
@@ -126,6 +129,9 @@ import { JobSchedulers } from './job-schedulers';
     StartProductPhotoTagBackfillJob,
     UndoContactImport,
     StreamNotificationOnCreated,
+    StreamInboxOnMessageReceived,
+    StreamInboxOnMessageSent,
+    StreamInboxOnHandedOver,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,
     RecordAutomationBirthdaysJob,

@@ -50,6 +50,7 @@ function show() {
       <NotificationBell />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 const page = (items: NotificationResponse[]) => Response.json({ items, nextCursor: null });
@@ -223,6 +224,16 @@ describe('Live notification updates', () => {
     stream().dispatchEvent(new MessageEvent('notification', { data: JSON.stringify(reconnect) }));
     await screen.findByRole('button', { name: 'Open notifications, 1 unread', hidden: true });
     expect(await screen.findByText('Reconnect your Facebook page')).toBeTruthy();
+  });
+
+  it('reads the chats again when the stream signals an inbox change', async () => {
+    serve(() => page([]));
+    const client = show();
+    const refetch = vi.spyOn(client, 'invalidateQueries');
+    stream().dispatchEvent(new Event('inbox'));
+    await waitFor(() =>
+      expect(refetch).toHaveBeenCalledWith(expect.objectContaining({ queryKey: ['chats'] })),
+    );
   });
 
   it('polls every 60 seconds while the stream is down and stops once it is back', async () => {
