@@ -16,7 +16,9 @@ describe('createStoreSchema', () => {
     expect(contracts.createStoreSchema.parse(input).name).toBe('রিনার দোকান');
   });
   it('accepts a first shop without a business type or district', () => {
-    const { businessType: _type, district: _district, ...rest } = input;
+    const rest: Record<string, unknown> = { ...input };
+    delete rest.businessType;
+    delete rest.district;
     expect(contracts.createStoreSchema.safeParse(rest).success).toBe(true);
   });
   it('adds https to a website typed without a scheme and keeps the offering', () => {
