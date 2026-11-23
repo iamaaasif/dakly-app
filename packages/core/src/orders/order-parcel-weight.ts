@@ -1,8 +1,15 @@
+import type { ProductsService } from '../products/products.service';
+
 // Null unless every item's product has a weight, so a partial total never looks complete.
-export function parcelWeightGrams(
+export async function orderParcelWeightGrams(
+  products: ProductsService,
+  storeId: string,
   items: { variantId: string; quantity: number }[],
-  weights: Map<string, number | null>,
-): number | null {
+): Promise<number | null> {
+  const weights = await products.variantWeights(
+    storeId,
+    items.map(({ variantId }) => variantId),
+  );
   let total = 0;
   for (const { variantId, quantity } of items) {
     const weight = weights.get(variantId);

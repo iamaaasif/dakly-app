@@ -21,12 +21,12 @@ import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductStockService } from '../products/product-stock.service';
-import { parcelWeightGrams } from './order-parcel-weight';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
 import { toOrderListItem } from './order-list-item';
+import { orderParcelWeightGrams } from './order-parcel-weight';
 import { moveOrderReservations } from './order-reservations';
 import { orderRiskFields } from './order-risk';
 import {
@@ -44,6 +44,7 @@ import {
   stageWrite,
   stagesForOrderTab,
 } from './order-stage';
+import { isoTime } from './order-time';
 import { editedOrderTotals, orderTotalPoisha, orderTotals } from './order-totals';
 import { orderError } from './orders.errors';
 import { OrdersRepository, type OrderItemWrite, type OrderWrite } from './orders.repository';
@@ -236,12 +237,7 @@ export class OrdersService {
     const order = await this.repository.find(storeId, orderId);
     if (!order) throw orderError('ORDER_NOT_FOUND');
     const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
-    const timeline = await orderStageHistory(storeId, orderId, this.audit);
     const items = await this.repository.items(storeId, orderId);
-    const weights = await this.products.variantWeights(
-      storeId,
-      items.map(({ variantId }) => variantId),
-    );
     return {
       ...order,
       recipientPhone:
@@ -259,8 +255,8 @@ export class OrdersService {
       totalPoisha: orderTotalPoisha(order),
       ...orderRiskFields(outcomes[0]),
       items,
-      parcelWeightGrams: parcelWeightGrams(items, weights),
-      timeline,
+      parcelWeightGrams: await orderParcelWeightGrams(this.products, storeId, items),
+      timeline: await orderStageHistory(storeId, orderId, this.audit),
     };
   }
 
@@ -420,8 +416,4 @@ export class OrdersService {
     }
     return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
-}
-
-function isoTime(value: Date | null): string | null {
-  return value?.toISOString() ?? null;
 }

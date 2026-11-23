@@ -323,7 +323,7 @@ function formValues(
     name: product.name,
     description: product.description,
     category: product.category,
-    weightGrams: product.weightGrams === null ? '' : String(product.weightGrams),
+    weightGrams: weightText(product.weightGrams),
     aliases: product.aliases,
     options: product.options,
     pricePoisha: takaInputFromPoisha(product.pricePoisha),
@@ -345,6 +345,10 @@ function formValues(
     isVisibleInChats: product.isVisibleInChats,
     isVisibleInOrderLink: product.isVisibleInOrderLink,
   };
+}
+
+function weightText(grams: number | null) {
+  return grams === null ? '' : String(grams);
 }
 
 function productChanges(
