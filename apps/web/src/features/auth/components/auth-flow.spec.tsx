@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PasswordResetConfirm } from './password-reset-confirm';
+import { PasswordReset } from './password-reset';
 import { SignInScreen } from './sign-in-screen';
 import { SignUpScreen } from './sign-up-screen';
 
@@ -169,8 +169,10 @@ describe('Sign in', () => {
     expect(screen.queryByRole('link', { name: 'Terms' })).toBeNull();
   });
   it('requires the second factor after a password reset', async () => {
-    vi.stubGlobal('fetch', async () =>
-      Response.json({ status: 'totp_required', challengeId: 'b'.repeat(43) }, { status: 202 }),
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.endsWith('/password-reset/confirm')
+        ? Response.json({ status: 'totp_required', challengeId: 'b'.repeat(43) }, { status: 202 })
+        : new Response(null, { status: 204 }),
     );
     const messages: unknown[] = [];
     class Channel {
@@ -181,14 +183,41 @@ describe('Sign in', () => {
       close() {}
     }
     vi.stubGlobal('BroadcastChannel', Channel);
-    show(<PasswordResetConfirm identifier="01712345678" />);
+    show(<PasswordReset />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Reset code'), '123456');
-    await user.type(screen.getByLabelText('New password'), 'new-password123');
-    await user.type(screen.getByLabelText('Confirm password'), 'new-password123');
-    await user.click(screen.getByRole('button', { name: 'Reset password' }));
+    await user.type(screen.getByLabelText('Email or mobile number'), '01712345678');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.type(await screen.findByLabelText('New password'), 'new-password123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'new-password123');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
     await screen.findByLabelText('Authenticator or backup code');
     expect(messages).toEqual(['changed']);
-    expect(screen.queryByText('Your password has been reset. You are signed in.')).toBeNull();
+    expect(screen.queryByText('Password updated')).toBeNull();
+  });
+  it('shows a wrong reset code on the password step and returns to the code step', async () => {
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.endsWith('/password-reset/confirm')
+        ? Response.json(
+            { error: { code: 'AUTH_CODE_INVALID', message: 'The code is incorrect or expired' } },
+            { status: 400 },
+          )
+        : new Response(null, { status: 204 }),
+    );
+    show(<PasswordReset />);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Email or mobile number'), 'owner@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.type(await screen.findByLabelText('New password'), 'new-password123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'new-password123');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'That code is wrong or has expired.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Enter the code again' }));
+    expect(await screen.findByLabelText('6-digit code')).toBeTruthy();
   });
 });

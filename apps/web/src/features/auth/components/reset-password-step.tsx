@@ -1,9 +1,11 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import type { SignInResponse } from '@dakly/contracts/auth';
+import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 
 import { useConfirmReset } from '../api/confirm-reset';
@@ -35,15 +37,19 @@ export function ResetPasswordStep({
     defaultValues: { password: '', confirmation: '' },
   });
   const reset = useConfirmReset();
+  // The code and the new password are checked together, so a wrong code shows up on this step.
+  const [badCode, setBadCode] = useState(false);
   const errors = form.formState.errors;
   return (
     <form
       method="post"
       className="space-y-4"
       onSubmit={form.handleSubmit(async ({ password }) => {
+        setBadCode(false);
         try {
           onReset(await reset.mutateAsync({ identifier, code, password, isRemembered: false }));
         } catch (error) {
+          setBadCode(error instanceof ApiError && error.code === 'AUTH_CODE_INVALID');
           formError(error, form.setError);
         }
       })}
@@ -65,16 +71,32 @@ export function ResetPasswordStep({
         autoComplete="new-password"
       />
       {errors.root ? (
-        <p role="alert" className="text-danger">
-          {errors.root.message}{' '}
-          <button type="button" onClick={onBadCode} className="font-semibold text-action underline">
-            Enter the code again
-          </button>
-        </p>
+        <ResetError message={errors.root.message} badCode={badCode} onBadCode={onBadCode} />
       ) : null}
       <Button type="submit" loading={reset.isPending} className="min-h-11 w-full font-semibold">
         Save new password
       </Button>
     </form>
+  );
+}
+
+function ResetError({
+  message,
+  badCode,
+  onBadCode,
+}: {
+  message?: string;
+  badCode: boolean;
+  onBadCode: () => void;
+}) {
+  return (
+    <p role="alert" className="text-danger">
+      {badCode ? 'That code is wrong or has expired.' : message}{' '}
+      {badCode ? (
+        <button type="button" onClick={onBadCode} className="font-semibold text-action underline">
+          Enter the code again
+        </button>
+      ) : null}
+    </p>
   );
 }
