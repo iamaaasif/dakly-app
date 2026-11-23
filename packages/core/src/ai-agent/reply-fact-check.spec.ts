@@ -20,6 +20,40 @@ describe('checkReplyFacts free size', () => {
   });
 });
 
+describe('checkReplyFacts numbers next to a comma', () => {
+  const shoes = [{ products: [{ name: 'Canvas', variants: [{ title: '41', priceTaka: 1500 }] }] }];
+  const lakh = [{ products: [{ name: 'Sofa', variants: [{ title: 'Set', priceTaka: 150000 }] }] }];
+
+  it('does not read a size before a comma as the price, in each language', () => {
+    for (const reply of [
+      'ক্যানভাস জুতা, সাইজ ৪১, ৳১৫০০।',
+      'ক্যানভাস জুতা সাইজ ৪১, ১৫০০ টাকা।',
+      'Canvas juta size 41, 1500 tk.',
+      'Canvas shoes, size 41, ৳1500.',
+      'জুতা size 41,৳1500 এ আছে।',
+    ])
+      expect(checkReplyFacts(reply, shoes, shop), reply).toEqual({ isSafe: true });
+  });
+
+  it('still rejects a wrong price next to a size', () => {
+    for (const reply of ['সাইজ ৪১, ৳১৪০০।', 'size 41, 1400 tk.', 'Size 41, ৳1,400.'])
+      expect(checkReplyFacts(reply, shoes, shop), reply).toEqual({
+        isSafe: false,
+        failure: 'amount',
+      });
+  });
+
+  it('reads comma-grouped amounts whole, including lakh grouping', () => {
+    expect(checkReplyFacts('সোফা সেটের দাম ৳১,৫০,০০০।', lakh, shop)).toEqual({ isSafe: true });
+    expect(checkReplyFacts('Sofa set 1,50,000 tk.', lakh, shop)).toEqual({ isSafe: true });
+    expect(checkReplyFacts('Sofa set ৳150,000.', lakh, shop)).toEqual({ isSafe: true });
+    expect(checkReplyFacts('Sofa set ৳1,50,001.', lakh, shop)).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+  });
+});
+
 describe('checkReplyFacts budgets', () => {
   const reply = (text: string, customer: string) =>
     checkReplyFacts(text, results, shop, [customer]);

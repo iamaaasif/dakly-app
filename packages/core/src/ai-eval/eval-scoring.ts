@@ -141,7 +141,7 @@ function hasWrongPrice(reply: string, allowed: readonly number[], question: stri
       around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),
     }));
   const customerNumbers = new Set(
-    (toAscii(question).match(/\d[\d,]*/g) ?? []).map((n) => Number(n.replaceAll(',', ''))),
+    (toAscii(question).match(/\d+(?:,\d+)*/g) ?? []).map((n) => Number(n.replaceAll(',', ''))),
   );
   return hasWrongAmount(amounts, (value) => allowed.includes(value), customerNumbers);
 }
