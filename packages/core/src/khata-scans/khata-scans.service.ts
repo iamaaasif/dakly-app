@@ -21,6 +21,7 @@ import { AppError } from '../platform/errors/app-error';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { UsageService } from '../usage/usage.service';
+import { prepareKhataPhoto } from './khata-photo';
 import { readKhataRows, type ReadKhataRow } from './khata-row-reading';
 import { khataScanError } from './khata-scans.errors';
 import {
@@ -29,7 +30,7 @@ import {
   type NewKhataRow,
   type StoredKhataRow,
 } from './khata-scans.repository';
-import { readKhataPage } from './prompts/read-khata-page.v2';
+import { readKhataPage } from './prompts/read-khata-page.v3';
 
 const UPLOAD_LINK_SECONDS = 15 * 60;
 const PHOTO_LINK_SECONDS = 15 * 60;
@@ -125,20 +126,18 @@ export class KhataScansService {
     if (!(await this.repository.claim(storeId, pageId, now, new Date(now.getTime() - LEASE_MS))))
       return;
     const page = await this.findPage(storeId, pageId);
-    const photo = await this.readPhoto(page);
-    if (!photo) {
+    const original = await this.readPhoto(page);
+    if (!original) {
       await this.repository.finish(storeId, pageId, { status: 'failed', failureCode: 'model' });
       return;
     }
     // No transaction is open here: the model call can take a minute (docs/rules/database.md).
-    const result = await this.ai.run(storeId, {
-      tier: 'vision',
-      purpose: 'khata_scan',
-      prompt: readKhataPage,
-      input: MODEL_INSTRUCTION,
-      images: [photo],
-      output: khataModelOutputSchema,
-    });
+    let result = await this.readWithModel(storeId, original, 0);
+    // A page the model finds sideways is turned and read again once; rows read from a page the
+    // model could not hold upright are never kept.
+    if (result.kind === 'output' && result.output.turnClockwiseDegrees !== 0) {
+      result = await this.readWithModel(storeId, original, result.output.turnClockwiseDegrees);
+    }
     if (result.kind !== 'output') {
       const code = result.kind === 'failure' ? result.code : undefined;
       await this.handleModelFailure(storeId, pageId, code, finalAttempt);
@@ -154,11 +153,33 @@ export class KhataScansService {
     await this.repository.saveRead(storeId, pageId, await this.withMatches(storeId, read));
   }
 
-  // Undefined when the photo is gone or was purged.
+  // Undefined when the photo is gone, was purged or is not a readable image.
   private async readPhoto(page: KhataPage) {
     if (!page.objectKey || !page.contentType) return undefined;
     const file = await this.storage.readBytes(page.objectKey, KHATA_PAGE_MAX_BYTES);
-    return file.kind === 'found' ? { contentType: page.contentType, bytes: file.bytes } : undefined;
+    if (file.kind !== 'found') return undefined;
+    return { contentType: page.contentType, bytes: file.bytes };
+  }
+
+  private async readWithModel(
+    storeId: string,
+    original: { contentType: string; bytes: Uint8Array },
+    turnClockwiseDegrees: 0 | 90 | 180 | 270,
+  ) {
+    // A PDF page is sent as it is; a photo is stood upright and sized first.
+    const photo =
+      original.contentType === 'application/pdf'
+        ? original
+        : await prepareKhataPhoto(original.bytes, turnClockwiseDegrees);
+    if (!photo) return { kind: 'failure', code: 'model' } as const;
+    return this.ai.run(storeId, {
+      tier: 'vision',
+      purpose: 'khata_scan',
+      prompt: readKhataPage,
+      input: MODEL_INSTRUCTION,
+      images: [photo],
+      output: khataModelOutputSchema,
+    });
   }
 
   // An outage or a pause passes, so the queue tries the page again and only the last try fails it.

@@ -38,6 +38,8 @@ export const importKhataPageSchema = z.strictObject({
 // or English letters and digits; code turns it into dates, phones and poisha.
 export const khataModelOutputSchema = z.strictObject({
   pageReadable: z.boolean(),
+  // Clockwise turn that makes the handwriting upright. Phone photos often arrive sideways.
+  turnClockwiseDegrees: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]),
   rows: z.array(
     z.strictObject({
       dateText: z.string().nullable(),

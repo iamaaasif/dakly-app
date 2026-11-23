@@ -47,14 +47,59 @@ export function parseEntryDate(text: string, today: Date): string | null {
   return parseParts(text, today, 'day_first');
 }
 
+const MONTH_NAMES: Record<number, string[]> = {
+  1: ['জানুয়ারি', 'জানুয়ারী', 'জানু', 'january', 'jan'],
+  2: ['ফেব্রুয়ারি', 'ফেব্রুয়ারী', 'ফেব্রু', 'february', 'feb'],
+  3: ['মার্চ', 'march', 'mar'],
+  4: ['এপ্রিল', 'april', 'apr'],
+  5: ['মে', 'may'],
+  6: ['জুন', 'june', 'jun'],
+  7: ['জুলাই', 'july', 'jul'],
+  8: ['আগস্ট', 'আগষ্ট', 'august', 'aug'],
+  9: ['সেপ্টেম্বর', 'সেপ্টেঃ', 'september', 'sept', 'sep'],
+  10: ['অক্টোবর', 'অক্টো', 'october', 'oct'],
+  11: ['নভেম্বর', 'নভে', 'november', 'nov'],
+  12: ['ডিসেম্বর', 'ডিসে', 'december', 'dec'],
+};
+const monthByName = new Map(
+  Object.entries(MONTH_NAMES).flatMap(([month, names]) =>
+    names.map((name) => [name, Number(month)] as const),
+  ),
+);
+// Words a page writes around a date that are not a person: "মাসের" (of the month) and the like.
+const NOT_A_NAME = new Set([...monthByName.keys(), 'মাস', 'মাসের', 'তারিখ', 'date', 'month']);
+
+// "16 May", "May 16", "১৬ মে ২০২৬", "16th May" become the same day as the numeric forms.
+function monthNameToNumeric(text: string): string | undefined {
+  const match =
+    /^(\d{1,2})(?:st|nd|rd|th)?\s+(\S+?)[,.]?(?:\s+(\d{2}|\d{4}))?$/i.exec(text) ??
+    /^(\S+?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{2}|\d{4}))?$/i.exec(text);
+  if (!match) return undefined;
+  const dayFirst = /^\d/.test(match[1] ?? '');
+  const [day, word] = dayFirst ? [match[1], match[2]] : [match[2], match[1]];
+  const month = monthByName.get((word ?? '').toLowerCase());
+  if (!day || month === undefined) return undefined;
+  return `${day}/${month}${match[3] ? `/${match[3]}` : ''}`;
+}
+
 function parseParts(text: string, today: Date, order: 'day_first' | 'month_first'): string | null {
-  const match = /^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2}|\d{4}))?$/.exec(
-    toEnglishDigits(text.trim()),
-  );
+  const digits = toEnglishDigits(text.trim());
+  const named = /^\d{1,2}[/\-.]\d{1,2}/.test(digits) ? undefined : monthNameToNumeric(digits);
+  // A month name is unambiguous, so it is always day then month whatever the order asked for.
+  const match = /^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2}|\d{4}))?$/.exec(named ?? digits);
   if (!match) return null;
   const [first, second] = [Number(match[1]), Number(match[2])];
-  const [day, month] = order === 'day_first' ? [first, second] : [second, first];
-  for (const year of candidateYears(match[3], today)) {
+  const isDayFirst = order === 'day_first' || named !== undefined;
+  return firstRealDate(
+    candidateYears(match[3], today),
+    isDayFirst ? first : second,
+    isDayFirst ? second : first,
+    today,
+  );
+}
+
+function firstRealDate(years: number[], day: number, month: number, today: Date): string | null {
+  for (const year of years) {
     const date = new Date(Date.UTC(year, month - 1, day));
     const isReal =
       date.getUTCFullYear() === year &&
@@ -107,7 +152,8 @@ function readRow(
   if (name === '' || amountPoisha === null) return undefined;
   const { phone, isBad: isPhoneBad } = readPhone(row.phoneText);
   const { entryDate, isBad: isDateBad } = readDate(row.dateText, today);
-  const isUnsure = row.kind === 'unclear' || isPhoneBad || isDateBad;
+  const isUnsure =
+    row.kind === 'unclear' || isPhoneBad || isDateBad || NOT_A_NAME.has(name.toLowerCase());
   return {
     entryDate,
     name,
