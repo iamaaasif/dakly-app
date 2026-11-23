@@ -1,13 +1,13 @@
-import { isBudgetLimit, leaksInstructions, offerWords } from '@dakly/contracts/reply-wording';
+import {
+  amountPatterns,
+  hasWrongAmount,
+  leaksInstructions,
+  offerWords,
+} from '@dakly/contracts/reply-wording';
 
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
 const number = String.raw`(\d[\d,]*(?:\.\d+)?)`;
-const amountPatterns = [
-  new RegExp(String.raw`৳\s*${number}`, 'giu'),
-  new RegExp(String.raw`${number}\s*(?:৳|tk\b|taka\b|টাকা)`, 'giu'),
-  new RegExp(String.raw`\b(?:tk\.?|bdt|taka|rs\.?)\s*${number}`, 'giu'),
-];
 const stockWord = String.raw`(?:in stock|stock|available|আছে|ache|বাকি|baki|স্টক)`;
 const stockPatterns = [
   new RegExp(
@@ -39,10 +39,8 @@ export function checkReplyFacts(
   const wording = wordingFailure(text, toolResults);
   if (wording) return { isSafe: false, failure: wording };
   const known = numbersIn(toolResults);
-  const budgets = numbersIn(customerTexts);
-  const isUnknownAmount = ({ value, around }: { value: number; around: string }) =>
-    !known.has(value) && !(budgets.has(value) && isBudgetLimit(around));
-  if (claimedAmounts(text).some(isUnknownAmount)) return { isSafe: false, failure: 'amount' };
+  if (hasWrongAmount(claimedAmounts(text), (value) => known.has(value), numbersIn(customerTexts)))
+    return { isSafe: false, failure: 'amount' };
   if (claimedNumbers(text, stockPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'stock' };
   return { isSafe: true };

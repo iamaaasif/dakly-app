@@ -37,6 +37,21 @@ describe('checkReplyFacts budgets', () => {
     ).toBe(true);
   });
 
+  it('rejects a budget promise when the product costs more or no price is quoted', () => {
+    const failed = { isSafe: false, failure: 'amount' };
+    expect(reply('জি, ১০০০ টাকার মধ্যে হবে।', '১০০০ takar moddhe hobe?')).toEqual(failed);
+    expect(reply('জি, ১০০০ টাকার মধ্যে হবে, দাম ৳1200।', '১০০০ এর মধ্যে দিবেন?')).toEqual(failed);
+    expect(reply('1000 takar moddhe hobe, dam 1200 tk.', '1000 takar moddhe hobe?')).toEqual(
+      failed,
+    );
+    expect(reply('Yes, under 1000 taka. It is 1200 tk.', 'can you do it under 1000')).toEqual(
+      failed,
+    );
+    expect(reply('Yes, under 1000 taka.', 'can you do it under 1000')).toEqual(failed);
+    expect(reply('জি, ১০০০ এর মধ্যে হবে।', '১০০০ এর মধ্যে দিবেন?')).toEqual(failed);
+    expect(reply('Sure, under 1000 is fine.', 'can you do it under 1000')).toEqual(failed);
+  });
+
   it('rejects a customer number used as the price', () => {
     expect(reply('জি, ৩০০ টাকায় পাঞ্জাবি হবে।', '৩০০ টাকায় হবে?')).toEqual({
       isSafe: false,

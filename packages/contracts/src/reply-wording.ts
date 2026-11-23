@@ -15,3 +15,34 @@ export const offerWords = (reply: string) =>
 const budgetPattern =
   /নিচে|নীচে|মধ্যে|কমে|পর্যন্ত|\b(?:under|below|within|upto|up to|less than|niche|moddhe|kome|porjonto)\b/iu;
 export const isBudgetLimit = (wordsAroundAmount: string) => budgetPattern.test(wordsAroundAmount);
+
+export type ClaimedAmount = { value: number; around: string };
+
+// An amount is wrong unless a tool gave it. The customer's own budget is the one exception, and
+// only when the reply quotes real prices that are all within it: "under 1000" next to a 1,200 price
+// (or next to no price) would promise a price the shop never gave.
+export function hasWrongAmount(
+  amounts: readonly ClaimedAmount[],
+  isKnown: (value: number) => boolean,
+  customerNumbers: ReadonlySet<number>,
+) {
+  const isBudgetEcho = ({ value, around }: ClaimedAmount) =>
+    !isKnown(value) && customerNumbers.has(value) && isBudgetLimit(around);
+  const unknown = amounts.filter(({ value }) => !isKnown(value));
+  if (unknown.some((amount) => !isBudgetEcho(amount))) return true;
+  if (unknown.length === 0) return false;
+  const quoted = amounts.filter(({ value }) => isKnown(value));
+  const budget = Math.min(...unknown.map(({ value }) => value));
+  return quoted.length === 0 || quoted.some(({ value }) => value > budget);
+}
+
+const number = String.raw`(\d[\d,]*(?:\.\d+)?)`;
+// Amounts and limits in a reply, with Bangla digits already turned into ASCII.
+export const amountPatterns = [
+  new RegExp(String.raw`৳\s*${number}`, 'giu'),
+  new RegExp(String.raw`${number}\s*(?:৳|tk\b|taka[yr]?\b|টাকা)`, 'giu'),
+  new RegExp(String.raw`\b(?:tk\.?|bdt|taka|rs\.?)\s*${number}`, 'giu'),
+  // A limit with no currency word, such as "১০০০ এর মধ্যে" or "under 1000".
+  new RegExp(String.raw`${number}\s*(?:এর|er)?\s*(?:মধ্যে|নিচে|moddhe|niche)`, 'giu'),
+  new RegExp(String.raw`\b(?:under|below|within|up to)\s*${number}`, 'giu'),
+];

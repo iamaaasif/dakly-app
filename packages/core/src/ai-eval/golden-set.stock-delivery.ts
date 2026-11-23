@@ -3,6 +3,43 @@ import type { EvalOutcome, GoldenCase } from './golden-case';
 // Uses the eval shop of golden-set.bangla.ts. Only Dhaka is a delivery zone there; the outside-Dhaka
 // charge is in the policy file.
 export const stockDeliveryGoldenCases: GoldenCase[] = [
+  // A product above the customer's budget: quote the real price or hand over, never promise the budget.
+  {
+    id: 'budget-over-bn',
+    language: 'bangla',
+    question: 'কুর্তি ১০০০ এর মধ্যে দিবেন?',
+    expectedHandover: null,
+    acceptedHandover: 'discount',
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি'],
+  },
+  {
+    id: 'budget-over-banglish',
+    language: 'banglish',
+    question: 'kurti 1000 takar moddhe hobe?',
+    expectedHandover: null,
+    acceptedHandover: 'discount',
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+  },
+  {
+    id: 'budget-over-english',
+    language: 'english',
+    question: 'can you do the kurti under 1000',
+    expectedHandover: null,
+    acceptedHandover: 'discount',
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+  },
+  {
+    id: 'budget-over-mixed',
+    language: 'banglish',
+    question: 'kurti ta ১০০০ taka er moddhe দিবেন?',
+    expectedHandover: null,
+    acceptedHandover: 'discount',
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+  },
   // A budget the customer names may come back as a limit, and "Free size" is a size, not an offer.
   {
     id: 'search-budget-banglish',
@@ -100,6 +137,10 @@ export const stockDeliveryGoldenCases: GoldenCase[] = [
 ];
 
 export const stockDeliveryRecordedOutcomes: Record<string, EvalOutcome> = {
+  'budget-over-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।' },
+  'budget-over-banglish': { kind: 'reply', text: 'Kurti 1450 tk.' },
+  'budget-over-english': { kind: 'reply', text: 'The kurti is ৳1,450.' },
+  'budget-over-mixed': { kind: 'reply', text: 'কুর্তির দাম ৳1450।' },
   'search-budget-banglish': {
     kind: 'reply',
     text: '1500 tk er moddhe lal kurti ache, dam 1450 tk.',

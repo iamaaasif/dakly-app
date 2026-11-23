@@ -1,4 +1,9 @@
-import { isBudgetLimit, leaksInstructions, offerWords } from '@dakly/contracts/reply-wording';
+import {
+  amountPatterns,
+  hasWrongAmount,
+  leaksInstructions,
+  offerWords,
+} from '@dakly/contracts/reply-wording';
 
 import type { EvalOutcome, GoldenCase } from './golden-case';
 
@@ -9,10 +14,6 @@ export const MIN_HANDOVER_ACCURACY = 0.9;
 export const MIN_PRODUCT_RECALL = 0.9;
 
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
-const amountPatterns = [
-  /৳\s*(\d[\d,]*(?:\.\d+)?)/giu,
-  /(\d[\d,]*(?:\.\d+)?)\s*(?:৳|tk\b|taka\b|টাকা)/giu,
-];
 
 export type EvalReport = {
   total: number;
@@ -133,16 +134,16 @@ function hasWrongPrice(reply: string, allowed: readonly number[], question: stri
   const toAscii = (text: string) =>
     text.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
   const text = toAscii(reply);
-  const budgets = (toAscii(question).match(/\d[\d,]*/g) ?? []).map((n) =>
-    Number(n.replaceAll(',', '')),
-  );
-  return amountPatterns
+  const amounts = amountPatterns
     .flatMap((pattern) => [...text.matchAll(pattern)])
-    .some((match) => {
-      const value = Number((match[1] ?? '').replaceAll(',', ''));
-      const around = text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15);
-      return !allowed.includes(value) && !(budgets.includes(value) && isBudgetLimit(around));
-    });
+    .map((match) => ({
+      value: Number((match[1] ?? '').replaceAll(',', '')),
+      around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),
+    }));
+  const customerNumbers = new Set(
+    (toAscii(question).match(/\d[\d,]*/g) ?? []).map((n) => Number(n.replaceAll(',', ''))),
+  );
+  return hasWrongAmount(amounts, (value) => allowed.includes(value), customerNumbers);
 }
 
 // A Latin term must be a whole word, so the size "M" is not found in "Medium". A Bangla term may
