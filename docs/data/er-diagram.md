@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0101_snapshot.json`: **107 tables, 1415 columns, 434 explicit indexes and 335 foreign keys**.
+Built from `packages/db/migrations/meta/0102_snapshot.json`: **107 tables, 1416 columns, 435 explicit indexes and 335 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -101,6 +101,7 @@ erDiagram
         timestamp_with_time_zone email_verified_at "NULL; timestamp with time zone"
         text password_hash "NULL; text"
         text google_subject UK "NULL; text"
+        text facebook_subject UK "NULL; text"
         bytea totp_secret_ciphertext "NULL; bytea"
         smallint totp_key_version "NULL; smallint"
         timestamp_with_time_zone totp_enabled_at "NULL; timestamp with time zone"

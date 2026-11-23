@@ -31,6 +31,8 @@ export const users = pgTable(
     passwordHash: text('password_hash'),
     // Google's stable subject id. After the first link, Google is never matched by email again.
     googleSubject: text('google_subject'),
+    // Facebook's stable user id, linked the same way: after the first link it is never matched by email again.
+    facebookSubject: text('facebook_subject'),
     totpSecretCiphertext: bytea('totp_secret_ciphertext'),
     totpKeyVersion: smallint('totp_key_version'),
     totpEnabledAt: timestamptz('totp_enabled_at'),
@@ -58,6 +60,7 @@ export const users = pgTable(
       .on(table.email)
       .where(sql`${table.emailVerifiedAt} is null`),
     uniqueIndex('users_google_subject_key').on(table.googleSubject),
+    uniqueIndex('users_facebook_subject_key').on(table.facebookSubject),
     check('users_has_identifier', sql`${table.phone} is not null or ${table.email} is not null`),
     check('users_phone_format', sql`${table.phone} ~ '^01[3-9][0-9]{8}$'`),
     check('users_language', isOneOf(table.language, languages)),
