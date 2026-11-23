@@ -404,6 +404,50 @@ it('takes an order in a chat, prices it in code and waits for the customer to sa
   });
 });
 
+it('names add-ons after a confirmed order only when the owner turned them on', async () => {
+  const storeId = await shop();
+  await admin.pool.query(
+    "insert into delivery_zones (id, store_id, name, charge_poisha, bd_area_ids, is_default) values (gen_random_uuid(), $1, 'Inside Dhaka', 6000, '{301}', true)",
+    [storeId],
+  );
+  const category = 'পোশাক';
+  const ordered = await product(storeId, { name: 'পাঞ্জাবি', category, pricePoisha: 120000 });
+  await product(storeId, { name: 'পোলো শার্ট', category, pricePoisha: 65000 });
+  await product(storeId, { name: 'শেষ হয়ে গেছে', category, pricePoisha: 50000, stock: 0 });
+  await product(storeId, { name: 'জুতা', category: 'জুতা', pricePoisha: 50000 });
+  await product(storeId, { name: 'দামি শেরওয়ানি', category, pricePoisha: 900000 });
+  const {
+    rows: [variant],
+  } = await admin.pool.query<{ id: string }>(
+    'select id from product_variants where store_id = $1 and product_id = $2',
+    [storeId, ordered],
+  );
+  const buyer = await contact(storeId);
+  const chat = { conversationId: randomUUID(), channel: 'messenger' as const };
+  const place = async (address: string, suggestAddOns: boolean) => {
+    const scope = { storeId, contactId: buyer, chat, suggestAddOns };
+    const drafted = (await tools.run(
+      scope,
+      'draft_order',
+      JSON.stringify(
+        draft(variant!.id, { address, items: [{ variantId: variant!.id, quantity: 1 }] }),
+      ),
+    )) as { orderNumber: number };
+    return tools.run(scope, 'confirm_order', JSON.stringify({ orderNumber: drafted.orderNumber }));
+  };
+
+  const withAddOns = await place('মিরপুর ১০', true);
+  expect(withAddOns).toMatchObject({ stage: 'to_pack' });
+  const { addOns } = withAddOns as { addOns: { name: string; variants: object[] }[] };
+  expect(addOns.map(({ name }) => name)).toEqual(['পোলো শার্ট']);
+  expect(addOns[0]!.variants).toMatchObject([{ priceTaka: 650, stock: 8 }]);
+
+  expect(await place('গুলশান ২', false)).toEqual({
+    orderNumber: expect.any(Number),
+    stage: 'to_pack',
+  });
+});
+
 it('saves the own phone on the buyer and shows staff a possible match when another contact holds it', async () => {
   const { storeId, variantId } = await orderShop();
   const rina = await contact(storeId);

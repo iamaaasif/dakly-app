@@ -1,4 +1,9 @@
-import { describeAlternatives, describePhotoMatch } from '../../ai-agent/sales-agent-tools.service';
+import {
+  addOnsRule,
+  describeAlternatives,
+  describePhotoMatch,
+} from '../../ai-agent/sales-agent-tools.service';
+import { pickAddOns } from '../../product-search/product-add-ons';
 import { pickAlternatives } from '../../product-search/product-alternatives';
 import { decidePhotoMatch } from '../../product-search/product-photo-match';
 import { nameScores, parseQuery } from '../../product-search/product-search-ranking';
@@ -110,11 +115,47 @@ const handlers: Record<string, (args: Args) => object> = {
   get_my_orders: () => ({ orders: [] }),
   get_order_status: () => ({ error: 'ORDER_NOT_FOUND' }),
   draft_order: () => ({ error: 'NOT_IN_A_CHAT' }),
-  confirm_order: () => ({ error: 'NOT_IN_A_CHAT' }),
   hand_over: ({ reason }) => ({ reason }),
 };
 
-export function runFixtureTool(name: string, argumentsJson: string): object {
+type OrderContext = { draftedOrder?: readonly string[]; suggestAddOns: boolean };
+
+const ADD_ON_LIMIT = 2;
+
+// Mirrors the real tool: only an add-on in stock, with only its sizes in stock.
+function presentAddOn(product: ChatProduct): object {
+  const found = evalProducts.find(({ productId }) => productId === product.id);
+  const sizes = new Set(product.variants.map(({ id }) => id));
+  return found
+    ? productResult({
+        ...found,
+        variants: found.variants.filter(({ variantId }) => sizes.has(variantId)),
+      })
+    : {};
+}
+
+function confirmOrder({ draftedOrder, suggestAddOns }: OrderContext) {
+  if (!draftedOrder) return { error: 'NOT_IN_A_CHAT' };
+  const ordered = evalChatProducts.filter(({ name }) => draftedOrder.includes(name));
+  const base = { orderNumber: 1001, stage: 'to_pack' };
+  if (!suggestAddOns) return base;
+  const itemsTotalPoisha = ordered.reduce(
+    (sum, { variants }) => sum + Math.min(...variants.map(({ pricePoisha }) => pricePoisha)),
+    0,
+  );
+  return {
+    ...base,
+    addOnRule: addOnsRule,
+    addOns: pickAddOns(ordered, evalChatProducts, itemsTotalPoisha, ADD_ON_LIMIT).map(presentAddOn),
+  };
+}
+
+export function runFixtureTool(
+  name: string,
+  argumentsJson: string,
+  order: OrderContext = { suggestAddOns: false },
+): object {
+  if (name === 'confirm_order') return confirmOrder(order);
   const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
   return handler ? handler(parse(argumentsJson)) : { error: 'UNKNOWN_TOOL' };
 }

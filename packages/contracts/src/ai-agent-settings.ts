@@ -14,6 +14,8 @@ export const agentAbilitiesSchema = z.strictObject({
   askForReview: z.boolean(),
   answerComments: z.boolean(),
   followUp: z.enum(followUpLevels),
+  // After the customer confirms an order, offers up to two in-stock products that go with it.
+  suggestAddOns: z.boolean(),
   // Buttons send a card with Order now, See sizes and Talk to a person; text sends photo and text.
   productCardStyle: z.enum(productCardStyles),
 });
@@ -36,6 +38,7 @@ export const defaultAgentAbilities = {
   askForReview: true,
   answerComments: true,
   followUp: 'hot',
+  suggestAddOns: false,
   productCardStyle: 'buttons',
 } satisfies AgentAbilities;
 
