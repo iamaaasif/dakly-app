@@ -171,7 +171,10 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await page.getByRole('link', { name: /^All\s*4$/ }).click();
     // Wait for the tab to clear, or the Instagram link is clicked with the old tab still in it.
     await expect(page).not.toHaveURL(/tab=/);
-    await page.getByRole('link', { name: 'Instagram' }).click();
+    await page
+      .getByRole('navigation', { name: 'Channel' })
+      .getByRole('link', { name: 'Instagram' })
+      .click();
     await expect(page).toHaveURL(/channel=instagram/);
     await expect(page.getByText('Rumana Akter')).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeHidden();
