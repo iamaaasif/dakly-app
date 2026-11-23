@@ -4,10 +4,10 @@ import type { GoogleSignInResponse } from '@dakly/contracts/auth';
 import type { AuthConfig } from '../auth.types';
 import { AuthFrame } from './auth-frame';
 import { AuthLink } from './auth-link';
-import { GoogleConsentNote } from './google-consent-note';
 import { SignInForm } from './sign-in-form';
 import { SignInNavigation } from './sign-in-navigation';
 import { SignInSocial } from './sign-in-social';
+import { SocialConsentNote } from './social-consent-note';
 
 export type SignInView = 'phone' | 'email' | 'signup';
 type SignInMainProps = {
@@ -19,6 +19,8 @@ type SignInMainProps = {
   onRemember: (remember: boolean) => void;
   onResult: (result: GoogleSignInResponse) => void;
   onNavigate?: (view: SignInView) => void;
+  // Shown above the form, such as why Facebook sign-in did not finish.
+  notice?: string;
 };
 // An invitation keeps the older wording; the standalone page follows the v4 design.
 const invitedCopy = {
@@ -40,6 +42,7 @@ export function SignInMain({
   onRemember,
   onResult,
   onNavigate,
+  notice,
 }: SignInMainProps) {
   const copy = embedded ? invitedCopy : pageCopy;
   return (
@@ -56,6 +59,11 @@ export function SignInMain({
       }
     >
       <div className="space-y-6">
+        {notice ? (
+          <p role="alert" className="rounded-control bg-danger-soft px-3.5 py-3 text-danger">
+            {notice}
+          </p>
+        ) : null}
         <SignInSocial config={config} remember={remember} embedded={embedded} onResult={onResult} />
         {embedded ? <SignInNavigation method={method} next={next} onNavigate={onNavigate} /> : null}
         <SignInForm
@@ -67,7 +75,9 @@ export function SignInMain({
           showCode={embedded}
           submitLabel={copy.submit}
         />
-        {config.googleClientId && config.legal ? <GoogleConsentNote legal={config.legal} /> : null}
+        {config.legal && (config.googleClientId || !embedded) ? (
+          <SocialConsentNote legal={config.legal} />
+        ) : null}
         {embedded ? (
           <AuthLink
             href="/sign-up"

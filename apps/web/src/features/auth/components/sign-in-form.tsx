@@ -56,7 +56,7 @@ export function SignInForm({
           }
         })}
       >
-        <SignInFields method={method} onRemember={onRemember} />
+        <SignInFields method={method} unified={!showCode} onRemember={onRemember} />
         {errors.root ? (
           <p role="alert" className="text-danger">
             {errors.root.message}

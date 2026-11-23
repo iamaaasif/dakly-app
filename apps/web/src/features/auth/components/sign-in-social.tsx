@@ -33,7 +33,13 @@ export function SignInSocial({
             onResult={onResult}
           />
         ) : null}
-        {embedded ? null : <FacebookSignIn label={facebookLabel} />}
+        {embedded ? null : (
+          <FacebookSignIn
+            label={facebookLabel}
+            isRemembered={remember}
+            termsVersion={config.legal?.termsVersion}
+          />
+        )}
       </div>
       <div className="flex items-center gap-3.5 text-xs font-semibold tracking-widest text-text-muted">
         <span className="h-px flex-1 bg-border" />

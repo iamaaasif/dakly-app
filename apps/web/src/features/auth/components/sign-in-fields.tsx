@@ -6,11 +6,39 @@ import type { PasswordSignInInput } from '@dakly/contracts/auth';
 import { authFieldClass, authPrefixedFieldClass } from './auth-control-class';
 import { FormField as AuthField } from '@/components/form-field';
 
+type IdentifierMode = { method: 'phone' | 'email'; unified: boolean };
+function identifierField({ method, unified }: IdentifierMode) {
+  if (unified)
+    return {
+      label: 'Email or mobile number',
+      type: 'text',
+      placeholder: 'you@business.com or 01712345678',
+      className: authFieldClass,
+    };
+  if (method === 'phone')
+    return {
+      label: 'Mobile number',
+      type: 'tel',
+      placeholder: '1712345678',
+      prefix: '+880',
+      className: authPrefixedFieldClass,
+    };
+  return {
+    label: 'Email',
+    type: 'email',
+    placeholder: 'you@business.com',
+    className: authFieldClass,
+  };
+}
+
 export function SignInFields({
   method,
+  unified,
   onRemember,
 }: {
   method: 'phone' | 'email';
+  // One field for an email or a mobile number, since accounts made by SMS have no email.
+  unified: boolean;
   onRemember: (value: boolean) => void;
 }) {
   const form = useFormContext<PasswordSignInInput>();
@@ -18,14 +46,10 @@ export function SignInFields({
   return (
     <>
       <AuthField
-        className={method === 'phone' ? authPrefixedFieldClass : authFieldClass}
-        label={method === 'phone' ? 'Mobile number' : 'Email'}
+        {...identifierField({ method, unified })}
         field={form.register('identifier')}
         error={errors.identifier}
-        type={method === 'email' ? 'email' : 'tel'}
         autoComplete="username"
-        prefix={method === 'phone' ? '+880' : undefined}
-        placeholder={method === 'phone' ? '1712345678' : 'you@business.com'}
       />
       <AuthField
         className={authFieldClass}
