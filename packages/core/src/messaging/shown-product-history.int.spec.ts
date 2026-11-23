@@ -47,7 +47,7 @@ describe('shown product history', () => {
     const instagramConnection = randomUUID();
     for (const [id, kind] of [
       [messengerConnection, 'facebook_page'],
-      [instagramConnection, 'instagram_account'],
+      [instagramConnection, 'instagram'],
     ] as const)
       await f.connection.pool.query(
         `insert into channel_connections (id, store_id, kind, external_account_id, display_name)
