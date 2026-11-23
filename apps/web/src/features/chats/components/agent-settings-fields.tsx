@@ -35,6 +35,11 @@ const abilityRows = [
   ],
   ['confirmOrders', 'Confirm orders', 'Marks the order confirmed when the customer says yes'],
   [
+    'suggestAddOns',
+    'Suggest add-ons',
+    'After the order is confirmed, offers up to two in-stock products from the same category at their shop price',
+  ],
+  [
     'courierUpdates',
     'Courier updates',
     'Tells customers when the parcel is shipped and out for delivery',

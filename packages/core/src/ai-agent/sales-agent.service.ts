@@ -37,7 +37,7 @@ import {
   shownProductIds,
 } from './chat-memory';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV8 } from './prompts/chat-reply.v8';
+import { chatReplyV9 } from './prompts/chat-reply.v9';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
@@ -144,7 +144,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV8, inChat, ad),
+        prompt: promptWith(chatReplyV9, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -246,7 +246,11 @@ export class SalesAgentService {
         refusal?.result ??
         (isUnconfirmed(call, input.customerTexts, results)
           ? { error: 'CONFIRMATION_NOT_GIVEN' }
-          : await this.tools.run(input, call.name, call.argumentsJson));
+          : await this.tools.run(
+              { ...input, suggestAddOns: input.rules.suggestAddOns },
+              call.name,
+              call.argumentsJson,
+            ));
       if (call.name === HAND_OVER_TOOL && 'reason' in result)
         return { handover: result.reason as Reason };
       results.push({ tool: call.name, result });
@@ -379,7 +383,7 @@ function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | 
 
 // A run that was shown the products block records its version with the reply prompt's.
 function promptWith(
-  prompt: typeof chatReplyV8,
+  prompt: typeof chatReplyV9,
   inChat: ToolResult | undefined,
   ad: object | undefined,
 ) {
