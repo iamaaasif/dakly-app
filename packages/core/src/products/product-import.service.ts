@@ -6,6 +6,7 @@ import type { ImportDuplicateMode } from '@dakly/contracts/contacts';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ProductCategoriesService } from './product-categories.service';
 import { matchProblem, type PreviewedRow, previewRows } from './product-import-preview';
 import type { ImportProduct, ImportVariant } from './product-import-types';
 import { ProductStockService } from './product-stock.service';
@@ -38,6 +39,7 @@ export class ProductImportService {
   constructor(
     @Inject(ProductsRepository) private readonly repository: ProductsRepository,
     @Inject(ProductsService) private readonly products: ProductsService,
+    @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
     @Inject(ProductStockService) private readonly stock: ProductStockService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
@@ -88,13 +90,16 @@ export class ProductImportService {
 
   private async addProduct(
     storeId: string,
-    { variants, ...details }: ImportProduct,
+    { variants, category, ...details }: ImportProduct,
     context: ImportContext,
   ): Promise<ImportedRow[]> {
     const created = await this.products.create(
       storeId,
       {
         ...details,
+        categoryId:
+          category === null ? null : (await this.categories.resolvePath(storeId, category)).id,
+        brandId: null,
         status: details.status ?? 'active',
         aliases: [],
         weightGrams: null,
@@ -175,7 +180,9 @@ export class ProductImportService {
     // A blank cell never overwrites what the shop already has.
     const changes = {
       ...(pricePoisha > 0 ? { pricePoisha } : {}),
-      ...(category === null ? {} : { category }),
+      ...(category === null
+        ? {}
+        : { categoryId: (await this.categories.resolvePath(storeId, category)).id }),
       ...(description === null ? {} : { description }),
       ...(status === undefined ? {} : { status }),
     };

@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0098_snapshot.json`: **105 tables, 1398 columns, 428 explicit indexes and 330 foreign keys**.
+Built from `packages/db/migrations/meta/0099_snapshot.json`: **107 tables, 1411 columns, 434 explicit indexes and 335 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -849,7 +849,12 @@ Schema files: `products.ts`, `orders.ts`, `payments.ts`.
 
 ```mermaid
 erDiagram
+    stores ||..o{ product_categories : "store_id"
+    product_categories |o..o{ product_categories : "store_id, parent_id"
+    stores ||..o{ product_brands : "store_id"
     stores ||..o{ products : "store_id"
+    product_categories |o..o{ products : "store_id, category_id"
+    product_brands |o..o{ products : "store_id, brand_id"
     stores ||..o{ product_variants : "store_id"
     products ||..o{ product_variants : "product_id"
     products ||..o{ product_variants : "store_id, product_id"
@@ -913,12 +918,29 @@ erDiagram
     files |o..o{ gateway_settlement_lines : "report_file_id"
     payment_intents |o..o{ gateway_settlement_lines : "payment_intent_id"
     staff_users |o..o{ gateway_settlement_lines : "matched_by_staff_id"
+    product_categories {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid parent_id FK "NULL; uuid"
+        text name "NOT NULL; text"
+        integer sort_order "NOT NULL; integer"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    product_brands {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text name "NOT NULL; text"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+        timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
     products {
         uuid id PK "NOT NULL; uuid"
         uuid store_id FK "NOT NULL; uuid"
         text name "NOT NULL; text"
         text description "NULL; text"
-        text category "NULL; text"
+        uuid category_id FK "NULL; uuid"
+        uuid brand_id FK "NULL; uuid"
         integer weight_grams "NULL; integer"
         text__ aliases "NOT NULL; text[]"
         bigint price_poisha "NOT NULL; bigint"
@@ -2290,12 +2312,17 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `files_uploaded_by_staff_id_staff_users_id_fk`                       | `files(uploaded_by_staff_id)`                             | `staff_users(id)`                           | no action |
 | `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
 | `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
+| `product_brands_store_id_stores_id_fk`                               | `product_brands(store_id)`                                | `stores(id)`                                | no action |
 | `product_bulk_edits_store_id_stores_id_fk`                           | `product_bulk_edits(store_id)`                            | `stores(id)`                                | no action |
 | `product_bulk_edits_actor_user_id_users_id_fk`                       | `product_bulk_edits(actor_user_id)`                       | `users(id)`                                 | no action |
+| `product_categories_store_id_stores_id_fk`                           | `product_categories(store_id)`                            | `stores(id)`                                | no action |
+| `product_categories_parent_id_store_fk`                              | `product_categories(store_id, parent_id)`                 | `product_categories(store_id, id)`          | no action |
 | `product_variants_store_id_stores_id_fk`                             | `product_variants(store_id)`                              | `stores(id)`                                | no action |
 | `product_variants_product_id_products_id_fk`                         | `product_variants(product_id)`                            | `products(id)`                              | no action |
 | `product_variants_product_id_store_fk`                               | `product_variants(store_id, product_id)`                  | `products(store_id, id)`                    | no action |
 | `products_store_id_stores_id_fk`                                     | `products(store_id)`                                      | `stores(id)`                                | no action |
+| `products_category_id_store_fk`                                      | `products(store_id, category_id)`                         | `product_categories(store_id, id)`          | no action |
+| `products_brand_id_store_fk`                                         | `products(store_id, brand_id)`                            | `product_brands(store_id, id)`              | no action |
 | `restock_requests_store_id_stores_id_fk`                             | `restock_requests(store_id)`                              | `stores(id)`                                | no action |
 | `restock_requests_variant_id_product_variants_id_fk`                 | `restock_requests(variant_id)`                            | `product_variants(id)`                      | no action |
 | `restock_requests_contact_id_contacts_id_fk`                         | `restock_requests(contact_id)`                            | `contacts(id)`                              | cascade   |

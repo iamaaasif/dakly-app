@@ -694,24 +694,49 @@ fixture('GET /products', async () => {
         .items.map((row: { id: string }) => row.id),
     ).toEqual([id]);
 });
+async function productCategory(shop: Shop, name: string) {
+  return (await success(shop, 'POST', '/products/categories', 201, { name })).json().id as string;
+}
+async function productBrand(shop: Shop, name: string) {
+  return (await success(shop, 'POST', '/products/brands', 201, { name })).json().id as string;
+}
 fixture('GET /products/categories', async () => {
   const { a, b } = await pair();
-  await success(a, 'POST', '/products', 201, {
-    name: 'পাঞ্জাবি',
-    pricePoisha: 125000,
-    category: 'Clothing',
-  });
-  await success(b, 'POST', '/products', 201, {
-    name: 'ঘড়ি',
-    pricePoisha: 50000,
-    category: 'Accessories',
-  });
-  expect((await success(a, 'GET', '/products/categories', 200)).json()).toEqual({
-    items: ['Clothing'],
-  });
-  expect((await success(b, 'GET', '/products/categories', 200)).json()).toEqual({
-    items: ['Accessories'],
-  });
+  await productCategory(a, 'Clothing');
+  await productCategory(b, 'Accessories');
+  const names = async (shop: Shop) =>
+    (await success(shop, 'GET', '/products/categories', 200))
+      .json()
+      .items.map((row: { name: string }) => row.name);
+  expect(await names(a)).toEqual(['Clothing']);
+  expect(await names(b)).toEqual(['Accessories']);
+});
+fixture('POST /products/categories', async () => {
+  const { a, b } = await pair();
+  const foreign = await productCategory(a, 'Clothing');
+  // The same name is free in another shop, but a parent of another shop is not found.
+  const own = await productCategory(b, 'Clothing');
+  expect((await f.row('product_categories', own)).store_id).toBe(b.id);
+  await success(b, 'POST', '/products/categories', 404, { name: 'Shirts', parentId: foreign });
+  await success(b, 'POST', '/products/categories', 409, { name: 'clothing' });
+});
+fixture('GET /products/brands', async () => {
+  const { a, b } = await pair();
+  await productBrand(a, 'Aarong');
+  await productBrand(b, 'Yellow');
+  const names = async (shop: Shop) =>
+    (await success(shop, 'GET', '/products/brands', 200))
+      .json()
+      .items.map((row: { name: string }) => row.name);
+  expect(await names(a)).toEqual(['Aarong']);
+  expect(await names(b)).toEqual(['Yellow']);
+});
+fixture('POST /products/brands', async () => {
+  const { a, b } = await pair();
+  await productBrand(a, 'Aarong');
+  const own = await productBrand(b, 'Aarong');
+  expect((await f.row('product_brands', own)).store_id).toBe(b.id);
+  await success(b, 'POST', '/products/brands', 409, { name: 'AARONG' });
 });
 fixture('GET /products/export', async () => {
   const { a, b } = await pair();

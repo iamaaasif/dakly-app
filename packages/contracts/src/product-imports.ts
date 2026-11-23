@@ -44,7 +44,19 @@ const optionalCell = <Schema extends z.ZodType>(schema: Schema) =>
 export const productImportRowSchema = z.object({
   name: text,
   price: optionalCell(takaInput).transform((value) => value ?? 0),
-  category: z.string().transform(blankAsNull).pipe(text.nullable()),
+  category: z
+    .string()
+    .transform(blankAsNull)
+    .pipe(
+      z
+        .string()
+        .max(200, 'Use 200 characters or fewer')
+        .refine(
+          (value) => value.split('>').filter((part) => part.trim()).length <= 2,
+          'Use one category or one sub-category, such as Clothing > T-shirts',
+        )
+        .nullable(),
+    ),
   description: z.string().transform(blankAsNull).pipe(z.string().max(10000).nullable()),
   status: z.preprocess(
     (value) => (typeof value === 'string' ? value.trim().toLowerCase() || undefined : value),

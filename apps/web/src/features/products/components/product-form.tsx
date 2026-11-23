@@ -22,6 +22,7 @@ import { useCreateProduct } from '../api/create-product';
 import { assistantDraftValues } from '../product-assistant-draft';
 import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
 import type { QuickAddHandoff } from '../quick-add-handoff';
+import { useDraftCategory } from '../use-draft-category';
 import {
   ProductDeliveryFields,
   ProductDescriptionFields,
@@ -68,6 +69,7 @@ export function ProductForm({
     defaultValues: formValues(product, initial, assistantDraft),
   });
   const { dirtyFields, errors, isDirty } = form.formState;
+  useDraftCategory(form, assistantDraft);
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
     product,
     dirtyFields,
@@ -322,7 +324,8 @@ function formValues(
   return {
     name: product.name,
     description: product.description,
-    category: product.category,
+    categoryId: product.categoryId,
+    brandId: product.brandId,
     weightGrams: weightText(product.weightGrams),
     aliases: product.aliases,
     options: product.options,

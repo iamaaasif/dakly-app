@@ -28,6 +28,55 @@ import { createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './column
 import { contacts } from './contacts';
 import { stores } from './stores';
 
+// A store's own two-level category list. A product has one category; a parent has no parent.
+export const productCategories = pgTable(
+  'product_categories',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    parentId: uuid('parent_id'),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('product_categories_store_id_id_key').on(table.storeId, table.id),
+    foreignKey({
+      name: 'product_categories_parent_id_store_fk',
+      columns: [table.storeId, table.parentId],
+      foreignColumns: [table.storeId, table.id],
+    }),
+    uniqueIndex('product_categories_top_name_key')
+      .on(table.storeId, sql`lower(${table.name})`)
+      .where(sql`${table.parentId} is null`),
+    uniqueIndex('product_categories_child_name_key')
+      .on(table.storeId, table.parentId, sql`lower(${table.name})`)
+      .where(sql`${table.parentId} is not null`),
+    check('product_categories_name_length', sql`char_length(${table.name}) between 1 and 100`),
+  ],
+);
+
+export const productBrands = pgTable(
+  'product_brands',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    name: text('name').notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('product_brands_store_id_id_key').on(table.storeId, table.id),
+    uniqueIndex('product_brands_store_name_key').on(table.storeId, sql`lower(${table.name})`),
+    check('product_brands_name_length', sql`char_length(${table.name}) between 1 and 100`),
+  ],
+);
+
 export const products = pgTable(
   'products',
   {
@@ -37,7 +86,8 @@ export const products = pgTable(
       .references(() => stores.id),
     name: text('name').notNull(),
     description: text('description'),
-    category: text('category'),
+    categoryId: uuid('category_id'),
+    brandId: uuid('brand_id'),
     // Packed parcel weight in grams for courier charges; null means the seller has not set one.
     weightGrams: integer('weight_grams'),
     // Words customers use for it ("kurti", "কুর্তি", "three piece"), for AI search.
@@ -76,7 +126,18 @@ export const products = pgTable(
     uniqueIndex('products_store_id_id_key').on(table.storeId, table.id),
 
     index('products_store_id_status_idx').on(table.storeId, table.status, table.name),
-    index('products_store_category_idx').on(table.storeId, table.category),
+    foreignKey({
+      name: 'products_category_id_store_fk',
+      columns: [table.storeId, table.categoryId],
+      foreignColumns: [productCategories.storeId, productCategories.id],
+    }),
+    foreignKey({
+      name: 'products_brand_id_store_fk',
+      columns: [table.storeId, table.brandId],
+      foreignColumns: [productBrands.storeId, productBrands.id],
+    }),
+    index('products_store_category_id_idx').on(table.storeId, table.categoryId),
+    index('products_store_brand_id_idx').on(table.storeId, table.brandId),
     index('products_name_trgm_idx').using('gin', sql`${table.name} gin_trgm_ops`),
     index('products_aliases_idx').using('gin', table.aliases),
     uniqueIndex('products_store_id_external_ref_key')

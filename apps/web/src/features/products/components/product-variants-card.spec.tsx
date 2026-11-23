@@ -21,6 +21,8 @@ const page = {
 const saved: ProductResponse = {
   ...createProductSchema.parse({ name: 'Cotton T-shirt', pricePoisha: 120000 }),
   id: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
+  category: null,
+  brand: null,
   imageFileIds: [],
   photos: [],
   readiness: [],

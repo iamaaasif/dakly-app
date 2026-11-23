@@ -694,6 +694,13 @@
       "when": 1795393248790,
       "tag": "0098_product_weight_grams",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1795399450755,
+      "tag": "0099_product_categories_brands",
+      "breakpoints": true
     }
   ]
 }

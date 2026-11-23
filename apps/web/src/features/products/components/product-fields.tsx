@@ -6,10 +6,10 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 
 import { profitPercent } from '../product-variant-grid';
-import { ProductCategoryField } from './product-category-field';
 import { ProductDescriptionField } from './product-description-field';
 import { ProductInputField } from './product-input-field';
 import { ProductLinesField } from './product-lines-field';
+import { ProductBrandField, ProductCategoryField } from './product-list-fields';
 import { ProductTrackStock } from './product-track-stock';
 import { ProductWarnAtField } from './product-warn-at-field';
 
@@ -49,6 +49,7 @@ export function ProductNameFields({ productId, showCode = true }: ProductFieldsP
       />
       <div className="grid gap-3 md:grid-cols-2">
         <ProductCategoryField />
+        <ProductBrandField />
         {showSkuAndCost && showCode ? (
           <ProductInputField
             name="variants.0.sku"

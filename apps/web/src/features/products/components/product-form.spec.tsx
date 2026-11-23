@@ -15,6 +15,8 @@ import { sessionContextKey } from '@/lib/session-context';
 const product: ProductResponse = {
   ...createProductSchema.parse({ name: 'Cotton Panjabi', pricePoisha: 245050, status: 'hidden' }),
   id: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
+  category: null,
+  brand: null,
   imageFileIds: [],
   photos: [],
   readiness: ['hidden', 'needs_photo'],
@@ -91,6 +93,7 @@ function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductFor
   };
   client.setQueryData(sessionContextKey, session);
   client.setQueryData(productsKeys.categories(session.contextTag), { items: [] });
+  client.setQueryData(productsKeys.brands(session.contextTag), { items: [] });
   const onSaved = vi.fn();
   const tree = (current?: ProductResponse) => (
     <QueryClientProvider client={client}>

@@ -245,6 +245,8 @@ export class IsolationFixture {
       'store_counters',
       'product_variants',
       'products',
+      'product_categories',
+      'product_brands',
       'imports',
       'knowledge_items',
       'ai_agent_settings',

@@ -11,6 +11,8 @@ import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { ProductBulkEditsRepository } from './product-bulk-edits.repository';
 import { ProductBulkEditsService } from './product-bulk-edits.service';
+import { ProductCategoriesRepository } from './product-categories.repository';
+import { ProductCategoriesService } from './product-categories.service';
 import { ProductStockRepository } from './product-stock.repository';
 import { ProductStockService } from './product-stock.service';
 
@@ -22,16 +24,23 @@ describe('ProductBulkEditsService', () => {
   const outbox = new OutboxService(new OutboxRepository(app.db, tenant), transaction);
   let now = new Date('2026-11-22T08:00:00Z');
   const clock = { now: () => now };
+  const categories = new ProductCategoriesService(
+    new ProductCategoriesRepository(tenant),
+    transaction,
+  );
   const service = new ProductBulkEditsService(
     new ProductBulkEditsRepository(tenant),
     new ProductStockService(new ProductStockRepository(tenant), transaction, clock, outbox),
     transaction,
     outbox,
     clock,
+    categories,
   );
   const actor = { kind: 'user', userId: randomUUID() } as const;
+  let clothing: string;
   beforeAll(async () => {
     await f.setup();
+    clothing = (await categories.create(f.a, { name: 'Clothing', parentId: null })).id;
     await f.connection.pool.query(
       "insert into users(id,email,password_hash,name) values($1,$2,'x','Owner') on conflict do nothing",
       [actor.userId, `${actor.userId}@example.com`],
@@ -44,6 +53,7 @@ describe('ProductBulkEditsService', () => {
       'stock_movements',
       'product_variants',
       'products',
+      'product_categories',
     ])
       await f.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         [f.a, f.b],
@@ -56,8 +66,8 @@ describe('ProductBulkEditsService', () => {
   async function product(variants = 1) {
     const id = randomUUID();
     await f.connection.pool.query(
-      "insert into products(id,store_id,name,price_poisha,category) values($1,$2,'Cotton T-shirt',120000,'Clothing')",
-      [id, f.a],
+      "insert into products(id,store_id,name,price_poisha,category_id) values($1,$2,'Cotton T-shirt',120000,$3)",
+      [id, f.a, clothing],
     );
     for (let index = 0; index < variants; index += 1)
       await f.connection.pool.query(
@@ -68,7 +78,7 @@ describe('ProductBulkEditsService', () => {
   }
   async function read(id: string) {
     const { rows } = await f.connection.pool.query(
-      `select p.price_poisha::int as price, p.category, p.status, v.cost_poisha::int as cost, v.on_hand
+      `select p.price_poisha::int as price, (select name from product_categories where id = p.category_id) as category, p.status, v.cost_poisha::int as cost, v.on_hand
        from products p join product_variants v on v.product_id = p.id where p.id = $1`,
       [id],
     );
@@ -101,12 +111,13 @@ describe('ProductBulkEditsService', () => {
     const edit = await service.apply(
       f.a,
       {
-        rows: [{ productId: id, pricePoisha: 150000, category: 'Shirts', stock: 30 }],
+        rows: [{ productId: id, pricePoisha: 150000, category: 'shirts', stock: 30 }],
         stockReason: 'Recount',
       },
       actor,
     );
-    await f.connection.pool.query("update products set category='Tops' where id=$1", [id]);
+    const tops = await categories.resolvePath(f.a, 'Tops');
+    await f.connection.pool.query('update products set category_id=$2 where id=$1', [id, tops.id]);
 
     expect(await service.undo(f.a, edit.id, actor)).toEqual({ restored: 2, skipped: 1 });
     expect(await read(id)).toMatchObject({ price: 120000, category: 'Tops', on_hand: 40 });
@@ -152,6 +163,22 @@ describe('ProductBulkEditsService', () => {
     await expect(
       service.apply(f.a, { rows: [{ productId: id, category: 'Shirts' }] }, actor),
     ).resolves.toMatchObject({ changedValues: 1 });
+  });
+
+  it('matches a typed category to the shop list ignoring case, adds a new one and restores it on undo', async () => {
+    const id = await product();
+    // The same category in other letters is no change.
+    await expect(
+      service.apply(f.a, { rows: [{ productId: id, category: 'clothing' }] }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_BULK_EDIT_NO_CHANGE' });
+    const typed = await service.apply(
+      f.a,
+      { rows: [{ productId: id, category: ' Bags > Totes ' }] },
+      actor,
+    );
+    expect(await read(id)).toMatchObject({ category: 'Totes' });
+    expect(await service.undo(f.a, typed.id, actor)).toEqual({ restored: 1, skipped: 0 });
+    expect(await read(id)).toMatchObject({ category: 'Clothing' });
   });
 
   it('does not touch another store', async () => {
