@@ -297,3 +297,27 @@ describe('ad context set', () => {
     expect(report.passed).toBe(false);
   });
 });
+
+describe('a size is not a price', () => {
+  const sizeCase: GoldenCase = {
+    id: 'size-next-to-price',
+    language: 'banglish',
+    question: 'loafer ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500],
+  };
+  const score = (text: string) =>
+    scoreEval([sizeCase], { [sizeCase.id]: { kind: 'reply', text } }).wrongPriceCaseIds;
+
+  it('skips the number after size or সাইজ, in each script', () => {
+    expect(score('Loafer size 41 ekhon stock-e nei. Canvas shoe size 41 ৳1500-e ache.')).toEqual(
+      [],
+    );
+    expect(score('লোফার সাইজ ৪১ নেই। ক্যানভাস সাইজ ৪১ ৳১৫০০ এ আছে।')).toEqual([]);
+  });
+
+  it('still fails a wrong price that follows a size', () => {
+    expect(score('Canvas shoe size 41 ৳1400-e ache.')).toEqual([sizeCase.id]);
+    expect(score('ক্যানভাস সাইজ ৪১ ১৪০০ টাকা।')).toEqual([sizeCase.id]);
+  });
+});
