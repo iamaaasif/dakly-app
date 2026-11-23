@@ -42,12 +42,13 @@ test('manages categories and brands, filters by them and bulk edits them', async
     expect(response.status()).toBe(201);
     return (await response.json()) as { id: string };
   }
-  async function capture(screen: string) {
+  async function capture(screen: string, before?: () => Promise<void>) {
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
+      await before?.();
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -105,7 +106,30 @@ test('manages categories and brands, filters by them and bulk edits them', async
     await page.getByLabel('Select all products on this page').check();
     await page.getByRole('button', { name: 'Edit in grid' }).click();
     await expect(page.getByRole('table', { name: 'Edit products in a grid' })).toBeVisible();
-    await capture('bulk-edit');
+    // On a phone the grid sits below the list tools and scrolls sideways, so bring the panel and
+    // its Category and Brand columns into the one viewport shot.
+    await capture('bulk-edit', async () => {
+      const grid = page.getByRole('table', { name: 'Edit products in a grid' });
+      await grid.scrollIntoViewIfNeeded();
+      // The Product column stays in view on the left, so leave room for it before Category.
+      await page.getByRole('columnheader', { name: 'Category' }).evaluate((header) => {
+        const scroller = header.closest('[class*="overflow-x"]') ?? header.parentElement!;
+        const stuck = header.parentElement!.firstElementChild!.getBoundingClientRect().width;
+        scroller.scrollLeft +=
+          header.getBoundingClientRect().left - scroller.getBoundingClientRect().left - stuck;
+      });
+    });
+    // A phone fits one list column beside the product name, so Brand gets its own shot.
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.getByRole('table', { name: 'Edit products in a grid' }).scrollIntoViewIfNeeded();
+    await page.getByRole('columnheader', { name: 'Brand' }).evaluate((header) => {
+      const scroller = header.closest('[class*="overflow-x"]') ?? header.parentElement!;
+      const stuck = header.parentElement!.firstElementChild!.getBoundingClientRect().width;
+      scroller.scrollLeft +=
+        header.getBoundingClientRect().left - scroller.getBoundingClientRect().left - stuck;
+    });
+    for (const directory of [evidence, ciCopy])
+      await page.screenshot({ path: resolve(directory, 'bulk-edit-brand-360.png') });
   } finally {
     try {
       await request('/me/active-store', { storeId });
