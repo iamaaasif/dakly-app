@@ -31,7 +31,7 @@ import { practiceError } from './ai-practice.errors';
 import { classifierInput } from './chat-memory';
 import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
-import { classifyChat } from './prompts/classify-chat.v3';
+import { classifyChat } from './prompts/classify-chat.v2';
 import { gradeTestAnswer } from './prompts/grade-test-answer.v1';
 import { SalesAgentService } from './sales-agent.service';
 
