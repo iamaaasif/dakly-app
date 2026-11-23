@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import type { replyLanguages } from '@dakly/contracts/ai';
 import {
   agentAbilitiesSchema,
@@ -30,6 +32,9 @@ export const defaultShopRules: ShopRules = {
   confirmOrders: defaultAgentAbilities.confirmOrders,
 };
 
+// Older saves can hold keys the screen no longer has; they are dropped, not an error.
+const savedHandoverRules = z.object(handoverRulesSchema.shape).partial();
+
 // A shop that never saved a switch gets its default, so a new switch never changes an old shop.
 export function shopRulesFrom(settings: {
   abilities: unknown;
@@ -43,7 +48,7 @@ export function shopRulesFrom(settings: {
     extraRules: settings.extraRules?.trim() || null,
     handover: {
       ...defaultHandoverRules,
-      ...handoverRulesSchema.partial().parse(settings.handoverRules),
+      ...savedHandoverRules.parse(settings.handoverRules),
     },
     showProducts: abilities.showProducts ?? defaultShopRules.showProducts,
     takeOrders: abilities.takeOrders ?? defaultShopRules.takeOrders,

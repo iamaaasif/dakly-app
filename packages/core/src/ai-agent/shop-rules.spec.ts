@@ -24,6 +24,12 @@ describe('shopRulesFrom', () => {
     });
   });
 
+  it('ignores a hand-over key an older save holds', () => {
+    expect(shopRulesFrom({ abilities: {}, handoverRules: { refund: true } })).toEqual(
+      defaultShopRules,
+    );
+  });
+
   it('treats blank extra rules as none', () => {
     expect(
       shopRulesFrom({ abilities: {}, handoverRules: {}, extraRules: '  ' }).extraRules,
