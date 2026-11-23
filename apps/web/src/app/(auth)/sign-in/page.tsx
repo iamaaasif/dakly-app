@@ -7,15 +7,20 @@ export const dynamic = 'force-dynamic';
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ method?: string; next?: string }>;
+  searchParams: Promise<{ method?: string; next?: string; facebook?: string; challenge?: string }>;
 }) {
-  const { method, next } = await searchParams;
+  const { method, next, facebook, challenge } = await searchParams;
   await redirectIfSignedIn(next);
   return (
     <SignInScreen
       config={webAuthConfig()}
-      method={method === 'email' ? 'email' : 'phone'}
+      method={method === 'phone' ? 'phone' : 'email'}
       next={safeNextPath(next)}
+      facebook={
+        facebook === 'totp' && /^[A-Za-z0-9_-]{43}$/.test(challenge ?? '')
+          ? { challengeId: challenge }
+          : { reason: facebook }
+      }
     />
   );
 }

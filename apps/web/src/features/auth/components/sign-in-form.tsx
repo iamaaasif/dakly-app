@@ -1,12 +1,12 @@
 'use client';
-import { Phone } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ChevronRight, Mail, Phone } from 'lucide-react';
 import { FormProvider } from 'react-hook-form';
 
 import type { SignInResponse } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
 
 import { useSignInForm } from '../hooks/use-sign-in-form';
+import { authButtonClass } from './auth-control-class';
 import { SignInCode } from './sign-in-code';
 import { SignInFields } from './sign-in-fields';
 import { formError } from '@/lib/form-error';
@@ -16,15 +16,17 @@ type SignInFormProps = {
   isRemembered: boolean;
   onResult: (result: SignInResponse) => void;
   onRemember: (remember: boolean) => void;
-  // The Google button, placed beside Get a code.
-  alternative?: ReactNode;
+  // Sign-in by a one-time code, offered inside an invitation.
+  showCode?: boolean;
+  submitLabel?: string;
 };
 export function SignInForm({
   method,
   isRemembered,
   onResult,
   onRemember,
-  alternative,
+  showCode = false,
+  submitLabel = 'Sign in',
 }: SignInFormProps) {
   const { form, password, pending, codeTarget, setCodeTarget, requestCode } = useSignInForm(
     method,
@@ -54,7 +56,7 @@ export function SignInForm({
           }
         })}
       >
-        <SignInFields method={method} onRemember={onRemember} />
+        <SignInFields method={method} unified={!showCode} onRemember={onRemember} />
         {errors.root ? (
           <p role="alert" className="text-danger">
             {errors.root.message}
@@ -63,8 +65,8 @@ export function SignInForm({
         <SignInActions
           method={method}
           pending={pending}
-          onRequestCode={requestCode}
-          alternative={alternative}
+          submitLabel={submitLabel}
+          onRequestCode={showCode ? requestCode : undefined}
         />
       </form>
     </FormProvider>
@@ -74,36 +76,30 @@ export function SignInForm({
 function SignInActions({
   method,
   pending,
+  submitLabel,
   onRequestCode,
-  alternative,
 }: {
   method: 'phone' | 'email';
   pending: boolean;
-  onRequestCode: () => void;
-  alternative?: ReactNode;
+  submitLabel: string;
+  onRequestCode?: () => void;
 }) {
   return (
     <>
-      <Button type="submit" loading={pending} className="w-full">
-        Sign in
+      <Button type="submit" loading={pending} className={authButtonClass}>
+        {submitLabel}
+        <ChevronRight aria-hidden="true" size={16} />
       </Button>
-      <div className="flex items-center gap-3 text-sm text-text-muted">
-        <span className="h-px flex-1 bg-border" />
-        or
-        <span className="h-px flex-1 bg-border" />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Button
-          variant="secondary"
-          loading={pending}
-          onClick={onRequestCode}
-          className={alternative ? undefined : 'sm:col-span-2'}
-        >
-          <Phone aria-hidden="true" size={16} />
+      {onRequestCode ? (
+        <Button variant="link" loading={pending} onClick={onRequestCode} className="w-full">
+          {method === 'phone' ? (
+            <Phone aria-hidden="true" size={16} />
+          ) : (
+            <Mail aria-hidden="true" size={16} />
+          )}
           Get a code by {method === 'phone' ? 'SMS' : 'email'}
         </Button>
-        {alternative}
-      </div>
+      ) : null}
     </>
   );
 }

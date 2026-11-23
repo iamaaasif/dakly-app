@@ -111,6 +111,6 @@ describe('Google identity transitions', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Continue with Google' }));
     await waitFor(() => expect(sent).toEqual(['/api/auth/google', 'signed-in']));
     expect(screen.queryByLabelText('Full name')).toBeNull();
-    expect(screen.queryByLabelText('Verification code')).toBeNull();
+    expect(screen.queryByLabelText('6-digit code')).toBeNull();
   });
 });

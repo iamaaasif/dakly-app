@@ -41,11 +41,12 @@ describe('Sign in', () => {
     await user.click(screen.getByRole('button', { name: /^Sign in/ }));
     await waitFor(() => expect(completed).toBe(true));
   });
-  it('offers real password, code and recovery entry points without requiring registration config', () => {
+  it('offers password sign-in and recovery on the page, and the code only inside an invitation', () => {
     show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
-    expect(screen.getByLabelText('Mobile number')).toBeTruthy();
+    expect(screen.getByLabelText('Email or mobile number')).toBeTruthy();
     expect(screen.getByLabelText('Password')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Get a code by/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Get a code by/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /instead/ })).toBeNull();
     expect(screen.getByRole('link', { name: 'Forgot password?' })).toBeTruthy();
     expect(screen.queryByText(/Google/)).toBeNull();
   });
@@ -84,7 +85,13 @@ describe('Sign in', () => {
           ? Response.json({ status: 'totp_required', challengeId: 'a'.repeat(43) }, { status: 202 })
           : new Response(null, { status: 204 });
       });
-      show(<SignInScreen config={{ legal: null, googleClientId: null }} method={method} />);
+      show(
+        <SignInScreen
+          config={{ legal: null, googleClientId: null }}
+          method={method}
+          onAuthenticated={() => {}}
+        />,
+      );
       const user = userEvent.setup();
       await user.type(
         screen.getByLabelText(method === 'phone' ? 'Mobile number' : 'Email'),
@@ -127,7 +134,9 @@ describe('Sign in', () => {
       sent.push(url);
       return new Response(null, { status: 204 });
     });
-    show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
+    show(
+      <SignInScreen config={{ legal: null, googleClientId: null }} onAuthenticated={() => {}} />,
+    );
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.type(screen.getByLabelText('Mobile number'), '01712345678');
     await user.click(screen.getByRole('button', { name: /Get a code by/ }));
@@ -154,11 +163,13 @@ describe('Sign in', () => {
     );
     show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Mobile number'), '01712345678');
+    await user.type(screen.getByLabelText('Email or mobile number'), '01712345678');
     await user.type(screen.getByLabelText('Password'), 'password123');
-    await user.click(screen.getByRole('button', { name: /^Sign in/ }));
+    await user.click(screen.getByRole('button', { name: /^Log in$/ }));
     await waitFor(() =>
-      expect(screen.getByLabelText('Mobile number').getAttribute('aria-invalid')).toBe('true'),
+      expect(screen.getByLabelText('Email or mobile number').getAttribute('aria-invalid')).toBe(
+        'true',
+      ),
     );
     expect(screen.getByText('Use your verified contact.')).toBeTruthy();
   });
