@@ -30,7 +30,7 @@ export const untouchedChoice: RowChoice = {
 };
 
 export type RowFieldName = 'entryDate' | 'name' | 'phone' | 'item' | 'amount';
-export type RowErrors = Partial<Record<RowFieldName, string>>;
+type RowErrors = Partial<Record<RowFieldName, string>>;
 
 const MAX_AMOUNT_TAKA = 10_000_000;
 
