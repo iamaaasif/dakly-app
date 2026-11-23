@@ -7,6 +7,7 @@ import type { AuthConfig } from '../auth.types';
 import { AuthFrame } from './auth-frame';
 import { AuthLink } from './auth-link';
 import { SignUpAccount } from './sign-up-account';
+import { SignUpFlow } from './sign-up-flow';
 import { SignUpVerify } from './sign-up-verify';
 
 export function SignUpScreen({
@@ -34,6 +35,7 @@ export function SignUpScreen({
         </AuthLink>
       </AuthFrame>
     );
+  if (!embedded) return <SignUpFlow config={{ ...config, legal: config.legal }} />;
   return (
     <AuthFrame
       title={account ? 'Verify your mobile · Step 2 of 4' : 'Create an account · Step 1 of 4'}
@@ -41,7 +43,7 @@ export function SignUpScreen({
       aside={
         embedded ? undefined : (
           <p>
-            Already have an account? <AuthLink href="/sign-in">Sign in</AuthLink>
+            Already have an account? <AuthLink href="/sign-in">Log in</AuthLink>
           </p>
         )
       }
