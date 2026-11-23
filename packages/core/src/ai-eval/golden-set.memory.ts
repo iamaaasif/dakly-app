@@ -30,6 +30,7 @@ export const memoryGoldenCases: GoldenCase[] = [
     language: 'banglish',
     question: 'আগের মতো 1200 তে kurti হবে তো? দাম কত?',
     expectedHandover: null,
+    acceptedHandover: 'discount',
     allowedAmountsTaka: [1450],
     mentionsAnyOf: ['কুর্তি', 'kurti'],
     memory: oldPrice,

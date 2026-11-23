@@ -8,6 +8,9 @@ export const goldenCaseSchema = z.strictObject({
   question: z.string().min(1),
   // The reason a person should take over, or null when the AI should answer.
   expectedHandover: z.enum(handoverReasons).nullable(),
+  // A reason that is also a right answer when the AI should answer, such as a customer who asks
+  // for a lower price while also asking the price. Never counted as a needless hand-over.
+  acceptedHandover: z.enum(handoverReasons).optional(),
   // Taka amounts the shop's catalog allows in an answer to this question.
   allowedAmountsTaka: z.array(z.number().nonnegative()),
   // The answer must name at least one of these: the product asked for, or an in-stock alternative.
