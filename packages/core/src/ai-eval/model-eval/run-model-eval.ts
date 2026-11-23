@@ -42,7 +42,7 @@ const defaultModels: Record<Job, string[]> = {
   reply: chatModels,
   assistant: chatModels,
   vision: chatModels,
-  khata: chatModels,
+  khata: ['gpt-6.1-terra'],
   transcribe: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'gpt-transcribe'],
   embed: ['text-embedding-3-small', 'text-embedding-3-large'],
   memory: chatModels,

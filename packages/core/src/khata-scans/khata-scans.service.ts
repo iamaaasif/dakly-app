@@ -30,7 +30,7 @@ import {
   type NewKhataRow,
   type StoredKhataRow,
 } from './khata-scans.repository';
-import { readKhataPage } from './prompts/read-khata-page.v3';
+import { readKhataPage } from './prompts/read-khata-page.v4';
 
 const UPLOAD_LINK_SECONDS = 15 * 60;
 const PHOTO_LINK_SECONDS = 15 * 60;
@@ -180,7 +180,7 @@ export class KhataScansService {
         : await prepareKhataPhoto(original.bytes, turnClockwiseDegrees);
     if (!photo) return { kind: 'failure', code: 'model' } as const;
     return this.ai.run(storeId, {
-      tier: 'vision',
+      tier: 'handwriting',
       purpose: 'khata_scan',
       prompt: readKhataPage,
       input: MODEL_INSTRUCTION,
