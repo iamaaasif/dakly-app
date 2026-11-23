@@ -52,7 +52,11 @@ describe('Meta webhook messages', () => {
       source: 'ADS',
       type: 'OPEN_THREAD',
       ad_id: '120000000001',
-      ads_context_data: { ad_title: 'Eid kurti', post_id: '10001_5555' },
+      ads_context_data: {
+        ad_title: 'Eid kurti',
+        post_id: '10001_5555',
+        photo_url: 'https://scontent.xx.fbcdn.net/ad.jpg',
+      },
     };
 
     const onEvent = parseMetaWebhook(delivery({ referral }));
@@ -66,8 +70,14 @@ describe('Meta webhook messages', () => {
       adId: '120000000001',
       postId: '10001_5555',
       title: 'Eid kurti',
+      photoUrl: 'https://scontent.xx.fbcdn.net/ad.jpg',
     });
-    expect(onMessage[0]?.referral).toEqual({ adId: '120000000002', postId: null, title: null });
+    expect(onMessage[0]?.referral).toEqual({
+      adId: '120000000002',
+      postId: null,
+      title: null,
+      photoUrl: null,
+    });
     expect(plain[0]?.referral).toBeNull();
     expect(empty[0]?.referral).toBeNull();
   });

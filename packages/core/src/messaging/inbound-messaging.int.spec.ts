@@ -668,14 +668,19 @@ it('keeps the newest ad or post a customer came from and ignores a message with 
   const read = async () =>
     (
       await admin.pool.query(
-        'select referral_ad_id, referral_post_id, referral_title from conversations where store_id = $1',
+        'select referral_ad_id, referral_post_id, referral_title, referral_photo_url from conversations where store_id = $1',
         [storeId],
       )
     ).rows[0];
 
   await service.receiveInboundMessage(storeId, {
     ...inbound(connectionId, 'from-ad'),
-    referral: { adId: '120000000001', postId: '55_66', title: 'Eid kurti' },
+    referral: {
+      adId: '120000000001',
+      postId: '55_66',
+      title: 'Eid kurti',
+      photoUrl: 'https://scontent.xx.fbcdn.net/ad.jpg',
+    },
   });
   await service.receiveInboundMessage(storeId, {
     ...inbound(connectionId, 'plain'),
@@ -686,30 +691,35 @@ it('keeps the newest ad or post a customer came from and ignores a message with 
     referral_ad_id: '120000000001',
     referral_post_id: '55_66',
     referral_title: 'Eid kurti',
+    referral_photo_url: 'https://scontent.xx.fbcdn.net/ad.jpg',
   });
 
   await service.receiveInboundMessage(storeId, {
     ...inbound(connectionId, 'from-other-ad'),
     sentAt: later(2),
     receivedAt: later(2),
-    referral: { adId: '120000000002', postId: null, title: null },
+    referral: { adId: '120000000002', postId: null, title: null, photoUrl: null },
   });
   await service.receiveInboundMessage(storeId, {
     ...inbound(connectionId, 'late-delivery'),
     sentAt: later(-1),
     receivedAt: later(3),
-    referral: { adId: '120000000001', postId: null, title: null },
+    referral: { adId: '120000000001', postId: null, title: null, photoUrl: null },
   });
   expect(await read()).toEqual({
     referral_ad_id: '120000000002',
     referral_post_id: null,
     referral_title: null,
+    referral_photo_url: null,
   });
   const referral = await app.get(InboxService).referralOf(storeId, await conversationId(storeId));
   expect(referral).toEqual({
     adId: '120000000002',
     postId: null,
     title: null,
+    photoUrl: null,
+    channelConnectionId: connectionId,
+    channel: 'messenger',
     referredAt: later(2),
   });
 });

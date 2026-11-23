@@ -13,6 +13,8 @@ export type InboundReferral = {
   adId: string | null;
   postId: string | null;
   title: string | null;
+  // The ad's picture as Meta shows it in the first message; null for a video or a text-only ad.
+  photoUrl: string | null;
 };
 
 export type InboundMessage = {

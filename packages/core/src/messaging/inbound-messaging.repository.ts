@@ -23,7 +23,12 @@ type MessageInput = {
 
 // A late delivery of an older message cannot replace a newer referral.
 function newerReferral(
-  referral: { adId: string | null; postId: string | null; title: string | null },
+  referral: {
+    adId: string | null;
+    postId: string | null;
+    title: string | null;
+    photoUrl: string | null;
+  },
   sentAt: string,
 ) {
   const isNewer = sql`(${conversations.referredAt} is null or ${conversations.referredAt} < ${sentAt}::timestamptz)`;
@@ -31,6 +36,7 @@ function newerReferral(
     referralAdId: sql`case when ${isNewer} then ${referral.adId} else ${conversations.referralAdId} end`,
     referralPostId: sql`case when ${isNewer} then ${referral.postId} else ${conversations.referralPostId} end`,
     referralTitle: sql`case when ${isNewer} then ${referral.title} else ${conversations.referralTitle} end`,
+    referralPhotoUrl: sql`case when ${isNewer} then ${referral.photoUrl} else ${conversations.referralPhotoUrl} end`,
     referredAt: sql`case when ${isNewer} then ${sentAt}::timestamptz else ${conversations.referredAt} end`,
   };
 }
@@ -127,7 +133,12 @@ export class InboundMessagingRepository {
       expiry: Date;
       preview: string;
       reopenVersion?: number;
-      referral?: { adId: string | null; postId: string | null; title: string | null };
+      referral?: {
+        adId: string | null;
+        postId: string | null;
+        title: string | null;
+        photoUrl: string | null;
+      };
     },
     now: Date,
   ) {
