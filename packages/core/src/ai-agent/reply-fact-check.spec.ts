@@ -20,6 +20,40 @@ describe('checkReplyFacts free size', () => {
   });
 });
 
+describe('checkReplyFacts numbers next to a comma', () => {
+  const shoes = [{ products: [{ name: 'Canvas', variants: [{ title: '41', priceTaka: 1500 }] }] }];
+  const lakh = [{ products: [{ name: 'Sofa', variants: [{ title: 'Set', priceTaka: 150000 }] }] }];
+
+  it('does not read a size before a comma as the price, in each language', () => {
+    for (const reply of [
+      'ক্যানভাস জুতা, সাইজ ৪১, ৳১৫০০।',
+      'ক্যানভাস জুতা সাইজ ৪১, ১৫০০ টাকা।',
+      'Canvas juta size 41, 1500 tk.',
+      'Canvas shoes, size 41, ৳1500.',
+      'জুতা size 41,৳1500 এ আছে।',
+    ])
+      expect(checkReplyFacts(reply, shoes, shop), reply).toEqual({ isSafe: true });
+  });
+
+  it('still rejects a wrong price next to a size', () => {
+    for (const reply of ['সাইজ ৪১, ৳১৪০০।', 'size 41, 1400 tk.', 'Size 41, ৳1,400.'])
+      expect(checkReplyFacts(reply, shoes, shop), reply).toEqual({
+        isSafe: false,
+        failure: 'amount',
+      });
+  });
+
+  it('reads comma-grouped amounts whole, including lakh grouping', () => {
+    expect(checkReplyFacts('সোফা সেটের দাম ৳১,৫০,০০০।', lakh, shop)).toEqual({ isSafe: true });
+    expect(checkReplyFacts('Sofa set 1,50,000 tk.', lakh, shop)).toEqual({ isSafe: true });
+    expect(checkReplyFacts('Sofa set ৳150,000.', lakh, shop)).toEqual({ isSafe: true });
+    expect(checkReplyFacts('Sofa set ৳1,50,001.', lakh, shop)).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+  });
+});
+
 describe('checkReplyFacts budgets', () => {
   const reply = (text: string, customer: string) =>
     checkReplyFacts(text, results, shop, [customer]);
@@ -115,6 +149,32 @@ describe('checkReplyFacts', () => {
       expect(check(reply)).toEqual({ isSafe: true });
     const freeSize = [{ products: [{ variants: [{ title: 'Free Size', priceTaka: 1200 }] }] }];
     expect(check('Free size ache, Tk 1200', freeSize)).toEqual({ isSafe: true });
+  });
+
+  it('allows a reply that refuses a discount and holds the price', () => {
+    for (const reply of [
+      'দুঃখিত, ছাড় নেই। কুর্তির দাম ৳1200 ফিক্সড।',
+      'এই দামে ছাড় দেওয়া যাবে না, দাম ১২০০ টাকা',
+      'ছাড়ের সুযোগ নেই, তবে অর্ডার করতে চাইলে বলুন',
+      'Sorry, no discount. The price is fixed at ৳1200.',
+      'We cannot offer any discount on this kurti.',
+      'Discount nai apu, dam 1200 taka fixed.',
+      'Sorry vaia, discount dite parbo na. Order korben?',
+      'আমরা কোনো ছাড় দিই না, দাম ফিক্সড।',
+    ])
+      expect(check(reply), reply).toEqual({ isSafe: true });
+  });
+
+  it('still rejects a real offer next to a refusal', () => {
+    for (const reply of [
+      '10% ছাড় দিচ্ছি',
+      'ছাড় নেই, তবে free delivery দেব',
+      'No discount on panjabi, but 10% off on kurti',
+      'discount dite parbo na keno, dibo',
+      'Discount dibo apu, ৳1200 er jaygay',
+      'ছাড় পাবেন, অর্ডার করুন',
+    ])
+      expect(check(reply), reply).toEqual({ isSafe: false, failure: 'offer' });
   });
 
   it('allows an offer the shop wrote in a policy passage', () => {

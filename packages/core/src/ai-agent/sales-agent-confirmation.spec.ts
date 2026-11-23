@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
+import type { AiRunsService } from '../ai/ai-runs.service';
 import type { AiService } from '../ai/ai.service';
 import type { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import type { InboxService } from '../messaging/inbox.service';
@@ -38,11 +39,17 @@ function agent(steps: Step[], customerTexts: string[]) {
     } as unknown as StoresService,
     { chatPhotoFile: async () => undefined } as unknown as ProductsService,
     { contextFor: async () => undefined } as unknown as ContactMemoryService,
+    { setOutcome: async () => undefined } as unknown as AiRunsService,
   );
   return { run, compose: () => service.compose({ storeId: 's', contactId: 'c', customerTexts }) };
 }
 
 const confirm: Step = { kind: 'tools', calls: [['confirm_order', { orderNumber: 7 }]] };
+
+beforeAll(() => {
+  vi.stubEnv('DATABASE_URL', 'postgres://localhost/dakly');
+  vi.stubEnv('REDIS_URL', 'redis://localhost');
+});
 
 describe('SalesAgentService order confirmation', () => {
   it('confirms an order after the customer said yes', async () => {
