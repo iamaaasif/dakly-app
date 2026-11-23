@@ -121,5 +121,13 @@ export type GoogleSignInPending = {
   verificationTicket: string;
 };
 
+// Continue with Facebook starts as a browser navigation, so its input is a query string.
+export const facebookStartSchema = z.strictObject({
+  // Needed only when this Facebook account has no Dakly account yet.
+  termsVersion: z.string().trim().min(1).max(100).optional(),
+  remember: z.literal('1').optional(),
+});
+export type FacebookStartInput = z.infer<typeof facebookStartSchema>;
+
 export type SignInResponse = void | { status: 'totp_required'; challengeId: string };
 export type GoogleSignInResponse = SignInResponse | GoogleSignInPending;

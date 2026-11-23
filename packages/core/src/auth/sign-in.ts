@@ -1,4 +1,5 @@
 import type { SignUpSource } from '@dakly/contracts/auth';
+import type { FacebookIdentity } from '@dakly/providers/facebook/facebook-identity-driver';
 import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 
 import type { SignInSubject } from './sign-in-failures';
@@ -28,6 +29,8 @@ export type SignInUser = {
     expectedEmailVerifiedAt?: string;
     expectedUnlinked?: true;
   };
+  // Facebook shares only an email it has confirmed, so a matching account links without a code.
+  facebook?: { identity: FacebookIdentity; mode: 'subject' | 'link' | 'signup' };
 };
 
 export function signInSubject(

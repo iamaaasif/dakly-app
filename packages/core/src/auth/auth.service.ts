@@ -64,6 +64,7 @@ export class AuthService {
       }
       if (secondFactor) await this.recovery.cancelPending(user.id, request.ip);
       await this.completeGoogleLink(user, current.googleSubject, request.ip);
+      await this.completeFacebookLink(user, current.facebookSubject, request.ip);
       // A new account has no earlier device to compare with.
       if (!user.registration) noticeIds = await this.notifyNewDevice(current, request);
       if (user.registrationPasswordHash)
@@ -142,11 +143,13 @@ export class AuthService {
       email: string | null;
       emailVerifiedAt: Date | null;
       googleSubject: string | null;
+      facebookSubject: string | null;
     },
   ): void {
     if (user.google) {
       return this.assertGoogleIdentity(user.google, current);
     }
+    if (user.facebook) return this.assertFacebookIdentity(user.facebook, current);
     const verifiedEmail = current.emailVerifiedAt ? current.email?.toLowerCase() : undefined;
     const identifier = user.kind === 'email' ? verifiedEmail : current.phone;
     if (identifier !== user.target || (user.deliveryEmail && verifiedEmail !== user.deliveryEmail))
@@ -161,6 +164,7 @@ export class AuthService {
         now: this.clock.now(),
         passwordHash: user.registrationPasswordHash,
         google: user.google?.identity,
+        facebook: user.facebook?.identity,
       }))
     )
       throw authError('AUTH_ACCOUNT_EXISTS');
@@ -203,5 +207,33 @@ export class AuthService {
         throw authError('AUTH_GOOGLE_CONFLICT');
     }
     await this.events.record(user.id, { event: 'google.linked', actor: { kind: 'user' }, ip });
+  }
+
+  private assertFacebookIdentity(
+    facebook: NonNullable<SignInUser['facebook']>,
+    current: { facebookSubject: string | null; email: string | null; emailVerifiedAt: Date | null },
+  ) {
+    const { identity, mode } = facebook;
+    if (mode === 'subject') {
+      if (current.facebookSubject !== identity.subject) throw authError('AUTH_INVALID_CREDENTIALS');
+      return;
+    }
+    if (mode === 'signup') return;
+    if (!current.emailVerifiedAt || current.email?.toLowerCase() !== identity.email)
+      throw authError('AUTH_INVALID_CREDENTIALS');
+    if (current.facebookSubject && current.facebookSubject !== identity.subject)
+      throw authError('AUTH_FACEBOOK_CONFLICT');
+  }
+
+  private async completeFacebookLink(user: SignInUser, currentSubject: string | null, ip: string) {
+    if (!user.facebook || user.facebook.mode === 'subject') return;
+    if (user.facebook.mode === 'link') {
+      if (currentSubject === user.facebook.identity.subject) return;
+      if (
+        !(await this.users.linkFacebook(user.id, user.facebook.identity.subject, this.clock.now()))
+      )
+        throw authError('AUTH_FACEBOOK_CONFLICT');
+    }
+    await this.events.record(user.id, { event: 'facebook.linked', actor: { kind: 'user' }, ip });
   }
 }

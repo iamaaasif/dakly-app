@@ -62,6 +62,7 @@ const eventLabels: Record<HistoryItem['event'], string> = {
   'phone.changed': 'Mobile number changed',
   'sessions.revoked': 'Devices signed out',
   'google.linked': 'Google account linked',
+  'facebook.linked': 'Facebook account linked',
 };
 
 const reasonLabels: Record<NonNullable<HistoryItem['reasonType']>, string> = {

@@ -715,6 +715,13 @@
       "when": 1795430960757,
       "tag": "0101_sign_up_source_and_store_business",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1795431459752,
+      "tag": "0102_facebook_sign_in",
+      "breakpoints": true
     }
   ]
 }

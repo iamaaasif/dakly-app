@@ -1144,3 +1144,28 @@ when the code is verified. `POST /stores` accepts an optional `websiteUrl` (a mi
 becomes https) and `offering` (`products`, `services` or `both`), saved on the store. The
 sign-up screen uses them to create the first shop on the free plan, so a new owner lands on the
 dashboard without the setup screen.
+
+### Continue with Facebook (ACC-19, part 6)
+
+Facebook sign-in and sign-up is an authorization-code redirect handled by the API, not a token
+posted by the browser. `GET /auth/facebook/start` (optional `termsVersion`, `remember=1`) saves a
+ten-minute state in Valkey, sets the `dakly_facebook_state` cookie and redirects to Facebook.
+Facebook returns to `GET /auth/facebook/callback`, which needs the state and the same cookie,
+exchanges the code, reads the Facebook id, name and email, then:
+
+1. An account with this Facebook id (`users.facebook_subject`) signs in.
+2. Otherwise an account with the same verified email is linked to the Facebook id and signs in, with a `facebook.linked` security event. Facebook shares only an email the person confirmed, so no extra code is asked.
+3. Otherwise a new account is created with that email marked verified and no phone or password. This needs `termsVersion`; the sign-in page does not send it, so a new person is sent to sign up.
+4. Facebook sharing no email ends with "sign up with your mobile number".
+
+Two-step verification still applies: an account with it enabled gets a challenge before a session.
+The callback ends in a redirect: `/dashboard` (or `/setup` for a new account) on success, or
+`/sign-in?facebook=<reason>` (`cancelled`, `terms_required`, `email_required`, `expired`,
+`unavailable`, `conflict`, `disabled`, `rate_limited`, `failed`, or `totp` with a `challenge`).
+
+Settings: `META_APP_ID` and `META_APP_SECRET` (the Meta app already used for channels) and
+`META_LOGIN_REDIRECT_URI`, which must be `https://<web origin>/api/auth/facebook/callback` and
+listed under Valid OAuth Redirect URIs in Facebook Login settings. The app needs the
+`public_profile` and `email` permissions and Live mode. `FACEBOOK_IDENTITY_DRIVER=fake` is for
+local and test use only. With no Meta settings in production, the Facebook route answers
+"unavailable".

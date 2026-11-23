@@ -11,6 +11,7 @@ export const accountSecurityEventTypes = [
   'phone.changed',
   'sessions.revoked',
   'google.linked',
+  'facebook.linked',
 ] as const;
 export const accountRecoveryReasons = ['lost_phone', 'lost_authenticator', 'lost_email'] as const;
 export const accountSecurityActorTypes = ['user', 'system', 'staff'] as const;

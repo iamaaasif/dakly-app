@@ -99,6 +99,10 @@ describe('Google identity configuration', () => {
   });
   it('requires an audience for the real Google verifier', () => {
     expect(() => loadEnv({ ...base, GOOGLE_IDENTITY_DRIVER: 'google' })).toThrow();
+    expect(() =>
+      loadEnv({ ...base, NODE_ENV: 'production', FACEBOOK_IDENTITY_DRIVER: 'fake' }),
+    ).toThrow();
+    expect(() => loadEnv({ ...base, FACEBOOK_IDENTITY_DRIVER: 'facebook' })).toThrow();
   });
 });
 
