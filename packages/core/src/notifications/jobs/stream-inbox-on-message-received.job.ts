@@ -1,4 +1,5 @@
 import { Inject } from '@nestjs/common';
+import { z } from 'zod';
 
 import { messageReceivedEventSchema } from '@dakly/contracts/events/messaging';
 
@@ -7,7 +8,10 @@ import type { JobHandler } from '../../platform/queue/job-handler';
 import { QUEUES } from '../../platform/queue/queues';
 import { NotificationStreamService } from '../notification-stream.service';
 
-// Only a signal goes out; each open inbox reads the list again. A repeat run is harmless.
+// The relay adds the outbox row id to the event, which the strict event schema rejects.
+const jobData = messageReceivedEventSchema.extend({ id: z.uuid() });
+
+// Only a signal goes out; each open inbox reads that chat again. A repeat run is harmless.
 @HandlesEvent('message.received', { queue: QUEUES.transactional })
 export class StreamInboxOnMessageReceived implements JobHandler {
   constructor(
@@ -15,7 +19,7 @@ export class StreamInboxOnMessageReceived implements JobHandler {
   ) {}
 
   async handle(data: unknown) {
-    const { storeId } = messageReceivedEventSchema.pick({ storeId: true }).parse(data);
-    await this.stream.announceInbox(storeId);
+    const { storeId, payload } = jobData.parse(data);
+    await this.stream.announceInbox(storeId, payload.conversationId);
   }
 }

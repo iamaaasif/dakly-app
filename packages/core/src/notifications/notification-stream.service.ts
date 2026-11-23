@@ -21,19 +21,19 @@ export const STREAM_HEARTBEAT_MS = 25_000;
 // Ten times the replay limit, so a replayed row or a relay retry minutes later still finds its id.
 export const STREAM_SENT_IDS_LIMIT = 1000;
 const CHANNEL_PREFIX = 'notifications:';
-// A bare signal that a store's chats changed; the browser reads the list again.
+// A signal that one chat in a store changed, carrying only its id; the browser reads that chat again.
 const INBOX_PREFIX = 'inbox:';
 const liveNotificationSchema = z.tuple([z.uuid(), z.uuid()]);
 
 export type StreamSession = { storeId: string; userId: string; sessionId: string };
 export type StreamMessage =
   | { type: 'notification'; id: string; data: NotificationResponse }
-  | { type: 'inbox'; data: Record<string, never> }
+  | { type: 'inbox'; data: { conversationId: string } }
   | { comment: string };
 type Stream = {
   userId: string;
   deliver: (notificationId: string) => void;
-  signalInbox: () => void;
+  signalInbox: (conversationId: string) => void;
   close: () => void;
 };
 
@@ -59,8 +59,8 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
     await this.valkey.connection.publish(CHANNEL_PREFIX + storeId, `${notificationId} ${userId}`);
   }
 
-  async announceInbox(storeId: string) {
-    await this.valkey.connection.publish(INBOX_PREFIX + storeId, 'changed');
+  async announceInbox(storeId: string, conversationId: string) {
+    await this.valkey.connection.publish(INBOX_PREFIX + storeId, conversationId);
   }
 
   open(session: StreamSession, lastEventId?: string): Observable<StreamMessage> {
@@ -94,8 +94,10 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
           enqueue('live delivery', async () =>
             send(await this.notifications.findForUser(storeId, userId, id)),
           ),
-        signalInbox: () =>
-          enqueue('inbox signal', async () => subscriber.next({ type: 'inbox', data: {} })),
+        signalInbox: (conversationId) =>
+          enqueue('inbox signal', async () =>
+            subscriber.next({ type: 'inbox', data: { conversationId } }),
+          ),
         close: () => subscriber.complete(),
       };
       enqueue('subscribe', () => this.join(storeId, stream));
@@ -167,8 +169,10 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
     subscriber.on('error', () => this.logger.error('Valkey subscriber connection failed'));
     subscriber.on('message', (channel: string, message: string) => {
       if (channel.startsWith(INBOX_PREFIX)) {
+        const conversationId = z.uuid().safeParse(message);
+        if (!conversationId.success) return;
         for (const stream of this.streams.get(channel.slice(INBOX_PREFIX.length)) ?? [])
-          stream.signalInbox();
+          stream.signalInbox(conversationId.data);
         return;
       }
       const ids = liveNotificationSchema.safeParse(message.split(' '));

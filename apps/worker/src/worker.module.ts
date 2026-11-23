@@ -66,6 +66,9 @@ import { FetchContactProfileJob } from '@dakly/core/messaging/jobs/fetch-contact
 import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
 import { MessagingModule } from '@dakly/core/messaging/messaging.module';
 import { StreamInboxOnHandedOver } from '@dakly/core/notifications/jobs/stream-inbox-on-handed-over.job';
+import { StreamInboxOnMessageDelivered } from '@dakly/core/notifications/jobs/stream-inbox-on-message-delivered.job';
+import { StreamInboxOnMessageFailed } from '@dakly/core/notifications/jobs/stream-inbox-on-message-failed.job';
+import { StreamInboxOnMessageRead } from '@dakly/core/notifications/jobs/stream-inbox-on-message-read.job';
 import { StreamInboxOnMessageReceived } from '@dakly/core/notifications/jobs/stream-inbox-on-message-received.job';
 import { StreamInboxOnMessageSent } from '@dakly/core/notifications/jobs/stream-inbox-on-message-sent.job';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
@@ -135,6 +138,9 @@ import { JobSchedulers } from './job-schedulers';
     StreamInboxOnMessageReceived,
     StreamInboxOnMessageSent,
     StreamInboxOnHandedOver,
+    StreamInboxOnMessageDelivered,
+    StreamInboxOnMessageRead,
+    StreamInboxOnMessageFailed,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,
     RecordAutomationBirthdaysJob,
