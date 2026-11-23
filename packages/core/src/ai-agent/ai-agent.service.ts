@@ -2,7 +2,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
-import type { HandoverRules } from '@dakly/contracts/ai-agent-settings';
 import { chatClassificationSchema } from '@dakly/contracts/chat-classification';
 import type { handoverReasons } from '@dakly/contracts/chats';
 import { parseCardTap } from '@dakly/contracts/product-card';
@@ -31,7 +30,7 @@ import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { cardMessages } from './card-messages';
 import { CardTapRepliesService } from './card-tap-replies.service';
 import { classifierInput, type ConversationEntry, conversationEntries } from './chat-memory';
-import { handoverReason } from './handover-reason';
+import { type HandoverCheckRules, handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v2';
 import { burstText } from './reply-burst';
@@ -153,7 +152,7 @@ export class AiAgentService {
         contactId: turn.contactId,
         texts,
         earlier,
-        rules: rules.handover,
+        rules: { ...rules.handover, takesOrders: rules.takeOrders },
       }));
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
@@ -175,7 +174,7 @@ export class AiAgentService {
     contactId: string;
     texts: string[];
     earlier: ConversationEntry[];
-    rules: HandoverRules;
+    rules: HandoverCheckRules;
   }) {
     const { storeId, contactId, texts, earlier, rules } = input;
     return (await this.hasAllowanceRoom(storeId, contactId))
@@ -259,7 +258,7 @@ export class AiAgentService {
     storeId: string,
     texts: string[],
     earlier: ConversationEntry[],
-    rules: HandoverRules,
+    rules: HandoverCheckRules,
   ): Promise<Reason | 'busy' | null> {
     if (!texts.length) return null;
     const result = await this.ai.run(storeId, {

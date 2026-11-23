@@ -32,7 +32,7 @@ const everyOtherThanHandbag = [
 
 const kurtiSummary = [
   { from: 'customer', text: 'কুর্তি M সাইজ ১টা নিব' },
-  { from: 'shop', text: 'অর্ডার সামারি: কুর্তি M x1, মোট ৳1,510। হ্যাঁ লিখলে কনফার্ম হবে।' },
+  { from: 'shop', text: 'অর্ডার #1001 সামারি: কুর্তি M x1, মোট ৳1,510। হ্যাঁ লিখলে কনফার্ম হবে।' },
 ] as const;
 
 export const addOnGoldenCases: GoldenCase[] = [
@@ -60,7 +60,7 @@ export const addOnGoldenCases: GoldenCase[] = [
     draftedOrder: ['কুর্তি'],
     earlier: [
       { from: 'customer', text: 'kurti M size 1ta nibo' },
-      { from: 'shop', text: 'অর্ডার সামারি: কুর্তি M x1, মোট ৳1,510। হ্যাঁ লিখলে কনফার্ম হবে।' },
+      { from: 'shop', text: 'অর্ডার #1001 সামারি: কুর্তি M x1, মোট ৳1,510। হ্যাঁ লিখলে কনফার্ম হবে।' },
     ],
   },
   {
@@ -88,7 +88,10 @@ export const addOnGoldenCases: GoldenCase[] = [
     draftedOrder: ['পোলো শার্ট'],
     earlier: [
       { from: 'customer', text: 'I want the polo shirt, size L, one piece' },
-      { from: 'shop', text: 'Order summary: polo shirt L x1, total ৳710. Reply yes to confirm.' },
+      {
+        from: 'shop',
+        text: 'Order #1001 summary: polo shirt L x1, total ৳710. Reply yes to confirm.',
+      },
     ],
   },
   {
@@ -114,7 +117,7 @@ export const addOnGoldenCases: GoldenCase[] = [
     draftedOrder: ['থ্রি পিস'],
     earlier: [
       { from: 'customer', text: 'thri pis M size ta nibo' },
-      { from: 'shop', text: 'অর্ডার সামারি: থ্রি পিস M x1, মোট ৳2,260। হ্যাঁ লিখলে কনফার্ম হবে।' },
+      { from: 'shop', text: 'অর্ডার #1001 সামারি: থ্রি পিস M x1, মোট ৳2,260। হ্যাঁ লিখলে কনফার্ম হবে।' },
     ],
   },
   // Nothing in stock fits, so the AI confirms and offers nothing.
@@ -129,7 +132,10 @@ export const addOnGoldenCases: GoldenCase[] = [
     draftedOrder: ['হ্যান্ডব্যাগ'],
     earlier: [
       { from: 'customer', text: 'লাল হ্যান্ডব্যাগটা নিব' },
-      { from: 'shop', text: 'অর্ডার সামারি: হ্যান্ডব্যাগ লাল x1, মোট ৳1,860। হ্যাঁ লিখলে কনফার্ম হবে।' },
+      {
+        from: 'shop',
+        text: 'অর্ডার #1001 সামারি: হ্যান্ডব্যাগ লাল x1, মোট ৳1,860। হ্যাঁ লিখলে কনফার্ম হবে।',
+      },
     ],
   },
   // The switch is off, so no other product is named.
@@ -143,7 +149,7 @@ export const addOnGoldenCases: GoldenCase[] = [
     draftedOrder: ['কুর্তি'],
     earlier: [
       { from: 'customer', text: 'kurti M size 1ta nibo' },
-      { from: 'shop', text: 'অর্ডার সামারি: কুর্তি M x1, মোট ৳1,510। হ্যাঁ লিখলে কনফার্ম হবে।' },
+      { from: 'shop', text: 'অর্ডার #1001 সামারি: কুর্তি M x1, মোট ৳1,510। হ্যাঁ লিখলে কনফার্ম হবে।' },
     ],
   },
   {

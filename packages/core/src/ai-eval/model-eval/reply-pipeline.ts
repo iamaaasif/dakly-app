@@ -92,7 +92,10 @@ export function handoverFor(
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
-    ? handoverReason([golden.question], classified, evalShopRules(golden).handover)
+    ? handoverReason([golden.question], classified, {
+        ...evalShopRules(golden).handover,
+        takesOrders: evalShopRules(golden).takeOrders,
+      })
     : 'ai_unavailable';
 }
 

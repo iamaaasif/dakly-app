@@ -108,7 +108,10 @@ export class AiPracticeService {
       throw practiceError('PRACTICE_AI_BUSY');
     const reason =
       classified.kind === 'output'
-        ? handoverReason([question], classified.output, rules.handover)
+        ? handoverReason([question], classified.output, {
+            ...rules.handover,
+            takesOrders: rules.takeOrders,
+          })
         : 'ai_unavailable';
     if (reason) return { kind: 'handover', reason };
     const composed = await this.sales.compose({
