@@ -10,7 +10,7 @@ import { adProducts } from '../../ai-agent/ad-context';
 import { classifierInput, productsInChat } from '../../ai-agent/chat-memory';
 import { handoverReason } from '../../ai-agent/handover-reason';
 import { chatReplyV8 } from '../../ai-agent/prompts/chat-reply.v8';
-import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
+import { classifyChat } from '../../ai-agent/prompts/classify-chat.v3';
 import {
   checkReplyFacts,
   factCheckFailedBlock,

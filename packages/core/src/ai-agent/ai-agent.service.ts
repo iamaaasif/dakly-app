@@ -33,7 +33,7 @@ import { CardTapRepliesService } from './card-tap-replies.service';
 import { classifierInput, type ConversationEntry, conversationEntries } from './chat-memory';
 import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
-import { classifyChat } from './prompts/classify-chat.v2';
+import { classifyChat } from './prompts/classify-chat.v3';
 import { burstText } from './reply-burst';
 import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
 import type { ShopRules } from './shop-rules';

@@ -5,7 +5,7 @@ import { handoverReasons } from '@dakly/contracts/chats';
 
 export const goldenCaseSchema = z.strictObject({
   id: z.string().min(1),
-  language: z.enum(['bangla', 'banglish', 'english']),
+  language: z.enum(['bangla', 'banglish', 'mixed', 'english']),
   question: z.string().min(1),
   // The reason a person should take over, or null when the AI should answer.
   expectedHandover: z.enum(handoverReasons).nullable(),

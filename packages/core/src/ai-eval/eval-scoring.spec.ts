@@ -221,6 +221,31 @@ describe('chat memory set', () => {
     expect(report.passed).toBe(false);
   });
 
+  it('fails a days-later answer that quotes the memory’s old price or offers the size with no stock', () => {
+    const report = scoreEval(chatMemoryGoldenCases, {
+      ...chatMemoryRecordedOutcomes,
+      'chat-memory-days-later-bn': { kind: 'reply', text: 'জি, কুর্তি আছে, ৳১,২০০।' },
+      'chat-memory-other-channel-stock-bn': { kind: 'reply', text: 'জি, পোলো শার্ট XL আছে, ৳৬৫০।' },
+    });
+    expect(report.wrongPriceCaseIds).toEqual(['chat-memory-days-later-bn']);
+    expect(report.outOfStockOfferCaseIds).toEqual(['chat-memory-other-channel-stock-bn']);
+    expect(report.passed).toBe(false);
+  });
+
+  it('lets a reply say a size is sold out, and fails one that offers it', () => {
+    const score = (text: string) =>
+      scoreEval(chatMemoryGoldenCases, {
+        ...chatMemoryRecordedOutcomes,
+        'chat-memory-other-channel-stock-bn': { kind: 'reply', text },
+      }).outOfStockOfferCaseIds;
+    expect(score('পোলো শার্টের XL সাইজটি এখন স্টকে নেই। M ও L সাইজ আছে, ৳৬৫০।')).toEqual([]);
+    expect(score('পোলো শার্টের XL এখন নেই, তবে M সাইজ আছে, ৳৬৫০।')).toEqual([]);
+    expect(score('পোলো শার্ট XL সাইজ আছে, ৳৬৫০।')).toEqual(['chat-memory-other-channel-stock-bn']);
+    expect(score('XL নেই। আমাদের XL সাইজ আছে, ৳৬৫০।')).toEqual([
+      'chat-memory-other-channel-stock-bn',
+    ]);
+  });
+
   it('fails a follow-up with nothing shown that guesses a product', () => {
     const report = scoreEval(chatMemoryGoldenCases, {
       ...chatMemoryRecordedOutcomes,
@@ -234,7 +259,7 @@ describe('ad context set', () => {
   it('passes the saved run in Bangla, Banglish and mixed', () => {
     expect(adContextGoldenCases.every(({ id }) => id in adContextRecordedOutcomes)).toBe(true);
     expect(new Set(adContextGoldenCases.map(({ language }) => language))).toEqual(
-      new Set(['bangla', 'banglish']),
+      new Set(['bangla', 'banglish', 'mixed']),
     );
     expect(adContextGoldenCases.some(({ id }) => id.endsWith('-mixed'))).toBe(true);
     const report = scoreEval(adContextGoldenCases, adContextRecordedOutcomes);

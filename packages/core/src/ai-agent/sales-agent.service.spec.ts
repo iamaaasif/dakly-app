@@ -33,6 +33,7 @@ function build(memoryText: string | undefined = undefined) {
   const inbox = {
     replyHistory: vi.fn().mockResolvedValue([]),
     referralOf: vi.fn().mockResolvedValue(null),
+    shownProductHistory: vi.fn().mockResolvedValue([]),
   } as unknown as InboxService;
   const stores = {
     settings: vi.fn().mockResolvedValue({ name: 'Shop', phone: '0171', district: 'Dhaka' }),
@@ -138,19 +139,17 @@ const kurti = {
   variants: [{ variantId: 'v-l', title: 'L', priceTaka: 1450, stock: 8 }],
 };
 
+const shownKurtiReply = {
+  id: 'm-2',
+  direction: 'out',
+  body: 'কুর্তি আছে, ৳১,৪৫০।',
+  mediaText: null,
+  aiSources: [{ tool: 'shown_products', refs: ['p-kurti'] }],
+} as const;
+
 it('reads the products shown earlier in the chat again, so "L ache?" quotes that one', async () => {
   const { service, run, inbox, tools } = build();
-  vi.mocked(inbox.replyHistory).mockResolvedValue([
-    { id: 'm-3', direction: 'in', body: 'L ache?', mediaText: null, aiSources: null },
-    {
-      id: 'm-2',
-      direction: 'out',
-      body: 'কুর্তি আছে, ৳১,৪৫০।',
-      mediaText: null,
-      aiSources: [{ tool: 'shown_products', refs: ['p-kurti'] }],
-    },
-    { id: 'm-1', direction: 'in', body: 'kurti ache?', mediaText: null, aiSources: null },
-  ]);
+  vi.mocked(inbox.shownProductHistory).mockResolvedValue([shownKurtiReply]);
   vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
     name === 'get_product' ? kurti : { products: [] },
   );
@@ -168,13 +167,67 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v8+products-in-chat.v1');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v8+products-in-chat.v2');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
   expect(composed.kind === 'reply' && composed.toolResults).toContainEqual(
     expect.objectContaining({ products: [kurti] }),
   );
+});
+
+it.each(['ওইটা এখনো আছে?', 'oita ekhono ache?', 'oita এখনো ache?'])(
+  'reads the product shown in this customer\'s other chat again for "%s", with today\'s price and stock',
+  async (question) => {
+    const { service, run, inbox, tools } = build('Prefers L size.');
+    // This chat is new (another channel, or days later): it holds no AI reply, but the same
+    // customer's other chat does, and the price in that reply is old.
+    vi.mocked(inbox.replyHistory).mockResolvedValue([
+      { id: 'm-9', direction: 'in', body: question, mediaText: null, aiSources: null },
+    ]);
+    vi.mocked(inbox.shownProductHistory).mockResolvedValue([shownKurtiReply]);
+    const today = {
+      ...kurti,
+      variants: [{ variantId: 'v-l', title: 'L', priceTaka: 1550, stock: 0 }],
+    };
+    vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
+      name === 'get_product' ? today : { products: [] },
+    );
+
+    await service.compose({
+      storeId,
+      contactId: 'c-1',
+      chat,
+      customerTexts: [question],
+      rules: defaultShopRules,
+    });
+
+    expect(inbox.shownProductHistory).toHaveBeenCalledWith(storeId, 'conv-1', expect.any(Number));
+    const input: string = run.mock.calls[0]![1].input;
+    expect(input).toMatch(
+      /<products_in_this_chat>.*"priceTaka":1550,"stock":0.*<\/products_in_this_chat>/,
+    );
+    expect(input).not.toContain('১,৪৫০');
+    expect(input).toContain('<customer_memory untrusted="true">Prefers L size.</customer_memory>');
+  },
+);
+
+it('leaves a shown product out when it can no longer be read', async () => {
+  const { service, run, inbox, tools } = build();
+  vi.mocked(inbox.shownProductHistory).mockResolvedValue([shownKurtiReply]);
+  vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
+    name === 'get_product' ? { error: 'PRODUCT_NOT_FOUND' } : { products: [] },
+  );
+
+  await service.compose({
+    storeId,
+    contactId: 'c-1',
+    chat,
+    customerTexts: ['ওইটা এখনো আছে?'],
+    rules: defaultShopRules,
+  });
+
+  expect(run.mock.calls[0]![1].input).not.toContain('<products_in_this_chat>');
 });
 
 it('keeps a read photo in the conversation, so "red ta ache?" has the photo to point at', async () => {
