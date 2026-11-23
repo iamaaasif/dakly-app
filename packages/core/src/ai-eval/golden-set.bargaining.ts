@@ -132,7 +132,7 @@ export const unclearGoldenCases: GoldenCase[] = [
   {
     id: 'unclear-second-banglish',
     language: 'banglish',
-    question: 'ei je oita, bujhlen na?',
+    question: 'ei je oita',
     expectedHandover: 'out_of_scope',
     allowedAmountsTaka: [],
     earlier: [
@@ -143,7 +143,7 @@ export const unclearGoldenCases: GoldenCase[] = [
   {
     id: 'unclear-second-bn',
     language: 'bangla',
-    question: 'আরে ওইটাই তো, বুঝলেন না?',
+    question: 'ওইটাই, ওই জিনিসটা',
     expectedHandover: 'out_of_scope',
     allowedAmountsTaka: [],
     earlier: [
@@ -154,7 +154,7 @@ export const unclearGoldenCases: GoldenCase[] = [
   {
     id: 'unclear-second-mixed',
     language: 'banglish',
-    question: 'eta eta, ওই যে apu, bujhen na?',
+    question: 'eta eta, ওই যে apu',
     expectedHandover: 'out_of_scope',
     allowedAmountsTaka: [],
     earlier: [
