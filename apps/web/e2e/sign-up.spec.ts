@@ -89,7 +89,7 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
     await privateInput(page, 'identifier', phone);
     await privateInput(page, 'password', password);
     await page.getByLabel('Keep me signed in on this device').check();
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByRole('button', { name: 'Log in', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Two-step verification' })).toBeVisible();
     await privateInput(page, 'code', backupCode);
     const reverified = otherPage.waitForResponse(
