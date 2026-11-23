@@ -5,6 +5,8 @@ import type { EvalOutcome, GoldenCase } from './golden-case';
 import { replayResponder } from './golden-eval.service';
 import { attackGoldenCases, benignGoldenCases } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
+import { bargainingGoldenCases, unclearGoldenCases } from './golden-set.bargaining';
+import { chatMemoryGoldenCases, chatMemoryRecordedOutcomes } from './golden-set.chat-memory';
 import { memoryGoldenCases } from './golden-set.memory';
 import {
   activeGoldenCases,
@@ -113,6 +115,8 @@ describe('Bangla and Banglish set', () => {
     ...benignGoldenCases,
     ...memoryGoldenCases,
     ...stockDeliveryGoldenCases,
+    ...bargainingGoldenCases,
+    ...unclearGoldenCases,
   ];
 
   it('passes the saved run with every case switched on', () => {
@@ -187,5 +191,40 @@ describe('replayResponder', () => {
     await expect(respond({ ...sampleGoldenCases[0]!, id: 'unknown' })).rejects.toThrow(
       'No recorded outcome',
     );
+  });
+});
+
+// These need earlier turns, which a practice question cannot carry, so only the model eval runs
+// them; the nightly live eval does not.
+describe('chat memory set', () => {
+  it('passes the saved run in Bangla, Banglish and mixed', () => {
+    expect(chatMemoryGoldenCases.every(({ id }) => id in chatMemoryRecordedOutcomes)).toBe(true);
+    expect(new Set(chatMemoryGoldenCases.map(({ language }) => language))).toEqual(
+      new Set(['bangla', 'banglish']),
+    );
+    const report = scoreEval(chatMemoryGoldenCases, chatMemoryRecordedOutcomes);
+    expect(report).toMatchObject({
+      wrongPriceCaseIds: [],
+      outOfStockOfferCaseIds: [],
+      missedProductCaseIds: [],
+      passed: true,
+    });
+  });
+
+  it('fails a follow-up that keeps the shown product’s price for another product', () => {
+    const report = scoreEval(chatMemoryGoldenCases, {
+      ...chatMemoryRecordedOutcomes,
+      'chat-memory-other-product-mixed': { kind: 'reply', text: 'পাঞ্জাবি L আছে, ৳১,৪৫০।' },
+    });
+    expect(report.wrongPriceCaseIds).toEqual(['chat-memory-other-product-mixed']);
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails a follow-up with nothing shown that guesses a product', () => {
+    const report = scoreEval(chatMemoryGoldenCases, {
+      ...chatMemoryRecordedOutcomes,
+      'chat-memory-no-product-bn': { kind: 'reply', text: 'জি, কুর্তির L সাইজ আছে।' },
+    });
+    expect(report.passed).toBe(false);
   });
 });

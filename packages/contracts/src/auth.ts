@@ -129,5 +129,14 @@ export const facebookStartSchema = z.strictObject({
 });
 export type FacebookStartInput = z.infer<typeof facebookStartSchema>;
 
+// Facebook adds fields such as error_reason and error_description, so unknown keys are dropped
+// rather than rejected.
+export const facebookCallbackSchema = z.object({
+  code: z.string().min(1).max(2000).optional(),
+  state: z.string().min(1).max(200).optional(),
+  error: z.string().max(200).optional(),
+});
+export type FacebookCallbackInput = z.infer<typeof facebookCallbackSchema>;
+
 export type SignInResponse = void | { status: 'totp_required'; challengeId: string };
 export type GoogleSignInResponse = SignInResponse | GoogleSignInPending;

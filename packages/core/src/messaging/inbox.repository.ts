@@ -333,6 +333,29 @@ export class InboxRepository {
     );
   }
 
+  replyHistory(storeId: string, conversationId: string, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: messages.id,
+          direction: messages.direction,
+          body: messages.body,
+          mediaText: messages.mediaText,
+          aiSources: messages.aiSources,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(messages.conversationId, conversationId),
+            ne(messages.kind, 'note'),
+          ),
+        )
+        .orderBy(desc(messages.createdAt), desc(messages.id))
+        .limit(limit),
+    );
+  }
+
   async addNote(
     storeId: string,
     conversationId: string,

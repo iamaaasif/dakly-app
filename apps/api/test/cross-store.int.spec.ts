@@ -1404,7 +1404,12 @@ const settingsBody = (version: number, replyLanguage: 'bn' | 'en') => ({
     followUp: 'hot',
     productCardStyle: 'buttons',
   },
-  handoverRules: { damagedOrWrong: true, refundsAndExchanges: true, specialRequests: false },
+  handoverRules: {
+    damagedOrWrong: true,
+    refundsAndExchanges: true,
+    specialRequests: false,
+    discounts: true,
+  },
   returnToAiMinutes: 60,
   extraRules: null,
 });
