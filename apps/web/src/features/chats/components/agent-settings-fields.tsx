@@ -51,6 +51,11 @@ const handoverRows = [
   ['damagedOrWrong', 'Damaged, wrong or fake product', 'Sends a holding reply and calls you'],
   ['refundsAndExchanges', 'Refunds and exchanges', 'Sends a holding reply and calls you'],
   ['specialRequests', 'Special requests', 'Custom or bulk orders go to you'],
+  [
+    'discounts',
+    'Discount requests',
+    'Off: Dakly says the price is fixed, and calls you if the customer asks again',
+  ],
 ] as const;
 
 const followUps = [

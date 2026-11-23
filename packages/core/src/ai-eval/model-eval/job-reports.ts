@@ -11,7 +11,7 @@ import { runKhataEval } from './khata-eval';
 import { runTranscribeEval, runVisionEval, type MediaScore } from './media-eval';
 import { runMemoryEval } from './memory-eval';
 import { runOptionsPhotoEval, runOptionsTitleEval } from './options-eval';
-import { classifyQuestion, composeReply, handoverFor } from './reply-pipeline';
+import { classifyQuestion, composeReply, evalShopRules, handoverFor } from './reply-pipeline';
 
 export type JobContext = {
   driver: LlmDriver;
@@ -32,7 +32,7 @@ async function classifyAll({ driver, meter, cases }: JobContext, model: string) 
   const reasons: Reasons = new Map();
   for (const golden of cases) {
     const screened = screenCustomerTexts([golden.question], {
-      handOverDiscounts: !golden.holdsPrice,
+      handOverDiscounts: evalShopRules(golden).handover.discounts,
       earlierTexts: (golden.earlier ?? [])
         .filter(({ from }) => from === 'customer')
         .map(({ text }) => text),

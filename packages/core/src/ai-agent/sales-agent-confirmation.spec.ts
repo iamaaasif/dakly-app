@@ -8,6 +8,7 @@ import type { ProductsService } from '../products/products.service';
 import type { StoresService } from '../stores/stores.service';
 import type { SalesAgentToolsService } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
+import { defaultShopRules } from './shop-rules';
 
 type Step = { kind: 'tools'; calls: [string, object][] } | { kind: 'reply' };
 
@@ -41,7 +42,11 @@ function agent(steps: Step[], customerTexts: string[]) {
     { contextFor: async () => undefined } as unknown as ContactMemoryService,
     { setOutcome: async () => undefined } as unknown as AiRunsService,
   );
-  return { run, compose: () => service.compose({ storeId: 's', contactId: 'c', customerTexts }) };
+  return {
+    run,
+    compose: () =>
+      service.compose({ storeId: 's', contactId: 'c', customerTexts, rules: defaultShopRules }),
+  };
 }
 
 const confirm: Step = { kind: 'tools', calls: [['confirm_order', { orderNumber: 7 }]] };

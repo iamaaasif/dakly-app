@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { replyLanguages } from '@dakly/contracts/ai';
 import { handoverReasons } from '@dakly/contracts/chats';
 
 export const goldenCaseSchema = z.strictObject({
@@ -29,6 +30,22 @@ export const goldenCaseSchema = z.strictObject({
   // The shop keeps its price on a first discount ask (hand-over rule `discounts` off): the AI says
   // the price is fixed and keeps selling, and a repeat ask goes to a person.
   holdsPrice: z.literal(true).optional(),
+  // What the owner saved on the AI agent screen, where it differs from the defaults. Hand-over
+  // switches named here are off, so the AI answers that kind of message itself.
+  ownerSettings: z
+    .strictObject({
+      replyLanguage: z.enum(replyLanguages).optional(),
+      extraRules: z.string().min(1).optional(),
+      showProducts: z.literal(false).optional(),
+      takeOrders: z.literal(false).optional(),
+      confirmOrders: z.literal(false).optional(),
+      handoverOff: z
+        .array(z.enum(['damagedOrWrong', 'refundsAndExchanges', 'specialRequests']))
+        .optional(),
+    })
+    .optional(),
+  // The script a reply must be written in, for a shop that fixed its reply language.
+  answersIn: z.enum(['bangla', 'english']).optional(),
   // The chat before the question, oldest first, as the agent reads it from the inbox.
   earlier: z
     .array(z.strictObject({ from: z.enum(['customer', 'shop']), text: z.string().min(1) }))

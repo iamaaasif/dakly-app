@@ -8,7 +8,7 @@ import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/
 
 import { classifierInput, productsInChat } from '../../ai-agent/chat-memory';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV6 } from '../../ai-agent/prompts/chat-reply.v6';
+import { chatReplyV7 } from '../../ai-agent/prompts/chat-reply.v7';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
 import {
   checkReplyFacts,
@@ -16,6 +16,12 @@ import {
   type FactCheckFailure,
 } from '../../ai-agent/reply-fact-check';
 import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
+import {
+  defaultShopRules,
+  refuseToolCall,
+  type ShopRules,
+  shopRulesBlock,
+} from '../../ai-agent/shop-rules';
 import type { EvalOutcome, GoldenCase } from '../golden-case';
 import { evalPhotoKey, evalProducts, evalShop } from './eval-catalog';
 import type { EvalMeter } from './eval-meter';
@@ -66,12 +72,27 @@ export async function classifyQuestion(
   }
 }
 
+// The owner's settings a case runs under: the defaults, then what the case changes.
+export function evalShopRules(golden: Pick<GoldenCase, 'holdsPrice' | 'ownerSettings'>): ShopRules {
+  const { handoverOff = [], ...changes } = golden.ownerSettings ?? {};
+  return {
+    ...defaultShopRules,
+    ...changes,
+    extraRules: changes.extraRules ?? null,
+    handover: {
+      ...defaultShopRules.handover,
+      ...Object.fromEntries(handoverOff.map((name) => [name, false])),
+      ...(golden.holdsPrice ? { discounts: false } : {}),
+    },
+  };
+}
+
 export function handoverFor(
-  golden: Pick<GoldenCase, 'question' | 'holdsPrice'>,
+  golden: Pick<GoldenCase, 'question' | 'holdsPrice' | 'ownerSettings'>,
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
-    ? handoverReason([golden.question], classified, !golden.holdsPrice)
+    ? handoverReason([golden.question], classified, evalShopRules(golden).handover)
     : 'ai_unavailable';
 }
 
@@ -79,12 +100,16 @@ type Run = { driver: LlmDriver; meter: EvalMeter; model: string };
 type Note = (note: string) => void;
 type ToolCall = { name: string; argumentsJson: string };
 
-type ReplyCase = Pick<GoldenCase, 'question' | 'memory' | 'earlier' | 'shownProducts'>;
+type ReplyCase = Pick<
+  GoldenCase,
+  'question' | 'memory' | 'earlier' | 'shownProducts' | 'holdsPrice' | 'ownerSettings'
+>;
 
 function replyContext(golden: ReplyCase, inChat: object | undefined, candidates: object) {
   const conversation = [...(golden.earlier ?? []), { from: 'customer', text: golden.question }];
   return [
     `<shop>${JSON.stringify(evalShop)}</shop>`,
+    shopRulesBlock(evalShopRules(golden)),
     ...(golden.memory
       ? [`<customer_memory untrusted="true">${golden.memory}</customer_memory>`]
       : []),
@@ -123,10 +148,12 @@ function factCheckFailure(reply: string, toolResults: object[], question: string
 }
 
 // A hand_over call ends the loop with its reason; any other call adds its result for the next round.
-function answerToolCalls(calls: ToolCall[], toolResults: object[], note: Note) {
+function answerToolCalls(calls: ToolCall[], toolResults: object[], note: Note, rules: ShopRules) {
   const answered: { name: string; result: object }[] = [];
   for (const call of calls) {
-    const result = runFixtureTool(call.name, call.argumentsJson);
+    const refusal = refuseToolCall(rules, call);
+    if (refusal?.kind === 'handover') return { handover: refusal.reason };
+    const result = refusal?.result ?? runFixtureTool(call.name, call.argumentsJson);
     if (call.name === 'hand_over' && 'reason' in result) {
       note(`hand_over ${String(result.reason)}`);
       return { handover: result.reason as Reason };
@@ -195,7 +222,7 @@ async function composeOnce(
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {
       model,
-      instructions: chatReplyV6.instructions,
+      instructions: chatReplyV7.instructions,
       input: context + transcript,
       output: chatReplyOutputSchema,
       tools: salesAgentLlmTools,
@@ -211,7 +238,7 @@ async function composeOnce(
         ? { kind: 'reply', text: parsed.data.reply, toolResults }
         : ended({ kind: 'handover', reason: 'out_of_scope' });
     }
-    const outcome = answerToolCalls(result.toolCalls, toolResults, note);
+    const outcome = answerToolCalls(result.toolCalls, toolResults, note, evalShopRules(golden));
     if (outcome.handover) return ended({ kind: 'handover', reason: outcome.handover });
     transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
   }
