@@ -158,9 +158,9 @@ Built for the variants grid (part 2, API): saving a product with fewer variants 
 
 ### Catalogue tools beside the full page (planned)
 
-Research: `docs/design/wireframes/prod-11/research.md`. Today the catalogue has a CSV import (PROD-5), a free-text category on each product, no brands, no product export and no bulk edit. Proposed follow-up tasks, each its own PR after the full page ships; none changes the full page.
+Research: `docs/design/wireframes/prod-11/research.md`. Proposed follow-up tasks, each its own PR after the full page ships; none changes the full page.
 
-- **Categories and brands** (PROD-12). A category becomes a row in a store table with a parent (two levels), a name and a sort order, and a brand a row with a name and optional logo; a product has one category and one brand. The product form picks from a list and can add one inline. The migration turns each distinct existing `products.category` text into a category without changing any product. A category path in a file reads `Clothing > T-shirts`. This changes the data model, so it needs a decision before it starts.
+- **Categories and brands** (PROD-12). Built; see "Categories and brands" below.
 - **Bulk edit on the list** (PROD-13). Select rows (or all rows for the current filters) and edit in a grid: price, sale price, cost, stock, category, brand, status. Stock changes need a reason and go to the stock history. A review step shows each old and new value before saving, and the result keeps an **Undo** for 24 hours for everything except stock, which is corrected by a new movement. A blank cell never overwrites a value.
 - **Export and XLSX** (PROD-14). Export the filtered list as CSV or XLSX with the same columns the import reads, so an export edited in a spreadsheet can be imported again. The import accepts XLSX, reuses the CUS-16 reader, and gets a dry run: a preview of added, changed and rejected rows with a downloadable error report before anything is written, and an editable preview table. Images by public link are not in this task.
 
@@ -187,6 +187,18 @@ The Import from Excel or CSV button sits beside Add product for members who can 
 - Results: added, updated, skipped and failed counts and the error report. There is no Undo (see the import rules above).
 - A blank cell never overwrites. For a product already in the shop, the file's non-blank category, description, status and price replace the stored ones, and a blank status keeps the product as it is. A file row is matched by SKU, so renaming an option value in the file keeps the variant, its id, price and stock. Rows with no SKU are added as new products.
 - A row whose option cells are all blank is a product without options, so a catalogue that mixes optioned and plain products imports in one file. Rows of one product must fill the same options.
+
+### Categories and brands (PROD-12)
+
+A shop keeps its own list of categories (two levels, such as `Clothing > T-shirts`) and a list of brands. A product has at most one of each, set by id: `categoryId` and `brandId` on create and edit. The response also carries `category` (the path as text, `Clothing > T-shirts`) and `brand` (the name), so search, the AI, chat cards and the export read the words and never see an id.
+
+- **Tables.** `product_categories` (store, parent, name, sort order) and `product_brands` (store, name), both with row level security. A name is unique per parent (top level counts as one parent) and per shop, ignoring case. Products point at them with a store-checked foreign key, so a product cannot take another shop's category.
+- **Migration 0098.** Each distinct old `products.category` text (ignoring case and spaces) becomes a top-level category of its shop and every product keeps pointing at it. The text column is dropped. No product changes name, price or visibility.
+- **API.** `GET` and `POST` on `/products/categories` and `/products/brands`; a list item carries its product count. A category sits under one parent at most (`PRODUCT_CATEGORY_TOO_DEEP`), and a repeated name is `PRODUCT_CATEGORY_NAME_TAKEN` or `PRODUCT_BRAND_NAME_TAKEN`.
+- **Form.** The Category and Brand fields are pickers with "+ New category" and "+ New brand", which add an item without leaving the form (a new category can go under a top-level one). Ask Dakly's draft picks the category only when the shop already has one of that name.
+- **Bulk edit.** The Category cell takes a name or a path, finds it in the shop's list ignoring case and adds it when missing; the edit records the list's own spelling, so undo still finds it.
+- **Import.** The Category column accepts `Clothing > T-shirts` with the same matching. More than two levels is a row error. The import does not read brands yet.
+- **Next (second PR).** Rename, move and delete for categories and brands, a screen for them, category and brand filters on the list, pickers and a Brand column in the bulk edit grid, and a brand column in import and export.
 
 ### Export products (PROD-14)
 
@@ -402,4 +414,4 @@ On the products list a person selects rows with the checkboxes (up to 100, kept 
 - A stock change asks for one reason (Restock, Recount, Damage, Other) for the whole edit and writes an `adjust` movement of the difference with that reason.
 - Each apply is one transaction and stores the old and new value of every field in `product_bulk_edits`.
 - **Undo** is offered for 24 hours (`POST /products/bulk-edits/:id/undo`). A value that was changed by hand since is left alone and counted as skipped. Stock is corrected by a new `adjust` movement of the opposite difference, so orders placed since keep their effect; if the stock is reserved by then, that row is skipped.
-- Brand and "select all matching the filters" from the design wait for PROD-12 and a later task.
+- Brand and "select all matching the filters" from the design wait for a later task.

@@ -81,6 +81,8 @@ describe('product photos with Postgres', () => {
       }),
     } as StoresService,
     storage,
+    {} as never,
+    {} as never,
   );
   const actor = { kind: 'user', userId: f.userA } as const;
   beforeAll(() => f.setup());

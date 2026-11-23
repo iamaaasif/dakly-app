@@ -34,6 +34,14 @@ const PRODUCT_ERRORS = {
   PRODUCT_BULK_EDIT_NOT_FOUND: { status: 404, message: 'Bulk edit not found' },
   PRODUCT_BULK_EDIT_UNDO_EXPIRED: { status: 409, message: 'The 24 hours to undo have passed' },
   PRODUCT_BULK_EDIT_ALREADY_UNDONE: { status: 409, message: 'This edit was already undone' },
+  PRODUCT_CATEGORY_NOT_FOUND: { status: 404, message: 'Category not found' },
+  PRODUCT_CATEGORY_NAME_TAKEN: { status: 409, message: 'A category with this name already exists' },
+  PRODUCT_CATEGORY_TOO_DEEP: {
+    status: 400,
+    message: 'A category can sit under one other category, no deeper',
+  },
+  PRODUCT_BRAND_NOT_FOUND: { status: 404, message: 'Brand not found' },
+  PRODUCT_BRAND_NAME_TAKEN: { status: 409, message: 'A brand with this name already exists' },
 } as const satisfies ErrorCatalog;
 
 export function productError(code: keyof typeof PRODUCT_ERRORS): AppError {

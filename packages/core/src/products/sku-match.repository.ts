@@ -2,6 +2,8 @@ import { sql } from 'drizzle-orm';
 
 import { products, productVariants } from '@dakly/db/schema/products';
 
+import { categoryPathSql } from './product-list-names.repository';
+
 export type SkuMatch = {
   id: string;
   productId: string;
@@ -30,7 +32,7 @@ export const skuMatchColumns = {
     costPoisha: sql<number | null>`${productVariants.costPoisha}::int`,
     onHand: productVariants.onHand,
     isStockTracked: products.isStockTracked,
-    category: products.category,
+    category: categoryPathSql,
     description: products.description,
     status: products.status,
   },

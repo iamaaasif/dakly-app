@@ -55,19 +55,27 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     expect((await request('/me/active-store', { storeId: fixture.storeIds[0] })).status()).toBe(
       204,
     );
+    const categoryIds: Record<string, string> = {};
+    for (const name of ['Men', 'Accessories'])
+      categoryIds[name] = (await (await request('/products/categories', { name })).json()).id;
     for (const input of [
       {
         name: 'Cotton Panjabi',
-        category: 'Men',
+        categoryId: categoryIds.Men,
         pricePoisha: 245000,
         compareAtPricePoisha: 295000,
         options: [{ name: 'Size', values: ['M', 'L', 'XL'] }],
         variants: ['M', 'L', 'XL'].map((size) => ({ optionValues: { Size: size } })),
       },
-      { name: 'Silk scarf', category: 'Accessories', pricePoisha: 45000, isStockTracked: false },
+      {
+        name: 'Silk scarf',
+        categoryId: categoryIds.Accessories,
+        pricePoisha: 45000,
+        isStockTracked: false,
+      },
       {
         name: 'Leather sandal',
-        category: 'Accessories',
+        categoryId: categoryIds.Accessories,
         pricePoisha: 0,
         isStockTracked: false,
         status: 'hidden',

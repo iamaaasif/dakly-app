@@ -12,6 +12,8 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
+import { ProductCategoriesRepository } from './product-categories.repository';
+import { ProductCategoriesService } from './product-categories.service';
 import { ProductImportService, type ImportProduct } from './product-import.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductStockRepository } from './product-stock.repository';
@@ -54,6 +56,10 @@ describe('ProductImportService with Postgres', () => {
   const outbox = new OutboxService(new OutboxRepository(app.db, tenant), transaction);
   const clock = { now: () => now };
   const repository = new ProductsRepository(tenant);
+  const categories = new ProductCategoriesService(
+    new ProductCategoriesRepository(tenant),
+    transaction,
+  );
   const products = new ProductsService(
     repository,
     new ProductOrderVariantsRepository(tenant),
@@ -64,6 +70,8 @@ describe('ProductImportService with Postgres', () => {
       settings: async () => ({ stock: { lowStockThreshold: 3 } }),
     } as unknown as StoresService,
     {} as FileStorageDriver,
+    categories,
+    {} as never,
   );
   const stock = new ProductStockService(
     new ProductStockRepository(tenant),
@@ -74,6 +82,7 @@ describe('ProductImportService with Postgres', () => {
   const importer = new ProductImportService(
     repository,
     products,
+    categories,
     stock,
     transaction,
     outbox,
@@ -88,7 +97,13 @@ describe('ProductImportService with Postgres', () => {
 
   beforeAll(() => f.setup());
   afterAll(async () => {
-    for (const table of ['outbox_events', 'stock_movements', 'product_variants', 'products'])
+    for (const table of [
+      'outbox_events',
+      'stock_movements',
+      'product_variants',
+      'products',
+      'product_categories',
+    ])
       await f.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         [f.a, f.b],
       ]);
@@ -246,7 +261,7 @@ describe('ProductImportService with Postgres', () => {
     const fields = async () =>
       (
         await f.connection.pool.query(
-          "select category, description, status from products where name='Fields'",
+          "select (select name from product_categories c where c.id = p.category_id) as category, description, status from products p where name='Fields'",
         )
       ).rows[0];
     await importer.importBatch(

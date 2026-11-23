@@ -81,6 +81,8 @@ describe('variant photos with Postgres', () => {
       }),
     } as StoresService,
     storage,
+    {} as never,
+    {} as never,
   );
   const photos = () =>
     new ProductVariantPhotosService(

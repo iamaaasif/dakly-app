@@ -10,7 +10,6 @@ import type {
 import type {
   CreateProductInput,
   ChangeProductInput,
-  ProductCategoriesResponse,
   ProductListQuery,
   ProductListResponse,
   ProductResponse,
@@ -30,7 +29,9 @@ import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provi
 import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { ProductBrandsService } from './product-brands.service';
 import { chatProduct, orderCatalogueProduct, type ChatProduct } from './product-catalogue-views';
+import { ProductCategoriesService } from './product-categories.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { productError } from './products.errors';
 import {
@@ -56,11 +57,14 @@ export class ProductsService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
+    @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
+    @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
   ) {}
 
   create(storeId: string, input: CreateProductInput, _actor: Actor): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
       const { variants, ...details } = input;
+      await this.assertListsExist(storeId, details);
       const product = await this.repository.insert(storeId, details, this.clock.now());
       await this.saveVariants(storeId, product, variants, []);
       await this.publishUpdated(storeId, product.id);
@@ -76,6 +80,7 @@ export class ProductsService {
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
       const { variants, ...details } = input;
+      await this.assertListsExist(storeId, details);
       const product = await this.repository.update(storeId, id, details, this.clock.now());
       if (!product) throw productError('PRODUCT_NOT_FOUND');
       if (variants) {
@@ -85,6 +90,14 @@ export class ProductsService {
       await this.publishUpdated(storeId, id);
       return this.getById(storeId, id);
     });
+  }
+
+  private async assertListsExist(
+    storeId: string,
+    { categoryId, brandId }: { categoryId?: string | null; brandId?: string | null },
+  ): Promise<void> {
+    if (categoryId) await this.categories.assertExists(storeId, categoryId);
+    if (brandId) await this.brands.assertExists(storeId, brandId);
   }
 
   async getById(storeId: string, id: string): Promise<ProductResponse> {
@@ -106,10 +119,6 @@ export class ProductsService {
       toResponse(product, product.variants, stock.lowStockThreshold, this.storage),
     );
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
-  }
-
-  async listCategories(storeId: string): Promise<ProductCategoriesResponse> {
-    return { items: await this.repository.listCategories(storeId) };
   }
 
   async listForOrders(storeId: string, query: OrderCatalogueQuery): Promise<OrderCataloguePage> {
