@@ -8,6 +8,7 @@ import { banglaGoldenCases } from '../golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from '../golden-set.bargaining';
 import { chatMemoryGoldenCases } from '../golden-set.chat-memory';
 import { memoryGoldenCases } from '../golden-set.memory';
+import { ownerSettingsGoldenCases } from '../golden-set.owner-settings';
 import { sampleGoldenCases } from '../golden-set.sample';
 import { stockDeliveryGoldenCases } from '../golden-set.stock-delivery';
 import { EvalMeter } from './eval-meter';
@@ -74,6 +75,7 @@ function selectedCases() {
     ...bargainingGoldenCases,
     ...unclearGoldenCases,
     ...chatMemoryGoldenCases,
+    ...ownerSettingsGoldenCases,
   ].filter((golden) => !golden.dependsOn || !pending.includes(golden.dependsOn));
 }
 
