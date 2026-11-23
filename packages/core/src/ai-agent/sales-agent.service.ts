@@ -130,7 +130,7 @@ export class SalesAgentService {
     const candidates = await this.productCandidates(input);
     if (candidates) results.push(candidates);
     const context = await this.context(input, history, inChat, candidates);
-    let transcript = rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
+    let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
@@ -303,6 +303,11 @@ function isUnconfirmed(
       call.argumentsJson.includes(String(result.orderNumber)),
   );
   return drafted;
+}
+
+// The retry's first lines tell the model why its last reply was not sent.
+function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | undefined) {
+  return rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
 }
 
 // A run that was shown the products block records its version with the reply prompt's.

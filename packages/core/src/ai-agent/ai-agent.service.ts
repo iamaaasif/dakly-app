@@ -144,13 +144,13 @@ export class AiAgentService {
     const { handOverDiscounts } = candidate;
     const reason =
       screenCustomerTexts(texts, { handOverDiscounts, earlierTexts: customerTexts(earlier) }) ??
-      (await this.classifyWithAllowance(
+      (await this.classifyWithAllowance({
         storeId,
-        turn.contactId,
+        contactId: turn.contactId,
         texts,
         earlier,
         handOverDiscounts,
-      ));
+      }));
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose({
@@ -165,13 +165,14 @@ export class AiAgentService {
     return this.send(storeId, conversationId, candidate, composed);
   }
 
-  private async classifyWithAllowance(
-    storeId: string,
-    contactId: string,
-    texts: string[],
-    earlier: ConversationEntry[],
-    handOverDiscounts: boolean,
-  ) {
+  private async classifyWithAllowance(input: {
+    storeId: string;
+    contactId: string;
+    texts: string[];
+    earlier: ConversationEntry[];
+    handOverDiscounts: boolean;
+  }) {
+    const { storeId, contactId, texts, earlier, handOverDiscounts } = input;
     return (await this.hasAllowanceRoom(storeId, contactId))
       ? this.classify(storeId, texts, earlier, handOverDiscounts)
       : 'allowance_used';
