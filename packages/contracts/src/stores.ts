@@ -77,6 +77,15 @@ export const dueBookSettingsSchema = z.strictObject({
 });
 type DueBookSettings = z.infer<typeof dueBookSettingsSchema>;
 
+export const storeOfferings = ['products', 'services', 'both'] as const;
+// Owners type "facebook.com/yourpage"; a missing scheme becomes https.
+export const websiteUrlSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .regex(/^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i)
+  .transform((value) => (/^https?:\/\//i.test(value) ? value : `https://${value}`));
+
 export const createStoreSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
   businessType: z.string().trim().min(1).max(100),
@@ -85,6 +94,8 @@ export const createStoreSchema = z.strictObject({
   customerListSize: z.enum(customerListSizes),
   planCode: z.string().trim().min(1).max(100),
   billingCycle: z.enum(billingCycles),
+  websiteUrl: websiteUrlSchema.optional(),
+  offering: z.enum(storeOfferings).optional(),
 });
 export type CreateStoreInput = z.infer<typeof createStoreSchema>;
 export type SetupProfile = {

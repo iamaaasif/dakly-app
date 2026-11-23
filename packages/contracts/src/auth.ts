@@ -4,12 +4,24 @@ import { bdMobileSchema } from './phone';
 
 export const passwordSchema = z.string().min(8).max(128).regex(/[0-9]/);
 
+export const signUpSources = [
+  'facebook',
+  'facebook_group',
+  'youtube',
+  'chatgpt',
+  'google_search',
+  'phone_call',
+  'other',
+] as const;
 export const signUpSchema = z.strictObject({
   purpose: z.literal('sign_up'),
   name: z.string().trim().min(1).max(120),
   phone: bdMobileSchema,
   email: z.email().max(254).optional(),
   termsVersion: z.string().trim().min(1).max(100),
+  // How the owner heard about Dakly. The free text is kept only when the source is "other".
+  source: z.enum(signUpSources).optional(),
+  sourceOther: z.string().trim().min(1).max(200).optional(),
 });
 export const requestCodeSchema = z.discriminatedUnion('purpose', [
   signUpSchema,
@@ -27,6 +39,7 @@ export const verifyCodeSchema = z
     path: ['password'],
     message: 'Password is only accepted during signup',
   });
+export type SignUpSource = (typeof signUpSources)[number];
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type RequestCodeInput = z.infer<typeof requestCodeSchema>;
 export type VerifyCodeInput = z.infer<typeof verifyCodeSchema>;

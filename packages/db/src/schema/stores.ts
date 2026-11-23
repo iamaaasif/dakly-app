@@ -14,6 +14,7 @@ import {
   customerListSizes,
   extensions,
   howYouSellOptions,
+  storeOfferings,
   storeStatuses,
 } from '@dakly/contracts/stores';
 
@@ -31,6 +32,9 @@ export const stores = pgTable(
     businessType: text('business_type'),
     phone: text('phone'),
     email: citext('email'),
+    // Website or Facebook Page link from sign-up, and whether the business sells products, services or both.
+    websiteUrl: text('website_url'),
+    offering: text('offering'),
     address: text('address'),
     district: text('district'),
     vatBin: text('vat_bin'),
@@ -68,6 +72,7 @@ export const stores = pgTable(
       isOneOf(table.onboardingCustomerCountRange, customerListSizes),
     ),
     check('stores_extensions', allOneOf(table.extensions, extensions)),
+    check('stores_offering', isOneOf(table.offering, storeOfferings)),
     check(
       'stores_customer_inactivity_days',
       sql`${table.customerInactivityDays} between 30 and 180`,

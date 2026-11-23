@@ -74,6 +74,8 @@ export class StoresRepository {
         slug: `s-${storeId.replaceAll('-', '')}`,
         businessType: input.businessType,
         district: input.district,
+        websiteUrl: input.websiteUrl,
+        offering: input.offering,
         howYouSell: input.howYouSell,
         onboardingCustomerCountRange: input.customerListSize,
         extensions,

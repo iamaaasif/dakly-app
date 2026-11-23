@@ -15,6 +15,21 @@ describe('createStoreSchema', () => {
   it('accepts and trims business details', () => {
     expect(contracts.createStoreSchema.parse(input).name).toBe('রিনার দোকান');
   });
+  it('adds https to a website typed without a scheme and keeps the offering', () => {
+    expect(
+      contracts.createStoreSchema.parse({
+        ...input,
+        websiteUrl: ' facebook.com/rina.store ',
+        offering: 'both',
+      }),
+    ).toMatchObject({ websiteUrl: 'https://facebook.com/rina.store', offering: 'both' });
+  });
+  it.each([{ websiteUrl: 'not a link' }, { offering: 'goods' }])(
+    'rejects an invalid website or offering %j',
+    (change) => {
+      expect(contracts.createStoreSchema.safeParse({ ...input, ...change }).success).toBe(false);
+    },
+  );
   it.each([
     { storeId: 'client-controlled' },
     { name: '' },

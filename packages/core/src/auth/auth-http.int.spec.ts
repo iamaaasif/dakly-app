@@ -119,7 +119,7 @@ describe('SMS authentication over Fastify', () => {
     expect(fake.messages).toHaveLength(before);
   });
   it('creates one verified phone account and storeless session from parallel verifies', async () => {
-    const input = registration();
+    const input = { ...registration(), source: 'other', sourceOther: 'A friend' };
     expect((await request('/auth/code', input)).statusCode).toBe(204);
     const payload = {
       purpose: 'sign_up',
@@ -145,6 +145,8 @@ describe('SMS authentication over Fastify', () => {
       email: input.email,
       emailVerifiedAt: null,
       termsVersion: '2026-11',
+      signUpSource: 'other',
+      signUpSourceOther: 'A friend',
     });
     expect(user!.phoneVerifiedAt).toBeInstanceOf(Date);
     expect(user!.termsAcceptedAt).toBeInstanceOf(Date);

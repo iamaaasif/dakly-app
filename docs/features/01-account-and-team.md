@@ -1134,3 +1134,13 @@ The design shows three steps for a shop with no answers. Release 1 has no store 
 `/extensions` is its own page, reached from Configuration in the menu (evidence in `docs/design/evidence/acc-13-extensions/`). The old Extensions tab in Settings now redirects here. The header shows "N of 4 on". Each card has the extension's icon, an On or Off badge, what it adds, a switch and an Open link to its first page; Open is disabled while the extension is off.
 
 A switch saves at once with `PATCH /store/extensions`, sending the full selection with the one change, then shows a toast ("Chats turned off. Your data is kept."). The shell context (`GET /me/context`) now reads the shop's extensions: Sales off clears the Orders and Products flags, Chats the chat flags, Social Auto Post the social flags and Physical Shop the Due book flags, so the menu and those pages hide while data stays. The menu refreshes after each switch. Only members with `canChangeExtensions` can switch; others see the cards locked and a line saying so. Physical Shop is an ordinary card. Its Open link goes to `/due-book` and "Adds" names only the Due book, because Shop sales is not built yet.
+
+### Sign-up business details and first shop (ACC-19, part 5)
+
+The sign-up request accepts an optional `source` (how the owner heard about Dakly: facebook,
+facebook_group, youtube, chatgpt, google_search, phone_call, other) and `sourceOther`, kept only
+when the source is `other`. Both are saved on the user (`sign_up_source`, `sign_up_source_other`)
+when the code is verified. `POST /stores` accepts an optional `websiteUrl` (a missing scheme
+becomes https) and `offering` (`products`, `services` or `both`), saved on the store. The
+sign-up screen uses them to create the first shop on the free plan, so a new owner lands on the
+dashboard without the setup screen.
