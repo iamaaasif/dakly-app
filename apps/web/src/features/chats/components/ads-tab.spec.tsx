@@ -73,7 +73,7 @@ describe('Ads tab', () => {
   it('shows what an unconfirmed ad looks like and that the customer is asked meanwhile', async () => {
     show();
     expect(await screen.findByText('Cotton Kurti, Silk Orna')).toBeTruthy();
-    expect(screen.getByText('Needs your check')).toBeTruthy();
+    expect(screen.getByText('To confirm')).toBeTruthy();
     expect(screen.getByText(/Until you confirm, Dakly asks/)).toBeTruthy();
     expect(screen.getByText('Answers use: Red Panjabi')).toBeTruthy();
   });

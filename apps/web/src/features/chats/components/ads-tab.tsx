@@ -14,7 +14,7 @@ import { formatShortDate } from '@/lib/format-date';
 
 const statusLabels = {
   confirmed: 'Confirmed',
-  suggested: 'Needs your check',
+  suggested: 'To confirm',
   unlinked: 'No products',
 };
 const statusVariants = { confirmed: 'success', suggested: 'warning', unlinked: 'neutral' } as const;
@@ -90,7 +90,9 @@ function AdCard({ ad, canEdit }: { ad: AdListItem; canEdit: boolean }) {
             <span className="truncate font-medium">
               {ad.title ?? (ad.source === 'ad' ? 'Ad' : 'Post')} {ad.externalId}
             </span>
-            <Badge variant={statusVariants[ad.status]}>{statusLabels[ad.status]}</Badge>
+            <Badge variant={statusVariants[ad.status]} className="shrink-0 whitespace-nowrap">
+              {statusLabels[ad.status]}
+            </Badge>
           </div>
           <time dateTime={ad.lastSeenAt} className="text-sm text-text-muted">
             Last customer {formatShortDate(ad.lastSeenAt)}
