@@ -220,6 +220,17 @@ describe('chat memory set', () => {
     expect(report.passed).toBe(false);
   });
 
+  it('fails a days-later answer that quotes the memory’s old price or offers the size with no stock', () => {
+    const report = scoreEval(chatMemoryGoldenCases, {
+      ...chatMemoryRecordedOutcomes,
+      'chat-memory-days-later-bn': { kind: 'reply', text: 'জি, কুর্তি আছে, ৳১,২০০।' },
+      'chat-memory-other-channel-stock-bn': { kind: 'reply', text: 'জি, পোলো শার্ট XL আছে, ৳৬৫০।' },
+    });
+    expect(report.wrongPriceCaseIds).toEqual(['chat-memory-days-later-bn']);
+    expect(report.outOfStockOfferCaseIds).toEqual(['chat-memory-other-channel-stock-bn']);
+    expect(report.passed).toBe(false);
+  });
+
   it('fails a follow-up with nothing shown that guesses a product', () => {
     const report = scoreEval(chatMemoryGoldenCases, {
       ...chatMemoryRecordedOutcomes,
