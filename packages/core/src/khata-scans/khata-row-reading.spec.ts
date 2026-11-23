@@ -114,12 +114,40 @@ const evalSet: {
     input: row({ kind: 'unclear', confidence: 99, amountText: '300' }),
     expected: { amountPoisha: 30_000, phone: null, entryDate: null, needsCheck: true },
   },
+  {
+    label: 'Bangla month word in the date',
+    input: row({ dateText: '১৬ মে', amountText: '১০০০/-' }),
+    expected: { amountPoisha: 100_000, phone: null, entryDate: '2026-05-16', needsCheck: false },
+  },
+  {
+    label: 'English month first and Banglish name',
+    input: row({ nameText: 'Suman bhai', dateText: 'Jun 20', amountText: '200 tk' }),
+    expected: { amountPoisha: 20_000, phone: null, entryDate: '2026-06-20', needsCheck: false },
+  },
+  {
+    label: 'mixed script, Bangla phone digits, ordinal and month word',
+    input: row({
+      nameText: 'সুমন Hossain',
+      phoneText: '০১৭৯৯৮৮৭৭৬৬',
+      dateText: '20th জুন ২০২৬',
+      amountText: '৳২০০',
+    }),
+    expected: {
+      amountPoisha: 20_000,
+      phone: '01799887766',
+      entryDate: '2026-06-20',
+      needsCheck: false,
+    },
+  },
 ];
 
 describe('reading khata rows', () => {
   it('reads every Bangla, Banglish and mixed sample correctly', () => {
     const wrong = evalSet.filter(({ input, expected }) => {
-      const [read] = readKhataRows({ pageReadable: true, rows: [input] }, today);
+      const [read] = readKhataRows(
+        { pageReadable: true, turnClockwiseDegrees: 0, rows: [input] },
+        today,
+      );
       return (
         !read ||
         read.amountPoisha !== expected.amountPoisha ||
@@ -136,6 +164,7 @@ describe('reading khata rows', () => {
     const rows = readKhataRows(
       {
         pageReadable: true,
+        turnClockwiseDegrees: 0,
         rows: [
           row({ nameText: ' রহিম ' }),
           row({ nameText: 'Mitu Akter' }),
@@ -151,6 +180,7 @@ describe('reading khata rows', () => {
     const rows = readKhataRows(
       {
         pageReadable: true,
+        turnClockwiseDegrees: 0,
         rows: [
           row({ nameText: '' }),
           row({ amountText: 'পাঁচশো' }),
@@ -163,8 +193,47 @@ describe('reading khata rows', () => {
     expect(rows.map(({ rowNumber, name }) => [rowNumber, name])).toEqual([[1, 'Jahan']]);
   });
 
+  it('flags a row whose name is a month word, never lifting it above the threshold', () => {
+    const rows = readKhataRows(
+      {
+        pageReadable: true,
+        turnClockwiseDegrees: 0,
+        rows: [
+          row({ nameText: 'মাসের', amountText: '৬০০', confidence: 99 }),
+          row({ nameText: 'মে', dateText: '২০ জুন', amountText: '২০০', confidence: 99 }),
+        ],
+      },
+      today,
+    );
+    expect(rows.map((read) => read.confidence < KHATA_CONFIDENCE_THRESHOLD)).toEqual([true, true]);
+  });
+
+  it('checks an amount that starts with ৮, which may be a ৳ sign read as a digit', () => {
+    const [read] = readKhataRows(
+      {
+        pageReadable: true,
+        turnClockwiseDegrees: 0,
+        rows: [row({ amountText: '৮২০০', confidence: 95 })],
+      },
+      today,
+    );
+    expect(read?.confidence).toBeLessThan(KHATA_CONFIDENCE_THRESHOLD);
+  });
+
+  it('keeps no rows from a page the model still finds sideways', () => {
+    expect(
+      readKhataRows({ pageReadable: true, turnClockwiseDegrees: 90, rows: [row({})] }, today),
+    ).toEqual([]);
+  });
+
+  it('never reads a phone number as an amount', () => {
+    expect(parseAmountPoisha('01712345678')).toBeNull();
+  });
+
   it('returns no rows for a page the model could not read', () => {
-    expect(readKhataRows({ pageReadable: false, rows: [row({})] }, today)).toEqual([]);
+    expect(
+      readKhataRows({ pageReadable: false, turnClockwiseDegrees: 0, rows: [row({})] }, today),
+    ).toEqual([]);
   });
 });
 
@@ -189,6 +258,14 @@ describe('parseEntryDate', () => {
     expect(parseEntryDate('২৫/১২', today)).toBe('2025-12-25');
   });
 
+  it.each([
+    ['১৬ মে', '2026-05-16'],
+    ['May 16', '2026-05-16'],
+    ['16th May 2025', '2025-05-16'],
+    ['২০ জুন', '2026-06-20'],
+    ['3 নভেম্বর ২০২৬', '2026-11-03'],
+  ])('reads the month word in %s', (text, date) => expect(parseEntryDate(text, today)).toBe(date));
+
   it('refuses a date in the future', () => {
     expect(parseEntryDate('25/12/2026', today)).toBeNull();
   });
@@ -201,6 +278,7 @@ describe('the sample handwritten page', () => {
     const rows = readKhataRows(
       {
         pageReadable: true,
+        turnClockwiseDegrees: 0,
         rows: [
           row({
             nameText: 'রহিম,',

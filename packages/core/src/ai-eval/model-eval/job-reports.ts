@@ -7,6 +7,7 @@ import { runAssistantProductEval } from './assistant-product-eval';
 import { runEmbeddingEval } from './embedding-eval';
 import type { EvalMeter } from './eval-meter';
 import { dollars, printTable, say } from './eval-output';
+import { runKhataEval } from './khata-eval';
 import { runTranscribeEval, runVisionEval, type MediaScore } from './media-eval';
 import { runMemoryEval } from './memory-eval';
 import { runOptionsPhotoEval, runOptionsTitleEval } from './options-eval';
@@ -162,6 +163,16 @@ export function reportVision({ driver, meter }: JobContext, models: string[]) {
     label: 'vision',
     models,
     run: (model) => runVisionEval(driver, meter, model),
+  });
+}
+
+export function reportKhata({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Vision job (khata pages)',
+    unit: 'pages',
+    label: 'vision',
+    models,
+    run: (model) => runKhataEval(driver, meter, model),
   });
 }
 
