@@ -156,20 +156,30 @@ export class AiAgentService {
     if (composed.kind === 'busy') return this.retryLater();
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
-    return this.checkAndSend(storeId, conversationId, candidate, composed);
+    return this.checkAndSend({
+      storeId,
+      conversationId,
+      candidate,
+      composed,
+      customerTexts: texts,
+    });
   }
 
-  private async checkAndSend(
-    storeId: string,
-    conversationId: string,
-    candidate: EligibleTurn,
-    composed: Extract<ComposedReply, { kind: 'reply' }>,
-  ) {
+  private async checkAndSend(input: {
+    storeId: string;
+    conversationId: string;
+    candidate: EligibleTurn;
+    composed: Extract<ComposedReply, { kind: 'reply' }>;
+    customerTexts: string[];
+  }) {
+    const { storeId, conversationId, candidate, composed, customerTexts } = input;
     const shop = await this.stores.settings(storeId);
-    const checked = checkReplyFacts(composed.text, composed.toolResults, {
-      phone: shop.phone,
-      linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
-    });
+    const checked = checkReplyFacts(
+      composed.text,
+      composed.toolResults,
+      { phone: shop.phone, linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL },
+      customerTexts,
+    );
     if (!checked.isSafe) {
       await this.runs.setOutcome(storeId, composed.aiRunId, 'failed_check', checked.failure);
       return this.handOver(storeId, conversationId, candidate, 'out_of_scope');

@@ -58,6 +58,7 @@ afterAll(async () => {
       'delivery_zones',
       'product_variants',
       'products',
+      'product_categories',
       'contacts',
       'store_counters',
     ])
@@ -88,6 +89,20 @@ async function contact(storeId: string) {
   return id;
 }
 
+async function categoryFor(storeId: string, name: string) {
+  const found = await admin.pool.query(
+    'select id from product_categories where store_id = $1 and name = $2',
+    [storeId, name],
+  );
+  if (found.rows[0]) return found.rows[0].id as string;
+  const id = randomUUID();
+  await admin.pool.query(
+    'insert into product_categories (id, store_id, name) values ($1, $2, $3)',
+    [id, storeId, name],
+  );
+  return id;
+}
+
 async function product(
   storeId: string,
   fields: {
@@ -101,8 +116,9 @@ async function product(
   },
 ) {
   const id = randomUUID();
+  const categoryId = fields.category ? await categoryFor(storeId, fields.category) : null;
   await admin.pool.query(
-    'insert into products (id, store_id, name, aliases, status, is_visible_in_chats, category, price_poisha) values ($1, $2, $3, $4, $5, $6, $7, $8)',
+    'insert into products (id, store_id, name, aliases, status, is_visible_in_chats, category_id, price_poisha) values ($1, $2, $3, $4, $5, $6, $7, $8)',
     [
       id,
       storeId,
@@ -110,7 +126,7 @@ async function product(
       fields.aliases ?? [],
       fields.status ?? 'active',
       fields.chats ?? true,
-      fields.category ?? null,
+      categoryId,
       fields.pricePoisha ?? 120000,
     ],
   );

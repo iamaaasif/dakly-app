@@ -85,10 +85,10 @@ Computed from this store's own past parcels for the phone (Glossary). High retur
 
 **Courier booking (later release, D21)**
 
-Release 1: staff book the parcel on the courier's own site, then use "Sent with courier" to record the courier and tracking code. Delivered, Returned and Money received are marked by hand.
+Release 1: staff book the parcel on the courier's own site, then use "Sent with courier" to record the courier and tracking code. The order detail shows the parcel weight (each item's product weight times its quantity) to type into that site; it is blank when any item's product has no weight. Delivered, Returned and Money received are marked by hand.
 
 1. Each courier is connected once in Integrations with the merchant's own API keys.
-2. Book sends: invoice (Dakly order number), recipient name, phone, address, district/area, COD amount, weight (default 0.5 kg, editable), item description, note. Bulk booking sends one request per courier batch.
+2. Book sends: invoice (Dakly order number), recipient name, phone, address, district/area, COD amount, weight (the order's total parcel weight from the products, 0.5 kg when any product has none, editable), item description, note. Bulk booking sends one request per courier batch.
 3. Dakly stores the consignment ID and tracking code, shows status Pickup requested, and polls status every 30 minutes (or receives webhooks where the courier offers them). Status maps to Dakly stages: in transit and out for delivery → With courier; delivered → Delivered; returned or cancelled by courier → Returned.
 4. If "Courier updates" is on in Chats, the customer gets a message when the parcel ships and when it's out for delivery.
 5. COD reconciliation: Delivered orders show COD pending until the courier's payment report (or the owner) marks them paid. The alert strip totals pending COD.

@@ -7,7 +7,7 @@ import { users } from './schema/auth';
 import { plans, subscriptions } from './schema/billing';
 import { contacts } from './schema/contacts';
 import { deliveryZones } from './schema/orders';
-import { products, productVariants } from './schema/products';
+import { productCategories, products, productVariants } from './schema/products';
 import { brandProfiles } from './schema/social';
 import { storeCounters, stores } from './schema/stores';
 import { memberships } from './schema/team';
@@ -131,12 +131,16 @@ async function seedStore(tx: Transaction): Promise<string> {
 }
 
 async function seedCatalogue(tx: Transaction, storeId: string): Promise<void> {
+  const [clothing] = await tx
+    .insert(productCategories)
+    .values({ storeId, name: 'Clothing' })
+    .returning({ id: productCategories.id });
   const [kurti] = await tx
     .insert(products)
     .values({
       storeId,
       name: "Women's Cotton Kurti",
-      category: 'Clothing',
+      categoryId: clothing!.id,
       aliases: ['kurti', 'কুর্তি'],
       pricePoisha: 185_000,
       options: [{ name: 'Size', values: ['S', 'M', 'L'] }],
@@ -158,7 +162,7 @@ async function seedCatalogue(tx: Transaction, storeId: string): Promise<void> {
     .values({
       storeId,
       name: 'Cotton Panjabi',
-      category: 'Clothing',
+      categoryId: clothing!.id,
       aliases: ['panjabi', 'পাঞ্জাবি'],
       pricePoisha: 220_000,
     })

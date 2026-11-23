@@ -1,13 +1,13 @@
-import { leaksInstructions, offerWords } from '@dakly/contracts/reply-wording';
+import {
+  amountPatterns,
+  hasWrongAmount,
+  leaksInstructions,
+  offerWords,
+} from '@dakly/contracts/reply-wording';
 
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
 const number = String.raw`(\d[\d,]*(?:\.\d+)?)`;
-const amountPatterns = [
-  new RegExp(String.raw`৳\s*${number}`, 'giu'),
-  new RegExp(String.raw`${number}\s*(?:৳|tk\b|taka\b|টাকা)`, 'giu'),
-  new RegExp(String.raw`\b(?:tk\.?|bdt|taka|rs\.?)\s*${number}`, 'giu'),
-];
 const stockWord = String.raw`(?:in stock|stock|available|আছে|ache|বাকি|baki|স্টক)`;
 const stockPatterns = [
   new RegExp(
@@ -29,6 +29,7 @@ export function checkReplyFacts(
   reply: string,
   toolResults: readonly unknown[],
   shop: Shop,
+  customerTexts: readonly string[] = [],
 ): { isSafe: true } | { isSafe: false; failure: FactCheckFailure } {
   const text = toAsciiDigits(reply);
   if (!text.trim()) return { isSafe: false, failure: 'empty' };
@@ -38,7 +39,7 @@ export function checkReplyFacts(
   const wording = wordingFailure(text, toolResults);
   if (wording) return { isSafe: false, failure: wording };
   const known = numbersIn(toolResults);
-  if (claimedNumbers(text, amountPatterns).some((value) => !known.has(value)))
+  if (hasWrongAmount(claimedAmounts(text), (value) => known.has(value), numbersIn(customerTexts)))
     return { isSafe: false, failure: 'amount' };
   if (claimedNumbers(text, stockPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'stock' };
@@ -58,6 +59,15 @@ function wordingFailure(text: string, toolResults: readonly unknown[]) {
   if (leaksInstructions(text)) return 'leak';
   const policyText = JSON.stringify(toolResults).toLowerCase();
   return offerWords(text).some((word) => !policyText.includes(word)) ? 'offer' : undefined;
+}
+
+function claimedAmounts(text: string) {
+  return amountPatterns.flatMap((pattern) =>
+    [...text.matchAll(pattern)].map((match) => ({
+      value: parseNumber(match[1]!),
+      around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),
+    })),
+  );
 }
 
 function claimedNumbers(text: string, patterns: RegExp[]) {

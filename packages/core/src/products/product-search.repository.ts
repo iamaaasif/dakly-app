@@ -5,6 +5,7 @@ import type { ProductOption } from '@dakly/contracts/products';
 import { products } from '@dakly/db/schema/products';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { categoryPathSql } from './product-list-names.repository';
 import { type Variant, variantSnapshot } from './product-snapshots.repository';
 import { chatProductFilter, type Product } from './products.repository';
 
@@ -24,7 +25,7 @@ export class ProductSearchRepository {
           id: products.id,
           name: products.name,
           description: products.description,
-          category: products.category,
+          category: categoryPathSql,
           aliases: products.aliases,
           pricePoisha: products.pricePoisha,
           variants: variantSnapshot(storeId),
@@ -88,7 +89,7 @@ export class ProductSearchRepository {
           id: products.id,
           name: products.name,
           description: products.description,
-          category: products.category,
+          category: categoryPathSql,
           aliases: products.aliases,
           options: sql<ProductOption[]>`${products.options}`,
           searchTextHash: products.searchTextHash,

@@ -3,6 +3,71 @@ import type { EvalOutcome, GoldenCase } from './golden-case';
 // Uses the eval shop of golden-set.bangla.ts. Only Dhaka is a delivery zone there; the outside-Dhaka
 // charge is in the policy file.
 export const stockDeliveryGoldenCases: GoldenCase[] = [
+  // A product above the customer's budget: quote the real price or hand over, never promise the budget.
+  {
+    id: 'budget-over-bn',
+    language: 'bangla',
+    question: 'কুর্তি ১০০০ এর মধ্যে দিবেন?',
+    expectedHandover: null,
+    acceptedHandover: 'discount',
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি'],
+  },
+  {
+    id: 'budget-over-banglish',
+    language: 'banglish',
+    question: 'kurti 1000 takar moddhe hobe?',
+    expectedHandover: null,
+    acceptedHandover: 'discount',
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+  },
+  {
+    id: 'budget-over-english',
+    language: 'english',
+    question: 'can you do the kurti under 1000',
+    expectedHandover: null,
+    acceptedHandover: 'discount',
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+  },
+  {
+    id: 'budget-over-mixed',
+    language: 'banglish',
+    question: 'kurti ta ১০০০ taka er moddhe দিবেন?',
+    expectedHandover: null,
+    acceptedHandover: 'discount',
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+  },
+  // A budget the customer names may come back as a limit, and "Free size" is a size, not an offer.
+  {
+    id: 'search-budget-banglish',
+    language: 'banglish',
+    question: '1500 tk er moddhe lal kurti ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+    dependsOn: 'AI-10',
+  },
+  {
+    id: 'search-budget-mixed',
+    language: 'banglish',
+    question: 'কুর্তি 1500 taka এর নিচে আছে?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
+    dependsOn: 'AI-10',
+  },
+  {
+    id: 'search-free-size-banglish',
+    language: 'banglish',
+    question: 'sharee free size ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [2800],
+    mentionsAnyOf: ['শাড়ি', 'saree', 'sharee'],
+    dependsOn: 'AI-10',
+  },
   // A size or colour with no product named: ask which product, never quote stock from a guess.
   {
     id: 'stock-no-product-banglish',
@@ -117,6 +182,16 @@ export const stockDeliveryRecordedOutcomes: Record<string, EvalOutcome> = {
   },
   'photo-match-sold-out-bn': { kind: 'reply', text: 'এই লোফারটা এখন স্টকে নেই।' },
   'photo-match-sold-out-mixed': { kind: 'reply', text: 'এই স্নিকার্স এখন স্টকে নেই।' },
+  'budget-over-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।' },
+  'budget-over-banglish': { kind: 'reply', text: 'Kurti 1450 tk.' },
+  'budget-over-english': { kind: 'reply', text: 'The kurti is ৳1,450.' },
+  'budget-over-mixed': { kind: 'reply', text: 'কুর্তির দাম ৳1450।' },
+  'search-budget-banglish': {
+    kind: 'reply',
+    text: '1500 tk er moddhe lal kurti ache, dam 1450 tk.',
+  },
+  'search-budget-mixed': { kind: 'reply', text: 'জি, ১৫০০ taka এর নিচে কুর্তি আছে, ৳১,৪৫০।' },
+  'search-free-size-banglish': { kind: 'reply', text: 'শাড়ি free size, দাম ৳২,৮০০।' },
   'stock-no-product-banglish': {
     kind: 'reply',
     text: 'কোন প্রোডাক্টের L সাইজের কথা বলছেন? নামটা বললে স্টক দেখে জানাবো।',

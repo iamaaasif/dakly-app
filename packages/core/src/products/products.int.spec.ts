@@ -13,6 +13,10 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { ProductBrandsRepository } from './product-brands.repository';
+import { ProductBrandsService } from './product-brands.service';
+import { ProductCategoriesRepository } from './product-categories.repository';
+import { ProductCategoriesService } from './product-categories.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
@@ -26,6 +30,11 @@ describe('ProductsService with Postgres', () => {
   const tenant = new TenantDatabase(app.db);
   const transaction = new StoreTransaction(tenant);
   const repository = new ProductsRepository(tenant);
+  const categories = new ProductCategoriesService(
+    new ProductCategoriesRepository(tenant),
+    transaction,
+  );
+  const brands = new ProductBrandsService(new ProductBrandsRepository(tenant), transaction);
   const service = new ProductsService(
     repository,
     new ProductOrderVariantsRepository(tenant),
@@ -56,11 +65,19 @@ describe('ProductsService with Postgres', () => {
       }),
     } as StoresService,
     {} as FileStorageDriver,
+    categories,
+    brands,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
   beforeAll(() => f.setup());
   afterAll(async () => {
-    for (const table of ['outbox_events', 'product_variants', 'products'])
+    for (const table of [
+      'outbox_events',
+      'product_variants',
+      'products',
+      'product_categories',
+      'product_brands',
+    ])
       await f.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         [f.a, f.b],
       ]);
@@ -443,68 +460,72 @@ describe('ProductsService with Postgres', () => {
     await expect(repository.lockArchiveVariants(f.b, product.id)).resolves.toBeNull();
   });
 
-  it('lists distinct non-empty categories sorted alphabetically, capped at 200, isolated by store', async () => {
+  it('keeps a two-level category list and a brand list per store and shows both on a product', async () => {
+    const clothing = await categories.create(f.a, { name: 'Clothing', parentId: null });
+    const tshirts = await categories.create(f.a, { name: 'T-shirts', parentId: clothing.id });
+    const shoes = await categories.create(f.a, { name: 'Shoes', parentId: null });
+    const aarong = await brands.create(f.a, { name: 'Aarong' });
+    await expect(
+      categories.create(f.a, { name: 'clothing', parentId: null }),
+    ).rejects.toMatchObject({
+      code: 'PRODUCT_CATEGORY_NAME_TAKEN',
+    });
+    await expect(
+      categories.create(f.a, { name: 'Polo', parentId: tshirts.id }),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CATEGORY_TOO_DEEP' });
+    // Another shop may use the same names.
+    await categories.create(f.b, { name: 'Clothing', parentId: null });
+
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Polo', categoryId: tshirts.id, brandId: aarong.id }),
+      actor,
+    );
+    expect(product).toMatchObject({
+      categoryId: tshirts.id,
+      category: 'Clothing > T-shirts',
+      brandId: aarong.id,
+      brand: 'Aarong',
+    });
     await service.create(
       f.a,
-      createProductSchema.parse({ name: 'Product A1', category: 'Women' }),
+      createProductSchema.parse({ name: 'Sandal', categoryId: shoes.id }),
       actor,
     );
-    await service.create(
-      f.a,
-      createProductSchema.parse({ name: 'Product A2', category: 'Men' }),
-      actor,
-    );
-    await service.create(
-      f.a,
-      createProductSchema.parse({ name: 'Product A3', category: 'Accessories' }),
-      actor,
-    );
-    await service.create(
-      f.a,
-      createProductSchema.parse({ name: 'Product A4', category: 'Men' }),
-      actor,
-    );
-    await service.create(
-      f.a,
-      createProductSchema.parse({ name: 'Product A5', category: null }),
-      actor,
-    );
-    // Archived product whose category should be excluded.
-    await f.connection.pool.query(
-      "insert into products(id, store_id, name, category, status) values(gen_random_uuid(), $1, 'Archived A', 'ArchivedCat', 'archived')",
-      [f.a],
-    );
+    const listed = (await categories.list(f.a)).items.find((item) => item.id === tshirts.id);
+    expect(listed).toMatchObject({ parentId: clothing.id, productCount: 1 });
 
-    // Products in store B.
-    await service.create(
-      f.b,
-      createProductSchema.parse({ name: 'Product B1', category: 'Kids' }),
-      actor,
-    );
-    await service.create(
-      f.b,
-      createProductSchema.parse({ name: 'Product B2', category: 'Footwear' }),
-      actor,
-    );
+    // Categories list in order of name, each with how many products use it.
+    expect((await categories.list(f.a)).items.map((item) => item.name)).toEqual([
+      'Clothing',
+      'Shoes',
+      'T-shirts',
+    ]);
+  });
 
-    const categoriesA = await service.listCategories(f.a);
-    expect(categoriesA).toEqual({ items: ['Accessories', 'Men', 'Women'] });
+  it('refuses a category or brand of another shop', async () => {
+    const foreign = await categories.create(f.b, { name: 'Foreign', parentId: null });
+    const foreignBrand = await brands.create(f.b, { name: 'Foreign brand' });
+    await expect(
+      service.create(f.a, createProductSchema.parse({ name: 'X', categoryId: foreign.id }), actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CATEGORY_NOT_FOUND' });
+    await expect(
+      service.create(
+        f.a,
+        createProductSchema.parse({ name: 'Y', brandId: foreignBrand.id }),
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'PRODUCT_BRAND_NOT_FOUND' });
+  });
 
-    const categoriesB = await service.listCategories(f.b);
-    expect(categoriesB).toEqual({ items: ['Footwear', 'Kids'] });
-
-    // Verify capping at 200 items.
-    await f.connection.pool.query(
-      `insert into products(id, store_id, name, category, status)
-       select gen_random_uuid(), $1, 'Bulk ' || i, 'Cat_' || lpad(i::text, 4, '0'), 'active'
-       from generate_series(1, 205) as i`,
-      [f.a],
-    );
-
-    const capped = await service.listCategories(f.a);
-    expect(capped.items).toHaveLength(200);
-    // Ensure alphabetical sorting holds for all returned items.
-    const sorted = [...capped.items].sort((x, y) => x.localeCompare(y));
-    expect(capped.items).toEqual(sorted);
+  it('finds a category by its path ignoring case and adds a missing one', async () => {
+    const first = await categories.resolvePath(f.a, 'Bags > Totes');
+    expect(await categories.resolvePath(f.a, ' bags > TOTES ')).toEqual(first);
+    expect(first.path).toBe('Bags > Totes');
+    const parent = (await categories.list(f.a)).items.find((item) => item.name === 'Bags');
+    expect(parent).toBeDefined();
+    await expect(categories.resolvePath(f.a, 'A > B > C')).rejects.toMatchObject({
+      code: 'PRODUCT_CATEGORY_TOO_DEEP',
+    });
   });
 });

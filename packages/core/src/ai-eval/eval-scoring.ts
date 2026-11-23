@@ -1,4 +1,9 @@
-import { leaksInstructions, offerWords } from '@dakly/contracts/reply-wording';
+import {
+  amountPatterns,
+  hasWrongAmount,
+  leaksInstructions,
+  offerWords,
+} from '@dakly/contracts/reply-wording';
 
 import type { EvalOutcome, GoldenCase } from './golden-case';
 
@@ -9,10 +14,6 @@ export const MIN_HANDOVER_ACCURACY = 0.9;
 export const MIN_PRODUCT_RECALL = 0.9;
 
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
-const amountPatterns = [
-  /৳\s*(\d[\d,]*(?:\.\d+)?)/giu,
-  /(\d[\d,]*(?:\.\d+)?)\s*(?:৳|tk\b|taka\b|টাকা)/giu,
-];
 
 export type EvalReport = {
   total: number;
@@ -61,11 +62,7 @@ export function scoreEval(
   const handoverCases = count(({ expectedHandover }) => expectedHandover !== null);
   const handoverCorrect = handoverCases - missedHandoverCaseIds.length;
   const productCases = count(({ mentionsAnyOf }) => Boolean(mentionsAnyOf));
-  const missedProductCaseIds = ids(
-    ({ golden, outcome }) =>
-      golden.mentionsAnyOf !== undefined &&
-      !(outcome.kind === 'reply' && mentionsAny(outcome.text, golden.mentionsAnyOf)),
-  );
+  const missedProductCaseIds = ids(missedProduct);
   const outOfStockOfferCaseIds = ids(offersOutOfStock);
   const wrongPhotoCaseIds = ids(hasWrongPhoto);
   return {
@@ -83,7 +80,10 @@ export function scoreEval(
     handoverCorrect,
     missedHandoverCaseIds,
     unneededHandoverCaseIds: ids(
-      ({ golden, outcome }) => golden.expectedHandover === null && outcome.kind === 'handover',
+      ({ golden, outcome }) =>
+        golden.expectedHandover === null &&
+        outcome.kind === 'handover' &&
+        !isAcceptedHandover(golden, outcome),
     ),
     passed:
       wrongPriceCaseIds.length === 0 &&
@@ -97,10 +97,25 @@ export function scoreEval(
   };
 }
 
+function missedProduct({ golden, outcome }: Scored) {
+  return (
+    golden.mentionsAnyOf !== undefined &&
+    !isAcceptedHandover(golden, outcome) &&
+    !(outcome.kind === 'reply' && mentionsAny(outcome.text, golden.mentionsAnyOf))
+  );
+}
+
+function isAcceptedHandover(golden: GoldenCase, outcome: EvalOutcome) {
+  return outcome.kind === 'handover' && outcome.reason === golden.acceptedHandover;
+}
+
 type Scored = { golden: GoldenCase; outcome: EvalOutcome };
 
 function hasWrongPriceReply({ golden, outcome }: Scored) {
-  return outcome.kind === 'reply' && hasWrongPrice(outcome.text, golden.allowedAmountsTaka);
+  return (
+    outcome.kind === 'reply' &&
+    hasWrongPrice(outcome.text, golden.allowedAmountsTaka, golden.question)
+  );
 }
 
 function offersOutOfStock({ golden, outcome }: Scored) {
@@ -115,11 +130,20 @@ function hasWrongPhoto({ golden, outcome }: Scored) {
   );
 }
 
-function hasWrongPrice(reply: string, allowed: readonly number[]) {
-  const text = reply.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
-  return amountPatterns
+function hasWrongPrice(reply: string, allowed: readonly number[], question: string) {
+  const toAscii = (text: string) =>
+    text.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
+  const text = toAscii(reply);
+  const amounts = amountPatterns
     .flatMap((pattern) => [...text.matchAll(pattern)])
-    .some((match) => !allowed.includes(Number((match[1] ?? '').replaceAll(',', ''))));
+    .map((match) => ({
+      value: Number((match[1] ?? '').replaceAll(',', '')),
+      around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),
+    }));
+  const customerNumbers = new Set(
+    (toAscii(question).match(/\d[\d,]*/g) ?? []).map((n) => Number(n.replaceAll(',', ''))),
+  );
+  return hasWrongAmount(amounts, (value) => allowed.includes(value), customerNumbers);
 }
 
 // A Latin term must be a whole word, so the size "M" is not found in "Medium". A Bangla term may

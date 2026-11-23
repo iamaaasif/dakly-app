@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, getTableName, inArray, isNotNull, lt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableName, inArray, lt, ne, sql } from 'drizzle-orm';
 
 import type {
   CreateProductInput,
@@ -12,6 +12,7 @@ import { products, productVariants } from '@dakly/db/schema/products';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { brandNameSql, categoryPathSql } from './product-list-names.repository';
 import {
   photoSnapshot,
   type CatalogueVariant,
@@ -29,7 +30,11 @@ const productColumns = {
   id: products.id,
   name: products.name,
   description: products.description,
-  category: products.category,
+  categoryId: products.categoryId,
+  category: categoryPathSql,
+  brandId: products.brandId,
+  brand: brandNameSql,
+  weightGrams: products.weightGrams,
   aliases: products.aliases,
   pricePoisha: products.pricePoisha,
   compareAtPricePoisha: products.compareAtPricePoisha,
@@ -68,6 +73,8 @@ type PhotoWrite = ConfirmProductPhotoInput & {
 type ProductDetails = Omit<CreateProductInput, 'variants'>;
 export type Product = ProductDetails & {
   id: string;
+  category: string | null;
+  brand: string | null;
   imageFileIds: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -200,24 +207,6 @@ export class ProductsRepository {
         .where(and(chatProductFilter(storeId), eq(products.id, id))),
     );
     return rows[0];
-  }
-
-  async listCategories(storeId: string): Promise<string[]> {
-    const rows = await this.database.forStore(storeId, (tx) =>
-      tx
-        .selectDistinct({ category: products.category })
-        .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            isNotNull(products.category),
-            ne(products.status, 'archived'),
-          ),
-        )
-        .orderBy(asc(products.category))
-        .limit(200),
-    );
-    return rows.map((row) => row.category!);
   }
 
   findVariants(storeId: string, productIds: string[]): Promise<Variant[]> {

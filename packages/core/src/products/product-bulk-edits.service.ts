@@ -21,6 +21,7 @@ import {
   type BulkEditRecord,
   type ProductFieldChange,
 } from './product-bulk-edits.repository';
+import { ProductCategoriesService } from './product-categories.service';
 import { ProductStockService } from './product-stock.service';
 import { productError } from './products.errors';
 
@@ -41,6 +42,7 @@ export class ProductBulkEditsService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
   ) {}
 
   apply(
@@ -49,12 +51,13 @@ export class ProductBulkEditsService {
     actor: Extract<Actor, { kind: 'user' }>,
   ): Promise<ProductBulkEditResponse> {
     return this.transaction.run(storeId, async () => {
+      const rows = await this.withCategoryPaths(storeId, input.rows);
       const current = await this.repository.lockProducts(
         storeId,
-        input.rows.map((row) => row.productId),
+        rows.map((row) => row.productId),
       );
       const byId = new Map(current.map((product) => [product.id, product]));
-      const changes = input.rows.flatMap((row) => {
+      const changes = rows.flatMap((row) => {
         const product = byId.get(row.productId);
         if (!product) throw productError('PRODUCT_BULK_EDIT_ROW_INVALID');
         return changesForRow(product, row);
@@ -128,10 +131,20 @@ export class ProductBulkEditsService {
     let stockSkipped = 0;
     for (const [productId, own] of groupByProduct(changes)) {
       const side = context.direction === 'apply' ? 'after' : 'before';
+      const { category, ...fields } = productFieldChange(own, side);
+      const categoryId =
+        category === undefined
+          ? {}
+          : {
+              categoryId:
+                category === null
+                  ? null
+                  : (await this.categories.resolvePath(storeId, category)).id,
+            };
       await this.repository.updateProduct(
         storeId,
         productId,
-        productFieldChange(own, side),
+        { ...fields, ...categoryId },
         context.now,
       );
       for (const change of own)
@@ -167,6 +180,22 @@ export class ProductBulkEditsService {
       return true;
     }
     return false;
+  }
+
+  // A typed category is matched to the shop's list (ignoring case) or added, and the edit records
+  // the list's own spelling, so an undo still finds the value it set.
+  private async withCategoryPaths(
+    storeId: string,
+    rows: ApplyProductBulkEditInput['rows'],
+  ): Promise<ApplyProductBulkEditInput['rows']> {
+    const resolved: ApplyProductBulkEditInput['rows'] = [];
+    for (const row of rows)
+      resolved.push(
+        row.category === undefined
+          ? row
+          : { ...row, category: (await this.categories.resolvePath(storeId, row.category)).path },
+      );
+    return resolved;
   }
 
   private async publishUpdated(storeId: string, changes: ProductBulkEditChange[], now: Date) {
@@ -242,7 +271,7 @@ function productFieldChange(changes: ProductBulkEditChange[], side: 'before' | '
   for (const change of changes)
     if ((productFields as readonly string[]).includes(change.field))
       result[change.field] = change[side];
-  return result as ProductFieldChange;
+  return result as Omit<ProductFieldChange, 'categoryId'> & { category?: string | null };
 }
 
 function toResponse(record: BulkEditRecord): ProductBulkEditResponse {

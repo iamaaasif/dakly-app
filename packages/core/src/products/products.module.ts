@@ -8,12 +8,17 @@ import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
+import { ProductBrandsRepository } from './product-brands.repository';
+import { ProductBrandsService } from './product-brands.service';
 import { ProductBulkEditsController } from './product-bulk-edits.controller';
 import { ProductBulkEditsRepository } from './product-bulk-edits.repository';
 import { ProductBulkEditsService } from './product-bulk-edits.service';
+import { ProductCategoriesRepository } from './product-categories.repository';
+import { ProductCategoriesService } from './product-categories.service';
 import { ProductExportController } from './product-export.controller';
 import { ProductExportService } from './product-export.service';
 import { ProductImportService } from './product-import.service';
+import { ProductListsController } from './product-lists.controller';
 import { ProductOptionSuggestionsController } from './product-option-suggestions.controller';
 import { ProductOptionSuggestionsService } from './product-option-suggestions.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
@@ -48,6 +53,7 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
   controllers: [
     ProductBulkEditsController,
     ProductExportController,
+    ProductListsController,
     ProductOptionSuggestionsController,
     ProductsController,
     ProductPhotosController,
@@ -58,6 +64,10 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
   providers: [
     ProductBulkEditsRepository,
     ProductBulkEditsService,
+    ProductBrandsRepository,
+    ProductBrandsService,
+    ProductCategoriesRepository,
+    ProductCategoriesService,
     ProductsRepository,
     ProductOrderVariantsRepository,
     ProductsService,
@@ -75,6 +85,8 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductSearchSourceService,
   ],
   exports: [
+    ProductBrandsService,
+    ProductCategoriesService,
     ProductsService,
     ProductImportService,
     ProductStockService,

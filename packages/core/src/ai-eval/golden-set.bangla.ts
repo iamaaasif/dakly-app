@@ -299,7 +299,7 @@ export const banglaGoldenCases: GoldenCase[] = [
     question: 'স্নিকার্স কবে আসবে? স্টক এলে জানাবেন',
     expectedHandover: null,
     allowedAmountsTaka: [1800, 1500],
-    mentionsAnyOf: ['জানাব', 'নতুন স্টক', 'স্টক এলে'],
+    mentionsAnyOf: ['জানাব', 'জানানো', 'রিস্টক হলে', 'নতুন স্টক', 'স্টক এলে'],
     neverOffer: ['লোফার', 'loafer'],
   },
   // Hand-overs written in Banglish.

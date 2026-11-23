@@ -37,6 +37,13 @@ const variantSchema = z.strictObject({
 
 const editVariantSchema = variantSchema.extend({ id: z.uuid().optional() });
 
+export const MAX_WEIGHT_GRAMS = 100_000;
+const weightGrams = z
+  .number()
+  .int('Enter a whole number of grams')
+  .min(1, 'Enter a weight above zero')
+  .max(MAX_WEIGHT_GRAMS, 'Use 100 kg or less');
+
 export const createProductSchema = z
   .strictObject({
     name: z.string().trim().min(1, 'Enter a product name').max(200, 'Use 200 characters or fewer'),
@@ -46,7 +53,9 @@ export const createProductSchema = z
       .max(10000, 'Use 10,000 characters or fewer')
       .nullable()
       .default(null),
-    category: text.nullable().default(null),
+    categoryId: z.uuid().nullable().default(null),
+    brandId: z.uuid().nullable().default(null),
+    weightGrams: weightGrams.nullable().default(null),
     aliases: z.array(text).max(100).default([]),
     pricePoisha: money.default(0),
     compareAtPricePoisha: money.nullable().default(null),
@@ -95,7 +104,9 @@ export const changeProductSchema = z
   .strictObject({
     name: text.optional(),
     description: z.string().trim().max(10000).nullable().optional(),
-    category: text.nullable().optional(),
+    categoryId: z.uuid().nullable().optional(),
+    brandId: z.uuid().nullable().optional(),
+    weightGrams: weightGrams.nullable().optional(),
     aliases: z.array(text).max(100).optional(),
     pricePoisha: money.optional(),
     compareAtPricePoisha: money.nullable().optional(),
@@ -149,10 +160,17 @@ const optionalTextInput = z
   .nullable()
   .transform((value) => value?.trim() || null);
 
+const optionalWeightInput = z.union(
+  [
+    z.literal('').transform(() => null),
+    z.string().regex(/^\d+$/, 'Enter a whole number of grams').transform(Number).pipe(weightGrams),
+  ],
+  { error: 'Enter a whole number of grams' },
+);
+
 export const productFormSchema = z
   .strictObject({
     ...createProductSchema.shape,
-    category: optionalTextInput.pipe(createProductSchema.shape.category.unwrap()).default(null),
     description: optionalTextInput
       .pipe(createProductSchema.shape.description.unwrap())
       .default(null),
@@ -165,6 +183,7 @@ export const productFormSchema = z
       .union([z.literal('').transform(() => 0), takaInput], { error: takaMessage })
       .default(0),
     compareAtPricePoisha: optionalTakaInput.default(null),
+    weightGrams: optionalWeightInput.default(null),
     variants: z
       .array(
         z.strictObject({
@@ -244,6 +263,9 @@ export type ProductVariantResponse = z.infer<typeof variantSchema> & {
 };
 export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
   id: string;
+  // The category's name, with its parent first ("Clothing > T-shirts"), and the brand's name.
+  category: string | null;
+  brand: string | null;
   imageFileIds: string[];
   readiness: ProductReadiness[];
   photos: ProductPhotoResponse[];
@@ -252,8 +274,6 @@ export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
   updatedAt: string;
 };
 export type ProductListResponse = { items: ProductResponse[]; nextCursor: string | null };
-
-export type ProductCategoriesResponse = { items: string[] };
 
 export type StockMovementKind = (typeof stockMovementKinds)[number];
 export const stockAdjustmentSchema = z.strictObject({

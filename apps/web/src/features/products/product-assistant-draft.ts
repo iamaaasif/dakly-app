@@ -1,4 +1,5 @@
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
+import type { ProductCategoryResponse } from '@dakly/contracts/product-lists';
 import type { ProductFormValues } from '@dakly/contracts/products';
 
 import { applyOptions, type GridVariant } from './product-variant-grid';
@@ -22,7 +23,6 @@ export function assistantDraftValues(draft: AssistantProductDraft): ProductFormV
   return {
     name: draft.name,
     description: draft.description ?? '',
-    category: draft.category ?? '',
     options: draft.options,
     pricePoisha: draft.pricePoisha === undefined ? '' : takaInputFromPoisha(draft.pricePoisha),
     variants,
@@ -41,4 +41,13 @@ export function assistantFilledFields(draft: AssistantProductDraft): string[] {
     ...draft.options.map(({ name }) => name),
     ...(draft.stockEach === undefined ? [] : ['Stock']),
   ];
+}
+
+// The assistant names a category in words; it is picked only when the shop already has it.
+export function categoryIdForName(
+  categories: ProductCategoryResponse[],
+  name: string,
+): string | undefined {
+  const wanted = name.trim().toLowerCase();
+  return categories.find((category) => category.name.toLowerCase() === wanted)?.id;
 }

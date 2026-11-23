@@ -26,6 +26,7 @@ function preview(matches: SkuMatch[], products: ImportProduct[], mode: 'update' 
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   return service.preview('store', products, mode);
 }

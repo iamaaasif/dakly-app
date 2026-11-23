@@ -12,6 +12,58 @@ const results = [
 const check = (reply: string, toolResults: unknown[] = results) =>
   checkReplyFacts(reply, toolResults, shop);
 
+describe('checkReplyFacts free size', () => {
+  it('allows Free size but still rejects a free offer', () => {
+    expect(check('শাড়িটি Free সাইজ, দাম ৳1200।').isSafe).toBe(true);
+    expect(check('Free size, ৳1200 tk.').isSafe).toBe(true);
+    expect(check('Free delivery, ৳1200 tk.')).toEqual({ isSafe: false, failure: 'offer' });
+  });
+});
+
+describe('checkReplyFacts budgets', () => {
+  const reply = (text: string, customer: string) =>
+    checkReplyFacts(text, results, shop, [customer]);
+
+  it('lets a reply repeat the customer budget as a limit, in each language', () => {
+    expect(
+      reply('জি, ২০০০ টাকার নিচে পাঞ্জাবি আছে। দাম ৳1200।', '২০০০ টাকার নিচে পাঞ্জাবি আছে?').isSafe,
+    ).toBe(true);
+    expect(
+      reply('2000 taka er moddhe punjabi ache, dam 1200 tk.', '2000 taka er moddhe punjabi ache?')
+        .isSafe,
+    ).toBe(true);
+    expect(
+      reply('Yes, under 2000 taka we have it at 1200 tk.', 'anything under 2000 taka?').isSafe,
+    ).toBe(true);
+  });
+
+  it('rejects a budget promise when the product costs more or no price is quoted', () => {
+    const failed = { isSafe: false, failure: 'amount' };
+    expect(reply('জি, ১০০০ টাকার মধ্যে হবে।', '১০০০ takar moddhe hobe?')).toEqual(failed);
+    expect(reply('জি, ১০০০ টাকার মধ্যে হবে, দাম ৳1200।', '১০০০ এর মধ্যে দিবেন?')).toEqual(failed);
+    expect(reply('1000 takar moddhe hobe, dam 1200 tk.', '1000 takar moddhe hobe?')).toEqual(
+      failed,
+    );
+    expect(reply('Yes, under 1000 taka. It is 1200 tk.', 'can you do it under 1000')).toEqual(
+      failed,
+    );
+    expect(reply('Yes, under 1000 taka.', 'can you do it under 1000')).toEqual(failed);
+    expect(reply('জি, ১০০০ এর মধ্যে হবে।', '১০০০ এর মধ্যে দিবেন?')).toEqual(failed);
+    expect(reply('Sure, under 1000 is fine.', 'can you do it under 1000')).toEqual(failed);
+  });
+
+  it('rejects a customer number used as the price', () => {
+    expect(reply('জি, ৩০০ টাকায় পাঞ্জাবি হবে।', '৩০০ টাকায় হবে?')).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+    expect(reply('Yes, price is 500 tk.', 'dam 500 tk na?')).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+  });
+});
+
 describe('checkReplyFacts', () => {
   it('accepts a price, stock and charge that tools returned, in English or Bangla digits', () => {
     expect(check('Panjabi ৳1,200, 8 pcs stock e ache. Dhaka delivery ৳60.')).toEqual({

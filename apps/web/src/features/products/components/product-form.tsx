@@ -22,7 +22,9 @@ import { useCreateProduct } from '../api/create-product';
 import { assistantDraftValues } from '../product-assistant-draft';
 import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
 import type { QuickAddHandoff } from '../quick-add-handoff';
+import { useDraftCategory } from '../use-draft-category';
 import {
+  ProductDeliveryFields,
   ProductDescriptionFields,
   ProductFields,
   ProductNameFields,
@@ -67,6 +69,7 @@ export function ProductForm({
     defaultValues: formValues(product, initial, assistantDraft),
   });
   const { dirtyFields, errors, isDirty } = form.formState;
+  useDraftCategory(form, assistantDraft);
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
     product,
     dirtyFields,
@@ -219,6 +222,9 @@ function ProductFormPageLayout({
           <FieldCard title="Price">
             <ProductPriceFields productId={productId} />
           </FieldCard>
+          <FieldCard title="Delivery">
+            <ProductDeliveryFields />
+          </FieldCard>
           <Card>
             <ProductVariantsCard product={product} />
           </Card>
@@ -318,7 +324,9 @@ function formValues(
   return {
     name: product.name,
     description: product.description,
-    category: product.category,
+    categoryId: product.categoryId,
+    brandId: product.brandId,
+    weightGrams: weightText(product.weightGrams),
     aliases: product.aliases,
     options: product.options,
     pricePoisha: takaInputFromPoisha(product.pricePoisha),
@@ -340,6 +348,10 @@ function formValues(
     isVisibleInChats: product.isVisibleInChats,
     isVisibleInOrderLink: product.isVisibleInOrderLink,
   };
+}
+
+function weightText(grams: number | null) {
+  return grams === null ? '' : String(grams);
 }
 
 function productChanges(

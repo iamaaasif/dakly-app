@@ -88,11 +88,18 @@ function sentCardPhoto(toolResults: object[]) {
   return last ? evalPhotoKey(last.photoFileId) : undefined;
 }
 
-function checkedReply(reply: string, toolResults: object[], note: Note): EvalOutcome {
-  const checked = checkReplyFacts(reply, toolResults, {
-    phone: evalShop.phone,
-    linkBaseUrl: 'https://dkl.example',
-  });
+function checkedReply(
+  reply: string,
+  toolResults: object[],
+  question: string,
+  note: Note,
+): EvalOutcome {
+  const checked = checkReplyFacts(
+    reply,
+    toolResults,
+    { phone: evalShop.phone, linkBaseUrl: 'https://dkl.example' },
+    [question],
+  );
   if (checked.isSafe) return { kind: 'reply', text: reply, cardPhoto: sentCardPhoto(toolResults) };
   note(`fact check ${checked.failure}: ${reply}`);
   return { kind: 'handover', reason: 'out_of_scope' };
@@ -151,7 +158,7 @@ export async function composeReply(
     if (result.kind === 'output') {
       const parsed = chatReplyOutputSchema.safeParse(result.output);
       return parsed.success
-        ? checkedReply(parsed.data.reply, toolResults, note)
+        ? checkedReply(parsed.data.reply, toolResults, question, note)
         : { kind: 'handover', reason: 'out_of_scope' };
     }
     const outcome = answerToolCalls(result.toolCalls, toolResults, note);
