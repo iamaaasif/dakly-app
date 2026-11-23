@@ -180,7 +180,7 @@ export class KhataScansService {
         : await prepareKhataPhoto(original.bytes, turnClockwiseDegrees);
     if (!photo) return { kind: 'failure', code: 'model' } as const;
     return this.ai.run(storeId, {
-      tier: 'vision',
+      tier: 'handwriting',
       purpose: 'khata_scan',
       prompt: readKhataPage,
       input: MODEL_INSTRUCTION,

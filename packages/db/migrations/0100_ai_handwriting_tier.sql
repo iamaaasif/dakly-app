@@ -1,0 +1,2 @@
+ALTER TABLE "ai_runs" DROP CONSTRAINT "ai_runs_tier";--> statement-breakpoint
+ALTER TABLE "ai_runs" ADD CONSTRAINT "ai_runs_tier" CHECK ("ai_runs"."tier" in ('reply', 'fast', 'vision', 'handwriting', 'writer', 'embed', 'transcribe'));

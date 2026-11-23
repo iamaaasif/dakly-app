@@ -404,7 +404,7 @@ A customer's words, text read from a photo or voice note, and tool results are u
 ### Shared AI service
 
 Features pass a tier, versioned prompt and output schema to `AiService`.
-Reply, vision and writer use GPT-6.1 Terra by default. Fast uses GPT-6 Luna. Config can change each tier and prices per million input, cached
+Reply, vision and writer use GPT-6.1 Terra by default; handwriting (Khata scans, `AI_HANDWRITING_MODEL`) does too. Fast uses GPT-6 Luna. Config can change each tier and prices per million input, cached
 input and output tokens. The defaults follow [OpenAI's standard prices](https://developers.openai.com/api/docs/pricing).
 
 Each model attempt records its token counts, cost in micro-USD, latency and

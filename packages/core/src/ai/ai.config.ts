@@ -7,7 +7,7 @@ export const AI_CONFIG = Symbol('AI_CONFIG');
 export const LLM_DRIVER = Symbol('LLM_DRIVER');
 export const aiTimeoutMs = 20_000;
 
-export type AiTier = 'reply' | 'fast' | 'vision' | 'writer';
+export type AiTier = 'reply' | 'fast' | 'vision' | 'handwriting' | 'writer';
 
 const pricesByModel = z.record(
   z.string().min(1),
@@ -39,6 +39,7 @@ export function loadAiConfig(): AiConfig {
     reply: env.AI_REPLY_MODEL,
     fast: env.AI_FAST_MODEL,
     vision: env.AI_VISION_MODEL,
+    handwriting: env.AI_HANDWRITING_MODEL,
     writer: env.AI_WRITER_MODEL,
   };
   let prices: AiConfig['prices'];
