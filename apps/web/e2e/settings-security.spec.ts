@@ -252,10 +252,10 @@ async function totp(page: Page, fixture: Fixture) {
   await pictures(page, 'security-history');
 }
 async function passwordSignIn(page: Page, fixture: Fixture) {
-  await expect(page.getByRole('heading', { name: 'Sign in to Dakly', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Log in to Dakly', exact: true })).toBeVisible();
   await privateInput(page, 'identifier', fixture.phone);
   await privateInput(page, 'password', fixture.password);
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('button', { name: 'Log in', exact: true }).click();
   await expect(page.getByLabel('Authenticator or backup code', { exact: true })).toBeVisible();
 }
 async function customSettingsAccess(
