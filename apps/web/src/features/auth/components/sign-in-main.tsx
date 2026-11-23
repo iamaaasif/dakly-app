@@ -76,7 +76,10 @@ export function SignInMain({
           submitLabel={copy.submit}
         />
         {config.legal && (config.googleClientId || !embedded) ? (
-          <SocialConsentNote legal={config.legal} />
+          <SocialConsentNote
+            legal={config.legal}
+            providers={socialProviders(Boolean(config.googleClientId), embedded)}
+          />
         ) : null}
         {embedded ? (
           <AuthLink
@@ -89,4 +92,9 @@ export function SignInMain({
       </div>
     </AuthFrame>
   );
+}
+
+function socialProviders(hasGoogle: boolean, embedded: boolean) {
+  if (!hasGoogle) return 'Facebook';
+  return embedded ? 'Google' : 'Google or Facebook';
 }
