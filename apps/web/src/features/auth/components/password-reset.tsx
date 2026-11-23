@@ -1,57 +1,95 @@
 'use client';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { Check } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
 
-import { passwordIdentifierSchema } from '@dakly/contracts/auth';
-import { Button } from '@dakly/ui/button';
+import type { SignInResponse } from '@dakly/contracts/auth';
 
-import { useRequestReset } from '../api/request-reset';
 import { AuthFrame } from './auth-frame';
-import { PasswordResetConfirm } from './password-reset-confirm';
-import { FormField as AuthField } from '@/components/form-field';
-import { formError } from '@/lib/form-error';
+import { ResetCodeStep } from './reset-code-step';
+import { ResetEmailStep } from './reset-email-step';
+import { ResetPasswordStep } from './reset-password-step';
+import { TotpStep } from './totp-step';
 
+type Step = 'email' | 'code' | 'password' | 'two-step' | 'done';
+const copy: Record<Step, { title: string; subtitle?: string }> = {
+  email: {
+    title: 'Reset your password',
+    subtitle: 'Enter the email on your account. We’ll email you a code to reset your password.',
+  },
+  code: { title: 'Check your email', subtitle: 'Use the code to reset your password.' },
+  password: {
+    title: 'Create a new password',
+    subtitle: 'Use at least 8 characters, with a number.',
+  },
+  'two-step': { title: 'Reset your password' },
+  done: { title: 'Password updated', subtitle: 'You can now sign in with your new password.' },
+};
 export function PasswordReset() {
-  const [identifier, setIdentifier] = useState<string>();
-  const form = useForm({
-    resolver: zodResolver(passwordIdentifierSchema),
-    defaultValues: { identifier: '' },
-  });
-  const request = useRequestReset();
+  const [step, setStep] = useState<Step>('email');
+  const [identifier, setIdentifier] = useState('');
+  const [code, setCode] = useState('');
+  const [challenge, setChallenge] = useState('');
+  const back = { email: () => window.location.assign('/sign-in'), code: () => setStep('email') }[
+    step as 'email' | 'code'
+  ];
+  function finish(result: SignInResponse) {
+    if (result) {
+      setChallenge(result.challengeId);
+      setStep('two-step');
+    } else setStep('done');
+  }
   return (
-    <AuthFrame title="Reset your password">
-      {identifier ? (
-        <PasswordResetConfirm identifier={identifier} />
-      ) : (
-        <form
-          method="post"
-          className="space-y-4"
-          onSubmit={form.handleSubmit(async (input) => {
-            try {
-              await request.mutateAsync(input);
-              setIdentifier(input.identifier);
-            } catch (error) {
-              formError(error, form.setError);
-            }
-          })}
-        >
-          <AuthField
-            label="Mobile number or email"
-            field={form.register('identifier')}
-            error={form.formState.errors.identifier}
-            autoComplete="username"
-          />
-          {form.formState.errors.root ? (
-            <p role="alert" className="text-danger">
-              {form.formState.errors.root.message}
-            </p>
-          ) : null}
-          <Button type="submit" loading={request.isPending}>
-            Send reset code
-          </Button>
-        </form>
-      )}
+    <AuthFrame {...copy[step]} onBack={step === 'password' ? () => setStep('code') : back}>
+      {step === 'email' ? (
+        <ResetEmailStep
+          onSent={(value) => {
+            setIdentifier(value);
+            setStep('code');
+          }}
+        />
+      ) : null}
+      {step === 'code' ? (
+        <ResetCodeStep
+          identifier={identifier}
+          onChange={() => setStep('email')}
+          onCode={(value) => {
+            setCode(value);
+            setStep('password');
+          }}
+        />
+      ) : null}
+      {step === 'password' ? (
+        <ResetPasswordStep
+          identifier={identifier}
+          code={code}
+          onReset={finish}
+          onBadCode={() => setStep('code')}
+        />
+      ) : null}
+      {step === 'two-step' ? (
+        <TotpStep challengeId={challenge} onSuccess={() => setStep('done')} />
+      ) : null}
+      {step === 'done' ? <ResetDone /> : null}
     </AuthFrame>
+  );
+}
+
+function ResetDone() {
+  return (
+    <div className="space-y-4">
+      <span
+        aria-hidden="true"
+        className="flex size-12 items-center justify-center rounded-full bg-success-soft text-success"
+      >
+        <Check size={20} />
+      </span>
+      <Link
+        href="/sign-in"
+        className="flex min-h-11 w-full items-center justify-center rounded-md bg-action font-semibold text-on-primary hover:bg-action-hover"
+      >
+        Log in
+      </Link>
+    </div>
   );
 }
