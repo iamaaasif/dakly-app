@@ -246,6 +246,17 @@ describe('chat memory set', () => {
     ]);
   });
 
+  it('does not count a promise to tell the customer when the size is back as an offer', () => {
+    const score = (text: string) =>
+      scoreEval(chatMemoryGoldenCases, {
+        ...chatMemoryRecordedOutcomes,
+        'chat-memory-other-channel-stock-bn': { kind: 'reply', text },
+      }).outOfStockOfferCaseIds;
+    expect(score('XL নেই। M ও L সাইজ আছে, প্রতিটি ৳৬৫০। XL আবার স্টকে এলে জানাবো?')).toEqual([]);
+    expect(score('XL nei. XL stock e ashle jānabo.')).toEqual([]);
+    expect(score('XL back in stock now, ৳650।')).toEqual(['chat-memory-other-channel-stock-bn']);
+  });
+
   it('fails a follow-up with nothing shown that guesses a product', () => {
     const report = scoreEval(chatMemoryGoldenCases, {
       ...chatMemoryRecordedOutcomes,
