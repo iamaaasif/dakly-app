@@ -190,6 +190,20 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByRole('button', { name: 'Take over' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
     await capture(page, 'take-over');
+    await database.pool.query(
+      'update ai_agent_settings set is_auto_reply_on = false where store_id = $1',
+      [storeId],
+    );
+    await page.reload();
+    await expect(page.getByText(/AI auto-reply is off, so Dakly AI will not answer/)).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Turn on AI auto-reply' })).toBeVisible();
+    await capture(page, 'auto-reply-off', resolve(process.cwd(), 'e2e-artifacts', 'chat-1'));
+    await database.pool.query(
+      'update ai_agent_settings set is_auto_reply_on = true where store_id = $1',
+      [storeId],
+    );
+    await page.reload();
+    await expect(page.getByText('Dakly AI is handling this chat')).toBeVisible();
     await page.getByRole('button', { name: /^Label/ }).click();
     await page.getByLabel('New label').fill('VIP');
     await page.getByRole('button', { name: 'Add' }).click();
@@ -239,8 +253,8 @@ test('lists chats by tab and channel and shows the tab counts', async ({
   }
 });
 
-async function capture(page: Page, screen: string) {
-  const evidence = process.env.CHAT5_SCREENSHOT_DIR;
+async function capture(page: Page, screen: string, directory?: string) {
+  const evidence = directory ?? process.env.CHAT5_SCREENSHOT_DIR;
   if (!evidence) return;
   await mkdir(evidence, { recursive: true });
   for (const [width, height] of [

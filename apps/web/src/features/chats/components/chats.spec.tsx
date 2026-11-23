@@ -457,12 +457,23 @@ describe('Conversation actions', () => {
   it('says so when the AI is assigned the chat but auto-reply is off', async () => {
     autoReplyOn = false;
     respondToActions({});
-    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canEditStoreSettings: true });
     expect(
       await screen.findByText(/AI auto-reply is off, so Dakly AI will not answer/),
     ).toBeTruthy();
     expect(screen.queryByText('Dakly AI is handling this chat')).toBeNull();
     expect(screen.getByRole('link', { name: 'Turn on AI auto-reply' })).toBeTruthy();
+    autoReplyOn = true;
+  });
+
+  it('shows the auto-reply-off notice without a link to someone who cannot change settings', async () => {
+    autoReplyOn = false;
+    respondToActions({});
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canEditStoreSettings: false });
+    expect(
+      await screen.findByText(/AI auto-reply is off, so Dakly AI will not answer/),
+    ).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Turn on AI auto-reply' })).toBeNull();
     autoReplyOn = true;
   });
 
