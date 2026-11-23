@@ -283,6 +283,8 @@ Three columns: chat list with tabs (All, Needs you, AI handling, Follow up) and 
 
 ### How it works
 
+Customer names: after a Messenger or Instagram message is saved, a job asks Meta for the sender's name with the Page token and saves it on the contact's channel identity. It also fills the contact's name when that is empty, and never replaces a name staff typed. Meta returns a name only: no phone, no email and no photo is saved. If Meta refuses (permission not approved), nothing is saved and the next message from that person tries again. WhatsApp names come from the webhook and are not built yet.
+
 Conversation state is three separate fields:
 
 | Field       | Values                               | Set by                                                                                                     |
