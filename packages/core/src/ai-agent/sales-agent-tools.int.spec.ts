@@ -548,3 +548,28 @@ it('puts a customer on the restock list once, only for a sold-out size, only in 
     { error: 'PRODUCT_VARIANT_NOT_FOUND' },
   );
 });
+
+it('limits search and product reads to the ad’s products, and reads their price and stock now', async () => {
+  const storeId = await shop();
+  const buyer = await contact(storeId);
+  const inAd = await product(storeId, { name: 'Ad panjabi', aliases: ['panjabi'], stock: 5 });
+  const outsideAd = await product(storeId, { name: 'Shop panjabi', aliases: ['panjabi'] });
+  const scope = { storeId, contactId: buyer, adProductIds: [inAd] };
+  const call = (name: string, args: object) => tools.run(scope, name, JSON.stringify(args));
+
+  expect(await call('search_products', { query: 'panjabi' })).toEqual({
+    products: [expect.objectContaining({ productId: inAd })],
+  });
+  expect(await call('search_products', { query: 'kurti' })).toEqual({ products: [] });
+  expect(await call('get_product', { productId: outsideAd })).toEqual({
+    error: 'NOT_AN_AD_PRODUCT',
+  });
+  expect(await call('get_product', { productId: inAd })).toMatchObject({ productId: inAd });
+  expect(await tools.adProducts(scope, [inAd, outsideAd])).toEqual([
+    expect.objectContaining({
+      productId: inAd,
+      variants: [expect.objectContaining({ priceTaka: 1200, stock: 3 })],
+    }),
+    expect.objectContaining({ productId: outsideAd }),
+  ]);
+});

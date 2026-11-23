@@ -6,9 +6,10 @@ import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
 import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/llm-driver';
 
+import { adProducts } from '../../ai-agent/ad-context';
 import { classifierInput, productsInChat } from '../../ai-agent/chat-memory';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV7 } from '../../ai-agent/prompts/chat-reply.v7';
+import { chatReplyV8 } from '../../ai-agent/prompts/chat-reply.v8';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
 import {
   checkReplyFacts,
@@ -102,10 +103,21 @@ type ToolCall = { name: string; argumentsJson: string };
 
 type ReplyCase = Pick<
   GoldenCase,
-  'question' | 'memory' | 'earlier' | 'shownProducts' | 'holdsPrice' | 'ownerSettings'
+  | 'question'
+  | 'memory'
+  | 'earlier'
+  | 'shownProducts'
+  | 'adProducts'
+  | 'holdsPrice'
+  | 'ownerSettings'
 >;
 
-function replyContext(golden: ReplyCase, inChat: object | undefined, candidates: object) {
+function replyContext(
+  golden: ReplyCase,
+  inChat: object | undefined,
+  candidates: object,
+  ad: object | undefined,
+) {
   const conversation = [...(golden.earlier ?? []), { from: 'customer', text: golden.question }];
   return [
     `<shop>${JSON.stringify(evalShop)}</shop>`,
@@ -115,6 +127,7 @@ function replyContext(golden: ReplyCase, inChat: object | undefined, candidates:
       : []),
     `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
     ...(inChat ? [`<products_in_this_chat>${JSON.stringify(inChat)}</products_in_this_chat>`] : []),
+    ...(ad ? [`<ad_products>${JSON.stringify(ad)}</ad_products>`] : []),
     `<product_candidates>${JSON.stringify(candidates)}</product_candidates>`,
   ].join('\n');
 }
@@ -128,6 +141,16 @@ function evalProductsInChat(names: readonly string[] | undefined) {
       : [];
   });
   return products.length ? productsInChat(products) : undefined;
+}
+
+// The ad's products read from the eval catalog, as the agent reads them from the shop.
+function evalAdProducts(names: readonly string[] | undefined) {
+  if (!names) return undefined;
+  const found = names.flatMap((name) => evalProducts.filter((product) => product.name === name));
+  const block = adProducts(
+    found.map(({ productId }) => runFixtureTool('get_product', JSON.stringify({ productId }))),
+  );
+  return { block, productIds: found.map(({ productId }) => productId) };
 }
 
 // The key of the photo on the last product card the run sent, or null for a card with no photo.
@@ -148,12 +171,24 @@ function factCheckFailure(reply: string, toolResults: object[], question: string
 }
 
 // A hand_over call ends the loop with its reason; any other call adds its result for the next round.
-function answerToolCalls(calls: ToolCall[], toolResults: object[], note: Note, rules: ShopRules) {
+function answerToolCalls({
+  calls,
+  toolResults,
+  note,
+  rules,
+  onlyProductIds,
+}: {
+  calls: ToolCall[];
+  toolResults: object[];
+  note: Note;
+  rules: ShopRules;
+  onlyProductIds: readonly string[] | undefined;
+}) {
   const answered: { name: string; result: object }[] = [];
   for (const call of calls) {
     const refusal = refuseToolCall(rules, call);
     if (refusal?.kind === 'handover') return { handover: refusal.reason };
-    const result = refusal?.result ?? runFixtureTool(call.name, call.argumentsJson);
+    const result = refusal?.result ?? runFixtureTool(call.name, call.argumentsJson, onlyProductIds);
     if (call.name === 'hand_over' && 'reason' in result) {
       note(`hand_over ${String(result.reason)}`);
       return { handover: result.reason as Reason };
@@ -165,12 +200,15 @@ function answerToolCalls(calls: ToolCall[], toolResults: object[], note: Note, r
 }
 
 // The photo match for a photo's text, else a search of what the customer wrote, as the real agent does.
-function replyCandidates(question: string): object | undefined {
+function replyCandidates(
+  question: string,
+  onlyProductIds: readonly string[] | undefined,
+): object | undefined {
   const photo = photoSearchText(question);
   if (photo !== undefined) return matchEvalPhoto(photo);
   const query = question.slice(0, 100).trim();
   return query.length >= MIN_SEARCH_LENGTH
-    ? runFixtureTool('search_products', JSON.stringify({ query }))
+    ? runFixtureTool('search_products', JSON.stringify({ query }), onlyProductIds)
     : undefined;
 }
 
@@ -203,6 +241,19 @@ const replyOutcome = ({ text, toolResults }: { text: string; toolResults: object
   cardPhoto: sentCardPhoto(toolResults),
 });
 
+// The prompt blocks of a case, and the products its tools may see: the ad's own while the ad has any.
+function replyBlocks(golden: ReplyCase, toolResults: object[]) {
+  const inChat = evalProductsInChat(golden.shownProducts);
+  if (inChat) toolResults.push(inChat);
+  const ad = evalAdProducts(golden.adProducts);
+  if (ad) toolResults.push(ad.block);
+  const onlyProductIds = ad?.productIds.length ? ad.productIds : undefined;
+  const candidates = replyCandidates(golden.question, onlyProductIds);
+  if (candidates) toolResults.push(candidates);
+  const context = replyContext(golden, inChat, candidates ?? { products: [] }, ad?.block);
+  return { context, onlyProductIds };
+}
+
 // One pass of the loop, with fixture tools instead of the database.
 async function composeOnce(
   { driver, meter, model }: Run,
@@ -211,18 +262,13 @@ async function composeOnce(
   rejected?: { failure: FactCheckFailure; reply: string },
 ): Promise<Composed> {
   const ended = (outcome: EvalOutcome): Composed => ({ kind: 'ended', outcome });
-  const { question } = golden;
   const toolResults: object[] = [];
-  const inChat = evalProductsInChat(golden.shownProducts);
-  if (inChat) toolResults.push(inChat);
-  const candidates = replyCandidates(question);
-  if (candidates) toolResults.push(candidates);
-  const context = replyContext(golden, inChat, candidates ?? { products: [] });
+  const { context, onlyProductIds } = replyBlocks(golden, toolResults);
   let transcript = rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {
       model,
-      instructions: chatReplyV7.instructions,
+      instructions: chatReplyV8.instructions,
       input: context + transcript,
       output: chatReplyOutputSchema,
       tools: salesAgentLlmTools,
@@ -238,7 +284,13 @@ async function composeOnce(
         ? { kind: 'reply', text: parsed.data.reply, toolResults }
         : ended({ kind: 'handover', reason: 'out_of_scope' });
     }
-    const outcome = answerToolCalls(result.toolCalls, toolResults, note, evalShopRules(golden));
+    const outcome = answerToolCalls({
+      calls: result.toolCalls,
+      toolResults,
+      note,
+      rules: evalShopRules(golden),
+      onlyProductIds,
+    });
     if (outcome.handover) return ended({ kind: 'handover', reason: outcome.handover });
     transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
   }

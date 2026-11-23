@@ -93,11 +93,17 @@ function cardText(found: EvalProduct, only?: EvalProduct['variants'][number]) {
 }
 
 // Answers the way the real tools do for a shop with this catalog, minus orders and knowledge.
-const handlers: Record<string, (args: Args) => object> = {
-  search_products: ({ query }) => ({
-    products: searchEvalProducts(String(query ?? ''), SEARCH_LIMIT).map(productResult),
+type Handler = (args: Args, onlyProductIds?: readonly string[]) => object;
+const handlers: Record<string, Handler> = {
+  search_products: ({ query }, onlyProductIds) => ({
+    products: searchEvalProducts(String(query ?? ''), SEARCH_LIMIT, onlyProductIds).map(
+      productResult,
+    ),
   }),
-  get_product: productById,
+  get_product: (args, onlyProductIds) =>
+    onlyProductIds && !onlyProductIds.includes(String(args.productId))
+      ? { error: 'NOT_AN_AD_PRODUCT' }
+      : productById(args),
   send_product_card: sendProductCard,
   find_alternatives: findAlternatives,
   join_restock_list: joinRestockList,
@@ -114,9 +120,14 @@ const handlers: Record<string, (args: Args) => object> = {
   hand_over: ({ reason }) => ({ reason }),
 };
 
-export function runFixtureTool(name: string, argumentsJson: string): object {
+// With `onlyProductIds` the tools see just those products, as they do in a chat from an ad.
+export function runFixtureTool(
+  name: string,
+  argumentsJson: string,
+  onlyProductIds?: readonly string[],
+): object {
   const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
-  return handler ? handler(parse(argumentsJson)) : { error: 'UNKNOWN_TOOL' };
+  return handler ? handler(parse(argumentsJson), onlyProductIds) : { error: 'UNKNOWN_TOOL' };
 }
 
 // The same decision as ProductSearchService.matchPhoto, over the eval shop.

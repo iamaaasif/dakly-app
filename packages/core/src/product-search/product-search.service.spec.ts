@@ -115,3 +115,25 @@ describe('ProductSearchService', () => {
     expect(found).toMatchObject({ kind: 'sold_out', product: { id: 'kurti-sold-out' } });
   });
 });
+
+describe('searchWithin', () => {
+  it('finds a pick among the given products only, and nothing for a question with no product word', async () => {
+    const service = build({});
+
+    const picked = await service.searchWithin('s', ['kurti-new', 'lehenga'], 'kurti ta koto?', 4);
+    const outside = await service.searchWithin('s', ['lehenga'], 'kurti ta koto?', 4);
+    const priceOnly = await service.searchWithin('s', ['kurti-new', 'lehenga'], 'দাম কত?', 4);
+
+    expect(picked.map(({ id }) => id)).toEqual(['kurti-new']);
+    expect(outside).toEqual([]);
+    expect(priceOnly).toEqual([]);
+  });
+
+  it('puts a product with stock before one that is sold out', async () => {
+    const service = build({});
+
+    const found = await service.searchWithin('s', ['kurti-sold-out', 'kurti-new'], 'kurti', 4);
+
+    expect(found.map(({ id }) => id)).toEqual(['kurti-new', 'kurti-sold-out']);
+  });
+});

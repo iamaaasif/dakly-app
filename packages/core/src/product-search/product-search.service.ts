@@ -42,6 +42,28 @@ export class ProductSearchService {
     );
   }
 
+  // Search limited to the products an ad sells, by spelling only: a pick such as "নীলটা" names a
+  // colour of one of at most four products, so meaning-based hits from the rest of the shop would only add guesses.
+  async searchWithin(
+    storeId: string,
+    productIds: readonly string[],
+    text: string,
+    limit: number,
+  ): Promise<ChatProduct[]> {
+    const allowed = new Set(productIds);
+    const candidates = (await this.source.listSearchCandidates(storeId, candidateLimit)).filter(
+      ({ id }) => allowed.has(id),
+    );
+    const found = await this.products.getManyForChat(
+      storeId,
+      rankByWords(candidates, parseQuery(text)),
+    );
+    return [...found.filter(isSellable), ...found.filter((product) => !isSellable(product))].slice(
+      0,
+      limit,
+    );
+  }
+
   // Matches the words and meaning of a customer's photo, as CHAT-7 read them, to the shop's products.
   async matchPhoto(storeId: string, photoText: string): Promise<PhotoMatch> {
     const { found, scores, words } = await this.rank(storeId, photoText, true);

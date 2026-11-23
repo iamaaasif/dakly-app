@@ -8,6 +8,13 @@ export type InboundAttachmentKind = 'image' | 'voice' | 'video' | 'file';
 
 export type InboundAttachment = { kind: InboundAttachmentKind; url: string };
 
+// Where a customer's first message came from. An ad that promotes a post carries both ids.
+export type InboundReferral = {
+  adId: string | null;
+  postId: string | null;
+  title: string | null;
+};
+
 export type InboundMessage = {
   channel: ChannelKind;
   accountExternalId: string;
@@ -16,6 +23,7 @@ export type InboundMessage = {
   senderExternalId: string;
   text: string | null;
   attachments: InboundAttachment[];
+  referral: InboundReferral | null;
   sentAt: Date;
 };
 

@@ -75,6 +75,11 @@ export const conversations = pgTable(
     lastMessagePreview: text('last_message_preview'),
     windowExpiresAt: timestamptz('window_expires_at'),
     unreadCount: integer('unread_count').notNull().default(0),
+    // The Meta ad or post the customer came from; the newest referral replaces the last one.
+    referralAdId: text('referral_ad_id'),
+    referralPostId: text('referral_post_id'),
+    referralTitle: text('referral_title'),
+    referredAt: timestamptz('referred_at'),
     aiSummary: text('ai_summary'),
     // Logical cursor survives message retention; this conversation alone owns its progress.
     memoryBuiltThroughMessageId: uuid('memory_built_through_message_id'),

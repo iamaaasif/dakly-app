@@ -50,6 +50,9 @@ export const goldenCaseSchema = z.strictObject({
   earlier: z
     .array(z.strictObject({ from: z.enum(['customer', 'shop']), text: z.string().min(1) }))
     .optional(),
+  // The chat started from an ad that sells these products, by name in the eval catalog; an empty
+  // list is an ad the shop has not linked to any product. The tools then see only those products.
+  adProducts: z.array(z.string().min(1)).max(4).optional(),
   // Products the shop already showed in that chat, newest first, by name in the eval catalog.
   shownProducts: z.array(z.string().min(1)).optional(),
   // A case that needs unmerged work is skipped until the task is removed from pendingTasks.

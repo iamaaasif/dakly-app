@@ -140,6 +140,14 @@ export class InboxService {
     return this.repository.replyHistory(storeId, id, limit);
   }
 
+  // The ad or post the customer came from, or null when the chat did not start from one.
+  async referralOf(storeId: string, id: string) {
+    await this.requireChats(storeId);
+    await this.find(storeId, id);
+    const referral = await this.repository.referralOf(storeId, id);
+    return referral && (referral.adId || referral.postId) ? referral : null;
+  }
+
   addNote(storeId: string, id: string, actor: UserActor, input: CreateConversationNoteInput) {
     return this.transaction.run(storeId, async () => {
       await this.requireChats(storeId);

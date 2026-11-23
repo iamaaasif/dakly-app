@@ -164,6 +164,7 @@ export class MetaWebhookRoutingService {
       externalMessageId: message.externalMessageId,
       content: message.text,
       attachments: message.attachments.map(({ kind, url }) => ({ kind, sourceUrl: url })),
+      referral: message.referral,
       sentAt: message.sentAt,
       receivedAt,
     });

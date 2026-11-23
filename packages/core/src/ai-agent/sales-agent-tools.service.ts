@@ -37,6 +37,8 @@ export type ToolScope = {
   contactId: string;
   // A practice question has no chat, so it can read but cannot take an order.
   chat?: { conversationId: string; channel: 'messenger' | 'instagram' };
+  // Set while the chat is answered from an ad: search and product reads stay inside these products.
+  adProductIds?: readonly string[];
 };
 type Handler = (scope: ToolScope, raw: unknown) => Promise<object>;
 
@@ -98,10 +100,18 @@ export class SalesAgentToolsService {
     }
   }
 
-  private async searchProducts({ storeId }: ToolScope, raw: unknown) {
+  private async searchProducts({ storeId, adProductIds }: ToolScope, raw: unknown) {
     const { query } = searchProductsTool.input.parse(raw);
-    const found = await this.productSearch.search(storeId, query, SEARCH_PRODUCT_LIMIT);
+    const found = adProductIds
+      ? await this.productSearch.searchWithin(storeId, adProductIds, query, SEARCH_PRODUCT_LIMIT)
+      : await this.productSearch.search(storeId, query, SEARCH_PRODUCT_LIMIT);
     return { products: found.map(productResult) };
+  }
+
+  // What the ad sells, read now so a price or stock count is never an old one.
+  async adProducts({ storeId }: ToolScope, productIds: readonly string[]): Promise<object[]> {
+    const found = await this.products.getManyForChat(storeId, [...productIds]);
+    return found.map(productResult);
   }
 
   // The customer sent a photo: say which product it shows, or that the shop cannot tell.
@@ -135,8 +145,9 @@ export class SalesAgentToolsService {
     return { onWaitingList: true, variantId };
   }
 
-  private async getProduct({ storeId }: ToolScope, raw: unknown) {
+  private async getProduct({ storeId, adProductIds }: ToolScope, raw: unknown) {
     const { productId } = getProductTool.input.parse(raw);
+    if (adProductIds && !adProductIds.includes(productId)) return { error: 'NOT_AN_AD_PRODUCT' };
     return productResult(await this.products.getForChat(storeId, productId));
   }
 

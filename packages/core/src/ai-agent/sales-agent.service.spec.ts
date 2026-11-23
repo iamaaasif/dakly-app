@@ -1,9 +1,11 @@
 import { beforeAll, expect, it, vi } from 'vitest';
 
+import type { AdLinksService } from '../ad-links/ad-links.service';
 import type { AiRunsService } from '../ai/ai-runs.service';
 import type { AiService } from '../ai/ai.service';
 import type { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import type { InboxService } from '../messaging/inbox.service';
+import type { Clock } from '../platform/clock';
 import type { ProductsService } from '../products/products.service';
 import type { StoresService } from '../stores/stores.service';
 import type { SalesAgentToolsService } from './sales-agent-tools.service';
@@ -26,8 +28,12 @@ function build(memoryText: string | undefined = undefined) {
   const ai = { run } as unknown as AiService;
   const tools = {
     run: vi.fn().mockResolvedValue({ products: [] }),
+    adProducts: vi.fn().mockResolvedValue([]),
   } as unknown as SalesAgentToolsService;
-  const inbox = { replyHistory: vi.fn().mockResolvedValue([]) } as unknown as InboxService;
+  const inbox = {
+    replyHistory: vi.fn().mockResolvedValue([]),
+    referralOf: vi.fn().mockResolvedValue(null),
+  } as unknown as InboxService;
   const stores = {
     settings: vi.fn().mockResolvedValue({ name: 'Shop', phone: '0171', district: 'Dhaka' }),
   } as unknown as StoresService;
@@ -36,13 +42,26 @@ function build(memoryText: string | undefined = undefined) {
     contextFor: vi.fn().mockResolvedValue(memoryText),
   } as unknown as ContactMemoryService;
   const runs = { setOutcome: vi.fn() } as unknown as AiRunsService;
+  const adLinks = { productIdsFor: vi.fn().mockResolvedValue([]) } as unknown as AdLinksService;
+  const clock = { now: () => new Date('2026-11-23T12:00:00Z') } as unknown as Clock;
   return {
-    service: new SalesAgentService(ai, tools, inbox, stores, products, memory, runs),
+    service: new SalesAgentService(
+      ai,
+      tools,
+      inbox,
+      stores,
+      products,
+      memory,
+      runs,
+      adLinks,
+      clock,
+    ),
     run,
     runs,
     tools,
     inbox,
     memory,
+    adLinks,
   };
 }
 
@@ -149,7 +168,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v7+products-in-chat.v1');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v8+products-in-chat.v1');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
@@ -197,7 +216,7 @@ it('adds no shown products when the chat has none, so the model still asks which
   });
 
   expect(run.mock.calls[0]![1].input).not.toContain('products_in_this_chat');
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v7');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v8');
   expect(tools.run).not.toHaveBeenCalledWith(expect.anything(), 'get_product', expect.anything());
 });
 
@@ -369,4 +388,76 @@ it('sends no product card when the owner turned cards off', async () => {
     'send_product_card',
     expect.anything(),
   );
+});
+
+const fromAd = (referredAt: string) => ({
+  adId: '120000000001',
+  postId: null,
+  title: 'Eid kurti',
+  referredAt: new Date(referredAt),
+});
+
+it('answers a bare price question from the ad’s products and limits search to them', async () => {
+  const { service, run, tools, inbox, adLinks } = build();
+  vi.mocked(inbox.referralOf).mockResolvedValue(fromAd('2026-11-23T11:00:00Z'));
+  vi.mocked(adLinks.productIdsFor).mockResolvedValue(['p-red', 'p-blue']);
+  vi.mocked(tools.adProducts).mockResolvedValue([
+    { productId: 'p-red', name: 'লাল কুর্তি' },
+    { productId: 'p-blue', name: 'নীল কুর্তি' },
+  ]);
+
+  await service.compose({
+    storeId,
+    contactId: 'c-1',
+    chat,
+    customerTexts: ['দাম কত?'],
+    rules: defaultShopRules,
+  });
+
+  const call = run.mock.calls[0]![1];
+  expect(call.input).toContain('<ad_products>');
+  expect(call.input).toContain('নীল কুর্তি');
+  expect(call.prompt.version).toBe('chat-reply.v8+ad-products.v1');
+  expect(tools.run).toHaveBeenCalledWith(
+    expect.objectContaining({ adProductIds: ['p-red', 'p-blue'] }),
+    'search_products',
+    expect.anything(),
+  );
+});
+
+it('keeps an ad with no linked products in the prompt so the model asks, and searches nothing narrower', async () => {
+  const { service, run, tools, inbox } = build();
+  vi.mocked(inbox.referralOf).mockResolvedValue(fromAd('2026-11-23T11:00:00Z'));
+  vi.mocked(tools.adProducts).mockResolvedValue([]);
+
+  await service.compose({
+    storeId,
+    contactId: 'c-1',
+    chat,
+    customerTexts: ['দাম কত?'],
+    rules: defaultShopRules,
+  });
+
+  expect(run.mock.calls[0]![1].input).toContain('"products":[]');
+  expect(tools.run).not.toHaveBeenCalledWith(
+    expect.objectContaining({ adProductIds: expect.anything() }),
+    expect.anything(),
+    expect.anything(),
+  );
+});
+
+it('ignores an ad the customer came from more than a day ago', async () => {
+  const { service, run, tools, inbox } = build();
+  vi.mocked(inbox.referralOf).mockResolvedValue(fromAd('2026-11-21T11:00:00Z'));
+
+  await service.compose({
+    storeId,
+    contactId: 'c-1',
+    chat,
+    customerTexts: ['দাম কত?'],
+    rules: defaultShopRules,
+  });
+
+  expect(run.mock.calls[0]![1].input).not.toContain('ad_products');
+  expect(tools.adProducts).not.toHaveBeenCalled();
 });

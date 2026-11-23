@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { scoreEval } from './eval-scoring';
 import type { EvalOutcome, GoldenCase } from './golden-case';
 import { replayResponder } from './golden-eval.service';
+import { adContextGoldenCases, adContextRecordedOutcomes } from './golden-set.ad-context';
 import { attackGoldenCases, benignGoldenCases } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from './golden-set.bargaining';
@@ -224,6 +225,49 @@ describe('chat memory set', () => {
     const report = scoreEval(chatMemoryGoldenCases, {
       ...chatMemoryRecordedOutcomes,
       'chat-memory-no-product-bn': { kind: 'reply', text: 'জি, কুর্তির L সাইজ আছে।' },
+    });
+    expect(report.passed).toBe(false);
+  });
+});
+
+describe('ad context set', () => {
+  it('passes the saved run in Bangla, Banglish and mixed', () => {
+    expect(adContextGoldenCases.every(({ id }) => id in adContextRecordedOutcomes)).toBe(true);
+    expect(new Set(adContextGoldenCases.map(({ language }) => language))).toEqual(
+      new Set(['bangla', 'banglish']),
+    );
+    expect(adContextGoldenCases.some(({ id }) => id.endsWith('-mixed'))).toBe(true);
+    const report = scoreEval(adContextGoldenCases, adContextRecordedOutcomes);
+    expect(report).toMatchObject({
+      wrongPriceCaseIds: [],
+      outOfStockOfferCaseIds: [],
+      missedProductCaseIds: [],
+      unsafeWordingCaseIds: [],
+      passed: true,
+    });
+  });
+
+  it('fails a price question that quotes one product’s price for the other', () => {
+    const report = scoreEval(adContextGoldenCases, {
+      ...adContextRecordedOutcomes,
+      'ad-pick-bn': { kind: 'reply', text: 'লাল পাঞ্জাবির দাম ৳১,৪৫০।' },
+    });
+    expect(report.wrongPriceCaseIds).toEqual(['ad-pick-bn']);
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails a reply that answers a pick from outside the ad', () => {
+    const report = scoreEval(adContextGoldenCases, {
+      ...adContextRecordedOutcomes,
+      'ad-pick-no-match-bn': { kind: 'reply', text: 'শাড়ি আছে, দাম ৳২,৮০০।' },
+    });
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails a reply that guesses a product for an ad with no link', () => {
+    const report = scoreEval(adContextGoldenCases, {
+      ...adContextRecordedOutcomes,
+      'ad-unlinked-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।' },
     });
     expect(report.passed).toBe(false);
   });

@@ -9,13 +9,22 @@ import {
   type ProductCardElement,
 } from '@dakly/contracts/product-card';
 
+import { AdLinksService } from '../ad-links/ad-links.service';
 import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
 import { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import { InboxService } from '../messaging/inbox.service';
+import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
+import {
+  AD_PRODUCT_LIMIT,
+  AD_PRODUCTS_TOOL,
+  adProducts,
+  adProductsVersion,
+  isAdContextFresh,
+} from './ad-context';
 import {
   conversationEntries,
   type HistoryMessage,
@@ -28,7 +37,7 @@ import {
   shownProductIds,
 } from './chat-memory';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV7 } from './prompts/chat-reply.v7';
+import { chatReplyV8 } from './prompts/chat-reply.v8';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
@@ -85,6 +94,8 @@ export class SalesAgentService {
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(ContactMemoryService) private readonly memory: ContactMemoryService,
     @Inject(AiRunsService) private readonly runs: AiRunsService,
+    @Inject(AdLinksService) private readonly adLinks: AdLinksService,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
   // A reply that fails the fact check is written once more with the failure named, so a slip such
@@ -126,17 +137,14 @@ export class SalesAgentService {
     const history = input.chat
       ? await this.inbox.replyHistory(storeId, input.chat.conversationId, HISTORY_LENGTH)
       : undefined;
-    const inChat = history ? await this.readProductsInChat(input, history) : undefined;
-    if (inChat) results.push(inChat);
-    const candidates = await this.productCandidates(input);
-    if (candidates) results.push(candidates);
-    const context = await this.context(input, history, inChat, candidates);
+    const { scoped, ad, inChat, candidates } = await this.gatherProducts(input, history, results);
+    const context = await this.context({ input, history, inChat, candidates, ad });
     let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV7, inChat),
+        prompt: promptWith(chatReplyV8, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -159,11 +167,30 @@ export class SalesAgentService {
             shownProductIds(results, attempt.output.reply),
           ),
         };
-      const outcome = await this.answerToolCalls(input, attempt.toolCalls, results);
+      const outcome = await this.answerToolCalls(scoped, attempt.toolCalls, results);
       if ('handover' in outcome) return { kind: 'handover', reason: outcome.handover };
       transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
     }
     return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  // The ad's products, the products shown earlier and the keyword matches, in the order the prompt
+  // lists them. `scoped` is the input the tools run with: inside the ad's products while it has any.
+  private async gatherProducts(
+    input: ComposeInput,
+    history: readonly HistoryMessage[] | undefined,
+    results: ToolResult[],
+  ) {
+    const ad = await this.adContext(input);
+    if (ad) results.push(ad.result);
+    const scoped: ComposeInput = ad?.productIds.length
+      ? { ...input, adProductIds: ad.productIds }
+      : input;
+    const inChat = history ? await this.readProductsInChat(scoped, history) : undefined;
+    if (inChat) results.push(inChat);
+    const candidates = await this.productCandidates(scoped);
+    if (candidates) results.push(candidates);
+    return { scoped, ad, inChat, candidates };
   }
 
   private async cards(storeId: string, results: ToolResult[]): Promise<ProductCard[]> {
@@ -232,6 +259,29 @@ export class SalesAgentService {
     return { answered };
   }
 
+  // The ad or post this chat started from, with what it sells read again now. Null when the chat
+  // did not start from one, or the ad is more than a day old. Products come only from the link
+  // the owner saved for it, never from a guess.
+  private async adContext(
+    input: ComposeInput,
+  ): Promise<{ productIds: string[]; result: ToolResult } | undefined> {
+    if (!input.chat) return undefined;
+    const referral = await this.inbox.referralOf(input.storeId, input.chat.conversationId);
+    if (!referral || !isAdContextFresh(referral.referredAt, this.clock.now())) return undefined;
+    const productIds = (await this.adLinks.productIdsFor(input.storeId, referral)).slice(
+      0,
+      AD_PRODUCT_LIMIT,
+    );
+    const products = await this.tools.adProducts(input, productIds);
+    return {
+      // A linked product that is no longer offered drops out here, so search cannot reach it.
+      productIds: products.flatMap((product) =>
+        'productId' in product ? [String(product.productId)] : [],
+      ),
+      result: { tool: AD_PRODUCTS_TOOL, result: adProducts(products) },
+    };
+  }
+
   // Search the customer's own words first, so the model starts with likely products.
   private async productCandidates(input: ComposeInput): Promise<ToolResult | undefined> {
     const photo = photoQuery(input.customerTexts);
@@ -262,12 +312,19 @@ export class SalesAgentService {
   }
 
   // Stable parts first so the provider's prompt cache can reuse them.
-  private async context(
-    input: ComposeInput,
-    history: readonly HistoryMessage[] | undefined,
-    inChat: ToolResult | undefined,
-    candidates: ToolResult | undefined,
-  ) {
+  private async context({
+    input,
+    history,
+    inChat,
+    candidates,
+    ad,
+  }: {
+    input: ComposeInput;
+    history: readonly HistoryMessage[] | undefined;
+    inChat: ToolResult | undefined;
+    candidates: ToolResult | undefined;
+    ad: { result: ToolResult } | undefined;
+  }) {
     const shop = await this.stores.settings(input.storeId);
     const memory = await this.memory.contextFor(input.storeId, input.contactId);
     const conversation = history
@@ -281,6 +338,7 @@ export class SalesAgentService {
       ...(inChat
         ? [`<products_in_this_chat>${JSON.stringify(inChat.result)}</products_in_this_chat>`]
         : []),
+      ...(ad ? [`<ad_products>${JSON.stringify(ad.result.result)}</ad_products>`] : []),
       `<product_candidates>${JSON.stringify(candidates?.result ?? { products: [] })}</product_candidates>`,
     ].join('\n');
   }
@@ -317,8 +375,17 @@ function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | 
 }
 
 // A run that was shown the products block records its version with the reply prompt's.
-function promptWith(prompt: typeof chatReplyV7, inChat: ToolResult | undefined) {
-  return inChat ? { ...prompt, version: `${prompt.version}+${productsInChatVersion}` } : prompt;
+function promptWith(
+  prompt: typeof chatReplyV8,
+  inChat: ToolResult | undefined,
+  ad: object | undefined,
+) {
+  const parts = [
+    prompt.version,
+    ...(inChat ? [productsInChatVersion] : []),
+    ...(ad ? [adProductsVersion] : []),
+  ];
+  return { ...prompt, version: parts.join('+') };
 }
 
 // Saved with the reply, so the next turn knows which products "this one" can mean.
