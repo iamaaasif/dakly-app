@@ -123,6 +123,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v5+products-in-chat.v1');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
@@ -158,6 +159,7 @@ it('adds no shown products when the chat has none, so the model still asks which
   await service.compose({ storeId, contactId: 'c-1', chat, customerTexts: ['L ache?'] });
 
   expect(run.mock.calls[0]![1].input).not.toContain('products_in_this_chat');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v5');
   expect(tools.run).not.toHaveBeenCalledWith(expect.anything(), 'get_product', expect.anything());
 });
 

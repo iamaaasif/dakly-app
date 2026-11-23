@@ -40,7 +40,7 @@ export const chatMemoryGoldenCases: GoldenCase[] = [
     question: 'L size ache?',
     expectedHandover: null,
     allowedAmountsTaka: [1450],
-    mentionsAnyOf: ['কুর্তি', 'kurti', 'আছে', 'ache'],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
     ...kurtiShown,
   },
   {
@@ -49,7 +49,7 @@ export const chatMemoryGoldenCases: GoldenCase[] = [
     question: 'L সাইজ আছে?',
     expectedHandover: null,
     allowedAmountsTaka: [1450],
-    mentionsAnyOf: ['কুর্তি', 'আছে'],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
     ...kurtiShown,
   },
   {
@@ -76,7 +76,7 @@ export const chatMemoryGoldenCases: GoldenCase[] = [
     question: 'লালটা আছে? দাম কত?',
     expectedHandover: null,
     allowedAmountsTaka: [1450],
-    mentionsAnyOf: ['কুর্তি', '১,৪৫০', '১৪৫০', '1450', '1,450'],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
     ...kurtiPhoto,
   },
   {
@@ -85,7 +85,7 @@ export const chatMemoryGoldenCases: GoldenCase[] = [
     question: 'red টা M size এ পাওয়া যাবে?',
     expectedHandover: null,
     allowedAmountsTaka: [1450],
-    mentionsAnyOf: ['কুর্তি', 'kurti', 'M'],
+    mentionsAnyOf: ['কুর্তি', 'kurti'],
     ...kurtiPhoto,
   },
   // XL has no stock: the follow-up gets the in-stock size and never XL as an offer.
@@ -95,7 +95,7 @@ export const chatMemoryGoldenCases: GoldenCase[] = [
     question: 'amar size M, ache?',
     expectedHandover: null,
     allowedAmountsTaka: [650],
-    mentionsAnyOf: ['M'],
+    mentionsAnyOf: ['পোলো', 'polo'],
     neverOffer: ['XL'],
     ...poloShown,
   },
@@ -105,7 +105,7 @@ export const chatMemoryGoldenCases: GoldenCase[] = [
     question: 'M সাইজটা আছে?',
     expectedHandover: null,
     allowedAmountsTaka: [650],
-    mentionsAnyOf: ['M'],
+    mentionsAnyOf: ['পোলো', 'polo'],
     neverOffer: ['XL'],
     ...poloShown,
   },

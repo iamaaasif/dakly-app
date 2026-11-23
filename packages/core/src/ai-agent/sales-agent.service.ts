@@ -20,6 +20,7 @@ import {
   MATCH_PHOTO_TOOL,
   PRODUCTS_IN_CHAT_TOOL,
   productsInChat,
+  productsInChatVersion,
   recentlyShownProductIds,
   SHOWN_PRODUCTS_SOURCE,
   shownProductIds,
@@ -99,7 +100,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: chatReplyV5,
+        prompt: promptWith(chatReplyV5, inChat),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -267,6 +268,11 @@ function isUnconfirmed(
       call.argumentsJson.includes(String(result.orderNumber)),
   );
   return drafted;
+}
+
+// A run that was shown the products block records its version with the reply prompt's.
+function promptWith(prompt: typeof chatReplyV5, inChat: ToolResult | undefined) {
+  return inChat ? { ...prompt, version: `${prompt.version}+${productsInChatVersion}` } : prompt;
 }
 
 // Saved with the reply, so the next turn knows which products "this one" can mean.
