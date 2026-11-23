@@ -5,6 +5,7 @@ import { parseArgs } from 'node:util';
 import { OpenAiLlmDriver } from '@dakly/providers/llm/openai/openai-llm-driver';
 
 import { banglaGoldenCases } from '../golden-set.bangla';
+import { chatMemoryGoldenCases } from '../golden-set.chat-memory';
 import { memoryGoldenCases } from '../golden-set.memory';
 import { sampleGoldenCases } from '../golden-set.sample';
 import { stockDeliveryGoldenCases } from '../golden-set.stock-delivery';
@@ -69,6 +70,7 @@ function selectedCases() {
     ...banglaGoldenCases,
     ...memoryGoldenCases,
     ...stockDeliveryGoldenCases,
+    ...chatMemoryGoldenCases,
   ].filter((golden) => !golden.dependsOn || !pending.includes(golden.dependsOn));
 }
 
