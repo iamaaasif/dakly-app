@@ -32,9 +32,7 @@ async function classifyAll({ driver, meter, cases }: JobContext, model: string) 
   const reasons: Reasons = new Map();
   for (const golden of cases) {
     const screened = screenCustomerTexts([golden.question]);
-    const classified = screened
-      ? undefined
-      : await classifyQuestion(driver, meter, model, golden.question);
+    const classified = screened ? undefined : await classifyQuestion(driver, meter, model, golden);
     reasons.set(golden.id, screened ?? handoverFor(golden.question, classified));
   }
   classifiedByModel.set(model, reasons);
@@ -82,7 +80,7 @@ async function scoreReplyModel(context: JobContext, model: string, reasons: Reas
     };
     outcomes[golden.id] = reason
       ? { kind: 'handover', reason }
-      : await composeReply(run, golden.question, note, golden.memory);
+      : await composeReply(run, golden, note);
     const outcome = outcomes[golden.id];
     if (outcome?.kind === 'reply') note(`reply: ${outcome.text}`);
   }

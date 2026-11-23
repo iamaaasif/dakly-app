@@ -263,7 +263,7 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
   await agent.reply(active.storeId, message.conversation_id, message.id);
 
   expect(inputs.map((input) => JSON.parse(input))).toEqual([
-    { customer_messages: ['bhai, order ta', 'kapor chera ashche'] },
+    { earlier_messages: [], customer_messages: ['bhai, order ta', 'kapor chera ashche'] },
   ]);
   const { rows: events } = await admin.pool.query(
     "select payload from outbox_events where store_id = $1 and type = 'conversation.handed_over'",
@@ -282,7 +282,7 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
       },
     ],
     notices: [{ user_id: assignee, type: 'conversation.handed_over' }],
-    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v1' }],
+    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v2' }],
     usage: [],
   });
 });
@@ -428,6 +428,7 @@ it('classifies the words of a voice note together with the message text', async 
   await agent.reply(active.storeId, message.conversation_id, message.id);
 
   expect(JSON.parse(inputs[0]!)).toEqual({
+    earlier_messages: [],
     customer_messages: ['দাম কত?', 'Voice note: ei saree ta ki stock e ache?'],
   });
 });
@@ -611,6 +612,47 @@ it('sends a product card before the reply', async () => {
   expect((await sent(active)).map((row) => row.body)).toEqual([
     'কটন পাঞ্জাবি\nDefault: ৳1,200',
     'Eta dekhun, ৳1,200.',
+  ]);
+});
+
+it('remembers the carded product, so a later "L size ache?" reads it again', async () => {
+  const active = await sellingShop();
+  const first = await receive(active, 'panjabi dekhan');
+  // An earlier turn, well before the next one, so the new burst holds only the follow-up.
+  await admin.pool.query(
+    "update messages set created_at = created_at - interval '10 minutes' where id = $1",
+    [first.id],
+  );
+  scriptSequence(
+    classified,
+    toolCalls([
+      'send_product_card',
+      { productId: active.productId, variantId: null, photoId: null, withoutPhoto: null },
+    ]),
+    replyText('Eta dekhun, ৳1,200.'),
+  );
+  await agent.reply(active.storeId, first.conversation_id, first.id);
+  vi.restoreAllMocks();
+  const second = await receive(active, 'L size ache?');
+  const inputs = scriptSequence(classified, replyText('জি, ৳1,200, 8 pcs ache.'));
+
+  await agent.reply(active.storeId, second.conversation_id, second.id);
+
+  expect(JSON.parse(inputs[0]!)).toEqual({
+    earlier_messages: [
+      { from: 'customer', text: 'panjabi dekhan' },
+      { from: 'shop', text: 'কটন পাঞ্জাবি\nDefault: ৳1,200' },
+      { from: 'shop', text: 'Eta dekhun, ৳1,200.' },
+    ],
+    customer_messages: ['L size ache?'],
+  });
+  expect(inputs[1]).toMatch(
+    new RegExp(`<products_in_this_chat>.*"productId":"${active.productId}".*"stock":8`),
+  );
+  expect((await sent(active)).map((row) => row.body)).toEqual([
+    'কটন পাঞ্জাবি\nDefault: ৳1,200',
+    'Eta dekhun, ৳1,200.',
+    'জি, ৳1,200, 8 pcs ache.',
   ]);
 });
 
