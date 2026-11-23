@@ -6,7 +6,7 @@ import { useSessionContext } from '@/lib/session-context';
 
 const STREAM_FALLBACK_POLL_MS = 60_000;
 
-// One stream per page, opened again when the session's shop or access changes. While it is
+// One stream per page, carrying notifications and a signal that the shop's chats changed, opened again when the session's shop or access changes. While it is
 // down the notification queries are polled instead.
 export function useEventStream() {
   const client = useQueryClient();
@@ -19,11 +19,18 @@ export function useEventStream() {
       void client.invalidateQueries({ queryKey: notificationsKeys.all });
       void client.invalidateQueries({ queryKey: ['chats'] });
     };
+    // A burst of messages reads the inbox once.
+    let inboxTimer: ReturnType<typeof setTimeout> | undefined;
+    const refreshInbox = () => {
+      clearTimeout(inboxTimer);
+      inboxTimer = setTimeout(() => void client.invalidateQueries({ queryKey: ['chats'] }), 300);
+    };
     let source: EventSource;
     let poll: ReturnType<typeof setInterval> | undefined;
     const open = () => {
       source = new EventSource('/api/events/stream');
       source.addEventListener('notification', refresh);
+      source.addEventListener('inbox', refreshInbox);
       source.addEventListener('open', () => {
         if (!poll) return;
         clearInterval(poll);
@@ -42,6 +49,7 @@ export function useEventStream() {
     open();
     return () => {
       clearInterval(poll);
+      clearTimeout(inboxTimer);
       source.close();
     };
   }, [client, contextTag]);

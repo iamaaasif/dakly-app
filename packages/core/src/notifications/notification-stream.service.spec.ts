@@ -49,17 +49,28 @@ function openStream(missed: string[] = []) {
     {} as AccountTransaction,
   );
   const ids: string[] = [];
+  const inboxSignals: string[] = [];
   const subscription = service
     .open({ storeId, userId, sessionId: randomUUID() }, missed.length ? randomUUID() : undefined)
     .subscribe((message: StreamMessage) => {
       if ('id' in message) ids.push(message.id);
+      else if ('type' in message) inboxSignals.push(message.type);
     });
   const announce = (id: string) =>
     channel.emit('message', `notifications:${storeId}`, `${id} ${userId}`);
-  return { ids, announce, close: () => subscription.unsubscribe() };
+  const announceInbox = () => channel.emit('message', `inbox:${storeId}`, 'changed');
+  return { ids, inboxSignals, announce, announceInbox, close: () => subscription.unsubscribe() };
 }
 
 describe('NotificationStreamService', () => {
+  it("tells an open stream that its shop's chats changed", async () => {
+    const { inboxSignals, announceInbox, close } = openStream();
+    await vi.waitFor(() => expect(inboxSignals).toEqual([]));
+    announceInbox();
+    await vi.waitFor(() => expect(inboxSignals).toEqual(['inbox']));
+    close();
+  });
+
   it('sends a replayed row once when the relay also announces it', async () => {
     const missed = randomUUID();
     const stream = openStream([missed]);
