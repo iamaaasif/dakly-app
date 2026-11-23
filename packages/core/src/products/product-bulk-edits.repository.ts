@@ -5,7 +5,6 @@ import type { ProductBulkEditChange } from '@dakly/contracts/product-bulk-edits'
 import { productBulkEdits, products, productVariants } from '@dakly/db/schema/products';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { categoryPathSql } from './product-list-names.repository';
 
 export type BulkEditVariant = {
   id: string;
@@ -17,7 +16,8 @@ export type BulkEditProduct = {
   id: string;
   pricePoisha: number;
   compareAtPricePoisha: number | null;
-  category: string | null;
+  categoryId: string | null;
+  brandId: string | null;
   status: 'active' | 'hidden';
   isStockTracked: boolean;
   variants: BulkEditVariant[];
@@ -26,6 +26,7 @@ export type ProductFieldChange = Partial<{
   pricePoisha: number;
   compareAtPricePoisha: number | null;
   categoryId: string | null;
+  brandId: string | null;
   status: 'active' | 'hidden';
 }>;
 export type BulkEditRecord = {
@@ -57,7 +58,8 @@ export class ProductBulkEditsRepository {
           id: products.id,
           pricePoisha: products.pricePoisha,
           compareAtPricePoisha: products.compareAtPricePoisha,
-          category: categoryPathSql,
+          categoryId: products.categoryId,
+          brandId: products.brandId,
           status: products.status,
           isStockTracked: products.isStockTracked,
         })

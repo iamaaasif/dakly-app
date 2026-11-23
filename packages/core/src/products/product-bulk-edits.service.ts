@@ -15,6 +15,7 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ProductBrandsService } from './product-brands.service';
 import {
   ProductBulkEditsRepository,
   type BulkEditProduct,
@@ -32,7 +33,13 @@ type WriteContext = {
   now: Date;
   reason: string;
 };
-const productFields = ['pricePoisha', 'compareAtPricePoisha', 'category', 'status'] as const;
+const productFields = [
+  'pricePoisha',
+  'compareAtPricePoisha',
+  'categoryId',
+  'brandId',
+  'status',
+] as const;
 
 @Injectable()
 export class ProductBulkEditsService {
@@ -43,6 +50,7 @@ export class ProductBulkEditsService {
     @Inject(OutboxService) private readonly outbox: OutboxService,
     @Inject(Clock) private readonly clock: Clock,
     @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
+    @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
   ) {}
 
   apply(
@@ -51,13 +59,16 @@ export class ProductBulkEditsService {
     actor: Extract<Actor, { kind: 'user' }>,
   ): Promise<ProductBulkEditResponse> {
     return this.transaction.run(storeId, async () => {
-      const rows = await this.withCategoryPaths(storeId, input.rows);
+      for (const { categoryId, brandId } of input.rows) {
+        if (categoryId) await this.categories.assertExists(storeId, categoryId);
+        if (brandId) await this.brands.assertExists(storeId, brandId);
+      }
       const current = await this.repository.lockProducts(
         storeId,
-        rows.map((row) => row.productId),
+        input.rows.map((row) => row.productId),
       );
       const byId = new Map(current.map((product) => [product.id, product]));
-      const changes = rows.flatMap((row) => {
+      const changes = input.rows.flatMap((row) => {
         const product = byId.get(row.productId);
         if (!product) throw productError('PRODUCT_BULK_EDIT_ROW_INVALID');
         return changesForRow(product, row);
@@ -131,20 +142,10 @@ export class ProductBulkEditsService {
     let stockSkipped = 0;
     for (const [productId, own] of groupByProduct(changes)) {
       const side = context.direction === 'apply' ? 'after' : 'before';
-      const { category, ...fields } = productFieldChange(own, side);
-      const categoryId =
-        category === undefined
-          ? {}
-          : {
-              categoryId:
-                category === null
-                  ? null
-                  : (await this.categories.resolvePath(storeId, category)).id,
-            };
       await this.repository.updateProduct(
         storeId,
         productId,
-        { ...fields, ...categoryId },
+        productFieldChange(own, side),
         context.now,
       );
       for (const change of own)
@@ -182,22 +183,6 @@ export class ProductBulkEditsService {
     return false;
   }
 
-  // A typed category is matched to the shop's list (ignoring case) or added, and the edit records
-  // the list's own spelling, so an undo still finds the value it set.
-  private async withCategoryPaths(
-    storeId: string,
-    rows: ApplyProductBulkEditInput['rows'],
-  ): Promise<ApplyProductBulkEditInput['rows']> {
-    const resolved: ApplyProductBulkEditInput['rows'] = [];
-    for (const row of rows)
-      resolved.push(
-        row.category === undefined
-          ? row
-          : { ...row, category: (await this.categories.resolvePath(storeId, row.category)).path },
-      );
-    return resolved;
-  }
-
   private async publishUpdated(storeId: string, changes: ProductBulkEditChange[], now: Date) {
     for (const productId of new Set(changes.map((change) => change.productId)))
       await this.outbox.publish({
@@ -223,7 +208,8 @@ function changesForRow(
   ][] = [
     ['pricePoisha', null, product.pricePoisha, row.pricePoisha],
     ['compareAtPricePoisha', null, product.compareAtPricePoisha, row.compareAtPricePoisha],
-    ['category', null, product.category, row.category],
+    ['categoryId', null, product.categoryId, row.categoryId],
+    ['brandId', null, product.brandId, row.brandId],
     ['status', null, product.status, row.status],
     ['costPoisha', variant?.id ?? null, variant?.costPoisha ?? null, row.costPoisha],
     ['stock', variant?.id ?? null, variant?.onHand ?? null, row.stock],
@@ -271,7 +257,7 @@ function productFieldChange(changes: ProductBulkEditChange[], side: 'before' | '
   for (const change of changes)
     if ((productFields as readonly string[]).includes(change.field))
       result[change.field] = change[side];
-  return result as Omit<ProductFieldChange, 'categoryId'> & { category?: string | null };
+  return result as ProductFieldChange;
 }
 
 function toResponse(record: BulkEditRecord): ProductBulkEditResponse {

@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import {
   CATEGORY_PATH_SEPARATOR,
+  type ChangeProductCategoryInput,
   type CreateProductCategoryInput,
   type ProductCategoryListResponse,
   type ProductCategoryResponse,
@@ -27,6 +28,40 @@ export class ProductCategoriesService {
     return this.transaction.run(storeId, async () => {
       const category = await this.insertCategory(storeId, input.parentId, input.name);
       return { ...category, productCount: 0 };
+    });
+  }
+
+  change(
+    storeId: string,
+    id: string,
+    input: ChangeProductCategoryInput,
+  ): Promise<ProductCategoryResponse> {
+    return this.transaction.run(storeId, async () => {
+      const current = await this.require(storeId, id);
+      const parentId = input.parentId === undefined ? current.parentId : input.parentId;
+      const name = input.name ?? current.name;
+      if (parentId !== current.parentId && parentId !== null)
+        await this.assertCanMoveUnder(storeId, id, parentId);
+      if (await this.repository.findByName(storeId, parentId, name, id))
+        throw productError('PRODUCT_CATEGORY_NAME_TAKEN');
+      const change = { name, parentId, sortOrder: input.sortOrder ?? current.sortOrder };
+      if (!(await this.repository.update(storeId, id, change)))
+        throw productError('PRODUCT_CATEGORY_NAME_TAKEN');
+      const updated = (await this.repository.list(storeId)).find((item) => item.id === id);
+      if (!updated) throw productError('PRODUCT_CATEGORY_NOT_FOUND');
+      return updated;
+    });
+  }
+
+  remove(storeId: string, id: string): Promise<void> {
+    return this.transaction.run(storeId, async () => {
+      await this.require(storeId, id);
+      if (
+        (await this.repository.hasChildren(storeId, id)) ||
+        (await this.repository.hasProducts(storeId, id))
+      )
+        throw productError('PRODUCT_CATEGORY_IN_USE');
+      await this.repository.delete(storeId, id);
     });
   }
 
@@ -59,6 +94,17 @@ export class ProductCategoriesService {
         path: found.map((category) => category.name).join(CATEGORY_PATH_SEPARATOR),
       };
     });
+  }
+
+  // A category with sub-categories of its own cannot move under another one.
+  private async assertCanMoveUnder(storeId: string, id: string, parentId: string): Promise<void> {
+    const parent = await this.require(storeId, parentId);
+    if (
+      parent.parentId !== null ||
+      parent.id === id ||
+      (await this.repository.hasChildren(storeId, id))
+    )
+      throw productError('PRODUCT_CATEGORY_TOO_DEEP');
   }
 
   private async insertCategory(

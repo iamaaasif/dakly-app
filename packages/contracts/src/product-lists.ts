@@ -9,6 +9,15 @@ export const createProductCategorySchema = z.strictObject({
 });
 export type CreateProductCategoryInput = z.infer<typeof createProductCategorySchema>;
 
+export const changeProductCategorySchema = z
+  .strictObject({
+    name: listName.optional(),
+    parentId: z.uuid().nullable().optional(),
+    sortOrder: z.number().int().min(0).max(100000).optional(),
+  })
+  .refine((change) => Object.keys(change).length > 0, 'Change at least one value');
+export type ChangeProductCategoryInput = z.infer<typeof changeProductCategorySchema>;
+
 export const productBrandSchema = z.strictObject({ name: listName });
 export type ProductBrandInput = z.infer<typeof productBrandSchema>;
 

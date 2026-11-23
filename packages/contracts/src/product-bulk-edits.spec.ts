@@ -28,7 +28,8 @@ describe('productBulkEditFormSchema', () => {
           compareAtPricePoisha: '',
           costPoisha: '',
           stock: '',
-          category: '  ',
+          categoryId: '',
+          brandId: '',
           status: 'active',
         },
       ],
@@ -39,7 +40,8 @@ describe('productBulkEditFormSchema', () => {
       compareAtPricePoisha: undefined,
       costPoisha: undefined,
       stock: undefined,
-      category: undefined,
+      categoryId: undefined,
+      brandId: undefined,
       status: 'active',
     });
   });
@@ -49,7 +51,8 @@ describe('productBulkEditFormSchema', () => {
       productId,
       compareAtPricePoisha: '',
       costPoisha: '',
-      category: '',
+      categoryId: '',
+      brandId: '',
       status: 'active',
     };
     const parse = (cells: object) =>

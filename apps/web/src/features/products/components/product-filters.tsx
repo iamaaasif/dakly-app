@@ -8,6 +8,7 @@ import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 
+import { categoryOptions, useProductBrands, useProductCategories } from '../api/get-categories';
 import { productsSearch } from '../api/products';
 import { readinessLabels } from '../product-labels';
 import { UrlLink } from '@/components/url-link';
@@ -37,12 +38,13 @@ export function ProductFilters({ query }: ProductFiltersProps) {
         <form
           className="flex flex-wrap items-center gap-2"
           onSubmit={form.handleSubmit(({ search }) =>
-            router.push(`/products?${productsSearch({ search, readiness: query.readiness })}`),
+            router.push(`/products?${productsSearch({ ...query, search, cursor: undefined })}`),
           )}
         >
           <SearchField />
         </form>
       </FormProvider>
+      <ListFilters query={query} />
       <ReadinessNav query={query} />
     </div>
   );
@@ -82,7 +84,7 @@ function ReadinessNav({ query }: ProductFiltersProps) {
       {readinessFilters.map((readiness) => (
         <UrlLink
           key={readiness ?? 'all'}
-          href={`/products?${productsSearch({ search: query.search, readiness })}`}
+          href={`/products?${productsSearch({ ...query, readiness, cursor: undefined })}`}
           aria-current={query.readiness === readiness ? 'page' : undefined}
           className={cn(
             'inline-flex min-h-10 items-center rounded-full border px-3 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
@@ -95,5 +97,62 @@ function ReadinessNav({ query }: ProductFiltersProps) {
         </UrlLink>
       ))}
     </nav>
+  );
+}
+
+const selectClass =
+  'min-h-10 rounded-md border border-input-border bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
+
+// Category and brand come from the shop's lists; a parent category also shows its sub-categories.
+function ListFilters({ query }: ProductFiltersProps) {
+  const router = useUrlRouter();
+  const categories = useProductCategories().data?.items ?? [];
+  const brands = useProductBrands().data?.items ?? [];
+  const choose = (change: Partial<ProductListQuery>) =>
+    router.push(`/products?${productsSearch({ ...query, ...change, cursor: undefined })}`);
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <ListFilterSelect
+        label="Category"
+        allLabel="All categories"
+        value={query.categoryId}
+        options={categoryOptions(categories)}
+        onChange={(categoryId) => choose({ categoryId })}
+      />
+      <ListFilterSelect
+        label="Brand"
+        allLabel="All brands"
+        value={query.brandId}
+        options={brands.map((brand) => ({ value: brand.id, label: brand.name }))}
+        onChange={(brandId) => choose({ brandId })}
+      />
+    </div>
+  );
+}
+
+type ListFilterSelectProps = {
+  label: string;
+  allLabel: string;
+  value: string | undefined;
+  options: { value: string; label: string }[];
+  onChange: (value: string | undefined) => void;
+};
+
+function ListFilterSelect({ label, allLabel, value, options, onChange }: ListFilterSelectProps) {
+  if (!options.length) return null;
+  return (
+    <select
+      aria-label={label}
+      className={selectClass}
+      value={value ?? ''}
+      onChange={(event) => onChange(event.target.value || undefined)}
+    >
+      <option value="">{allLabel}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }

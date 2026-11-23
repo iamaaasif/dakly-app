@@ -473,6 +473,9 @@ describe('ProductsService with Postgres', () => {
     await expect(
       categories.create(f.a, { name: 'Polo', parentId: tshirts.id }),
     ).rejects.toMatchObject({ code: 'PRODUCT_CATEGORY_TOO_DEEP' });
+    await expect(categories.change(f.a, clothing.id, { parentId: shoes.id })).rejects.toMatchObject(
+      { code: 'PRODUCT_CATEGORY_TOO_DEEP' },
+    );
     // Another shop may use the same names.
     await categories.create(f.b, { name: 'Clothing', parentId: null });
 
@@ -492,14 +495,28 @@ describe('ProductsService with Postgres', () => {
       createProductSchema.parse({ name: 'Sandal', categoryId: shoes.id }),
       actor,
     );
+    // A parent category also lists the products in its sub-categories.
+    const names = async (query: object) =>
+      (await service.list(f.a, { limit: 50, ...query })).items.map((item) => item.name);
+    expect(await names({ categoryId: clothing.id })).toEqual(['Polo']);
+    expect(await names({ categoryId: shoes.id })).toEqual(['Sandal']);
+    expect(await names({ brandId: aarong.id })).toEqual(['Polo']);
+
+    await expect(categories.remove(f.a, tshirts.id)).rejects.toMatchObject({
+      code: 'PRODUCT_CATEGORY_IN_USE',
+    });
+    await expect(brands.remove(f.a, aarong.id)).rejects.toMatchObject({
+      code: 'PRODUCT_BRAND_IN_USE',
+    });
     const listed = (await categories.list(f.a)).items.find((item) => item.id === tshirts.id);
     expect(listed).toMatchObject({ parentId: clothing.id, productCount: 1 });
 
-    // Categories list in order of name, each with how many products use it.
+    await service.edit(f.a, product.id, { categoryId: null, brandId: null }, actor);
+    await categories.remove(f.a, tshirts.id);
+    await brands.remove(f.a, aarong.id);
     expect((await categories.list(f.a)).items.map((item) => item.name)).toEqual([
       'Clothing',
       'Shoes',
-      'T-shirts',
     ]);
   });
 

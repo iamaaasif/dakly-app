@@ -720,6 +720,30 @@ fixture('POST /products/categories', async () => {
   await success(b, 'POST', '/products/categories', 404, { name: 'Shirts', parentId: foreign });
   await success(b, 'POST', '/products/categories', 409, { name: 'clothing' });
 });
+fixture('PATCH /products/categories/:categoryId', async () => {
+  const { a, b } = await pair();
+  const foreign = await productCategory(a, 'Clothing');
+  const own = await productCategory(b, 'Shoes');
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/categories/${id}`,
+    foreign,
+    () => ({ name: 'Mine' }),
+  );
+  await success(b, 'PATCH', `/products/categories/${own}`, 200, { name: 'Sandals' });
+  expect(await f.row('product_categories', own)).toMatchObject({ name: 'Sandals' });
+  expect(await f.row('product_categories', foreign)).toMatchObject({ name: 'Clothing' });
+});
+fixture('DELETE /products/categories/:categoryId', async () => {
+  const { a, b } = await pair();
+  const foreign = await productCategory(a, 'Clothing');
+  const own = await productCategory(b, 'Shoes');
+  await hidden(b, 'DELETE', (id) => `/products/categories/${id}`, foreign);
+  await success(b, 'DELETE', `/products/categories/${own}`, 204);
+  expect(await f.row('product_categories', own)).toBeUndefined();
+  expect(await f.row('product_categories', foreign)).toMatchObject({ name: 'Clothing' });
+});
 fixture('GET /products/brands', async () => {
   const { a, b } = await pair();
   await productBrand(a, 'Aarong');
@@ -737,6 +761,29 @@ fixture('POST /products/brands', async () => {
   const own = await productBrand(b, 'Aarong');
   expect((await f.row('product_brands', own)).store_id).toBe(b.id);
   await success(b, 'POST', '/products/brands', 409, { name: 'AARONG' });
+});
+fixture('PATCH /products/brands/:brandId', async () => {
+  const { a, b } = await pair();
+  const foreign = await productBrand(a, 'Aarong');
+  const own = await productBrand(b, 'Yellow');
+  await hidden(
+    b,
+    'PATCH',
+    (id) => `/products/brands/${id}`,
+    foreign,
+    () => ({ name: 'Mine' }),
+  );
+  await success(b, 'PATCH', `/products/brands/${own}`, 200, { name: 'Ecstasy' });
+  expect(await f.row('product_brands', foreign)).toMatchObject({ name: 'Aarong' });
+});
+fixture('DELETE /products/brands/:brandId', async () => {
+  const { a, b } = await pair();
+  const foreign = await productBrand(a, 'Aarong');
+  const own = await productBrand(b, 'Yellow');
+  await hidden(b, 'DELETE', (id) => `/products/brands/${id}`, foreign);
+  await success(b, 'DELETE', `/products/brands/${own}`, 204);
+  expect(await f.row('product_brands', own)).toBeUndefined();
+  expect(await f.row('product_brands', foreign)).toMatchObject({ name: 'Aarong' });
 });
 fixture('GET /products/export', async () => {
   const { a, b } = await pair();

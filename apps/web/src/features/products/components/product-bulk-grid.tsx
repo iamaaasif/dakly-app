@@ -71,7 +71,7 @@ export function ProductBulkGrid({
       <FormProvider {...form}>
         <form className="space-y-4" noValidate onSubmit={form.handleSubmit(submit)}>
           <p className="text-sm text-text-muted md:hidden">
-            Swipe sideways to edit Price, Old price, Cost, Stock, Category and Status.
+            Swipe sideways to edit Price, Old price, Cost, Stock, Category, Brand and Status.
           </p>
           <GridTable products={products} preset={preset} />
           <p className="text-sm text-text-muted">
@@ -98,7 +98,8 @@ const columns = [
   { field: 'compareAtPricePoisha', label: 'Old price' },
   { field: 'costPoisha', label: 'Cost' },
   { field: 'stock', label: 'Stock' },
-  { field: 'category', label: 'Category' },
+  { field: 'categoryId', label: 'Category' },
+  { field: 'brandId', label: 'Brand' },
   { field: 'status', label: 'Status' },
 ] as const;
 
@@ -135,7 +136,7 @@ function GridTable({ products, preset }: Pick<ProductBulkGridProps, 'products' |
                 field={field}
                 label={label}
                 disabled={isDisabled(field, product)}
-                autoFocus={preset === 'category' && field === 'category' && index === 0}
+                autoFocus={preset === 'category' && field === 'categoryId' && index === 0}
               />
             ))}
           </TableRow>

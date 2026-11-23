@@ -9,6 +9,7 @@ import type { ProductResponse } from '@dakly/contracts/products';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
 import { ProductBulkPanel } from './product-bulk-panel';
+import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
 const variant = (id: string, onHand: number, title = 'Default') => ({
@@ -19,11 +20,14 @@ const variant = (id: string, onHand: number, title = 'Default') => ({
   reserved: 0,
   available: onHand,
 });
+const clothingId = '019c01ea-cf15-7d31-a7f5-d73d66007c01';
+const brandId = '019c01ea-cf15-7d31-a7f5-d73d66007b01';
 const products = [
   {
     id: '019c01ea-cf15-7d31-a7f5-d73d66007a01',
     name: 'Cotton T-shirt',
-    category: 'Clothing',
+    categoryId: clothingId,
+    brandId: null,
     status: 'active',
     pricePoisha: 120000,
     compareAtPricePoisha: null,
@@ -33,7 +37,8 @@ const products = [
   {
     id: '019c01ea-cf15-7d31-a7f5-d73d66007a02',
     name: 'Cotton Panjabi',
-    category: 'Clothing',
+    categoryId: clothingId,
+    brandId: null,
     status: 'active',
     pricePoisha: 245000,
     compareAtPricePoisha: 295000,
@@ -61,6 +66,12 @@ function show(proposed?: ProductBulkEditRow[]) {
     contextTag: 'verified',
     currentStore: { storeId: 'shop', name: 'Shop', canViewProducts: true, canEditProducts: true },
   } as unknown as SessionContext);
+  client.setQueryData(productsKeys.categories('verified'), {
+    items: [{ id: clothingId, name: 'Clothing', parentId: null, sortOrder: 0, productCount: 2 }],
+  });
+  client.setQueryData(productsKeys.brands('verified'), {
+    items: [{ id: brandId, name: 'Aarong', productCount: 0 }],
+  });
   const onClose = vi.fn();
   render(
     <QueryClientProvider client={client}>
@@ -92,7 +103,10 @@ describe('Product bulk edit', () => {
     await userEvent.type(price, '1250');
     // A blank cell is not an edit to blank.
     await userEvent.clear(screen.getByLabelText('Old price for Cotton Panjabi'));
-    await userEvent.clear(screen.getByLabelText('Category for Cotton Panjabi'));
+    await userEvent.selectOptions(
+      screen.getByLabelText('Category for Cotton Panjabi'),
+      'No category',
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Review 1 change' }));
 
     expect(screen.getByText('Price: Cotton T-shirt 1,200 → 1,250.')).toBeTruthy();
@@ -100,6 +114,17 @@ describe('Product bulk edit', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(writes).toEqual([{ rows: [{ productId: products[0]!.id, pricePoisha: 125000 }] }]);
+  });
+
+  it('picks a category and a brand from the shop lists and shows their names in the review', async () => {
+    const { writes } = show();
+    await userEvent.selectOptions(screen.getByLabelText('Brand for Cotton T-shirt'), 'Aarong');
+    await userEvent.click(screen.getByRole('button', { name: 'Review 1 change' }));
+    expect(screen.getByText('Brand: Cotton T-shirt - → Aarong.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() =>
+      expect(writes).toEqual([{ rows: [{ productId: products[0]!.id, brandId }] }]),
+    );
   });
 
   it('shows price read-only when a size has its own price', () => {

@@ -133,6 +133,10 @@ export class ProductsRepository {
               ? sql`exists (select 1 from product_variants v where v.store_id = ${storeId} and v.product_id = ${productIdColumn} and v.status <> 'archived' and coalesce(v.price_override_poisha, ${products.pricePoisha}) = 0)`
               : undefined,
             stockReadinessFilter(storeId, query.readiness, lowStockThreshold),
+            query.categoryId
+              ? sql`(${products.categoryId} = ${query.categoryId} or ${products.categoryId} in (select id from product_categories where store_id = ${storeId} and parent_id = ${query.categoryId}))`
+              : undefined,
+            query.brandId ? eq(products.brandId, query.brandId) : undefined,
             query.cursor ? lt(products.id, query.cursor) : undefined,
           ),
         )

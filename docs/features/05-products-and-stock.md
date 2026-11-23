@@ -196,9 +196,11 @@ A shop keeps its own list of categories (two levels, such as `Clothing > T-shirt
 - **Migration 0098.** Each distinct old `products.category` text (ignoring case and spaces) becomes a top-level category of its shop and every product keeps pointing at it. The text column is dropped. No product changes name, price or visibility. An old text that already contains " > " (the bulk edit could write one) becomes a single top-level category with that full name, not two levels.
 - **API.** `GET` and `POST` on `/products/categories` and `/products/brands`; a list item carries its product count. A category sits under one parent at most (`PRODUCT_CATEGORY_TOO_DEEP`), and a repeated name is `PRODUCT_CATEGORY_NAME_TAKEN` or `PRODUCT_BRAND_NAME_TAKEN`.
 - **Form.** The Category and Brand fields are pickers with "+ New category" and "+ New brand", which add an item without leaving the form (a new category can go under a top-level one). Ask Dakly's draft picks the category only when the shop already has one of that name.
-- **Bulk edit.** The Category cell takes a name or a path, finds it in the shop's list ignoring case and adds it when missing; the edit records the list's own spelling, so undo still finds it.
+- **Bulk edit.** The Category cell takes a name or a path, finds it in the shop's list ignoring case and adds it when missing; the edit records the list's own spelling, so undo still finds it. The grid also has a Brand column that picks from the brand list.
 - **Import.** The Category column accepts `Clothing > T-shirts` with the same matching. More than two levels is a row error. The import does not read brands yet.
-- **Next (second PR).** Rename, move and delete for categories and brands, a screen for them, category and brand filters on the list, pickers and a Brand column in the bulk edit grid, and a brand column in import and export.
+- **Manage lists.** `/products/lists` shows both lists with product counts. Members who can edit products rename an item, move a category under another top-level category (`PATCH /products/categories/:id`, `PATCH /products/brands/:id`) and delete an item (`DELETE` on the same paths). A delete is refused with `PRODUCT_CATEGORY_IN_USE` or `PRODUCT_BRAND_IN_USE` while products use it, and a category with sub-categories cannot be deleted or moved under another. A category moves only when it has no sub-categories, so the list stays two levels.
+- **Filters.** The product list has Category and Brand filters in the address (`categoryId`, `brandId`); a parent category also shows its sub-categories.
+- **Not yet.** A brand column in import and export.
 
 ### Export products (PROD-14)
 

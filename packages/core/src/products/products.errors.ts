@@ -42,6 +42,14 @@ const PRODUCT_ERRORS = {
   },
   PRODUCT_BRAND_NOT_FOUND: { status: 404, message: 'Brand not found' },
   PRODUCT_BRAND_NAME_TAKEN: { status: 409, message: 'A brand with this name already exists' },
+  PRODUCT_CATEGORY_IN_USE: {
+    status: 409,
+    message: 'Move its products and sub-categories elsewhere before deleting it',
+  },
+  PRODUCT_BRAND_IN_USE: {
+    status: 409,
+    message: 'Move its products to another brand before deleting it',
+  },
 } as const satisfies ErrorCatalog;
 
 export function productError(code: keyof typeof PRODUCT_ERRORS): AppError {
