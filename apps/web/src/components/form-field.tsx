@@ -1,3 +1,4 @@
+import { Eye, EyeOff } from 'lucide-react';
 import { useState, type ComponentProps, type ReactNode } from 'react';
 import type { UseFormRegisterReturn, FieldError } from 'react-hook-form';
 
@@ -102,8 +103,9 @@ function FieldControl({
         type="button"
         aria-label={`${shown ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
         onClick={onToggle}
-        className="absolute inset-y-0 right-0 rounded-md px-3 text-sm font-semibold hover:text-action focus-visible:outline-2 focus-visible:outline-focus"
+        className="absolute inset-y-0 right-0 flex items-center gap-1.5 rounded-md px-3 text-sm font-semibold hover:text-action focus-visible:outline-2 focus-visible:outline-focus"
       >
+        {shown ? <EyeOff aria-hidden="true" size={16} /> : <Eye aria-hidden="true" size={16} />}
         {shown ? 'Hide' : 'Show'}
       </button>
     </div>

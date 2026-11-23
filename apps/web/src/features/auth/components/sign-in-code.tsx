@@ -8,6 +8,7 @@ import { Button } from '@dakly/ui/button';
 import { useVerifyCode } from '../api/verify-code';
 import { useVerifyEmailCode } from '../api/verify-email-code';
 import { useCodeResend } from '../hooks/use-code-resend';
+import { authButtonClass } from './auth-control-class';
 import { ResendButton } from './resend-button';
 import { FormField as AuthField } from '@/components/form-field';
 import { formError } from '@/lib/form-error';
@@ -23,6 +24,7 @@ export function SignInCode({ target, method, onResult, onBack }: SignInCodeProps
   const form = useForm({ resolver: zodResolver(codeSchema), defaultValues: { code: '' } });
   const phone = useVerifyCode();
   const email = useVerifyEmailCode();
+  const pending = phone.isPending || email.isPending;
   const { countdown, sending, resend } = useCodeResend(method, target.identifier, form.setError);
   return (
     <form
@@ -58,7 +60,7 @@ export function SignInCode({ target, method, onResult, onBack }: SignInCodeProps
         inputMode="numeric"
         autoComplete="one-time-code"
         maxLength={6}
-        className="text-center text-lg tracking-widest"
+        className="min-h-14 rounded-control! text-center text-xl tracking-widest"
         autoFocus
       />
       {form.formState.errors.root ? (
@@ -66,7 +68,7 @@ export function SignInCode({ target, method, onResult, onBack }: SignInCodeProps
           {form.formState.errors.root.message}
         </p>
       ) : null}
-      <Button type="submit" loading={phone.isPending || email.isPending}>
+      <Button type="submit" loading={pending} className={authButtonClass}>
         Verify code
       </Button>
       <div className="flex flex-wrap gap-3">

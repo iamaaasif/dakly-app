@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PasswordResetConfirm } from './password-reset-confirm';
+import { PasswordReset } from './password-reset';
 import { SignInScreen } from './sign-in-screen';
 import { SignUpScreen } from './sign-up-screen';
 
@@ -41,11 +41,12 @@ describe('Sign in', () => {
     await user.click(screen.getByRole('button', { name: /^Sign in/ }));
     await waitFor(() => expect(completed).toBe(true));
   });
-  it('offers real password, code and recovery entry points without requiring registration config', () => {
+  it('offers password sign-in and recovery on the page, and the code only inside an invitation', () => {
     show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
     expect(screen.getByLabelText('Mobile number')).toBeTruthy();
     expect(screen.getByLabelText('Password')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Get a code by/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Get a code by/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /instead/ })).toBeNull();
     expect(screen.getByRole('link', { name: 'Forgot password?' })).toBeTruthy();
     expect(screen.queryByText(/Google/)).toBeNull();
   });
@@ -84,7 +85,13 @@ describe('Sign in', () => {
           ? Response.json({ status: 'totp_required', challengeId: 'a'.repeat(43) }, { status: 202 })
           : new Response(null, { status: 204 });
       });
-      show(<SignInScreen config={{ legal: null, googleClientId: null }} method={method} />);
+      show(
+        <SignInScreen
+          config={{ legal: null, googleClientId: null }}
+          method={method}
+          onAuthenticated={() => {}}
+        />,
+      );
       const user = userEvent.setup();
       await user.type(
         screen.getByLabelText(method === 'phone' ? 'Mobile number' : 'Email'),
@@ -127,7 +134,9 @@ describe('Sign in', () => {
       sent.push(url);
       return new Response(null, { status: 204 });
     });
-    show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
+    show(
+      <SignInScreen config={{ legal: null, googleClientId: null }} onAuthenticated={() => {}} />,
+    );
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.type(screen.getByLabelText('Mobile number'), '01712345678');
     await user.click(screen.getByRole('button', { name: /Get a code by/ }));
@@ -156,7 +165,7 @@ describe('Sign in', () => {
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Mobile number'), '01712345678');
     await user.type(screen.getByLabelText('Password'), 'password123');
-    await user.click(screen.getByRole('button', { name: /^Sign in/ }));
+    await user.click(screen.getByRole('button', { name: /^Log in$/ }));
     await waitFor(() =>
       expect(screen.getByLabelText('Mobile number').getAttribute('aria-invalid')).toBe('true'),
     );
@@ -168,9 +177,29 @@ describe('Sign in', () => {
     expect(screen.queryByRole('button', { name: 'Send verification code' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Terms' })).toBeNull();
   });
+  it('asks for the email, a valid password and a source before the business step', async () => {
+    show(
+      <SignUpScreen
+        config={{
+          legal: { termsUrl: '/terms', privacyUrl: '/privacy', termsVersion: 'v1' },
+          googleClientId: null,
+        }}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByText('Enter your email address.')).toBeTruthy();
+    expect(screen.getByText('Use at least 8 characters.')).toBeTruthy();
+    expect(screen.getByText('Tell us how you heard about Dakly.')).toBeTruthy();
+    await user.type(screen.getByLabelText('Password'), 'abcdefgh');
+    expect(await screen.findByText('Add at least one number.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign up with Facebook' })).toBeTruthy();
+  });
   it('requires the second factor after a password reset', async () => {
-    vi.stubGlobal('fetch', async () =>
-      Response.json({ status: 'totp_required', challengeId: 'b'.repeat(43) }, { status: 202 }),
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.endsWith('/password-reset/confirm')
+        ? Response.json({ status: 'totp_required', challengeId: 'b'.repeat(43) }, { status: 202 })
+        : new Response(null, { status: 204 }),
     );
     const messages: unknown[] = [];
     class Channel {
@@ -181,14 +210,17 @@ describe('Sign in', () => {
       close() {}
     }
     vi.stubGlobal('BroadcastChannel', Channel);
-    show(<PasswordResetConfirm identifier="01712345678" />);
+    show(<PasswordReset />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Reset code'), '123456');
-    await user.type(screen.getByLabelText('New password'), 'new-password123');
-    await user.type(screen.getByLabelText('Confirm password'), 'new-password123');
-    await user.click(screen.getByRole('button', { name: 'Reset password' }));
+    await user.type(screen.getByLabelText('Email'), '01712345678');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.type(await screen.findByLabelText('New password'), 'new-password123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'new-password123');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
     await screen.findByLabelText('Authenticator or backup code');
     expect(messages).toEqual(['changed']);
-    expect(screen.queryByText('Your password has been reset. You are signed in.')).toBeNull();
+    expect(screen.queryByText('Password updated')).toBeNull();
   });
 });

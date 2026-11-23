@@ -3,6 +3,7 @@ import { useFormContext } from 'react-hook-form';
 
 import type { PasswordSignInInput } from '@dakly/contracts/auth';
 
+import { authFieldClass, authPrefixedFieldClass } from './auth-control-class';
 import { FormField as AuthField } from '@/components/form-field';
 
 export function SignInFields({
@@ -17,16 +18,19 @@ export function SignInFields({
   return (
     <>
       <AuthField
+        className={method === 'phone' ? authPrefixedFieldClass : authFieldClass}
         label={method === 'phone' ? 'Mobile number' : 'Email'}
         field={form.register('identifier')}
         error={errors.identifier}
         type={method === 'email' ? 'email' : 'tel'}
         autoComplete="username"
         prefix={method === 'phone' ? '+880' : undefined}
-        placeholder={method === 'phone' ? '1712345678' : 'you@example.com'}
+        placeholder={method === 'phone' ? '1712345678' : 'you@business.com'}
       />
       <AuthField
+        className={authFieldClass}
         label="Password"
+        placeholder="Your password"
         field={form.register('password')}
         error={errors.password}
         type="password"
@@ -40,7 +44,7 @@ export function SignInFields({
       <label className="flex min-h-10 items-center gap-3">
         <input
           type="checkbox"
-          className="size-4 accent-action"
+          className="size-4.25 accent-inverse"
           {...form.register('isRemembered', {
             onChange: (event) => onRemember(Boolean(event.target.checked)),
           })}
