@@ -82,7 +82,7 @@ function AutoReplyOffBanner({ query }: { query: ChatScreenQuery }) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-warning-soft px-3 py-2">
       <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />
-      <p className="min-w-0 flex-1 font-medium">
+      <p className="min-w-48 flex-1 font-medium">
         AI auto-reply is off, so Dakly AI will not answer this chat.
       </p>
       {canChangeSettings ? (
