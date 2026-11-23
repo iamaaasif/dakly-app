@@ -8,7 +8,7 @@ import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/
 
 import { classifierInput, productsInChat } from '../../ai-agent/chat-memory';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV7 } from '../../ai-agent/prompts/chat-reply.v7';
+import { chatReplyV8 } from '../../ai-agent/prompts/chat-reply.v8';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
 import {
   checkReplyFacts,
@@ -92,7 +92,10 @@ export function handoverFor(
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
-    ? handoverReason([golden.question], classified, evalShopRules(golden).handover)
+    ? handoverReason([golden.question], classified, {
+        ...evalShopRules(golden).handover,
+        takesOrders: evalShopRules(golden).takeOrders,
+      })
     : 'ai_unavailable';
 }
 
@@ -102,7 +105,13 @@ type ToolCall = { name: string; argumentsJson: string };
 
 type ReplyCase = Pick<
   GoldenCase,
-  'question' | 'memory' | 'earlier' | 'shownProducts' | 'holdsPrice' | 'ownerSettings'
+  | 'question'
+  | 'memory'
+  | 'earlier'
+  | 'shownProducts'
+  | 'holdsPrice'
+  | 'ownerSettings'
+  | 'draftedOrder'
 >;
 
 function replyContext(golden: ReplyCase, inChat: object | undefined, candidates: object) {
@@ -148,12 +157,23 @@ function factCheckFailure(reply: string, toolResults: object[], question: string
 }
 
 // A hand_over call ends the loop with its reason; any other call adds its result for the next round.
-function answerToolCalls(calls: ToolCall[], toolResults: object[], note: Note, rules: ShopRules) {
+function answerToolCalls(
+  calls: ToolCall[],
+  toolResults: object[],
+  note: Note,
+  shop: { rules: ShopRules; draftedOrder: readonly string[] | undefined },
+) {
+  const { rules, draftedOrder } = shop;
   const answered: { name: string; result: object }[] = [];
   for (const call of calls) {
     const refusal = refuseToolCall(rules, call);
     if (refusal?.kind === 'handover') return { handover: refusal.reason };
-    const result = refusal?.result ?? runFixtureTool(call.name, call.argumentsJson);
+    const result =
+      refusal?.result ??
+      runFixtureTool(call.name, call.argumentsJson, {
+        draftedOrder,
+        suggestAddOns: rules.suggestAddOns,
+      });
     if (call.name === 'hand_over' && 'reason' in result) {
       note(`hand_over ${String(result.reason)}`);
       return { handover: result.reason as Reason };
@@ -222,7 +242,7 @@ async function composeOnce(
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {
       model,
-      instructions: chatReplyV7.instructions,
+      instructions: chatReplyV8.instructions,
       input: context + transcript,
       output: chatReplyOutputSchema,
       tools: salesAgentLlmTools,
@@ -238,7 +258,10 @@ async function composeOnce(
         ? { kind: 'reply', text: parsed.data.reply, toolResults }
         : ended({ kind: 'handover', reason: 'out_of_scope' });
     }
-    const outcome = answerToolCalls(result.toolCalls, toolResults, note, evalShopRules(golden));
+    const outcome = answerToolCalls(result.toolCalls, toolResults, note, {
+      rules: evalShopRules(golden),
+      draftedOrder: golden.draftedOrder,
+    });
     if (outcome.handover) return ended({ kind: 'handover', reason: outcome.handover });
     transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
   }

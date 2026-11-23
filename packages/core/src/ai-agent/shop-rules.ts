@@ -21,6 +21,7 @@ export type ShopRules = {
   showProducts: AgentAbilities['showProducts'];
   takeOrders: AgentAbilities['takeOrders'];
   confirmOrders: AgentAbilities['confirmOrders'];
+  suggestAddOns: AgentAbilities['suggestAddOns'];
 };
 
 export const defaultShopRules: ShopRules = {
@@ -30,6 +31,7 @@ export const defaultShopRules: ShopRules = {
   showProducts: defaultAgentAbilities.showProducts,
   takeOrders: defaultAgentAbilities.takeOrders,
   confirmOrders: defaultAgentAbilities.confirmOrders,
+  suggestAddOns: defaultAgentAbilities.suggestAddOns,
 };
 
 // Older saves can hold keys the screen no longer has; they are dropped, not an error.
@@ -53,19 +55,22 @@ export function shopRulesFrom(settings: {
     showProducts: abilities.showProducts ?? defaultShopRules.showProducts,
     takeOrders: abilities.takeOrders ?? defaultShopRules.takeOrders,
     confirmOrders: abilities.confirmOrders ?? defaultShopRules.confirmOrders,
+    suggestAddOns: abilities.suggestAddOns ?? defaultShopRules.suggestAddOns,
   };
 }
 
 // Goes right after the shop block, which is stable per shop, so the prompt cache still holds.
 // The owner's text is JSON, with "<" escaped so it cannot close the block.
 export function shopRulesBlock(rules: ShopRules) {
-  const { replyLanguage, extraRules, showProducts, takeOrders, confirmOrders } = rules;
+  const { replyLanguage, extraRules, showProducts, takeOrders, confirmOrders, suggestAddOns } =
+    rules;
   const json = JSON.stringify({
     replyLanguage,
     extraRules,
     showProducts,
     takeOrders,
     confirmOrders,
+    suggestAddOns,
     handsOverRefunds: rules.handover.refundsAndExchanges,
     handsOverDamaged: rules.handover.damagedOrWrong,
   }).replace(/</g, '\\u003c');

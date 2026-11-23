@@ -116,3 +116,17 @@ describe('handoverReason', () => {
     ).toBeNull();
   });
 });
+
+describe('a customer ready to buy', () => {
+  const buyer = { ...greeting, intent: 'order' as const, handover: 'ready_to_buy' as const };
+
+  it('goes to the model when the shop takes orders, and to a person when it does not', () => {
+    const rules = defaultHandoverRules;
+    expect(
+      handoverReason(['ji, confirm korun'], buyer, { ...rules, takesOrders: true }),
+    ).toBeNull();
+    expect(handoverReason(['ji, confirm korun'], buyer, { ...rules, takesOrders: false })).toBe(
+      'ready_to_buy',
+    );
+  });
+});

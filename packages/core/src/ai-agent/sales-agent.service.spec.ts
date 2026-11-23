@@ -150,7 +150,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v7+products-in-chat.v2');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v8+products-in-chat.v2');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
@@ -252,7 +252,7 @@ it('adds no shown products when the chat has none, so the model still asks which
   });
 
   expect(run.mock.calls[0]![1].input).not.toContain('products_in_this_chat');
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v7');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v8');
   expect(tools.run).not.toHaveBeenCalledWith(expect.anything(), 'get_product', expect.anything());
 });
 
@@ -425,3 +425,28 @@ it('sends no product card when the owner turned cards off', async () => {
     expect.anything(),
   );
 });
+
+it.each([true, false])(
+  'tells the tools whether the owner turned add-on suggestions on (%s)',
+  async (suggestAddOns) => {
+    const { service, run, tools } = build();
+    run
+      .mockResolvedValueOnce(
+        toolCall('get_product', { productId: '3f1c2a52-9d7e-4a0e-8d55-1a5f6f3d2b10' }),
+      )
+      .mockResolvedValueOnce(reply('কুর্তির দাম ৳1,450।', 'run-2'));
+
+    await service.compose({
+      storeId,
+      contactId: 'c-1',
+      customerTexts: ['kurti koto?'],
+      rules: { ...defaultShopRules, suggestAddOns },
+    });
+
+    expect(tools.run).toHaveBeenCalledWith(
+      expect.objectContaining({ suggestAddOns }),
+      'get_product',
+      expect.anything(),
+    );
+  },
+);

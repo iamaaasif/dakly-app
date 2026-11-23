@@ -37,6 +37,8 @@ export type ToolScope = {
   contactId: string;
   // A practice question has no chat, so it can read but cannot take an order.
   chat?: { conversationId: string; channel: 'messenger' | 'instagram' };
+  // The owner's Suggest add-ons switch; confirming an order then returns what goes with it.
+  suggestAddOns?: boolean;
 };
 type Handler = (scope: ToolScope, raw: unknown) => Promise<object>;
 
@@ -264,10 +266,20 @@ export class SalesAgentToolsService {
     };
   }
 
-  private async confirmOrder({ storeId, contactId }: ToolScope, raw: unknown) {
+  private async confirmOrder({ storeId, contactId, suggestAddOns }: ToolScope, raw: unknown) {
     const { orderNumber } = confirmOrderTool.input.parse(raw);
     const order = await this.chatOrders.confirm(storeId, contactId, orderNumber);
-    return { orderNumber: order.number, stage: order.stage };
+    if (!suggestAddOns) return { orderNumber: order.number, stage: order.stage };
+    const addOns = await this.productSearch.addOnsFor(storeId, {
+      variantIds: order.items.map(({ variantId }) => variantId),
+      itemsTotalPoisha: order.itemsSubtotalPoisha,
+    });
+    return {
+      orderNumber: order.number,
+      stage: order.stage,
+      addOnRule: addOnsRule,
+      addOns: addOns.map(productResult),
+    };
   }
 
   private async handOver(raw: unknown) {
@@ -285,6 +297,10 @@ function parseJson(text: string): unknown {
 }
 
 const taka = (poisha: number) => poisha / 100;
+
+// No "offer", "discount" or "free" in this text: the fact check allows a word that a tool result holds.
+export const addOnsRule =
+  'Mention at most two of these, once, after you say the order is confirmed. Use only their names and the priceTaka shown here. Ask if the customer wants one added; never add it yourself. When addOns is empty, say nothing about other products.';
 
 // The same chat and the same details give the same key, so a retried job or a repeated model call
 // returns the order it already made.

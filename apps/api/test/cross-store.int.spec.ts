@@ -1402,6 +1402,7 @@ const settingsBody = (version: number, replyLanguage: 'bn' | 'en') => ({
     askForReview: true,
     answerComments: true,
     followUp: 'hot',
+    suggestAddOns: false,
     productCardStyle: 'buttons',
   },
   handoverRules: {
