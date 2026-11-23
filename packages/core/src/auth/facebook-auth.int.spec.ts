@@ -63,6 +63,9 @@ describe('Continue with Facebook over Fastify', () => {
       .from(users)
       .where(inArray(users.email, emails));
     const ids = rows.map((row) => row.id);
+    await admin.pool.query('delete from account_security_events where user_id = any($1::uuid[])', [
+      ids,
+    ]);
     await admin.db.delete(sessions).where(inArray(sessions.userId, ids));
     await admin.db.delete(users).where(inArray(users.id, ids));
     await app?.close();
