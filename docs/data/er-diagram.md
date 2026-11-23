@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0100_snapshot.json`: **107 tables, 1411 columns, 434 explicit indexes and 335 foreign keys**.
+Built from `packages/db/migrations/meta/0101_snapshot.json`: **107 tables, 1415 columns, 434 explicit indexes and 335 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -68,6 +68,8 @@ erDiagram
         text business_type "NULL; text"
         text phone "NULL; text"
         citext email "NULL; citext"
+        text website_url "NULL; text"
+        text offering "NULL; text"
         text address "NULL; text"
         text district "NULL; text"
         text vat_bin "NULL; text"
@@ -110,6 +112,8 @@ erDiagram
         timestamp_with_time_zone last_sign_in_at "NULL; timestamp with time zone"
         text terms_version "NULL; text"
         timestamp_with_time_zone terms_accepted_at "NULL; timestamp with time zone"
+        text sign_up_source "NULL; text"
+        text sign_up_source_other "NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }

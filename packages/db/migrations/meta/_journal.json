@@ -708,6 +708,13 @@
       "when": 1795412960018,
       "tag": "0100_ai_handwriting_tier",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1795430960757,
+      "tag": "0101_sign_up_source_and_store_business",
+      "breakpoints": true
     }
   ]
 }

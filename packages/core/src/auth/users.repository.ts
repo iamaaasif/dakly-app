@@ -297,6 +297,8 @@ export class UsersRepository {
           phoneVerifiedAt: input.phone ? now : undefined,
           termsVersion: input.termsVersion,
           termsAcceptedAt: now,
+          signUpSource: input.source,
+          signUpSourceOther: input.source === 'other' ? input.sourceOther : undefined,
         })
         .onConflictDoNothing()
         .returning({ id: users.id }),

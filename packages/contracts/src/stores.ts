@@ -77,16 +77,30 @@ export const dueBookSettingsSchema = z.strictObject({
 });
 type DueBookSettings = z.infer<typeof dueBookSettingsSchema>;
 
+export const storeOfferings = ['products', 'services', 'both'] as const;
+// Owners type "facebook.com/yourpage"; a missing scheme becomes https.
+export const websiteUrlSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .regex(/^(https?:\/\/)?([\w-]+\.)+[a-z]{2,}(\/\S*)?$/i)
+  .transform((value) => (/^https?:\/\//i.test(value) ? value : `https://${value}`));
+
 export const createStoreSchema = z.strictObject({
   name: z.string().trim().min(1).max(100),
-  businessType: z.string().trim().min(1).max(100),
-  district: z.string().trim().min(1).max(100),
+  // The setup screen requires both; sign-up creates the first shop before it knows either.
+  businessType: z.string().trim().min(1).max(100).optional(),
+  district: z.string().trim().min(1).max(100).optional(),
   howYouSell: z.array(z.enum(howYouSellOptions)).min(1).max(4),
   customerListSize: z.enum(customerListSizes),
   planCode: z.string().trim().min(1).max(100),
   billingCycle: z.enum(billingCycles),
+  websiteUrl: websiteUrlSchema.optional(),
+  offering: z.enum(storeOfferings).optional(),
 });
 export type CreateStoreInput = z.infer<typeof createStoreSchema>;
+// The setup screen still asks for both.
+export const setupStoreSchema = createStoreSchema.required({ businessType: true, district: true });
 export type SetupProfile = {
   howYouSell: (typeof howYouSellOptions)[number][];
   extensions: string[];

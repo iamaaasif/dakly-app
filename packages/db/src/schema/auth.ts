@@ -11,6 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+import { signUpSources } from '@dakly/contracts/auth';
 import { languages } from '@dakly/contracts/stores';
 
 import { bytea, citext, createdAt, id, inet, isOneOf, timestamptz, updatedAt } from './columns';
@@ -42,6 +43,9 @@ export const users = pgTable(
     // The terms and privacy version the user accepted at sign-up or after a change.
     termsVersion: text('terms_version'),
     termsAcceptedAt: timestamptz('terms_accepted_at'),
+    // How the owner said they heard about Dakly on the sign-up form.
+    signUpSource: text('sign_up_source'),
+    signUpSourceOther: text('sign_up_source_other'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -57,6 +61,11 @@ export const users = pgTable(
     check('users_has_identifier', sql`${table.phone} is not null or ${table.email} is not null`),
     check('users_phone_format', sql`${table.phone} ~ '^01[3-9][0-9]{8}$'`),
     check('users_language', isOneOf(table.language, languages)),
+    check('users_sign_up_source', isOneOf(table.signUpSource, signUpSources)),
+    check(
+      'users_sign_up_source_other',
+      sql`${table.signUpSourceOther} is null or ${table.signUpSource} = 'other'`,
+    ),
     check('users_terms', sql`(${table.termsVersion} is null) = (${table.termsAcceptedAt} is null)`),
     check('users_name_length', sql`char_length(${table.name}) between 1 and 120`),
   ],

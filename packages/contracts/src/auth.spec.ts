@@ -26,6 +26,12 @@ describe('SMS authentication contracts', () => {
   ])('rejects invalid signup fields %j', (change) => {
     expect(requestCodeSchema.safeParse({ ...signup, ...change }).success).toBe(false);
   });
+  it('accepts how the owner heard about Dakly and rejects an unknown source', () => {
+    expect(
+      requestCodeSchema.parse({ ...signup, source: 'other', sourceOther: ' a friend ' }),
+    ).toMatchObject({ source: 'other', sourceOther: 'a friend' });
+    expect(requestCodeSchema.safeParse({ ...signup, source: 'newspaper' }).success).toBe(false);
+  });
   it.each(['12345', '1234567', '12a456'])('rejects malformed verification code %s', (code) => {
     expect(
       verifyCodeSchema.safeParse({ purpose: 'sign_in', phone: signup.phone, code }).success,
