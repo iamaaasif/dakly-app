@@ -225,6 +225,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
   } finally {
+    await database.pool.query('delete from ai_agent_settings where store_id = $1', [storeId]);
     await database.pool.query('delete from product_variants where store_id = $1', [storeId]);
     await database.pool.query('delete from products where store_id = $1', [storeId]);
     await database.pool.query('delete from messages where store_id = $1', [storeId]);
