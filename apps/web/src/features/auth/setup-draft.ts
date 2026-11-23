@@ -1,8 +1,8 @@
-import { createStoreSchema } from '@dakly/contracts/stores';
+import { setupStoreSchema } from '@dakly/contracts/stores';
 
 import type { BusinessDraft } from './auth.types';
 
-const businessSchema = createStoreSchema.omit({ planCode: true, billingCycle: true });
+const businessSchema = setupStoreSchema.omit({ planCode: true, billingCycle: true });
 const keyFor = (userId: string) => `dakly-setup-draft:${userId}`;
 
 // The draft lives only in this tab so a reload does not lose the business details.

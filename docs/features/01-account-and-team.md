@@ -1143,4 +1143,5 @@ when the source is `other`. Both are saved on the user (`sign_up_source`, `sign_
 when the code is verified. `POST /stores` accepts an optional `websiteUrl` (a missing scheme
 becomes https) and `offering` (`products`, `services` or `both`), saved on the store. The
 sign-up screen uses them to create the first shop on the free plan, so a new owner lands on the
-dashboard without the setup screen.
+dashboard without the setup screen. `businessType` and `district` are optional on `POST /stores`
+for that reason; the setup screen still requires both.
