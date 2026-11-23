@@ -114,6 +114,10 @@ test('lists chats by tab and channel and shows the tab counts', async ({
         ],
       );
     }
+    await database.pool.query(
+      'insert into ai_agent_settings (store_id, is_auto_reply_on) values ($1, true)',
+      [storeId],
+    );
     const productId = randomUUID();
     await database.pool.query(
       "insert into products(id, store_id, name, is_stock_tracked, price_poisha) values ($1, $2, 'Women''s Kurti', true, 125000)",
