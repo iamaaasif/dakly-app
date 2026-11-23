@@ -28,16 +28,31 @@ const discountPatterns: RegExp[] = [
   /\b(discount|bargain|last price|final price|lowest price|best price|coupon|promo code|cashback)\b/u,
   /\b\d{1,3}\s*%\s*(off|discount)\b|\b(half|50) ?(price|off)\b|\bfor free\b|\bfree of charge\b/u,
   /\b(chhar|chhaar|dam kom|dam ektu kom|kom koren|kom korun|komer moddhe|kome den|kome dite|price kom|dam komao|free te|freete)\b/u,
-  /ছাড়(?!া)|ডিসকাউন্ট|দাম কম|দাম কমান|কমে দিন|কমে হবে|ফ্রিতে|বিনামূল্যে|দর ?কষা/u,
+  /\bkom (hobe|hoy|rakhen|rakha|korben|korte|den|dile)\b/u,
+  /ছাড়(?!া)|ডিসকাউন্ট|দাম কম|দাম কমান|কমে দিন|কমে হবে|কম হবে|কম হয়|কম রাখেন|কম করেন|ফ্রিতে|বিনামূল্যে|দর ?কষা/u,
 ];
 
+export type DiscountScreen = {
+  // On, every discount ask goes to a person. Off, the model holds the price once and a repeat ask
+  // goes to a person.
+  handOverDiscounts: boolean;
+  // Customer messages earlier in the same chat, before this burst.
+  earlierTexts: readonly string[];
+};
+
 // Runs before any model call, so an attack costs no tokens and cannot talk the model round.
-export function screenCustomerTexts(texts: readonly string[]): Reason | null {
+export function screenCustomerTexts(
+  texts: readonly string[],
+  discounts: DiscountScreen,
+): Reason | null {
   const text = normalize(texts.join('\n'));
   if (manipulationPatterns.some((pattern) => pattern.test(text))) return 'other';
-  if (discountPatterns.some((pattern) => pattern.test(text))) return 'discount';
-  return null;
+  if (!asksForDiscount(text)) return null;
+  if (discounts.handOverDiscounts) return 'discount';
+  return asksForDiscount(normalize(discounts.earlierTexts.join('\n'))) ? 'discount' : null;
 }
+
+const asksForDiscount = (text: string) => discountPatterns.some((pattern) => pattern.test(text));
 
 // Zero-width characters and spaced-out letters are the usual ways to slip a phrase past a filter.
 function normalize(text: string) {

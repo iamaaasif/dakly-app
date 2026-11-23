@@ -132,6 +132,14 @@ export class InboxService {
     };
   }
 
+  // The AI's view of the chat, newest first: notes left out, read photo and voice text and the
+  // sources of each AI reply kept, which the inbox screen does not need.
+  async replyHistory(storeId: string, id: string, limit: number) {
+    await this.requireChats(storeId);
+    await this.find(storeId, id);
+    return this.repository.replyHistory(storeId, id, limit);
+  }
+
   addNote(storeId: string, id: string, actor: UserActor, input: CreateConversationNoteInput) {
     return this.transaction.run(storeId, async () => {
       await this.requireChats(storeId);
