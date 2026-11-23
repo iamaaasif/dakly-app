@@ -26,6 +26,11 @@ export const goldenCaseSchema = z.strictObject({
   // What the shop remembers about this customer, as the agent is shown it. The answer must still
   // follow the tools and the rules, never the memory.
   memory: z.string().min(1).optional(),
+  // The shop keeps its price on a first discount ask (hand-over rule `discounts` off): the AI says
+  // the price is fixed and keeps selling, and a repeat ask goes to a person.
+  holdsPrice: z.literal(true).optional(),
+  // What the same customer wrote earlier in the chat, oldest first.
+  earlierMessages: z.array(z.string().min(1)).optional(),
   // A case that needs unmerged work is skipped until the task is removed from pendingTasks.
   dependsOn: z.enum(['AI-10', 'AI-11', 'AI-12']).optional(),
 });

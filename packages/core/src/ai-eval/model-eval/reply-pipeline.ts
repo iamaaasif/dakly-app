@@ -7,11 +7,15 @@ import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/llm-driver';
 
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV5 } from '../../ai-agent/prompts/chat-reply.v5';
+import { chatReplyV6 } from '../../ai-agent/prompts/chat-reply.v6';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v1';
-import { checkReplyFacts } from '../../ai-agent/reply-fact-check';
+import {
+  checkReplyFacts,
+  factCheckFailedBlock,
+  type FactCheckFailure,
+} from '../../ai-agent/reply-fact-check';
 import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
-import type { EvalOutcome } from '../golden-case';
+import type { EvalOutcome, GoldenCase } from '../golden-case';
 import { evalPhotoKey, evalShop } from './eval-catalog';
 import type { EvalMeter } from './eval-meter';
 import { matchEvalPhoto, runFixtureTool } from './fixture-tools';
@@ -62,21 +66,25 @@ export async function classifyQuestion(
 }
 
 export function handoverFor(
-  question: string,
+  golden: GoldenCase,
   classified: ChatClassification | undefined,
 ): Reason | null {
-  return classified ? handoverReason([question], classified) : 'ai_unavailable';
+  return classified
+    ? handoverReason([golden.question], classified, !golden.holdsPrice)
+    : 'ai_unavailable';
 }
 
 type Run = { driver: LlmDriver; meter: EvalMeter; model: string };
 type Note = (note: string) => void;
 type ToolCall = { name: string; argumentsJson: string };
+type Asked = Pick<GoldenCase, 'question' | 'memory' | 'earlierMessages'>;
 
-function replyContext(question: string, candidates: object, memory?: string) {
+function replyContext({ question, memory, earlierMessages = [] }: Asked, candidates: object) {
+  const conversation = [...earlierMessages, question].map((text) => ({ from: 'customer', text }));
   return [
     `<shop>${JSON.stringify(evalShop)}</shop>`,
     ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
-    `<conversation untrusted="true">${JSON.stringify([{ from: 'customer', text: question }])}</conversation>`,
+    `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
     `<product_candidates>${JSON.stringify(candidates)}</product_candidates>`,
   ].join('\n');
 }
@@ -88,21 +96,14 @@ function sentCardPhoto(toolResults: object[]) {
   return last ? evalPhotoKey(last.photoFileId) : undefined;
 }
 
-function checkedReply(
-  reply: string,
-  toolResults: object[],
-  question: string,
-  note: Note,
-): EvalOutcome {
+function factCheckFailure(reply: string, toolResults: object[], question: string) {
   const checked = checkReplyFacts(
     reply,
     toolResults,
     { phone: evalShop.phone, linkBaseUrl: 'https://dkl.example' },
     [question],
   );
-  if (checked.isSafe) return { kind: 'reply', text: reply, cardPhoto: sentCardPhoto(toolResults) };
-  note(`fact check ${checked.failure}: ${reply}`);
-  return { kind: 'handover', reason: 'out_of_scope' };
+  return checked.isSafe ? undefined : checked.failure;
 }
 
 // A hand_over call ends the loop with its reason; any other call adds its result for the next round.
@@ -130,22 +131,51 @@ function replyCandidates(question: string): object | undefined {
     : undefined;
 }
 
-// The same loop as SalesAgentService.compose, with fixture tools instead of the database.
+// The same flow as SalesAgentService.compose: a reply that fails the fact check is written once
+// more with the failure named, and a second failure hands over.
 export async function composeReply(
-  { driver, meter, model }: Run,
-  question: string,
+  run: Run,
+  asked: Asked,
   note: Note = () => undefined,
-  memory?: string,
 ): Promise<EvalOutcome> {
+  const first = await composeOnce(run, asked, note);
+  if (first.kind !== 'reply') return first.outcome;
+  const failure = factCheckFailure(first.text, first.toolResults, asked.question);
+  if (!failure) return replyOutcome(first);
+  note(`fact check ${failure}: ${first.text}`);
+  const second = await composeOnce(run, asked, note, { failure, reply: first.text });
+  if (second.kind !== 'reply') return second.outcome;
+  const failedAgain = factCheckFailure(second.text, second.toolResults, asked.question);
+  if (!failedAgain) return replyOutcome(second);
+  note(`fact check ${failedAgain} again: ${second.text}`);
+  return { kind: 'handover', reason: 'out_of_scope' };
+}
+
+type Composed =
+  { kind: 'reply'; text: string; toolResults: object[] } | { kind: 'ended'; outcome: EvalOutcome };
+
+const replyOutcome = ({ text, toolResults }: { text: string; toolResults: object[] }) => ({
+  kind: 'reply' as const,
+  text,
+  cardPhoto: sentCardPhoto(toolResults),
+});
+
+async function composeOnce(
+  { driver, meter, model }: Run,
+  asked: Asked,
+  note: Note,
+  rejected?: { failure: FactCheckFailure; reply: string },
+): Promise<Composed> {
+  const ended = (outcome: EvalOutcome): Composed => ({ kind: 'ended', outcome });
   const toolResults: object[] = [];
-  const candidates = replyCandidates(question);
+  const candidates = replyCandidates(asked.question);
   if (candidates) toolResults.push(candidates);
-  const context = replyContext(question, candidates ?? { products: [] }, memory);
-  let transcript = '';
+  const context = replyContext(asked, candidates ?? { products: [] });
+  let transcript = rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {
       model,
-      instructions: chatReplyV5.instructions,
+      instructions: chatReplyV6.instructions,
       input: context + transcript,
       output: chatReplyOutputSchema,
       tools: salesAgentLlmTools,
@@ -154,17 +184,17 @@ export async function composeReply(
       if (error instanceof LlmError) return undefined;
       throw error;
     });
-    if (!result) return { kind: 'handover', reason: 'ai_unavailable' };
+    if (!result) return ended({ kind: 'handover', reason: 'ai_unavailable' });
     if (result.kind === 'output') {
       const parsed = chatReplyOutputSchema.safeParse(result.output);
       return parsed.success
-        ? checkedReply(parsed.data.reply, toolResults, question, note)
-        : { kind: 'handover', reason: 'out_of_scope' };
+        ? { kind: 'reply', text: parsed.data.reply, toolResults }
+        : ended({ kind: 'handover', reason: 'out_of_scope' });
     }
     const outcome = answerToolCalls(result.toolCalls, toolResults, note);
-    if (outcome.handover) return { kind: 'handover', reason: outcome.handover };
+    if (outcome.handover) return ended({ kind: 'handover', reason: outcome.handover });
     transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
   }
   note('ran out of tool rounds');
-  return { kind: 'handover', reason: 'out_of_scope' };
+  return ended({ kind: 'handover', reason: 'out_of_scope' });
 }

@@ -23,12 +23,11 @@ import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { QUEUES } from '../platform/queue/queues';
-import { MINUTE_MS } from '../platform/time';
+import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
@@ -37,7 +36,6 @@ import { CardTapRepliesService } from './card-tap-replies.service';
 import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v1';
-import { checkReplyFacts } from './reply-fact-check';
 import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
@@ -59,6 +57,7 @@ type EligibleTurn = {
   claimTimeoutMinutes: number | null;
   productCardStyle: 'buttons' | 'text';
   takeOrders: boolean;
+  handOverDiscounts: boolean;
 };
 
 @Injectable()
@@ -141,10 +140,11 @@ export class AiAgentService {
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
-    const texts = burst.texts;
+    const { texts, earlierTexts } = burst;
+    const { handOverDiscounts } = candidate;
     const reason =
-      screenCustomerTexts(texts) ??
-      (await this.classifyWithAllowance(storeId, turn.contactId, texts));
+      screenCustomerTexts(texts, { handOverDiscounts, earlierTexts }) ??
+      (await this.classifyWithAllowance(storeId, turn.contactId, texts, handOverDiscounts));
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose({
@@ -156,40 +156,17 @@ export class AiAgentService {
     if (composed.kind === 'busy') return this.retryLater();
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
-    return this.checkAndSend({
-      storeId,
-      conversationId,
-      candidate,
-      composed,
-      customerTexts: texts,
-    });
-  }
-
-  private async checkAndSend(input: {
-    storeId: string;
-    conversationId: string;
-    candidate: EligibleTurn;
-    composed: Extract<ComposedReply, { kind: 'reply' }>;
-    customerTexts: string[];
-  }) {
-    const { storeId, conversationId, candidate, composed, customerTexts } = input;
-    const shop = await this.stores.settings(storeId);
-    const checked = checkReplyFacts(
-      composed.text,
-      composed.toolResults,
-      { phone: shop.phone, linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL },
-      customerTexts,
-    );
-    if (!checked.isSafe) {
-      await this.runs.setOutcome(storeId, composed.aiRunId, 'failed_check', checked.failure);
-      return this.handOver(storeId, conversationId, candidate, 'out_of_scope');
-    }
     return this.send(storeId, conversationId, candidate, composed);
   }
 
-  private async classifyWithAllowance(storeId: string, contactId: string, texts: string[]) {
+  private async classifyWithAllowance(
+    storeId: string,
+    contactId: string,
+    texts: string[],
+    handOverDiscounts: boolean,
+  ) {
     return (await this.hasAllowanceRoom(storeId, contactId))
-      ? this.classify(storeId, texts)
+      ? this.classify(storeId, texts, handOverDiscounts)
       : 'allowance_used';
   }
 
@@ -227,6 +204,7 @@ export class AiAgentService {
       claimTimeoutMinutes: settings.claimTimeoutMinutes,
       productCardStyle: settings.productCardStyle,
       takeOrders: settings.takeOrders,
+      handOverDiscounts: settings.handOverDiscounts,
     };
   }
 
@@ -254,7 +232,11 @@ export class AiAgentService {
       return settings;
   }
 
-  private async classify(storeId: string, texts: string[]): Promise<Reason | 'busy' | null> {
+  private async classify(
+    storeId: string,
+    texts: string[],
+    handOverDiscounts: boolean,
+  ): Promise<Reason | 'busy' | null> {
     if (!texts.length) return null;
     const result = await this.ai.run(storeId, {
       tier: 'fast',
@@ -263,7 +245,7 @@ export class AiAgentService {
       input: JSON.stringify({ customer_messages: texts }),
       output: chatClassificationSchema,
     });
-    if (result.kind === 'output') return handoverReason(texts, result.output);
+    if (result.kind === 'output') return handoverReason(texts, result.output, handOverDiscounts);
     if (result.kind === 'failure' && result.code === 'AI_STORE_BUSY') return 'busy';
     return 'ai_unavailable';
   }
@@ -414,6 +396,7 @@ export class AiAgentService {
 function burstText(turn: Turn, delay: number, now: Date) {
   const texts: string[] = [];
   let awaitingMedia = false;
+  let messageCount = 0;
   let previous = turn.latest.createdAt.getTime();
   for (const message of turn.inbound) {
     if (message.senderIdentityId !== turn.latest.senderIdentityId) break;
@@ -426,6 +409,24 @@ function burstText(turn: Turn, delay: number, now: Date) {
       .some(isAwaitingReading);
     if (unread && now.getTime() - receivedAt < MEDIA_WAIT_LIMIT_MS) awaitingMedia = true;
     previous = receivedAt;
+    messageCount += 1;
   }
-  return { texts: texts.reverse(), awaitingMedia };
+  return {
+    texts: texts.reverse(),
+    awaitingMedia,
+    earlierTexts: earlierTexts(turn, messageCount, now),
+  };
+}
+
+// The same customer's messages from the last day before the burst tell a repeat discount ask
+// from a first one.
+function earlierTexts(turn: Turn, burstLength: number, now: Date) {
+  return turn.inbound
+    .slice(burstLength)
+    .filter(
+      (message) =>
+        message.senderIdentityId === turn.latest.senderIdentityId &&
+        now.getTime() - message.createdAt.getTime() <= DAY_MS,
+    )
+    .flatMap((message) => (message.body ? [message.body.slice(0, 2000)] : []));
 }

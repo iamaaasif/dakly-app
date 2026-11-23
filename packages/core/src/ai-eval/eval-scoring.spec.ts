@@ -5,6 +5,7 @@ import type { EvalOutcome, GoldenCase } from './golden-case';
 import { replayResponder } from './golden-eval.service';
 import { attackGoldenCases, benignGoldenCases } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
+import { bargainingGoldenCases } from './golden-set.bargaining';
 import { memoryGoldenCases } from './golden-set.memory';
 import {
   activeGoldenCases,
@@ -113,6 +114,7 @@ describe('Bangla and Banglish set', () => {
     ...benignGoldenCases,
     ...memoryGoldenCases,
     ...stockDeliveryGoldenCases,
+    ...bargainingGoldenCases,
   ];
 
   it('passes the saved run with every case switched on', () => {

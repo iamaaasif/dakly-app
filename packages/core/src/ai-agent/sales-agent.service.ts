@@ -8,13 +8,16 @@ import {
   type ProductCardElement,
 } from '@dakly/contracts/product-card';
 
+import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
 import { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import { InboxService } from '../messaging/inbox.service';
+import { loadEnv } from '../platform/config/env';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV5 } from './prompts/chat-reply.v5';
+import { chatReplyV6 } from './prompts/chat-reply.v6';
+import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
   isOutOfStock,
@@ -68,21 +71,53 @@ export class SalesAgentService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(ContactMemoryService) private readonly memory: ContactMemoryService,
+    @Inject(AiRunsService) private readonly runs: AiRunsService,
   ) {}
 
+  // A reply that fails the fact check is written once more with the failure named, so a slip such
+  // as an invented amount does not cost the customer a person's wait. A second failure hands over.
   async compose(input: ComposeInput): Promise<ComposedReply> {
+    const first = await this.composeOnce(input);
+    const failed = first.kind === 'reply' && (await this.factCheckFailure(input, first));
+    if (first.kind !== 'reply' || !failed) return first;
+    await this.runs.setOutcome(input.storeId, first.aiRunId, 'failed_check', failed);
+    const second = await this.composeOnce(input, { failure: failed, reply: first.text });
+    const failedAgain = second.kind === 'reply' && (await this.factCheckFailure(input, second));
+    if (second.kind !== 'reply' || !failedAgain) return second;
+    await this.runs.setOutcome(input.storeId, second.aiRunId, 'failed_check', failedAgain);
+    return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  private async factCheckFailure(
+    input: ComposeInput,
+    composed: Extract<ComposedReply, { kind: 'reply' }>,
+  ): Promise<FactCheckFailure | false> {
+    const shop = await this.stores.settings(input.storeId);
+    const checked = checkReplyFacts(
+      composed.text,
+      composed.toolResults,
+      { phone: shop.phone, linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL },
+      input.customerTexts,
+    );
+    return !checked.isSafe && checked.failure;
+  }
+
+  private async composeOnce(
+    input: ComposeInput,
+    rejected?: { failure: FactCheckFailure; reply: string },
+  ): Promise<ComposedReply> {
     const { storeId } = input;
     const signal = AbortSignal.timeout(REPLY_BUDGET_MS);
     const results: ToolResult[] = [];
     const candidates = await this.productCandidates(input);
     if (candidates) results.push(candidates);
     const context = await this.context(input, candidates);
-    let transcript = '';
+    let transcript = rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: chatReplyV5,
+        prompt: chatReplyV6,
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,

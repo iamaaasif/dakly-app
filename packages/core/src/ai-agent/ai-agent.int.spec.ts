@@ -572,21 +572,43 @@ it('answers price and delivery from tool results, saves the run and sources, and
     runs: [
       { purpose: 'classify' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v5' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v6' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v5' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v6' },
     ],
     usage: [{ id: expect.any(String) }],
   });
 });
 
-it('hands over instead of sending a price no tool returned', async () => {
+it('writes a reply again after a failed fact check and sends the fixed one', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'price koto?');
+  const inputs = scriptSequence(
+    classified,
+    toolCalls(['search_products', { query: 'পাঞ্জাবি' }]),
+    replyText('দাম ৳999 only'),
+    toolCalls(['search_products', { query: 'পাঞ্জাবি' }]),
+    replyText('পাঞ্জাবির দাম ৳1,200।'),
+  );
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+  expect((await sent(active)).map((row) => row.body)).toEqual(['পাঞ্জাবির দাম ৳1,200।']);
+  expect(inputs[3]).toContain('<fact_check_failed kind="amount">');
+  expect(await runOutcomes(active)).toEqual([
+    { outcome: 'completed', error_code: null },
+    { outcome: 'failed_check', error_code: 'amount' },
+    { outcome: 'completed', error_code: null },
+    { outcome: 'sent', error_code: null },
+  ]);
+});
+
+it('hands over instead of sending a price no tool returned, after one retry', async () => {
   const active = await sellingShop();
   const message = await receive(active, 'price koto?');
   scriptSequence(
     classified,
     toolCalls(['search_products', { query: 'পাঞ্জাবি' }]),
     replyText('দাম ৳999 only'),
+    replyText('দাম ৳998 only'),
   );
   await agent.reply(active.storeId, message.conversation_id, message.id);
   expect((await sent(active)).map((row) => row.author_type)).toEqual(['system']);
@@ -612,6 +634,46 @@ it('sends a product card before the reply', async () => {
     'কটন পাঞ্জাবি\nDefault: ৳1,200',
     'Eta dekhun, ৳1,200.',
   ]);
+});
+
+it('hands a discount ask to a person before any model call in a shop that hands over discounts', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'kurti last price koto?');
+  const inputs = scriptSequence();
+  await agent.reply(active.storeId, message.conversation_id, message.id);
+  expect(inputs).toEqual([]);
+  expect(await observe(active)).toMatchObject({
+    conversations: [{ status: 'needs_you', handover_reason: 'discount' }],
+  });
+});
+
+it('holds the price on a first discount ask and hands over a repeat ask in a shop that keeps its price', async () => {
+  const active = await sellingShop();
+  await admin.pool.query(
+    `update ai_agent_settings set handover_rules = '{"discounts": false}' where store_id = $1`,
+    [active.storeId],
+  );
+  const first = await receive(active, 'panjabi te ektu ছাড় hobe? last price koto?');
+  const fixedPrice = 'দুঃখিত, ছাড় নেই, পাঞ্জাবির দাম ৳1,200 ফিক্সড। কোন সাইজ লাগবে?';
+  scriptSequence(
+    { ...classified, output: { ...classification, intent: 'price', handover: 'discount' } },
+    toolCalls(['search_products', { query: 'পাঞ্জাবি' }]),
+    replyText(fixedPrice),
+  );
+  await agent.reply(active.storeId, first.conversation_id, first.id);
+  expect((await sent(active)).map((row) => row.body)).toEqual([fixedPrice]);
+  await admin.pool.query(
+    "update messages set created_at = now() - interval '10 minutes' where store_id = $1",
+    [active.storeId],
+  );
+
+  const second = await receive(active, 'ar ektu kom hobe na apu?');
+  const inputs = scriptSequence();
+  await agent.reply(active.storeId, second.conversation_id, second.id);
+  expect(inputs).toEqual([]);
+  expect(await observe(active)).toMatchObject({
+    conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'discount' }],
+  });
 });
 
 it('hands over when the model calls hand_over', async () => {
@@ -730,9 +792,12 @@ it("counts the return timer from the person's reply when the job runs late", asy
 it('records the fact check failure on the AI run and marks a sent reply', async () => {
   const blocked = await sellingShop();
   const first = await receive(blocked, 'price koto?');
-  scriptSequence(classified, replyText('দাম ৳999 only'));
+  scriptSequence(classified, replyText('দাম ৳999 only'), replyText('দাম ৳999 only'));
   await agent.reply(blocked.storeId, first.conversation_id, first.id);
-  expect(await runOutcomes(blocked)).toEqual([{ outcome: 'failed_check', error_code: 'amount' }]);
+  expect(await runOutcomes(blocked)).toEqual([
+    { outcome: 'failed_check', error_code: 'amount' },
+    { outcome: 'failed_check', error_code: 'amount' },
+  ]);
 
   const open = await sellingShop();
   const second = await receive(open, 'hello');
