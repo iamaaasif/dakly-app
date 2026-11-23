@@ -134,7 +134,7 @@ it.each(['signup', 'phone', 'email'])(
       );
       await user.click(screen.getByRole('button', { name: /Get a code by/ }));
     }
-    const label = view === 'signup' ? 'Verification code' : 'Sign-in code';
+    const label = view === 'signup' ? '6-digit code' : 'Sign-in code';
     const code = await screen.findByLabelText<HTMLInputElement>(label);
     await user.type(code, '123456');
     network.pause();

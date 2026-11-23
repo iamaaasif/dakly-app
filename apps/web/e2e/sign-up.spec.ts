@@ -29,18 +29,20 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
     );
     await page.setViewportSize({ width: 360, height: 900 });
     await page.goto('/sign-up');
-    await expect(
-      page.getByRole('heading', { name: 'Create an account · Step 1 of 4' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Create your free account' })).toBeVisible();
     await page.screenshot({ path: 'e2e-artifacts/signup-360.png' });
-    await page.getByLabel('Full name').fill(name);
-    await privateInput(page, 'phone', phone);
+    await privateInput(page, 'email', `${name.toLowerCase().replace(/\W+/g, '.')}@browser.test`);
     await privateInput(page, 'password', password);
-    await page.getByLabel('I agree to the Terms and Privacy documents.').check();
-    await page.getByRole('button', { name: 'Send verification code' }).click();
-    await expect(
-      page.getByRole('heading', { name: 'Verify your mobile · Step 2 of 4' }),
-    ).toBeVisible();
+    await page.getByRole('combobox', { name: 'How did you hear about us?' }).click();
+    await page.getByRole('option', { name: 'Facebook', exact: true }).click();
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(page.getByRole('heading', { name: 'Tell us about your business' })).toBeVisible();
+    await page.getByLabel('Your name').fill(name);
+    await page.getByLabel('Business name').fill('Dhaka Stationery');
+    await privateInput(page, 'phone', phone);
+    await page.getByRole('radio', { name: /Products/ }).click();
+    await page.getByRole('button', { name: 'Create a free account' }).click();
+    await expect(page.getByRole('heading', { name: 'Enter the code we sent you' })).toBeVisible();
     const text = await messageText(phone, /\b\d{6}\b/, seen);
     await privateInput(page, 'code', text.match(/\b\d{6}\b/)![0]);
     await page.getByRole('button', { name: 'Verify mobile', exact: true }).click();
@@ -89,7 +91,7 @@ test('signs up with a real SMS, commits the shop once, and completes public reco
     await privateInput(page, 'identifier', phone);
     await privateInput(page, 'password', password);
     await page.getByLabel('Keep me signed in on this device').check();
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await page.getByRole('button', { name: 'Log in', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Two-step verification' })).toBeVisible();
     await privateInput(page, 'code', backupCode);
     const reverified = otherPage.waitForResponse(

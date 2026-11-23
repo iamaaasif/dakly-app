@@ -14,7 +14,7 @@ export default async function SignInPage({
   return (
     <SignInScreen
       config={webAuthConfig()}
-      method={method === 'email' ? 'email' : 'phone'}
+      method={method === 'phone' ? 'phone' : 'email'}
       next={safeNextPath(next)}
     />
   );
