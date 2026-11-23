@@ -150,7 +150,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v7+products-in-chat.v1');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v7+products-in-chat.v2');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.

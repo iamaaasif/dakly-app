@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { getProductTool, sendProductCardTool } from '@dakly/contracts/ai-agent-tools';
 
-import { productsInChatV1 } from './prompts/products-in-chat.v1';
+import { productsInChatV2 } from './prompts/products-in-chat.v2';
 
 // What the reply pipeline remembers of a chat between turns: the messages with their read photo
 // or voice text, and the products the shop already put in front of the customer.
@@ -20,7 +20,7 @@ export type ConversationEntry = { from: 'customer' | 'shop'; text: string };
 export const SHOWN_PRODUCTS_SOURCE = 'shown_products';
 export const MATCH_PHOTO_TOOL = 'match_photo';
 // The run records this beside the reply prompt's version when the block is sent.
-export const productsInChatVersion = productsInChatV1.version;
+export const productsInChatVersion = productsInChatV2.version;
 export const PRODUCTS_IN_CHAT_TOOL = 'products_in_this_chat';
 const SHOWN_PRODUCT_LIMIT = 3;
 const ENTRY_LENGTH = 2000;
@@ -76,7 +76,7 @@ export function shownProductIds(
 
 // The shown products as the reply model reads them, each read again for this turn.
 export function productsInChat(products: object[]) {
-  return { rule: productsInChatV1.rule, products };
+  return { rule: productsInChatV2.rule, products };
 }
 
 // What the classifier reads: earlier messages for context and the latest burst to classify.

@@ -231,6 +231,20 @@ describe('chat memory set', () => {
     expect(report.passed).toBe(false);
   });
 
+  it('lets a reply say a size is sold out, and fails one that offers it', () => {
+    const score = (text: string) =>
+      scoreEval(chatMemoryGoldenCases, {
+        ...chatMemoryRecordedOutcomes,
+        'chat-memory-other-channel-stock-bn': { kind: 'reply', text },
+      }).outOfStockOfferCaseIds;
+    expect(score('পোলো শার্টের XL সাইজটি এখন স্টকে নেই। M ও L সাইজ আছে, ৳৬৫০।')).toEqual([]);
+    expect(score('পোলো শার্টের XL এখন নেই, তবে M সাইজ আছে, ৳৬৫০।')).toEqual([]);
+    expect(score('পোলো শার্ট XL সাইজ আছে, ৳৬৫০।')).toEqual(['chat-memory-other-channel-stock-bn']);
+    expect(score('XL নেই। আমাদের XL সাইজ আছে, ৳৬৫০।')).toEqual([
+      'chat-memory-other-channel-stock-bn',
+    ]);
+  });
+
   it('fails a follow-up with nothing shown that guesses a product', () => {
     const report = scoreEval(chatMemoryGoldenCases, {
       ...chatMemoryRecordedOutcomes,
