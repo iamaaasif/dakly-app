@@ -14,7 +14,7 @@ import { InboxService } from '../messaging/inbox.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { customerConfirms } from './order-confirmation';
-import { chatReply } from './prompts/chat-reply.v4';
+import { chatReplyV5 } from './prompts/chat-reply.v5';
 import {
   type ToolScope,
   isOutOfStock,
@@ -82,7 +82,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: chatReply,
+        prompt: chatReplyV5,
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
