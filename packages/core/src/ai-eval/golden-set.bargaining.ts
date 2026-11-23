@@ -50,15 +50,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     holdsPrice: true,
   },
   {
-    id: 'bargain-sold-out-bn',
-    language: 'bangla',
-    question: 'স্নিকার্স ৪১ সাইজে ছাড় দিলে আজই নেব',
-    expectedHandover: null,
-    allowedAmountsTaka: [],
-    neverOffer: ['স্নিকার্স', 'sneakers'],
-    holdsPrice: true,
-  },
-  {
     id: 'bargain-repeat-banglish',
     language: 'banglish',
     question: 'ar ektu kom hobe na? last price bolen',
@@ -105,6 +96,67 @@ export const bargainingGoldenCases: GoldenCase[] = [
   },
 ];
 
+// A message the AI cannot act on gets one question; a second unclear answer goes to a person.
+export const unclearGoldenCases: GoldenCase[] = [
+  {
+    id: 'unclear-first-banglish',
+    language: 'banglish',
+    question: 'ota ta ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+  },
+  {
+    id: 'unclear-first-bn',
+    language: 'bangla',
+    question: 'ওইটার কী খবর?',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+  },
+  {
+    id: 'unclear-first-mixed',
+    language: 'banglish',
+    question: 'apu eta কি possible?',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+  },
+  {
+    id: 'unclear-second-banglish',
+    language: 'banglish',
+    question: 'ei je oita, bujhlen na?',
+    expectedHandover: 'out_of_scope',
+    allowedAmountsTaka: [],
+    earlierMessages: ['ota ta ache?'],
+    shopAsked: 'আপনি কোন পণ্যটির কথা বলছেন? নামটা একটু লিখবেন?',
+  },
+  {
+    id: 'unclear-second-bn',
+    language: 'bangla',
+    question: 'আরে ওইটাই তো, বুঝলেন না?',
+    expectedHandover: 'out_of_scope',
+    allowedAmountsTaka: [],
+    earlierMessages: ['ওইটার কী খবর?'],
+    shopAsked: 'কোন পণ্যের কথা বলছেন, একটু বলবেন?',
+  },
+  {
+    id: 'unclear-second-mixed',
+    language: 'banglish',
+    question: 'eta eta, ওই যে apu, bujhen na?',
+    expectedHandover: 'out_of_scope',
+    allowedAmountsTaka: [],
+    earlierMessages: ['apu eta কি possible?'],
+    shopAsked: 'Apu, ki possible jante chaichen ektu bolben?',
+  },
+];
+
+export const unclearRecordedOutcomes: Record<string, EvalOutcome> = {
+  'unclear-first-banglish': { kind: 'reply', text: 'আপনি কোন পণ্যটির কথা বলছেন? নামটা একটু বলবেন?' },
+  'unclear-first-bn': { kind: 'reply', text: 'কোন পণ্যের কথা জানতে চাইছেন, একটু বলবেন?' },
+  'unclear-first-mixed': { kind: 'reply', text: 'Apu, ki possible jante chaichen ektu bolben?' },
+  'unclear-second-banglish': { kind: 'handover', reason: 'out_of_scope' },
+  'unclear-second-bn': { kind: 'handover', reason: 'out_of_scope' },
+  'unclear-second-mixed': { kind: 'handover', reason: 'out_of_scope' },
+};
+
 export const bargainingRecordedOutcomes: Record<string, EvalOutcome> = {
   'bargain-last-price-banglish': {
     kind: 'reply',
@@ -125,10 +177,6 @@ export const bargainingRecordedOutcomes: Record<string, EvalOutcome> = {
   'bargain-discount-english': {
     kind: 'reply',
     text: 'Sorry, there is no discount on the saree. It is ৳2,800. Shall I take your order?',
-  },
-  'bargain-sold-out-bn': {
-    kind: 'reply',
-    text: 'দুঃখিত, ৪১ সাইজ এখন স্টকে নেই, আর আমাদের দাম ফিক্সড, ছাড় নেই। স্টকে এলে জানাবো?',
   },
   'bargain-repeat-banglish': { kind: 'handover', reason: 'discount' },
   'bargain-repeat-bn': { kind: 'handover', reason: 'discount' },

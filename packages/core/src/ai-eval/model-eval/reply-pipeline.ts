@@ -77,10 +77,17 @@ export function handoverFor(
 type Run = { driver: LlmDriver; meter: EvalMeter; model: string };
 type Note = (note: string) => void;
 type ToolCall = { name: string; argumentsJson: string };
-type Asked = Pick<GoldenCase, 'question' | 'memory' | 'earlierMessages'>;
+type Asked = Pick<GoldenCase, 'question' | 'memory' | 'earlierMessages' | 'shopAsked'>;
 
-function replyContext({ question, memory, earlierMessages = [] }: Asked, candidates: object) {
-  const conversation = [...earlierMessages, question].map((text) => ({ from: 'customer', text }));
+function replyContext(
+  { question, memory, earlierMessages = [], shopAsked }: Asked,
+  candidates: object,
+) {
+  const conversation = [
+    ...earlierMessages.map((text) => ({ from: 'customer', text })),
+    ...(shopAsked ? [{ from: 'shop', text: shopAsked }] : []),
+    { from: 'customer', text: question },
+  ];
   return [
     `<shop>${JSON.stringify(evalShop)}</shop>`,
     ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),

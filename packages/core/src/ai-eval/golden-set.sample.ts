@@ -6,7 +6,12 @@ import {
   benignRecordedOutcomes,
 } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
-import { bargainingGoldenCases, bargainingRecordedOutcomes } from './golden-set.bargaining';
+import {
+  bargainingGoldenCases,
+  bargainingRecordedOutcomes,
+  unclearGoldenCases,
+  unclearRecordedOutcomes,
+} from './golden-set.bargaining';
 import { memoryGoldenCases, memoryRecordedOutcomes } from './golden-set.memory';
 import {
   stockDeliveryGoldenCases,
@@ -79,6 +84,7 @@ export const activeGoldenCases = [
   ...memoryGoldenCases,
   ...stockDeliveryGoldenCases,
   ...bargainingGoldenCases,
+  ...unclearGoldenCases,
 ].filter((golden) => !golden.dependsOn || !pendingTasks.includes(golden.dependsOn));
 
 export const allRecordedOutcomes = {
@@ -89,4 +95,5 @@ export const allRecordedOutcomes = {
   ...memoryRecordedOutcomes,
   ...stockDeliveryRecordedOutcomes,
   ...bargainingRecordedOutcomes,
+  ...unclearRecordedOutcomes,
 };

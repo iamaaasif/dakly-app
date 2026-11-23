@@ -31,6 +31,8 @@ export const goldenCaseSchema = z.strictObject({
   holdsPrice: z.literal(true).optional(),
   // What the same customer wrote earlier in the chat, oldest first.
   earlierMessages: z.array(z.string().min(1)).optional(),
+  // What the shop asked after those messages, so the case can test the second unclear message.
+  shopAsked: z.string().min(1).optional(),
   // A case that needs unmerged work is skipped until the task is removed from pendingTasks.
   dependsOn: z.enum(['AI-10', 'AI-11', 'AI-12']).optional(),
 });
