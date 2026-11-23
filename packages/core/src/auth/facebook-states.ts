@@ -1,12 +1,17 @@
 import { randomBytes } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
+import { z } from 'zod';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
 import { authKey } from './auth-key';
 import { authError } from './auth.errors';
 
-export type FacebookState = { termsVersion?: string; isRemembered: boolean };
+const facebookStateSchema = z.object({
+  termsVersion: z.string().optional(),
+  isRemembered: z.boolean(),
+});
+export type FacebookState = z.infer<typeof facebookStateSchema>;
 const lifetimeSeconds = 600;
 
 // The state travels through Facebook and must come back with the same browser's cookie.
@@ -28,6 +33,8 @@ export class FacebookStates {
   async consume(nonce: string): Promise<FacebookState> {
     const data = await this.client.connection.getdel(authKey('facebook-state', nonce));
     if (!data) throw authError('AUTH_FACEBOOK_STATE_INVALID');
-    return JSON.parse(data) as FacebookState;
+    const state = facebookStateSchema.safeParse(JSON.parse(data));
+    if (!state.success) throw authError('AUTH_FACEBOOK_STATE_INVALID');
+    return state.data;
   }
 }
