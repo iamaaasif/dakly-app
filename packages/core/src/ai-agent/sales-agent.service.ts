@@ -28,7 +28,7 @@ import {
   shownProductIds,
 } from './chat-memory';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV6 } from './prompts/chat-reply.v6';
+import { chatReplyV7 } from './prompts/chat-reply.v7';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
@@ -36,6 +36,7 @@ import {
   SalesAgentToolsService,
   salesAgentLlmTools,
 } from './sales-agent-tools.service';
+import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
 
 const MAX_ROUNDS = 4;
 const REPLY_BUDGET_MS = 20_000;
@@ -71,7 +72,7 @@ export type ProductCard = {
   image?: { objectKey: string; contentType: string; sizeBytes: number };
 };
 
-export type ComposeInput = ToolScope & { customerTexts: string[] };
+export type ComposeInput = ToolScope & { customerTexts: string[]; rules: ShopRules };
 
 // Runs the model and the read-only tools. It sends nothing and holds no transaction.
 @Injectable()
@@ -135,7 +136,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV6, inChat),
+        prompt: promptWith(chatReplyV7, inChat),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -216,9 +217,13 @@ export class SalesAgentService {
   ): Promise<{ handover: Reason } | { answered: { name: string; result: object }[] }> {
     const answered: { name: string; result: object }[] = [];
     for (const call of calls) {
-      const result = isUnconfirmed(call, input.customerTexts, results)
-        ? { error: 'CONFIRMATION_NOT_GIVEN' }
-        : await this.tools.run(input, call.name, call.argumentsJson);
+      const refusal = refuseToolCall(input.rules, call);
+      if (refusal?.kind === 'handover') return { handover: refusal.reason };
+      const result =
+        refusal?.result ??
+        (isUnconfirmed(call, input.customerTexts, results)
+          ? { error: 'CONFIRMATION_NOT_GIVEN' }
+          : await this.tools.run(input, call.name, call.argumentsJson));
       if (call.name === HAND_OVER_TOOL && 'reason' in result)
         return { handover: result.reason as Reason };
       results.push({ tool: call.name, result });
@@ -270,6 +275,7 @@ export class SalesAgentService {
       : input.customerTexts.map((text) => ({ from: 'customer', text: text.slice(0, 2000) }));
     return [
       `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
+      shopRulesBlock(input.rules),
       ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
       `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
       ...(inChat
@@ -311,7 +317,7 @@ function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | 
 }
 
 // A run that was shown the products block records its version with the reply prompt's.
-function promptWith(prompt: typeof chatReplyV6, inChat: ToolResult | undefined) {
+function promptWith(prompt: typeof chatReplyV7, inChat: ToolResult | undefined) {
   return inChat ? { ...prompt, version: `${prompt.version}+${productsInChatVersion}` } : prompt;
 }
 
