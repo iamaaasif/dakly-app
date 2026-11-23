@@ -11,7 +11,7 @@ import {
   type KhataTurn,
 } from '../../khata-scans/khata-photo';
 import { readKhataRows, type ReadKhataRow } from '../../khata-scans/khata-row-reading';
-import { readKhataPage } from '../../khata-scans/prompts/read-khata-page.v3';
+import { readKhataPage } from '../../khata-scans/prompts/read-khata-page.v4';
 import type { EvalMeter } from './eval-meter';
 import type { MediaScore } from './media-eval';
 import { meteredRespond } from './reply-pipeline';
@@ -28,7 +28,18 @@ export type ExpectedKhataRow = {
 };
 
 // The pages are typeset in Bangla, Banglish and mixed script on ruled paper. Two are sideways.
-export const khataCases: { file: string; expected: ExpectedKhataRow[] }[] = [
+export const khataCases: { file: string; expected: ExpectedKhataRow[]; checksNames?: boolean }[] = [
+  // The owner's own phone photo of a handwritten page. Names are scored here because a weak
+  // vision model made them up, and the dates are written with looped zeros that read as 3 or 6, so dates are scored even when unsure.
+  {
+    file: 'khata-real-handwriting',
+    checksNames: true,
+    expected: [
+      { name: 'রহিম', amountPoisha: 50_000, entryDate: '2025-11-07' },
+      { name: 'করিম', amountPoisha: 100_000, entryDate: '2025-10-06' },
+      { name: 'রবি', amountPoisha: 200_000, entryDate: '2025-06-10', phone: '01818050101' },
+    ],
+  },
   {
     file: 'khata-bangla-upright',
     expected: [
@@ -79,8 +90,12 @@ export const khataCases: { file: string; expected: ExpectedKhataRow[] }[] = [
 const sureRow = (row: ReadKhataRow) => row.confidence >= KHATA_CONFIDENCE_THRESHOLD;
 const MONTH_WORDS = ['মাসের', 'মাস', 'মে', 'জুন', 'জুলাই', 'may', 'jun', 'jul'];
 
-function wrongDetail(found: ReadKhataRow, wanted: ExpectedKhataRow): string | undefined {
-  if (!sureRow(found)) return undefined;
+function wrongDetail(
+  found: ReadKhataRow,
+  wanted: ExpectedKhataRow,
+  isStrict: boolean,
+): string | undefined {
+  if (!isStrict && !sureRow(found)) return undefined;
   if (wanted.entryDate && found.entryDate !== wanted.entryDate)
     return `${wanted.name} date ${found.entryDate} not ${wanted.entryDate}`;
   if (wanted.phone && found.phone !== wanted.phone)
@@ -100,10 +115,16 @@ function wrongSureRow(row: ReadKhataRow, expected: ExpectedKhataRow[]): string |
 // A page passes when every written row comes back (found by its amount) and no row the owner
 // would not be asked to check is wrong: an amount that is not on the page, a wrong date or phone,
 // or a month word as a name. A misread letter in a name is shown to the owner, so it is not scored.
-export function scoreKhataReading(rows: ReadKhataRow[], expected: ExpectedKhataRow[]): string[] {
+export function scoreKhataReading(
+  rows: ReadKhataRow[],
+  expected: ExpectedKhataRow[],
+  checksNames = false,
+): string[] {
   const fromExpected = expected.map((wanted) => {
     const found = rows.find((row) => row.amountPoisha === wanted.amountPoisha);
-    if (found) return wrongDetail(found, wanted);
+    if (found && checksNames && !found.name.toLowerCase().includes(wanted.name))
+      return `${wanted.name} read as ${found.name}`;
+    if (found) return wrongDetail(found, wanted, checksNames);
     // A row with the right name but a doubtful amount is flagged for the owner: safe, not missing.
     const flagged = rows.some(
       (row) => !sureRow(row) && row.name.toLowerCase().includes(wanted.name),
@@ -153,12 +174,12 @@ export async function runKhataEval(
   model: string,
 ): Promise<MediaScore> {
   const failures: string[] = [];
-  for (const { file, expected } of khataCases) {
+  for (const { file, expected, checksNames } of khataCases) {
     const original = new Uint8Array(readFileSync(path.join(fixtures, `${file}.jpg`)));
     try {
       const output = await readPage({ driver, meter, model, original });
       const problems = output
-        ? scoreKhataReading(readKhataRows(output, today), expected)
+        ? scoreKhataReading(readKhataRows(output, today), expected, checksNames)
         : ['no reading'];
       if (problems.length > 0) failures.push(`${file}: ${problems.join(', ')}`);
     } catch (error) {
