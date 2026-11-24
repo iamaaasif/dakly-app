@@ -39,6 +39,7 @@ import { type HandoverCheckRules, handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v2';
 import { burstText, isFlood, isSameTurn } from './reply-burst';
+import { outageRetryDelay, retryAt } from './reply-retry';
 import {
   type ComposedReply,
   type ComposeInput,
@@ -154,7 +155,7 @@ export class AiAgentService {
     if (stopped) return this.handOver(storeId, conversationId, candidate, stopped);
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
-    if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
+    if (burst.awaitingMedia) return retryAt(this.clock.now(), MEDIA_WAIT_MS);
     const earlier = await this.earlierMessages(storeId, conversationId, burst.messageIds);
     const compose = {
       storeId,
@@ -164,10 +165,10 @@ export class AiAgentService {
       rules: candidate.rules,
     };
     const { reason, prepared } = await this.checkHandOver(compose, earlier, burst.screenTexts);
-    if (reason === 'busy') return this.retryLater();
+    if (reason === 'busy') return retryAt(this.clock.now());
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose(compose, prepared);
-    if (composed.kind === 'busy') return this.retryLater();
+    if (composed.kind === 'busy') return retryAt(this.clock.now());
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
     return this.send(storeId, conversationId, candidate, composed);
@@ -230,10 +231,6 @@ export class AiAgentService {
       (await this.usage.isConsumed(storeId, 'ai_conversation', reference)) ||
       (await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
     );
-  }
-
-  private retryLater(delayMs = 1000) {
-    return { delayUntil: this.clock.now().getTime() + delayMs };
   }
 
   private async eligibleTurn(
@@ -311,6 +308,8 @@ export class AiAgentService {
     before: EligibleTurn,
     reason: Reason,
   ) {
+    const retryIn = outageRetryDelay(reason, before.turn.latest.createdAt, this.clock.now());
+    if (retryIn) return retryAt(this.clock.now(), retryIn);
     await this.transaction.runLocked(storeId, async () => {
       const current = await this.lockCurrent(storeId, conversationId, before);
       if (!current) return;
