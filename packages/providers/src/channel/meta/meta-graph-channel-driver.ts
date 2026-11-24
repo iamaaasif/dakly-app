@@ -136,7 +136,7 @@ export class MetaGraphChannelDriver
   implements
     MetaAuthorizationDriver,
     MetaTokenHealthDriver,
-    Pick<ChannelDriver, 'send' | 'downloadMedia'>,
+    Pick<ChannelDriver, 'send' | 'downloadMedia' | 'showTyping'>,
     ProfileDriver,
     Omit<CommentDriver, 'parseComments'>
 {
@@ -281,6 +281,19 @@ export class MetaGraphChannelDriver
       { method: 'POST', accessToken, signal: AbortSignal.timeout(requestTimeoutMs), body },
     );
     return { externalMessageId: response.message_id };
+  }
+
+  async showTyping(
+    { accountExternalId, accessToken }: ChannelCredentials,
+    { channel, recipientExternalId }: Parameters<ChannelDriver['showTyping']>[1],
+  ) {
+    const endpoint = channel === 'messenger' ? encodeURIComponent(accountExternalId) : 'me';
+    await this.request(`${endpoint}/messages`, {}, z.object({ recipient_id: z.string().min(1) }), {
+      method: 'POST',
+      accessToken,
+      signal: AbortSignal.timeout(requestTimeoutMs),
+      body: JSON.stringify({ recipient: { id: recipientExternalId }, sender_action: 'typing_on' }),
+    });
   }
 
   async replyToComment(

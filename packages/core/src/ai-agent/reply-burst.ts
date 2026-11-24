@@ -54,3 +54,16 @@ export function burstText(turn: Turn, delay: number, now: Date) {
   }
   return { texts: texts.reverse(), screenTexts, messageIds, awaitingMedia };
 }
+
+type TurnSnapshot = { target: { contactId: string }; turn: Turn };
+
+// True when the same customer has the same messages in the same chat version, so nothing arrived
+// while the model was working.
+export function isSameTurn(current: TurnSnapshot, before: TurnSnapshot) {
+  return (
+    current.target.contactId === before.target.contactId &&
+    current.turn.version === before.turn.version &&
+    current.turn.inbound.length === before.turn.inbound.length &&
+    current.turn.inbound.every(({ id }, index) => id === before.turn.inbound[index]?.id)
+  );
+}

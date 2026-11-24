@@ -38,7 +38,7 @@ export class FakeMetaChannelDriver
   implements
     MetaAuthorizationDriver,
     MetaTokenHealthDriver,
-    Pick<ChannelDriver, 'send' | 'downloadMedia'>,
+    Pick<ChannelDriver, 'send' | 'downloadMedia' | 'showTyping'>,
     ProfileDriver,
     Omit<CommentDriver, 'parseComments'>
 {
@@ -84,6 +84,13 @@ export class FakeMetaChannelDriver
     const reference = JSON.stringify([message.channel, accountExternalId, message.operationKey]);
     const externalMessageId = `fake-${createHash('sha256').update(reference).digest('hex')}`;
     return { externalMessageId };
+  }
+
+  async showTyping(
+    credentials: ChannelCredentials,
+    target: Parameters<ChannelDriver['showTyping']>[1],
+  ) {
+    this.requireConnected(target.channel, credentials);
   }
 
   async replyToComment(
