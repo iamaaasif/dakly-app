@@ -81,6 +81,14 @@ export type ProductCard = {
   image?: { objectKey: string; contentType: string; sizeBytes: number };
 };
 
+export type PreparedReply = {
+  results: ToolResult[];
+  scoped: ComposeInput;
+  ad: { result: ToolResult } | undefined;
+  inChat: ToolResult | undefined;
+  context: string;
+};
+
 export type ComposeInput = ToolScope & { customerTexts: string[]; rules: ShopRules };
 
 // Runs the model and the read-only tools. It sends nothing and holds no transaction.
@@ -100,8 +108,8 @@ export class SalesAgentService {
 
   // A reply that fails the fact check is written once more with the failure named, so a slip such
   // as an invented amount does not cost the customer a person's wait. A second failure hands over.
-  async compose(input: ComposeInput): Promise<ComposedReply> {
-    const first = await this.composeOnce(input);
+  async compose(input: ComposeInput, prepared?: Promise<PreparedReply>): Promise<ComposedReply> {
+    const first = await this.composeOnce(input, undefined, prepared);
     const failed = first.kind === 'reply' && (await this.factCheckFailure(input, first));
     if (first.kind !== 'reply' || !failed) return first;
     await this.runs.setOutcome(input.storeId, first.aiRunId, 'failed_check', failed);
@@ -126,19 +134,33 @@ export class SalesAgentService {
     return !checked.isSafe && checked.failure;
   }
 
+  // Reads what the model needs. The caller may start it while the hand-over check is still
+  // running; it only reads, so a hand-over simply drops the result.
+  async prepare(input: ComposeInput): Promise<PreparedReply> {
+    const results: ToolResult[] = [];
+    // A practice question has no saved conversation, so the question itself is the whole history.
+    const [history, products] = await Promise.all([
+      input.chat
+        ? this.inbox.replyHistory(input.storeId, input.chat.conversationId, HISTORY_LENGTH)
+        : undefined,
+      this.gatherProducts(input, results),
+    ]);
+    const { scoped, ad, inChat, candidates } = products;
+    const context = await this.context({ input, history, inChat, candidates, ad });
+    return { results, scoped, ad, inChat, context };
+  }
+
   private async composeOnce(
     input: ComposeInput,
     rejected?: { failure: FactCheckFailure; reply: string },
+    prepared?: Promise<PreparedReply>,
   ): Promise<ComposedReply> {
     const { storeId } = input;
     const signal = AbortSignal.timeout(REPLY_BUDGET_MS);
-    const results: ToolResult[] = [];
-    // A practice question has no saved conversation, so the question itself is the whole history.
-    const history = input.chat
-      ? await this.inbox.replyHistory(storeId, input.chat.conversationId, HISTORY_LENGTH)
-      : undefined;
-    const { scoped, ad, inChat, candidates } = await this.gatherProducts(input, results);
-    const context = await this.context({ input, history, inChat, candidates, ad });
+    const ready = await (prepared ?? this.prepare(input));
+    // The model's tool rounds add to the list, so a retry must not see the first try's results.
+    const results = [...ready.results];
+    const { scoped, ad, inChat, context } = ready;
     let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {

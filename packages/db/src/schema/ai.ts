@@ -50,7 +50,7 @@ export const aiAgentSettings = pgTable(
       .default('match_customer'),
     abilities: jsonb('abilities').notNull().default({}),
     handoverRules: jsonb('handover_rules').notNull().default({}),
-    debounceSeconds: smallint('debounce_seconds').notNull().default(8),
+    debounceSeconds: smallint('debounce_seconds').notNull().default(3),
     claimTimeoutMinutes: smallint('claim_timeout_minutes').default(10),
     returnToAiMinutes: integer('return_to_ai_minutes').default(30),
     extraRules: text('extra_rules'),
