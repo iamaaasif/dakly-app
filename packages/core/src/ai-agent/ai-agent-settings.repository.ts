@@ -40,13 +40,16 @@ export class AiAgentSettingsRepository {
         .where(and(eq(aiAgentSettings.storeId, storeId), eq(aiAgentSettings.isAutoReplyOn, true))),
     );
     if (!settings) return undefined;
-    const { productCardStyle } = agentAbilitiesSchema.partial().parse(settings.abilities);
+    const { productCardStyle, answerComments } = agentAbilitiesSchema
+      .partial()
+      .parse(settings.abilities);
     return {
       debounceSeconds: settings.debounceSeconds,
       testers: testersSchema.parse(settings.testers),
       claimTimeoutMinutes: settings.claimTimeoutMinutes,
       returnToAiMinutes: settings.returnToAiMinutes,
       productCardStyle: productCardStyle ?? defaultAgentAbilities.productCardStyle,
+      answerComments: answerComments ?? defaultAgentAbilities.answerComments,
       rules: shopRulesFrom(settings),
     };
   }

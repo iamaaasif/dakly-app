@@ -35,6 +35,11 @@ export class ProductSearchSourceService {
     }));
   }
 
+  async chatProductsByPhotos(storeId: string, fileIds: string[]) {
+    if (!fileIds.length) return [];
+    return this.repository.findIdsByChatPhotos(storeId, fileIds);
+  }
+
   nearestForChat(
     storeId: string,
     input: { embedding: readonly number[]; model: string; limit: number },

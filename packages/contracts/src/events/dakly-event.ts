@@ -76,6 +76,7 @@ import {
   variantRestockedEventSchema,
 } from './products';
 import {
+  commentReceivedEventSchema,
   postFailedEventSchema,
   postPublishedEventSchema,
   postScheduledEventSchema,
@@ -137,6 +138,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   attributionWindowChangedEventSchema,
   attributionRebuildContinuedEventSchema,
   attributionOrdersRebuiltEventSchema,
+  commentReceivedEventSchema,
   postScheduledEventSchema,
   postPublishedEventSchema,
   postFailedEventSchema,

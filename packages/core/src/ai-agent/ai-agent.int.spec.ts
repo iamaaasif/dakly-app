@@ -16,6 +16,8 @@ import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
 import type { LlmResult } from '@dakly/providers/llm/llm-driver';
 
 import { AiService } from '../ai/ai.service';
+import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { CommentsService } from '../comments/comments.service';
 import { KillSwitchesService } from '../kill-switches/kill-switches.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
@@ -25,8 +27,10 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { SocialService } from '../social/social.service';
 import { AiAgentModule } from './ai-agent.module';
 import { AiAgentService } from './ai-agent.service';
+import { ReplyToFacebookCommentJob } from './jobs/reply-to-facebook-comment.job';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeIds: string[] = [];
@@ -63,6 +67,9 @@ afterAll(async () => {
     await queue?.obliterate();
     await app?.close();
     for (const table of [
+      'social_comments',
+      'post_targets',
+      'posts',
       'product_variants',
       'products',
       'delivery_zones',
@@ -951,3 +958,107 @@ it("returns the chat to the AI 30 minutes after a person's last reply, without c
   );
   expect(await conversationTimer(permanent)).toEqual({ responder: 'human', minutes: null });
 });
+
+it.each(['catalogue photo', 'caption', 'conflicting post'] as const)(
+  'handles a Facebook price comment using %s and respects the comment switch',
+  async (match) => {
+    const { storeId, connectionId } = await shop();
+    const productId = randomUUID();
+    const postId = randomUUID();
+    const photoId = randomUUID();
+    await admin.pool.query(
+      "insert into products (id, store_id, name, price_poisha, image_file_ids) values ($1,$2,'Blue Kurti',120000,$3)",
+      [productId, storeId, [photoId]],
+    );
+    await admin.pool.query(
+      "insert into product_variants (id, store_id, product_id, title, on_hand, is_default) values (gen_random_uuid(),$1,$2,'Default',3,true)",
+      [storeId, productId],
+    );
+    if (match === 'conflicting post') {
+      await admin.pool.query(
+        "insert into products (id,store_id,name,price_poisha) values (gen_random_uuid(),$1,'Red Saree',250000)",
+        [storeId],
+      );
+    }
+    const caption = {
+      'catalogue photo': 'New arrival',
+      caption: 'New arrival: Blue Kurti',
+      'conflicting post': 'New arrival: Red Saree',
+    }[match];
+    await admin.pool.query(
+      'insert into posts (id,store_id,caption,media_file_ids) values ($1,$2,$3,$4)',
+      [postId, storeId, caption, match === 'caption' ? [] : [photoId]],
+    );
+    await admin.pool.query(
+      "insert into post_targets (id,store_id,post_id,channel_connection_id,external_post_id,status,published_at) values (gen_random_uuid(),$1,$2,$3,$4,'published',now())",
+      [storeId, postId, connectionId, postId],
+    );
+    const social = app.get(SocialService);
+    await expect(
+      social.publishedPostContent(randomUUID(), {
+        channelConnectionId: connectionId,
+        externalPostId: postId,
+      }),
+    ).resolves.toBeUndefined();
+    const comments = app.get(CommentsService);
+    const connections = app.get(ChannelConnectionsService);
+    vi.spyOn(connections, 'prepareMetaSend').mockResolvedValue({
+      storeId,
+      connectionId,
+      channel: 'messenger',
+      ciphertext: Buffer.alloc(0),
+      keyVersion: 1,
+      externalAccountId: connectionId,
+    });
+    const privateReply = vi.spyOn(connections, 'sendMetaPrivateReply').mockResolvedValue({
+      externalMessageId: 'private-reply',
+      recipientExternalId: 'commenter',
+    });
+    const publicReply = vi.spyOn(connections, 'replyToMetaComment').mockResolvedValue({
+      externalReplyId: 'public-reply',
+    });
+    const job = app.get(ReplyToFacebookCommentJob);
+
+    async function receivePriceComment() {
+      const now = new Date();
+      await comments.receive(storeId, {
+        kind: 'facebook_page',
+        externalAccountId: connectionId,
+        externalPostId: postId,
+        externalCommentId: randomUUID(),
+        authorExternalId: 'commenter',
+        authorName: null,
+        parentExternalCommentId: null,
+        text: 'Price koto?',
+        commentedAt: now,
+        receivedAt: now,
+      });
+      const { rows } = await admin.pool.query(
+        "select id, type, payload, occurred_at from outbox_events where store_id=$1 and type='comment.received' order by occurred_at desc,id desc limit 1",
+        [storeId],
+      );
+      const { occurred_at, ...event } = rows[0];
+      return { ...event, storeId, occurredAt: occurred_at.toISOString() };
+    }
+
+    const event = await receivePriceComment();
+    await job.handle(event);
+    await job.handle(event);
+    await admin.pool.query('update ai_agent_settings set abilities = $2 where store_id=$1', [
+      storeId,
+      { answerComments: false },
+    ]);
+    await job.handle(await receivePriceComment());
+    expect(privateReply.mock.calls.map(([, input]) => input.text)).toEqual(
+      match === 'conflicting post' ? [] : ['Blue Kurti er dam ৳1,200.'],
+    );
+    expect(publicReply.mock.calls.map(([, input]) => input.text)).toEqual(
+      match === 'conflicting post' ? [] : ['Messenger e dam janiyechi.'],
+    );
+    const { items } = await comments.list(storeId, { limit: 50 });
+    expect(items.map(({ status }) => status).sort()).toEqual([
+      'new',
+      match === 'conflicting post' ? 'new' : 'replied',
+    ]);
+  },
+);

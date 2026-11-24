@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
   CommentListQuery,
   CommentReplyInput,
@@ -10,9 +11,13 @@ import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
 
 import { AuditService } from '../audit/audit.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { ConsentService } from '../consents/consent.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
+import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { AppError } from '../platform/errors/app-error';
+import { OutboxService } from '../platform/outbox/outbox.service';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
@@ -39,9 +44,12 @@ function channelOf(kind: CommentRow['kind']) {
   return kind === 'instagram' ? 'instagram' : 'messenger';
 }
 
+function privateReplyClosesAt(row: CommentRow) {
+  return new Date(new Date(row.commentedAt).getTime() + privateReplyWindowDays * DAY_MS);
+}
+
 function canReplyPrivately(row: CommentRow, now: Date) {
-  const expiresAt = new Date(row.commentedAt).getTime() + privateReplyWindowDays * DAY_MS;
-  return !row.privateRepliedAt && now.getTime() <= expiresAt;
+  return !row.privateRepliedAt && now < privateReplyClosesAt(row);
 }
 
 function toResponse(row: CommentRow, now: Date): CommentResponse {
@@ -62,10 +70,12 @@ function toResponse(row: CommentRow, now: Date): CommentResponse {
   };
 }
 
+function isDefiniteRejection(error: unknown) {
+  return error instanceof MetaRequestError && ['rejected', 'auth_error'].includes(error.code);
+}
+
 function providerError(error: unknown) {
-  if (error instanceof MetaRequestError && ['rejected', 'auth_error'].includes(error.code))
-    return commentError('COMMENT_REJECTED');
-  return commentError('COMMENT_UNCONFIRMED');
+  return commentError(isDefiniteRejection(error) ? 'COMMENT_REJECTED' : 'COMMENT_UNCONFIRMED');
 }
 
 @Injectable()
@@ -75,10 +85,13 @@ export class CommentsService {
     @Inject(ChannelConnectionsService) private readonly connections: ChannelConnectionsService,
     @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
+    @Inject(ConsentService) private readonly consent: ConsentService,
+    @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
   ) {}
 
   receive(storeId: string, input: ReceiveCommentInput): Promise<ReceiveOutcome> {
@@ -112,7 +125,16 @@ export class CommentsService {
         },
         this.clock.now(),
       );
-      return id ? 'stored' : 'duplicate';
+      if (!id) return 'duplicate';
+      if (input.kind === 'facebook_page' && !input.parentExternalCommentId) {
+        await this.outbox.publish({
+          type: 'comment.received',
+          storeId,
+          occurredAt: input.receivedAt.toISOString(),
+          payload: { commentId: id },
+        });
+      }
+      return 'stored';
     });
   }
 
@@ -130,6 +152,88 @@ export class CommentsService {
 
   async replyPublicly(storeId: string, userId: string, id: string, input: CommentReplyInput) {
     await this.requireChats(storeId);
+    await this.sendPublicReply(storeId, { kind: 'user', userId }, id, input.body);
+    return this.respond(storeId, id);
+  }
+
+  async replyPrivately(storeId: string, userId: string, id: string, input: CommentReplyInput) {
+    await this.requireChats(storeId);
+    await this.sendPrivateReply(storeId, { kind: 'user', userId }, id, input.body);
+    return this.respond(storeId, id);
+  }
+
+  async pendingFacebookReply(storeId: string, id: string) {
+    const row = await this.repository.find(storeId, id);
+    if (
+      !row ||
+      row.kind !== 'facebook_page' ||
+      row.status === 'hidden' ||
+      row.parentExternalCommentId !== null ||
+      row.publicReplyExternalId !== null ||
+      this.clock.now() >= privateReplyClosesAt(row)
+    )
+      return;
+    const phase = await this.automaticReplyPhase(storeId, row);
+    if (!phase) return;
+    const { channelConnectionId, externalPostId, body } = row;
+    return {
+      channelConnectionId,
+      externalPostId,
+      body,
+      privateSent: phase === 'public',
+    };
+  }
+
+  private async automaticReplyPhase(storeId: string, row: CommentRow) {
+    if (row.status === 'new' && !row.privateRepliedAt) return 'private';
+    if (row.status === 'replied' && (await this.hasAutomaticPrivateReply(storeId, row.id)))
+      return 'public';
+  }
+
+  private async hasAutomaticPrivateReply(storeId: string, id: string) {
+    const replies = await this.audit.history(storeId, {
+      entityType: 'comment',
+      entityId: id,
+      action: 'comment.replied_privately',
+    });
+    return replies.some(({ actorType }) => actorType === 'system');
+  }
+
+  async replyAutomatically(
+    storeId: string,
+    id: string,
+    { privateBody, publicBody }: { privateBody?: string; publicBody: string },
+  ) {
+    await this.requireChats(storeId);
+    const pending = await this.pendingFacebookReply(storeId, id);
+    if (!pending || (!pending.privateSent && !privateBody)) return;
+    const actor = { kind: 'system' } as const;
+    try {
+      if (!pending.privateSent && privateBody)
+        await this.sendPrivateReply(storeId, actor, id, privateBody);
+      await this.sendPublicReply(storeId, actor, id, publicBody);
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        [
+          'COMMENT_ALREADY_REPLIED',
+          'COMMENT_PRIVATE_REPLY_USED',
+          'COMMENT_PRIVATE_REPLY_EXPIRED',
+          'COMMENT_PRIVATE_REPLY_BLOCKED',
+          'CHANNEL_NOT_CONNECTED',
+        ].includes(error.code)
+      )
+        return;
+      throw error;
+    }
+  }
+
+  private async sendPublicReply(
+    storeId: string,
+    actor: AuditEntry['actor'],
+    id: string,
+    body: string,
+  ) {
     const row = await this.require(storeId, id);
     if (row.publicReplyExternalId) throw commentError('COMMENT_ALREADY_REPLIED');
     const channel = channelOf(row.kind);
@@ -138,18 +242,25 @@ export class CommentsService {
       row.channelConnectionId,
       channel,
     );
-    if (!(await this.repository.claimPublicReply(storeId, id, this.clock.now())))
+    if (
+      !(await this.repository.claimPublicReply(
+        storeId,
+        id,
+        this.clock.now(),
+        actor.kind === 'system',
+      ))
+    )
       throw commentError('COMMENT_ALREADY_REPLIED');
     let externalReplyId: string;
     try {
       ({ externalReplyId } = await this.connections.replyToMetaComment(prepared, {
         channel,
         externalCommentId: row.externalCommentId,
-        text: input.body,
+        text: body,
       }));
     } catch (error) {
       // Only a refusal proves nothing was posted; after an outage the reply may be on the page.
-      if (error instanceof MetaRequestError && error.code !== 'unavailable')
+      if (isDefiniteRejection(error))
         await this.repository.releasePublicReply(storeId, id, this.clock.now());
       throw providerError(error);
     }
@@ -160,59 +271,81 @@ export class CommentsService {
         { publicReplyExternalId: externalReplyId },
         this.clock.now(),
       );
-      await this.record(storeId, userId, {
+      await this.record(storeId, actor, {
         action: 'comment.replied_publicly',
         id,
         state: 'replied',
       });
     });
-    return this.respond(storeId, id);
   }
 
-  async replyPrivately(storeId: string, userId: string, id: string, input: CommentReplyInput) {
-    await this.requireChats(storeId);
+  private async sendPrivateReply(
+    storeId: string,
+    actor: AuditEntry['actor'],
+    id: string,
+    body: string,
+  ) {
     const row = await this.require(storeId, id);
     const now = this.clock.now();
     if (row.privateRepliedAt) throw commentError('COMMENT_PRIVATE_REPLY_USED');
     if (!canReplyPrivately(row, now)) throw commentError('COMMENT_PRIVATE_REPLY_EXPIRED');
     const channel = channelOf(row.kind);
-    if (row.contactId) {
-      const decision = await this.sendPolicy.check(storeId, {
-        contactId: row.contactId,
-        channel,
-        category: 'staff_reply',
-        at: now,
-      });
-      if (decision.action !== 'send') throw commentError('COMMENT_PRIVATE_REPLY_BLOCKED');
-    }
     const prepared = await this.connections.prepareMetaSend(
       storeId,
       row.channelConnectionId,
       channel,
     );
-    if (!(await this.repository.claimPrivateReply(storeId, id, now)))
-      throw commentError('COMMENT_PRIVATE_REPLY_USED');
+    await this.claimPrivateReply(storeId, row, actor.kind === 'system');
     try {
       await this.connections.sendMetaPrivateReply(prepared, {
         channel,
         externalCommentId: row.externalCommentId,
-        text: input.body,
+        text: body,
       });
     } catch (error) {
       // Only a refusal proves nothing was sent; after an outage the reply may have gone out.
-      if (error instanceof MetaRequestError && error.code !== 'unavailable')
+      if (isDefiniteRejection(error))
         await this.repository.releasePrivateReply(storeId, id, this.clock.now());
       throw providerError(error);
     }
     await this.transaction.run(storeId, async () => {
       await this.repository.markReplied(storeId, id, {}, this.clock.now());
-      await this.record(storeId, userId, {
+      await this.record(storeId, actor, {
         action: 'comment.replied_privately',
         id,
         state: 'replied',
       });
     });
-    return this.respond(storeId, id);
+  }
+
+  private claimPrivateReply(storeId: string, row: CommentRow, onlyUnanswered: boolean) {
+    return this.transaction.runLocked(storeId, async () => {
+      const windowClosesAt = privateReplyClosesAt(row);
+      if (row.contactId) {
+        const { decision } = await this.sendPolicy.checkForSend(storeId, {
+          contactId: row.contactId,
+          channel: channelOf(row.kind),
+          category: 'staff_reply',
+          windowClosesAt,
+        });
+        if (
+          decision.action !== 'send' ||
+          (onlyUnanswered && !(await this.mayReplyAutomatically(storeId, row.contactId)))
+        )
+          throw commentError('COMMENT_PRIVATE_REPLY_BLOCKED');
+      }
+      const now = this.clock.now();
+      if (now >= windowClosesAt) throw commentError('COMMENT_PRIVATE_REPLY_EXPIRED');
+      if (!(await this.repository.claimPrivateReply(storeId, row.id, now, onlyUnanswered)))
+        throw commentError('COMMENT_PRIVATE_REPLY_USED');
+    });
+  }
+
+  private async mayReplyAutomatically(storeId: string, contactId: string) {
+    const contact = await this.contacts.findRecipient(storeId, contactId);
+    if (!contact || contact.kind === 'not_customer') return false;
+    const consent = await this.consent.current(storeId, [contactId], 'messenger');
+    return !consent.some(({ status }) => status === 'withdrawn');
   }
 
   async setHidden(storeId: string, userId: string, id: string, hidden: boolean) {
@@ -236,11 +369,15 @@ export class CommentsService {
     }
     await this.transaction.run(storeId, async () => {
       await this.repository.setHidden(storeId, id, hidden, this.clock.now());
-      await this.record(storeId, userId, {
-        action: hidden ? 'comment.hidden' : 'comment.unhidden',
-        id,
-        state: hidden ? 'hidden' : 'visible',
-      });
+      await this.record(
+        storeId,
+        { kind: 'user', userId },
+        {
+          action: hidden ? 'comment.hidden' : 'comment.unhidden',
+          id,
+          state: hidden ? 'hidden' : 'visible',
+        },
+      );
     });
     return this.respond(storeId, id);
   }
@@ -257,11 +394,11 @@ export class CommentsService {
 
   private record(
     storeId: string,
-    userId: string,
+    actor: AuditEntry['actor'],
     change: { action: string; id: string; state: string },
   ) {
     return this.audit.record(storeId, {
-      actor: { kind: 'user', userId },
+      actor,
       action: change.action,
       entityType: 'comment',
       entityId: change.id,

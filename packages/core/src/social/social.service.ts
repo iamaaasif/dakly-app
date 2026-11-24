@@ -24,6 +24,7 @@ import { TeamService } from '../team/team.service';
 import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
 import { validateInstagramPhotos, validateInstagramPost } from './post-content';
 import { photosOf, response } from './post-response';
+import { PublishedPostsRepository } from './published-posts.repository';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
@@ -39,6 +40,7 @@ type PostingConnection = Awaited<
 export class SocialService {
   constructor(
     @Inject(SocialRepository) private readonly repository: SocialRepository,
+    @Inject(PublishedPostsRepository) private readonly published: PublishedPostsRepository,
     @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
     @Inject(TeamService) private readonly team: TeamService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
@@ -118,6 +120,15 @@ export class SocialService {
     return new Map(
       files.map(({ id, objectKey }) => [id, this.storage.createDownloadUrl(objectKey, 15 * 60)]),
     );
+  }
+
+  async publishedPostContent(
+    storeId: string,
+    target: { channelConnectionId: string; externalPostId: string },
+  ) {
+    const post = await this.published.publishedPostContent(storeId, target);
+    if (post)
+      return { caption: post.captionOverride ?? post.caption, mediaFileIds: post.mediaFileIds };
   }
 
   async listPosts(

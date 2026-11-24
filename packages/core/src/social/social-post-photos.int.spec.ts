@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { PublishedPostsRepository } from './published-posts.repository';
 import { SocialRepository } from './social.repository';
 import { SocialService } from './social.service';
 
@@ -20,6 +21,7 @@ describe('SocialService post photos', () => {
     const unused = {} as never;
     return new SocialService(
       new SocialRepository(fixture.tenant),
+      new PublishedPostsRepository(fixture.tenant),
       unused,
       unused,
       unused,
