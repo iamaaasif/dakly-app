@@ -6,8 +6,8 @@ import { Badge } from '@dakly/ui/badge';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 
-import { contactDisplayName } from '../contact-name';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { contactDisplayName } from '../contact-name';
 import { formatDate, formatTime } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';

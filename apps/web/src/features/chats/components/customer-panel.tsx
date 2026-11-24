@@ -7,8 +7,8 @@ import { cn } from '@dakly/ui/cn';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { useChatContact } from '../api/chat-contact';
-import { contactDisplayName } from '../contact-name';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { contactDisplayName } from '../contact-name';
 import { CustomerStatus } from './customer-status';
 import { DeliveryHistory } from './delivery-history';
 import { MakeOrderForm } from './make-order-form';

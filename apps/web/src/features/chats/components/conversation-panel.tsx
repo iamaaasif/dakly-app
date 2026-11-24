@@ -10,13 +10,13 @@ import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
-import { contactDisplayName } from '../contact-name';
 import {
   useConversation,
   useConversationMessages,
   useMarkConversationRead,
 } from '../api/conversation-thread';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { contactDisplayName } from '../contact-name';
 import { replyWindow } from '../reply-window';
 import { ChatComposer } from './chat-composer';
 import { ConversationActions } from './conversation-actions';
