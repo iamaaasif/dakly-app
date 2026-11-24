@@ -137,3 +137,42 @@ describe('searchWithin', () => {
     expect(found.map(({ id }) => id)).toEqual(['kurti-new', 'kurti-sold-out']);
   });
 });
+
+describe('browse', () => {
+  const priced = (id: string, category: string, price: number) => ({
+    ...candidate(id, id),
+    category,
+    pricesPoisha: [price],
+  });
+  function browseService() {
+    const source = {
+      listSearchCandidates: async () => [
+        priced('shirt', 'Men', 65_000),
+        priced('saree', 'Women', 450_000),
+        priced('lipstick', 'Beauty', 45_000),
+        priced('kurti', 'Women', 110_000),
+      ],
+    } as unknown as ProductSearchSourceService;
+    const products = {
+      getManyForChat: async (_storeId: string, ids: string[]) =>
+        ids.map((id) => chatProduct(id, id === 'kurti' ? 0 : 4)),
+    } as unknown as ProductsService;
+    return new ProductSearchService(products, source, {} as AiService);
+  }
+
+  it('lists the categories and the cheapest products that can be sold now', async () => {
+    const found = await browseService().browse('store', { sort: 'cheapest' }, 3);
+    expect(found.categories).toEqual(['Men', 'Women', 'Beauty']);
+    expect(found.products.map(({ id }) => id)).toEqual(['lipstick', 'shirt', 'saree']);
+  });
+
+  it('keeps to a budget and a category, and leaves out sold-out products', async () => {
+    const service = browseService();
+    expect(
+      (await service.browse('store', { maxPricePoisha: 100_000 }, 5)).products.map(({ id }) => id),
+    ).toEqual(['shirt', 'lipstick']);
+    expect(
+      (await service.browse('store', { category: 'women' }, 5)).products.map(({ id }) => id),
+    ).toEqual(['saree']);
+  });
+});
