@@ -40,7 +40,7 @@ import {
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV10 } from './prompts/chat-reply.v10';
+import { chatReplyV12 } from './prompts/chat-reply.v12';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
@@ -154,7 +154,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV10, inChat, ad),
+        prompt: promptWith(chatReplyV12, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -394,7 +394,7 @@ function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | 
 
 // A run that was shown the products block records its version with the reply prompt's.
 function promptWith(
-  prompt: typeof chatReplyV10,
+  prompt: typeof chatReplyV12,
   inChat: ToolResult | undefined,
   ad: object | undefined,
 ) {

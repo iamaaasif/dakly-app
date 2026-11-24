@@ -14,7 +14,7 @@ import {
 } from '../../ai-agent/chat-memory';
 import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV10 } from '../../ai-agent/prompts/chat-reply.v10';
+import { chatReplyV12 } from '../../ai-agent/prompts/chat-reply.v12';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
 import {
@@ -330,7 +330,7 @@ async function composeOnce(
       history ? `reply:${model}:${history}` : `reply:${model}`,
       {
         model,
-        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV10.instructions,
+        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV12.instructions,
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
