@@ -112,6 +112,8 @@ export async function reportReply(context: JobContext, models: string[], fastMod
       totals?.inputTokens
         ? `${Math.round((totals.cachedInputTokens / totals.inputTokens) * 100)}%`
         : '-',
+      totals ? String(Math.round(totals.inputTokens / answered)) : '-',
+      totals ? (totals.calls / answered).toFixed(2) : '-',
       perThousand(totals?.microUsd, answered),
     ]);
     if (context.verbose)
@@ -131,6 +133,8 @@ export async function reportReply(context: JobContext, models: string[], fastMod
       'hand-overs right',
       'needless',
       'cached input',
+      'input tokens per chat',
+      'calls per chat',
       'per 1,000 chats',
     ],
     rows,

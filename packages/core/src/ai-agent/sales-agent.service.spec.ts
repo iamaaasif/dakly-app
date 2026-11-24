@@ -167,7 +167,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v10+products-in-chat.v2');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v12+products-in-chat.v2');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
@@ -269,7 +269,7 @@ it('adds no shown products when the chat has none, so the model still asks which
   });
 
   expect(run.mock.calls[0]![1].input).not.toContain('products_in_this_chat');
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v10');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v12');
   expect(tools.run).not.toHaveBeenCalledWith(expect.anything(), 'get_product', expect.anything());
 });
 
@@ -470,7 +470,7 @@ it('answers a bare price question from the ad’s products and limits search to 
   const call = run.mock.calls[0]![1];
   expect(call.input).toContain('<ad_products>');
   expect(call.input).toContain('নীল কুর্তি');
-  expect(call.prompt.version).toBe('chat-reply.v10+ad-products.v1');
+  expect(call.prompt.version).toBe('chat-reply.v12+ad-products.v1');
   expect(tools.run).toHaveBeenCalledWith(
     expect.objectContaining({ adProductIds: ['p-red', 'p-blue'] }),
     'search_products',
