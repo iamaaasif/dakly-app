@@ -10,6 +10,7 @@ import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
+import { contactDisplayName } from '../contact-name';
 import {
   useConversation,
   useConversationMessages,
@@ -119,7 +120,7 @@ function ConversationHeader({ conversation }: { conversation: ConversationRespon
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="truncate text-lg font-bold">{conversation.contactName ?? 'No name'}</h2>
+        <h2 className="truncate text-lg font-bold">{contactDisplayName(conversation)}</h2>
         {conversation.channel !== 'whatsapp' ? (
           <Badge variant={window.state === 'open' ? 'warning' : 'neutral'}>
             {window.state === 'open' ? window.label : 'Window over'}

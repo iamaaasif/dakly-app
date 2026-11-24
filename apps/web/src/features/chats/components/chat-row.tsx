@@ -6,6 +6,7 @@ import { Badge } from '@dakly/ui/badge';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 
+import { contactDisplayName } from '../contact-name';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { formatDate, formatTime } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
@@ -27,7 +28,7 @@ type ChatRowProps = {
 const rowClasses = 'flex gap-3 border-l-4 border-transparent p-3 hover:bg-surface-muted';
 
 export function ChatRow({ conversation, query, selection }: ChatRowProps) {
-  const name = conversation.contactName ?? 'No name';
+  const name = contactDisplayName(conversation);
   const content = <ChatRowContent conversation={conversation} name={name} />;
   if (selection)
     return (
