@@ -30,6 +30,20 @@ export class AdLinksRepository {
     return rows.map(({ productId }) => productId);
   }
 
+  async listAll(storeId: string): Promise<(Key & { productId: string })[]> {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          source: adProductLinks.source,
+          externalId: adProductLinks.externalId,
+          productId: adProductLinks.productId,
+        })
+        .from(adProductLinks)
+        .where(eq(adProductLinks.storeId, storeId))
+        .orderBy(asc(adProductLinks.position)),
+    );
+  }
+
   // One transaction swaps the whole set, so a reader never sees half of the old list and half of the new.
   replace(storeId: string, { source, externalId }: Key, productIds: string[]) {
     return this.database.forStore(storeId, async (tx) => {

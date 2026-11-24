@@ -6,6 +6,7 @@ import { Sheet } from '@dakly/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { agentTabs, type AgentTab } from '../agent-tabs';
+import { AdsTab } from './ads-tab';
 import { AgentSettingsTab } from './agent-settings-tab';
 import { FeedbackTab } from './feedback-tab';
 import { GoLivePanel } from './go-live-panel';
@@ -17,6 +18,7 @@ const tabLabels: Record<AgentTab, string> = {
   settings: 'Settings',
   knowledge: 'Knowledge',
   feedback: 'Feedback',
+  ads: 'Ads',
   test: 'Test the agent',
 };
 
@@ -37,6 +39,7 @@ export function AiAgentDrawer({
 }: AiAgentDrawerProps) {
   const { data } = useSessionContext();
   const canEdit = Boolean(data?.currentStore?.canEditStoreSettings);
+  const canEditProducts = Boolean(data?.currentStore?.canEditProducts);
   const canEditChats = Boolean(data?.currentStore?.canEditChats);
   return (
     <Sheet
@@ -72,6 +75,9 @@ export function AiAgentDrawer({
             canFix={canEditChats}
             onFilterChange={onFeedbackFilterChange}
           />
+        </TabsContent>
+        <TabsContent value="ads">
+          <AdsTab canEdit={canEditProducts} />
         </TabsContent>
         <TabsContent value="test">
           <TestAgentTab canEdit={canEdit} />

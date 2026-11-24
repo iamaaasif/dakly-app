@@ -6,6 +6,7 @@ const AD_LINK_ERRORS = {
     status: 422,
     message: 'Link only active products that are shown in chats',
   },
+  AD_SUGGESTION_NOT_FOUND: { status: 404, message: 'This ad has no suggested products' },
   AD_READING_UNAVAILABLE: { status: 503, message: 'The ad could not be read right now' },
 } as const satisfies ErrorCatalog;
 
