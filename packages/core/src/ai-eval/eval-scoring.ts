@@ -137,7 +137,7 @@ function offersOutOfStock({ golden, outcome }: Scored) {
     );
 }
 
-const clauseBreak = /[।.!?,;\n]|\s(?:তবে|কিন্তু|but|kintu|tobe)\s/iu;
+const clauseBreak = /[।.!?,;—–\n]|\s(?:তবে|কিন্তু|but|kintu|tobe)\s/iu;
 const outOfStockPhrase =
   /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\bnei\b|\bnai\b|out of stock|sold out|not available|unavailable/iu;
 // Promising to tell the customer when the item is back is not an offer to sell it now.

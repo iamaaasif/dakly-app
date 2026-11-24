@@ -82,7 +82,7 @@ export const getMyOrdersTool = {
 export const getOrderStatusTool = {
   name: 'get_order_status',
   description:
-    'Status of one of this customer’s orders by number: stage, items, total, courier and tracking code. Use it for “where is my order”.',
+    'Status of one of this customer’s orders by number: stage, items, total, courier and tracking code. Use it for “where is my order”. An order of another customer is reported as not found.',
   aliases: [
     'অর্ডার কোথায়',
     'অর্ডারের অবস্থা',
@@ -135,7 +135,7 @@ export const draftOrderTool = {
 export const confirmOrderTool = {
   name: 'confirm_order',
   description:
-    'Confirm an order waiting for confirmation, after the customer said yes to the summary (হ্যাঁ, yes, ji, ok, ঠিক আছে). Use the order number from draft_order or get_my_orders. When the result says ORDER_ADVANCE_REQUIRED, hand over with the reason other.',
+    'Confirm an order waiting for confirmation, after the customer said yes to the summary (হ্যাঁ, yes, ji, ok, ঠিক আছে). Use the order number from draft_order or get_my_orders. When the result says ORDER_ADVANCE_REQUIRED, hand over with the reason other: a person asks this customer for the delivery charge in advance.',
   aliases: ['হ্যাঁ', 'ji', 'yes', 'ok', 'ঠিক আছে', 'thik ache', 'confirm'],
   input: z.strictObject({ orderNumber: z.int().positive().max(2147483647) }),
   units: {},
