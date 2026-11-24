@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ChatProduct } from '../products/products.service';
-import { describeAlternatives } from './sales-agent-tools.service';
+import { describeAlternatives } from './product-match-results';
 
 const variant = (id: string, available: number) => ({
   id,
