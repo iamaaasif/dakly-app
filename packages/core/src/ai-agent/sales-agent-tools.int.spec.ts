@@ -404,6 +404,22 @@ it('takes an order in a chat, prices it in code and waits for the customer to sa
   });
 });
 
+it('confirms the one order waiting for a yes when the model names a number that is not the customer own', async () => {
+  const { storeId, variantId } = await orderShop();
+  const buyer = await contact(storeId);
+  const { orderNumber } = (await runInChat(storeId, buyer, 'draft_order', draft(variantId))) as {
+    orderNumber: number;
+  };
+  expect(await run(storeId, buyer, 'confirm_order', { orderNumber: orderNumber + 1000 })).toEqual({
+    orderNumber,
+    stage: 'to_pack',
+  });
+  // Nothing is waiting any more, so a wrong number is still refused.
+  expect(await run(storeId, buyer, 'confirm_order', { orderNumber: orderNumber + 1000 })).toEqual({
+    error: 'ORDER_NOT_FOUND',
+  });
+});
+
 it('names add-ons after a confirmed order only when the owner turned them on', async () => {
   const storeId = await shop();
   await admin.pool.query(

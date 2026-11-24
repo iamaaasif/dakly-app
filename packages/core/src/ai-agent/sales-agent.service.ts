@@ -40,7 +40,7 @@ import {
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV10 } from './prompts/chat-reply.v10';
+import { chatReplyV11 } from './prompts/chat-reply.v11';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
@@ -154,7 +154,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV10, inChat, ad),
+        prompt: promptWith(chatReplyV11, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -279,10 +279,13 @@ export class SalesAgentService {
     if (!input.chat) return undefined;
     const referral = await this.inbox.referralOf(input.storeId, input.chat.conversationId);
     if (!referral || !isAdContextFresh(referral.referredAt, this.clock.now())) return undefined;
-    const productIds = (await this.adLinks.productIdsFor(input.storeId, referral)).slice(
-      0,
-      AD_PRODUCT_LIMIT,
-    );
+    const linkedIds = await this.adLinks.productIdsFor(input.storeId, referral);
+    // No saved link: the ad's own title still names its product when it matches exactly one.
+    const productIds = (
+      linkedIds.length || !referral.title
+        ? linkedIds
+        : await this.tools.productNamedBy(input, referral.title)
+    ).slice(0, AD_PRODUCT_LIMIT);
     const products = await this.tools.adProducts(input, productIds);
     return {
       // A linked product that is no longer offered drops out here, so search cannot reach it.
@@ -394,7 +397,7 @@ function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | 
 
 // A run that was shown the products block records its version with the reply prompt's.
 function promptWith(
-  prompt: typeof chatReplyV10,
+  prompt: typeof chatReplyV11,
   inChat: ToolResult | undefined,
   ad: object | undefined,
 ) {

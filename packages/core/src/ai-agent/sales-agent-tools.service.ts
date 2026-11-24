@@ -116,6 +116,12 @@ export class SalesAgentToolsService {
     return found.map(productResult);
   }
 
+  // The one product a text names clearly, as a photo's words are matched; none when it is unsure.
+  async productNamedBy({ storeId }: ToolScope, text: string): Promise<string[]> {
+    const match = await this.productSearch.matchPhoto(storeId, text);
+    return match.kind === 'sure' ? [match.product.id] : [];
+  }
+
   // The customer sent a photo: say which product it shows, or that the shop cannot tell.
   async matchPhoto({ storeId }: ToolScope, photoText: string): Promise<object> {
     const match = await this.productSearch.matchPhoto(storeId, photoText);
@@ -279,7 +285,11 @@ export class SalesAgentToolsService {
 
   private async confirmOrder({ storeId, contactId, suggestAddOns }: ToolScope, raw: unknown) {
     const { orderNumber } = confirmOrderTool.input.parse(raw);
-    const order = await this.chatOrders.confirm(storeId, contactId, orderNumber);
+    const order = await this.chatOrders.confirm(
+      storeId,
+      contactId,
+      await this.orderToConfirm(storeId, contactId, orderNumber),
+    );
     if (!suggestAddOns) return { orderNumber: order.number, stage: order.stage };
     const addOns = await this.productSearch.addOnsFor(storeId, {
       variantIds: order.items.map(({ variantId }) => variantId),
@@ -291,6 +301,15 @@ export class SalesAgentToolsService {
       addOnRule: addOnsRule,
       addOns: addOns.map(productResult),
     };
+  }
+
+  // The model often says yes without the number it saw one message earlier and guesses one. When
+  // the number is none of this customer's orders and exactly one waits for a yes, that one is meant.
+  private async orderToConfirm(storeId: string, contactId: string, orderNumber: number) {
+    const own = await this.orders.list(storeId, contactId, OWN_ORDER_LIMIT);
+    if (own.some(({ number }) => number === orderNumber)) return orderNumber;
+    const waiting = own.filter(({ stage }) => stage === 'to_confirm');
+    return waiting.length === 1 ? waiting[0]!.number : orderNumber;
   }
 
   private async handOver(raw: unknown) {
