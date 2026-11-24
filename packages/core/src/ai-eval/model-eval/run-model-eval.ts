@@ -16,6 +16,7 @@ import { stockDeliveryGoldenCases } from '../golden-set.stock-delivery';
 import { EvalMeter } from './eval-meter';
 import { say } from './eval-output';
 import {
+  reportAdPhotos,
   reportEmbed,
   reportFast,
   reportKhata,
@@ -106,6 +107,7 @@ async function main() {
     vision: async () => {
       await reportVision(context, modelsFor('vision'));
       await reportOptionsFromPhoto(context, modelsFor('vision'));
+      await reportAdPhotos(context, modelsFor('vision'));
     },
     khata: () => reportKhata(context, modelsFor('khata')),
     transcribe: () => reportTranscribe(context, modelsFor('transcribe')),

@@ -22,6 +22,26 @@ const participants = {
   recipient: z.object({ id: z.string().min(1) }),
 };
 const timestamp = z.number().int().nonnegative().max(8.64e15);
+function toReferral(value: {
+  ad_id?: string | undefined;
+  ads_context_data?:
+    | {
+        ad_title?: string | undefined;
+        post_id?: string | undefined;
+        photo_url?: string | undefined;
+      }
+    | undefined;
+}): InboundReferral | null {
+  const context = value.ads_context_data ?? {};
+  if (!value.ad_id && !context.post_id) return null;
+  return {
+    adId: value.ad_id ?? null,
+    postId: context.post_id ?? null,
+    title: context.ad_title ?? null,
+    photoUrl: context.photo_url ?? null,
+  };
+}
+
 // Meta puts the referral on the event, or on the message for a first message sent from an ad.
 const referral = z
   .object({
@@ -30,18 +50,14 @@ const referral = z
       .object({
         ad_title: z.string().min(1).max(200).optional(),
         post_id: z.string().min(1).max(64).optional(),
+        photo_url: z
+          .url({ protocol: /^https$/ })
+          .max(2000)
+          .optional(),
       })
       .optional(),
   })
-  .transform((value): InboundReferral | null =>
-    value.ad_id || value.ads_context_data?.post_id
-      ? {
-          adId: value.ad_id ?? null,
-          postId: value.ads_context_data?.post_id ?? null,
-          title: value.ads_context_data?.ad_title ?? null,
-        }
-      : null,
-  );
+  .transform(toReferral);
 const messagingEvent = z.object({
   ...participants,
   timestamp,

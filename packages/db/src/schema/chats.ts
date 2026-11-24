@@ -79,6 +79,7 @@ export const conversations = pgTable(
     referralAdId: text('referral_ad_id'),
     referralPostId: text('referral_post_id'),
     referralTitle: text('referral_title'),
+    referralPhotoUrl: text('referral_photo_url'),
     referredAt: timestamptz('referred_at'),
     aiSummary: text('ai_summary'),
     // Logical cursor survives message retention; this conversation alone owns its progress.

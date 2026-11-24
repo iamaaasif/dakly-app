@@ -10,6 +10,7 @@ import { createDatabase } from '@dakly/db/client';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AdLinksModule } from './ad-links.module';
 import { AdLinksService } from './ad-links.service';
+import { AdSourcesRepository } from './ad-sources.repository';
 
 class TestModule {}
 Module({ imports: [DatabaseModule, AdLinksModule] })(TestModule);
@@ -27,7 +28,7 @@ beforeAll(async () => {
 afterAll(async () => {
   try {
     await app?.close();
-    for (const table of ['ad_product_links', 'products'])
+    for (const table of ['ad_product_suggestions', 'ad_sources', 'ad_product_links', 'products'])
       await admin.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [fixtures]);
     await admin.pool.query('delete from stores where id = any($1::uuid[])', [fixtures]);
   } finally {
@@ -127,4 +128,36 @@ it('removes an ad’s links', async () => {
   await links.remove(storeId, ad);
 
   await expect(links.get(storeId, ad)).rejects.toMatchObject({ code: 'AD_LINK_NOT_FOUND' });
+});
+
+it('keeps suggestions apart from links and from other shops, and replaces them on a new reading', async () => {
+  const storeId = await store();
+  const otherStore = await store();
+  const sources = app.get(AdSourcesRepository);
+  const [first, second] = await Promise.all(
+    ['Blue kurti', 'Red kurti'].map((name) => product(storeId, name)),
+  );
+  const shown = { title: 'Eid kurti', photoUrl: null };
+
+  expect((await sources.noteSeen(storeId, ad, shown)).readState).toBe('pending');
+  await sources.finishReading(storeId, ad, {
+    readState: 'read',
+    origin: 'photo',
+    productIds: [first!, second!],
+  });
+  expect((await sources.noteSeen(storeId, ad, { title: null, photoUrl: null })).title).toBe(
+    'Eid kurti',
+  );
+  expect(await sources.listSuggestedProductIds(storeId, ad)).toEqual([first, second]);
+  // The reply reads links only, so a suggestion the owner has not confirmed is never used.
+  expect(await links.productIdsFor(storeId, { adId: ad.externalId, postId: null })).toEqual([]);
+  expect(await sources.listSuggestedProductIds(otherStore, ad)).toEqual([]);
+  expect((await sources.noteSeen(otherStore, ad, shown)).readState).toBe('pending');
+
+  await sources.finishReading(storeId, ad, {
+    readState: 'read',
+    origin: 'photo',
+    productIds: [second!],
+  });
+  expect(await sources.listSuggestedProductIds(storeId, ad)).toEqual([second]);
 });

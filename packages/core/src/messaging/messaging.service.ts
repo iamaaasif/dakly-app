@@ -31,7 +31,12 @@ export type InboundMessageInput = {
   content: string | null;
   attachments: { kind: (typeof messageAttachmentKinds)[number]; sourceUrl: string }[];
   // The Meta ad or post the customer came from, when the message carried one.
-  referral?: { adId: string | null; postId: string | null; title: string | null } | null;
+  referral?: {
+    adId: string | null;
+    postId: string | null;
+    title: string | null;
+    photoUrl: string | null;
+  } | null;
   sentAt: Date;
   receivedAt: Date;
 };

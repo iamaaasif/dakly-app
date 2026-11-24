@@ -182,6 +182,9 @@ export class InboxRepository {
           adId: conversations.referralAdId,
           postId: conversations.referralPostId,
           title: conversations.referralTitle,
+          photoUrl: conversations.referralPhotoUrl,
+          channelConnectionId: conversations.channelConnectionId,
+          channel: conversations.channel,
           referredAt: conversations.referredAt,
         })
         .from(conversations)

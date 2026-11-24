@@ -6,6 +6,7 @@ const AD_LINK_ERRORS = {
     status: 422,
     message: 'Link only active products that are shown in chats',
   },
+  AD_READING_UNAVAILABLE: { status: 503, message: 'The ad could not be read right now' },
 } as const satisfies ErrorCatalog;
 
 export function adLinkError(code: keyof typeof AD_LINK_ERRORS) {
