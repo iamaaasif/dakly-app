@@ -422,6 +422,15 @@ export class SocialPublishingService {
   }
 
   private meta<Result>(operation: string, call: () => Promise<Result>) {
-    return measureVendorCall(this.logger, operation, 'Meta publishing request measured', call);
+    return measureVendorCall(
+      this.logger,
+      operation,
+      'Meta publishing request measured',
+      call,
+    ).catch((failure: unknown) => {
+      if (failure instanceof MetaPublishingError && failure.detail)
+        this.logger.warn({ operation, metaError: failure.detail }, 'Meta rejected the request');
+      throw failure;
+    });
   }
 }
