@@ -98,6 +98,18 @@ describe('MetaGraphPublishingDriver', () => {
     });
   });
 
+  it('keeps the code and message Meta gave for a rejection', async () => {
+    const body = {
+      error: { code: 200, error_subcode: 1, message: '(#200) Requires pages_manage_posts' },
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body, { status: 403 })));
+
+    await expect(driver.publishInstagram(account, 'container')).rejects.toMatchObject({
+      code: 'rejected',
+      detail: { code: 200, subcode: 1, message: '(#200) Requires pages_manage_posts' },
+    });
+  });
+
   it('distinguishes a confirmed rejection from an unknown publishing result', async () => {
     const fetch = vi
       .fn()
