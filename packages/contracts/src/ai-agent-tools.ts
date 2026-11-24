@@ -17,7 +17,7 @@ export type AiToolDefinition = {
 export const searchProductsTool = {
   name: 'search_products',
   description:
-    'Find up to 3 products by name or what the customer calls them, with each variant price and stock. Use it first when the customer asks for a product, a price or stock. Use get_product when you already have the product id.',
+    'Find up to 3 products by name or what the customer calls them, with variant prices and stock. Use it first for a product, price or stock question; use get_product when you have the product id.',
   aliases: ['দাম', 'দাম কত', 'আছে কি', 'price', 'price koto', 'stock ache', 'available', 'ache?'],
   input: z.strictObject({ query: z.string().trim().min(3).max(100) }),
   units: {
@@ -54,7 +54,7 @@ export const browseProductsTool = {
 export const getProductTool = {
   name: 'get_product',
   description:
-    'Read one product: description, category, variants with price and stock. Use it for questions about size, colour, material or one variant after search_products gave you the product id.',
+    'Read one product: description, category, variants with price and stock. Use it for size, colour, material or one variant after search_products gave the product id.',
   aliases: ['সাইজ', 'রঙ', 'কালার', 'size', 'color', 'colour', 'details', 'detail den'],
   input: z.strictObject({ productId: z.uuid() }),
   units: {
@@ -66,7 +66,7 @@ export const getProductTool = {
 export const getDeliveryChargeTool = {
   name: 'get_delivery_charge',
   description:
-    'Delivery charge to an area, thana, district or city. Use it for any delivery cost question. Give the place name the customer wrote; up to 3 matching places come back with their charge. When no place matches, the shop’s delivery zones come back instead: use the zone of the locality’s city, and ask the customer when you cannot tell. When no zone fits the place, such as a district outside the shop’s city, call search_knowledge for the delivery rules before handing over. Your reply names the place the charge is for, such as “Delivery to Dhaka city is ৳60”, so the customer can correct a wrong guess.',
+    'Delivery charge to an area, thana, district or city. Give the place the customer wrote; up to 3 matching places come back with their charge. When none match, the shop’s delivery zones come back: use the zone of the locality’s city, and ask when you cannot tell. When no zone fits, call search_knowledge for the delivery rules before handing over. Name the place in your reply, such as “Delivery to Dhaka city is ৳60”.',
   aliases: [
     'ডেলিভারি চার্জ',
     'ডেলিভারি খরচ',
@@ -82,7 +82,7 @@ export const getDeliveryChargeTool = {
 export const searchKnowledgeTool = {
   name: 'search_knowledge',
   description:
-    'Search the shop’s own policies and FAQs: return, exchange, payment methods, delivery time, delivery charge outside the shop’s city, opening hours. Use it for any shop rule question. If nothing useful comes back, hand over; never guess a policy.',
+    'Search the shop’s policies and FAQs: return, exchange, payment methods, delivery time, delivery charge outside the shop’s city, opening hours. If nothing useful comes back, hand over; never guess a policy.',
   aliases: [
     'রিটার্ন পলিসি',
     'পেমেন্ট',
@@ -98,7 +98,7 @@ export const searchKnowledgeTool = {
 export const getMyOrdersTool = {
   name: 'get_my_orders',
   description:
-    'List this customer’s own latest 5 orders with number, stage and total. Takes no arguments: it can only show the customer you are chatting with. Use it for “my orders” and when the customer gives no order number.',
+    'List this customer’s latest 5 orders with number, stage and total. Takes no arguments. Use it for “my orders” and when the customer gives no order number.',
   aliases: ['আমার অর্ডার', 'আমার অর্ডারগুলো', 'my orders', 'amar order', 'order list'],
   input: z.strictObject({}),
   units: { totalTaka: 'taka, converted from poisha' },
@@ -107,7 +107,7 @@ export const getMyOrdersTool = {
 export const getOrderStatusTool = {
   name: 'get_order_status',
   description:
-    'Status of one of this customer’s own orders by order number: stage, items, total, courier and tracking code. Use it for “where is my order”. An order of another customer is reported as not found.',
+    'Status of one of this customer’s orders by number: stage, items, total, courier and tracking code. Use it for “where is my order”. An order of another customer is reported as not found.',
   aliases: [
     'অর্ডার কোথায়',
     'অর্ডারের অবস্থা',
@@ -123,7 +123,7 @@ export const getOrderStatusTool = {
 export const sendProductCardTool = {
   name: 'send_product_card',
   description:
-    'Send the customer a product card with name and price before your reply. Always pass variantId, photoId and withoutPhoto, with null for the ones that do not apply. Use it when the customer wants to see a product or asks for options. Pass variantId when the customer asks about one colour or size, so the card shows the photo of that variant. When the product has no such variant but its photos are tagged with the colour or style the customer asked for, pass the photoId of that photo instead. When the customer asks for a colour or style that no photo matches, set withoutPhoto so no other colour is shown as if it were the one asked for, and say that colour is not available. The price on the card comes from the shop, so do not repeat it in your own words unless a tool returned it.',
+    'Send the customer a product card with name and price before your reply, when they want to see a product or ask for options. Always pass variantId, photoId and withoutPhoto, with null for the ones that do not apply. Pass variantId for one colour or size. When only a photo is tagged with the colour or style asked for, pass its photoId. When no photo matches the colour or style, set withoutPhoto and say it is not available. The card carries the price, so repeat one only as a tool returned it.',
   aliases: ['ছবি', 'দেখান', 'photo', 'picture', 'pic den', 'dekhan'],
   input: z.strictObject({
     productId: z.uuid(),
@@ -137,7 +137,7 @@ export const sendProductCardTool = {
 export const draftOrderTool = {
   name: 'draft_order',
   description:
-    'Create an order for this customer, delivered to the customer themselves, when you have the product variants, quantities, name, the customer’s own mobile number, the full address and the area (thana, upazila or district). Ask for every missing detail in one message first. The order waits for the customer’s yes. The result has the order number, items, delivery charge and total: write the summary from it and ask the customer to reply yes (হ্যাঁ). Never repeat the customer’s phone number in the summary. When the customer orders for another person, hand over instead.',
+    'Create an order delivered to the customer themselves, once you have the variants, quantities, name, the customer’s own mobile number, full address and area (thana, upazila or district). Ask for every missing detail in one message first. The order waits for the customer’s yes. Write the summary from the result (order number, items, delivery charge, total) without the phone number. When the customer orders for another person, hand over instead.',
   aliases: ['অর্ডার করব', 'নিব', 'কিনব', 'order korbo', 'nibo', 'order dibo', 'i want to order'],
   input: z.strictObject({
     items: z
@@ -160,7 +160,7 @@ export const draftOrderTool = {
 export const confirmOrderTool = {
   name: 'confirm_order',
   description:
-    'Confirm one of this customer’s own orders that is waiting for confirmation, after the customer said yes to the summary (হ্যাঁ, yes, ji, ok, ঠিক আছে). Use the order number from draft_order or get_my_orders. When the result says ORDER_ADVANCE_REQUIRED, hand over with the reason other: a person asks this customer for the delivery charge in advance.',
+    'Confirm an order waiting for confirmation, after the customer said yes to the summary (হ্যাঁ, yes, ji, ok, ঠিক আছে). Use the order number from draft_order or get_my_orders. When the result says ORDER_ADVANCE_REQUIRED, hand over with the reason other: a person asks this customer for the delivery charge in advance.',
   aliases: ['হ্যাঁ', 'ji', 'yes', 'ok', 'ঠিক আছে', 'thik ache', 'confirm'],
   input: z.strictObject({ orderNumber: z.int().positive().max(2147483647) }),
   units: {},
@@ -169,7 +169,7 @@ export const confirmOrderTool = {
 export const findAlternativesTool = {
   name: 'find_alternatives',
   description:
-    'Use it when a product or a size is out of stock. Returns the product’s sizes that are in stock, up to 3 similar products that are in stock (same category, close price), and the sold-out variants the customer can wait for. Offer only what it returns; never offer an item with stock 0.',
+    'For a product or size that is out of stock. Returns the in-stock sizes, up to 3 similar in-stock products and the sold-out variants the customer can wait for. Offer only what it returns.',
   aliases: ['নেই', 'স্টক নেই', 'stock nai', 'nai', 'sold out', 'out of stock', 'onno kichu ache?'],
   input: z.strictObject({ productId: z.uuid() }),
   units: {
@@ -181,7 +181,7 @@ export const findAlternativesTool = {
 export const joinRestockListTool = {
   name: 'join_restock_list',
   description:
-    'Put this customer on the waiting list of a sold-out variant so the shop can tell them when it is back. Call it only after the customer said yes to “নতুন স্টক এলে জানাবো?”. Use a variantId from find_alternatives or get_product whose stock is 0. It sends nothing now and promises no date.',
+    'Put this customer on the waiting list of a sold-out variant, only after they said yes to “নতুন স্টক এলে জানাবো?”. Use a variantId whose stock is 0 from find_alternatives or get_product. It promises no date.',
   aliases: [
     'স্টক এলে জানাবেন',
     'কবে আসবে',
@@ -201,7 +201,7 @@ export const handOverReasons = handoverReasons.filter(
 export const handOverTool = {
   name: 'hand_over',
   description:
-    'Pass the chat to a person. Use it for refunds, exchanges, complaints, discounts, an angry customer, a request for a person, a question you cannot answer from tool results, or a customer ready to buy when no order tool is available. Allowed reasons: asked_for_person, complaint, refund, discount, angry, out_of_scope, ready_to_buy, other.',
+    'Pass the chat to a person: refunds, exchanges, complaints, discounts, an angry customer, a request for a person, a question the tools cannot answer, or a customer ready to buy when no order tool is available. Reasons: asked_for_person, complaint, refund, discount, angry, out_of_scope, ready_to_buy, other.',
   aliases: [
     'মানুষের সাথে কথা বলব',
     'ফেরত',

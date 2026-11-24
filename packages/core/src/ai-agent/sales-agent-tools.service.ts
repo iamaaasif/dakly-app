@@ -52,13 +52,18 @@ const ZONE_LIMIT = 20;
 const KNOWLEDGE_LIMIT = 4;
 const OWN_ORDER_LIMIT = 5;
 
+const ALIAS_LIMIT = 3;
+
+// The field names already say taka, so only the units that add something go to the model.
 export const salesAgentLlmTools: readonly LlmTool[] = salesAgentTools.map((tool) => ({
   name: tool.name,
   input: tool.input,
   description: [
     tool.description,
-    `Words customers use: ${tool.aliases.join(', ')}.`,
-    ...Object.entries(tool.units).map(([field, unit]) => `${field}: ${unit}.`),
+    `Words customers use: ${tool.aliases.slice(0, ALIAS_LIMIT).join(', ')}.`,
+    ...Object.entries(tool.units)
+      .filter(([, unit]) => !unit.endsWith('converted from poisha'))
+      .map(([field, unit]) => `${field}: ${unit}.`),
   ].join(' '),
 }));
 

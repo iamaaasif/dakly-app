@@ -192,7 +192,7 @@ const draft = (variantId: string, fields: object = {}) => ({
   ...fields,
 });
 
-it('lists every tool for the model with its words and units in the description', () => {
+it('lists every tool for the model with its words and its non-obvious units in the description', () => {
   expect(salesAgentLlmTools.map((tool) => tool.name)).toEqual([
     'search_products',
     'browse_products',
@@ -210,7 +210,8 @@ it('lists every tool for the model with its words and units in the description',
   ]);
   const search = salesAgentLlmTools[0]!;
   expect(search.description).toContain('দাম কত');
-  expect(search.description).toContain('priceTaka: taka, converted from poisha.');
+  expect(search.description).toContain('stock: count of pieces left');
+  expect(search.description).not.toContain('converted from poisha');
 });
 
 it('finds only active chat-visible products of this store by name or alias, with taka prices and free stock', async () => {
