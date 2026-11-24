@@ -559,3 +559,21 @@ it.each([true, false])(
     );
   },
 );
+
+it('answers from reads started earlier without reading the chat again', async () => {
+  const { service, run, inbox } = build();
+  const input = {
+    storeId,
+    contactId: 'c-1',
+    chat: { conversationId: 'chat-1', channel: 'messenger' as const },
+    customerTexts: ['Price koto?'],
+    rules: defaultShopRules,
+  };
+
+  const prepared = service.prepare(input);
+  const composed = await service.compose(input, prepared);
+
+  expect(composed.kind).toBe('reply');
+  expect(inbox.replyHistory).toHaveBeenCalledTimes(1);
+  expect(run).toHaveBeenCalledTimes(1);
+});
