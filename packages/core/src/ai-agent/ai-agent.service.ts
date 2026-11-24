@@ -39,6 +39,7 @@ import { type HandoverCheckRules, handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v2';
 import { burstText, isFlood, isSameTurn } from './reply-burst';
+import { outageRetryDelay, retryAt } from './reply-retry';
 import {
   type ComposedReply,
   type ComposeInput,
@@ -49,8 +50,6 @@ import type { ShopRules } from './shop-rules';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
-const OUTAGE_RETRY_MS = 10_000;
-const OUTAGE_RETRY_WINDOW_MS = 3 * 60_000;
 const MEDIA_WAIT_MS = 3000;
 // Enough to see the product or question the latest messages answer, few enough to stay cheap.
 const CLASSIFY_HISTORY_LENGTH = 6;
@@ -156,7 +155,7 @@ export class AiAgentService {
     if (stopped) return this.handOver(storeId, conversationId, candidate, stopped);
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
-    if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
+    if (burst.awaitingMedia) return retryAt(this.clock.now(), MEDIA_WAIT_MS);
     const earlier = await this.earlierMessages(storeId, conversationId, burst.messageIds);
     const compose = {
       storeId,
@@ -166,13 +165,10 @@ export class AiAgentService {
       rules: candidate.rules,
     };
     const { reason, prepared } = await this.checkHandOver(compose, earlier, burst.screenTexts);
-    if (reason === 'busy' || (reason === 'ai_unavailable' && this.isRecent(turn)))
-      return this.retryLater(reason === 'busy' ? 1000 : OUTAGE_RETRY_MS);
+    if (reason === 'busy') return retryAt(this.clock.now());
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose(compose, prepared);
-    if (composed.kind === 'busy') return this.retryLater();
-    if (composed.kind === 'handover' && composed.reason === 'ai_unavailable' && this.isRecent(turn))
-      return this.retryLater(OUTAGE_RETRY_MS);
+    if (composed.kind === 'busy') return retryAt(this.clock.now());
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
     return this.send(storeId, conversationId, candidate, composed);
@@ -235,16 +231,6 @@ export class AiAgentService {
       (await this.usage.isConsumed(storeId, 'ai_conversation', reference)) ||
       (await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
     );
-  }
-
-  // A model outage of a minute or two should not send every waiting customer to a person, so a
-  // chat whose latest message is still fresh is tried again; an older one is handed over.
-  private isRecent(turn: Turn) {
-    return this.clock.now().getTime() - turn.latest.createdAt.getTime() < OUTAGE_RETRY_WINDOW_MS;
-  }
-
-  private retryLater(delayMs = 1000) {
-    return { delayUntil: this.clock.now().getTime() + delayMs };
   }
 
   private async eligibleTurn(
@@ -322,6 +308,8 @@ export class AiAgentService {
     before: EligibleTurn,
     reason: Reason,
   ) {
+    const retryIn = outageRetryDelay(reason, before.turn.latest.createdAt, this.clock.now());
+    if (retryIn) return retryAt(this.clock.now(), retryIn);
     await this.transaction.runLocked(storeId, async () => {
       const current = await this.lockCurrent(storeId, conversationId, before);
       if (!current) return;

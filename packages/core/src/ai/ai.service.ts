@@ -17,6 +17,7 @@ import { AiGate } from './ai-gate';
 import { AiRunsService, type AiAttempt } from './ai-runs.service';
 import { AI_CONFIG, aiTimeoutMs, type AiConfig, type AiTier } from './ai.config';
 import { aiError } from './ai.errors';
+import { retryTransientFailure } from './transient-retry';
 
 // Reading a customer's photo or voice note draws from the chat allowance, one unit each.
 const usageUnits = {
@@ -44,13 +45,6 @@ export type AiRequest<T> = {
 type GateFailure =
   'AI_PAUSED' | 'AI_STORE_BUSY' | 'USAGE_ALLOWANCE_EXCEEDED' | 'LLM_ABORTED' | 'LLM_TIMEOUT';
 type AiResult<T> = AiAttempt<T> | { kind: 'failure'; code: GateFailure };
-
-const transientRetryWaitsMs = [800, 2000];
-const transientFailures = new Set<string>([
-  'LLM_REQUEST_FAILED',
-  'LLM_RATE_LIMITED',
-  'LLM_UNAVAILABLE',
-]);
 
 @Injectable()
 export class AiService {
@@ -173,17 +167,12 @@ export class AiService {
     if (await this.gate.isPaused()) return { kind: 'failure', code: 'AI_PAUSED' };
     const firstTimeout = deadline - this.clock.now().getTime();
     if (firstTimeout <= 0) return { kind: 'failure', code: 'LLM_TIMEOUT' };
-    let first = await this.attempt(storeId, request, firstTimeout);
-    // A request the vendor failed or refused for now is tried again after a short wait, while time
-    // is left; a timeout is not, since the deadline has then passed.
-    for (const wait of transientRetryWaitsMs) {
-      if (first.kind !== 'failure' || !transientFailures.has(first.code)) break;
-      if (request.signal?.aborted || (await this.gate.isPaused())) return first;
-      const left = deadline - this.clock.now().getTime() - wait;
-      if (left <= 0) return first;
-      await new Promise((resolve) => setTimeout(resolve, wait));
-      first = await this.attempt(storeId, request, left);
-    }
+    const first = await retryTransientFailure(await this.attempt(storeId, request, firstTimeout), {
+      deadline,
+      now: () => this.clock.now().getTime(),
+      isStopped: async () => request.signal?.aborted === true || (await this.gate.isPaused()),
+      attempt: (timeoutMs) => this.attempt(storeId, request, timeoutMs),
+    });
     if (first.kind !== 'failure' || first.code !== 'AI_OUTPUT_MISMATCH') return first;
     if (await this.gate.isPaused()) return first;
     const retryTimeout = deadline - this.clock.now().getTime();
