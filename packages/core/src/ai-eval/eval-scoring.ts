@@ -142,7 +142,7 @@ const outOfStockPhrase =
   /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\bnei\b|\bnai\b|out of stock|sold out|not available|unavailable/iu;
 // Promising to tell the customer when the item is back is not an offer to sell it now.
 const restockNotice =
-  /আবার\s*স্টকে\s*(?:এলে|আসলে)|stock\s*-?\s*e\s*(?:ashle|aile)|(?:stock|স্টক)\s*-?\s*এ?\s*(?:এলে|আসলে)|\b(?:when|once|if)\b[^.]*\bback in stock/iu;
+  /আবার\s*স্টকে\s*(?:এলে|আসলে)|stock\s*-?\s*e\s*(?:ashle|aile|ele)|(?:stock|স্টক)\s*-?\s*এ?\s*(?:এলে|আসলে)|\b(?:when|once|if)\b[^.]*\bback in stock/iu;
 const inStockPhrase = /আছে|\bache\b|\bin stock\b|(?<!not |un)available/iu;
 
 function hasWrongPhoto({ golden, outcome }: Scored) {

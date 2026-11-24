@@ -175,6 +175,8 @@ describe('checkReplyFacts', () => {
       'Discount nai apu, dam 1200 taka fixed.',
       'Sorry vaia, discount dite parbo na. Order korben?',
       'আমরা কোনো ছাড় দিই না, দাম ফিক্সড।',
+      'দাম নির্ধারিত, discount দেওয়া যাচ্ছে না',
+      'Discount deya jacche na, dam fixed.',
     ])
       expect(check(reply), reply).toEqual({ isSafe: true });
   });
@@ -187,6 +189,7 @@ describe('checkReplyFacts', () => {
       'discount dite parbo na keno, dibo',
       'Discount dibo apu, ৳1200 er jaygay',
       'ছাড় পাবেন, অর্ডার করুন',
+      'discount দেওয়া যাচ্ছে, অর্ডার করুন',
     ])
       expect(check(reply), reply).toEqual({ isSafe: false, failure: 'offer' });
   });
