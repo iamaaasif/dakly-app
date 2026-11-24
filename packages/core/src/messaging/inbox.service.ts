@@ -143,6 +143,14 @@ export class InboxService {
     return this.repository.replyHistory(storeId, id, limit);
   }
 
+  // The ad or post the customer came from, or null when the chat did not start from one.
+  async referralOf(storeId: string, id: string) {
+    await this.requireChats(storeId);
+    await this.find(storeId, id);
+    const referral = await this.repository.referralOf(storeId, id);
+    return referral && (referral.adId || referral.postId) ? referral : null;
+  }
+
   // Where the AI finds "the product we showed": the AI replies of all this customer's chats, so
   // "ওইটা এখনো আছে?" works days later and on another channel after a merge.
   async shownProductHistory(storeId: string, id: string, limit: number) {

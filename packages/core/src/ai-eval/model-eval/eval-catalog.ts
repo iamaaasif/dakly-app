@@ -180,12 +180,17 @@ export const deliveryPolicyPassage = {
 // Matches when any word of the query is in a product's name, alias or description. The shop's
 // real search is an exact substring match until AI-10 adds fuzzy search; this stands in for it, so
 // the run measures the model and not the search.
-export function searchEvalProducts(query: string, limit: number): EvalProduct[] {
+export function searchEvalProducts(
+  query: string,
+  limit: number,
+  onlyProductIds?: readonly string[],
+): EvalProduct[] {
   const words = query
     .toLowerCase()
     .split(/[\s,.?!।]+/u)
     .filter((word) => [...word].length >= MIN_WORD_LENGTH);
   return evalProducts
+    .filter(({ productId }) => !onlyProductIds || onlyProductIds.includes(productId))
     .filter(({ name, aliases, description }) => {
       const text = [name, description, ...aliases].join(' ').toLowerCase();
       return words.some((word) => text.includes(word));

@@ -35,8 +35,22 @@ describe('checkReplyFacts numbers next to a comma', () => {
       expect(checkReplyFacts(reply, shoes, shop), reply).toEqual({ isSafe: true });
   });
 
+  it('does not read a size followed by a space and the price as an amount', () => {
+    for (const reply of [
+      'Loafer size 41 ekhon stock-e nei. Similar canvas shoe size 41 ৳1500-e ache.',
+      'ক্যানভাস জুতা সাইজ ৪১ ৳১৫০০।',
+      'Canvas size 41 1500 tk.',
+    ])
+      expect(checkReplyFacts(reply, shoes, shop), reply).toEqual({ isSafe: true });
+  });
+
   it('still rejects a wrong price next to a size', () => {
-    for (const reply of ['সাইজ ৪১, ৳১৪০০।', 'size 41, 1400 tk.', 'Size 41, ৳1,400.'])
+    for (const reply of [
+      'সাইজ ৪১, ৳১৪০০।',
+      'size 41, 1400 tk.',
+      'Size 41, ৳1,400.',
+      'size 41 ৳1400',
+    ])
       expect(checkReplyFacts(reply, shoes, shop), reply).toEqual({
         isSafe: false,
         failure: 'amount',

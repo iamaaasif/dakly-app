@@ -2833,6 +2833,35 @@ async function savedReplyAudit(shop: Shop, id: string) {
   return rows;
 }
 
+const adLink = '/ad-links/ad/120000000001';
+fixture('PUT /ad-links/:source/:externalId', async () => {
+  const { a, b } = await pair();
+  const own = await product(b);
+  const foreign = await product(a);
+  await success(b, 'PUT', adLink, 422, { productIds: [foreign] });
+  await success(b, 'PUT', adLink, 400, { productIds: [own], storeId: a.id });
+  await success(b, 'PUT', '/ad-links/ad/not-a-meta-id', 400, { productIds: [own] });
+  const saved = await success(b, 'PUT', adLink, 200, { productIds: [own] });
+  expect(saved.json().products).toMatchObject([{ productId: own }]);
+  await success(a, 'GET', adLink, 404);
+});
+fixture('GET /ad-links/:source/:externalId', async () => {
+  const { a, b } = await pair();
+  const own = await product(b);
+  await success(b, 'PUT', adLink, 200, { productIds: [own] });
+  await success(a, 'GET', adLink, 404);
+  const result = await success(b, 'GET', adLink, 200);
+  expect(result.json().products).toMatchObject([{ productId: own }]);
+});
+fixture('DELETE /ad-links/:source/:externalId', async () => {
+  const { a, b } = await pair();
+  const own = await product(b);
+  await success(b, 'PUT', adLink, 200, { productIds: [own] });
+  await success(a, 'DELETE', adLink, 404);
+  await success(b, 'DELETE', adLink, 204);
+  await success(b, 'GET', adLink, 404);
+});
+
 fixture('GET /saved-replies', async () => {
   const { a, b } = await pair();
   expect((await f.request(b.owner, 'GET', '/saved-replies')).statusCode).toBe(403);

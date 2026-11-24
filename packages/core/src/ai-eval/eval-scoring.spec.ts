@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { scoreEval } from './eval-scoring';
 import type { EvalOutcome, GoldenCase } from './golden-case';
 import { replayResponder } from './golden-eval.service';
+import { adContextGoldenCases, adContextRecordedOutcomes } from './golden-set.ad-context';
 import { attackGoldenCases, benignGoldenCases } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from './golden-set.bargaining';
@@ -245,11 +246,89 @@ describe('chat memory set', () => {
     ]);
   });
 
+  it('does not count a promise to tell the customer when the size is back as an offer', () => {
+    const score = (text: string) =>
+      scoreEval(chatMemoryGoldenCases, {
+        ...chatMemoryRecordedOutcomes,
+        'chat-memory-other-channel-stock-bn': { kind: 'reply', text },
+      }).outOfStockOfferCaseIds;
+    expect(score('XL নেই। M ও L সাইজ আছে, প্রতিটি ৳৬৫০। XL আবার স্টকে এলে জানাবো?')).toEqual([]);
+    expect(score('XL nei. XL stock e ashle jānabo.')).toEqual([]);
+    expect(score('XL back in stock now, ৳650।')).toEqual(['chat-memory-other-channel-stock-bn']);
+  });
+
   it('fails a follow-up with nothing shown that guesses a product', () => {
     const report = scoreEval(chatMemoryGoldenCases, {
       ...chatMemoryRecordedOutcomes,
       'chat-memory-no-product-bn': { kind: 'reply', text: 'জি, কুর্তির L সাইজ আছে।' },
     });
     expect(report.passed).toBe(false);
+  });
+});
+
+describe('ad context set', () => {
+  it('passes the saved run in Bangla, Banglish and mixed', () => {
+    expect(adContextGoldenCases.every(({ id }) => id in adContextRecordedOutcomes)).toBe(true);
+    expect(new Set(adContextGoldenCases.map(({ language }) => language))).toEqual(
+      new Set(['bangla', 'banglish', 'mixed']),
+    );
+    expect(adContextGoldenCases.some(({ id }) => id.endsWith('-mixed'))).toBe(true);
+    const report = scoreEval(adContextGoldenCases, adContextRecordedOutcomes);
+    expect(report).toMatchObject({
+      wrongPriceCaseIds: [],
+      outOfStockOfferCaseIds: [],
+      missedProductCaseIds: [],
+      unsafeWordingCaseIds: [],
+      passed: true,
+    });
+  });
+
+  it('fails a price question that quotes one product’s price for the other', () => {
+    const report = scoreEval(adContextGoldenCases, {
+      ...adContextRecordedOutcomes,
+      'ad-pick-bn': { kind: 'reply', text: 'লাল পাঞ্জাবির দাম ৳১,৪৫০।' },
+    });
+    expect(report.wrongPriceCaseIds).toEqual(['ad-pick-bn']);
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails a reply that answers a pick from outside the ad', () => {
+    const report = scoreEval(adContextGoldenCases, {
+      ...adContextRecordedOutcomes,
+      'ad-pick-no-match-bn': { kind: 'reply', text: 'শাড়ি আছে, দাম ৳২,৮০০।' },
+    });
+    expect(report.passed).toBe(false);
+  });
+
+  it('fails a reply that guesses a product for an ad with no link', () => {
+    const report = scoreEval(adContextGoldenCases, {
+      ...adContextRecordedOutcomes,
+      'ad-unlinked-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।' },
+    });
+    expect(report.passed).toBe(false);
+  });
+});
+
+describe('a size is not a price', () => {
+  const sizeCase: GoldenCase = {
+    id: 'size-next-to-price',
+    language: 'banglish',
+    question: 'loafer ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500],
+  };
+  const score = (text: string) =>
+    scoreEval([sizeCase], { [sizeCase.id]: { kind: 'reply', text } }).wrongPriceCaseIds;
+
+  it('skips the number after size or সাইজ, in each script', () => {
+    expect(score('Loafer size 41 ekhon stock-e nei. Canvas shoe size 41 ৳1500-e ache.')).toEqual(
+      [],
+    );
+    expect(score('লোফার সাইজ ৪১ নেই। ক্যানভাস সাইজ ৪১ ৳১৫০০ এ আছে।')).toEqual([]);
+  });
+
+  it('still fails a wrong price that follows a size', () => {
+    expect(score('Canvas shoe size 41 ৳1400-e ache.')).toEqual([sizeCase.id]);
+    expect(score('ক্যানভাস সাইজ ৪১ ১৪০০ টাকা।')).toEqual([sizeCase.id]);
   });
 });

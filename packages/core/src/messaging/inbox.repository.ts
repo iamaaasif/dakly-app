@@ -175,6 +175,21 @@ export class InboxRepository {
     return row;
   }
 
+  async referralOf(storeId: string, id: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          adId: conversations.referralAdId,
+          postId: conversations.referralPostId,
+          title: conversations.referralTitle,
+          referredAt: conversations.referredAt,
+        })
+        .from(conversations)
+        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, id))),
+    );
+    return row;
+  }
+
   async replyRoute(storeId: string, id: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx

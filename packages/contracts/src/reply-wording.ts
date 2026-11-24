@@ -54,12 +54,14 @@ export function hasWrongAmount(
 // A comma belongs to the number only between digits, so "size 41, ৳1500" holds 41 and 1500.
 export const numberPattern = String.raw`(\d+(?:,\d+)*(?:\.\d+)?)`;
 const number = numberPattern;
+// A number right after "size" or "সাইজ" is a size ("size 41 ৳1500"), not an amount.
+const notASize = String.raw`(?<!\d)(?<!(?:size|saiz|সাইজ)[\s:.-]*)`;
 // Amounts and limits in a reply, with Bangla digits already turned into ASCII.
 export const amountPatterns = [
   new RegExp(String.raw`৳\s*${number}`, 'giu'),
-  new RegExp(String.raw`${number}\s*(?:৳|tk\b|taka[yr]?\b|টাকা)`, 'giu'),
+  new RegExp(String.raw`${notASize}${number}\s*(?:৳|tk\b|taka[yr]?\b|টাকা)`, 'giu'),
   new RegExp(String.raw`\b(?:tk\.?|bdt|taka|rs\.?)\s*${number}`, 'giu'),
   // A limit with no currency word, such as "১০০০ এর মধ্যে" or "under 1000".
-  new RegExp(String.raw`${number}\s*(?:এর|er)?\s*(?:মধ্যে|নিচে|moddhe|niche)`, 'giu'),
+  new RegExp(String.raw`${notASize}${number}\s*(?:এর|er)?\s*(?:মধ্যে|নিচে|moddhe|niche)`, 'giu'),
   new RegExp(String.raw`\b(?:under|below|within|up to)\s*${number}`, 'giu'),
 ];

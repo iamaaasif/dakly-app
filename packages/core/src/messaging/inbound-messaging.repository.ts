@@ -21,6 +21,20 @@ type MessageInput = {
   sentAt: Date;
 };
 
+// A late delivery of an older message cannot replace a newer referral.
+function newerReferral(
+  referral: { adId: string | null; postId: string | null; title: string | null },
+  sentAt: string,
+) {
+  const isNewer = sql`(${conversations.referredAt} is null or ${conversations.referredAt} < ${sentAt}::timestamptz)`;
+  return {
+    referralAdId: sql`case when ${isNewer} then ${referral.adId} else ${conversations.referralAdId} end`,
+    referralPostId: sql`case when ${isNewer} then ${referral.postId} else ${conversations.referralPostId} end`,
+    referralTitle: sql`case when ${isNewer} then ${referral.title} else ${conversations.referralTitle} end`,
+    referredAt: sql`case when ${isNewer} then ${sentAt}::timestamptz else ${conversations.referredAt} end`,
+  };
+}
+
 @Injectable()
 export class InboundMessagingRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -106,7 +120,15 @@ export class InboundMessagingRepository {
       expiry,
       preview,
       reopenVersion,
-    }: { conversationId: string; at: Date; expiry: Date; preview: string; reopenVersion?: number },
+      referral,
+    }: {
+      conversationId: string;
+      at: Date;
+      expiry: Date;
+      preview: string;
+      reopenVersion?: number;
+      referral?: { adId: string | null; postId: string | null; title: string | null };
+    },
     now: Date,
   ) {
     const sentAt = at.toISOString();
@@ -125,6 +147,7 @@ export class InboundMessagingRepository {
           windowExpiresAt: sql`greatest(${conversations.windowExpiresAt}, ${expiry.toISOString()}::timestamptz)`,
           lastMessagePreview: sql`case when ${conversations.lastMessageAt} > ${sentAt}::timestamptz then ${conversations.lastMessagePreview} else ${preview} end`,
           unreadCount: sql`${conversations.unreadCount} + 1`,
+          ...(referral && newerReferral(referral, sentAt)),
           updatedAt: now,
         })
         .where(and(eq(conversations.storeId, storeId), eq(conversations.id, conversationId))),

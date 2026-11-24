@@ -35,10 +35,41 @@ describe('Meta webhook messages', () => {
         senderExternalId: '10003',
         text: 'ডেলিভারি চার্জ কত?',
         attachments: [],
+        referral: null,
         sentAt: new Date(timestamp),
       },
       expect.objectContaining({ externalMessageId: 'mid.10005', text: 'ধন্যবাদ' }),
     ]);
+  });
+
+  it('reads the ad or post a first message came from, on the event or on the message', () => {
+    const delivery = (event: object) => ({
+      object: 'page',
+      entry: [{ id: '10001', messaging: [{ ...message, ...event }] }],
+    });
+    const referral = {
+      ref: 'eid',
+      source: 'ADS',
+      type: 'OPEN_THREAD',
+      ad_id: '120000000001',
+      ads_context_data: { ad_title: 'Eid kurti', post_id: '10001_5555' },
+    };
+
+    const onEvent = parseMetaWebhook(delivery({ referral }));
+    const onMessage = parseMetaWebhook(
+      delivery({ message: { ...message.message, referral: { ad_id: '120000000002' } } }),
+    );
+    const plain = parseMetaWebhook(delivery({}));
+    const empty = parseMetaWebhook(delivery({ referral: { ref: 'only-a-ref' } }));
+
+    expect(onEvent[0]?.referral).toEqual({
+      adId: '120000000001',
+      postId: '10001_5555',
+      title: 'Eid kurti',
+    });
+    expect(onMessage[0]?.referral).toEqual({ adId: '120000000002', postId: null, title: null });
+    expect(plain[0]?.referral).toBeNull();
+    expect(empty[0]?.referral).toBeNull();
   });
 
   it('keeps an Instagram attachment and skips echoes and mismatched account ids', () => {

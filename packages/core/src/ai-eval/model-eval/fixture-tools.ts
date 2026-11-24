@@ -98,11 +98,17 @@ function cardText(found: EvalProduct, only?: EvalProduct['variants'][number]) {
 }
 
 // Answers the way the real tools do for a shop with this catalog, minus orders and knowledge.
-const handlers: Record<string, (args: Args) => object> = {
-  search_products: ({ query }) => ({
-    products: searchEvalProducts(String(query ?? ''), SEARCH_LIMIT).map(productResult),
+type Handler = (args: Args, onlyProductIds?: readonly string[]) => object;
+const handlers: Record<string, Handler> = {
+  search_products: ({ query }, onlyProductIds) => ({
+    products: searchEvalProducts(String(query ?? ''), SEARCH_LIMIT, onlyProductIds).map(
+      productResult,
+    ),
   }),
-  get_product: productById,
+  get_product: (args, onlyProductIds) =>
+    onlyProductIds && !onlyProductIds.includes(String(args.productId))
+      ? { error: 'NOT_AN_AD_PRODUCT' }
+      : productById(args),
   send_product_card: sendProductCard,
   find_alternatives: findAlternatives,
   join_restock_list: joinRestockList,
@@ -154,10 +160,11 @@ export function runFixtureTool(
   name: string,
   argumentsJson: string,
   order: OrderContext = { suggestAddOns: false },
+  onlyProductIds?: readonly string[],
 ): object {
   if (name === 'confirm_order') return confirmOrder(order);
   const handler = Object.hasOwn(handlers, name) ? handlers[name] : undefined;
-  return handler ? handler(parse(argumentsJson)) : { error: 'UNKNOWN_TOOL' };
+  return handler ? handler(parse(argumentsJson), onlyProductIds) : { error: 'UNKNOWN_TOOL' };
 }
 
 // The same decision as ProductSearchService.matchPhoto, over the eval shop.

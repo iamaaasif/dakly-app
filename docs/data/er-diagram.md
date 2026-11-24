@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0102_snapshot.json`: **107 tables, 1416 columns, 435 explicit indexes and 335 foreign keys**.
+Built from `packages/db/migrations/meta/0103_snapshot.json`: **108 tables, 1427 columns, 436 explicit indexes and 337 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -397,7 +397,7 @@ erDiagram
 
 ## Channels, customers and chats
 
-Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`, `due-book.ts`.
+Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`, `ad-links.ts`, `due-book.ts`.
 
 ```mermaid
 erDiagram
@@ -485,6 +485,8 @@ erDiagram
     users |o..o{ sms_messages : "created_by_user_id"
     contacts |o..o{ sms_messages : "store_id, contact_id"
     sms_sender_ids |o..o{ sms_messages : "store_id, sender_id_id"
+    stores ||..o{ ad_product_links : "store_id"
+    products ||..o{ ad_product_links : "store_id, product_id"
     stores ||..o{ due_entries : "store_id"
     users |o..o{ due_entries : "recorded_by_user_id"
     contacts ||..o{ due_entries : "store_id, contact_id"
@@ -725,6 +727,10 @@ erDiagram
         text last_message_preview "NULL; text"
         timestamp_with_time_zone window_expires_at "NULL; timestamp with time zone"
         integer unread_count "NOT NULL; integer"
+        text referral_ad_id "NULL; text"
+        text referral_post_id "NULL; text"
+        text referral_title "NULL; text"
+        timestamp_with_time_zone referred_at "NULL; timestamp with time zone"
         text ai_summary "NULL; text"
         uuid memory_built_through_message_id "NULL; uuid"
         timestamp_with_time_zone memory_built_through_message_at "NULL; timestamp with time zone"
@@ -816,6 +822,15 @@ erDiagram
         timestamp_with_time_zone sent_at "NULL; timestamp with time zone"
         timestamp_with_time_zone delivered_at "NULL; timestamp with time zone"
         timestamp_with_time_zone failed_at "NULL; timestamp with time zone"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
+    }
+    ad_product_links {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        text source "NOT NULL; text"
+        text external_id "NOT NULL; text"
+        uuid product_id FK "NOT NULL; uuid"
+        smallint position "NOT NULL; smallint"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     due_entries {
@@ -2042,6 +2057,8 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `account_security_notices_recovery_id_account_recoveries_id_fk`      | `account_security_notices(recovery_id)`                   | `account_recoveries(id)`                    | cascade   |
 | `account_security_events_user_id_users_id_fk`                        | `account_security_events(user_id)`                        | `users(id)`                                 | no action |
 | `account_security_events_actor_staff_id_staff_users_id_fk`           | `account_security_events(actor_staff_id)`                 | `staff_users(id)`                           | no action |
+| `ad_product_links_store_id_stores_id_fk`                             | `ad_product_links(store_id)`                              | `stores(id)`                                | no action |
+| `ad_product_links_product_id_store_fk`                               | `ad_product_links(store_id, product_id)`                  | `products(store_id, id)`                    | no action |
 | `abuse_reports_reported_by_staff_id_staff_users_id_fk`               | `abuse_reports(reported_by_staff_id)`                     | `staff_users(id)`                           | no action |
 | `abuse_reports_handled_by_staff_id_staff_users_id_fk`                | `abuse_reports(handled_by_staff_id)`                      | `staff_users(id)`                           | no action |
 | `ai_cost_alerts_store_id_stores_id_fk`                               | `ai_cost_alerts(store_id)`                                | `stores(id)`                                | cascade   |
