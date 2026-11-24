@@ -207,6 +207,12 @@ export class ProductsService {
     });
   }
 
+  async productIdsOfVariants(storeId: string, variantIds: string[]): Promise<string[]> {
+    if (!variantIds.length) return [];
+    const rows = await this.orderVariantRepository.productIds(storeId, variantIds);
+    return rows.map(({ productId }) => productId);
+  }
+
   async variantWeights(storeId: string, variantIds: string[]) {
     if (!variantIds.length) return new Map<string, number | null>();
     const rows = await this.orderVariantRepository.weights(storeId, variantIds);

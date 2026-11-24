@@ -21,7 +21,15 @@ describe('shopRulesFrom', () => {
       showProducts: false,
       takeOrders: true,
       confirmOrders: false,
+      suggestAddOns: false,
     });
+  });
+
+  it('keeps add-on suggestions off until the owner turns them on', () => {
+    expect(shopRulesFrom({ abilities: {}, handoverRules: {} }).suggestAddOns).toBe(false);
+    expect(
+      shopRulesFrom({ abilities: { suggestAddOns: true }, handoverRules: {} }).suggestAddOns,
+    ).toBe(true);
   });
 
   it('ignores a hand-over key an older save holds', () => {

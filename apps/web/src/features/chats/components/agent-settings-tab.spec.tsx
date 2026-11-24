@@ -113,6 +113,18 @@ describe('AI agent settings tab', () => {
     });
   });
 
+  it('keeps Suggest add-ons off until the owner turns it on, then saves it', async () => {
+    respond(() => Response.json({ ...saved, version: 4 }, { headers }));
+    show();
+    const addOns = await screen.findByRole('switch', { name: /Suggest add-ons/ });
+    expect(addOns.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(addOns);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText('AI agent settings saved.')).toBeTruthy();
+    const put = requests.find((request) => request.method === 'PUT');
+    expect(JSON.parse(put!.body!)).toMatchObject({ abilities: { suggestAddOns: true } });
+  });
+
   it('saves the product card style the owner picks', async () => {
     respond(() => Response.json({ ...saved, version: 4 }, { headers }));
     show();
