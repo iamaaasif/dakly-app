@@ -8,6 +8,7 @@ import type {
   InboundComment,
   InboundMessage,
   InboundPostback,
+  InboundReferral,
 } from '../channel-driver';
 
 const deliverySchema = z.looseObject({
@@ -21,10 +22,48 @@ const participants = {
   recipient: z.object({ id: z.string().min(1) }),
 };
 const timestamp = z.number().int().nonnegative().max(8.64e15);
+function toReferral(value: {
+  ad_id?: string | undefined;
+  ads_context_data?:
+    | {
+        ad_title?: string | undefined;
+        post_id?: string | undefined;
+        photo_url?: string | undefined;
+      }
+    | undefined;
+}): InboundReferral | null {
+  const context = value.ads_context_data ?? {};
+  if (!value.ad_id && !context.post_id) return null;
+  return {
+    adId: value.ad_id ?? null,
+    postId: context.post_id ?? null,
+    title: context.ad_title ?? null,
+    photoUrl: context.photo_url ?? null,
+  };
+}
+
+// Meta puts the referral on the event, or on the message for a first message sent from an ad.
+const referral = z
+  .object({
+    ad_id: z.string().min(1).max(64).optional(),
+    ads_context_data: z
+      .object({
+        ad_title: z.string().min(1).max(200).optional(),
+        post_id: z.string().min(1).max(64).optional(),
+        photo_url: z
+          .url({ protocol: /^https$/ })
+          .max(2000)
+          .optional(),
+      })
+      .optional(),
+  })
+  .transform(toReferral);
 const messagingEvent = z.object({
   ...participants,
   timestamp,
+  referral: z.unknown().optional(),
   message: z.object({
+    referral: z.unknown().optional(),
     mid: z.string().min(1),
     text: z.string().optional(),
     attachments: z.array(z.unknown()).default([]),
@@ -96,6 +135,10 @@ type MetaMessagingChannel = 'messenger' | 'instagram';
 type MetaReceipt = z.infer<typeof receiptEvent>;
 type ReceiptAddress = Pick<ChannelReceipt, 'channel' | 'accountExternalId' | 'recipientExternalId'>;
 
+function inboundReferral(...candidates: unknown[]): InboundReferral | null {
+  return candidates.map((candidate) => referral.safeParse(candidate).data).find(Boolean) ?? null;
+}
+
 function inboundMessage(channel: MetaMessagingChannel, account: string, event: unknown) {
   const parsed = messagingEvent.safeParse(event).data;
   if (!parsed || parsed.recipient.id !== account || parsed.sender.id === account) return undefined;
@@ -116,6 +159,7 @@ function inboundMessage(channel: MetaMessagingChannel, account: string, event: u
     senderExternalId: sender.id,
     text: message.text || null,
     attachments,
+    referral: inboundReferral(message.referral, parsed.referral),
     sentAt: new Date(timestamp),
   } satisfies InboundMessage;
 }

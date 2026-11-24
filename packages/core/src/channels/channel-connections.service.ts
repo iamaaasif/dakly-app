@@ -8,6 +8,7 @@ import {
   type ChannelDriver,
   type CommentDriver,
   type OutboundMessage,
+  type ProfileDriver,
 } from '@dakly/providers/channel/channel-driver';
 
 import { NotificationsService } from '../notifications/notifications.service';
@@ -62,7 +63,10 @@ export class ChannelConnectionsService {
     private readonly pageSubscriptions: MetaPageSubscriptionsService,
     @Inject(META_CHANNEL_DRIVER)
     private readonly driver:
-      (Pick<ChannelDriver, 'send' | 'downloadMedia'> & Omit<CommentDriver, 'parseComments'>) | null,
+      | (Pick<ChannelDriver, 'send' | 'downloadMedia' | 'showTyping'> &
+          ProfileDriver &
+          Omit<CommentDriver, 'parseComments'>)
+      | null,
   ) {}
 
   async list(
@@ -187,6 +191,26 @@ export class ChannelConnectionsService {
     }
   }
 
+  // The typing sign is a courtesy: a failure is logged and never stops the reply it precedes.
+  async showMetaTyping(
+    storeId: string,
+    target: {
+      connectionId: string;
+      channel: OutboundMessage['channel'];
+      recipientExternalId: string;
+    },
+  ) {
+    const { connectionId, channel, recipientExternalId } = target;
+    try {
+      const prepared = await this.prepareMetaSend(storeId, connectionId, channel);
+      await this.useMetaToken(prepared, 'meta_typing', (driver, credentials) =>
+        driver.showTyping(credentials, { channel, recipientExternalId }),
+      );
+    } catch (error) {
+      this.logger.warn({ message: 'Typing sign failed', storeId, error: String(error) });
+    }
+  }
+
   replyToMetaComment(
     prepared: PreparedMetaSend,
     comment: Parameters<CommentDriver['replyToComment']>[1],
@@ -237,6 +261,24 @@ export class ChannelConnectionsService {
     } catch (error) {
       await this.recordSendCredentialRejection(storeId, connectionId, ciphertext, error);
       throw error;
+    } finally {
+      token.fill(0);
+    }
+  }
+
+  async fetchMetaProfile(prepared: PreparedMetaSend, externalId: string) {
+    if (hasDatabaseTransactionScope()) throw connectionError('CHANNEL_SEND_INSIDE_TRANSACTION');
+    if (!this.driver) throw connectionError('META_CHANNEL_NOT_CONFIGURED');
+    const { storeId, ciphertext, keyVersion, channel } = prepared;
+    const token = this.encryption.decrypt(
+      { owner: 'store', storeId, purpose: 'channel-access-token' },
+      { ciphertext, keyVersion },
+    );
+    const driver = this.driver;
+    try {
+      return await measureVendorCall(this.logger, 'meta_profile', 'Meta profile measured', () =>
+        driver.fetchProfile(token.toString(), { channel, externalId }),
+      );
     } finally {
       token.fill(0);
     }

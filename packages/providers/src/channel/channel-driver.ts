@@ -8,6 +8,15 @@ export type InboundAttachmentKind = 'image' | 'voice' | 'video' | 'file';
 
 export type InboundAttachment = { kind: InboundAttachmentKind; url: string };
 
+// Where a customer's first message came from. An ad that promotes a post carries both ids.
+export type InboundReferral = {
+  adId: string | null;
+  postId: string | null;
+  title: string | null;
+  // The ad's picture as Meta shows it in the first message; null for a video or a text-only ad.
+  photoUrl: string | null;
+};
+
 export type InboundMessage = {
   channel: ChannelKind;
   accountExternalId: string;
@@ -16,6 +25,7 @@ export type InboundMessage = {
   senderExternalId: string;
   text: string | null;
   attachments: InboundAttachment[];
+  referral: InboundReferral | null;
   sentAt: Date;
 };
 
@@ -115,6 +125,17 @@ export type CommentDriver = {
   ): Promise<void>;
 };
 
+// Meta gives a name only; it never gives a phone number or an email address.
+export type ContactProfile = { name: string | null };
+
+export type ProfileDriver = {
+  // Null when Meta refuses the lookup, for example a missing permission or a blocked user.
+  fetchProfile(
+    accessToken: string,
+    target: { channel: Exclude<ChannelKind, 'whatsapp'>; externalId: string },
+  ): Promise<ContactProfile | null>;
+};
+
 export type ChannelDriver = {
   readonly kind: ChannelKind;
   verifyWebhookSignature(rawBody: Buffer, signatureHeader: string): boolean;
@@ -122,6 +143,11 @@ export type ChannelDriver = {
   parseReceipts(payload: unknown): ChannelReceipt[];
   parsePostbacks(payload: unknown): InboundPostback[];
   send(credentials: ChannelCredentials, message: OutboundMessage): Promise<SendResult>;
+  // Shows "typing" to the customer for up to 20 seconds, or until the next message arrives.
+  showTyping(
+    credentials: ChannelCredentials,
+    target: { channel: Exclude<ChannelKind, 'whatsapp'>; recipientExternalId: string },
+  ): Promise<void>;
   downloadMedia(accessToken: string, url: string, maxBytes: number): Promise<MediaDownload>;
 };
 

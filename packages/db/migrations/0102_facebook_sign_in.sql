@@ -1,0 +1,4 @@
+ALTER TABLE "account_security_events" DROP CONSTRAINT "account_security_events_event";--> statement-breakpoint
+ALTER TABLE "users" ADD COLUMN "facebook_subject" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "users_facebook_subject_key" ON "users" USING btree ("facebook_subject");--> statement-breakpoint
+ALTER TABLE "account_security_events" ADD CONSTRAINT "account_security_events_event" CHECK ("account_security_events"."event" in ('password.changed', 'totp.enabled', 'totp.disabled', 'recovery.started', 'recovery.cancelled', 'recovery.completed', 'email.changed', 'phone.changed', 'sessions.revoked', 'google.linked', 'facebook.linked'));

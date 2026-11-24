@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { getProductTool } from '@dakly/contracts/ai-agent-tools';
 import { chatReplyOutputSchema } from '@dakly/contracts/chat-reply';
 import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import {
@@ -8,23 +9,52 @@ import {
   type ProductCardElement,
 } from '@dakly/contracts/product-card';
 
+import { AdLinksService } from '../ad-links/ad-links.service';
+import { AiRunsService } from '../ai/ai-runs.service';
 import { AiService } from '../ai/ai.service';
 import { ContactMemoryService } from '../contact-memory/contact-memory.service';
 import { InboxService } from '../messaging/inbox.service';
+import { Clock } from '../platform/clock';
+import { loadEnv } from '../platform/config/env';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
+import {
+  AD_PRODUCT_LIMIT,
+  AD_PRODUCTS_TOOL,
+  adProducts,
+  adProductsVersion,
+  isAdContextFresh,
+} from './ad-context';
+import {
+  conversationEntries,
+  type ConversationEntry,
+  type HistoryMessage,
+  MATCH_PHOTO_TOOL,
+  PRODUCTS_IN_CHAT_TOOL,
+  productsInChat,
+  productsInChatVersion,
+  recentlyShownProductIds,
+  SHOWN_PRODUCTS_SOURCE,
+  shownProductIds,
+} from './chat-memory';
+import { conversationBlocks, windowConversation } from './conversation-window';
+import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV5 } from './prompts/chat-reply.v5';
+import { chatReplyV12 } from './prompts/chat-reply.v12';
+import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
   isOutOfStock,
   SalesAgentToolsService,
   salesAgentLlmTools,
 } from './sales-agent-tools.service';
+import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
 
 const MAX_ROUNDS = 4;
 const REPLY_BUDGET_MS = 20_000;
 const HISTORY_LENGTH = 20;
+// The whole recent chat is read; the conversation window decides how much of it the model sees.
+const REPLY_HISTORY_LENGTH = 300;
 const PHOTO_QUERY_LENGTH = 1000;
 const CARD_TOOL = 'send_product_card';
 const HAND_OVER_TOOL = 'hand_over';
@@ -43,6 +73,7 @@ export type ComposedReply =
       cards: ProductCard[];
       toolResults: object[];
       toolNames: string[];
+      earlierCustomerTexts: string[];
       sources: { tool: string; refs: string[] }[];
     }
   | { kind: 'handover'; reason: Reason }
@@ -56,7 +87,15 @@ export type ProductCard = {
   image?: { objectKey: string; contentType: string; sizeBytes: number };
 };
 
-export type ComposeInput = ToolScope & { customerTexts: string[] };
+export type PreparedReply = {
+  results: ToolResult[];
+  scoped: ComposeInput;
+  ad: { result: ToolResult } | undefined;
+  inChat: ToolResult | undefined;
+  history: readonly HistoryMessage[] | undefined;
+};
+
+export type ComposeInput = ToolScope & { customerTexts: string[]; rules: ShopRules };
 
 // Runs the model and the read-only tools. It sends nothing and holds no transaction.
 @Injectable()
@@ -68,21 +107,77 @@ export class SalesAgentService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(ContactMemoryService) private readonly memory: ContactMemoryService,
+    @Inject(AiRunsService) private readonly runs: AiRunsService,
+    @Inject(AdLinksService) private readonly adLinks: AdLinksService,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  async compose(input: ComposeInput): Promise<ComposedReply> {
+  // A reply that fails the fact check is written once more with the failure named, so a slip such
+  // as an invented amount does not cost the customer a person's wait. A second failure hands over.
+  async compose(input: ComposeInput, prepared?: Promise<PreparedReply>): Promise<ComposedReply> {
+    const first = await this.composeOnce(input, undefined, prepared);
+    const failed = first.kind === 'reply' && (await this.factCheckFailure(input, first));
+    if (first.kind !== 'reply' || !failed) return first;
+    await this.runs.setOutcome(input.storeId, first.aiRunId, 'failed_check', failed);
+    const second = await this.composeOnce(input, { failure: failed, reply: first.text });
+    const failedAgain = second.kind === 'reply' && (await this.factCheckFailure(input, second));
+    if (second.kind !== 'reply' || !failedAgain) return second;
+    await this.runs.setOutcome(input.storeId, second.aiRunId, 'failed_check', failedAgain);
+    return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  private async factCheckFailure(
+    input: ComposeInput,
+    composed: Extract<ComposedReply, { kind: 'reply' }>,
+  ): Promise<FactCheckFailure | false> {
+    const shop = await this.stores.settings(input.storeId);
+    const checked = checkReplyFacts(
+      composed.text,
+      composed.toolResults,
+      {
+        phone: shop.phone,
+        linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
+        earlierCustomerTexts: composed.earlierCustomerTexts,
+      },
+      input.customerTexts,
+    );
+    return !checked.isSafe && checked.failure;
+  }
+
+  // Reads the chat and the products it already points to. The caller may start it while the
+  // hand-over check is still running; the search that costs an AI call waits for the verdict.
+  async prepare(input: ComposeInput): Promise<PreparedReply> {
+    const results: ToolResult[] = [];
+    // A practice question has no saved conversation, so the question itself is the whole history.
+    const [history, products] = await Promise.all([
+      input.chat
+        ? this.inbox.replyHistory(input.storeId, input.chat.conversationId, REPLY_HISTORY_LENGTH)
+        : undefined,
+      this.gatherProducts(input, results),
+    ]);
+    return { results, history, ...products };
+  }
+
+  private async composeOnce(
+    input: ComposeInput,
+    rejected?: { failure: FactCheckFailure; reply: string },
+    prepared?: Promise<PreparedReply>,
+  ): Promise<ComposedReply> {
     const { storeId } = input;
     const signal = AbortSignal.timeout(REPLY_BUDGET_MS);
-    const results: ToolResult[] = [];
-    const candidates = await this.productCandidates(input);
+    const ready = await (prepared ?? this.prepare(input));
+    // The model's tool rounds add to the list, so a retry must not see the first try's results.
+    const results = [...ready.results];
+    const { scoped, ad, inChat, history } = ready;
+    const candidates = await this.productCandidates(scoped);
     if (candidates) results.push(candidates);
-    const context = await this.context(input, candidates);
-    let transcript = '';
+    const context = await this.context({ input, history, inChat, candidates, ad });
+    let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: chatReplyV5,
+        prompt: promptWith(chatReplyV12, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -100,13 +195,30 @@ export class SalesAgentService {
           cards: await this.cards(storeId, results),
           toolResults: results.map(({ result }) => result),
           toolNames: results.map(({ tool }) => tool),
-          sources: sourcesOf(results),
+          earlierCustomerTexts: customerLines(history),
+          sources: withShownProducts(
+            sourcesOf(results),
+            shownProductIds(results, attempt.output.reply),
+          ),
         };
-      const outcome = await this.answerToolCalls(input, attempt.toolCalls, results);
+      const outcome = await this.answerToolCalls(scoped, attempt.toolCalls, results);
       if ('handover' in outcome) return { kind: 'handover', reason: outcome.handover };
       transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
     }
     return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  // The ad's products and the products shown earlier, in the order the prompt lists them.
+  // `scoped` is the input the tools run with: inside the ad's products while it has any.
+  private async gatherProducts(input: ComposeInput, results: ToolResult[]) {
+    const ad = await this.adContext(input);
+    if (ad) results.push(ad.result);
+    const scoped: ComposeInput = ad?.productIds.length
+      ? { ...input, adProductIds: ad.productIds }
+      : input;
+    const inChat = input.chat ? await this.readProductsInChat(scoped, input.chat) : undefined;
+    if (inChat) results.push(inChat);
+    return { scoped, ad, inChat };
   }
 
   private async cards(storeId: string, results: ToolResult[]): Promise<ProductCard[]> {
@@ -160,9 +272,17 @@ export class SalesAgentService {
   ): Promise<{ handover: Reason } | { answered: { name: string; result: object }[] }> {
     const answered: { name: string; result: object }[] = [];
     for (const call of calls) {
-      const result = isUnconfirmed(call, input.customerTexts, results)
-        ? { error: 'CONFIRMATION_NOT_GIVEN' }
-        : await this.tools.run(input, call.name, call.argumentsJson);
+      const refusal = refuseToolCall(input.rules, call);
+      if (refusal?.kind === 'handover') return { handover: refusal.reason };
+      const result =
+        refusal?.result ??
+        (isUnconfirmed(call, input.customerTexts, results)
+          ? { error: 'CONFIRMATION_NOT_GIVEN' }
+          : await this.tools.run(
+              { ...input, suggestAddOns: input.rules.suggestAddOns },
+              call.name,
+              call.argumentsJson,
+            ));
       if (call.name === HAND_OVER_TOOL && 'reason' in result)
         return { handover: result.reason as Reason };
       results.push({ tool: call.name, result });
@@ -171,39 +291,93 @@ export class SalesAgentService {
     return { answered };
   }
 
+  // The ad or post this chat started from, with what it sells read again now. Null when the chat
+  // did not start from one, or the ad is more than a day old. Products come only from the link
+  // the owner saved for it, never from a guess.
+  private async adContext(
+    input: ComposeInput,
+  ): Promise<{ productIds: string[]; result: ToolResult } | undefined> {
+    if (!input.chat) return undefined;
+    const referral = await this.inbox.referralOf(input.storeId, input.chat.conversationId);
+    if (!referral || !isAdContextFresh(referral.referredAt, this.clock.now())) return undefined;
+    const productIds = (await this.adLinks.productIdsFor(input.storeId, referral)).slice(
+      0,
+      AD_PRODUCT_LIMIT,
+    );
+    const products = await this.tools.adProducts(input, productIds);
+    return {
+      // A linked product that is no longer offered drops out here, so search cannot reach it.
+      productIds: products.flatMap((product) =>
+        'productId' in product ? [String(product.productId)] : [],
+      ),
+      result: { tool: AD_PRODUCTS_TOOL, result: adProducts(products) },
+    };
+  }
+
   // Search the customer's own words first, so the model starts with likely products.
   private async productCandidates(input: ComposeInput): Promise<ToolResult | undefined> {
     const photo = photoQuery(input.customerTexts);
-    if (photo) return { tool: 'match_photo', result: await this.tools.matchPhoto(input, photo) };
+    if (photo) return { tool: MATCH_PHOTO_TOOL, result: await this.tools.matchPhoto(input, photo) };
     const query = input.customerTexts.join(' ').slice(0, 100).trim();
     if (query.length < 3) return undefined;
     const result = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
     return { tool: 'search_products', result };
   }
 
+  // Read again now, so a price or stock count is never an old one from the earlier message.
+  private async readProductsInChat(
+    input: ComposeInput,
+    chat: { conversationId: string },
+  ): Promise<ToolResult | undefined> {
+    const products: object[] = [];
+    // All of this customer's chats, not only this one: a customer who comes back on another
+    // channel after a merge still means the product they were shown.
+    const shown = await this.inbox.shownProductHistory(
+      input.storeId,
+      chat.conversationId,
+      HISTORY_LENGTH,
+    );
+    for (const productId of recentlyShownProductIds(shown)) {
+      const product = await this.tools.run(
+        input,
+        getProductTool.name,
+        JSON.stringify({ productId }),
+      );
+      if (!('error' in product)) products.push(product);
+    }
+    return products.length
+      ? { tool: PRODUCTS_IN_CHAT_TOOL, result: productsInChat(products) }
+      : undefined;
+  }
+
   // Stable parts first so the provider's prompt cache can reuse them.
-  private async context(input: ComposeInput, candidates: ToolResult | undefined) {
+  private async context({
+    input,
+    history,
+    inChat,
+    candidates,
+    ad,
+  }: {
+    input: ComposeInput;
+    history: readonly HistoryMessage[] | undefined;
+    inChat: ToolResult | undefined;
+    candidates: ToolResult | undefined;
+    ad: { result: ToolResult } | undefined;
+  }) {
     const shop = await this.stores.settings(input.storeId);
     const memory = await this.memory.contextFor(input.storeId, input.contactId);
-    // A practice question has no saved conversation, so the question itself is the whole history.
-    const history = input.chat
-      ? await this.inbox.messages(input.storeId, input.chat.conversationId, {
-          limit: HISTORY_LENGTH,
-        })
-      : undefined;
-    const conversation = history
-      ? history.items
-          .filter((message) => message.kind !== 'note' && message.body)
-          .reverse()
-          .map((message) => ({
-            from: message.direction === 'in' ? 'customer' : 'shop',
-            text: message.body?.slice(0, 2000),
-          }))
-      : input.customerTexts.map((text) => ({ from: 'customer', text: text.slice(0, 2000) }));
+    const conversation: ConversationEntry[] = history
+      ? conversationEntries(history)
+      : input.customerTexts.map((text) => ({ from: 'customer', text: shorten(text) }));
     return [
       `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
+      shopRulesBlock(input.rules),
       ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
-      `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
+      ...conversationBlocks(windowConversation(conversation, input.customerTexts)),
+      ...(inChat
+        ? [`<products_in_this_chat>${JSON.stringify(inChat.result)}</products_in_this_chat>`]
+        : []),
+      ...(ad ? [`<ad_products>${JSON.stringify(ad.result.result)}</ad_products>`] : []),
       `<product_candidates>${JSON.stringify(candidates?.result ?? { products: [] })}</product_candidates>`,
     ].join('\n');
   }
@@ -232,6 +406,36 @@ function isUnconfirmed(
       call.argumentsJson.includes(String(result.orderNumber)),
   );
   return drafted;
+}
+
+// The retry's first lines tell the model why its last reply was not sent.
+function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | undefined) {
+  return rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
+}
+
+// A run that was shown the products block records its version with the reply prompt's.
+function promptWith(
+  prompt: typeof chatReplyV12,
+  inChat: ToolResult | undefined,
+  ad: object | undefined,
+) {
+  const parts = [
+    prompt.version,
+    ...(inChat ? [productsInChatVersion] : []),
+    ...(ad ? [adProductsVersion] : []),
+  ];
+  return { ...prompt, version: parts.join('+') };
+}
+
+// Saved with the reply, so the next turn knows which products "this one" can mean.
+function withShownProducts(sources: { tool: string; refs: string[] }[], shown: string[]) {
+  return shown.length ? [...sources, { tool: SHOWN_PRODUCTS_SOURCE, refs: shown }] : sources;
+}
+
+function customerLines(history: readonly HistoryMessage[] | undefined) {
+  return conversationEntries(history ?? []).flatMap(({ from, text }) =>
+    from === 'customer' ? [text] : [],
+  );
 }
 
 function sourcesOf(results: ToolResult[]) {

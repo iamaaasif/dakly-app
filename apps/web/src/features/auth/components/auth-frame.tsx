@@ -1,7 +1,8 @@
+'use client';
 import { ChevronLeft } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 import { Card } from '@dakly/ui/card';
 
@@ -29,15 +30,7 @@ export function AuthFrame({
   embedded,
   children,
 }: AuthFrameProps) {
-  const heading = (
-    <div className="mb-5.5 space-y-2.5">
-      {step ? <StepBars {...step} /> : null}
-      <h1 tabIndex={-1} className="text-title font-bold tracking-tight text-balance">
-        {title}
-      </h1>
-      {subtitle ? <p className="text-field text-text-muted">{subtitle}</p> : null}
-    </div>
-  );
+  const heading = <AuthHeading title={title} subtitle={subtitle} step={step} />;
   if (embedded)
     return (
       <main className="mx-auto max-w-lg space-y-6 px-4 py-8">
@@ -54,7 +47,12 @@ export function AuthFrame({
         <AuthTopBar onBack={onBack} />
         <div className="mx-auto flex w-full max-w-110 flex-1 flex-col justify-center py-8">
           {heading}
-          {children}
+          <div
+            key={title}
+            className="motion-safe:animate-[motion-fade-in_200ms_var(--motion-ease)]"
+          >
+            {children}
+          </div>
           {aside ? (
             <div className="mt-6 space-y-4 border-t border-border pt-4 text-center text-text-muted">
               {aside}
@@ -68,6 +66,36 @@ export function AuthFrame({
           </span>
         </p>
       </main>
+    </div>
+  );
+}
+
+// A new step moves focus to its heading, so a screen reader announces it and the keyboard
+// continues from the top of the step. The first render is left alone.
+function AuthHeading({
+  title,
+  subtitle,
+  step,
+}: Pick<AuthFrameProps, 'title' | 'subtitle' | 'step'>) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const firstTitle = useRef(title);
+  useEffect(() => {
+    if (firstTitle.current !== title) headingRef.current?.focus({ preventScroll: true });
+  }, [title]);
+  return (
+    <div
+      key={title}
+      className="mb-5.5 space-y-2.5 motion-safe:animate-[motion-fade-in_200ms_var(--motion-ease)]"
+    >
+      {step ? <StepBars {...step} /> : null}
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="text-title font-bold tracking-tight text-balance outline-none"
+      >
+        {title}
+      </h1>
+      {subtitle ? <p className="text-field text-text-muted">{subtitle}</p> : null}
     </div>
   );
 }

@@ -27,6 +27,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS, MINUTE_MS, startOfDayIn } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
+import { InboxShownProductsRepository } from './inbox-shown-products.repository';
 import { InboxRepository } from './inbox.repository';
 import { messagingError } from './messaging.errors';
 
@@ -47,6 +48,8 @@ export class InboxService {
     @Inject(Clock) private readonly clock: Clock,
     @Inject(UsersService) private readonly users: UsersService,
     @Inject(ChatOrdersService) private readonly chatOrders: ChatOrdersService,
+    @Inject(InboxShownProductsRepository)
+    private readonly shownProducts: InboxShownProductsRepository,
   ) {}
 
   async list(storeId: string, query: ConversationListQuery, access: StoreAccess, actor: UserActor) {
@@ -130,6 +133,30 @@ export class InboxService {
       items,
       nextCursor: last && rows.length > query.limit ? `${last.createdAt}_${last.id}` : null,
     };
+  }
+
+  // The AI's view of the chat, newest first: notes left out, read photo and voice text and the
+  // sources of each AI reply kept, which the inbox screen does not need.
+  async replyHistory(storeId: string, id: string, limit: number) {
+    await this.requireChats(storeId);
+    await this.find(storeId, id);
+    return this.repository.replyHistory(storeId, id, limit);
+  }
+
+  // The ad or post the customer came from, or null when the chat did not start from one.
+  async referralOf(storeId: string, id: string) {
+    await this.requireChats(storeId);
+    await this.find(storeId, id);
+    const referral = await this.repository.referralOf(storeId, id);
+    return referral && (referral.adId || referral.postId) ? referral : null;
+  }
+
+  // Where the AI finds "the product we showed": the AI replies of all this customer's chats, so
+  // "ওইটা এখনো আছে?" works days later and on another channel after a merge.
+  async shownProductHistory(storeId: string, id: string, limit: number) {
+    await this.requireChats(storeId);
+    await this.find(storeId, id);
+    return this.shownProducts.shownProductHistory(storeId, id, limit);
   }
 
   addNote(storeId: string, id: string, actor: UserActor, input: CreateConversationNoteInput) {

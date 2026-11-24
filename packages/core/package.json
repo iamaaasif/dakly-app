@@ -36,6 +36,7 @@
     "pino-http": "10.5.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.0",
+    "sharp": "^0.35.5",
     "unpdf": "1.9.1",
     "write-excel-file": "4.1.1",
     "zod": "^4.1.0"

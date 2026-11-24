@@ -156,11 +156,22 @@ export class DeliveryService {
   }
 
   // A typed name is accepted only when it is exact or the only match; a guess would price the wrong zone.
+  // A customer writes "Dhanmondi, Dhaka" but the areas stop at district and upazila, so each part
+  // of a comma-separated place is tried from the most specific on.
   async findAreaIdByName(storeId: string, name: string): Promise<number> {
+    const parts = name.split(/[,،]/).map((part) => part.trim());
+    for (const candidate of new Set([name.trim(), ...parts])) {
+      if (candidate.length < 2) continue;
+      const areaId = await this.findExactOrOnlyArea(storeId, candidate);
+      if (areaId !== undefined) return areaId;
+    }
+    throw deliveryError('DELIVERY_AREA_INVALID');
+  }
+
+  private async findExactOrOnlyArea(storeId: string, name: string): Promise<number | undefined> {
     const [first, second] = await this.repository.findAreasByName(storeId, name, 2);
     const isExact = first?.name.toLowerCase() === name.toLowerCase() || first?.nameBn === name;
-    if (!first || (second && !isExact)) throw deliveryError('DELIVERY_AREA_INVALID');
-    return first.id;
+    return first && (!second || isExact) ? first.id : undefined;
   }
 
   private async assertAreasAvailable(storeId: string, ids: number[], exceptId?: string) {

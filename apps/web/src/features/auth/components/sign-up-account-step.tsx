@@ -4,7 +4,7 @@ import { Check, ChevronRight } from 'lucide-react';
 import { Controller, useForm, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 
-import { emailSchema } from '@dakly/contracts/auth';
+import { emailSchema, signUpSources } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
@@ -28,7 +28,7 @@ const accountSchema = z.object({
         });
     }),
   password: newPasswordSchema,
-  source: z.string().min(1, 'Tell us how you heard about Dakly.'),
+  source: z.enum(signUpSources, { error: 'Tell us how you heard about Dakly.' }),
   sourceOther: z.string().trim().max(200),
 });
 export type AccountDetails = z.infer<typeof accountSchema>;
@@ -40,7 +40,7 @@ type SignUpAccountStepProps = {
 export function SignUpAccountStep({ legal, initial, onNext }: SignUpAccountStepProps) {
   const form = useForm({
     resolver: zodResolver(accountSchema),
-    defaultValues: initial ?? { email: '', password: '', source: '', sourceOther: '' },
+    defaultValues: initial ?? { email: '', password: '', sourceOther: '' },
   });
   const errors = form.formState.errors;
   const password = form.watch('password');
@@ -127,7 +127,7 @@ function SourceField({ form }: { form: UseFormReturn<AccountDetails> }) {
           control={form.control}
           name="source"
           render={({ field }) => (
-            <Select value={field.value} onValueChange={field.onChange}>
+            <Select value={field.value ?? ''} onValueChange={field.onChange}>
               <SelectTrigger
                 aria-labelledby="source-label"
                 aria-invalid={Boolean(error)}
@@ -137,8 +137,8 @@ function SourceField({ form }: { form: UseFormReturn<AccountDetails> }) {
               </SelectTrigger>
               <SelectContent>
                 {hearSources.map((source) => (
-                  <SelectItem key={source} value={source}>
-                    {source}
+                  <SelectItem key={source.value} value={source.value}>
+                    {source.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -151,7 +151,7 @@ function SourceField({ form }: { form: UseFormReturn<AccountDetails> }) {
           </p>
         ) : null}
       </div>
-      {form.watch('source') === 'Other' ? (
+      {form.watch('source') === 'other' ? (
         <AuthField
           label="Where did you hear about us? (optional)"
           field={form.register('sourceOther')}

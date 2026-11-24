@@ -11,19 +11,25 @@ import {
   type MetaTokenHealthDriver,
   type OutboundCard,
   type OutboundMessage,
+  type ProfileDriver,
 } from '../channel-driver';
+import { failedMediaResult, isMetaMediaUrl, mediaType, readCapped } from './meta-media';
 
 const graph = 'https://graph.facebook.com/v27.0/';
 const login = 'https://www.facebook.com/v27.0/dialog/oauth';
 const requestTimeoutMs = 5000;
 const mediaTimeoutMs = 20_000;
-// The webhook is signed, but the token only goes to Meta's own media hosts.
-const mediaHostSuffixes = ['.fbcdn.net', '.cdninstagram.com', '.fbsbx.com'];
 const pageManagementTasks = ['MANAGE', 'PROFILE_PLUS_MANAGE', 'PROFILE_PLUS_FULL_CONTROL'];
 
 const accessTokenSchema = z.object({ access_token: z.string().min(1) });
 const graphErrorSchema = z.object({
   error: z.object({ code: z.number(), error_subcode: z.number().optional() }),
+});
+const profileSchema = z.object({
+  first_name: z.string().optional(),
+  last_name: z.string().optional(),
+  name: z.string().optional(),
+  username: z.string().optional(),
 });
 const accountsSchema = z.object({
   data: z.array(
@@ -119,52 +125,6 @@ function messageContent(message: OutboundMessage) {
   };
 }
 
-function isMetaMediaUrl(url: string): boolean {
-  const { protocol, hostname } = new URL(url);
-  return protocol === 'https:' && mediaHostSuffixes.some((suffix) => hostname.endsWith(suffix));
-}
-
-// Meta's signed media links carry their expiry as hex Unix seconds in the `oe` parameter.
-function linkExpired(url: string): boolean {
-  const expiry = Number.parseInt(new URL(url).searchParams.get('oe') ?? '', 16);
-  return Number.isFinite(expiry) && expiry * 1000 < Date.now();
-}
-
-// Returns a final answer for a failed fetch, throws for an uncertain one, or nothing on success.
-function failedMediaResult(response: Response, url: string): MediaDownload | undefined {
-  const { status } = response;
-  // The token must never follow a redirect, so a redirect is a final answer.
-  if (status >= 300 && status < 400) throw new MetaRequestError('rejected');
-  // A CDN answer says nothing certain about the Page token, so it never marks it rejected.
-  if (status === 401) throw new MetaRequestError('rejected');
-  if ([400, 404, 410].includes(status)) return { kind: 'expired' };
-  // A 403 is only an expired link when the link's own expiry has passed; otherwise it may pass
-  // on a retry, so it counts as a fetch failure.
-  if (status === 403 && linkExpired(url)) return { kind: 'expired' };
-  if (!response.ok) throw new MetaRequestError('unavailable');
-  return undefined;
-}
-
-function mediaType(response: Response): string {
-  return (response.headers.get('content-type') ?? '').split(';')[0]?.trim() ?? '';
-}
-
-// Content-Length can be missing or wrong, so the body is counted as it arrives.
-async function readCapped(response: Response, maxBytes: number): Promise<Uint8Array | null> {
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for await (const chunk of response.body ?? []) {
-      total += chunk.byteLength;
-      if (total > maxBytes) return null;
-      chunks.push(chunk);
-    }
-  } catch {
-    throw new MetaRequestError('unavailable');
-  }
-  return Buffer.concat(chunks);
-}
-
 type MetaApp = {
   appId: string;
   appSecret: string;
@@ -176,7 +136,8 @@ export class MetaGraphChannelDriver
   implements
     MetaAuthorizationDriver,
     MetaTokenHealthDriver,
-    Pick<ChannelDriver, 'send' | 'downloadMedia'>,
+    Pick<ChannelDriver, 'send' | 'downloadMedia' | 'showTyping'>,
+    ProfileDriver,
     Omit<CommentDriver, 'parseComments'>
 {
   constructor(private readonly app: MetaApp) {}
@@ -322,6 +283,19 @@ export class MetaGraphChannelDriver
     return { externalMessageId: response.message_id };
   }
 
+  async showTyping(
+    { accountExternalId, accessToken }: ChannelCredentials,
+    { channel, recipientExternalId }: Parameters<ChannelDriver['showTyping']>[1],
+  ) {
+    const endpoint = channel === 'messenger' ? encodeURIComponent(accountExternalId) : 'me';
+    await this.request(`${endpoint}/messages`, {}, z.object({ recipient_id: z.string().min(1) }), {
+      method: 'POST',
+      accessToken,
+      signal: AbortSignal.timeout(requestTimeoutMs),
+      body: JSON.stringify({ recipient: { id: recipientExternalId }, sender_action: 'typing_on' }),
+    });
+  }
+
   async replyToComment(
     { accessToken }: ChannelCredentials,
     comment: Parameters<CommentDriver['replyToComment']>[1],
@@ -379,6 +353,24 @@ export class MetaGraphChannelDriver
         body: JSON.stringify({ [flag]: comment.hidden }),
       },
     );
+  }
+
+  async fetchProfile(accessToken: string, target: Parameters<ProfileDriver['fetchProfile']>[1]) {
+    // Messenger returns first and last name; Instagram returns a name and a username.
+    const fields = target.channel === 'messenger' ? 'first_name,last_name' : 'name,username';
+    try {
+      const profile = await this.request(
+        encodeURIComponent(target.externalId),
+        { fields },
+        profileSchema,
+        { accessToken, signal: AbortSignal.timeout(requestTimeoutMs) },
+      );
+      const fullName = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
+      return { name: fullName || profile.name || profile.username || null };
+    } catch (error) {
+      if (error instanceof MetaRequestError && error.code === 'auth_error') return null;
+      throw error;
+    }
   }
 
   async downloadMedia(accessToken: string, url: string, maxBytes: number): Promise<MediaDownload> {

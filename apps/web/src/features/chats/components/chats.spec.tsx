@@ -304,17 +304,26 @@ describe('Conversation', () => {
   };
   const verified = { headers: { 'x-session-context': 'verified' } };
   const posts: { path: string; body: unknown }[] = [];
+  const saved: (typeof inbound)[] = [];
 
   function respondToThread(windowExpiresAt: string | null) {
     vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
         posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) });
+        saved.push({
+          ...inbound,
+          id: 'm2',
+          direction: 'out',
+          authorType: 'user',
+          status: 'sent',
+          body: (JSON.parse(String(init.body ?? '{}')) as { body: string }).body,
+        });
         return Response.json({ messageId: 'sent' }, verified);
       }
       const sidebar = sidebarResponse(path);
       if (sidebar) return sidebar;
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
-        return Response.json({ items: [inbound], nextCursor: null }, verified);
+        return Response.json({ items: [...saved, inbound], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
         return Response.json({ ...sadia, unreadCount: 0, windowExpiresAt }, verified);
       if (path.startsWith('/api/saved-replies'))
@@ -332,6 +341,7 @@ describe('Conversation', () => {
 
   afterEach(() => {
     posts.length = 0;
+    saved.length = 0;
   });
 
   it('shows the thread with the reply window and sends a reply', async () => {
@@ -341,6 +351,9 @@ describe('Conversation', () => {
     expect(await screen.findByText('Reply within 22 h')).toBeTruthy();
     await userEvent.type(screen.getByLabelText('Write a reply'), 'Ji, 1300 taka');
     await userEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    // The words move from the box into the thread at once, before the server answers.
+    expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe('');
+    expect(await screen.findByText('Ji, 1300 taka')).toBeTruthy();
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]!.path).toBe(`/api/conversations/${chatId}/replies`);
     expect(posts[0]!.body).toMatchObject({ body: 'Ji, 1300 taka' });
@@ -384,9 +397,6 @@ describe('Conversation actions', () => {
         });
         return Response.json({ ...sadia, ...chat }, verified);
       }
-      if (path.startsWith('/api/conversations/labels'))
-        return Response.json(['VIP', 'Wholesale'], verified);
-      if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
       if (path.startsWith('/api/conversations/assignees'))
         return Response.json(
           [
@@ -399,7 +409,7 @@ describe('Conversation actions', () => {
         return Response.json({ items: [], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
         return Response.json({ ...sadia, unreadCount: 0, ...chat }, verified);
-      return ok([sadia]);
+      return sidebarResponse(path) ?? ok([sadia]);
     });
   }
 
@@ -442,6 +452,29 @@ describe('Conversation actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(sent).toHaveLength(3));
     expect(sent[2]!.body).toEqual({ label: 'Eid', change: 'add' });
+  });
+
+  it('says so when the AI is assigned the chat but auto-reply is off', async () => {
+    autoReplyOn = false;
+    respondToActions({});
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canEditStoreSettings: true });
+    expect(
+      await screen.findByText(/AI auto-reply is off, so Dakly AI will not answer/),
+    ).toBeTruthy();
+    expect(screen.queryByText('Dakly AI is handling this chat')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Turn on AI auto-reply' })).toBeTruthy();
+    autoReplyOn = true;
+  });
+
+  it('shows the auto-reply-off notice without a link to someone who cannot change settings', async () => {
+    autoReplyOn = false;
+    respondToActions({});
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canEditStoreSettings: false });
+    expect(
+      await screen.findByText(/AI auto-reply is off, so Dakly AI will not answer/),
+    ).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'Turn on AI auto-reply' })).toBeNull();
+    autoReplyOn = true;
   });
 
   it('hands a chat back to the AI', async () => {

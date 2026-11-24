@@ -26,11 +26,15 @@ const envSchema = z.object({
   META_LOGIN_CONFIG_ID: z.string().min(1).optional(),
   META_OAUTH_REDIRECT_URI: z.url().optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().min(1).optional(),
+  // Continue with Facebook reuses the Meta app id and secret; only the return address differs.
+  FACEBOOK_IDENTITY_DRIVER: z.enum(['fake', 'facebook']).optional(),
+  META_LOGIN_REDIRECT_URI: z.url().optional(),
   LLM_DRIVER: z.enum(['openai', 'fake']).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   AI_REPLY_MODEL: z.string().min(1).default('gpt-6-luna'),
   AI_FAST_MODEL: z.string().min(1).default('gpt-6-luna'),
   AI_VISION_MODEL: z.string().min(1).default('gpt-6-luna'),
+  AI_HANDWRITING_MODEL: z.string().min(1).default('gpt-6.1-terra'),
   AI_WRITER_MODEL: z.string().min(1).default('gpt-6.1-terra'),
   AI_TRANSCRIBE_MODEL: z.string().min(1).default('gpt-4o-transcribe'),
   AI_EMBEDDING_MODEL: z.string().min(1).default('text-embedding-3-large'),
@@ -136,10 +140,7 @@ function parseEnv(source: NodeJS.ProcessEnv): Env {
   if (env.NODE_ENV === 'production' && env.SMS_DRIVER === 'mailpit') {
     throw new Error('SMS_DRIVER=mailpit is not allowed in production');
   }
-  if (env.NODE_ENV === 'production' && env.GOOGLE_IDENTITY_DRIVER === 'fake')
-    throw new Error('Fake Google identity is not allowed in production');
-  if (env.GOOGLE_IDENTITY_DRIVER === 'google' && !env.GOOGLE_CLIENT_ID)
-    throw new Error('GOOGLE_CLIENT_ID is required for Google identity');
+  assertIdentityEnv(env);
   if (Boolean(env.TURNSTILE_SITE_KEY) !== Boolean(env.TURNSTILE_SECRET_KEY))
     throw new Error('TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY are set together');
   if (env.NODE_ENV === 'production' && env.CLOUDFLARE_ACCESS_DEVELOPMENT_JWKS)
@@ -174,6 +175,28 @@ function parseMetaChannel(env: z.infer<typeof envSchema>): MetaChannelConfigurat
   if (new URL(redirectUri).protocol !== 'https:')
     throw new Error('Meta Graph requires an HTTPS redirect URI');
   return { driver, appId, appSecret, loginConfigId, redirectUri };
+}
+
+function assertIdentityEnv(env: z.infer<typeof envSchema>): void {
+  assertGoogleEnv(env);
+  assertFacebookEnv(env);
+}
+
+function assertGoogleEnv(env: z.infer<typeof envSchema>): void {
+  if (env.NODE_ENV === 'production' && env.GOOGLE_IDENTITY_DRIVER === 'fake')
+    throw new Error('Fake Google identity is not allowed in production');
+  if (env.GOOGLE_IDENTITY_DRIVER === 'google' && !env.GOOGLE_CLIENT_ID)
+    throw new Error('GOOGLE_CLIENT_ID is required for Google identity');
+}
+
+function assertFacebookEnv(env: z.infer<typeof envSchema>): void {
+  if (env.NODE_ENV === 'production' && env.FACEBOOK_IDENTITY_DRIVER === 'fake')
+    throw new Error('Fake Facebook identity is not allowed in production');
+  if (
+    env.FACEBOOK_IDENTITY_DRIVER === 'facebook' &&
+    !(env.META_APP_ID && env.META_APP_SECRET && env.META_LOGIN_REDIRECT_URI)
+  )
+    throw new Error('META_APP_ID, META_APP_SECRET and META_LOGIN_REDIRECT_URI are required');
 }
 
 function assertLlmEnv(env: z.infer<typeof envSchema>): void {

@@ -30,13 +30,20 @@ export type InboundMessageInput = {
   // Null when the customer sent only attachments.
   content: string | null;
   attachments: { kind: (typeof messageAttachmentKinds)[number]; sourceUrl: string }[];
+  // The Meta ad or post the customer came from, when the message carried one.
+  referral?: {
+    adId: string | null;
+    postId: string | null;
+    title: string | null;
+    photoUrl: string | null;
+  } | null;
   sentAt: Date;
   receivedAt: Date;
 };
 
 export type PostbackInput = Omit<
   InboundMessageInput,
-  'externalMessageId' | 'content' | 'attachments' | 'kind'
+  'externalMessageId' | 'content' | 'attachments' | 'referral' | 'kind'
 > & {
   kind: 'facebook_page' | 'instagram';
   payload: string;
@@ -206,6 +213,7 @@ export class MessagingService {
           ? input.content.slice(0, 160)
           : attachmentPreviews[input.attachments[0]!.kind],
         reopenVersion: reopen ? conversation.version : undefined,
+        referral: input.referral ?? undefined,
       },
       now,
     );

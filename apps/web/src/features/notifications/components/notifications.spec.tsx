@@ -50,6 +50,7 @@ function show() {
       <NotificationBell />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 const page = (items: NotificationResponse[]) => Response.json({ items, nextCursor: null });
@@ -225,17 +226,35 @@ describe('Live notification updates', () => {
     expect(await screen.findByText('Reconnect your Facebook page')).toBeTruthy();
   });
 
-  it('polls every 60 seconds while the stream is down and stops once it is back', async () => {
+  it('reads the chats again when the stream signals an inbox change', async () => {
+    serve(() => page([]));
+    const client = show();
+    const refetch = vi.spyOn(client, 'invalidateQueries');
+    const conversationId = crypto.randomUUID();
+    stream().dispatchEvent(new MessageEvent('inbox', { data: JSON.stringify({ conversationId }) }));
+    // Only that chat's thread and the list are read, not every chats query.
+    await waitFor(() => {
+      const keys = refetch.mock.calls.map(([filters]) => filters?.queryKey);
+      expect(
+        keys.some(
+          (key) => key?.[0] === 'chats' && key[2] === 'messages' && key[3] === conversationId,
+        ),
+      ).toBe(true);
+      expect(keys.some((key) => key?.[0] === 'chats' && key[2] === 'list')).toBe(true);
+    });
+  });
+
+  it('polls every 15 seconds while the stream is down and stops once it is back', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     const requests = serve(() => page([]));
     show();
     await screen.findByRole('button', { name: 'Open notifications, 0 unread', hidden: true });
-    vi.advanceTimersByTime(60_000);
+    vi.advanceTimersByTime(15_000);
     expect(unreadRequests(requests)).toBe(1);
     stream().dispatchEvent(new Event('error'));
-    vi.advanceTimersByTime(60_000);
+    vi.advanceTimersByTime(15_000);
     await waitFor(() => expect(unreadRequests(requests)).toBe(2));
-    vi.advanceTimersByTime(60_000);
+    vi.advanceTimersByTime(15_000);
     await waitFor(() => expect(unreadRequests(requests)).toBe(3));
     stream().dispatchEvent(new Event('open'));
     await waitFor(() => expect(unreadRequests(requests)).toBe(4));
@@ -251,7 +270,7 @@ describe('Live notification updates', () => {
     await screen.findByRole('button', { name: 'Open notifications, 0 unread', hidden: true });
     stream().readyState = FakeEventSource.CLOSED;
     stream().dispatchEvent(new Event('error'));
-    vi.advanceTimersByTime(60_000);
+    vi.advanceTimersByTime(15_000);
     expect(FakeEventSource.opened).toHaveLength(2);
     expect(FakeEventSource.opened[0]!.readyState).toBe(FakeEventSource.CLOSED);
   });

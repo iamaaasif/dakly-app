@@ -1,4 +1,12 @@
-export const aiTiers = ['reply', 'fast', 'vision', 'writer', 'embed', 'transcribe'] as const;
+export const aiTiers = [
+  'reply',
+  'fast',
+  'vision',
+  'handwriting',
+  'writer',
+  'embed',
+  'transcribe',
+] as const;
 export const aiRunPurposes = [
   'chat_reply',
   'classify',

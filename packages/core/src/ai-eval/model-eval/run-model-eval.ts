@@ -4,15 +4,23 @@ import { parseArgs } from 'node:util';
 
 import { OpenAiLlmDriver } from '@dakly/providers/llm/openai/openai-llm-driver';
 
+import { adContextGoldenCases } from '../golden-set.ad-context';
+import { addOnGoldenCases } from '../golden-set.add-ons';
 import { banglaGoldenCases } from '../golden-set.bangla';
+import { bargainingGoldenCases, unclearGoldenCases } from '../golden-set.bargaining';
+import { chatMemoryGoldenCases } from '../golden-set.chat-memory';
+import { longChatGoldenCases } from '../golden-set.long-chats';
 import { memoryGoldenCases } from '../golden-set.memory';
+import { ownerSettingsGoldenCases } from '../golden-set.owner-settings';
 import { sampleGoldenCases } from '../golden-set.sample';
 import { stockDeliveryGoldenCases } from '../golden-set.stock-delivery';
 import { EvalMeter } from './eval-meter';
 import { say } from './eval-output';
 import {
+  reportAdPhotos,
   reportEmbed,
   reportFast,
+  reportKhata,
   reportMemory,
   reportAssistantProducts,
   reportOptionsFromPhoto,
@@ -22,8 +30,19 @@ import {
   reportVision,
   type JobContext,
 } from './job-reports';
+import { reportLongChats } from './long-chat-report';
 
-const jobs = ['fast', 'reply', 'assistant', 'vision', 'transcribe', 'embed', 'memory'] as const;
+const jobs = [
+  'fast',
+  'reply',
+  'assistant',
+  'vision',
+  'khata',
+  'transcribe',
+  'embed',
+  'memory',
+  'longchat',
+] as const;
 type Job = (typeof jobs)[number];
 
 const chatModels = ['gpt-6-luna', 'gpt-5.6-luna', 'gpt-6.1-terra', 'gpt-5.6-terra'];
@@ -32,9 +51,11 @@ const defaultModels: Record<Job, string[]> = {
   reply: chatModels,
   assistant: chatModels,
   vision: chatModels,
+  khata: ['gpt-6.1-terra'],
   transcribe: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'gpt-transcribe'],
   embed: ['text-embedding-3-small', 'text-embedding-3-large'],
   memory: chatModels,
+  longchat: ['gpt-6-luna', 'gpt-6.1-terra'],
 };
 // The reply job takes its hand-over decisions from one fast model, so every reply model is
 // judged on the same questions.
@@ -58,6 +79,13 @@ function selectedCases() {
     ...banglaGoldenCases,
     ...memoryGoldenCases,
     ...stockDeliveryGoldenCases,
+    ...bargainingGoldenCases,
+    ...unclearGoldenCases,
+    ...chatMemoryGoldenCases,
+    ...longChatGoldenCases,
+    ...adContextGoldenCases,
+    ...ownerSettingsGoldenCases,
+    ...addOnGoldenCases,
   ].filter((golden) => !golden.dependsOn || !pending.includes(golden.dependsOn));
 }
 
@@ -84,10 +112,18 @@ async function main() {
     vision: async () => {
       await reportVision(context, modelsFor('vision'));
       await reportOptionsFromPhoto(context, modelsFor('vision'));
+      await reportAdPhotos(context, modelsFor('vision'));
     },
+    khata: () => reportKhata(context, modelsFor('khata')),
     transcribe: () => reportTranscribe(context, modelsFor('transcribe')),
     embed: () => reportEmbed(context, modelsFor('embed')),
     memory: () => reportMemory(context, modelsFor('memory')),
+    longchat: () =>
+      reportLongChats(
+        { ...context, cases: longChatGoldenCases },
+        modelsFor('longchat'),
+        baselineFastModel,
+      ),
   };
   for (const job of selected) await runners[job]();
   say(`\nTotal API spend this run: $${meter.spentUsd.toFixed(3)}`);

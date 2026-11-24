@@ -192,7 +192,7 @@ const draft = (variantId: string, fields: object = {}) => ({
   ...fields,
 });
 
-it('lists every tool for the model with its words and units in the description', () => {
+it('lists every tool for the model with its words and its non-obvious units in the description', () => {
   expect(salesAgentLlmTools.map((tool) => tool.name)).toEqual([
     'search_products',
     'get_product',
@@ -209,7 +209,8 @@ it('lists every tool for the model with its words and units in the description',
   ]);
   const search = salesAgentLlmTools[0]!;
   expect(search.description).toContain('দাম কত');
-  expect(search.description).toContain('priceTaka: taka, converted from poisha.');
+  expect(search.description).toContain('stock: count of pieces left');
+  expect(search.description).not.toContain('converted from poisha');
 });
 
 it('finds only active chat-visible products of this store by name or alias, with taka prices and free stock', async () => {
@@ -404,6 +405,50 @@ it('takes an order in a chat, prices it in code and waits for the customer to sa
   });
 });
 
+it('names add-ons after a confirmed order only when the owner turned them on', async () => {
+  const storeId = await shop();
+  await admin.pool.query(
+    "insert into delivery_zones (id, store_id, name, charge_poisha, bd_area_ids, is_default) values (gen_random_uuid(), $1, 'Inside Dhaka', 6000, '{301}', true)",
+    [storeId],
+  );
+  const category = 'পোশাক';
+  const ordered = await product(storeId, { name: 'পাঞ্জাবি', category, pricePoisha: 120000 });
+  await product(storeId, { name: 'পোলো শার্ট', category, pricePoisha: 65000 });
+  await product(storeId, { name: 'শেষ হয়ে গেছে', category, pricePoisha: 50000, stock: 0 });
+  await product(storeId, { name: 'জুতা', category: 'জুতা', pricePoisha: 50000 });
+  await product(storeId, { name: 'দামি শেরওয়ানি', category, pricePoisha: 900000 });
+  const {
+    rows: [variant],
+  } = await admin.pool.query<{ id: string }>(
+    'select id from product_variants where store_id = $1 and product_id = $2',
+    [storeId, ordered],
+  );
+  const buyer = await contact(storeId);
+  const chat = { conversationId: randomUUID(), channel: 'messenger' as const };
+  const place = async (address: string, suggestAddOns: boolean) => {
+    const scope = { storeId, contactId: buyer, chat, suggestAddOns };
+    const drafted = (await tools.run(
+      scope,
+      'draft_order',
+      JSON.stringify(
+        draft(variant!.id, { address, items: [{ variantId: variant!.id, quantity: 1 }] }),
+      ),
+    )) as { orderNumber: number };
+    return tools.run(scope, 'confirm_order', JSON.stringify({ orderNumber: drafted.orderNumber }));
+  };
+
+  const withAddOns = await place('মিরপুর ১০', true);
+  expect(withAddOns).toMatchObject({ stage: 'to_pack' });
+  const { addOns } = withAddOns as { addOns: { name: string; variants: object[] }[] };
+  expect(addOns.map(({ name }) => name)).toEqual(['পোলো শার্ট']);
+  expect(addOns[0]!.variants).toMatchObject([{ priceTaka: 650, stock: 8 }]);
+
+  expect(await place('গুলশান ২', false)).toEqual({
+    orderNumber: expect.any(Number),
+    stage: 'to_pack',
+  });
+});
+
 it('saves the own phone on the buyer and shows staff a possible match when another contact holds it', async () => {
   const { storeId, variantId } = await orderShop();
   const rina = await contact(storeId);
@@ -547,4 +592,29 @@ it('puts a customer on the restock list once, only for a sold-out size, only in 
   expect(await runInChat(await shop(), buyer, 'join_restock_list', { variantId: soldOut })).toEqual(
     { error: 'PRODUCT_VARIANT_NOT_FOUND' },
   );
+});
+
+it('limits search and product reads to the ad’s products, and reads their price and stock now', async () => {
+  const storeId = await shop();
+  const buyer = await contact(storeId);
+  const inAd = await product(storeId, { name: 'Ad panjabi', aliases: ['panjabi'], stock: 5 });
+  const outsideAd = await product(storeId, { name: 'Shop panjabi', aliases: ['panjabi'] });
+  const scope = { storeId, contactId: buyer, adProductIds: [inAd] };
+  const call = (name: string, args: object) => tools.run(scope, name, JSON.stringify(args));
+
+  expect(await call('search_products', { query: 'panjabi' })).toEqual({
+    products: [expect.objectContaining({ productId: inAd })],
+  });
+  expect(await call('search_products', { query: 'kurti' })).toEqual({ products: [] });
+  expect(await call('get_product', { productId: outsideAd })).toEqual({
+    error: 'NOT_AN_AD_PRODUCT',
+  });
+  expect(await call('get_product', { productId: inAd })).toMatchObject({ productId: inAd });
+  expect(await tools.adProducts(scope, [inAd, outsideAd])).toEqual([
+    expect.objectContaining({
+      productId: inAd,
+      variants: [expect.objectContaining({ priceTaka: 1200, stock: 3 })],
+    }),
+    expect.objectContaining({ productId: outsideAd }),
+  ]);
 });

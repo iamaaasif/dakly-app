@@ -175,6 +175,24 @@ export class InboxRepository {
     return row;
   }
 
+  async referralOf(storeId: string, id: string) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          adId: conversations.referralAdId,
+          postId: conversations.referralPostId,
+          title: conversations.referralTitle,
+          photoUrl: conversations.referralPhotoUrl,
+          channelConnectionId: conversations.channelConnectionId,
+          channel: conversations.channel,
+          referredAt: conversations.referredAt,
+        })
+        .from(conversations)
+        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, id))),
+    );
+    return row;
+  }
+
   async replyRoute(storeId: string, id: string) {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
@@ -330,6 +348,29 @@ export class InboxRepository {
         )
         .orderBy(desc(messages.createdAt), desc(messages.id))
         .limit(query.limit + 1),
+    );
+  }
+
+  replyHistory(storeId: string, conversationId: string, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: messages.id,
+          direction: messages.direction,
+          body: messages.body,
+          mediaText: messages.mediaText,
+          aiSources: messages.aiSources,
+        })
+        .from(messages)
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(messages.conversationId, conversationId),
+            ne(messages.kind, 'note'),
+          ),
+        )
+        .orderBy(desc(messages.createdAt), desc(messages.id))
+        .limit(limit),
     );
   }
 

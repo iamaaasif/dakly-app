@@ -701,6 +701,48 @@
       "when": 1795399450755,
       "tag": "0099_product_categories_brands",
       "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1795412960018,
+      "tag": "0100_ai_handwriting_tier",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1795430960757,
+      "tag": "0101_sign_up_source_and_store_business",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1795431459752,
+      "tag": "0102_facebook_sign_in",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1795447291214,
+      "tag": "0103_ad_context_and_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1795450617068,
+      "tag": "0104_ad_sources_and_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1795486520631,
+      "tag": "0105_ai_reply_debounce",
+      "breakpoints": true
     }
   ]
 }

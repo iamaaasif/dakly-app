@@ -17,6 +17,7 @@ import {
 import { aiAgentSettings, aiRuleChanges } from '@dakly/db/schema/ai';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { shopRulesFrom } from './shop-rules';
 
 @Injectable()
 export class AiAgentSettingsRepository {
@@ -31,21 +32,22 @@ export class AiAgentSettingsRepository {
           claimTimeoutMinutes: aiAgentSettings.claimTimeoutMinutes,
           returnToAiMinutes: aiAgentSettings.returnToAiMinutes,
           abilities: aiAgentSettings.abilities,
+          handoverRules: aiAgentSettings.handoverRules,
+          replyLanguage: aiAgentSettings.replyLanguage,
+          extraRules: aiAgentSettings.extraRules,
         })
         .from(aiAgentSettings)
         .where(and(eq(aiAgentSettings.storeId, storeId), eq(aiAgentSettings.isAutoReplyOn, true))),
     );
     if (!settings) return undefined;
-    const { productCardStyle, takeOrders } = agentAbilitiesSchema
-      .partial()
-      .parse(settings.abilities);
+    const { productCardStyle } = agentAbilitiesSchema.partial().parse(settings.abilities);
     return {
       debounceSeconds: settings.debounceSeconds,
       testers: testersSchema.parse(settings.testers),
       claimTimeoutMinutes: settings.claimTimeoutMinutes,
       returnToAiMinutes: settings.returnToAiMinutes,
       productCardStyle: productCardStyle ?? defaultAgentAbilities.productCardStyle,
-      takeOrders: takeOrders ?? defaultAgentAbilities.takeOrders,
+      rules: shopRulesFrom(settings),
     };
   }
 
@@ -81,6 +83,9 @@ export class AiAgentSettingsRepository {
       tx
         .select({
           handoverRules: aiAgentSettings.handoverRules,
+          abilities: aiAgentSettings.abilities,
+          replyLanguage: aiAgentSettings.replyLanguage,
+          extraRules: aiAgentSettings.extraRules,
           testQuestions: aiAgentSettings.testQuestions,
         })
         .from(aiAgentSettings)
@@ -88,6 +93,7 @@ export class AiAgentSettingsRepository {
     );
     return {
       hasHandoverRules: Object.keys(settings?.handoverRules ?? {}).length > 0,
+      rules: shopRulesFrom(settings ?? { abilities: {}, handoverRules: {} }),
       testQuestions: testQuestionsSchema.parse(settings?.testQuestions ?? []),
     };
   }
@@ -199,8 +205,9 @@ function toResponse(row: typeof aiAgentSettings.$inferSelect): AgentSettingsResp
     isAutoReplyOn: row.isAutoReplyOn,
     replyLanguage: row.replyLanguage,
     abilities: { ...defaultAgentAbilities, ...agentAbilitiesSchema.partial().parse(row.abilities) },
+    // Rules saved before a rule existed take that rule's default.
     handoverRules: handoverRulesSaved
-      ? handoverRulesSchema.parse(row.handoverRules)
+      ? { ...defaultHandoverRules, ...handoverRulesSchema.partial().parse(row.handoverRules) }
       : defaultHandoverRules,
     returnToAiMinutes: choice(row.returnToAiMinutes),
     extraRules: row.extraRules,

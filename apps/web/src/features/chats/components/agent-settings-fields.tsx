@@ -35,6 +35,11 @@ const abilityRows = [
   ],
   ['confirmOrders', 'Confirm orders', 'Marks the order confirmed when the customer says yes'],
   [
+    'suggestAddOns',
+    'Suggest add-ons',
+    'After the order is confirmed, offers up to two in-stock products from the same category at their shop price',
+  ],
+  [
     'courierUpdates',
     'Courier updates',
     'Tells customers when the parcel is shipped and out for delivery',
@@ -51,6 +56,11 @@ const handoverRows = [
   ['damagedOrWrong', 'Damaged, wrong or fake product', 'Sends a holding reply and calls you'],
   ['refundsAndExchanges', 'Refunds and exchanges', 'Sends a holding reply and calls you'],
   ['specialRequests', 'Special requests', 'Custom or bulk orders go to you'],
+  [
+    'discounts',
+    'Discount requests',
+    'Off: Dakly says the price is fixed, and calls you if the customer asks again',
+  ],
 ] as const;
 
 const followUps = [

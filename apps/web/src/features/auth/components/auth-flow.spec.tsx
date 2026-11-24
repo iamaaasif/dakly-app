@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PasswordReset } from './password-reset';
 import { SignInScreen } from './sign-in-screen';
+import { SignUpBusinessStep } from './sign-up-business-step';
 import { SignUpScreen } from './sign-up-screen';
 
 afterEach(() => {
@@ -43,7 +44,7 @@ describe('Sign in', () => {
   });
   it('offers password sign-in and recovery on the page, and the code only inside an invitation', () => {
     show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
-    expect(screen.getByLabelText('Mobile number')).toBeTruthy();
+    expect(screen.getByLabelText('Email or mobile number')).toBeTruthy();
     expect(screen.getByLabelText('Password')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Get a code by/ })).toBeNull();
     expect(screen.queryByRole('link', { name: /instead/ })).toBeNull();
@@ -163,11 +164,13 @@ describe('Sign in', () => {
     );
     show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Mobile number'), '01712345678');
+    await user.type(screen.getByLabelText('Email or mobile number'), '01712345678');
     await user.type(screen.getByLabelText('Password'), 'password123');
     await user.click(screen.getByRole('button', { name: /^Log in$/ }));
     await waitFor(() =>
-      expect(screen.getByLabelText('Mobile number').getAttribute('aria-invalid')).toBe('true'),
+      expect(screen.getByLabelText('Email or mobile number').getAttribute('aria-invalid')).toBe(
+        'true',
+      ),
     );
     expect(screen.getByText('Use your verified contact.')).toBeTruthy();
   });
@@ -193,7 +196,8 @@ describe('Sign in', () => {
     expect(screen.getByText('Tell us how you heard about Dakly.')).toBeTruthy();
     await user.type(screen.getByLabelText('Password'), 'abcdefgh');
     expect(await screen.findByText('Add at least one number.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Sign up with Facebook' })).toBeTruthy();
+    const facebook = screen.getByRole('link', { name: 'Sign up with Facebook' });
+    expect(facebook.getAttribute('href')).toBe('/api/auth/facebook/start?termsVersion=v1');
   });
   it('requires the second factor after a password reset', async () => {
     vi.stubGlobal('fetch', async (url: string) =>
@@ -212,7 +216,7 @@ describe('Sign in', () => {
     vi.stubGlobal('BroadcastChannel', Channel);
     show(<PasswordReset />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText('Email'), '01712345678');
+    await user.type(screen.getByLabelText('Email or mobile number'), '01712345678');
     await user.click(screen.getByRole('button', { name: 'Send code' }));
     await user.type(await screen.findByLabelText('6-digit code'), '123456');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -222,5 +226,73 @@ describe('Sign in', () => {
     await screen.findByLabelText('Authenticator or backup code');
     expect(messages).toEqual(['changed']);
     expect(screen.queryByText('Password updated')).toBeNull();
+  });
+  it('shows a wrong reset code on the password step and returns to the code step', async () => {
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.endsWith('/password-reset/confirm')
+        ? Response.json(
+            { error: { code: 'AUTH_CODE_INVALID', message: 'The code is incorrect or expired' } },
+            { status: 400 },
+          )
+        : new Response(null, { status: 204 }),
+    );
+    show(<PasswordReset />);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Email or mobile number'), 'owner@example.com');
+    await user.click(screen.getByRole('button', { name: 'Send code' }));
+    await user.type(await screen.findByLabelText('6-digit code'), '123456');
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await user.type(await screen.findByLabelText('New password'), 'new-password123');
+    await user.type(screen.getByLabelText('Confirm new password'), 'new-password123');
+    await user.click(screen.getByRole('button', { name: 'Save new password' }));
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      'That code is wrong or has expired.',
+    );
+    await user.click(screen.getByRole('button', { name: 'Enter the code again' }));
+    expect(await screen.findByLabelText('6-digit code')).toBeTruthy();
+  });
+  it('sends how the owner heard about Dakly with the sign-up code and keeps the shop details', async () => {
+    const requests: unknown[] = [];
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      requests.push(JSON.parse(String(init.body)));
+      return new Response(null, { status: 204 });
+    });
+    let sent: unknown;
+    show(
+      <SignUpBusinessStep
+        account={{
+          email: 'owner@example.com',
+          password: 'abcdefg1',
+          source: 'other',
+          sourceOther: 'A friend',
+        }}
+        legal={{ termsUrl: '/terms', privacyUrl: '/privacy', termsVersion: 'v1' }}
+        onSent={(value) => {
+          sent = value;
+        }}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Your name'), 'Rina Akter');
+    await user.type(screen.getByLabelText('Business name'), 'Urban Trend');
+    await user.type(screen.getByLabelText('Phone number'), '01712345678');
+    await user.type(screen.getByLabelText(/Website or Facebook Page/), 'facebook.com/urbantrend');
+    await user.click(screen.getByRole('radio', { name: /^Both/ }));
+    await user.click(screen.getByRole('button', { name: 'Create a free account' }));
+    await waitFor(() => expect(sent).toBeTruthy());
+    expect(requests[0]).toMatchObject({
+      purpose: 'sign_up',
+      phone: '01712345678',
+      email: 'owner@example.com',
+      source: 'other',
+      sourceOther: 'A friend',
+    });
+    expect(sent).toMatchObject({
+      shop: {
+        businessName: 'Urban Trend',
+        websiteUrl: 'facebook.com/urbantrend',
+        offering: 'both',
+      },
+    });
   });
 });

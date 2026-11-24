@@ -70,7 +70,7 @@ export class KhataImportsService {
           await this.importRow({
             storeId,
             userId,
-            row,
+            row: withEdit(row, decisions.get(row.id)!),
             decision: decisions.get(row.id)!,
             customersByPhone,
           }),
@@ -249,6 +249,20 @@ export class KhataImportsService {
     const noon = new Date(`${entryDate}T12:00:00+06:00`);
     return (noon > now ? now : noon).toISOString();
   }
+}
+
+// The owner's corrections replace what was read, for this import only.
+function withEdit(row: StoredKhataRow, decision: Decision): StoredKhataRow {
+  const { edit } = decision;
+  if (!edit) return row;
+  return {
+    ...row,
+    entryDate: edit.entryDate === undefined ? row.entryDate : edit.entryDate,
+    name: edit.name ?? row.name,
+    phone: edit.phone === undefined ? row.phone : edit.phone,
+    item: edit.item === undefined ? row.item : edit.item,
+    amountPoisha: edit.amountPoisha ?? row.amountPoisha,
+  };
 }
 
 function decisionsByRow(rows: StoredKhataRow[], given: Decision[]): Map<string, Decision> {

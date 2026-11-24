@@ -14,6 +14,8 @@ export const agentAbilitiesSchema = z.strictObject({
   askForReview: z.boolean(),
   answerComments: z.boolean(),
   followUp: z.enum(followUpLevels),
+  // After the customer confirms an order, offers up to two in-stock products that go with it.
+  suggestAddOns: z.boolean(),
   // Buttons send a card with Order now, See sizes and Talk to a person; text sends photo and text.
   productCardStyle: z.enum(productCardStyles),
 });
@@ -22,6 +24,9 @@ export const handoverRulesSchema = z.strictObject({
   damagedOrWrong: z.boolean(),
   refundsAndExchanges: z.boolean(),
   specialRequests: z.boolean(),
+  // On, every discount ask goes to a person. Off, the AI says the price is fixed once and a repeat
+  // ask goes to a person. On by default until the bargaining evals pass.
+  discounts: z.boolean(),
 });
 
 export const defaultAgentAbilities = {
@@ -33,6 +38,7 @@ export const defaultAgentAbilities = {
   askForReview: true,
   answerComments: true,
   followUp: 'hot',
+  suggestAddOns: false,
   productCardStyle: 'buttons',
 } satisfies AgentAbilities;
 
@@ -40,6 +46,7 @@ export const defaultHandoverRules = {
   damagedOrWrong: true,
   refundsAndExchanges: true,
   specialRequests: true,
+  discounts: true,
 } satisfies HandoverRules;
 
 export const saveAgentSettingsSchema = z.strictObject({

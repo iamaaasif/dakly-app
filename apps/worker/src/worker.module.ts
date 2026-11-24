@@ -57,12 +57,20 @@ import { ReadKhataPage } from '@dakly/core/khata-scans/jobs/read-khata-page.job'
 import { KhataScansModule } from '@dakly/core/khata-scans/khata-scans.module';
 import { KillSwitchesModule } from '@dakly/core/kill-switches/kill-switches.module';
 import { MaintenanceModule } from '@dakly/core/maintenance/maintenance.module';
+import { ContactProfileModule } from '@dakly/core/messaging/contact-profile.module';
 import { ConversationReturnsModule } from '@dakly/core/messaging/conversation-returns.module';
 import { ErasedContactFilesModule } from '@dakly/core/messaging/erased-contact-files.module';
 import { InboundAttachmentsModule } from '@dakly/core/messaging/inbound-attachments.module';
 import { CopyMessageAttachmentsJob } from '@dakly/core/messaging/jobs/copy-message-attachments.job';
+import { FetchContactProfileJob } from '@dakly/core/messaging/jobs/fetch-contact-profile.job';
 import { SendMessageJob } from '@dakly/core/messaging/jobs/send-message.job';
 import { MessagingModule } from '@dakly/core/messaging/messaging.module';
+import { StreamInboxOnHandedOver } from '@dakly/core/notifications/jobs/stream-inbox-on-handed-over.job';
+import { StreamInboxOnMessageDelivered } from '@dakly/core/notifications/jobs/stream-inbox-on-message-delivered.job';
+import { StreamInboxOnMessageFailed } from '@dakly/core/notifications/jobs/stream-inbox-on-message-failed.job';
+import { StreamInboxOnMessageRead } from '@dakly/core/notifications/jobs/stream-inbox-on-message-read.job';
+import { StreamInboxOnMessageReceived } from '@dakly/core/notifications/jobs/stream-inbox-on-message-received.job';
+import { StreamInboxOnMessageSent } from '@dakly/core/notifications/jobs/stream-inbox-on-message-sent.job';
 import { StreamNotificationOnCreated } from '@dakly/core/notifications/jobs/stream-notification-on-created.job';
 import { WakeSnoozedNotificationsJob } from '@dakly/core/notifications/jobs/wake-snoozed-notifications.job';
 import { NotificationsModule } from '@dakly/core/notifications/notifications.module';
@@ -117,6 +125,7 @@ import { JobSchedulers } from './job-schedulers';
     RelayOutboxJob,
     SendMessageJob,
     CopyMessageAttachmentsJob,
+    FetchContactProfileJob,
     FailStuckImportsJob,
     RunContactImport,
     ReadKhataPage,
@@ -126,6 +135,12 @@ import { JobSchedulers } from './job-schedulers';
     StartProductPhotoTagBackfillJob,
     UndoContactImport,
     StreamNotificationOnCreated,
+    StreamInboxOnMessageReceived,
+    StreamInboxOnMessageSent,
+    StreamInboxOnHandedOver,
+    StreamInboxOnMessageDelivered,
+    StreamInboxOnMessageRead,
+    StreamInboxOnMessageFailed,
     WakeSnoozedNotificationsJob,
     WakeDueRunsJob,
     RecordAutomationBirthdaysJob,
@@ -173,6 +188,7 @@ import { JobSchedulers } from './job-schedulers';
     MetaWebhookMaintenanceModule,
     MessagingModule,
     InboundAttachmentsModule,
+    ContactProfileModule,
     ErasedContactFilesModule,
     ChannelTokenHealthModule,
     MetaPageReconciliationModule,

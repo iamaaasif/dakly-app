@@ -10,6 +10,7 @@ import {
   type MetaPage,
   type MetaTokenHealthDriver,
   type OutboundMessage,
+  type ProfileDriver,
 } from '../channel-driver';
 
 const authorizationCode = 'dakly-local-meta-code';
@@ -37,7 +38,8 @@ export class FakeMetaChannelDriver
   implements
     MetaAuthorizationDriver,
     MetaTokenHealthDriver,
-    Pick<ChannelDriver, 'send' | 'downloadMedia'>,
+    Pick<ChannelDriver, 'send' | 'downloadMedia' | 'showTyping'>,
+    ProfileDriver,
     Omit<CommentDriver, 'parseComments'>
 {
   constructor(private readonly redirectUri: string) {}
@@ -84,6 +86,13 @@ export class FakeMetaChannelDriver
     return { externalMessageId };
   }
 
+  async showTyping(
+    credentials: ChannelCredentials,
+    target: Parameters<ChannelDriver['showTyping']>[1],
+  ) {
+    this.requireConnected(target.channel, credentials);
+  }
+
   async replyToComment(
     credentials: ChannelCredentials,
     comment: Parameters<CommentDriver['replyToComment']>[1],
@@ -121,6 +130,12 @@ export class FakeMetaChannelDriver
       return account === accountExternalId && page.accessToken === accessToken;
     });
     if (!connected) throw new MetaRequestError('auth_error');
+  }
+
+  async fetchProfile(accessToken: string) {
+    return pages.some((page) => page.accessToken === accessToken)
+      ? { name: 'Fake Customer' }
+      : null;
   }
 
   // Development has no Meta CDN: a link containing "expired" behaves like an old one.

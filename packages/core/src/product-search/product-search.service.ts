@@ -6,6 +6,7 @@ import { AiService } from '../ai/ai.service';
 import { AppError } from '../platform/errors/app-error';
 import { ProductSearchSourceService } from '../products/product-search-source.service';
 import { ProductsService, type ChatProduct } from '../products/products.service';
+import { addOnPriceCeilingPoisha, pickAddOns } from './product-add-ons';
 import { pickAlternatives } from './product-alternatives';
 import { decidePhotoMatch, isSellable, type PhotoMatch } from './product-photo-match';
 import {
@@ -24,6 +25,9 @@ const candidateLimit = 2000;
 const maxMeaningDistance = 0.55;
 const meaningLimit = 20;
 const alternativeLimit = 3;
+const addOnLimit = 2;
+// Sized so one query reads at most this many products; the picker then keeps two.
+const addOnHydrateLimit = 30;
 
 @Injectable()
 export class ProductSearchService {
@@ -36,6 +40,28 @@ export class ProductSearchService {
   // Finds what a customer asks for in Bangla, Banglish or English. Products the shop can sell now come first.
   async search(storeId: string, text: string, limit: number): Promise<ChatProduct[]> {
     const { found } = await this.rank(storeId, text, false);
+    return [...found.filter(isSellable), ...found.filter((product) => !isSellable(product))].slice(
+      0,
+      limit,
+    );
+  }
+
+  // Search limited to the products an ad sells, by spelling only: a pick such as "নীলটা" names a
+  // colour of one of at most four products, so meaning-based hits from the rest of the shop would only add guesses.
+  async searchWithin(
+    storeId: string,
+    productIds: readonly string[],
+    text: string,
+    limit: number,
+  ): Promise<ChatProduct[]> {
+    const allowed = new Set(productIds);
+    const candidates = (await this.source.listSearchCandidates(storeId, candidateLimit)).filter(
+      ({ id }) => allowed.has(id),
+    );
+    const found = await this.products.getManyForChat(
+      storeId,
+      rankByWords(candidates, parseQuery(text)),
+    );
     return [...found.filter(isSellable), ...found.filter((product) => !isSellable(product))].slice(
       0,
       limit,
@@ -59,6 +85,33 @@ export class ProductSearchService {
       soldOut,
       await this.products.getManyForChat(storeId, sameCategory),
       alternativeLimit,
+    );
+  }
+
+  // In-stock products that go with a confirmed order: same category as an item in it, not in it.
+  async addOnsFor(
+    storeId: string,
+    order: { variantIds: string[]; itemsTotalPoisha: number },
+  ): Promise<ChatProduct[]> {
+    const orderedIds = await this.products.productIdsOfVariants(storeId, order.variantIds);
+    const ordered = await this.products.getManyForChat(storeId, orderedIds);
+    const categories = new Set(ordered.map(({ category }) => category?.trim().toLowerCase()));
+    const candidates = await this.source.listSearchCandidates(storeId, candidateLimit);
+    const sameCategory = candidates
+      .filter(
+        ({ id, category, pricesPoisha }) =>
+          !orderedIds.includes(id) &&
+          category !== null &&
+          categories.has(category.trim().toLowerCase()) &&
+          Math.min(...pricesPoisha) <= addOnPriceCeilingPoisha(order.itemsTotalPoisha),
+      )
+      .slice(0, addOnHydrateLimit)
+      .map(({ id }) => id);
+    return pickAddOns(
+      ordered,
+      await this.products.getManyForChat(storeId, sameCategory),
+      order.itemsTotalPoisha,
+      addOnLimit,
     );
   }
 

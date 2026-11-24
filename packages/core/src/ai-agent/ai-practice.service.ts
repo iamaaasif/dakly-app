@@ -24,17 +24,15 @@ import { AuditService } from '../audit/audit.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { Clock } from '../platform/clock';
-import { loadEnv } from '../platform/config/env';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { ProductsService } from '../products/products.service';
-import { StoresService } from '../stores/stores.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { practiceError } from './ai-practice.errors';
+import { classifierInput } from './chat-memory';
 import { handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
-import { classifyChat } from './prompts/classify-chat.v1';
+import { classifyChat } from './prompts/classify-chat.v2';
 import { gradeTestAnswer } from './prompts/grade-test-answer.v1';
-import { checkReplyFacts } from './reply-fact-check';
 import { SalesAgentService } from './sales-agent.service';
 
 const productToolNames = [searchProductsTool.name, getProductTool.name, sendProductCardTool.name];
@@ -49,7 +47,6 @@ export class AiPracticeService {
     @Inject(AiAgentSettingsRepository) private readonly settings: AiAgentSettingsRepository,
     @Inject(AiService) private readonly ai: AiService,
     @Inject(SalesAgentService) private readonly sales: SalesAgentService,
-    @Inject(StoresService) private readonly stores: StoresService,
     @Inject(KnowledgeSearchService) private readonly knowledge: KnowledgeSearchService,
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
@@ -94,20 +91,27 @@ export class AiPracticeService {
   }
 
   async ask(storeId: string, question: string): Promise<TestAnswerResponse> {
-    const screened = screenCustomerTexts([question]);
+    const { rules } = await this.settings.practice(storeId);
+    const screened = screenCustomerTexts([question], {
+      handOverDiscounts: rules.handover.discounts,
+      earlierTexts: [],
+    });
     if (screened) return { kind: 'handover', reason: screened };
     const classified = await this.ai.run(storeId, {
       tier: 'fast',
       purpose: 'classify',
       prompt: classifyChat,
-      input: JSON.stringify({ customer_messages: [question] }),
+      input: classifierInput([question], []),
       output: chatClassificationSchema,
     });
     if (classified.kind === 'failure' && classified.code === 'AI_STORE_BUSY')
       throw practiceError('PRACTICE_AI_BUSY');
     const reason =
       classified.kind === 'output'
-        ? handoverReason([question], classified.output)
+        ? handoverReason([question], classified.output, {
+            ...rules.handover,
+            takesOrders: rules.takeOrders,
+          })
         : 'ai_unavailable';
     if (reason) return { kind: 'handover', reason };
     const composed = await this.sales.compose({
@@ -115,17 +119,10 @@ export class AiPracticeService {
       // Matches no real contact, so the order tools find nothing.
       contactId: randomUUID(),
       customerTexts: [question],
+      rules,
     });
     if (composed.kind === 'busy') throw practiceError('PRACTICE_AI_BUSY');
     if (composed.kind === 'handover') return composed;
-    const shop = await this.stores.settings(storeId);
-    const checked = checkReplyFacts(
-      composed.text,
-      composed.toolResults,
-      { phone: shop.phone, linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL },
-      [question],
-    );
-    if (!checked.isSafe) return { kind: 'handover', reason: 'out_of_scope' };
     return { kind: 'reply', text: composed.text, source: await this.sourceOf(storeId, composed) };
   }
 

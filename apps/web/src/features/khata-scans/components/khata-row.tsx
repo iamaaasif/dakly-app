@@ -1,17 +1,22 @@
 import { Check } from 'lucide-react';
-import type { ReactNode } from 'react';
 
 import type { KhataRowResponse } from '@dakly/contracts/khata-scans';
 import { cn } from '@dakly/ui/cn';
 
-import { confidenceTone, rowStatus, type RowChoice } from '../khata-review';
+import {
+  confidenceTone,
+  readRow,
+  rowStatus,
+  type RowChoice,
+  type RowDraft,
+  type RowFieldName,
+  type RowReading,
+} from '../khata-review';
 import { SuggestedCustomer } from './suggested-customer';
-import { formatMonthDay } from '@/lib/format-date';
-import { formatWholeTaka } from '@/lib/format-money';
-import { formatPhone } from '@/lib/format-phone';
+import { formatWholeTaka, takaInputFromPoisha } from '@/lib/format-money';
 
 export const rowColumns =
-  'grid grid-cols-[86px_minmax(110px,1.2fr)_120px_minmax(90px,1fr)_86px_70px_150px] gap-1.5';
+  'grid grid-cols-[132px_minmax(110px,1.2fr)_130px_minmax(90px,1fr)_96px_64px_90px] gap-1.5';
 
 const toneClasses = {
   success: 'bg-success-soft text-success',
@@ -33,6 +38,8 @@ export type KhataRowProps = {
 };
 
 export function KhataRow({ row, choice, onChange }: KhataRowProps) {
+  const reading = readRow(row, choice);
+  const errors = Object.values(reading.errors);
   return (
     <li
       className={cn(
@@ -40,10 +47,20 @@ export function KhataRow({ row, choice, onChange }: KhataRowProps) {
         choice.skipped && 'opacity-50',
       )}
     >
-      <RowFields row={row} choice={choice} />
+      <RowFields
+        row={row}
+        choice={choice}
+        reading={reading}
+        onEdit={(draft) => onChange({ draft })}
+      />
+      {errors.length > 0 ? (
+        <p role="alert" className="text-sm text-danger">
+          {errors.join('. ')}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2.5 text-sm">
-        <KindNote row={row} />
-        {row.match ? (
+        <KindNote row={row} reading={reading} />
+        {row.match && choice.draft.phone === undefined ? (
           <SuggestedCustomer
             match={row.match}
             choice={choice}
@@ -72,16 +89,44 @@ export function KhataRow({ row, choice, onChange }: KhataRowProps) {
   );
 }
 
-function RowFields({ row, choice }: Pick<KhataRowProps, 'row' | 'choice'>) {
-  const flagged = row.needsCheck && !choice.checked;
+type RowFieldsProps = Pick<KhataRowProps, 'row' | 'choice'> & {
+  reading: RowReading;
+  onEdit: (draft: RowDraft) => void;
+};
+
+const fieldKinds: Record<
+  RowFieldName,
+  { name: string; type: string; inputMode?: 'decimal' | 'tel' }
+> = {
+  entryDate: { name: 'Date', type: 'date' },
+  name: { name: 'Customer', type: 'text' },
+  phone: { name: 'Phone', type: 'text', inputMode: 'tel' },
+  item: { name: 'Product', type: 'text' },
+  amount: { name: 'Amount in taka', type: 'text', inputMode: 'decimal' },
+};
+
+function RowFields({ row, choice, reading, onEdit }: RowFieldsProps) {
   const status = rowStatus(row, choice);
+  const { draft } = choice;
+  const isFlagged = (field: RowFieldName) =>
+    (row.needsCheck && !choice.checked && draft[field] === undefined) || !!reading.errors[field];
+  const input = (field: RowFieldName, shown: string) => (
+    <EditableField
+      {...fieldKinds[field]}
+      label={`${fieldKinds[field].name}, row ${row.rowNumber}`}
+      value={draft[field] ?? shown}
+      flagged={isFlagged(field)}
+      invalid={!!reading.errors[field]}
+      onChange={(value) => onEdit({ [field]: value })}
+    />
+  );
   return (
     <div className={cn(rowColumns, 'items-center')}>
-      <Field>{row.entryDate ? formatMonthDay(row.entryDate) : ''}</Field>
-      <Field flagged={flagged}>{row.name}</Field>
-      <Field flagged={flagged}>{row.phone ? formatPhone(row.phone) : ''}</Field>
-      <Field>{row.item ?? ''}</Field>
-      <Field flagged={flagged}>{formatWholeTaka(BigInt(row.amountPoisha))}</Field>
+      {input('entryDate', row.entryDate ?? '')}
+      {input('name', row.name)}
+      {input('phone', row.phone ?? '')}
+      {input('item', row.item ?? '')}
+      {input('amount', takaInputFromPoisha(row.amountPoisha))}
       <span
         className={cn(
           'justify-self-start rounded-full px-2 py-0.5 text-xs font-bold',
@@ -95,23 +140,48 @@ function RowFields({ row, choice }: Pick<KhataRowProps, 'row' | 'choice'>) {
   );
 }
 
-function Field({ children, flagged = false }: { children: ReactNode; flagged?: boolean }) {
+type EditableFieldProps = {
+  label: string;
+  value: string;
+  type: string;
+  flagged: boolean;
+  invalid: boolean;
+  inputMode?: 'decimal' | 'tel';
+  onChange: (value: string) => void;
+};
+
+function fieldTone(invalid: boolean, flagged: boolean): string {
+  if (invalid) return 'border-danger bg-danger-soft';
+  return flagged ? 'border-warning bg-warning-soft' : 'border-input-border bg-surface';
+}
+
+// A cell you can type in. Yellow marks what Dakly was unsure about; red marks what cannot be imported.
+function EditableField({
+  label,
+  flagged,
+  invalid,
+  onChange,
+  ...input
+}: EditableFieldProps & { name?: string }) {
   return (
-    <span
+    <input
+      {...input}
+      aria-label={label}
+      aria-invalid={invalid || undefined}
+      max={input.type === 'date' ? new Date().toISOString().slice(0, 10) : undefined}
+      onChange={(event) => onChange(event.target.value)}
       className={cn(
-        'h-8 truncate rounded-md border px-1.5 leading-8',
-        flagged ? 'border-warning bg-warning-soft' : 'border-border bg-surface',
+        'h-8 min-w-0 rounded-md border px-1.5 text-base text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+        fieldTone(invalid, flagged),
       )}
-    >
-      {children}
-    </span>
+    />
   );
 }
 
 const kindNotes = { sale: 'Paid', payment: 'Payment received', baki: 'Due' };
 
 // An import records what already happened: a sale is paid, a baki is owed.
-function KindNote({ row }: { row: KhataRowResponse }) {
+function KindNote({ row, reading }: { row: KhataRowResponse; reading: RowReading }) {
   const owed = row.kind === 'baki';
   const walkIn = row.kind === 'sale';
   return (
@@ -120,9 +190,9 @@ function KindNote({ row }: { row: KhataRowResponse }) {
         className={cn('font-semibold whitespace-nowrap', owed ? 'text-danger' : 'text-success')}
       >
         {kindNotes[row.kind]}
-        {owed ? ` ${formatWholeTaka(BigInt(row.amountPoisha))}` : ''}
+        {owed ? ` ${formatWholeTaka(BigInt(reading.amountPoisha))}` : ''}
       </span>
-      {row.phone ? null : (
+      {reading.phone ? null : (
         <span className={walkIn ? 'text-text-muted' : 'text-danger'}>
           {walkIn ? 'No phone · saved as walk-in sale' : 'No phone: link a customer or skip'}
         </span>

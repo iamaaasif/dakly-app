@@ -1402,9 +1402,15 @@ const settingsBody = (version: number, replyLanguage: 'bn' | 'en') => ({
     askForReview: true,
     answerComments: true,
     followUp: 'hot',
+    suggestAddOns: false,
     productCardStyle: 'buttons',
   },
-  handoverRules: { damagedOrWrong: true, refundsAndExchanges: true, specialRequests: false },
+  handoverRules: {
+    damagedOrWrong: true,
+    refundsAndExchanges: true,
+    specialRequests: false,
+    discounts: true,
+  },
   returnToAiMinutes: 60,
   extraRules: null,
 });
@@ -2826,6 +2832,70 @@ async function savedReplyAudit(shop: Shop, id: string) {
   );
   return rows;
 }
+
+const adLink = '/ad-links/ad/120000000001';
+fixture('PUT /ad-links/:source/:externalId', async () => {
+  const { a, b } = await pair();
+  const own = await product(b);
+  const foreign = await product(a);
+  await success(b, 'PUT', adLink, 422, { productIds: [foreign] });
+  await success(b, 'PUT', adLink, 400, { productIds: [own], storeId: a.id });
+  await success(b, 'PUT', '/ad-links/ad/not-a-meta-id', 400, { productIds: [own] });
+  const saved = await success(b, 'PUT', adLink, 200, { productIds: [own] });
+  expect(saved.json().products).toMatchObject([{ productId: own }]);
+  await success(a, 'GET', adLink, 404);
+});
+fixture('GET /ad-links/:source/:externalId', async () => {
+  const { a, b } = await pair();
+  const own = await product(b);
+  await success(b, 'PUT', adLink, 200, { productIds: [own] });
+  await success(a, 'GET', adLink, 404);
+  const result = await success(b, 'GET', adLink, 200);
+  expect(result.json().products).toMatchObject([{ productId: own }]);
+});
+fixture('DELETE /ad-links/:source/:externalId', async () => {
+  const { a, b } = await pair();
+  const own = await product(b);
+  await success(b, 'PUT', adLink, 200, { productIds: [own] });
+  await success(a, 'DELETE', adLink, 404);
+  await success(b, 'DELETE', adLink, 204);
+  await success(b, 'GET', adLink, 404);
+});
+
+async function seedAd(shop: Shop, productId: string) {
+  const id = randomUUID();
+  await f.admin.pool.query(
+    "insert into ad_sources (id, store_id, source, external_id, title) values ($1, $2, 'ad', '120000000001', 'Eid kurti')",
+    [id, shop.id],
+  );
+  await f.admin.pool.query(
+    "insert into ad_product_suggestions (id, store_id, source, external_id, product_id, origin, position) values ($1, $2, 'ad', '120000000001', $3, 'photo', 0)",
+    [randomUUID(), shop.id, productId],
+  );
+}
+fixture('GET /ads', async () => {
+  const { a, b } = await pair();
+  await seedAd(b, await product(b));
+  expect((await success(a, 'GET', '/ads', 200)).json().items).toEqual([]);
+  const own = (await success(b, 'GET', '/ads', 200)).json().items;
+  expect(own).toMatchObject([{ externalId: '120000000001', status: 'suggested', products: [] }]);
+});
+fixture('POST /ads/:source/:externalId/confirm', async () => {
+  const { a, b } = await pair();
+  await seedAd(b, await product(b));
+  await success(a, 'POST', '/ads/ad/120000000001/confirm', 404);
+  const confirmed = await success(b, 'POST', '/ads/ad/120000000001/confirm', 200);
+  expect(confirmed.json().products).toHaveLength(1);
+  const listed = (await success(b, 'GET', '/ads', 200)).json().items;
+  expect(listed).toMatchObject([{ status: 'confirmed' }]);
+});
+fixture('DELETE /ads/:source/:externalId/suggestions', async () => {
+  const { a, b } = await pair();
+  await seedAd(b, await product(b));
+  await success(a, 'DELETE', '/ads/ad/120000000001/suggestions', 404);
+  await success(b, 'DELETE', '/ads/ad/120000000001/suggestions', 204);
+  await success(b, 'POST', '/ads/ad/120000000001/confirm', 404);
+});
 
 fixture('GET /saved-replies', async () => {
   const { a, b } = await pair();

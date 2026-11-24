@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { AdLinksModule } from '@dakly/core/ad-links/ad-links.module';
 import { AdminModule } from '@dakly/core/admin/admin.module';
 import { KnowledgeModule } from '@dakly/core/ai/knowledge/knowledge.module';
 import { AiAgentSettingsModule } from '@dakly/core/ai-agent/ai-agent-settings.module';
@@ -62,6 +63,7 @@ import { HealthController } from './health.controller';
     DeliveryModule,
     ProductsModule,
     SavedRepliesModule,
+    AdLinksModule,
     AiReplyFeedbackModule,
     OrdersModule,
     PaymentsModule,

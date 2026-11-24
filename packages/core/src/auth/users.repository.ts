@@ -6,6 +6,7 @@ import type { Database } from '@dakly/db/client';
 import { accountRecoveries } from '@dakly/db/schema/account-recovery';
 import { users } from '@dakly/db/schema/auth';
 import { uuidv7 } from '@dakly/db/uuid-v7';
+import type { FacebookIdentity } from '@dakly/providers/facebook/facebook-identity-driver';
 import type { GoogleIdentity } from '@dakly/providers/google/google-identity-driver';
 
 import { AccountDatabase } from '../platform/database/account-database';
@@ -20,6 +21,7 @@ type NewUser = {
   now: Date;
   passwordHash?: string;
   google?: GoogleIdentity;
+  facebook?: FacebookIdentity;
 };
 
 @Injectable()
@@ -216,6 +218,34 @@ export class UsersRepository {
     }
   }
 
+  async findByFacebookSubject(subject: string) {
+    const rows = await this.connection
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.facebookSubject, subject))
+      .limit(1);
+    return rows[0];
+  }
+
+  async linkFacebook(userId: string, subject: string, now: Date): Promise<boolean> {
+    try {
+      await this.database.forUser(userId, (tx) =>
+        tx
+          .update(users)
+          .set({
+            facebookSubject: subject,
+            securityVersion: sql`${users.securityVersion} + 1`,
+            updatedAt: now,
+          })
+          .where(eq(users.id, userId)),
+      );
+      return true;
+    } catch (error) {
+      if (isConstraintViolation(error, '23505', 'users_facebook_subject_key')) return false;
+      throw error;
+    }
+  }
+
   async hasUnverifiedEmail(email: string): Promise<boolean> {
     const rows = await this.connection
       .select({ exists: sql<boolean>`true` })
@@ -282,7 +312,10 @@ export class UsersRepository {
     `);
   }
 
-  async create(userId: string, { input, now, passwordHash, google }: NewUser): Promise<boolean> {
+  async create(
+    userId: string,
+    { input, now, passwordHash, google, facebook }: NewUser,
+  ): Promise<boolean> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx
         .insert(users)
@@ -292,11 +325,14 @@ export class UsersRepository {
           passwordHash,
           phone: input.phone,
           email: google?.email ?? input.email,
-          emailVerifiedAt: google ? now : undefined,
+          emailVerifiedAt: google || facebook ? now : undefined,
           googleSubject: google?.subject,
+          facebookSubject: facebook?.subject,
           phoneVerifiedAt: input.phone ? now : undefined,
           termsVersion: input.termsVersion,
           termsAcceptedAt: now,
+          signUpSource: input.source,
+          signUpSourceOther: input.source === 'other' ? input.sourceOther : undefined,
         })
         .onConflictDoNothing()
         .returning({ id: users.id }),
@@ -323,6 +359,7 @@ export class UsersRepository {
           backupCodeHashes: users.backupCodeHashes,
           passwordHash: users.passwordHash,
           googleSubject: users.googleSubject,
+          facebookSubject: users.facebookSubject,
         })
         .from(users)
         .where(eq(users.id, userId))

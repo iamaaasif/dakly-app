@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { Clock } from '../platform/clock';
 import {
   ContactIdentitiesRepository,
   type InboundIdentity,
@@ -10,7 +11,19 @@ import {
 export class ContactIdentitiesService {
   constructor(
     @Inject(ContactIdentitiesRepository) private readonly identities: ContactIdentitiesRepository,
+    @Inject(Clock) private readonly clock: Clock,
   ) {}
+
+  findUnnamedMetaIdentities(storeId: string, contactId: string) {
+    return this.identities.findUnnamedMetaIdentities(storeId, contactId);
+  }
+
+  recordProfileName(
+    storeId: string,
+    profile: { identityId: string; contactId: string; name: string },
+  ) {
+    return this.identities.recordProfileName(storeId, profile, this.clock.now());
+  }
 
   async findActiveChannelIdentity(storeId: string, input: InboundIdentity) {
     const identity = await this.identities.findInboundIdentity(storeId, input);

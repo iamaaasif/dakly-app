@@ -127,6 +127,25 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     expect(numbers.sort((a, b) => a - b)).toEqual([1001, 1002]);
   });
 
+  it('saves the website and what the business offers on a free first shop', async () => {
+    const owner = await account();
+    const response = await post(owner.cookies[0]!, {
+      ...input,
+      name: 'Urban Trend',
+      planCode: 'free',
+      websiteUrl: 'facebook.com/urbantrend',
+      offering: 'both',
+    });
+    expect(response.statusCode).toBe(201);
+    storeIds.push(response.json().id);
+    const [row] = await admin.db.select().from(stores).where(eq(stores.id, response.json().id));
+    expect(row).toMatchObject({
+      name: 'Urban Trend',
+      websiteUrl: 'https://facebook.com/urbantrend',
+      offering: 'both',
+    });
+    expect((await subscription(response.json().id))[0]).toMatchObject({ status: 'active' });
+  });
   it('creates exactly one yearly Growth trial for parallel sessions and resumes on retry', async () => {
     const owner = await account();
     const responses = await Promise.all(owner.cookies.map((cookie) => post(cookie)));

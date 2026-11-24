@@ -19,6 +19,10 @@ import { AuthService } from './auth.service';
 import { CodesModule } from './codes.module';
 import { EmailChangeController } from './email-change.controller';
 import { EmailChangeService } from './email-change.service';
+import { FACEBOOK_IDENTITY_DRIVER, createFacebookIdentityDriver } from './facebook-provider';
+import { FacebookStates } from './facebook-states';
+import { FacebookController } from './facebook.controller';
+import { FacebookService } from './facebook.service';
 import { GoogleIdentityService } from './google-identity.service';
 import { GOOGLE_IDENTITY_DRIVER, createGoogleIdentityDriver } from './google-provider';
 import { GoogleTickets } from './google-tickets';
@@ -66,6 +70,7 @@ import { UsersModule } from './users.module';
     TotpRecoveryController,
     AuthController,
     GoogleController,
+    FacebookController,
     EmailChangeController,
     PasswordController,
     PasswordChangeController,
@@ -78,6 +83,9 @@ import { UsersModule } from './users.module';
     TotpCredentials,
     TotpChallenges,
     GoogleService,
+    FacebookService,
+    FacebookStates,
+    { provide: FACEBOOK_IDENTITY_DRIVER, useFactory: createFacebookIdentityDriver },
     GoogleIdentityService,
     GoogleTickets,
     { provide: GOOGLE_IDENTITY_DRIVER, useFactory: createGoogleIdentityDriver },

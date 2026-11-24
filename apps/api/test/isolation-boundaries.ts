@@ -32,7 +32,7 @@ const groups = [
   },
   {
     evidence:
-      'auth/auth-http.int.spec.ts; auth/password-auth.int.spec.ts; auth/totp-auth.int.spec.ts; auth/google-auth.int.spec.ts',
+      'auth/auth-http.int.spec.ts; auth/password-auth.int.spec.ts; auth/totp-auth.int.spec.ts; auth/google-auth.int.spec.ts; auth/facebook-auth.int.spec.ts',
     boundary: 'public authentication or authenticated account security',
     routes: [
       'POST /auth/code',
@@ -44,6 +44,8 @@ const groups = [
       'POST /auth/password-reset/confirm',
       'POST /auth/google',
       'POST /auth/google/email/verify',
+      'GET /auth/facebook/start',
+      'GET /auth/facebook/callback',
       'POST /auth/totp',
       'POST /auth/totp/recovery/code',
       'POST /auth/totp/recovery',

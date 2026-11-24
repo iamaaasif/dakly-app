@@ -34,6 +34,7 @@ const groups = [
       'contact-memory',
       'customer-insights',
       'chats',
+      'ad-links',
       'due-book',
     ],
   ],

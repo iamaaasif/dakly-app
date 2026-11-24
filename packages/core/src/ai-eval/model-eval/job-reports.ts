@@ -3,14 +3,16 @@ import type { LlmDriver } from '@dakly/providers/llm/llm-driver';
 import { screenCustomerTexts } from '../../ai-agent/manipulation-screen';
 import { MIN_HANDOVER_ACCURACY, scoreEval } from '../eval-scoring';
 import type { EvalOutcome, GoldenCase } from '../golden-case';
+import { runAdPhotoEval } from './ad-photo-eval';
 import { runAssistantProductEval } from './assistant-product-eval';
 import { runEmbeddingEval } from './embedding-eval';
 import type { EvalMeter } from './eval-meter';
 import { dollars, printTable, say } from './eval-output';
+import { runKhataEval } from './khata-eval';
 import { runTranscribeEval, runVisionEval, type MediaScore } from './media-eval';
 import { runMemoryEval } from './memory-eval';
 import { runOptionsPhotoEval, runOptionsTitleEval } from './options-eval';
-import { classifyQuestion, composeReply, handoverFor } from './reply-pipeline';
+import { classifyQuestion, composeReply, evalShopRules, handoverFor } from './reply-pipeline';
 
 export type JobContext = {
   driver: LlmDriver;
@@ -25,16 +27,19 @@ const perThousand = (microUsd: number | undefined, count: number) =>
   dollars(((microUsd ?? 0) / Math.max(count, 1)) * 1000);
 
 // Reasons are kept per model, so the reply job reuses what the fast job already paid for.
-async function classifyAll({ driver, meter, cases }: JobContext, model: string) {
+export async function classifyAll({ driver, meter, cases }: JobContext, model: string) {
   const known = classifiedByModel.get(model);
   if (known) return known;
   const reasons: Reasons = new Map();
   for (const golden of cases) {
-    const screened = screenCustomerTexts([golden.question]);
-    const classified = screened
-      ? undefined
-      : await classifyQuestion(driver, meter, model, golden.question);
-    reasons.set(golden.id, screened ?? handoverFor(golden.question, classified));
+    const screened = screenCustomerTexts([golden.question], {
+      handOverDiscounts: evalShopRules(golden).handover.discounts,
+      earlierTexts: (golden.earlier ?? [])
+        .filter(({ from }) => from === 'customer')
+        .map(({ text }) => text),
+    });
+    const classified = screened ? undefined : await classifyQuestion(driver, meter, model, golden);
+    reasons.set(golden.id, screened ?? handoverFor(golden, classified));
   }
   classifiedByModel.set(model, reasons);
   return reasons;
@@ -81,7 +86,7 @@ async function scoreReplyModel(context: JobContext, model: string, reasons: Reas
     };
     outcomes[golden.id] = reason
       ? { kind: 'handover', reason }
-      : await composeReply(run, golden.question, note, golden.memory);
+      : await composeReply(run, golden, note);
     const outcome = outcomes[golden.id];
     if (outcome?.kind === 'reply') note(`reply: ${outcome.text}`);
   }
@@ -107,6 +112,8 @@ export async function reportReply(context: JobContext, models: string[], fastMod
       totals?.inputTokens
         ? `${Math.round((totals.cachedInputTokens / totals.inputTokens) * 100)}%`
         : '-',
+      totals ? String(Math.round(totals.inputTokens / answered)) : '-',
+      totals ? (totals.calls / answered).toFixed(2) : '-',
       perThousand(totals?.microUsd, answered),
     ]);
     if (context.verbose)
@@ -126,6 +133,8 @@ export async function reportReply(context: JobContext, models: string[], fastMod
       'hand-overs right',
       'needless',
       'cached input',
+      'input tokens per chat',
+      'calls per chat',
       'per 1,000 chats',
     ],
     rows,
@@ -162,6 +171,26 @@ export function reportVision({ driver, meter }: JobContext, models: string[]) {
     label: 'vision',
     models,
     run: (model) => runVisionEval(driver, meter, model),
+  });
+}
+
+export function reportAdPhotos({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Vision job (ad pictures with Bangla, Banglish and mixed titles)',
+    unit: 'pictures',
+    label: 'vision',
+    models,
+    run: (model) => runAdPhotoEval(driver, meter, model),
+  });
+}
+
+export function reportKhata({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Vision job (khata pages)',
+    unit: 'pages',
+    label: 'vision',
+    models,
+    run: (model) => runKhataEval(driver, meter, model),
   });
 }
 

@@ -3,6 +3,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 
 import { type INestApplicationContext, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import sharp from 'sharp';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { KhataModelOutput } from '@dakly/contracts/khata-scans';
@@ -88,7 +89,13 @@ async function shop(pagesAllowed: number) {
 }
 
 // The page is "uploaded" by stubbing the object store the way a browser PUT would leave it.
-function storeObject(bytes = new Uint8Array([1, 2, 3])) {
+const pagePhoto = new Uint8Array(
+  await sharp({ create: { width: 40, height: 60, channels: 3, background: '#ffffff' } })
+    .jpeg()
+    .toBuffer(),
+);
+
+function storeObject(bytes = pagePhoto) {
   vi.spyOn(S3FileStorageDriver.prototype, 'getObjectMetadata').mockImplementation(async () => ({
     contentType: 'image/jpeg',
     sizeBytes: 3_000_000,
@@ -136,6 +143,7 @@ describe('KhataScansService (Postgres)', () => {
     storeObject();
     modelReads({
       pageReadable: true,
+      turnClockwiseDegrees: 0,
       rows: [
         baki(),
         baki({ nameText: 'Mitu', phoneText: '01556 781231', amountText: 'Tk 950' }),
@@ -168,7 +176,7 @@ describe('KhataScansService (Postgres)', () => {
   it('does not read or charge a page twice when the job runs again', async () => {
     const { storeId, userId } = await shop(5);
     storeObject();
-    const read = modelReads({ pageReadable: true, rows: [baki()] });
+    const read = modelReads({ pageReadable: true, turnClockwiseDegrees: 0, rows: [baki()] });
     const pageId = await uploadedPage(storeId, userId);
     await service.requestRead(storeId, pageId);
 
@@ -184,10 +192,48 @@ describe('KhataScansService (Postgres)', () => {
     expect(used.rows[0].n).toBe(1);
   });
 
+  it('turns a sideways page and reads it again, keeping only the second read and charging once', async () => {
+    const { storeId, userId } = await shop(5);
+    storeObject();
+    const read = vi
+      .spyOn(FakeLlmDriver.prototype, 'respond')
+      .mockResolvedValueOnce({
+        kind: 'output',
+        output: {
+          pageReadable: true,
+          turnClockwiseDegrees: 90,
+          rows: [baki({ nameText: 'মাসের', amountText: '৬০০', confidence: 35 })],
+        },
+        usage,
+        model: 'test-vision',
+        responseId: 'r1',
+      })
+      .mockResolvedValueOnce({
+        kind: 'output',
+        output: { pageReadable: true, turnClockwiseDegrees: 0, rows: [baki()] },
+        usage,
+        model: 'test-vision',
+        responseId: 'r2',
+      });
+    const pageId = await uploadedPage(storeId, userId);
+    await service.requestRead(storeId, pageId);
+
+    await service.readPage(storeId, pageId, true);
+
+    expect(read).toHaveBeenCalledTimes(2);
+    const { rows } = await service.getPage(storeId, pageId);
+    expect(rows.map((row) => row.name)).toEqual(['রহিম উদ্দিন']);
+    const used = await admin.pool.query(
+      'select count(*)::int as n from usage_events where store_id=$1',
+      [storeId],
+    );
+    expect(used.rows[0].n).toBe(1);
+  });
+
   it('marks a blurry page unreadable and does not charge for it', async () => {
     const { storeId, userId } = await shop(5);
     storeObject();
-    modelReads({ pageReadable: false, rows: [] });
+    modelReads({ pageReadable: false, turnClockwiseDegrees: 0, rows: [] });
     const pageId = await uploadedPage(storeId, userId);
     await service.requestRead(storeId, pageId);
 
@@ -233,7 +279,7 @@ describe('KhataScansService (Postgres)', () => {
       failureCode: 'model',
     });
 
-    modelReads({ pageReadable: true, rows: [baki()] });
+    modelReads({ pageReadable: true, turnClockwiseDegrees: 0, rows: [baki()] });
     await service.requestRead(storeId, pageId);
     await service.readPage(storeId, pageId, true);
     expect((await service.getPage(storeId, pageId)).status).toBe('read');
@@ -247,7 +293,7 @@ describe('KhataScansService (Postgres)', () => {
       .mockRejectedValueOnce(new LlmError('LLM_TIMEOUT'))
       .mockResolvedValueOnce({
         kind: 'output',
-        output: { pageReadable: true, rows: [baki()] },
+        output: { pageReadable: true, turnClockwiseDegrees: 0, rows: [baki()] },
         usage,
         model: 'test-vision',
         responseId: 'r2',
@@ -287,7 +333,7 @@ describe('KhataScansService (Postgres)', () => {
 describe('KhataImportsService (Postgres)', () => {
   async function readPageOf(storeId: string, userId: string, rows: KhataModelOutput['rows']) {
     storeObject();
-    modelReads({ pageReadable: true, rows });
+    modelReads({ pageReadable: true, turnClockwiseDegrees: 0, rows });
     const pageId = await uploadedPage(storeId, userId);
     await service.requestRead(storeId, pageId);
     await service.readPage(storeId, pageId, true);
@@ -349,6 +395,53 @@ describe('KhataImportsService (Postgres)', () => {
       [storeId],
     );
     expect(dated.rows).toEqual([{ day: '2026-11-12', source: 'khata_import' }]);
+  });
+
+  it('imports the owner corrections instead of what was read', async () => {
+    const { storeId, userId } = await shop(5);
+    const page = await readPageOf(storeId, userId, [
+      baki({ phoneText: null, dateText: '৭/১১', confidence: 60 }),
+    ]);
+    const row = page.rows[0]!;
+
+    await imports.importPage(storeId, userId, page.id, {
+      rows: [
+        {
+          rowId: row.id,
+          action: 'import',
+          isChecked: true,
+          edit: { phone: '01911223344', amountPoisha: 40_000, entryDate: '2025-11-07' },
+        },
+      ],
+    });
+
+    expect(await balanceOf(storeId, '01911223344')).toBe(40_000);
+    const dated = await admin.pool.query(
+      "select to_char(occurred_at at time zone 'Asia/Dhaka', 'YYYY-MM-DD') as day from due_entries where store_id=$1",
+      [storeId],
+    );
+    expect(dated.rows).toEqual([{ day: '2025-11-07' }]);
+  });
+
+  it('matches an existing customer on the corrected phone instead of making a new one', async () => {
+    const { storeId, userId } = await shop(5);
+    await admin.pool.query(
+      "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'Rahim Uddin','01712345678','manual','customer')",
+      [randomUUID(), storeId],
+    );
+    const page = await readPageOf(storeId, userId, [baki({ phoneText: '01911223344' })]);
+
+    const result = await imports.importPage(storeId, userId, page.id, {
+      rows: [{ rowId: page.rows[0]!.id, action: 'import', edit: { phone: '01712345678' } }],
+    });
+
+    expect(result.customersCreated).toBe(0);
+    expect(await balanceOf(storeId, '01712345678')).toBe(125_000);
+    const contacts = await admin.pool.query(
+      'select count(*)::int as n from contacts where store_id=$1',
+      [storeId],
+    );
+    expect(contacts.rows[0].n).toBe(1);
   });
 
   it('refuses a second import of the same page and a decision list that misses a row', async () => {

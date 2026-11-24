@@ -21,12 +21,21 @@ export const STREAM_HEARTBEAT_MS = 25_000;
 // Ten times the replay limit, so a replayed row or a relay retry minutes later still finds its id.
 export const STREAM_SENT_IDS_LIMIT = 1000;
 const CHANNEL_PREFIX = 'notifications:';
+// A signal that one chat in a store changed, carrying only its id; the browser reads that chat again.
+const INBOX_PREFIX = 'inbox:';
 const liveNotificationSchema = z.tuple([z.uuid(), z.uuid()]);
 
 export type StreamSession = { storeId: string; userId: string; sessionId: string };
 export type StreamMessage =
-  { type: 'notification'; id: string; data: NotificationResponse } | { comment: string };
-type Stream = { userId: string; deliver: (notificationId: string) => void; close: () => void };
+  | { type: 'notification'; id: string; data: NotificationResponse }
+  | { type: 'inbox'; data: { conversationId: string } }
+  | { comment: string };
+type Stream = {
+  userId: string;
+  deliver: (notificationId: string) => void;
+  signalInbox: (conversationId: string) => void;
+  close: () => void;
+};
 
 // Each API process holds one subscriber connection, which Valkey keeps in subscribe mode, and
 // fans each store channel out to that store's open streams.
@@ -48,6 +57,10 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
 
   async announce(storeId: string, notificationId: string, userId: string) {
     await this.valkey.connection.publish(CHANNEL_PREFIX + storeId, `${notificationId} ${userId}`);
+  }
+
+  async announceInbox(storeId: string, conversationId: string) {
+    await this.valkey.connection.publish(INBOX_PREFIX + storeId, conversationId);
   }
 
   open(session: StreamSession, lastEventId?: string): Observable<StreamMessage> {
@@ -80,6 +93,10 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
         deliver: (id) =>
           enqueue('live delivery', async () =>
             send(await this.notifications.findForUser(storeId, userId, id)),
+          ),
+        signalInbox: (conversationId) =>
+          enqueue('inbox signal', async () =>
+            subscriber.next({ type: 'inbox', data: { conversationId } }),
           ),
         close: () => subscriber.complete(),
       };
@@ -125,7 +142,10 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
       return;
     }
     this.streams.set(storeId, new Set([stream]));
-    const subscribing = this.connection().subscribe(CHANNEL_PREFIX + storeId);
+    const subscribing = this.connection().subscribe(
+      CHANNEL_PREFIX + storeId,
+      INBOX_PREFIX + storeId,
+    );
     this.subscribing.set(storeId, subscribing);
     await subscribing;
   }
@@ -136,7 +156,9 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
     this.streams.delete(storeId);
     this.subscribing.delete(storeId);
     // A dropped connection forgets its channels anyway; nothing waits for this answer.
-    void this.subscriber?.unsubscribe(CHANNEL_PREFIX + storeId).catch(() => undefined);
+    void this.subscriber
+      ?.unsubscribe(CHANNEL_PREFIX + storeId, INBOX_PREFIX + storeId)
+      .catch(() => undefined);
   }
 
   private connection(): Redis {
@@ -146,6 +168,13 @@ export class NotificationStreamService implements BeforeApplicationShutdown, OnA
     const subscriber = this.valkey.connection.duplicate({ enableReadyCheck: false });
     subscriber.on('error', () => this.logger.error('Valkey subscriber connection failed'));
     subscriber.on('message', (channel: string, message: string) => {
+      if (channel.startsWith(INBOX_PREFIX)) {
+        const conversationId = z.uuid().safeParse(message);
+        if (!conversationId.success) return;
+        for (const stream of this.streams.get(channel.slice(INBOX_PREFIX.length)) ?? [])
+          stream.signalInbox(conversationId.data);
+        return;
+      }
       const ids = liveNotificationSchema.safeParse(message.split(' '));
       if (!ids.success) return;
       const [notificationId, userId] = ids.data;

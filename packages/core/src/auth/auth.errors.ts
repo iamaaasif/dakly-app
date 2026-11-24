@@ -35,6 +35,19 @@ const AUTH_ERRORS = {
     status: 400,
     message: 'The Google verification has expired or was already used',
   },
+  AUTH_FACEBOOK_UNAVAILABLE: {
+    status: 503,
+    message: 'Facebook sign-in is unavailable. Try again later',
+  },
+  AUTH_FACEBOOK_CONFLICT: { status: 409, message: 'This Facebook identity cannot be linked' },
+  AUTH_FACEBOOK_EMAIL_REQUIRED: {
+    status: 400,
+    message: 'Facebook did not share an email address. Sign up with your mobile number instead',
+  },
+  AUTH_FACEBOOK_STATE_INVALID: {
+    status: 400,
+    message: 'The Facebook sign-in expired or was opened in another browser. Start again',
+  },
   AUTH_INVALID_CREDENTIALS: { status: 401, message: 'The sign-in credentials are incorrect' },
   AUTH_EMAIL_UNVERIFIED: { status: 403, message: 'Verify this email before signing in' },
   AUTH_ACCOUNT_EXISTS: { status: 409, message: 'This account already exists. Sign in instead' },

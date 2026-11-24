@@ -11,6 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+import { signUpSources } from '@dakly/contracts/auth';
 import { languages } from '@dakly/contracts/stores';
 
 import { bytea, citext, createdAt, id, inet, isOneOf, timestamptz, updatedAt } from './columns';
@@ -30,6 +31,8 @@ export const users = pgTable(
     passwordHash: text('password_hash'),
     // Google's stable subject id. After the first link, Google is never matched by email again.
     googleSubject: text('google_subject'),
+    // Facebook's stable user id, linked the same way: after the first link it is never matched by email again.
+    facebookSubject: text('facebook_subject'),
     totpSecretCiphertext: bytea('totp_secret_ciphertext'),
     totpKeyVersion: smallint('totp_key_version'),
     totpEnabledAt: timestamptz('totp_enabled_at'),
@@ -42,6 +45,9 @@ export const users = pgTable(
     // The terms and privacy version the user accepted at sign-up or after a change.
     termsVersion: text('terms_version'),
     termsAcceptedAt: timestamptz('terms_accepted_at'),
+    // How the owner said they heard about Dakly on the sign-up form.
+    signUpSource: text('sign_up_source'),
+    signUpSourceOther: text('sign_up_source_other'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -54,9 +60,15 @@ export const users = pgTable(
       .on(table.email)
       .where(sql`${table.emailVerifiedAt} is null`),
     uniqueIndex('users_google_subject_key').on(table.googleSubject),
+    uniqueIndex('users_facebook_subject_key').on(table.facebookSubject),
     check('users_has_identifier', sql`${table.phone} is not null or ${table.email} is not null`),
     check('users_phone_format', sql`${table.phone} ~ '^01[3-9][0-9]{8}$'`),
     check('users_language', isOneOf(table.language, languages)),
+    check('users_sign_up_source', isOneOf(table.signUpSource, signUpSources)),
+    check(
+      'users_sign_up_source_other',
+      sql`${table.signUpSourceOther} is null or ${table.signUpSource} = 'other'`,
+    ),
     check('users_terms', sql`(${table.termsVersion} is null) = (${table.termsAcceptedAt} is null)`),
     check('users_name_length', sql`char_length(${table.name}) between 1 and 120`),
   ],
