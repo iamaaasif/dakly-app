@@ -86,6 +86,7 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
               'sms_sender_ids',
               'files',
               'audit_log',
+              'notifications',
               'memberships',
               'ai_runs',
             ])
