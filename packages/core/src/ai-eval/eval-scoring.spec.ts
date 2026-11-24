@@ -256,6 +256,7 @@ describe('chat memory set', () => {
     expect(score('XL nei. XL stock e ashle jānabo.')).toEqual([]);
     expect(score('XL nei. XL abar stock-e ele janabo?')).toEqual([]);
     expect(score('XL nei. XL stock e ele janabo?')).toEqual([]);
+    expect(score('XL নেই। XL নতুন স্টকে এলে জানাবো?')).toEqual([]);
     // A dash splits the clause: "nei" belongs to XL, "ache" to what follows it.
     expect(score('XL nei—ekhane M ar L ache.')).toEqual([]);
     expect(score('XL back in stock now, ৳650।')).toEqual(['chat-memory-other-channel-stock-bn']);
