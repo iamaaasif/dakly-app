@@ -146,7 +146,7 @@ describe('AiService', () => {
     expect(runs.map((run) => run.outcome)).toEqual(['timeout']);
   });
 
-  it('tries again after a failed vendor request and stops after two waits', async () => {
+  it('tries again after a failed vendor request, stops after two waits and counts it once', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] });
     try {
       const recovered = fixture([new LlmError('LLM_REQUEST_FAILED'), reply]);
@@ -165,6 +165,8 @@ describe('AiService', () => {
       await vi.advanceTimersByTimeAsync(5000);
       await expect(failing).resolves.toMatchObject({ kind: 'failure', code: 'LLM_REQUEST_FAILED' });
       expect(broken.runs).toHaveLength(3);
+      // The retries of one request count as one provider failure, so the AI is not paused.
+      await expect(broken.service.run(storeId, request)).resolves.toMatchObject({ kind: 'output' });
     } finally {
       vi.useRealTimers();
     }

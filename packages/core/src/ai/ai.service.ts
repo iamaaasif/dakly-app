@@ -171,7 +171,7 @@ export class AiService {
       deadline,
       now: () => this.clock.now().getTime(),
       isStopped: async () => request.signal?.aborted === true || (await this.gate.isPaused()),
-      attempt: (timeoutMs) => this.attempt(storeId, request, timeoutMs),
+      attempt: (timeoutMs) => this.attempt(storeId, request, timeoutMs, true),
     });
     if (first.kind !== 'failure' || first.code !== 'AI_OUTPUT_MISMATCH') return first;
     if (await this.gate.isPaused()) return first;
@@ -184,6 +184,7 @@ export class AiService {
     storeId: string,
     request: AiRequest<T>,
     timeoutMs: number,
+    isRetry = false,
   ): Promise<AiAttempt<T>> {
     const model = this.config.models[request.tier];
     return this.runs.attempt(
@@ -204,6 +205,7 @@ export class AiService {
         promptVersion: request.prompt.version,
         price: Object.hasOwn(this.config.prices, model) ? this.config.prices[model] : undefined,
       },
+      isRetry,
     );
   }
 }
