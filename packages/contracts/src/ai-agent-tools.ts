@@ -29,7 +29,7 @@ export const searchProductsTool = {
 export const browseProductsTool = {
   name: 'browse_products',
   description:
-    'List what the shop sells when the customer names no product: “ki ki ache”, “what do you have”, the cheapest or the dearest, something under a budget, a gift, one category. Returns the shop’s categories and up to 5 products that can be sold now, with each variant price and stock. Use sort cheapest or priciest for “sobcheye sosta” or “sobcheye dami”, and maxPriceTaka for a budget. Use search_products when the customer names a product.',
+    'List what the shop sells when the customer names no product: “ki ki ache”, “what do you have”, the cheapest or the dearest, something under a budget, a gift, one category. Returns the shop’s categories and up to 5 products that can be sold now, with each variant price and stock. Pass null for what the customer did not ask. Use sort cheapest or priciest for “sobcheye sosta” or “sobcheye dami”, and maxPriceTaka for a budget. Use search_products when the customer names a product.',
   aliases: [
     'ki ki ache',
     'কী কী আছে',
@@ -41,9 +41,9 @@ export const browseProductsTool = {
     'gift',
   ],
   input: z.strictObject({
-    category: z.string().trim().min(2).max(60).optional(),
-    maxPriceTaka: z.int().positive().max(10_000_000).optional(),
-    sort: z.enum(['cheapest', 'priciest', 'newest']).optional(),
+    category: z.string().trim().min(2).max(60).nullable(),
+    maxPriceTaka: z.int().positive().max(10_000_000).nullable(),
+    sort: z.enum(['cheapest', 'priciest', 'newest']).nullable(),
   }),
   units: {
     priceTaka: 'taka, converted from poisha',

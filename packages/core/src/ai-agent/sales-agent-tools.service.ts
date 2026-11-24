@@ -110,9 +110,9 @@ export class SalesAgentToolsService {
     const found = await this.productSearch.browse(
       storeId,
       {
-        category,
-        sort,
-        maxPricePoisha: maxPriceTaka === undefined ? undefined : maxPriceTaka * 100,
+        category: category ?? undefined,
+        sort: sort ?? undefined,
+        maxPricePoisha: maxPriceTaka === null ? undefined : maxPriceTaka * 100,
       },
       BROWSE_PRODUCT_LIMIT,
     );
