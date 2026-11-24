@@ -105,3 +105,7 @@ function productsIn(value: unknown): Product[] {
       : [];
   return [...own, ...Object.values(value).flatMap(productsIn)];
 }
+
+// A repeat discount ask is judged from what the customer wrote earlier in the same chat.
+export const customerTexts = (entries: ConversationEntry[]) =>
+  entries.filter(({ from }) => from === 'customer').map(({ text }) => text);

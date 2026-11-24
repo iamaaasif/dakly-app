@@ -29,12 +29,22 @@ import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { cardMessages } from './card-messages';
 import { CardTapRepliesService } from './card-tap-replies.service';
-import { classifierInput, type ConversationEntry, conversationEntries } from './chat-memory';
+import {
+  classifierInput,
+  type ConversationEntry,
+  conversationEntries,
+  customerTexts,
+} from './chat-memory';
 import { type HandoverCheckRules, handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v2';
-import { burstText, isFlood } from './reply-burst';
-import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
+import { burstText, isFlood, isSameTurn } from './reply-burst';
+import {
+  type ComposedReply,
+  type ComposeInput,
+  type ProductCard,
+  SalesAgentService,
+} from './sales-agent.service';
 import type { ShopRules } from './shop-rules';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
@@ -53,6 +63,7 @@ type EligibleTurn = {
     connectionId: string;
     identityId: string;
   };
+  recipientExternalId: string;
   debounceSeconds: number;
   claimTimeoutMinutes: number | null;
   productCardStyle: 'buttons' | 'text';
@@ -90,24 +101,29 @@ export class AiAgentService {
     const turn = await this.inbox.aiReplyTurn(storeId, conversationId);
     const arrival = turn?.inbound.find(({ id }) => id === messageId);
     if (!turn || arrival?.createdAt.getTime() !== turn.latest.createdAt.getTime()) return;
-    const delay = settings.debounceSeconds * 1000;
+    const dedupeId = `${storeId}-${conversationId}`;
     await this.queue.add(
       REPLY_TO_CUSTOMER,
       { storeId, conversationId, messageId: turn.latest.id },
       {
         jobId: `ai-reply-${messageId}`,
-        delay,
-        deduplication: {
-          id: `${storeId}-${conversationId}`,
-          replace: true,
-          keepLastIfActive: true,
-        },
+        delay: settings.debounceSeconds * 1000,
+        deduplication: { id: dedupeId, replace: true, keepLastIfActive: true },
         attempts: 3,
         backoff: { type: 'exponential', delay: MINUTE_MS },
         removeOnComplete: { age: 60 * 60 },
         removeOnFail: 100,
       },
     );
+    await this.showTyping(storeId, conversationId);
+  }
+
+  // The customer sees "typing" at once, long before the reply is ready.
+  private async showTyping(storeId: string, conversationId: string) {
+    const candidate = await this.eligibleTurn(storeId, conversationId);
+    if (!candidate) return;
+    const recipientExternalId = candidate.recipientExternalId;
+    await this.channels.showMetaTyping(storeId, { ...candidate.target, recipientExternalId });
   }
 
   // A person's reply keeps the chat with people until the store's return timer runs out.
@@ -132,44 +148,55 @@ export class AiAgentService {
     const candidate = await this.eligibleTurn(storeId, conversationId);
     if (!candidate) return;
     const { turn, debounceSeconds } = candidate;
-    if (turn.latest.id !== messageId) {
-      // A later event may have arrived while an older subscriber was adding its job.
-      await this.schedule(storeId, conversationId, turn.latest.id);
-      return;
-    }
+    // A later event may have arrived while an older subscriber was adding its job.
+    if (turn.latest.id !== messageId) return this.schedule(storeId, conversationId, turn.latest.id);
     const stopped = await this.stoppedReason(storeId, turn);
     if (stopped) return this.handOver(storeId, conversationId, candidate, stopped);
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
-    const texts = burst.texts;
     const earlier = await this.earlierMessages(storeId, conversationId, burst.messageIds);
-    const { rules } = candidate;
-    const reason =
-      screenCustomerTexts(burst.screenTexts, {
-        handOverDiscounts: rules.handover.discounts,
-        earlierTexts: customerTexts(earlier),
-      }) ??
-      (await this.classifyWithAllowance({
-        storeId,
-        contactId: turn.contactId,
-        texts,
-        earlier,
-        rules: { ...rules.handover, takesOrders: rules.takeOrders },
-      }));
-    if (reason === 'busy') return this.retryLater();
-    if (reason) return this.handOver(storeId, conversationId, candidate, reason);
-    const composed = await this.sales.compose({
+    const compose = {
       storeId,
       contactId: turn.contactId,
       chat: { conversationId, channel: candidate.target.channel },
-      customerTexts: texts,
-      rules,
-    });
+      customerTexts: burst.texts,
+      rules: candidate.rules,
+    };
+    const { reason, prepared } = await this.checkHandOver(compose, earlier, burst.screenTexts);
+    if (reason === 'busy') return this.retryLater();
+    if (reason) return this.handOver(storeId, conversationId, candidate, reason);
+    const composed = await this.sales.compose(compose, prepared);
     if (composed.kind === 'busy') return this.retryLater();
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
     return this.send(storeId, conversationId, candidate, composed);
+  }
+
+  // The reads for the reply run while the hand-over check waits for its model. They only read,
+  // so a hand-over drops them.
+  private async checkHandOver(
+    compose: ComposeInput,
+    earlier: ConversationEntry[],
+    screenTexts: string[],
+  ) {
+    const { storeId, contactId, customerTexts: texts, rules } = compose;
+    const screened = screenCustomerTexts(screenTexts, {
+      handOverDiscounts: rules.handover.discounts,
+      earlierTexts: customerTexts(earlier),
+    });
+    const prepared = screened ? undefined : this.sales.prepare(compose);
+    prepared?.catch(() => undefined);
+    const reason =
+      screened ??
+      (await this.classifyWithAllowance({
+        storeId,
+        contactId,
+        texts,
+        earlier,
+        rules: { ...rules.handover, takesOrders: rules.takeOrders },
+      }));
+    return { reason, prepared };
   }
 
   private async classifyWithAllowance(input: {
@@ -222,10 +249,12 @@ export class AiAgentService {
     if (!(await this.isAnswerable(storeId, turn, settings.testers))) return;
     if (!(await this.mayContact(storeId, contactId, channel))) return;
     const target = { contactId, channel, connectionId, identityId: latest.senderIdentityId };
-    if (!(await this.identities.findOutboundIdentity(storeId, target))) return;
+    const identity = await this.identities.findOutboundIdentity(storeId, target);
+    if (!identity) return;
     return {
       turn,
       target,
+      recipientExternalId: identity.externalId,
       debounceSeconds: settings.debounceSeconds,
       claimTimeoutMinutes: settings.claimTimeoutMinutes,
       productCardStyle: settings.productCardStyle,
@@ -409,16 +438,6 @@ export class AiAgentService {
       throw error;
     }
     const current = await this.eligibleTurn(storeId, conversationId, true);
-    const unchanged =
-      current &&
-      current.target.contactId === before.target.contactId &&
-      current.turn.version === before.turn.version &&
-      current.turn.inbound.length === before.turn.inbound.length &&
-      current.turn.inbound.every(({ id }, index) => id === before.turn.inbound[index]?.id);
-    return unchanged ? current : undefined;
+    return current && isSameTurn(current, before) ? current : undefined;
   }
 }
-
-// A repeat discount ask is judged from what the customer wrote earlier in the same chat.
-const customerTexts = (entries: ConversationEntry[]) =>
-  entries.filter(({ from }) => from === 'customer').map(({ text }) => text);
