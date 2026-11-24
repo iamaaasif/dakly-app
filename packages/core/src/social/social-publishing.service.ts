@@ -20,6 +20,7 @@ import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { HOUR_MS, MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
+import { measureMetaCall } from './meta-request-log';
 import { publishedSchedule } from './next-metrics-at';
 import { validateInstagramPhotos, validateInstagramPost } from './post-content';
 import { publishError, socialError } from './social.errors';
@@ -421,16 +422,6 @@ export class SocialPublishingService {
     return updated;
   }
 
-  private meta<Result>(operation: string, call: () => Promise<Result>) {
-    return measureVendorCall(
-      this.logger,
-      operation,
-      'Meta publishing request measured',
-      call,
-    ).catch((failure: unknown) => {
-      if (failure instanceof MetaPublishingError && failure.detail)
-        this.logger.warn({ operation, metaError: failure.detail }, 'Meta rejected the request');
-      throw failure;
-    });
-  }
+  private readonly meta = <Result>(operation: string, call: () => Promise<Result>) =>
+    measureMetaCall(this.logger, operation, call);
 }

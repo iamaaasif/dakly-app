@@ -54,11 +54,14 @@ function responseError(status: number, payload: unknown) {
     subcode: error.error_subcode ?? null,
     message: (error.message ?? '').slice(0, 300),
   };
-  if ([190, 459].includes(error.code)) return new MetaPublishingError('auth_error', detail);
-  if (status < 400 || status === 408 || status >= 500)
-    return new MetaPublishingError('unavailable', detail);
+  return new MetaPublishingError(errorKind(status, error), detail);
+}
+
+function errorKind(status: number, error: z.infer<typeof errorResult>['error']) {
+  if ([190, 459].includes(error.code)) return 'auth_error';
+  if (status < 400 || status === 408 || status >= 500) return 'unavailable';
   const retryable = status === 429 || error.is_transient || retryableCodes.includes(error.code);
-  return new MetaPublishingError(retryable ? 'retryable' : 'rejected', detail);
+  return retryable ? 'retryable' : 'rejected';
 }
 
 function insightMetrics({ kind, isStory }: MetaPostRef) {
