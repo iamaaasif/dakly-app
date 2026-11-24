@@ -32,6 +32,8 @@ const browseHydrateLimit = 20;
 const browseCategoryLimit = 12;
 
 const lowestPrice = (prices: readonly number[]) => Math.min(...prices);
+// Newest keeps the order the candidates come in.
+const priceOrder = { cheapest: 1, priciest: -1, newest: 0 } as const;
 
 @Injectable()
 export class ProductSearchService {
@@ -73,12 +75,10 @@ export class ProductSearchService {
           (filter.maxPricePoisha === undefined ||
             lowestPrice(pricesPoisha) <= filter.maxPricePoisha),
       )
-      .sort((a, b) =>
-        filter.sort === 'cheapest'
-          ? lowestPrice(a.pricesPoisha) - lowestPrice(b.pricesPoisha)
-          : filter.sort === 'priciest'
-            ? lowestPrice(b.pricesPoisha) - lowestPrice(a.pricesPoisha)
-            : 0,
+      .sort(
+        (a, b) =>
+          priceOrder[filter.sort ?? 'newest'] *
+          (lowestPrice(a.pricesPoisha) - lowestPrice(b.pricesPoisha)),
       );
     const found = await this.products.getManyForChat(
       storeId,
