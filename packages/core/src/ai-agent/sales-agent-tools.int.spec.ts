@@ -195,6 +195,7 @@ const draft = (variantId: string, fields: object = {}) => ({
 it('lists every tool for the model with its words and units in the description', () => {
   expect(salesAgentLlmTools.map((tool) => tool.name)).toEqual([
     'search_products',
+    'browse_products',
     'get_product',
     'get_delivery_charge',
     'search_knowledge',

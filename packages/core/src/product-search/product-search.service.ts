@@ -28,6 +28,10 @@ const alternativeLimit = 3;
 const addOnLimit = 2;
 // Sized so one query reads at most this many products; the picker then keeps two.
 const addOnHydrateLimit = 30;
+const browseHydrateLimit = 20;
+const browseCategoryLimit = 12;
+
+const lowestPrice = (prices: readonly number[]) => Math.min(...prices);
 
 @Injectable()
 export class ProductSearchService {
@@ -44,6 +48,46 @@ export class ProductSearchService {
       0,
       limit,
     );
+  }
+
+  // What the shop sells, for a customer who names no product: categories, then products that can
+  // be sold now, narrowed by category or budget and ordered by price when asked.
+  async browse(
+    storeId: string,
+    filter: {
+      category?: string | undefined;
+      maxPricePoisha?: number | undefined;
+      sort?: 'cheapest' | 'priciest' | 'newest' | undefined;
+    },
+    limit: number,
+  ): Promise<{ categories: string[]; products: ChatProduct[] }> {
+    const candidates = await this.source.listSearchCandidates(storeId, candidateLimit);
+    const categories = [
+      ...new Set(candidates.flatMap(({ category }) => (category ? [category] : []))),
+    ];
+    const wanted = filter.category?.toLowerCase();
+    const matching = candidates
+      .filter(
+        ({ category, pricesPoisha }) =>
+          (!wanted || (category?.toLowerCase().includes(wanted) ?? false)) &&
+          (filter.maxPricePoisha === undefined ||
+            lowestPrice(pricesPoisha) <= filter.maxPricePoisha),
+      )
+      .sort((a, b) =>
+        filter.sort === 'cheapest'
+          ? lowestPrice(a.pricesPoisha) - lowestPrice(b.pricesPoisha)
+          : filter.sort === 'priciest'
+            ? lowestPrice(b.pricesPoisha) - lowestPrice(a.pricesPoisha)
+            : 0,
+      );
+    const found = await this.products.getManyForChat(
+      storeId,
+      matching.slice(0, browseHydrateLimit).map(({ id }) => id),
+    );
+    return {
+      categories: categories.slice(0, browseCategoryLimit),
+      products: found.filter(isSellable).slice(0, limit),
+    };
   }
 
   // Search limited to the products an ad sells, by spelling only: a pick such as "নীলটা" names a

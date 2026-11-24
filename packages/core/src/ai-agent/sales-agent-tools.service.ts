@@ -4,6 +4,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ZodError } from 'zod';
 
 import {
+  browseProductsTool,
   confirmOrderTool,
   draftOrderTool,
   findAlternativesTool,
@@ -45,6 +46,7 @@ export type ToolScope = {
 type Handler = (scope: ToolScope, raw: unknown) => Promise<object>;
 
 const SEARCH_PRODUCT_LIMIT = 3;
+const BROWSE_PRODUCT_LIMIT = 5;
 const AREA_LIMIT = 3;
 const ZONE_LIMIT = 20;
 const KNOWLEDGE_LIMIT = 4;
@@ -64,6 +66,7 @@ export const salesAgentLlmTools: readonly LlmTool[] = salesAgentTools.map((tool)
 export class SalesAgentToolsService {
   private readonly handlers: Record<string, Handler> = {
     [searchProductsTool.name]: (scope, raw) => this.searchProducts(scope, raw),
+    [browseProductsTool.name]: (scope, raw) => this.browseProducts(scope, raw),
     [getProductTool.name]: (scope, raw) => this.getProduct(scope, raw),
     [getDeliveryChargeTool.name]: (scope, raw) => this.getDeliveryCharge(scope, raw),
     [searchKnowledgeTool.name]: (scope, raw) => this.searchKnowledge(scope, raw),
@@ -100,6 +103,20 @@ export class SalesAgentToolsService {
       if (error instanceof AppError && error.status < 500) return { error: error.code };
       throw error;
     }
+  }
+
+  private async browseProducts({ storeId }: ToolScope, raw: unknown) {
+    const { category, maxPriceTaka, sort } = browseProductsTool.input.parse(raw);
+    const found = await this.productSearch.browse(
+      storeId,
+      {
+        category,
+        sort,
+        maxPricePoisha: maxPriceTaka === undefined ? undefined : maxPriceTaka * 100,
+      },
+      BROWSE_PRODUCT_LIMIT,
+    );
+    return { categories: found.categories, products: found.products.map(productResult) };
   }
 
   private async searchProducts({ storeId, adProductIds }: ToolScope, raw: unknown) {
