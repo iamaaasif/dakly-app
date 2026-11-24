@@ -254,6 +254,8 @@ describe('chat memory set', () => {
       }).outOfStockOfferCaseIds;
     expect(score('XL নেই। M ও L সাইজ আছে, প্রতিটি ৳৬৫০। XL আবার স্টকে এলে জানাবো?')).toEqual([]);
     expect(score('XL nei. XL stock e ashle jānabo.')).toEqual([]);
+    expect(score('XL nei. XL abar stock-e ele janabo?')).toEqual([]);
+    expect(score('XL nei. XL stock e ele janabo?')).toEqual([]);
     expect(score('XL back in stock now, ৳650।')).toEqual(['chat-memory-other-channel-stock-bn']);
   });
 

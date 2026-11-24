@@ -33,7 +33,7 @@ import { classifierInput, type ConversationEntry, conversationEntries } from './
 import { type HandoverCheckRules, handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v2';
-import { burstText } from './reply-burst';
+import { burstText, isFlood } from './reply-burst';
 import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
 import type { ShopRules } from './shop-rules';
 
@@ -118,11 +118,14 @@ export class AiAgentService {
   }
 
   // Either way the customer is handed to a person now, so nobody waits for the stop to end.
+  // A flood of messages is not read by a model either: no call is made.
   private async stoppedReason(
     storeId: string,
-  ): Promise<'store_read_only' | 'ai_paused' | undefined> {
+    turn: Turn,
+  ): Promise<'store_read_only' | 'ai_paused' | 'other' | undefined> {
     if (await this.billing.isReadOnly(storeId)) return 'store_read_only';
-    return (await this.switches.isPaused('ai_replies', storeId)) ? 'ai_paused' : undefined;
+    if (await this.switches.isPaused('ai_replies', storeId)) return 'ai_paused';
+    return isFlood(turn) ? 'other' : undefined;
   }
 
   async reply(storeId: string, conversationId: string, messageId: string) {
@@ -134,7 +137,7 @@ export class AiAgentService {
       await this.schedule(storeId, conversationId, turn.latest.id);
       return;
     }
-    const stopped = await this.stoppedReason(storeId);
+    const stopped = await this.stoppedReason(storeId, turn);
     if (stopped) return this.handOver(storeId, conversationId, candidate, stopped);
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
@@ -143,7 +146,7 @@ export class AiAgentService {
     const earlier = await this.earlierMessages(storeId, conversationId, burst.messageIds);
     const { rules } = candidate;
     const reason =
-      screenCustomerTexts(texts, {
+      screenCustomerTexts(burst.screenTexts, {
         handOverDiscounts: rules.handover.discounts,
         earlierTexts: customerTexts(earlier),
       }) ??

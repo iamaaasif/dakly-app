@@ -27,7 +27,7 @@ const perThousand = (microUsd: number | undefined, count: number) =>
   dollars(((microUsd ?? 0) / Math.max(count, 1)) * 1000);
 
 // Reasons are kept per model, so the reply job reuses what the fast job already paid for.
-async function classifyAll({ driver, meter, cases }: JobContext, model: string) {
+export async function classifyAll({ driver, meter, cases }: JobContext, model: string) {
   const known = classifiedByModel.get(model);
   if (known) return known;
   const reasons: Reasons = new Map();
