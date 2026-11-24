@@ -38,6 +38,7 @@ import {
   shownProductIds,
 } from './chat-memory';
 import { conversationBlocks, windowConversation } from './conversation-window';
+import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
 import { chatReplyV10 } from './prompts/chat-reply.v10';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
@@ -346,7 +347,7 @@ export class SalesAgentService {
     const memory = await this.memory.contextFor(input.storeId, input.contactId);
     const conversation: ConversationEntry[] = history
       ? conversationEntries(history)
-      : input.customerTexts.map((text) => ({ from: 'customer', text: text.slice(0, 2000) }));
+      : input.customerTexts.map((text) => ({ from: 'customer', text: shorten(text) }));
     return [
       `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
       shopRulesBlock(input.rules),

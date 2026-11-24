@@ -1,4 +1,5 @@
 import type { ConversationEntry } from './chat-memory';
+import { MESSAGE_LENGTH, shorten } from './message-shortening';
 
 // How much of a chat the reply model reads. The newest messages come whole, up to a token budget.
 // Older messages are never dropped: the customer's own older lines stay as short digest lines, and
@@ -26,9 +27,10 @@ export type ConversationWindow = {
 };
 
 export function windowConversation(
-  entries: readonly ConversationEntry[],
+  all: readonly ConversationEntry[],
   latestTexts: readonly string[],
 ): ConversationWindow {
+  const entries = all.map(({ from, text }) => ({ from, text: shorten(text, MESSAGE_LENGTH) }));
   let used = 0;
   let start = entries.length;
   while (start > 0) {
@@ -39,7 +41,7 @@ export function windowConversation(
     start -= 1;
   }
   const older = entries.slice(0, start);
-  const recalled = recall(older, latestTexts.join(' '));
+  const recalled = recall(older, shorten(latestTexts.join(' '), MESSAGE_LENGTH));
   return {
     recent: entries.slice(start),
     digest: digestOf(older, recalled),
@@ -66,8 +68,7 @@ function digestOf(older: readonly ConversationEntry[], recalled: readonly Conver
     .map(({ from, text }) => ({ from, text: cut(text) }));
 }
 
-const cut = (text: string) =>
-  text.length > DIGEST_LINE_LENGTH ? `${text.slice(0, DIGEST_LINE_LENGTH)}…` : text;
+const cut = (text: string) => shorten(text, DIGEST_LINE_LENGTH);
 
 // Older messages that share rare words, or spelling pieces, with the latest words. Spelling pieces
 // (three letters) let "mirpur" find "Mirpur-10" and "মিরপুর" find "মিরপুরে".
