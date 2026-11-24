@@ -573,9 +573,9 @@ it('answers price and delivery from tool results, saves the run and sources, and
     runs: [
       { purpose: 'classify' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v12' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v13' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v12' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v13' },
     ],
     usage: [{ id: expect.any(String) }],
   });

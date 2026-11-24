@@ -195,6 +195,7 @@ const draft = (variantId: string, fields: object = {}) => ({
 it('lists every tool for the model with its words and its non-obvious units in the description', () => {
   expect(salesAgentLlmTools.map((tool) => tool.name)).toEqual([
     'search_products',
+    'browse_products',
     'get_product',
     'get_delivery_charge',
     'search_knowledge',
@@ -402,6 +403,22 @@ it('takes an order in a chat, prices it in code and waits for the customer to sa
   // Answering yes twice does not move the order again.
   expect(await run(storeId, buyer, 'confirm_order', { orderNumber })).toEqual({
     error: 'ORDER_STAGE_NOT_ALLOWED',
+  });
+});
+
+it('confirms the one order waiting for a yes when the model names a number that is not the customer own', async () => {
+  const { storeId, variantId } = await orderShop();
+  const buyer = await contact(storeId);
+  const { orderNumber } = (await runInChat(storeId, buyer, 'draft_order', draft(variantId))) as {
+    orderNumber: number;
+  };
+  expect(await run(storeId, buyer, 'confirm_order', { orderNumber: orderNumber + 1000 })).toEqual({
+    orderNumber,
+    stage: 'to_pack',
+  });
+  // Nothing is waiting any more, so a wrong number is still refused.
+  expect(await run(storeId, buyer, 'confirm_order', { orderNumber: orderNumber + 1000 })).toEqual({
+    error: 'ORDER_NOT_FOUND',
   });
 });
 
