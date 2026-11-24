@@ -12,7 +12,7 @@ const wordsOf = (product: ChatProduct) =>
       .filter((word) => [...word].length >= MIN_WORD_LENGTH),
   );
 
-const sameCategory = (left: ChatProduct, right: ChatProduct) =>
+export const sameCategory = (left: ChatProduct, right: ChatProduct) =>
   left.category !== null &&
   right.category !== null &&
   left.category.trim().toLowerCase() === right.category.trim().toLowerCase();

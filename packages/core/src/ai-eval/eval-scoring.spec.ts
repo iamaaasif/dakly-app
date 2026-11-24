@@ -221,6 +221,42 @@ describe('chat memory set', () => {
     expect(report.passed).toBe(false);
   });
 
+  it('fails a days-later answer that quotes the memory’s old price or offers the size with no stock', () => {
+    const report = scoreEval(chatMemoryGoldenCases, {
+      ...chatMemoryRecordedOutcomes,
+      'chat-memory-days-later-bn': { kind: 'reply', text: 'জি, কুর্তি আছে, ৳১,২০০।' },
+      'chat-memory-other-channel-stock-bn': { kind: 'reply', text: 'জি, পোলো শার্ট XL আছে, ৳৬৫০।' },
+    });
+    expect(report.wrongPriceCaseIds).toEqual(['chat-memory-days-later-bn']);
+    expect(report.outOfStockOfferCaseIds).toEqual(['chat-memory-other-channel-stock-bn']);
+    expect(report.passed).toBe(false);
+  });
+
+  it('lets a reply say a size is sold out, and fails one that offers it', () => {
+    const score = (text: string) =>
+      scoreEval(chatMemoryGoldenCases, {
+        ...chatMemoryRecordedOutcomes,
+        'chat-memory-other-channel-stock-bn': { kind: 'reply', text },
+      }).outOfStockOfferCaseIds;
+    expect(score('পোলো শার্টের XL সাইজটি এখন স্টকে নেই। M ও L সাইজ আছে, ৳৬৫০।')).toEqual([]);
+    expect(score('পোলো শার্টের XL এখন নেই, তবে M সাইজ আছে, ৳৬৫০।')).toEqual([]);
+    expect(score('পোলো শার্ট XL সাইজ আছে, ৳৬৫০।')).toEqual(['chat-memory-other-channel-stock-bn']);
+    expect(score('XL নেই। আমাদের XL সাইজ আছে, ৳৬৫০।')).toEqual([
+      'chat-memory-other-channel-stock-bn',
+    ]);
+  });
+
+  it('does not count a promise to tell the customer when the size is back as an offer', () => {
+    const score = (text: string) =>
+      scoreEval(chatMemoryGoldenCases, {
+        ...chatMemoryRecordedOutcomes,
+        'chat-memory-other-channel-stock-bn': { kind: 'reply', text },
+      }).outOfStockOfferCaseIds;
+    expect(score('XL নেই। M ও L সাইজ আছে, প্রতিটি ৳৬৫০। XL আবার স্টকে এলে জানাবো?')).toEqual([]);
+    expect(score('XL nei. XL stock e ashle jānabo.')).toEqual([]);
+    expect(score('XL back in stock now, ৳650।')).toEqual(['chat-memory-other-channel-stock-bn']);
+  });
+
   it('fails a follow-up with nothing shown that guesses a product', () => {
     const report = scoreEval(chatMemoryGoldenCases, {
       ...chatMemoryRecordedOutcomes,
@@ -234,7 +270,7 @@ describe('ad context set', () => {
   it('passes the saved run in Bangla, Banglish and mixed', () => {
     expect(adContextGoldenCases.every(({ id }) => id in adContextRecordedOutcomes)).toBe(true);
     expect(new Set(adContextGoldenCases.map(({ language }) => language))).toEqual(
-      new Set(['bangla', 'banglish']),
+      new Set(['bangla', 'banglish', 'mixed']),
     );
     expect(adContextGoldenCases.some(({ id }) => id.endsWith('-mixed'))).toBe(true);
     const report = scoreEval(adContextGoldenCases, adContextRecordedOutcomes);
@@ -270,5 +306,29 @@ describe('ad context set', () => {
       'ad-unlinked-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।' },
     });
     expect(report.passed).toBe(false);
+  });
+});
+
+describe('a size is not a price', () => {
+  const sizeCase: GoldenCase = {
+    id: 'size-next-to-price',
+    language: 'banglish',
+    question: 'loafer ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500],
+  };
+  const score = (text: string) =>
+    scoreEval([sizeCase], { [sizeCase.id]: { kind: 'reply', text } }).wrongPriceCaseIds;
+
+  it('skips the number after size or সাইজ, in each script', () => {
+    expect(score('Loafer size 41 ekhon stock-e nei. Canvas shoe size 41 ৳1500-e ache.')).toEqual(
+      [],
+    );
+    expect(score('লোফার সাইজ ৪১ নেই। ক্যানভাস সাইজ ৪১ ৳১৫০০ এ আছে।')).toEqual([]);
+  });
+
+  it('still fails a wrong price that follows a size', () => {
+    expect(score('Canvas shoe size 41 ৳1400-e ache.')).toEqual([sizeCase.id]);
+    expect(score('ক্যানভাস সাইজ ৪১ ১৪০০ টাকা।')).toEqual([sizeCase.id]);
   });
 });

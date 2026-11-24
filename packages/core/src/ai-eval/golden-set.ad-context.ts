@@ -39,7 +39,7 @@ export const adContextGoldenCases: GoldenCase[] = [
   },
   {
     id: 'ad-price-single-mixed',
-    language: 'banglish',
+    language: 'mixed',
     question: 'এই ad টার price কত?',
     expectedHandover: null,
     allowedAmountsTaka: [650],
@@ -67,7 +67,7 @@ export const adContextGoldenCases: GoldenCase[] = [
   },
   {
     id: 'ad-price-four-mixed',
-    language: 'banglish',
+    language: 'mixed',
     question: 'সবগুলার price কত?',
     expectedHandover: null,
     allowedAmountsTaka: [1450, 1200, 650, 1500],
@@ -95,7 +95,7 @@ export const adContextGoldenCases: GoldenCase[] = [
   },
   {
     id: 'ad-pick-mixed',
-    language: 'banglish',
+    language: 'mixed',
     question: 'canvas জুতা টার price?',
     expectedHandover: null,
     allowedAmountsTaka: [1500],
@@ -126,7 +126,7 @@ export const adContextGoldenCases: GoldenCase[] = [
   },
   {
     id: 'ad-pick-no-match-mixed',
-    language: 'banglish',
+    language: 'mixed',
     question: 'নীল টা ache? price কত?',
     expectedHandover: null,
     allowedAmountsTaka: [],
@@ -179,7 +179,7 @@ export const adContextGoldenCases: GoldenCase[] = [
   // A price ask is still not a discount: the price stays as the shop set it.
   {
     id: 'ad-discount-mixed',
-    language: 'banglish',
+    language: 'mixed',
     question: 'দাম কত? ad এ তো কম লেখা ছিল, discount দিবেন?',
     expectedHandover: null,
     acceptedHandover: 'discount',
