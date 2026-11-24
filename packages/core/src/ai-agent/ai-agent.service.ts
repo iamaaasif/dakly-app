@@ -39,6 +39,8 @@ import type { ShopRules } from './shop-rules';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
+const OUTAGE_RETRY_MS = 10_000;
+const OUTAGE_RETRY_WINDOW_MS = 3 * 60_000;
 const MEDIA_WAIT_MS = 3000;
 // Enough to see the product or question the latest messages answer, few enough to stay cheap.
 const CLASSIFY_HISTORY_LENGTH = 6;
@@ -157,7 +159,8 @@ export class AiAgentService {
         earlier,
         rules: { ...rules.handover, takesOrders: rules.takeOrders },
       }));
-    if (reason === 'busy') return this.retryLater();
+    if (reason === 'busy' || (reason === 'ai_unavailable' && this.isRecent(turn)))
+      return this.retryLater(reason === 'busy' ? 1000 : OUTAGE_RETRY_MS);
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose({
       storeId,
@@ -167,6 +170,8 @@ export class AiAgentService {
       rules,
     });
     if (composed.kind === 'busy') return this.retryLater();
+    if (composed.kind === 'handover' && composed.reason === 'ai_unavailable' && this.isRecent(turn))
+      return this.retryLater(OUTAGE_RETRY_MS);
     if (composed.kind === 'handover')
       return this.handOver(storeId, conversationId, candidate, composed.reason);
     return this.send(storeId, conversationId, candidate, composed);
@@ -203,6 +208,12 @@ export class AiAgentService {
       (await this.usage.isConsumed(storeId, 'ai_conversation', reference)) ||
       (await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
     );
+  }
+
+  // A model outage of a minute or two should not send every waiting customer to a person, so a
+  // chat whose latest message is still fresh is tried again; an older one is handed over.
+  private isRecent(turn: Turn) {
+    return this.clock.now().getTime() - turn.latest.createdAt.getTime() < OUTAGE_RETRY_WINDOW_MS;
   }
 
   private retryLater(delayMs = 1000) {

@@ -45,6 +45,13 @@ type GateFailure =
   'AI_PAUSED' | 'AI_STORE_BUSY' | 'USAGE_ALLOWANCE_EXCEEDED' | 'LLM_ABORTED' | 'LLM_TIMEOUT';
 type AiResult<T> = AiAttempt<T> | { kind: 'failure'; code: GateFailure };
 
+const transientRetryWaitsMs = [800, 2000];
+const transientFailures = new Set<string>([
+  'LLM_REQUEST_FAILED',
+  'LLM_RATE_LIMITED',
+  'LLM_UNAVAILABLE',
+]);
+
 @Injectable()
 export class AiService {
   constructor(
@@ -166,7 +173,17 @@ export class AiService {
     if (await this.gate.isPaused()) return { kind: 'failure', code: 'AI_PAUSED' };
     const firstTimeout = deadline - this.clock.now().getTime();
     if (firstTimeout <= 0) return { kind: 'failure', code: 'LLM_TIMEOUT' };
-    const first = await this.attempt(storeId, request, firstTimeout);
+    let first = await this.attempt(storeId, request, firstTimeout);
+    // A request the vendor failed or refused for now is tried again after a short wait, while time
+    // is left; a timeout is not, since the deadline has then passed.
+    for (const wait of transientRetryWaitsMs) {
+      if (first.kind !== 'failure' || !transientFailures.has(first.code)) break;
+      if (request.signal?.aborted || (await this.gate.isPaused())) return first;
+      const left = deadline - this.clock.now().getTime() - wait;
+      if (left <= 0) return first;
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      first = await this.attempt(storeId, request, left);
+    }
     if (first.kind !== 'failure' || first.code !== 'AI_OUTPUT_MISMATCH') return first;
     if (await this.gate.isPaused()) return first;
     const retryTimeout = deadline - this.clock.now().getTime();
