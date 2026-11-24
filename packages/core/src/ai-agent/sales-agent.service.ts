@@ -86,7 +86,7 @@ export type PreparedReply = {
   scoped: ComposeInput;
   ad: { result: ToolResult } | undefined;
   inChat: ToolResult | undefined;
-  context: string;
+  history: readonly HistoryMessage[] | undefined;
 };
 
 export type ComposeInput = ToolScope & { customerTexts: string[]; rules: ShopRules };
@@ -134,8 +134,8 @@ export class SalesAgentService {
     return !checked.isSafe && checked.failure;
   }
 
-  // Reads what the model needs. The caller may start it while the hand-over check is still
-  // running; it only reads, so a hand-over simply drops the result.
+  // Reads the chat and the products it already points to. The caller may start it while the
+  // hand-over check is still running; the search that costs an AI call waits for the verdict.
   async prepare(input: ComposeInput): Promise<PreparedReply> {
     const results: ToolResult[] = [];
     // A practice question has no saved conversation, so the question itself is the whole history.
@@ -145,9 +145,7 @@ export class SalesAgentService {
         : undefined,
       this.gatherProducts(input, results),
     ]);
-    const { scoped, ad, inChat, candidates } = products;
-    const context = await this.context({ input, history, inChat, candidates, ad });
-    return { results, scoped, ad, inChat, context };
+    return { results, history, ...products };
   }
 
   private async composeOnce(
@@ -160,7 +158,10 @@ export class SalesAgentService {
     const ready = await (prepared ?? this.prepare(input));
     // The model's tool rounds add to the list, so a retry must not see the first try's results.
     const results = [...ready.results];
-    const { scoped, ad, inChat, context } = ready;
+    const { scoped, ad, inChat, history } = ready;
+    const candidates = await this.productCandidates(scoped);
+    if (candidates) results.push(candidates);
+    const context = await this.context({ input, history, inChat, candidates, ad });
     let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
@@ -196,8 +197,7 @@ export class SalesAgentService {
     return { kind: 'handover', reason: 'out_of_scope' };
   }
 
-  // The ad's products, the products shown earlier and the keyword matches, in the order the prompt
-  // lists them. `scoped` is the input the tools run with: inside the ad's products while it has any.
+  // The ad's products and the products shown earlier, in the order the prompt lists them. `scoped` is the input the tools run with: inside the ad's products while it has any.
   private async gatherProducts(input: ComposeInput, results: ToolResult[]) {
     const ad = await this.adContext(input);
     if (ad) results.push(ad.result);
@@ -206,9 +206,7 @@ export class SalesAgentService {
       : input;
     const inChat = input.chat ? await this.readProductsInChat(scoped, input.chat) : undefined;
     if (inChat) results.push(inChat);
-    const candidates = await this.productCandidates(scoped);
-    if (candidates) results.push(candidates);
-    return { scoped, ad, inChat, candidates };
+    return { scoped, ad, inChat };
   }
 
   private async cards(storeId: string, results: ToolResult[]): Promise<ProductCard[]> {
