@@ -9,6 +9,7 @@ import { addOnGoldenCases } from '../golden-set.add-ons';
 import { banglaGoldenCases } from '../golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from '../golden-set.bargaining';
 import { chatMemoryGoldenCases } from '../golden-set.chat-memory';
+import { longChatGoldenCases } from '../golden-set.long-chats';
 import { memoryGoldenCases } from '../golden-set.memory';
 import { ownerSettingsGoldenCases } from '../golden-set.owner-settings';
 import { sampleGoldenCases } from '../golden-set.sample';
@@ -29,6 +30,7 @@ import {
   reportVision,
   type JobContext,
 } from './job-reports';
+import { reportLongChats } from './long-chat-report';
 
 const jobs = [
   'fast',
@@ -39,6 +41,7 @@ const jobs = [
   'transcribe',
   'embed',
   'memory',
+  'longchat',
 ] as const;
 type Job = (typeof jobs)[number];
 
@@ -52,6 +55,7 @@ const defaultModels: Record<Job, string[]> = {
   transcribe: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'gpt-transcribe'],
   embed: ['text-embedding-3-small', 'text-embedding-3-large'],
   memory: chatModels,
+  longchat: ['gpt-6-luna', 'gpt-6.1-terra'],
 };
 // The reply job takes its hand-over decisions from one fast model, so every reply model is
 // judged on the same questions.
@@ -78,6 +82,7 @@ function selectedCases() {
     ...bargainingGoldenCases,
     ...unclearGoldenCases,
     ...chatMemoryGoldenCases,
+    ...longChatGoldenCases,
     ...adContextGoldenCases,
     ...ownerSettingsGoldenCases,
     ...addOnGoldenCases,
@@ -113,6 +118,12 @@ async function main() {
     transcribe: () => reportTranscribe(context, modelsFor('transcribe')),
     embed: () => reportEmbed(context, modelsFor('embed')),
     memory: () => reportMemory(context, modelsFor('memory')),
+    longchat: () =>
+      reportLongChats(
+        { ...context, cases: longChatGoldenCases },
+        modelsFor('longchat'),
+        baselineFastModel,
+      ),
   };
   for (const job of selected) await runners[job]();
   say(`\nTotal API spend this run: $${meter.spentUsd.toFixed(3)}`);

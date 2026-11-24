@@ -213,6 +213,21 @@ describe('checkReplyFacts', () => {
     expect(check('Call 01812345678')).toEqual({ isSafe: false, failure: 'phone' });
   });
 
+  it('allows a phone number the customer wrote earlier in the chat, and no other', () => {
+    const reply = 'আপনার নম্বর 01811223344 এ জানাবো';
+    expect(
+      checkReplyFacts(reply, [], { ...shop, earlierCustomerTexts: ['আমার নম্বর ০১৮১১২২৩৩৪৪'] }),
+    ).toEqual({
+      isSafe: true,
+    });
+    expect(
+      checkReplyFacts('Call 01911223344', [], { ...shop, earlierCustomerTexts: ['01811223344'] }),
+    ).toEqual({
+      isSafe: false,
+      failure: 'phone',
+    });
+  });
+
   it('refuses a shop phone when the shop has none saved', () => {
     expect(checkReplyFacts('Call 01712345678', [], { ...shop, phone: null })).toEqual({
       isSafe: false,
