@@ -99,17 +99,17 @@ describe('AI agent settings tab', () => {
     });
   });
 
-  it('lets the owner keep the price on a first discount ask and saves it', async () => {
+  it('lets the owner send every discount ask to a person and saves it', async () => {
     respond(() => Response.json({ ...saved, version: 4 }, { headers }));
     show();
     const discounts = await screen.findByRole('switch', { name: /Discount requests/ });
-    expect(discounts.getAttribute('aria-checked')).toBe('true');
+    expect(discounts.getAttribute('aria-checked')).toBe('false');
     fireEvent.click(discounts);
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(await screen.findByText('AI agent settings saved.')).toBeTruthy();
     const put = requests.find((request) => request.method === 'PUT');
     expect(JSON.parse(put!.body!)).toMatchObject({
-      handoverRules: { discounts: false, refundsAndExchanges: true },
+      handoverRules: { discounts: true, refundsAndExchanges: true },
     });
   });
 

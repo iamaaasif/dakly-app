@@ -64,7 +64,7 @@ describe('owner settings set', () => {
     expect(rules('owner-refund-off-banglish').handover).toMatchObject({
       refundsAndExchanges: false,
       damagedOrWrong: true,
-      discounts: true,
+      discounts: false,
     });
     expect(rules('owner-extra-rule-discount-banglish').handover.discounts).toBe(false);
     expect(rules('owner-orders-off-bn').takeOrders).toBe(false);

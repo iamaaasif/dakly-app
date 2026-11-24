@@ -315,6 +315,7 @@ export const banglaGoldenCases: GoldenCase[] = [
     language: 'banglish',
     question: 'dam ektu kom korte parben?',
     expectedHandover: 'discount',
+    handsOverDiscounts: true,
     allowedAmountsTaka: [],
   },
 ];
