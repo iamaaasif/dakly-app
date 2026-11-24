@@ -7,8 +7,14 @@ import { photoSearchText, type handoverReasons } from '@dakly/contracts/chats';
 import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/llm-driver';
 
 import { adProducts } from '../../ai-agent/ad-context';
-import { classifierInput, productsInChat } from '../../ai-agent/chat-memory';
+import {
+  classifierInput,
+  type ConversationEntry,
+  productsInChat,
+} from '../../ai-agent/chat-memory';
+import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
 import { handoverReason } from '../../ai-agent/handover-reason';
+import { chatReplyV12 } from '../../ai-agent/prompts/chat-reply.v12';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
 import {
@@ -100,7 +106,13 @@ export function handoverFor(
     : 'ai_unavailable';
 }
 
-type Run = { driver: LlmDriver; meter: EvalMeter; model: string };
+// `history: 'last20'` reads the chat the way the agent did before the conversation window.
+export type Run = {
+  driver: LlmDriver;
+  meter: EvalMeter;
+  model: string;
+  history?: 'last20';
+};
 type Note = (note: string) => void;
 type ToolCall = { name: string; argumentsJson: string };
 
@@ -116,20 +128,32 @@ type ReplyCase = Pick<
   | 'draftedOrder'
 >;
 
-function replyContext(
-  golden: ReplyCase,
-  inChat: object | undefined,
-  candidates: object,
-  ad: object | undefined,
-) {
-  const conversation = [...(golden.earlier ?? []), { from: 'customer', text: golden.question }];
+function replyContext({
+  history,
+  golden,
+  inChat,
+  candidates,
+  ad,
+}: {
+  history: Run['history'];
+  golden: ReplyCase;
+  inChat: object | undefined;
+  candidates: object;
+  ad: object | undefined;
+}) {
+  const conversation: ConversationEntry[] = [
+    ...(golden.earlier ?? []),
+    { from: 'customer', text: golden.question },
+  ];
   return [
     `<shop>${JSON.stringify(evalShop)}</shop>`,
     shopRulesBlock(evalShopRules(golden)),
     ...(golden.memory
       ? [`<customer_memory untrusted="true">${golden.memory}</customer_memory>`]
       : []),
-    `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
+    ...(history === 'last20'
+      ? [`<conversation untrusted="true">${JSON.stringify(conversation.slice(-20))}</conversation>`]
+      : conversationBlocks(windowConversation(conversation, [golden.question]))),
     ...(inChat ? [`<products_in_this_chat>${JSON.stringify(inChat)}</products_in_this_chat>`] : []),
     ...(ad ? [`<ad_products>${JSON.stringify(ad)}</ad_products>`] : []),
     `<product_candidates>${JSON.stringify(candidates)}</product_candidates>`,
@@ -164,11 +188,22 @@ function sentCardPhoto(toolResults: object[]) {
   return last ? evalPhotoKey(last.photoFileId) : undefined;
 }
 
-function factCheckFailure(reply: string, toolResults: object[], question: string) {
+function factCheckFailure(
+  reply: string,
+  toolResults: object[],
+  question: string,
+  earlier: readonly ConversationEntry[] = [],
+) {
   const checked = checkReplyFacts(
     reply,
     toolResults,
-    { phone: evalShop.phone, linkBaseUrl: 'https://dkl.example' },
+    {
+      phone: evalShop.phone,
+      linkBaseUrl: 'https://dkl.example',
+      earlierCustomerTexts: earlier.flatMap(({ from, text }) =>
+        from === 'customer' ? [text] : [],
+      ),
+    },
     [question],
   );
   return checked.isSafe ? undefined : checked.failure;
@@ -233,12 +268,17 @@ export async function composeReply(
 ): Promise<EvalOutcome> {
   const first = await composeOnce(run, golden, note);
   if (first.kind !== 'reply') return first.outcome;
-  const failure = factCheckFailure(first.text, first.toolResults, golden.question);
+  const failure = factCheckFailure(first.text, first.toolResults, golden.question, golden.earlier);
   if (!failure) return replyOutcome(first);
   note(`fact check ${failure}: ${first.text}`);
   const second = await composeOnce(run, golden, note, { failure, reply: first.text });
   if (second.kind !== 'reply') return second.outcome;
-  const failedAgain = factCheckFailure(second.text, second.toolResults, golden.question);
+  const failedAgain = factCheckFailure(
+    second.text,
+    second.toolResults,
+    golden.question,
+    golden.earlier,
+  );
   if (!failedAgain) return replyOutcome(second);
   note(`fact check ${failedAgain} again: ${second.text}`);
   return { kind: 'handover', reason: 'out_of_scope' };
@@ -254,7 +294,7 @@ const replyOutcome = ({ text, toolResults }: { text: string; toolResults: object
 });
 
 // The prompt blocks of a case, and the products its tools may see: the ad's own while the ad has any.
-function replyBlocks(golden: ReplyCase, toolResults: object[]) {
+function replyBlocks(history: Run['history'], golden: ReplyCase, toolResults: object[]) {
   const inChat = evalProductsInChat(golden.shownProducts);
   if (inChat) toolResults.push(inChat);
   const ad = evalAdProducts(golden.adProducts);
@@ -262,30 +302,41 @@ function replyBlocks(golden: ReplyCase, toolResults: object[]) {
   const onlyProductIds = ad?.productIds.length ? ad.productIds : undefined;
   const candidates = replyCandidates(golden.question, onlyProductIds);
   if (candidates) toolResults.push(candidates);
-  const context = replyContext(golden, inChat, candidates ?? { products: [] }, ad?.block);
+  const context = replyContext({
+    history,
+    golden,
+    inChat,
+    candidates: candidates ?? { products: [] },
+    ad: ad?.block,
+  });
   return { context, onlyProductIds };
 }
 
 // One pass of the loop, with fixture tools instead of the database.
 async function composeOnce(
-  { driver, meter, model }: Run,
+  { driver, meter, model, history }: Run,
   golden: ReplyCase,
   note: Note,
   rejected?: { failure: FactCheckFailure; reply: string },
 ): Promise<Composed> {
   const ended = (outcome: EvalOutcome): Composed => ({ kind: 'ended', outcome });
   const toolResults: object[] = [];
-  const { context, onlyProductIds } = replyBlocks(golden, toolResults);
+  const { context, onlyProductIds } = replyBlocks(history, golden, toolResults);
   let transcript = rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
-    const result = await meteredRespond(driver, meter, `reply:${model}`, {
-      model,
-      instructions: chatReplyV9.instructions,
-      input: context + transcript,
-      output: chatReplyOutputSchema,
-      tools: salesAgentLlmTools,
-      timeoutMs: TIMEOUT_MS,
-    }).catch((error: unknown) => {
+    const result = await meteredRespond(
+      driver,
+      meter,
+      history ? `reply:${model}:${history}` : `reply:${model}`,
+      {
+        model,
+        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV12.instructions,
+        input: context + transcript,
+        output: chatReplyOutputSchema,
+        tools: salesAgentLlmTools,
+        timeoutMs: TIMEOUT_MS,
+      },
+    ).catch((error: unknown) => {
       if (error instanceof LlmError) return undefined;
       throw error;
     });

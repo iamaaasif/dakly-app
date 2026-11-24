@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { getProductTool, sendProductCardTool } from '@dakly/contracts/ai-agent-tools';
 
+import { shorten } from './message-shortening';
 import { productsInChatV2 } from './prompts/products-in-chat.v2';
 
 // What the reply pipeline remembers of a chat between turns: the messages with their read photo
@@ -23,7 +24,6 @@ export const MATCH_PHOTO_TOOL = 'match_photo';
 export const productsInChatVersion = productsInChatV2.version;
 export const PRODUCTS_IN_CHAT_TOOL = 'products_in_this_chat';
 const SHOWN_PRODUCT_LIMIT = 3;
-const ENTRY_LENGTH = 2000;
 const NAMING_TOOLS: readonly string[] = [sendProductCardTool.name, getProductTool.name];
 
 const storedSourcesSchema = z.array(z.object({ tool: z.string(), refs: z.array(z.string()) }));
@@ -32,7 +32,7 @@ const storedSourcesSchema = z.array(z.object({ tool: z.string(), refs: z.array(z
 // photo still has the photo to point at.
 export function conversationEntries(history: readonly HistoryMessage[]): ConversationEntry[] {
   return history.toReversed().flatMap(({ direction, body, mediaText }) => {
-    const text = [mediaText, body].filter(Boolean).join('\n').slice(0, ENTRY_LENGTH);
+    const text = shorten([mediaText, body].filter(Boolean).join('\n'));
     return text ? [{ from: direction === 'in' ? 'customer' : 'shop', text }] : [];
   });
 }

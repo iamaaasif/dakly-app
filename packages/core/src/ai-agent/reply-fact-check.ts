@@ -24,7 +24,13 @@ const linkPattern =
 export type FactCheckFailure =
   'empty' | 'too_long' | 'amount' | 'stock' | 'phone' | 'link' | 'offer' | 'leak';
 
-type Shop = { phone: string | null; linkBaseUrl: string };
+// `earlierCustomerTexts` is what the customer wrote earlier in this chat: only their own phone
+// number may come back from it.
+type Shop = {
+  phone: string | null;
+  linkBaseUrl: string;
+  earlierCustomerTexts?: readonly string[];
+};
 
 // Tells the model why its last reply was not sent, so the one retry can fix it.
 const failureHints: Record<FactCheckFailure, string> = {
@@ -51,7 +57,10 @@ export function checkReplyFacts(
   const text = toAsciiDigits(reply);
   if (!text.trim()) return { isSafe: false, failure: 'empty' };
   if ([...text].length > MAX_REPLY_LENGTH) return { isSafe: false, failure: 'too_long' };
-  const contact = contactFailure(text, shop);
+  const contact = contactFailure(text, shop, [
+    ...customerTexts,
+    ...(shop.earlierCustomerTexts ?? []),
+  ]);
   if (contact) return { isSafe: false, failure: contact };
   const wording = wordingFailure(text, toolResults);
   if (wording) return { isSafe: false, failure: wording };
@@ -63,11 +72,15 @@ export function checkReplyFacts(
   return { isSafe: true };
 }
 
-function contactFailure(text: string, shop: Shop) {
+function contactFailure(text: string, shop: Shop, customerTexts: readonly string[]) {
   if ((text.match(linkPattern) ?? []).some((link) => !link.startsWith(`${shop.linkBaseUrl}/`)))
     return 'link';
-  const shopPhone = shop.phone && digitsOnly(shop.phone);
-  return (text.match(phonePattern) ?? []).some((phone) => digitsOnly(phone) !== shopPhone)
+  const allowed = new Set(
+    [shop.phone ?? '', ...customerTexts.flatMap((t) => toAsciiDigits(t).match(phonePattern) ?? [])]
+      .filter(Boolean)
+      .map(digitsOnly),
+  );
+  return (text.match(phonePattern) ?? []).some((phone) => !allowed.has(digitsOnly(phone)))
     ? 'phone'
     : undefined;
 }

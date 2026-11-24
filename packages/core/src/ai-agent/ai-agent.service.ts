@@ -38,7 +38,7 @@ import {
 import { type HandoverCheckRules, handoverReason } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
 import { classifyChat } from './prompts/classify-chat.v2';
-import { burstText, isSameTurn } from './reply-burst';
+import { burstText, isFlood, isSameTurn } from './reply-burst';
 import {
   type ComposedReply,
   type ComposeInput,
@@ -101,17 +101,14 @@ export class AiAgentService {
     const turn = await this.inbox.aiReplyTurn(storeId, conversationId);
     const arrival = turn?.inbound.find(({ id }) => id === messageId);
     if (!turn || arrival?.createdAt.getTime() !== turn.latest.createdAt.getTime()) return;
+    const dedupeId = `${storeId}-${conversationId}`;
     await this.queue.add(
       REPLY_TO_CUSTOMER,
       { storeId, conversationId, messageId: turn.latest.id },
       {
         jobId: `ai-reply-${messageId}`,
         delay: settings.debounceSeconds * 1000,
-        deduplication: {
-          id: `${storeId}-${conversationId}`,
-          replace: true,
-          keepLastIfActive: true,
-        },
+        deduplication: { id: dedupeId, replace: true, keepLastIfActive: true },
         attempts: 3,
         backoff: { type: 'exponential', delay: MINUTE_MS },
         removeOnComplete: { age: 60 * 60 },
@@ -137,37 +134,36 @@ export class AiAgentService {
   }
 
   // Either way the customer is handed to a person now, so nobody waits for the stop to end.
+  // A flood of messages is not read by a model either: no call is made.
   private async stoppedReason(
     storeId: string,
-  ): Promise<'store_read_only' | 'ai_paused' | undefined> {
+    turn: Turn,
+  ): Promise<'store_read_only' | 'ai_paused' | 'other' | undefined> {
     if (await this.billing.isReadOnly(storeId)) return 'store_read_only';
-    return (await this.switches.isPaused('ai_replies', storeId)) ? 'ai_paused' : undefined;
+    if (await this.switches.isPaused('ai_replies', storeId)) return 'ai_paused';
+    return isFlood(turn) ? 'other' : undefined;
   }
 
   async reply(storeId: string, conversationId: string, messageId: string) {
     const candidate = await this.eligibleTurn(storeId, conversationId);
     if (!candidate) return;
     const { turn, debounceSeconds } = candidate;
-    if (turn.latest.id !== messageId) {
-      // A later event may have arrived while an older subscriber was adding its job.
-      await this.schedule(storeId, conversationId, turn.latest.id);
-      return;
-    }
-    const stopped = await this.stoppedReason(storeId);
+    // A later event may have arrived while an older subscriber was adding its job.
+    if (turn.latest.id !== messageId) return this.schedule(storeId, conversationId, turn.latest.id);
+    const stopped = await this.stoppedReason(storeId, turn);
     if (stopped) return this.handOver(storeId, conversationId, candidate, stopped);
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
-    const texts = burst.texts;
     const earlier = await this.earlierMessages(storeId, conversationId, burst.messageIds);
     const compose = {
       storeId,
       contactId: turn.contactId,
       chat: { conversationId, channel: candidate.target.channel },
-      customerTexts: texts,
+      customerTexts: burst.texts,
       rules: candidate.rules,
     };
-    const { reason, prepared } = await this.checkHandOver(compose, earlier);
+    const { reason, prepared } = await this.checkHandOver(compose, earlier, burst.screenTexts);
     if (reason === 'busy') return this.retryLater();
     if (reason) return this.handOver(storeId, conversationId, candidate, reason);
     const composed = await this.sales.compose(compose, prepared);
@@ -179,9 +175,13 @@ export class AiAgentService {
 
   // The reads for the reply run while the hand-over check waits for its model. They only read,
   // so a hand-over drops them.
-  private async checkHandOver(compose: ComposeInput, earlier: ConversationEntry[]) {
+  private async checkHandOver(
+    compose: ComposeInput,
+    earlier: ConversationEntry[],
+    screenTexts: string[],
+  ) {
     const { storeId, contactId, customerTexts: texts, rules } = compose;
-    const screened = screenCustomerTexts(texts, {
+    const screened = screenCustomerTexts(screenTexts, {
       handOverDiscounts: rules.handover.discounts,
       earlierTexts: customerTexts(earlier),
     });

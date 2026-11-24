@@ -27,6 +27,7 @@ import {
 } from './ad-context';
 import {
   conversationEntries,
+  type ConversationEntry,
   type HistoryMessage,
   MATCH_PHOTO_TOOL,
   PRODUCTS_IN_CHAT_TOOL,
@@ -36,8 +37,10 @@ import {
   SHOWN_PRODUCTS_SOURCE,
   shownProductIds,
 } from './chat-memory';
+import { conversationBlocks, windowConversation } from './conversation-window';
+import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV9 } from './prompts/chat-reply.v9';
+import { chatReplyV12 } from './prompts/chat-reply.v12';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
@@ -50,6 +53,8 @@ import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
 const MAX_ROUNDS = 4;
 const REPLY_BUDGET_MS = 20_000;
 const HISTORY_LENGTH = 20;
+// The whole recent chat is read; the conversation window decides how much of it the model sees.
+const REPLY_HISTORY_LENGTH = 300;
 const PHOTO_QUERY_LENGTH = 1000;
 const CARD_TOOL = 'send_product_card';
 const HAND_OVER_TOOL = 'hand_over';
@@ -68,6 +73,7 @@ export type ComposedReply =
       cards: ProductCard[];
       toolResults: object[];
       toolNames: string[];
+      earlierCustomerTexts: string[];
       sources: { tool: string; refs: string[] }[];
     }
   | { kind: 'handover'; reason: Reason }
@@ -128,7 +134,11 @@ export class SalesAgentService {
     const checked = checkReplyFacts(
       composed.text,
       composed.toolResults,
-      { phone: shop.phone, linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL },
+      {
+        phone: shop.phone,
+        linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
+        earlierCustomerTexts: composed.earlierCustomerTexts,
+      },
       input.customerTexts,
     );
     return !checked.isSafe && checked.failure;
@@ -141,7 +151,7 @@ export class SalesAgentService {
     // A practice question has no saved conversation, so the question itself is the whole history.
     const [history, products] = await Promise.all([
       input.chat
-        ? this.inbox.replyHistory(input.storeId, input.chat.conversationId, HISTORY_LENGTH)
+        ? this.inbox.replyHistory(input.storeId, input.chat.conversationId, REPLY_HISTORY_LENGTH)
         : undefined,
       this.gatherProducts(input, results),
     ]);
@@ -167,7 +177,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV9, inChat, ad),
+        prompt: promptWith(chatReplyV12, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -185,6 +195,7 @@ export class SalesAgentService {
           cards: await this.cards(storeId, results),
           toolResults: results.map(({ result }) => result),
           toolNames: results.map(({ tool }) => tool),
+          earlierCustomerTexts: customerLines(history),
           sources: withShownProducts(
             sourcesOf(results),
             shownProductIds(results, attempt.output.reply),
@@ -197,7 +208,8 @@ export class SalesAgentService {
     return { kind: 'handover', reason: 'out_of_scope' };
   }
 
-  // The ad's products and the products shown earlier, in the order the prompt lists them. `scoped` is the input the tools run with: inside the ad's products while it has any.
+  // The ad's products and the products shown earlier, in the order the prompt lists them.
+  // `scoped` is the input the tools run with: inside the ad's products while it has any.
   private async gatherProducts(input: ComposeInput, results: ToolResult[]) {
     const ad = await this.adContext(input);
     if (ad) results.push(ad.result);
@@ -354,14 +366,14 @@ export class SalesAgentService {
   }) {
     const shop = await this.stores.settings(input.storeId);
     const memory = await this.memory.contextFor(input.storeId, input.contactId);
-    const conversation = history
+    const conversation: ConversationEntry[] = history
       ? conversationEntries(history)
-      : input.customerTexts.map((text) => ({ from: 'customer', text: text.slice(0, 2000) }));
+      : input.customerTexts.map((text) => ({ from: 'customer', text: shorten(text) }));
     return [
       `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
       shopRulesBlock(input.rules),
       ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
-      `<conversation untrusted="true">${JSON.stringify(conversation)}</conversation>`,
+      ...conversationBlocks(windowConversation(conversation, input.customerTexts)),
       ...(inChat
         ? [`<products_in_this_chat>${JSON.stringify(inChat.result)}</products_in_this_chat>`]
         : []),
@@ -403,7 +415,7 @@ function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | 
 
 // A run that was shown the products block records its version with the reply prompt's.
 function promptWith(
-  prompt: typeof chatReplyV9,
+  prompt: typeof chatReplyV12,
   inChat: ToolResult | undefined,
   ad: object | undefined,
 ) {
@@ -418,6 +430,12 @@ function promptWith(
 // Saved with the reply, so the next turn knows which products "this one" can mean.
 function withShownProducts(sources: { tool: string; refs: string[] }[], shown: string[]) {
   return shown.length ? [...sources, { tool: SHOWN_PRODUCTS_SOURCE, refs: shown }] : sources;
+}
+
+function customerLines(history: readonly HistoryMessage[] | undefined) {
+  return conversationEntries(history ?? []).flatMap(({ from, text }) =>
+    from === 'customer' ? [text] : [],
+  );
 }
 
 function sourcesOf(results: ToolResult[]) {

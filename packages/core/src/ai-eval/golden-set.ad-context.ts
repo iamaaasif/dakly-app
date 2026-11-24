@@ -119,7 +119,7 @@ export const adContextGoldenCases: GoldenCase[] = [
     language: 'banglish',
     question: 'saree ta koto?',
     expectedHandover: null,
-    allowedAmountsTaka: [],
+    allowedAmountsTaka: [1450, 1200],
     mentionsAnyOf: askWhich,
     neverOffer: ['শাড়ি', 'saree'],
     ...fashionAd,

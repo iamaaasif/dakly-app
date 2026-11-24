@@ -175,6 +175,8 @@ describe('checkReplyFacts', () => {
       'Discount nai apu, dam 1200 taka fixed.',
       'Sorry vaia, discount dite parbo na. Order korben?',
       'আমরা কোনো ছাড় দিই না, দাম ফিক্সড।',
+      'দাম নির্ধারিত, discount দেওয়া যাচ্ছে না',
+      'Discount deya jacche na, dam fixed.',
     ])
       expect(check(reply), reply).toEqual({ isSafe: true });
   });
@@ -187,6 +189,7 @@ describe('checkReplyFacts', () => {
       'discount dite parbo na keno, dibo',
       'Discount dibo apu, ৳1200 er jaygay',
       'ছাড় পাবেন, অর্ডার করুন',
+      'discount দেওয়া যাচ্ছে, অর্ডার করুন',
     ])
       expect(check(reply), reply).toEqual({ isSafe: false, failure: 'offer' });
   });
@@ -211,6 +214,21 @@ describe('checkReplyFacts', () => {
     expect(check('Call +880 1712-345678')).toEqual({ isSafe: true });
     expect(check('Call ০১৭১২৩৪৫৬৭৮')).toEqual({ isSafe: true });
     expect(check('Call 01812345678')).toEqual({ isSafe: false, failure: 'phone' });
+  });
+
+  it('allows a phone number the customer wrote earlier in the chat, and no other', () => {
+    const reply = 'আপনার নম্বর 01811223344 এ জানাবো';
+    expect(
+      checkReplyFacts(reply, [], { ...shop, earlierCustomerTexts: ['আমার নম্বর ০১৮১১২২৩৩৪৪'] }),
+    ).toEqual({
+      isSafe: true,
+    });
+    expect(
+      checkReplyFacts('Call 01911223344', [], { ...shop, earlierCustomerTexts: ['01811223344'] }),
+    ).toEqual({
+      isSafe: false,
+      failure: 'phone',
+    });
   });
 
   it('refuses a shop phone when the shop has none saved', () => {
