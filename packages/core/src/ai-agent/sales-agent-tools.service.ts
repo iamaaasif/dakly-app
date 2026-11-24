@@ -299,8 +299,8 @@ export class SalesAgentToolsService {
   }
 
   private async handOver(raw: unknown) {
-    const { reason } = handOverTool.input.parse(raw);
-    return { handedOver: true, reason };
+    const { reason, summary } = handOverTool.input.parse(raw);
+    return { handedOver: true, reason, summary: summary ?? undefined };
   }
 }
 

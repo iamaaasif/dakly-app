@@ -276,13 +276,13 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'complaint' }],
     replies: [
       {
-        body: 'একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।',
+        body: 'আপনার বিষয়টি নোট করা হয়েছে। আমাদের টিম খুব শীঘ্রই আপনার সাথে কথা বলবে।',
         author_type: 'system',
         recipient_identity_id: message.sender_identity_id,
       },
     ],
     notices: [{ user_id: assignee, type: 'conversation.handed_over' }],
-    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v2' }],
+    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v3' }],
     usage: [],
   });
 });

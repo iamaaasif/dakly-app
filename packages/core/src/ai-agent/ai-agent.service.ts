@@ -2,13 +2,11 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Queue } from 'bullmq';
 
-import { chatClassificationSchema } from '@dakly/contracts/chat-classification';
 import type { handoverReasons } from '@dakly/contracts/chats';
 import { parseCardTap } from '@dakly/contracts/product-card';
 import type { ProductCarousel } from '@dakly/contracts/product-card';
 
 import { AiRunsService } from '../ai/ai-runs.service';
-import { AiService } from '../ai/ai.service';
 import { BillingService } from '../billing/billing.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ConsentService } from '../consents/consent.service';
@@ -29,10 +27,11 @@ import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { cardMessages } from './card-messages';
 import { CardTapRepliesService } from './card-tap-replies.service';
-import { classifierInput, type ConversationEntry, conversationEntries } from './chat-memory';
-import { type HandoverCheckRules, handoverReason } from './handover-reason';
+import { ChatClassifierService } from './chat-classifier.service';
+import { type ConversationEntry, conversationEntries } from './chat-memory';
+import { declineReply, holdingReply } from './decline-reply';
+import type { HandoverCheckRules } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
-import { classifyChat } from './prompts/classify-chat.v2';
 import { burstText, isFlood } from './reply-burst';
 import { type ComposedReply, type ProductCard, SalesAgentService } from './sales-agent.service';
 import type { ShopRules } from './shop-rules';
@@ -42,7 +41,6 @@ export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 const MEDIA_WAIT_MS = 3000;
 // Enough to see the product or question the latest messages answer, few enough to stay cheap.
 const CLASSIFY_HISTORY_LENGTH = 6;
-const HOLDING_REPLY = 'একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।';
 type Reason = (typeof handoverReasons)[number];
 type Turn = NonNullable<Awaited<ReturnType<InboxService['aiReplyTurn']>>>;
 type EligibleTurn = {
@@ -63,7 +61,7 @@ type EligibleTurn = {
 export class AiAgentService {
   constructor(
     @Inject(AiAgentSettingsRepository) private readonly settings: AiAgentSettingsRepository,
-    @Inject(AiService) private readonly ai: AiService,
+    @Inject(ChatClassifierService) private readonly classifier: ChatClassifierService,
     @Inject(AiRunsService) private readonly runs: AiRunsService,
     @Inject(SalesAgentService) private readonly sales: SalesAgentService,
     @Inject(InboxService) private readonly inbox: InboxService,
@@ -138,7 +136,7 @@ export class AiAgentService {
       return;
     }
     const stopped = await this.stoppedReason(storeId, turn);
-    if (stopped) return this.handOver(storeId, conversationId, candidate, stopped);
+    if (stopped) return this.handOver(storeId, conversationId, candidate, { reason: stopped });
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return this.retryLater(MEDIA_WAIT_MS);
@@ -155,10 +153,14 @@ export class AiAgentService {
         contactId: turn.contactId,
         texts,
         earlier,
-        rules: { ...rules.handover, takesOrders: rules.takeOrders },
+        rules: {
+          ...rules.handover,
+          takesOrders: rules.takeOrders,
+          shopReplies: earlier.filter(({ from }) => from === 'shop').length,
+        },
       }));
     if (reason === 'busy') return this.retryLater();
-    if (reason) return this.handOver(storeId, conversationId, candidate, reason);
+    if (reason) return this.stop(storeId, conversationId, candidate, { reason, texts });
     const composed = await this.sales.compose({
       storeId,
       contactId: turn.contactId,
@@ -168,7 +170,7 @@ export class AiAgentService {
     });
     if (composed.kind === 'busy') return this.retryLater();
     if (composed.kind === 'handover')
-      return this.handOver(storeId, conversationId, candidate, composed.reason);
+      return this.stop(storeId, conversationId, candidate, { ...composed, texts });
     return this.send(storeId, conversationId, candidate, composed);
   }
 
@@ -181,7 +183,7 @@ export class AiAgentService {
   }) {
     const { storeId, contactId, texts, earlier, rules } = input;
     return (await this.hasAllowanceRoom(storeId, contactId))
-      ? this.classify(storeId, texts, earlier, rules)
+      ? this.classifier.classify(storeId, texts, earlier, rules)
       : 'allowance_used';
   }
 
@@ -257,30 +259,53 @@ export class AiAgentService {
       return settings;
   }
 
-  private async classify(
+  // The reason `other` is a message that tries to change the rules or is not about the shop.
+  private stop(
     storeId: string,
-    texts: string[],
-    earlier: ConversationEntry[],
-    rules: HandoverCheckRules,
-  ): Promise<Reason | 'busy' | null> {
-    if (!texts.length) return null;
-    const result = await this.ai.run(storeId, {
-      tier: 'fast',
-      purpose: 'classify',
-      prompt: classifyChat,
-      input: classifierInput(texts, earlier),
-      output: chatClassificationSchema,
+    conversationId: string,
+    before: EligibleTurn,
+    outcome: { reason: Reason; summary?: string; texts: string[] },
+  ) {
+    return outcome.reason === 'other'
+      ? this.decline(storeId, conversationId, before, outcome.texts)
+      : this.handOver(storeId, conversationId, before, outcome);
+  }
+
+  // A message that tries to change the rules or is not about the shop gets one short refusal. A
+  // person has nothing to do there, so the chat stays with the AI and no model reply is written.
+  private decline(storeId: string, conversationId: string, before: EligibleTurn, texts: string[]) {
+    const content = declineReply(before.rules.replyLanguage, texts);
+    return this.sayLine(storeId, conversationId, before, {
+      content,
+      key: `ai-decline:${before.turn.latest.id}`,
     });
-    if (result.kind === 'output') return handoverReason(texts, result.output, rules);
-    if (result.kind === 'failure' && result.code === 'AI_STORE_BUSY') return 'busy';
-    return 'ai_unavailable';
+  }
+
+  // A fixed line from the shop, sent only while the chat is still the one the job read.
+  private async sayLine(
+    storeId: string,
+    conversationId: string,
+    before: EligibleTurn,
+    line: { content: string; key: string },
+  ) {
+    await this.transaction.runLocked(storeId, async () => {
+      const current = await this.lockCurrent(storeId, conversationId, before);
+      if (!current) return;
+      await this.messaging.queueChannelMessage(storeId, {
+        ...current.target,
+        category: 'staff_reply',
+        actor: { kind: 'system' },
+        content: line.content,
+        operationKey: line.key,
+      });
+    });
   }
 
   private async handOver(
     storeId: string,
     conversationId: string,
     before: EligibleTurn,
-    reason: Reason,
+    { reason, summary }: { reason: Reason; summary?: string },
   ) {
     await this.transaction.runLocked(storeId, async () => {
       const current = await this.lockCurrent(storeId, conversationId, before);
@@ -302,7 +327,7 @@ export class AiAgentService {
         ...current.target,
         category: 'staff_reply',
         actor: { kind: 'system' },
-        content: HOLDING_REPLY,
+        content: holdingReply(current.rules.replyLanguage),
         operationKey: `ai-handover:${current.turn.latest.id}`,
       });
       await this.notifications.notify(storeId, {
@@ -311,6 +336,7 @@ export class AiAgentService {
         category: 'fix_now',
         dedupeKey: `handover:${current.turn.latest.id}`,
         title: 'A conversation needs your reply',
+        ...(summary ? { body: summary } : {}),
       });
     });
   }
@@ -322,24 +348,11 @@ export class AiAgentService {
     const before = tap && (await this.eligibleTurn(storeId, conversationId));
     if (!tap || !before) return;
     if (tap.kind === 'human' || (tap.kind === 'order' && !before.rules.takeOrders))
-      return this.handOver(
-        storeId,
-        conversationId,
-        before,
-        tap.kind === 'human' ? 'asked_for_person' : 'ready_to_buy',
-      );
-    const content = await this.tapReplies.reply(storeId, tap);
-    await this.transaction.runLocked(storeId, async () => {
-      const current = await this.lockCurrent(storeId, conversationId, before);
-      if (!current) return;
-      await this.messaging.queueChannelMessage(storeId, {
-        ...current.target,
-        category: 'staff_reply',
-        actor: { kind: 'system' },
-        content,
-        operationKey: `card-tap:${tapId}`,
+      return this.handOver(storeId, conversationId, before, {
+        reason: tap.kind === 'human' ? 'asked_for_person' : 'ready_to_buy',
       });
-    });
+    const content = await this.tapReplies.reply(storeId, tap);
+    await this.sayLine(storeId, conversationId, before, { content, key: `card-tap:${tapId}` });
   }
 
   // Sends the product cards, then the reply, and spends one AI conversation unit with them.
@@ -388,7 +401,7 @@ export class AiAgentService {
       if (!(error instanceof AppError)) throw error;
       // A retried job finds its reply already saved under the same operation key.
       if (error.code === 'USAGE_ALLOWANCE_EXCEEDED')
-        return this.handOver(storeId, conversationId, before, 'allowance_used');
+        return this.handOver(storeId, conversationId, before, { reason: 'allowance_used' });
       if (error.code !== 'MESSAGE_OPERATION_CONFLICT') throw error;
     }
     if (isSaved) await this.runs.setOutcome(storeId, aiRunId, 'sent');

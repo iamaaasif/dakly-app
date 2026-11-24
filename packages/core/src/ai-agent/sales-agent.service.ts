@@ -40,7 +40,7 @@ import {
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV12 } from './prompts/chat-reply.v12';
+import { chatReplyV13 } from './prompts/chat-reply.v13';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
@@ -76,8 +76,11 @@ export type ComposedReply =
       earlierCustomerTexts: string[];
       sources: { tool: string; refs: string[] }[];
     }
-  | { kind: 'handover'; reason: Reason }
+  | { kind: 'handover'; reason: Reason; summary?: string }
   | { kind: 'busy' };
+
+const summaryOf = (result: object) =>
+  'summary' in result && typeof result.summary === 'string' ? result.summary : undefined;
 
 // The photo is sent before the text; a card with no photo is text only.
 export type ProductCard = {
@@ -154,7 +157,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV12, inChat, ad),
+        prompt: promptWith(chatReplyV13, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -179,7 +182,8 @@ export class SalesAgentService {
           ),
         };
       const outcome = await this.answerToolCalls(scoped, attempt.toolCalls, results);
-      if ('handover' in outcome) return { kind: 'handover', reason: outcome.handover };
+      if ('handover' in outcome)
+        return { kind: 'handover', reason: outcome.handover, summary: outcome.summary };
       transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
     }
     return { kind: 'handover', reason: 'out_of_scope' };
@@ -248,7 +252,9 @@ export class SalesAgentService {
     input: ComposeInput,
     calls: readonly { name: string; argumentsJson: string }[],
     results: ToolResult[],
-  ): Promise<{ handover: Reason } | { answered: { name: string; result: object }[] }> {
+  ): Promise<
+    { handover: Reason; summary?: string } | { answered: { name: string; result: object }[] }
+  > {
     const answered: { name: string; result: object }[] = [];
     for (const call of calls) {
       const refusal = refuseToolCall(input.rules, call);
@@ -263,7 +269,7 @@ export class SalesAgentService {
               call.argumentsJson,
             ));
       if (call.name === HAND_OVER_TOOL && 'reason' in result)
-        return { handover: result.reason as Reason };
+        return { handover: result.reason as Reason, summary: summaryOf(result) };
       results.push({ tool: call.name, result });
       answered.push({ name: call.name, result });
     }
@@ -349,7 +355,12 @@ export class SalesAgentService {
       ? conversationEntries(history)
       : input.customerTexts.map((text) => ({ from: 'customer', text: shorten(text) }));
     return [
-      `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
+      `<shop>${JSON.stringify({
+        name: shop.name,
+        phone: shop.phone,
+        address: shop.address,
+        district: shop.district,
+      })}</shop>`,
       shopRulesBlock(input.rules),
       ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
       ...conversationBlocks(windowConversation(conversation, input.customerTexts)),
@@ -394,7 +405,7 @@ function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | 
 
 // A run that was shown the products block records its version with the reply prompt's.
 function promptWith(
-  prompt: typeof chatReplyV12,
+  prompt: typeof chatReplyV13,
   inChat: ToolResult | undefined,
   ad: object | undefined,
 ) {

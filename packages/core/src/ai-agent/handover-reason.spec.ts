@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { defaultHandoverRules } from '@dakly/contracts/ai-agent-settings';
+import { defaultHandoverRules as switchesOn } from '@dakly/contracts/ai-agent-settings';
 import type { ChatClassification } from '@dakly/contracts/chat-classification';
 
 import { handoverReason } from './handover-reason';
 
+// The model has already replied twice, so a complaint, refund or angry message goes to a person.
+const defaultHandoverRules = { ...switchesOn, shopReplies: 2 };
 const holdPrice = { ...defaultHandoverRules, discounts: false };
 
 const greeting: ChatClassification = {
@@ -95,6 +97,7 @@ describe('handoverReason', () => {
       refundsAndExchanges: false,
       specialRequests: false,
       discounts: false,
+      shopReplies: 2,
     };
     expect(
       handoverReason(['refund now'], { ...greeting, intent: 'exchange', asksForPerson: true }, off),
@@ -110,10 +113,59 @@ describe('handoverReason', () => {
       intent: 'special_request' as const,
       handover: 'out_of_scope' as const,
     };
-    expect(handoverReason(['50 pcs bulk'], request, defaultHandoverRules)).toBe('out_of_scope');
+    expect(handoverReason(['50 pcs bulk'], request, switchesOn)).toBe('out_of_scope');
     expect(
-      handoverReason(['50 pcs bulk'], request, { ...defaultHandoverRules, specialRequests: false }),
+      handoverReason(['50 pcs bulk'], request, { ...switchesOn, specialRequests: false }),
     ).toBeNull();
+  });
+});
+
+describe('a complaint, refund or angry message at the start of a chat', () => {
+  it.each([
+    ['apnara fraud! ager order ashe nai', { sentiment: 'angry' as const }],
+    ['product ta vanga, taka ferot chai', { intent: 'exchange' as const }],
+    ['kapor chera ashche', { intent: 'complaint' as const, handover: 'complaint' as const }],
+  ])('goes to the model first: %s', (text, change) => {
+    expect(handoverReason([text], { ...greeting, ...change }, switchesOn)).toBeNull();
+  });
+
+  it('still goes to a person at once when the customer asks for one', () => {
+    expect(handoverReason(['agent chai'], { ...greeting, asksForPerson: true }, switchesOn)).toBe(
+      'asked_for_person',
+    );
+  });
+
+  it('goes to a person once the shop has replied twice', () => {
+    expect(
+      handoverReason(
+        ['kothay amar order'],
+        { ...greeting, sentiment: 'angry' },
+        defaultHandoverRules,
+      ),
+    ).toBe('angry');
+  });
+});
+
+describe('a question the classifier cannot place', () => {
+  it('hands over a message that is still unclear after the shop asked what it means', () => {
+    const unclear = { ...greeting, intent: 'other' as const, handover: 'out_of_scope' as const };
+    expect(handoverReason(['oi jinish ta'], unclear, { ...switchesOn, shopReplies: 1 })).toBe(
+      'out_of_scope',
+    );
+  });
+
+  it.each(['out_of_scope', 'other'] as const)(
+    'keeps %s a hand-over only for a custom order or an attempt on the rules, never for another question',
+    (handover) => {
+      const question = { ...greeting, intent: 'other' as const, handover };
+      expect(handoverReason(['apnader phone number ta den'], question, switchesOn)).toBe(
+        handover === 'other' ? 'other' : null,
+      );
+    },
+  );
+
+  it('does not read ছাড়া (without) as a discount ask', () => {
+    expect(handoverReason(['ডেলিভারি ছাড়া দাম কত?'], greeting, defaultHandoverRules)).toBeNull();
   });
 });
 

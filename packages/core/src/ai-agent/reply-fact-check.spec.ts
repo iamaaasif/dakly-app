@@ -231,6 +231,17 @@ describe('checkReplyFacts', () => {
     });
   });
 
+  it('allows a phone number that a tool result holds, such as a bKash number from the knowledge', () => {
+    const knowledge = [{ passages: [{ content: 'bKash personal: 01912345678' }] }];
+    expect(checkReplyFacts('bKash করুন 01912345678 নম্বরে', knowledge, shop)).toEqual({
+      isSafe: true,
+    });
+    expect(checkReplyFacts('bKash করুন 01612345678 নম্বরে', knowledge, shop)).toEqual({
+      isSafe: false,
+      failure: 'phone',
+    });
+  });
+
   it('refuses a shop phone when the shop has none saved', () => {
     expect(checkReplyFacts('Call 01712345678', [], { ...shop, phone: null })).toEqual({
       isSafe: false,

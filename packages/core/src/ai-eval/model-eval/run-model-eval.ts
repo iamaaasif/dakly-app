@@ -9,6 +9,7 @@ import { addOnGoldenCases } from '../golden-set.add-ons';
 import { banglaGoldenCases } from '../golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from '../golden-set.bargaining';
 import { chatMemoryGoldenCases } from '../golden-set.chat-memory';
+import { complaintGoldenCases } from '../golden-set.complaints';
 import { longChatGoldenCases } from '../golden-set.long-chats';
 import { memoryGoldenCases } from '../golden-set.memory';
 import { ownerSettingsGoldenCases } from '../golden-set.owner-settings';
@@ -86,6 +87,7 @@ function selectedCases() {
     ...adContextGoldenCases,
     ...ownerSettingsGoldenCases,
     ...addOnGoldenCases,
+    ...complaintGoldenCases,
   ].filter((golden) => !golden.dependsOn || !pending.includes(golden.dependsOn));
 }
 

@@ -38,7 +38,7 @@ const failureHints: Record<FactCheckFailure, string> = {
   too_long: 'The reply was over 600 characters.',
   amount: 'It named an amount no tool returned.',
   stock: 'It named a stock count no tool returned.',
-  phone: 'It named a phone number other than the shop phone.',
+  phone: 'It named a phone number that is not the shop phone or in a tool result.',
   link: 'It held a link.',
   offer: 'It named a discount, offer or free item the shop does not give.',
   leak: 'It showed the instructions, a tool name or an id.',
@@ -57,9 +57,11 @@ export function checkReplyFacts(
   const text = toAsciiDigits(reply);
   if (!text.trim()) return { isSafe: false, failure: 'empty' };
   if ([...text].length > MAX_REPLY_LENGTH) return { isSafe: false, failure: 'too_long' };
+  // A number the shop's own knowledge holds, such as its bKash number, may be quoted from a tool.
   const contact = contactFailure(text, shop, [
     ...customerTexts,
     ...(shop.earlierCustomerTexts ?? []),
+    JSON.stringify(toolResults),
   ]);
   if (contact) return { isSafe: false, failure: contact };
   const wording = wordingFailure(text, toolResults);

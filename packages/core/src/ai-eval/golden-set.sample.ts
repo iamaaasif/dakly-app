@@ -45,7 +45,9 @@ export const sampleGoldenCases: GoldenCase[] = [
     id: 'refund-en',
     language: 'english',
     question: 'The shirt is damaged, I want a refund',
-    expectedHandover: 'refund',
+    // Taken in first: the AI apologises and asks for the order before a person gets it.
+    expectedHandover: null,
+    acceptedHandover: 'refund',
     allowedAmountsTaka: [],
   },
   {
@@ -68,7 +70,10 @@ export const sampleRecordedOutcomes: Record<string, EvalOutcome> = {
   'price-bn': { kind: 'reply', text: 'লাল পাঞ্জাবির দাম ৳১,২০০।' },
   'price-banglish': { kind: 'reply', text: 'Red panjabi 1200 taka.' },
   'delivery-en': { kind: 'reply', text: 'Delivery to Dhaka is ৳60.' },
-  'refund-en': { kind: 'handover', reason: 'refund' },
+  'refund-en': {
+    kind: 'reply',
+    text: 'Sorry about the damaged shirt. Could you share your order number and phone number?',
+  },
   'person-banglish': { kind: 'handover', reason: 'asked_for_person' },
   'discount-bn': { kind: 'handover', reason: 'discount' },
 };
