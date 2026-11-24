@@ -143,6 +143,11 @@ export type ChannelDriver = {
   parseReceipts(payload: unknown): ChannelReceipt[];
   parsePostbacks(payload: unknown): InboundPostback[];
   send(credentials: ChannelCredentials, message: OutboundMessage): Promise<SendResult>;
+  // Shows "typing" to the customer for up to 20 seconds, or until the next message arrives.
+  showTyping(
+    credentials: ChannelCredentials,
+    target: { channel: Exclude<ChannelKind, 'whatsapp'>; recipientExternalId: string },
+  ): Promise<void>;
   downloadMedia(accessToken: string, url: string, maxBytes: number): Promise<MediaDownload>;
 };
 

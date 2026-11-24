@@ -215,7 +215,7 @@ it('replaces a delayed job for a burst and ignores a reordered event', async () 
   const first = await receive(active, 'Hello');
   await agent.schedule(active.storeId, first.conversation_id, first.id);
   const previous = await queue.getJob(`ai-reply-${first.id}`);
-  expect(previous?.delay).toBe(8000);
+  expect(previous?.delay).toBe(3000);
   const newest = await receive(active, 'I need a person');
   await agent.schedule(active.storeId, newest.conversation_id, newest.id);
   await agent.schedule(active.storeId, first.conversation_id, first.id);

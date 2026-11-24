@@ -43,6 +43,21 @@ describe('MetaGraphChannelDriver', () => {
     });
   });
 
+  it('shows the typing sign to a Messenger customer with a sender action', async () => {
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      const request = new Request(url, init);
+      expect(url.pathname).toMatch(/\/123\/messages$/);
+      expect(await request.json()).toEqual({
+        recipient: { id: '999' },
+        sender_action: 'typing_on',
+      });
+      return Response.json({ recipient_id: '999' });
+    });
+    await expect(
+      driver.showTyping(pageCredentials, { channel: 'messenger', recipientExternalId: '999' }),
+    ).resolves.toBeUndefined();
+  });
+
   it('sends text with up to three postback buttons as a Messenger button template', async () => {
     vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
       expect(await new Request(url, init).json()).toEqual({
