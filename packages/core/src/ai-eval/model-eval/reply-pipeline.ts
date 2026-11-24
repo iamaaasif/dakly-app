@@ -9,7 +9,7 @@ import { LlmError, type LlmDriver, type LlmRequest } from '@dakly/providers/llm/
 import { adProducts } from '../../ai-agent/ad-context';
 import { classifierInput, productsInChat } from '../../ai-agent/chat-memory';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV8 } from '../../ai-agent/prompts/chat-reply.v8';
+import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
 import {
   checkReplyFacts,
@@ -93,7 +93,10 @@ export function handoverFor(
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
-    ? handoverReason([golden.question], classified, evalShopRules(golden).handover)
+    ? handoverReason([golden.question], classified, {
+        ...evalShopRules(golden).handover,
+        takesOrders: evalShopRules(golden).takeOrders,
+      })
     : 'ai_unavailable';
 }
 
@@ -110,6 +113,7 @@ type ReplyCase = Pick<
   | 'adProducts'
   | 'holdsPrice'
   | 'ownerSettings'
+  | 'draftedOrder'
 >;
 
 function replyContext(
@@ -175,20 +179,28 @@ function answerToolCalls({
   calls,
   toolResults,
   note,
-  rules,
+  shop,
   onlyProductIds,
 }: {
   calls: ToolCall[];
   toolResults: object[];
   note: Note;
-  rules: ShopRules;
+  shop: { rules: ShopRules; draftedOrder: readonly string[] | undefined };
   onlyProductIds: readonly string[] | undefined;
 }) {
+  const { rules, draftedOrder } = shop;
   const answered: { name: string; result: object }[] = [];
   for (const call of calls) {
     const refusal = refuseToolCall(rules, call);
     if (refusal?.kind === 'handover') return { handover: refusal.reason };
-    const result = refusal?.result ?? runFixtureTool(call.name, call.argumentsJson, onlyProductIds);
+    const result =
+      refusal?.result ??
+      runFixtureTool(
+        call.name,
+        call.argumentsJson,
+        { draftedOrder, suggestAddOns: rules.suggestAddOns },
+        onlyProductIds,
+      );
     if (call.name === 'hand_over' && 'reason' in result) {
       note(`hand_over ${String(result.reason)}`);
       return { handover: result.reason as Reason };
@@ -208,7 +220,7 @@ function replyCandidates(
   if (photo !== undefined) return matchEvalPhoto(photo);
   const query = question.slice(0, 100).trim();
   return query.length >= MIN_SEARCH_LENGTH
-    ? runFixtureTool('search_products', JSON.stringify({ query }), onlyProductIds)
+    ? runFixtureTool('search_products', JSON.stringify({ query }), undefined, onlyProductIds)
     : undefined;
 }
 
@@ -268,7 +280,7 @@ async function composeOnce(
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `reply:${model}`, {
       model,
-      instructions: chatReplyV8.instructions,
+      instructions: chatReplyV9.instructions,
       input: context + transcript,
       output: chatReplyOutputSchema,
       tools: salesAgentLlmTools,
@@ -288,7 +300,7 @@ async function composeOnce(
       calls: result.toolCalls,
       toolResults,
       note,
-      rules: evalShopRules(golden),
+      shop: { rules: evalShopRules(golden), draftedOrder: golden.draftedOrder },
       onlyProductIds,
     });
     if (outcome.handover) return ended({ kind: 'handover', reason: outcome.handover });

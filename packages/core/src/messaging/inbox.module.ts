@@ -10,6 +10,7 @@ import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
 import { ConversationOrdersService } from './conversation-orders.service';
 import { ConversationReplyService } from './conversation-reply.service';
+import { InboxShownProductsRepository } from './inbox-shown-products.repository';
 import { InboxController } from './inbox.controller';
 import { InboxRepository } from './inbox.repository';
 import { InboxService } from './inbox.service';
@@ -28,7 +29,13 @@ import { MessagingModule } from './messaging.module';
     UsersModule,
   ],
   controllers: [InboxController],
-  providers: [InboxRepository, InboxService, ConversationReplyService, ConversationOrdersService],
+  providers: [
+    InboxRepository,
+    InboxShownProductsRepository,
+    InboxService,
+    ConversationReplyService,
+    ConversationOrdersService,
+  ],
   exports: [InboxRepository, InboxService],
 })
 export class InboxModule {}

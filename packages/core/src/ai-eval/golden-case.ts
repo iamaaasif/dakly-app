@@ -5,7 +5,7 @@ import { handoverReasons } from '@dakly/contracts/chats';
 
 export const goldenCaseSchema = z.strictObject({
   id: z.string().min(1),
-  language: z.enum(['bangla', 'banglish', 'english']),
+  language: z.enum(['bangla', 'banglish', 'mixed', 'english']),
   question: z.string().min(1),
   // The reason a person should take over, or null when the AI should answer.
   expectedHandover: z.enum(handoverReasons).nullable(),
@@ -39,11 +39,15 @@ export const goldenCaseSchema = z.strictObject({
       showProducts: z.literal(false).optional(),
       takeOrders: z.literal(false).optional(),
       confirmOrders: z.literal(false).optional(),
+      suggestAddOns: z.literal(true).optional(),
       handoverOff: z
         .array(z.enum(['damagedOrWrong', 'refundsAndExchanges', 'specialRequests']))
         .optional(),
     })
     .optional(),
+  // The products, by name in the eval catalog, of the order the customer is confirming. Only then
+  // does confirm_order answer; with suggestAddOns on it carries the add-ons the shop would pick.
+  draftedOrder: z.array(z.string().min(1)).optional(),
   // The script a reply must be written in, for a shop that fixed its reply language.
   answersIn: z.enum(['bangla', 'english']).optional(),
   // The chat before the question, oldest first, as the agent reads it from the inbox.

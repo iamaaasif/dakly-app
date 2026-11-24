@@ -37,7 +37,7 @@ import {
   shownProductIds,
 } from './chat-memory';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV8 } from './prompts/chat-reply.v8';
+import { chatReplyV9 } from './prompts/chat-reply.v9';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import {
   type ToolScope,
@@ -137,14 +137,14 @@ export class SalesAgentService {
     const history = input.chat
       ? await this.inbox.replyHistory(storeId, input.chat.conversationId, HISTORY_LENGTH)
       : undefined;
-    const { scoped, ad, inChat, candidates } = await this.gatherProducts(input, history, results);
+    const { scoped, ad, inChat, candidates } = await this.gatherProducts(input, results);
     const context = await this.context({ input, history, inChat, candidates, ad });
     let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV8, inChat, ad),
+        prompt: promptWith(chatReplyV9, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -176,17 +176,13 @@ export class SalesAgentService {
 
   // The ad's products, the products shown earlier and the keyword matches, in the order the prompt
   // lists them. `scoped` is the input the tools run with: inside the ad's products while it has any.
-  private async gatherProducts(
-    input: ComposeInput,
-    history: readonly HistoryMessage[] | undefined,
-    results: ToolResult[],
-  ) {
+  private async gatherProducts(input: ComposeInput, results: ToolResult[]) {
     const ad = await this.adContext(input);
     if (ad) results.push(ad.result);
     const scoped: ComposeInput = ad?.productIds.length
       ? { ...input, adProductIds: ad.productIds }
       : input;
-    const inChat = history ? await this.readProductsInChat(scoped, history) : undefined;
+    const inChat = input.chat ? await this.readProductsInChat(scoped, input.chat) : undefined;
     if (inChat) results.push(inChat);
     const candidates = await this.productCandidates(scoped);
     if (candidates) results.push(candidates);
@@ -250,7 +246,11 @@ export class SalesAgentService {
         refusal?.result ??
         (isUnconfirmed(call, input.customerTexts, results)
           ? { error: 'CONFIRMATION_NOT_GIVEN' }
-          : await this.tools.run(input, call.name, call.argumentsJson));
+          : await this.tools.run(
+              { ...input, suggestAddOns: input.rules.suggestAddOns },
+              call.name,
+              call.argumentsJson,
+            ));
       if (call.name === HAND_OVER_TOOL && 'reason' in result)
         return { handover: result.reason as Reason };
       results.push({ tool: call.name, result });
@@ -295,10 +295,17 @@ export class SalesAgentService {
   // Read again now, so a price or stock count is never an old one from the earlier message.
   private async readProductsInChat(
     input: ComposeInput,
-    history: readonly HistoryMessage[],
+    chat: { conversationId: string },
   ): Promise<ToolResult | undefined> {
     const products: object[] = [];
-    for (const productId of recentlyShownProductIds(history)) {
+    // All of this customer's chats, not only this one: a customer who comes back on another
+    // channel after a merge still means the product they were shown.
+    const shown = await this.inbox.shownProductHistory(
+      input.storeId,
+      chat.conversationId,
+      HISTORY_LENGTH,
+    );
+    for (const productId of recentlyShownProductIds(shown)) {
       const product = await this.tools.run(
         input,
         getProductTool.name,
@@ -376,7 +383,7 @@ function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | 
 
 // A run that was shown the products block records its version with the reply prompt's.
 function promptWith(
-  prompt: typeof chatReplyV8,
+  prompt: typeof chatReplyV9,
   inChat: ToolResult | undefined,
   ad: object | undefined,
 ) {
