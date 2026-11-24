@@ -3,6 +3,7 @@ import type { LlmDriver } from '@dakly/providers/llm/llm-driver';
 import { screenCustomerTexts } from '../../ai-agent/manipulation-screen';
 import { MIN_HANDOVER_ACCURACY, scoreEval } from '../eval-scoring';
 import type { EvalOutcome, GoldenCase } from '../golden-case';
+import { runAdPhotoEval } from './ad-photo-eval';
 import { runAssistantProductEval } from './assistant-product-eval';
 import { runEmbeddingEval } from './embedding-eval';
 import type { EvalMeter } from './eval-meter';
@@ -166,6 +167,16 @@ export function reportVision({ driver, meter }: JobContext, models: string[]) {
     label: 'vision',
     models,
     run: (model) => runVisionEval(driver, meter, model),
+  });
+}
+
+export function reportAdPhotos({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Vision job (ad pictures with Bangla, Banglish and mixed titles)',
+    unit: 'pictures',
+    label: 'vision',
+    models,
+    run: (model) => runAdPhotoEval(driver, meter, model),
   });
 }
 
