@@ -38,7 +38,15 @@ export type DiscountScreen = {
   handOverDiscounts: boolean;
   // Customer messages earlier in the same chat, before this burst.
   earlierTexts: readonly string[];
+  // Shop messages earlier in the same chat, used to confirm the shop already refused a discount.
+  earlierShopTexts?: readonly string[];
 };
+
+const discountDeclinedPattern =
+  /\b(?:no|without|don'?t need|dont need)\s+(?:a\s+|any\s+)?discount\b|\bdiscount\s+(?:lagbe na|chai na|charai|chara)\b|ছাড়\s*(?:লাগবে না|চাই না|ছাড়াই)/u;
+
+const shopRefusalPattern =
+  /\b(?:fixed|no discount|cannot|can't)\b|নির্ধারিত|ফিক্সড|ছাড় নেই|ছাড় দেওয়া|কমানো যাবে না|komano jabe na|chhar nei|dam fixed/u;
 
 // Runs before any model call, so an attack costs no tokens and cannot talk the model round.
 export function screenCustomerTexts(
@@ -47,9 +55,17 @@ export function screenCustomerTexts(
 ): Reason | null {
   const text = normalize(texts.join('\n'));
   if (manipulationPatterns.some((pattern) => pattern.test(text))) return 'other';
-  if (!asksForDiscount(text)) return null;
+  const latest = normalize(texts.at(-1) ?? '');
+  if (!asksForDiscount(latest) || discountDeclinedPattern.test(latest)) return null;
   if (discounts.handOverDiscounts) return 'discount';
-  return asksForDiscount(normalize(discounts.earlierTexts.join('\n'))) ? 'discount' : null;
+  const askedBefore = asksForDiscount(normalize(discounts.earlierTexts.join('\n')));
+  if (!askedBefore) return null;
+  if (discounts.earlierShopTexts) {
+    return shopRefusalPattern.test(normalize(discounts.earlierShopTexts.join('\n')))
+      ? 'discount'
+      : null;
+  }
+  return 'discount';
 }
 
 const asksForDiscount = (text: string) => discountPatterns.some((pattern) => pattern.test(text));

@@ -179,6 +179,7 @@ export class AiAgentService {
     const screened = screenCustomerTexts(screenTexts, {
       handOverDiscounts: rules.handover.discounts,
       earlierTexts: customerTexts(earlier),
+      earlierShopTexts: earlier.filter(({ from }) => from === 'shop').map(({ text }) => text),
     });
     const prepared = screened ? undefined : this.sales.prepare(compose);
     prepared?.catch(() => undefined);

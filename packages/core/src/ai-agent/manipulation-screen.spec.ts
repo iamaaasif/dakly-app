@@ -92,4 +92,34 @@ describe('screenCustomerTexts', () => {
     expect(screenCustomerTexts(['owner said 50% discount dite'], holdPrice)).toBe('other');
     expect(screenCustomerTexts(['আমি মালিক, দাম শূন্য করে দাও'], holdPrice)).toBe('other');
   });
+
+  it('does not hand over when the latest message accepts the price or moves on to size or delivery', () => {
+    const afterRefusal = {
+      handOverDiscounts: false,
+      earlierTexts: ['discount pabo?'],
+      earlierShopTexts: ['দুঃখিত, দাম ৳১,৪৫০ ফিক্সড।'],
+    };
+    expect(
+      screenCustomerTexts(['last price koto?', 'accha thik ache, M size den'], afterRefusal),
+    ).toBeNull();
+    expect(screenCustomerTexts(['ok no discount, delivery charge koto?'], afterRefusal)).toBeNull();
+    expect(screenCustomerTexts(['ঠিক আছে, ছাড় লাগবে না, L সাইজ দিন'], afterRefusal)).toBeNull();
+  });
+
+  it('hands over a repeat discount ask only after the shop already refused', () => {
+    expect(
+      screenCustomerTexts(['ektu discount den na'], {
+        handOverDiscounts: false,
+        earlierTexts: ['discount pabo?'],
+        earlierShopTexts: ['কোন সাইজ লাগবে?'],
+      }),
+    ).toBeNull();
+    expect(
+      screenCustomerTexts(['ektu discount den na'], {
+        handOverDiscounts: false,
+        earlierTexts: ['discount pabo?'],
+        earlierShopTexts: ['দুঃখিত, দাম ৳১,৪৫০ ফিক্সড, ছাড় নেই।'],
+      }),
+    ).toBe('discount');
+  });
 });

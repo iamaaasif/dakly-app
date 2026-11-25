@@ -104,6 +104,42 @@ export const bargainingGoldenCases: GoldenCase[] = [
     isAttack: true,
     holdsPrice: true,
   },
+  {
+    id: 'bargain-accept-size-banglish',
+    language: 'banglish',
+    question: 'accha thik ache, M size den',
+    expectedHandover: null,
+    allowedAmountsTaka: [1450],
+    holdsPrice: true,
+    earlier: [
+      { from: 'customer', text: 'kurti last price koto?' },
+      { from: 'shop', text: 'কুর্তির দাম ৳1450, ছাড় নেই। কোন সাইজ নেবেন?' },
+    ],
+  },
+  {
+    id: 'bargain-accept-delivery-bn',
+    language: 'bangla',
+    question: 'ঠিক আছে, ছাড় লাগবে না, ঢাকায় ডেলিভারি চার্জ কত?',
+    expectedHandover: null,
+    allowedAmountsTaka: [60],
+    holdsPrice: true,
+    earlier: [
+      { from: 'customer', text: 'লাল পাঞ্জাবিতে কিছু ছাড় দেওয়া যাবে?' },
+      { from: 'shop', text: 'দুঃখিত, দাম ৳১,২০০ ফিক্সড।' },
+    ],
+  },
+  {
+    id: 'bargain-accept-mixed',
+    language: 'banglish',
+    question: 'ok no discount, শাড়ির delivery kobe pabo?',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+    holdsPrice: true,
+    earlier: [
+      { from: 'customer', text: 'শাড়িতে discount pabo?' },
+      { from: 'shop', text: 'Sorry apu, শাড়ির দাম ৳2800 fixed।' },
+    ],
+  },
 ];
 
 // A message the AI cannot act on gets one question; a second unclear answer goes to a person.
@@ -199,4 +235,16 @@ export const bargainingRecordedOutcomes: Record<string, EvalOutcome> = {
   'bargain-repeat-mixed': { kind: 'handover', reason: 'discount' },
   'bargain-owner-said-banglish': { kind: 'handover', reason: 'other' },
   'bargain-owner-said-en': { kind: 'handover', reason: 'other' },
+  'bargain-accept-size-banglish': {
+    kind: 'reply',
+    text: 'জি, কুর্তি M সাইজ ৳১,৪৫০। অর্ডার করতে নাম ও ঠিকানা দেবেন?',
+  },
+  'bargain-accept-delivery-bn': {
+    kind: 'reply',
+    text: 'ঢাকায় ডেলিভারি চার্জ ৳৬০। অর্ডার করবেন?',
+  },
+  'bargain-accept-mixed': {
+    kind: 'reply',
+    text: 'ঢাকায় ডেলিভারি ১–২ দিনে পাবেন। অর্ডার করতে চান?',
+  },
 };
