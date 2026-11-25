@@ -269,8 +269,15 @@ export class InboxService {
   async handOver(
     storeId: string,
     id: string,
-    reason: (typeof handoverReasons)[number],
-    returnAfterMinutes: number | null,
+    {
+      reason,
+      returnAfterMinutes,
+      summary,
+    }: {
+      reason: (typeof handoverReasons)[number];
+      returnAfterMinutes: number | null;
+      summary?: string;
+    },
   ) {
     return this.transaction.run(storeId, async () => {
       const before = await this.repository.find(storeId, id, 'no key update');
@@ -287,6 +294,7 @@ export class InboxService {
           status: 'needs_you',
           responder: 'human',
           handoverReason: reason,
+          ...(summary ? { aiSummary: summary } : {}),
           handedOverAt: now,
           aiResumesAt,
         },

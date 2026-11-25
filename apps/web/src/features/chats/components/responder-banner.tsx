@@ -52,27 +52,44 @@ function HandlingBanner({
     });
   const Icon = ai ? Sparkles : UserRound;
   return (
-    <div
-      className={
-        ai
-          ? 'flex shrink-0 items-center gap-2 border-b border-border bg-success-soft px-3 py-2'
-          : 'flex shrink-0 items-center gap-2 border-b border-border bg-surface-muted px-3 py-2'
-      }
-    >
-      <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
-      <p className="min-w-0 flex-1 font-medium">
-        {ai ? 'Dakly AI is handling this chat' : 'Your team is handling this chat'}
-      </p>
-      {canEdit ? (
-        <Button variant="secondary" loading={action.isPending} onClick={confirm}>
-          {ai ? 'Take over' : 'Hand back to Dakly AI'}
-        </Button>
-      ) : null}
-      {action.error ? (
-        <p role="alert" className="basis-full text-danger">
-          {action.error.message}
+    <div className="shrink-0 border-b border-border">
+      <div
+        className={
+          ai
+            ? 'flex items-center gap-2 bg-success-soft px-3 py-2'
+            : 'flex items-center gap-2 bg-surface-muted px-3 py-2'
+        }
+      >
+        <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
+        <p className="min-w-0 flex-1 font-medium">
+          {ai ? 'Dakly AI is handling this chat' : 'Your team is handling this chat'}
         </p>
-      ) : null}
+        {canEdit ? (
+          <Button variant="secondary" loading={action.isPending} onClick={confirm}>
+            {ai ? 'Take over' : 'Hand back to Dakly AI'}
+          </Button>
+        ) : null}
+        {action.error ? (
+          <p role="alert" className="basis-full text-danger">
+            {action.error.message}
+          </p>
+        ) : null}
+      </div>
+      {!ai && <HandoverSummary summary={conversation.aiSummary} />}
+    </div>
+  );
+}
+
+function HandoverSummary({ summary }: { summary?: string | null }) {
+  const text = summary?.trim();
+  if (!text) return null;
+  return (
+    <div
+      data-testid="handover-summary"
+      className="text-ink-muted border-t border-border bg-surface-muted px-3 py-2 text-xs"
+    >
+      <span className="text-ink font-medium">Handover summary: </span>
+      <span>{text}</span>
     </div>
   );
 }

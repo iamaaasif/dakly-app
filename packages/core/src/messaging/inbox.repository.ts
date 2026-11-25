@@ -30,6 +30,7 @@ const fields = {
   responder: conversations.responder,
   assigneeUserId: conversations.assigneeUserId,
   handoverReason: conversations.handoverReason,
+  aiSummary: conversations.aiSummary,
   handedOverAt: conversations.handedOverAt,
   aiResumesAt: conversations.aiResumesAt,
   // Keep PostgreSQL's microseconds in cursor timestamps.
@@ -81,6 +82,7 @@ type ConversationChange = UpdateConversationInput & {
   responder?: (typeof conversationResponders)[number];
   aiResumesAt?: Date | null;
   handoverReason?: (typeof handoverReasons)[number] | null;
+  aiSummary?: string | null;
   handedOverAt?: Date | null;
 };
 

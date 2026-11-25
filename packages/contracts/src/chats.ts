@@ -226,6 +226,7 @@ export type ConversationResponse = {
   responder: (typeof conversationResponders)[number];
   assigneeUserId: string | null;
   handoverReason: (typeof handoverReasons)[number] | null;
+  aiSummary?: string | null;
   handedOverAt: string | null;
   aiResumesAt: string | null;
   lastMessageAt: string | null;

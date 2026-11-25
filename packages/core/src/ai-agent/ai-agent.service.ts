@@ -326,12 +326,15 @@ export class AiAgentService {
     await this.transaction.runLocked(storeId, async () => {
       const current = await this.lockCurrent(storeId, conversationId, before);
       if (!current) return;
-      const change = await this.inbox.handOver(
-        storeId,
-        conversationId,
+      const latestText = current.turn.latest.body?.trim();
+      const handoverSummary =
+        summary?.trim() ||
+        `Reason: ${reason}${latestText ? ` | Issue: ${latestText.slice(0, 200)}` : ''}`;
+      const change = await this.inbox.handOver(storeId, conversationId, {
         reason,
-        current.claimTimeoutMinutes,
-      );
+        returnAfterMinutes: current.claimTimeoutMinutes,
+        summary: handoverSummary,
+      });
       if (!change) return;
       await this.outbox.publish({
         type: 'conversation.handed_over',
@@ -352,7 +355,7 @@ export class AiAgentService {
         category: 'fix_now',
         dedupeKey: `handover:${current.turn.latest.id}`,
         title: 'A conversation needs your reply',
-        ...(summary ? { body: summary } : {}),
+        body: handoverSummary,
       });
     });
   }
