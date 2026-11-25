@@ -52,6 +52,8 @@ const AUTH_ERRORS = {
   AUTH_EMAIL_UNVERIFIED: { status: 403, message: 'Verify this email before signing in' },
   AUTH_ACCOUNT_EXISTS: { status: 409, message: 'This account already exists. Sign in instead' },
   AUTH_ACCOUNT_NOT_FOUND: { status: 404, message: 'No account has this verified sign-in method' },
+  AUTH_SIGNUP_EMAIL_REQUIRED: { status: 400, message: 'Enter your email address to sign up' },
+  AUTH_SIGNUP_PHONE_REQUIRED: { status: 400, message: 'Enter your mobile number to sign up' },
   AUTH_CODE_INVALID: { status: 400, message: 'The code is incorrect or expired' },
   AUTH_RATE_LIMITED: { status: 429, message: 'Too many attempts. Try again later' },
   AUTH_LOCKED: { status: 429, message: 'Sign-in is locked for 15 minutes' },

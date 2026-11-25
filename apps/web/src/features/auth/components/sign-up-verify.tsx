@@ -1,7 +1,7 @@
 'use client';
-import { MessageSquare } from 'lucide-react';
+import { Mail, MessageSquare } from 'lucide-react';
 
-import type { SignUpInput } from '@dakly/contracts/auth';
+import type { SignUpCodeChannel, SignUpInput } from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
 
 import { useSignUpVerification } from '../hooks/use-sign-up-verification';
@@ -11,10 +11,12 @@ import { FormField as AuthField } from '@/components/form-field';
 
 export function SignUpVerify({
   account,
+  channel,
   onBack,
   onAuthenticated,
 }: {
   account: { registration: SignUpInput; password?: string };
+  channel: SignUpCodeChannel;
   onBack: () => void;
   onAuthenticated?: () => void;
 }) {
@@ -22,14 +24,17 @@ export function SignUpVerify({
     account,
     { onAuthenticated },
   );
+  const viaEmail = channel === 'email';
+  const Icon = viaEmail ? Mail : MessageSquare;
+  const { email, phone } = account.registration;
+  const recipient = viaEmail ? email : phone && `+880 ${formatPhone(phone)}`;
   if (challenge) return <TotpStep challengeId={challenge} onSuccess={complete} />;
   return (
     <form method="post" className="space-y-4" onSubmit={submit}>
       <div className="flex flex-wrap items-center gap-2.5 rounded-control border border-border bg-background px-3 py-2.5">
-        <MessageSquare aria-hidden="true" size={16} className="text-text-muted" />
+        <Icon aria-hidden="true" size={16} className="text-text-muted" />
         <span className="min-w-0 flex-1 text-sm break-all">
-          Code sent by SMS to{' '}
-          <b className="font-semibold">+880 {formatPhone(account.registration.phone)}</b>
+          Code sent by {viaEmail ? 'email' : 'SMS'} to <b className="font-semibold">{recipient}</b>
         </span>
         <button type="button" onClick={onBack} className="text-sm font-semibold text-action">
           Change
@@ -51,7 +56,7 @@ export function SignUpVerify({
         </p>
       ) : null}
       <Button type="submit" loading={pending} className="min-h-11 w-full font-semibold">
-        Verify mobile
+        {viaEmail ? 'Verify email' : 'Verify mobile'}
       </Button>
       <ResendLine seconds={countdown.seconds} pending={pending} onResend={resend} />
       <p className="text-sm text-text-muted">

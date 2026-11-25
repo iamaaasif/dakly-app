@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { signUpCodeChannelSchema } from '@dakly/contracts/auth';
+
 const apiOrigin = z.url().refine((value) => {
   const parsed = new URL(value);
   return parsed.origin === value && ['http:', 'https:'].includes(parsed.protocol);
@@ -29,6 +31,7 @@ export function webAuthConfig() {
   const privacy = process.env.WEB_PRIVACY_URL;
   const version = process.env.WEB_TERMS_VERSION;
   return {
+    signupCodeChannel: webSignupCodeChannel(),
     legal:
       terms && privacy && version
         ? {
@@ -45,4 +48,8 @@ export function webAuthConfig() {
           .parse(process.env.WEB_GOOGLE_CLIENT_ID)
       : null,
   };
+}
+
+export function webSignupCodeChannel() {
+  return signUpCodeChannelSchema.parse(process.env.SIGNUP_CODE_CHANNEL);
 }

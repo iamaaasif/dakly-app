@@ -8,6 +8,7 @@ import type {
   VerifyEmailCodeInput,
 } from '@dakly/contracts/auth';
 
+import { loadEnv } from '../platform/config/env';
 import { hashPassword } from '../platform/crypto/password';
 import { authError } from './auth.errors';
 import { AuthService } from './auth.service';
@@ -24,33 +25,36 @@ export class SignInCodeFlowService {
   ) {}
 
   async requestCode(input: RequestCodeInput, ip: string): Promise<void> {
+    if (input.purpose === 'sign_up') {
+      const subject = this.signUpSubject(input);
+      const existing = subject.email
+        ? await this.users.findByVerifiedEmail(subject.email)
+        : await this.users.findByPhone(subject.target);
+      if (existing) throw authError('AUTH_ACCOUNT_EXISTS');
+      return this.codes.send({ subject, purpose: 'sign_up', ip, registration: input });
+    }
     const user = await this.users.findByPhone(input.phone);
-    if (input.purpose === 'sign_up' && user) throw authError('AUTH_ACCOUNT_EXISTS');
-    if (input.purpose === 'sign_in' && !user) throw authError('AUTH_ACCOUNT_NOT_FOUND');
+    if (!user) throw authError('AUTH_ACCOUNT_NOT_FOUND');
     await this.codes.send({
-      subject: signInSubject(input.phone, user?.id, user?.emailVerifiedAt ? user.email : null),
+      subject: signInSubject(input.phone, user.id, user.emailVerifiedAt ? user.email : null),
       purpose: input.purpose,
       ip,
-      registration: input.purpose === 'sign_up' ? input : undefined,
     });
   }
 
   async verifyCode(input: VerifyCodeInput, request: SignInRequest) {
-    const user = await this.users.findByPhone(input.phone);
+    if (input.purpose === 'sign_up') return this.verifyRegistration(input, request);
+    const phone = input.phone;
+    const user = await this.users.findByPhone(phone);
     const grant = await this.codes.consume(
-      signInSubject(input.phone, user?.id, user?.emailVerifiedAt ? user.email : null),
+      signInSubject(phone, user?.id, user?.emailVerifiedAt ? user.email : null),
       input.purpose,
       input.code,
       request.ip,
     );
-    if (input.purpose === 'sign_up') {
-      if (user) throw authError('AUTH_ACCOUNT_EXISTS');
-      if (!grant.registration) throw authError('AUTH_CODE_INVALID');
-      return this.register(input, grant.registration, request);
-    }
     if (!user || grant.userId !== user.id) throw authError('AUTH_CODE_INVALID');
     return this.auth.completeSignIn(
-      { id: user.id, target: input.phone, deliveryEmail: grant.email },
+      { id: user.id, target: phone, deliveryEmail: grant.email },
       request,
     );
   }
@@ -70,20 +74,37 @@ export class SignInCodeFlowService {
     });
   }
 
-  private async register(
-    input: VerifyCodeInput,
-    registration: SignUpInput,
+  private async verifyRegistration(
+    input: Extract<VerifyCodeInput, { purpose: 'sign_up' }>,
     request: SignInRequest,
   ) {
+    const subject = this.signUpSubject(input);
+    const grant = await this.codes.consume(subject, 'sign_up', input.code, request.ip);
+    if (!grant.registration || grant.email !== subject.email) throw authError('AUTH_CODE_INVALID');
     return this.auth.completeSignIn(
       {
         id: this.users.allocateId(),
-        target: input.phone,
-        registration,
+        target: subject.target,
+        kind: subject.email ? 'email' : undefined,
+        deliveryEmail: subject.email,
+        registration: {
+          ...grant.registration,
+          phone: subject.phone,
+          email: subject.email ?? grant.registration.email,
+        },
         registrationPasswordHash: input.password ? await hashPassword(input.password) : undefined,
       },
       request,
     );
+  }
+
+  private signUpSubject({ email, phone }: Pick<SignUpInput, 'email' | 'phone'>) {
+    if (loadEnv().SIGNUP_CODE_CHANNEL === 'email') {
+      if (!email) throw authError('AUTH_SIGNUP_EMAIL_REQUIRED');
+      return { target: email, email, phone: undefined };
+    }
+    if (!phone) throw authError('AUTH_SIGNUP_PHONE_REQUIRED');
+    return { target: phone, phone, email: undefined };
   }
 
   async verifyEmailCode(input: VerifyEmailCodeInput, request: SignInRequest) {

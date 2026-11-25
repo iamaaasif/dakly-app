@@ -46,13 +46,13 @@ afterEach(() => {
   focusManager.setFocused(undefined);
   onlineManager.setOnline(true);
 });
-function show(view: string) {
+function show(view: string, signupCodeChannel: 'email' | 'sms' = 'email') {
   route.view = view;
   client = new QueryClient();
   history.replaceState(null, '', `/invites/accept#token=${'a'.repeat(64)}`);
   render(
     <QueryClientProvider client={client}>
-      <InviteEntry config={config} />
+      <InviteEntry config={{ ...config, signupCodeChannel }} />
     </QueryClientProvider>,
   );
 }
@@ -116,25 +116,51 @@ function transport() {
     },
   };
 }
-it.each(['signup', 'phone', 'email'])(
-  'retains invited %s code and TOTP across real focus/reconnect checks',
-  async (view) => {
+it.each([
+  {
+    view: 'signup',
+    channel: 'email',
+    contactLabel: 'Email',
+    contact: 'rina@example.test',
+    verifyButton: 'Verify email',
+  },
+  {
+    view: 'signup',
+    channel: 'sms',
+    contactLabel: 'Mobile number',
+    contact: '01712345678',
+    verifyButton: 'Verify mobile',
+  },
+  {
+    view: 'phone',
+    channel: 'sms',
+    contactLabel: 'Mobile number',
+    contact: '01712345678',
+    verifyButton: 'Verify code',
+  },
+  {
+    view: 'email',
+    channel: 'email',
+    contactLabel: 'Email',
+    contact: 'rina@example.test',
+    verifyButton: 'Verify code',
+  },
+] as const)(
+  'retains invited $view code and TOTP with $channel across real focus/reconnect checks',
+  async ({ view, channel, contactLabel, contact, verifyButton }) => {
     const network = transport();
-    show(view);
+    const signup = view === 'signup';
+    show(view, channel);
     const user = userEvent.setup();
-    if (view === 'signup') {
+    await user.type(await screen.findByLabelText(contactLabel), contact);
+    if (signup) {
       await user.type(await screen.findByLabelText('Full name'), 'Rina');
-      await user.type(screen.getByLabelText('Mobile number'), '01712345678');
       await user.click(screen.getByLabelText('I agree to the Terms and Privacy documents.'));
       await user.click(screen.getByRole('button', { name: 'Send verification code' }));
     } else {
-      await user.type(
-        await screen.findByLabelText(view === 'phone' ? 'Mobile number' : 'Email'),
-        view === 'phone' ? '01712345678' : 'rina@example.test',
-      );
       await user.click(screen.getByRole('button', { name: /Get a code by/ }));
     }
-    const label = view === 'signup' ? '6-digit code' : 'Sign-in code';
+    const label = signup ? '6-digit code' : 'Sign-in code';
     const code = await screen.findByLabelText<HTMLInputElement>(label);
     await user.type(code, '123456');
     network.pause();
@@ -151,9 +177,7 @@ it.each(['signup', 'phone', 'email'])(
     await act(async () => network.resume(network.anonymous()));
     await waitFor(() => expect(code.matches(':disabled')).toBe(false));
     expect(screen.getByLabelText(label)).toBe(code);
-    await user.click(
-      screen.getByRole('button', { name: view === 'signup' ? 'Verify mobile' : 'Verify code' }),
-    );
+    await user.click(screen.getByRole('button', { name: verifyButton }));
     const totp = await screen.findByLabelText<HTMLInputElement>('Authenticator or backup code');
     await user.type(totp, '654321');
     network.pause();

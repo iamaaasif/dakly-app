@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { signUpCodeChannelSchema } from '@dakly/contracts/auth';
+
 import { redisUrlSchema } from '../queue/redis-connection';
 import { parseEncryptionConfiguration, type EncryptionConfiguration } from './encryption-config';
 import { trustedProxiesSchema } from './trusted-proxies';
@@ -11,6 +13,7 @@ const envSchema = z.object({
   // Test runs set their own, so a local worker never takes their jobs. BullMQ's default otherwise.
   QUEUE_PREFIX: z.string().min(1).default('bull'),
   EMAIL_DRIVER: z.enum(['smtp', 'sendgrid']).optional(),
+  SIGNUP_CODE_CHANNEL: signUpCodeChannelSchema,
   EMAIL_FROM: z.email().optional(),
   SENDGRID_API_KEY: z.string().min(1).optional(),
   BKASH_BILLING_MODE: z.enum(['live', 'sandbox']).optional(),

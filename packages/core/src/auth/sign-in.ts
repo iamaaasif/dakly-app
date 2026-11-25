@@ -4,7 +4,6 @@ import type { GoogleIdentity } from '@dakly/providers/google/google-identity-dri
 
 import type { SignInSubject } from './sign-in-failures';
 
-// A phone sign-up has a verified phone; a Google sign-up has only the Google email.
 export type NewAccount = {
   name: string;
   phone?: string;
@@ -13,7 +12,12 @@ export type NewAccount = {
   source?: SignUpSource;
   sourceOther?: string;
 };
-export type SignInRequest = { ip: string; userAgent?: string; isRemembered: boolean };
+export type SignInRequest = {
+  ip: string;
+  userAgent?: string;
+  isRemembered: boolean;
+  selectFirstStore?: boolean;
+};
 // A pending registration is inserted in the same account transaction as its first session.
 export type SignInUser = {
   id: string;

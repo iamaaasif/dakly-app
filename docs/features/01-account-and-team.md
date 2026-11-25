@@ -542,13 +542,17 @@ instantiate an SMS driver. Captured messages do not prove live SMS delivery.
 
 ## Code sign-up and sign-in
 
-ACC-2 provides the phone routes. Both require an allowed `Origin`.
+Both routes require an allowed `Origin`. Set `SIGNUP_CODE_CHANNEL` to the same
+value on the API and web app. It defaults to `email`; use `sms` for mobile verification.
+The team invite form defaults to the same channel. In email mode, invite new users
+by email so their signup proves the invited address.
 
-- `POST /auth/code`: `purpose: sign_up` takes name, normalized BD phone, optional
-  email and `termsVersion`. An existing phone returns `409 AUTH_ACCOUNT_EXISTS`.
+- `POST /auth/code`: `purpose: sign_up` takes name, `termsVersion` and the configured
+  contact. Email mode requires email. SMS mode requires a normalized BD phone and
+  accepts an optional email. An existing verified contact returns `409 AUTH_ACCOUNT_EXISTS`.
   `purpose: sign_in` takes a phone; an unknown account returns
   `404 AUTH_ACCOUNT_NOT_FOUND` without sending a message.
-- `POST /auth/code/verify`: takes the same phone and purpose, a six-digit code and
+- `POST /auth/code/verify`: takes the same contact and purpose, a six-digit code and
   optional `isRemembered` (default false). It returns 204 and sets the session
   cookie; neither the code nor the session token appears in the response body.
 
@@ -562,14 +566,15 @@ invalidates its old grant; the final account row lock rechecks the current phone
 disabled flag and TOTP status before issuing a session. Resend waits 30 seconds;
 sends are limited to five per target and twenty per IP in an hour. Concurrent or
 failed delivery attempts can consume capacity without a delivered message. The
-code is saved before SMS delivery, outside any database transaction. An uncertain
-delivery failure retains the code and cooldown and returns `AUTH_SMS_UNAVAILABLE`.
+code is saved before delivery, outside any database transaction. An uncertain delivery
+failure retains the code and cooldown and returns `AUTH_EMAIL_UNAVAILABLE` or `AUTH_SMS_UNAVAILABLE`.
 
 `AuthService.completeSignIn` is the sole production session issuer. It accepts an
 internal identity and plain request context, inserts a pending registration if
 needed, and commits the user and storeless session in one account transaction.
-Sign-up records phone verification and accepted terms; its optional email remains
-unverified. Phone uniqueness protects concurrent sign-ups. Email uniqueness applies
+Sign-up records verification for the contact that received the code and saves accepted terms.
+Email sign-up creates an email account. SMS sign-up verifies the phone and leaves any
+optional email unverified. Phone uniqueness protects concurrent sign-ups. Email uniqueness applies
 only to verified addresses, so an optional unverified signup email cannot reserve
 an identity. A consumed code is never restored after database failure: the user
 must request another code. If the database committed but clearing failure state
@@ -739,7 +744,9 @@ under the account lock. Sign-in and password-change codes cannot reset a passwor
 The password update, revocation of every old session and `password.changed` and
 `sessions.revoked` events commit atomically. Audit failure rolls them all back.
 Reset then calls the common sign-in gate; TOTP can refuse session issuance while
-the reset and old-session revocation remain committed. Later account and store
+the reset and old-session revocation remain committed. A successful reset session
+selects the first shop listed among the user's active memberships. The confirmation then opens the
+dashboard automatically. Later account and store
 requests with revoked cookies return 401; requests already authorized may finish.
 
 Email-change and password-code proof stores only domain-separated fingerprints
@@ -968,7 +975,8 @@ Google email verification tickets stay in component memory. Keep me signed in
 is ticked by default, as in the design. `/sign-in` and `/sign-up` send a person with a live
 session to the Dashboard.
 
-`/sign-up` has account and SMS verification steps. `/setup` resumes the verified
+`/sign-up` verifies an email or mobile number according to `SIGNUP_CODE_CHANNEL`.
+`/setup` resumes the verified
 account at business details and plan choice. The final `POST /stores` commits the
 business details, Owner membership and subscription together. Reloading before
 verification clears the account draft; after verification, the session can resume
@@ -1146,7 +1154,7 @@ sign-up screen uses them to create the first shop on the free plan, so a new own
 dashboard without the setup screen. `businessType` and `district` are optional on `POST /stores`
 for that reason; the setup screen still requires both.
 
-The sign-up page has three steps: email, password and source; name, business name, phone, website and what the business offers; then the SMS code. After the code is right the page creates the first shop (free plan, "social media" as how they sell, under 500 customers) and opens the dashboard. If creating the shop fails the owner lands on the setup screen instead. A Google or Facebook sign-up has no business step and goes to setup. The sign-in page has one "Email or mobile number" field because accounts made by SMS have no email. A wrong reset code shows on the password step with a link back to the code step.
+The sign-up page asks for email, password and source, then for name, business name, website and what the business offers. SMS mode also asks for a mobile number. The last step checks the code sent to the configured contact. After the code is right the page creates the first shop (free plan, "social media" as how they sell, under 500 customers) and opens the dashboard. If creating the shop fails the owner lands on the setup screen instead. A Google or Facebook sign-up has no business step and goes to setup. The sign-in page has one "Email or mobile number" field. A wrong reset code shows on the password step with a link back to the code step.
 
 ### Continue with Facebook (ACC-19, part 6)
 

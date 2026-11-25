@@ -4,7 +4,13 @@ import { ChevronRight } from 'lucide-react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { z } from 'zod';
 
-import { passwordSchema, signUpSchema, type SignUpInput } from '@dakly/contracts/auth';
+import {
+  emailSchema,
+  passwordSchema,
+  signUpSchema,
+  type SignUpCodeChannel,
+  type SignUpInput,
+} from '@dakly/contracts/auth';
 import { Button } from '@dakly/ui/button';
 
 import { useRequestCode } from '../api/request-code';
@@ -24,17 +30,22 @@ const accountSchema = signUpSchema.extend({
 });
 export function SignUpAccount({
   legal,
+  channel,
   onSent,
 }: {
   legal: NonNullable<AuthConfig['legal']>;
+  channel: SignUpCodeChannel;
   onSent: (account: { registration: SignUpInput; password?: string }) => void;
 }) {
   const form = useForm({
-    resolver: zodResolver(accountSchema),
+    resolver: zodResolver(
+      channel === 'email'
+        ? accountSchema.extend({ email: emailSchema })
+        : accountSchema.required({ phone: true }),
+    ),
     defaultValues: {
       purpose: 'sign_up' as const,
       name: '',
-      phone: '',
       email: '',
       password: '',
       termsVersion: legal.termsVersion,
@@ -56,7 +67,7 @@ export function SignUpAccount({
           }
         })}
       >
-        <SignUpFields />
+        <SignUpFields channel={channel} />
         <SignUpConsent legal={legal} />
         {errors.root ? (
           <p role="alert" className="text-danger">
