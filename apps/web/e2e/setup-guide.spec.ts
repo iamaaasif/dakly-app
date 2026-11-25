@@ -33,7 +33,7 @@ test('shows the three setup cards and their destinations on the dashboard', asyn
     ['Add store details', '/settings?tab=store'],
     ['Connect a channel', '/integrations'],
     ['Create your first product', '/products/new'],
-  ]) {
+  ] as const) {
     await expect(guide.getByRole('link', { name })).toHaveAttribute('href', href);
   }
   await expect(page.getByRole('heading', { name: 'How do you sell?' })).toHaveCount(0);
