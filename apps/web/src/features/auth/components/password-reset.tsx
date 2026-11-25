@@ -1,7 +1,6 @@
 'use client';
-import { Check } from 'lucide-react';
-import Link from 'next/link';
-import { useState } from 'react';
+import { ArrowRight, Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import type { SignInResponse } from '@dakly/contracts/auth';
 
@@ -23,7 +22,10 @@ const copy: Record<Step, { title: string; subtitle?: string }> = {
     subtitle: 'Use at least 8 characters, with a number.',
   },
   'two-step': { title: 'Reset your password' },
-  done: { title: 'Password updated', subtitle: 'You can now sign in with your new password.' },
+  done: {
+    title: 'Password updated',
+    subtitle: 'You’re signed in on this device. We signed you out of your other sessions.',
+  },
 };
 export function PasswordReset() {
   const [step, setStep] = useState<Step>('email');
@@ -40,7 +42,12 @@ export function PasswordReset() {
     } else setStep('done');
   }
   return (
-    <AuthFrame {...copy[step]} onBack={step === 'password' ? () => setStep('code') : back}>
+    <AuthFrame
+      {...copy[step]}
+      onBack={step === 'password' ? () => setStep('code') : back}
+      headingIcon={step === 'done' ? <ResetSuccessIcon /> : undefined}
+      centerHeading={step === 'done'}
+    >
       {step === 'email' ? (
         <ResetEmailStep
           onSent={(value) => {
@@ -76,20 +83,28 @@ export function PasswordReset() {
 }
 
 function ResetDone() {
+  useEffect(() => {
+    const timer = window.setTimeout(() => window.location.replace('/dashboard'), 3000);
+    return () => window.clearTimeout(timer);
+  }, []);
   return (
-    <div className="space-y-4">
-      <span
-        aria-hidden="true"
-        className="flex size-12 items-center justify-center rounded-full bg-success-soft text-success"
-      >
-        <Check size={20} />
-      </span>
-      <Link
-        href="/sign-in"
-        className="flex min-h-11 w-full items-center justify-center rounded-md bg-action font-semibold text-on-primary hover:bg-action-hover"
-      >
-        Log in
-      </Link>
-    </div>
+    <a
+      href="/dashboard"
+      className="mx-auto flex min-h-12 w-full max-w-88 items-center justify-center gap-2 rounded-control bg-action px-4 font-semibold text-on-primary hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+    >
+      Continue to dashboard
+      <ArrowRight aria-hidden="true" size={16} />
+    </a>
+  );
+}
+
+function ResetSuccessIcon() {
+  return (
+    <span
+      aria-hidden="true"
+      className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-success-soft text-success"
+    >
+      <Check size={26} />
+    </span>
   );
 }

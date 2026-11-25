@@ -38,30 +38,33 @@ export function SignUpScreen({
   if (!embedded) return <SignUpFlow config={{ ...config, legal: config.legal }} />;
   return (
     <AuthFrame
-      title={account ? 'Verify your mobile · Step 2 of 4' : 'Create an account · Step 1 of 4'}
-      embedded={embedded}
-      aside={
-        embedded ? undefined : (
-          <p>
-            Already have an account? <AuthLink href="/sign-in">Log in</AuthLink>
-          </p>
-        )
+      title={
+        account ? 'Enter your verification code · Step 2 of 4' : 'Create an account · Step 1 of 4'
       }
+      subtitle={
+        !account && config.signupCodeChannel === 'email'
+          ? 'Use the email address from your invitation. If you were invited by mobile, ask for an email invitation.'
+          : undefined
+      }
+      embedded={embedded}
     >
       {account ? (
         <SignUpVerify
           account={account}
+          channel={config.signupCodeChannel}
           onBack={() => setAccount(null)}
           onAuthenticated={onAuthenticated}
         />
       ) : (
-        <SignUpAccount legal={config.legal} onSent={setAccount} />
+        <SignUpAccount
+          legal={config.legal}
+          channel={config.signupCodeChannel}
+          onSent={setAccount}
+        />
       )}
-      {embedded || onSignIn ? (
-        <AuthLink href="/sign-in" onNavigate={onSignIn}>
-          Already have an account? Sign in
-        </AuthLink>
-      ) : null}
+      <AuthLink href="/sign-in" onNavigate={onSignIn}>
+        Already have an account? Sign in
+      </AuthLink>
     </AuthFrame>
   );
 }

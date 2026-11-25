@@ -128,6 +128,7 @@ async function main() {
     WEB_PRIVACY_URL: 'https://legal.browser.test/privacy',
     WEB_TERMS_VERSION: 'browser-fixture-v1',
     WEB_GOOGLE_CLIENT_ID: undefined,
+    SIGNUP_CODE_CHANNEL: 'sms',
   };
   let fixture;
   try {

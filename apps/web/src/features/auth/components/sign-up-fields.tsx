@@ -1,12 +1,12 @@
 import { useFormContext } from 'react-hook-form';
 
-import { type SignUpInput } from '@dakly/contracts/auth';
+import type { SignUpCodeChannel, SignUpInput } from '@dakly/contracts/auth';
 
 import { authFieldClass } from './auth-control-class';
 import { PasswordStrength } from './password-strength';
 import { FormField as AuthField } from '@/components/form-field';
 
-export function SignUpFields() {
+export function SignUpFields({ channel }: { channel: SignUpCodeChannel }) {
   const form = useFormContext<SignUpInput & { password: string }>();
   const errors = form.formState.errors;
   const password = form.watch('password');
@@ -19,18 +19,20 @@ export function SignUpFields() {
         error={errors.name}
         autoComplete="name"
       />
+      {channel === 'sms' ? (
+        <AuthField
+          className={authFieldClass}
+          label="Mobile number"
+          field={form.register('phone')}
+          error={errors.phone}
+          type="tel"
+          autoComplete="tel"
+          hint="+880 · Use your own Bangladeshi mobile number."
+        />
+      ) : null}
       <AuthField
         className={authFieldClass}
-        label="Mobile number"
-        field={form.register('phone')}
-        error={errors.phone}
-        type="tel"
-        autoComplete="tel"
-        hint="+880 · Use your own Bangladeshi mobile number."
-      />
-      <AuthField
-        className={authFieldClass}
-        label="Email (optional)"
+        label={channel === 'email' ? 'Email' : 'Email (optional)'}
         field={form.register('email')}
         error={errors.email}
         type="email"

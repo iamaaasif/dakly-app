@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SessionContext } from '@dakly/contracts/sessions';
 
+import { InviteForm } from './invite-form';
 import { MembersScreen } from './members-screen';
 import { RoleForm } from './role-form';
 import { RolePicker } from './role-picker';
@@ -68,6 +69,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe('Team screens', () => {
+  it.each([
+    ['email', 'Email'],
+    ['phone', 'Mobile number'],
+  ] as const)('defaults to %s for invitations in the configured signup mode', (channel, label) => {
+    vi.stubGlobal('fetch', async () =>
+      response({ seats: { used: 1, limit: 3 }, items: [], nextCursor: null }),
+    );
+    show(<InviteForm defaultChannel={channel} onDone={() => {}} />, true);
+    expect(screen.getByLabelText(label)).toBeTruthy();
+  });
   it('shows masked contact, exact activity and plan seats without granting edit controls', async () => {
     vi.stubGlobal('fetch', async () =>
       response({
