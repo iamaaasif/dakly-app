@@ -577,3 +577,29 @@ it('answers from reads started earlier without reading the chat again', async ()
   expect(inbox.replyHistory).toHaveBeenCalledTimes(1);
   expect(run).toHaveBeenCalledTimes(1);
 });
+
+it('includes compact delivery zones in <shop> and allows quoting their charges', async () => {
+  const { service, run, tools } = build();
+  (tools as unknown as { deliveryZones: ReturnType<typeof vi.fn> }).deliveryZones = vi
+    .fn()
+    .mockResolvedValue([
+      { name: 'Inside Dhaka', chargeTaka: 60 },
+      { name: 'Outside Dhaka', chargeTaka: 120 },
+    ]);
+  run.mockResolvedValue({
+    kind: 'output',
+    aiRunId: 'run-1',
+    output: { reply: 'ঢাকায় ডেলিভারি চার্জ ৳60।' },
+  });
+
+  const composed = await service.compose({
+    storeId,
+    contactId: 'c-1',
+    customerTexts: ['Dhaka delivery charge koto?'],
+    rules: defaultShopRules,
+  });
+
+  const input: string = run.mock.calls[0]![1].input;
+  expect(input).toContain('"deliveryZones":[{"name":"Inside Dhaka","chargeTaka":60}');
+  expect(composed).toMatchObject({ kind: 'reply', text: 'ঢাকায় ডেলিভারি চার্জ ৳60।' });
+});
