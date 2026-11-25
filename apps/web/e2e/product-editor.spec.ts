@@ -149,8 +149,9 @@ test('creates a product on its page, manages photos, edits it and changes stock'
     expect(changed.variants[0]).toMatchObject({ id: created.variants[0]!.id, onHand: 2 });
     await capture('edited');
 
-    await page.getByRole('button', { name: 'Show product', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Hide product', exact: true })).toBeVisible();
+    await page.getByRole('combobox', { name: 'Status', exact: true }).click();
+    await page.getByRole('option', { name: 'Active', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toHaveText('Active');
 
     // The list opens the same page, and its row has Change stock as a dialog.
     await page.goto(`/products?search=${encodeURIComponent('Silk scarf editor')}`);

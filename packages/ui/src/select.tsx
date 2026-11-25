@@ -1,6 +1,6 @@
 'use client';
 import * as SelectPrimitive from '@radix-ui/react-select';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import type { ComponentProps } from 'react';
 
 import { cn } from './cn';
@@ -21,7 +21,7 @@ export function SelectTrigger({ className, children, ...props }: SelectTriggerPr
     >
       {children}
       <SelectPrimitive.Icon asChild>
-        <ChevronDown aria-hidden="true" size={16} strokeWidth={1.75} />
+        <ChevronsUpDown aria-hidden="true" size={16} strokeWidth={1.75} />
       </SelectPrimitive.Icon>
     </SelectPrimitive.Trigger>
   );

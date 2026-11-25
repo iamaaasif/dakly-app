@@ -2,12 +2,15 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useFormContext } from 'react-hook-form';
 
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import type { ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
+import { FormField } from '@dakly/ui/form-field';
 import { QueryError } from '@dakly/ui/query-error';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
@@ -35,7 +38,7 @@ export function NewProductPage({ initial, assistantDraft }: NewProductPageProps)
         backHref: '/products',
         notice: assistantDraft ? <AssistantNotice draft={assistantDraft} /> : undefined,
         photos: <p className="text-sm text-text-muted">Save the product to add photos.</p>,
-        status: <StatusCard status="hidden" />,
+        status: <StatusCard />,
       }}
     />
   );
@@ -86,7 +89,7 @@ function LoadedProductPage({ product, onSaved }: LoadedProductPageProps) {
         photos: <ProductPhotos product={product} />,
         status: (
           <>
-            <StatusCard status={product.status} product={product} />
+            <StatusCard product={product} />
             <ProductChatPreview product={product} />
           </>
         ),
@@ -105,29 +108,40 @@ function AssistantNotice({ draft }: { draft: AssistantProductDraft }) {
   );
 }
 
-type StatusCardProps = { status: 'active' | 'hidden'; product?: ProductResponse };
+type StatusCardProps = { product?: ProductResponse };
 
-function StatusCard({ status, product }: StatusCardProps) {
+function StatusCard({ product }: StatusCardProps) {
   const change = useChangeProduct(product?.id ?? '');
+  const form = useFormContext<{ status: 'active' | 'hidden' }>();
   const [changingStock, setChangingStock] = useState(false);
+  const status = product ? product.status : form.watch('status');
+  // A saved product changes at once; a new one waits for Save.
+  const choose = (next: string) => {
+    const value = next === 'active' ? 'active' : 'hidden';
+    if (product) change.mutate({ status: value });
+    else form.setValue('status', value, { shouldDirty: true });
+  };
   return (
     <Card className="space-y-3">
-      <h2 className="text-base font-semibold text-text">Status</h2>
-      <p className="text-sm text-text">{status === 'hidden' ? 'Hidden' : 'Shown'}</p>
+      <FormField name="status" label="Status">
+        {(control) => (
+          <Select value={status} onValueChange={choose} disabled={change.isPending}>
+            <SelectTrigger {...control}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="hidden">Hidden</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+      </FormField>
       <p className="text-xs text-text-muted">
         Hidden products are not offered to customers in chats, the shop or the order link.
       </p>
       {product ? (
         <>
           <ProductReadiness product={product} />
-          <Button
-            type="button"
-            variant="secondary"
-            loading={change.isPending}
-            onClick={() => change.mutate({ status: status === 'hidden' ? 'active' : 'hidden' })}
-          >
-            {status === 'hidden' ? 'Show product' : 'Hide product'}
-          </Button>
           {product.isStockTracked ? (
             <Button type="button" variant="secondary" onClick={() => setChangingStock(true)}>
               Change stock
