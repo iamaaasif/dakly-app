@@ -93,9 +93,16 @@ function recall(older: readonly ConversationEntry[], query: string): Conversatio
     .map(({ entry }) => entry);
 }
 
+const SHORT_SIZE_OR_NUMBER = /^(?:xs|s|m|l|xl|xxl|xxxl|[2-6]xl|\d{2})$/;
+const banglaDigits = (text: string) =>
+  text.replace(/[০-৯]/g, (digit) => String(digit.charCodeAt(0) - 0x09e6));
+
 function piecesOf(text: string): Set<string> {
   const pieces = new Set<string>();
-  for (const word of text.toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u)) {
+  for (const word of banglaDigits(text)
+    .toLowerCase()
+    .split(/[^\p{L}\p{M}\p{N}]+/u)) {
+    if (SHORT_SIZE_OR_NUMBER.test(word)) pieces.add(`tok:${word}`);
     if (word.length < 3) continue;
     for (let at = 0; at + 3 <= word.length; at += 1) pieces.add(word.slice(at, at + 3));
   }

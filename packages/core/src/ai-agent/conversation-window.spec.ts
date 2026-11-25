@@ -48,6 +48,17 @@ describe('windowConversation', () => {
     ).toContainEqual(size);
   });
 
+  it('recalls exact short size and number tokens (M, L, XL, 41) without noise', () => {
+    const mSize = customer('amar M lagbe');
+    const lSize = customer('bhai L nibo');
+    const shoe = customer('জুতায় ৪১ লাগে');
+    const padding = chatOf(120);
+    expect(windowConversation([mSize, ...padding], ['M ta ache?']).recalled).toContainEqual(mSize);
+    expect(windowConversation([lSize, ...padding], ['L hobe?']).recalled).toContainEqual(lSize);
+    expect(windowConversation([shoe, ...padding], ['41 ache?']).recalled).toContainEqual(shoe);
+    expect(windowConversation([mSize, ...padding], ['ok ta ki']).recalled).toEqual([]);
+  });
+
   it('keeps every older customer line, cut short, when nothing matches', () => {
     const phone = customer('আমার নম্বর 01811223344, whatsapp e ney');
     const window = windowConversation([phone, ...chatOf(120)], ['order confirm']);
