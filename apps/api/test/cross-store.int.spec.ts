@@ -3022,42 +3022,25 @@ async function stepStates(shop: Shop) {
 fixture('GET /setup-checklist', async () => {
   const { a, b } = await pair();
   await setupGuide(a, ['social_media'], ['chats', 'sales', 'social_auto_post']);
+  await setupGuide(b, ['social_media'], ['chats', 'sales']);
+  await success(a, 'PATCH', '/store', 200, { businessType: 'Clothing', district: 'Dhaka' });
   await orderVariant(a);
   await f.admin.pool.query(
-    "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values(gen_random_uuid(),$1,'facebook_page',gen_random_uuid()::text,'Page')",
+    "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values(gen_random_uuid(),$1,'instagram',gen_random_uuid()::text,'Shop')",
     [a.id],
   );
   expect(await stepStates(a)).toEqual({
-    connect_facebook_page: true,
-    teach_ai_answers: false,
+    add_store_details: true,
+    connect_channel: true,
     add_products: true,
-    chats_to_orders: false,
-    set_up_messaging: false,
-    send_first_campaign: false,
   });
-  // The other shop has the same answers but none of the first shop's data.
-  await setupGuide(b, ['social_media'], ['chats', 'sales']);
   expect(await stepStates(b)).toEqual({
-    connect_facebook_page: false,
-    teach_ai_answers: false,
+    add_store_details: false,
+    connect_channel: false,
     add_products: false,
-    chats_to_orders: false,
-    set_up_messaging: false,
-    send_first_campaign: false,
   });
-  await f.admin.pool.query(
-    "insert into campaigns(id,store_id,name,channel,content,status) values(gen_random_uuid(),$1,'অফার','sms','{}','sent')",
-    [a.id],
-  );
-  await f.admin.pool.query(
-    "insert into sms_sender_ids(id,store_id,sender_name,status) values(gen_random_uuid(),$1,'Rina Shop','approved')",
-    [a.id],
-  );
-  expect(await stepStates(a)).toMatchObject({ set_up_messaging: true, send_first_campaign: true });
-  expect(await stepStates(b)).toMatchObject({
-    set_up_messaging: false,
-    send_first_campaign: false,
-  });
+  await setupGuide(b, ['online_store'], ['sales']);
+  expect(await stepStates(b)).toEqual({ add_store_details: false, add_products: false });
 });
 
 fixture('PATCH /setup-checklist', async () => {
@@ -3071,7 +3054,7 @@ fixture('PATCH /setup-checklist', async () => {
     hidden: false,
     turnedOn: ['sales', 'chats', 'social_auto_post'],
   });
-  expect(changed.json().steps).toHaveLength(6);
+  expect(changed.json().steps).toHaveLength(3);
   expect(await f.row('stores', b.id)).toEqual(before);
   expect((await f.row('stores', a.id)).extensions).toEqual(['sales', 'chats', 'social_auto_post']);
   // Answering again turns nothing off and nothing on twice.
@@ -3079,7 +3062,7 @@ fixture('PATCH /setup-checklist', async () => {
     howYouSell: ['online_store', 'social_media'],
   });
   expect(again.json().turnedOn).toEqual([]);
-  expect(again.json().steps).toHaveLength(6);
+  expect(again.json().steps).toHaveLength(3);
   const staff = await f.request(a.member, 'PATCH', '/setup-checklist', {
     howYouSell: ['online_store'],
   });
@@ -3098,19 +3081,23 @@ fixture('PATCH /setup-checklist', async () => {
     { storeId: b.id, howYouSell: ['online_store'] },
   ])
     expect((await f.request(a.owner, 'PATCH', '/setup-checklist', payload)).statusCode).toBe(400);
-  // With every step done, the guide hides, and new answers bring it back.
+  await success(a, 'PATCH', '/store', 200, { businessType: 'Clothing', district: 'Dhaka' });
+  await orderVariant(a);
   await f.admin.pool.query(
-    "insert into campaigns(id,store_id,name,channel,content,status) values(gen_random_uuid(),$1,'অফার','sms','{}','sent')",
-    [b.id],
+    "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values(gen_random_uuid(),$1,'facebook_page',gen_random_uuid()::text,'Page')",
+    [a.id],
   );
-  await f.admin.pool.query(
-    "insert into sms_sender_ids(id,store_id,sender_name,status) values(gen_random_uuid(),$1,'Rina Shop','approved')",
-    [b.id],
+  expect((await success(a, 'PATCH', '/setup-checklist', 200, { hidden: true })).json().hidden).toBe(
+    true,
   );
+  expect((await success(b, 'GET', '/setup-checklist', 200)).json().hidden).toBe(false);
+
+  await setupGuide(b, ['online_store'], []);
+  await success(b, 'PATCH', '/store', 200, { businessType: 'Books', district: 'Sylhet' });
   const hiddenGuide = await success(b, 'PATCH', '/setup-checklist', 200, { hidden: true });
   expect(hiddenGuide.json().hidden).toBe(true);
   expect((await success(b, 'GET', '/setup-checklist', 200)).json().hidden).toBe(true);
-  expect((await success(a, 'GET', '/setup-checklist', 200)).json().hidden).toBe(false);
+  expect((await success(a, 'GET', '/setup-checklist', 200)).json().hidden).toBe(true);
   const reopened = await success(b, 'PATCH', '/setup-checklist', 200, {
     howYouSell: ['online_store'],
   });

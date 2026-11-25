@@ -2,14 +2,7 @@ import { z } from 'zod';
 
 import { howYouSellOptions } from './stores';
 
-export const setupStepIds = [
-  'connect_facebook_page',
-  'teach_ai_answers',
-  'add_products',
-  'chats_to_orders',
-  'set_up_messaging',
-  'send_first_campaign',
-] as const;
+export const setupStepIds = ['add_store_details', 'connect_channel', 'add_products'] as const;
 
 export const howYouSellAnswersSchema = z
   .array(z.enum(howYouSellOptions))

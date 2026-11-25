@@ -1,52 +1,93 @@
 'use client';
-import { Check, ChevronRight } from 'lucide-react';
+import { Check, ChevronRight, Plus } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
 
+import type { SessionContext } from '@dakly/contracts/sessions';
+import type { SetupChecklistResponse } from '@dakly/contracts/setup-checklist';
 import { Button, buttonVariants } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 import { cn } from '@dakly/ui/cn';
 
-import { useChangeSetupChecklist, useSetupChecklist } from '../api/setup-checklist';
-import { HowYouSellDialog } from './how-you-sell-dialog';
+import { useHideSetupChecklist, useSetupChecklist } from '../api/setup-checklist';
 import { setupStepCopy } from './setup-steps';
 import { useSessionContext } from '@/lib/session-context';
 
 export function SetupCard() {
-  const { data: session } = useSessionContext();
-  const { data } = useSetupChecklist(Boolean(session?.currentStore));
-  const change = useChangeSetupChecklist();
-  const [open, setOpen] = useState(false);
-  if (!data || data.hidden) return null;
+  const store = useSessionContext().data?.currentStore;
+  const { data } = useSetupChecklist(Boolean(store));
+  const hide = useHideSetupChecklist();
+  if (!store || !data || data.hidden) return null;
 
-  const canChange = Boolean(session?.currentStore?.canChangeExtensions);
-  const doneCount = data.steps.filter(({ done }) => done).length;
-  const allDone = doneCount === data.steps.length;
-  const nextId = data.steps.find(({ done }) => !done)?.id;
+  const steps = visibleSetupSteps(data.steps);
+  if (!steps.length) return null;
+
+  const doneCount = steps.filter(({ done }) => done).length;
+  const allDone = doneCount === steps.length;
+  const canHide = store.canChangeExtensions && data.steps.every(({ done }) => done);
 
   return (
-    <Card aria-labelledby="setup-guide-title" role="region" className="space-y-4 p-4 md:p-6">
+    <Card
+      aria-labelledby="setup-guide-title"
+      role="region"
+      className="shadow-xs @container overflow-hidden rounded-dashboard-card p-0"
+    >
       <SetupCardHeader
         allDone={allDone}
-        canChange={canChange}
+        canHide={canHide}
         done={doneCount}
-        total={data.steps.length}
-        hiding={change.isPending}
-        onChange={() => setOpen(true)}
-        onHide={() => change.mutate({ hidden: true })}
+        total={steps.length}
+        hiding={hide.isPending}
+        onHide={() => hide.mutate()}
       />
-      {change.error && (
-        <p role="alert" className="text-sm text-danger">
-          {change.error.message}
+      {hide.error && (
+        <p role="alert" className="px-5 pt-4 text-sm text-danger">
+          {hide.error.message}
         </p>
       )}
-      <ol className={cn('grid gap-4 md:grid-cols-2', data.steps.length > 2 && 'xl:grid-cols-3')}>
-        {data.steps.map(({ id, done }, index) => (
-          <SetupStepCard key={id} id={id} done={done} index={index} isNext={id === nextId} />
-        ))}
-      </ol>
-      <HowYouSellDialog open={open} answers={data.howYouSell} onClose={() => setOpen(false)} />
+      <SetupSteps steps={steps} store={store} />
     </Card>
+  );
+}
+
+function visibleSetupSteps(steps: SetupChecklistResponse['steps']) {
+  // A local server or cache can still return step IDs from an older dashboard.
+  return steps.filter(({ id }) => Object.hasOwn(setupStepCopy, id));
+}
+
+function SetupSteps({
+  steps,
+  store,
+}: {
+  steps: SetupChecklistResponse['steps'];
+  store: NonNullable<SessionContext['currentStore']>;
+}) {
+  const editable = {
+    add_store_details: store.canEditStoreSettings,
+    connect_channel: store.canEditStoreSettings,
+    add_products: store.canEditProducts,
+  };
+  const nextIndex = steps.findIndex(({ id, done }) => !done && editable[id]);
+
+  return (
+    <ol
+      aria-label="Setup steps"
+      className={cn(
+        'grid gap-4 p-4 sm:p-5',
+        steps.length === 2 && '@min-[620px]:grid-cols-2',
+        steps.length === 3 && '@min-[830px]:grid-cols-3',
+      )}
+    >
+      {steps.map(({ id, done }, index) => (
+        <SetupStepCard
+          key={id}
+          id={id}
+          done={done}
+          index={index}
+          isNext={index === nextIndex}
+          canEdit={editable[id]}
+        />
+      ))}
+    </ol>
   );
 }
 
@@ -55,48 +96,71 @@ function SetupStepCard(props: {
   done: boolean;
   index: number;
   isNext: boolean;
+  canEdit: boolean;
 }) {
-  const { id, done, index, isNext } = props;
+  const { id, done, index, isNext, canEdit } = props;
   const copy = setupStepCopy[id];
   return (
     <li
       className={cn(
-        'rounded-xl flex flex-col gap-3 border bg-surface p-4',
-        isNext ? 'border-primary ring-1 ring-primary' : 'border-border',
+        'flex min-w-0 flex-col gap-4 rounded-dashboard-tile border bg-surface p-4 sm:p-5',
+        isNext ? 'shadow-xs border-border-strong' : 'border-border',
       )}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3.5">
         <span
           aria-hidden="true"
           className={cn(
             'grid size-10 shrink-0 place-items-center rounded-lg',
             done && 'bg-success-soft text-success',
-            isNext && 'bg-primary text-on-primary',
+            isNext && 'bg-inverse text-on-primary',
             !done && !isNext && 'bg-surface-muted text-text-muted',
           )}
         >
-          {done ? <Check size={20} /> : copy.icon}
+          {done ? <Check size={20} /> : index + 1}
         </span>
-        <span className="text-xs font-bold tracking-wider text-text-muted uppercase">
-          Step {index + 1}
-        </span>
+        <div className="min-w-0 space-y-0.5">
+          <p className="text-xs font-semibold tracking-wide text-text-muted uppercase">
+            Step {index + 1}
+          </p>
+          <h3 className="text-md leading-tight font-bold tracking-tight">{copy.title}</h3>
+          <p className="text-sm text-text-muted">{copy.hint}</p>
+        </div>
       </div>
-      <div className="flex-1">
-        <h3 className="text-md font-semibold">{copy.title}</h3>
-        <p className="text-sm text-text-muted">{copy.hint}</p>
+      <div className="flex min-h-36 flex-1 flex-col justify-center gap-2 rounded-lg border border-border bg-background p-3">
+        {copy.preview}
       </div>
-      {done ? (
-        <p className="min-h-10 text-base font-medium text-success">Done</p>
-      ) : (
-        <Link
-          href={copy.href}
-          className={buttonVariants({ variant: isNext ? 'primary' : 'secondary' })}
-        >
-          {copy.button}
-          <ChevronRight aria-hidden="true" size={16} />
-        </Link>
-      )}
+      <SetupStepAction id={id} done={done} canEdit={canEdit} isNext={isNext} />
     </li>
+  );
+}
+
+function SetupStepAction({
+  id,
+  done,
+  canEdit,
+  isNext,
+}: {
+  id: keyof typeof setupStepCopy;
+  done: boolean;
+  canEdit: boolean;
+  isNext: boolean;
+}) {
+  if (done) return <p className="min-h-10 text-sm font-semibold text-success">Done</p>;
+  if (!canEdit) return null;
+  const copy = setupStepCopy[id];
+  return (
+    <Link
+      href={copy.href}
+      className={cn(
+        buttonVariants({ variant: isNext ? 'primary' : 'secondary' }),
+        !isNext && 'border-inverse bg-inverse text-on-primary hover:bg-inverse/85',
+      )}
+    >
+      {id === 'add_products' && <Plus aria-hidden="true" size={16} />}
+      {copy.button}
+      {id !== 'add_products' && <ChevronRight aria-hidden="true" size={16} />}
+    </Link>
   );
 }
 
@@ -111,7 +175,10 @@ function SetupProgress({ done, total }: { done: number; total: number }) {
         aria-valuenow={done}
         className="h-1.5 w-28 overflow-hidden rounded-full bg-surface-muted"
       >
-        <div className="h-full bg-success" style={{ width: `${(done / total) * 100}%` }} />
+        <div
+          className="h-full rounded-full bg-inverse"
+          style={{ width: `${total ? (done / total) * 100 : 0}%` }}
+        />
       </div>
       <span className="text-base font-medium">
         {done} of {total} done
@@ -122,34 +189,28 @@ function SetupProgress({ done, total }: { done: number; total: number }) {
 
 function SetupCardHeader(props: {
   allDone: boolean;
-  canChange: boolean;
+  canHide: boolean;
   done: number;
   total: number;
   hiding: boolean;
-  onChange: () => void;
   onHide: () => void;
 }) {
-  const { allDone, canChange, done, total, hiding, onChange, onHide } = props;
+  const { allDone, canHide, done, total, hiding, onHide } = props;
   return (
-    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+    <div className="flex flex-col justify-between gap-3 border-b border-border bg-linear-to-b from-background to-surface px-4 py-5 sm:px-6 @min-[680px]:flex-row @min-[680px]:items-center">
       <div>
-        <h2 id="setup-guide-title" className="text-lg font-bold">
-          {allDone ? 'You’re all set' : 'Get started with Dakly'}
+        <h2 id="setup-guide-title" className="text-lg font-bold tracking-tight">
+          {allDone ? 'You’re all set' : `Get started in ${total} ${total === 1 ? 'step' : 'steps'}`}
         </h2>
         <p className="text-sm text-text-muted">
           {allDone
             ? 'Dakly is ready to grow your sales.'
-            : `${total} steps to start getting repeat sales.`}
+            : 'Finish these steps so Dakly can start answering customers and taking orders.'}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {canChange && (
-          <Button variant="link" className="min-h-10" onClick={onChange}>
-            Change setup
-          </Button>
-        )}
         <SetupProgress done={done} total={total} />
-        {allDone && canChange && (
+        {canHide && (
           <Button variant="secondary" loading={hiding} onClick={onHide}>
             Hide guide
           </Button>

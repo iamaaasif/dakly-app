@@ -20,6 +20,8 @@ const storeColumns = {
   extensions: stores.extensions,
 };
 const setupColumns = {
+  businessType: stores.businessType,
+  district: stores.district,
   howYouSell: stores.howYouSell,
   extensions: stores.extensions,
   guideHidden: sql<boolean>`coalesce((${stores.settings}->>'setupGuideHidden')::boolean, false)`,
