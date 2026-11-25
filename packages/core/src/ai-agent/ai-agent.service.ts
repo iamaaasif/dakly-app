@@ -281,26 +281,18 @@ export class AiAgentService {
       return settings;
   }
 
-  // The reason `other` is a message that tries to change the rules or is not about the shop.
+  // The reason `other` is a message that tries to change the rules or is not about the shop. It gets
+  // one short refusal; a person has nothing to do there, so the chat stays with the AI.
   private stop(
     storeId: string,
     conversationId: string,
     before: EligibleTurn,
     outcome: { reason: Reason; summary?: string; texts: string[] },
   ) {
-    return outcome.reason === 'other'
-      ? this.decline(storeId, conversationId, before, outcome.texts)
-      : this.handOver(storeId, conversationId, before, outcome);
-  }
-
-  // A message that tries to change the rules or is not about the shop gets one short refusal. A
-  // person has nothing to do there, so the chat stays with the AI and no model reply is written.
-  private decline(storeId: string, conversationId: string, before: EligibleTurn, texts: string[]) {
-    const content = declineReply(before.rules.replyLanguage, texts);
-    return this.sayLine(storeId, conversationId, before, {
-      content,
-      key: `ai-decline:${before.turn.latest.id}`,
-    });
+    if (outcome.reason !== 'other') return this.handOver(storeId, conversationId, before, outcome);
+    const content = declineReply(before.rules.replyLanguage, outcome.texts);
+    const key = `ai-decline:${before.turn.latest.id}`;
+    return this.sayLine(storeId, conversationId, before, { content, key });
   }
 
   // A fixed line from the shop, sent only while the chat is still the one the job read.

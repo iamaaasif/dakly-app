@@ -18,13 +18,7 @@ import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
-import {
-  AD_PRODUCT_LIMIT,
-  AD_PRODUCTS_TOOL,
-  adProducts,
-  adProductsVersion,
-  isAdContextFresh,
-} from './ad-context';
+import { AD_PRODUCT_LIMIT, AD_PRODUCTS_TOOL, adProducts, isAdContextFresh } from './ad-context';
 import {
   conversationEntries,
   type ConversationEntry,
@@ -32,7 +26,6 @@ import {
   MATCH_PHOTO_TOOL,
   PRODUCTS_IN_CHAT_TOOL,
   productsInChat,
-  productsInChatVersion,
   recentlyShownProductIds,
   SHOWN_PRODUCTS_SOURCE,
   shownProductIds,
@@ -42,12 +35,14 @@ import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
 import { chatReplyV14 } from './prompts/chat-reply.v14';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
+import { promptWith } from './reply-prompt-version';
 import {
   type ToolScope,
   isOutOfStock,
   SalesAgentToolsService,
   salesAgentLlmTools,
 } from './sales-agent-tools.service';
+import { shopBlock, summaryOf } from './shop-block';
 import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
 
 const MAX_ROUNDS = 4;
@@ -78,9 +73,6 @@ export type ComposedReply =
     }
   | { kind: 'handover'; reason: Reason; summary?: string }
   | { kind: 'busy' };
-
-const summaryOf = (result: object) =>
-  'summary' in result && typeof result.summary === 'string' ? result.summary : undefined;
 
 // The photo is sent before the text; a card with no photo is text only.
 export type ProductCard = {
@@ -379,12 +371,7 @@ export class SalesAgentService {
       ? conversationEntries(history)
       : input.customerTexts.map((text) => ({ from: 'customer', text: shorten(text) }));
     return [
-      `<shop>${JSON.stringify({
-        name: shop.name,
-        phone: shop.phone,
-        address: shop.address,
-        district: shop.district,
-      })}</shop>`,
+      shopBlock(shop),
       shopRulesBlock(input.rules),
       ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
       ...conversationBlocks(windowConversation(conversation, input.customerTexts)),
@@ -425,20 +412,6 @@ function isUnconfirmed(
 // The retry's first lines tell the model why its last reply was not sent.
 function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | undefined) {
   return rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
-}
-
-// A run that was shown the products block records its version with the reply prompt's.
-function promptWith(
-  prompt: typeof chatReplyV14,
-  inChat: ToolResult | undefined,
-  ad: object | undefined,
-) {
-  const parts = [
-    prompt.version,
-    ...(inChat ? [productsInChatVersion] : []),
-    ...(ad ? [adProductsVersion] : []),
-  ];
-  return { ...prompt, version: parts.join('+') };
 }
 
 // Saved with the reply, so the next turn knows which products "this one" can mean.
