@@ -56,7 +56,7 @@ test('shows the compact dashboard and keeps figures scoped to the selected shop'
       [1180, 1],
       [1280, 2],
       [1440, 2],
-    ]) {
+    ] as const) {
       await page.setViewportSize({ width, height: 900 });
       const layout = await overview.evaluate((element) => ({
         columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
