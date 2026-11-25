@@ -37,7 +37,18 @@ export class ProductSearchRepository {
     );
   }
 
-  findIdsByChatPhotos(storeId: string, fileIds: string[]) {
+  listPostProductNames(storeId: string, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: products.id, name: products.name })
+        .from(products)
+        .where(eq(products.storeId, storeId))
+        .orderBy(desc(products.id))
+        .limit(limit),
+    );
+  }
+
+  findPostProductsByPhotos(storeId: string, fileIds: string[]) {
     return this.database.forStore(storeId, (tx) => {
       const matchingVariants = tx
         .select({ productId: productVariants.productId })
@@ -54,7 +65,7 @@ export class ProductSearchRepository {
         .from(products)
         .where(
           and(
-            chatProductFilter(storeId),
+            eq(products.storeId, storeId),
             or(arrayOverlaps(products.imageFileIds, fileIds), variantPhoto),
           ),
         )

@@ -65,7 +65,8 @@ export class CommentAutoReplyService {
   ) {
     const post = await this.social.publishedPostContent(storeId, target);
     if (!post) return;
-    const photos = await this.source.chatProductsByPhotos(storeId, post.mediaFileIds);
+    // Products hidden after publication still count when deciding what the post shows.
+    const photos = await this.source.postProductsByPhotos(storeId, post.mediaFileIds);
     if (photos.length > 1 || photos.some(({ variantPhoto }) => variantPhoto)) return;
     const named = post.caption
       ? await this.search.productsNamedInCaption(storeId, post.caption)

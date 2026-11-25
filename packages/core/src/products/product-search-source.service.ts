@@ -35,9 +35,13 @@ export class ProductSearchSourceService {
     }));
   }
 
-  async chatProductsByPhotos(storeId: string, fileIds: string[]) {
+  listPostProductNames(storeId: string, limit: number) {
+    return this.repository.listPostProductNames(storeId, limit);
+  }
+
+  async postProductsByPhotos(storeId: string, fileIds: string[]) {
     if (!fileIds.length) return [];
-    return this.repository.findIdsByChatPhotos(storeId, fileIds);
+    return this.repository.findPostProductsByPhotos(storeId, fileIds);
   }
 
   nearestForChat(

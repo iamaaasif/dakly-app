@@ -959,31 +959,38 @@ it("returns the chat to the AI 30 minutes after a person's last reply, without c
   expect(await conversationTimer(permanent)).toEqual({ responder: 'human', minutes: null });
 });
 
-it.each(['catalogue photo', 'caption', 'conflicting post'] as const)(
+it.each(['catalogue photo', 'caption', 'conflicting post', 'conflicting hidden photo'] as const)(
   'handles a Facebook price comment using %s and respects the comment switch',
   async (match) => {
     const { storeId, connectionId } = await shop();
     const productId = randomUUID();
     const postId = randomUUID();
     const photoId = randomUUID();
+    const conflicting = match === 'conflicting post' || match === 'conflicting hidden photo';
     await admin.pool.query(
-      "insert into products (id, store_id, name, price_poisha, image_file_ids) values ($1,$2,'Blue Kurti',120000,$3)",
-      [productId, storeId, [photoId]],
+      "insert into products (id, store_id, name, price_poisha, image_file_ids, is_visible_in_chats) values ($1,$2,'Blue Kurti',120000,$3,$4)",
+      [productId, storeId, [photoId], match !== 'conflicting hidden photo'],
     );
     await admin.pool.query(
       "insert into product_variants (id, store_id, product_id, title, on_hand, is_default) values (gen_random_uuid(),$1,$2,'Default',3,true)",
       [storeId, productId],
     );
-    if (match === 'conflicting post') {
+    if (conflicting) {
+      const secondProductId = randomUUID();
       await admin.pool.query(
-        "insert into products (id,store_id,name,price_poisha) values (gen_random_uuid(),$1,'Red Saree',250000)",
-        [storeId],
+        "insert into products (id,store_id,name,price_poisha) values ($1,$2,'Red Saree',250000)",
+        [secondProductId, storeId],
+      );
+      await admin.pool.query(
+        "insert into product_variants (id,store_id,product_id,title,on_hand,is_default) values (gen_random_uuid(),$1,$2,'Default',3,true)",
+        [storeId, secondProductId],
       );
     }
     const caption = {
       'catalogue photo': 'New arrival',
       caption: 'New arrival: Blue Kurti',
       'conflicting post': 'New arrival: Red Saree',
+      'conflicting hidden photo': 'New arrival: Red Saree',
     }[match];
     await admin.pool.query(
       'insert into posts (id,store_id,caption,media_file_ids) values ($1,$2,$3,$4)',
@@ -1050,15 +1057,15 @@ it.each(['catalogue photo', 'caption', 'conflicting post'] as const)(
     ]);
     await job.handle(await receivePriceComment());
     expect(privateReply.mock.calls.map(([, input]) => input.text)).toEqual(
-      match === 'conflicting post' ? [] : ['Blue Kurti er dam ৳1,200.'],
+      conflicting ? [] : ['Blue Kurti er dam ৳1,200.'],
     );
     expect(publicReply.mock.calls.map(([, input]) => input.text)).toEqual(
-      match === 'conflicting post' ? [] : ['Messenger e dam janiyechi.'],
+      conflicting ? [] : ['Messenger e dam janiyechi.'],
     );
     const { items } = await comments.list(storeId, { limit: 50 });
     expect(items.map(({ status }) => status).sort()).toEqual([
       'new',
-      match === 'conflicting post' ? 'new' : 'replied',
+      conflicting ? 'new' : 'replied',
     ]);
   },
 );

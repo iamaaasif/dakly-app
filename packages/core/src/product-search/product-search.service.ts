@@ -55,7 +55,7 @@ export class ProductSearchService {
 
   async productsNamedInCaption(storeId: string, caption: string) {
     const text = ` ${searchWords(caption).join(' ')} `;
-    const candidates = await this.source.listSearchCandidates(storeId, candidateLimit);
+    const candidates = await this.source.listPostProductNames(storeId, candidateLimit);
     const matches = candidates.filter(({ name }) => {
       const words = searchWords(name);
       return words.length > 0 && text.includes(` ${words.join(' ')} `);
