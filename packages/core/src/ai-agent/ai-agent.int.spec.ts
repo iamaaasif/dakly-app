@@ -263,7 +263,10 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
   await agent.reply(active.storeId, message.conversation_id, message.id);
 
   expect(inputs.map((input) => JSON.parse(input))).toEqual([
-    { earlier_messages: [], customer_messages: ['bhai, order ta', 'ekjon manush er sathe kotha bolbo'] },
+    {
+      earlier_messages: [],
+      customer_messages: ['bhai, order ta', 'ekjon manush er sathe kotha bolbo'],
+    },
   ]);
   const { rows: events } = await admin.pool.query(
     "select payload from outbox_events where store_id = $1 and type = 'conversation.handed_over'",
@@ -273,7 +276,9 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     { payload: { conversationId: message.conversation_id, reason: 'asked_for_person' } },
   ]);
   expect(await observe(active)).toEqual({
-    conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'asked_for_person' }],
+    conversations: [
+      { status: 'needs_you', responder: 'human', handover_reason: 'asked_for_person' },
+    ],
     replies: [
       {
         body: 'আপনার বিষয়টি নোট করা হয়েছে। আমাদের টিম খুব শীঘ্রই আপনার সাথে কথা বলবে।',
