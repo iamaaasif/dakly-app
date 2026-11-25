@@ -33,7 +33,10 @@ export function handoverReason(
     ({ intent, pattern, switchName }) =>
       rules[switchName] && (intent === result.intent || pattern.test(text)),
   );
-  const reason = rule?.reason ?? classifierReason(result, rules);
+  const reason =
+    result.sentiment === 'angry' || result.handover === 'angry'
+      ? 'angry'
+      : (rule?.reason ?? classifierReason(result, rules));
   return reason && !isTakenInByModel(reason, rules) ? reason : null;
 }
 
@@ -70,15 +73,22 @@ const handoverRules: {
 }[] = [
   {
     intent: 'exchange',
-    pattern: /\b(refund|exchange|ferot)\b|ফেরত|বদল/u,
+    pattern:
+      /\b(?:want|need|give|issue|process)\s+(?:a\s+)?(?:refund|exchange|return)\b|\b(?:taka\s*ferot|refund|exchange|ferot)\s*(?:chai|chay|den|din|dao|lagbe|korbo|korte\s*chai|deben|dite\s*hobe|korun|koren)\b|(?:টাকা\s*ফেরত|রিফান্ড|ফেরত|বদল)\s*(?:চাই|দিন|দাও|দেন|লাগবে|করব|করবো|করতে\s*চাই|করুন|দেব|দেবো|দিব|দিবো)|এটা\s*(?:ফেরত|বদল)/u,
     reason: 'refund',
     switchName: 'refundsAndExchanges',
   },
   {
     intent: 'complaint',
-    pattern: /\b(damaged|fake|chera|broken)\b|নকল|ছেঁড়া/u,
+    pattern:
+      /\b(?:received|came|is|was|looks|got)\s+(?:a\s+)?(?:damaged|broken|fake|chera)\b|\b(?:damaged|broken|chera)\s+(?:ashche|asce|esechhe|eseche|peyechi|peyeci|diyechhe|diyeche|dise|pathaise|pathiyeche)\b|\b(?:eta|aita|product|kapor)\s+(?:fake|chera|broken|damaged)\b|নকল\s*(?:দিয়েছে|দিছে|পাঠাইছে|পণ্য)|ছেঁড়া|ভাঙা/u,
     reason: 'complaint',
     switchName: 'damagedOrWrong',
   },
-  { pattern: /\b(discount|chhar)\b|ছাড়(?!া)/u, reason: 'discount', switchName: 'discounts' },
+  {
+    pattern:
+      /\b(?:get|give|want|need)\s+(?:a\s+|any\s+)?(?:discount|chhar)\b|\b(?:discount|chhar)\s+(?:den|din|dao|diben|deben|pabo|lagbe|chai|chay|koren|korun)\b|ছাড়\s*(?:দিন|দাও|দেন|দেওয়া|পাব|পাবো|চাই|লাগবে|দিবেন|করুন|করেন)/u,
+    reason: 'discount',
+    switchName: 'discounts',
+  },
 ];
