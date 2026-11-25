@@ -268,9 +268,11 @@ describe('KhataScansService (Postgres)', () => {
   it('fails a page the model could not answer and lets the owner try it again', async () => {
     const { storeId, userId } = await shop(5);
     storeObject();
-    vi.spyOn(FakeLlmDriver.prototype, 'respond').mockRejectedValueOnce(
-      new LlmError('LLM_UNAVAILABLE'),
-    );
+    // The vendor stays down through both short retries.
+    vi.spyOn(FakeLlmDriver.prototype, 'respond')
+      .mockRejectedValueOnce(new LlmError('LLM_UNAVAILABLE'))
+      .mockRejectedValueOnce(new LlmError('LLM_UNAVAILABLE'))
+      .mockRejectedValueOnce(new LlmError('LLM_UNAVAILABLE'));
     const pageId = await uploadedPage(storeId, userId);
     await service.requestRead(storeId, pageId);
     await service.readPage(storeId, pageId, true);

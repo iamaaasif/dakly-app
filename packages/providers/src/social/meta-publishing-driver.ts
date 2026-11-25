@@ -45,8 +45,14 @@ const messages = {
   unavailable: 'Meta did not confirm the result',
 };
 
+export type MetaErrorDetail = { code: number; subcode: number | null; message: string };
+
 export class MetaPublishingError extends Error {
-  constructor(readonly code: keyof typeof messages) {
+  // Meta's own reason, kept off `message` so it never reaches an API response.
+  constructor(
+    readonly code: keyof typeof messages,
+    readonly detail: MetaErrorDetail | null = null,
+  ) {
     super(messages[code]);
   }
 }

@@ -16,6 +16,7 @@ import {
   useMarkConversationRead,
 } from '../api/conversation-thread';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { contactDisplayName } from '../contact-name';
 import { replyWindow } from '../reply-window';
 import { ChatComposer } from './chat-composer';
 import { ConversationActions } from './conversation-actions';
@@ -119,7 +120,7 @@ function ConversationHeader({ conversation }: { conversation: ConversationRespon
   return (
     <div className="min-w-0">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="truncate text-lg font-bold">{conversation.contactName ?? 'No name'}</h2>
+        <h2 className="truncate text-lg font-bold">{contactDisplayName(conversation)}</h2>
         {conversation.channel !== 'whatsapp' ? (
           <Badge variant={window.state === 'open' ? 'warning' : 'neutral'}>
             {window.state === 'open' ? window.label : 'Window over'}

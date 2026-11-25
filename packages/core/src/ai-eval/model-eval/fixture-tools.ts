@@ -1,8 +1,5 @@
-import {
-  addOnsRule,
-  describeAlternatives,
-  describePhotoMatch,
-} from '../../ai-agent/sales-agent-tools.service';
+import { describeAlternatives, describePhotoMatch } from '../../ai-agent/product-match-results';
+import { addOnsRule } from '../../ai-agent/sales-agent-tools.service';
 import { pickAddOns } from '../../product-search/product-add-ons';
 import { pickAlternatives } from '../../product-search/product-alternatives';
 import { decidePhotoMatch } from '../../product-search/product-photo-match';

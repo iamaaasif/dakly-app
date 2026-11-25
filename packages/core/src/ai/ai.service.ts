@@ -17,6 +17,7 @@ import { AiGate } from './ai-gate';
 import { AiRunsService, type AiAttempt } from './ai-runs.service';
 import { AI_CONFIG, aiTimeoutMs, type AiConfig, type AiTier } from './ai.config';
 import { aiError } from './ai.errors';
+import { retryTransientFailure } from './transient-retry';
 
 // Reading a customer's photo or voice note draws from the chat allowance, one unit each.
 const usageUnits = {
@@ -166,7 +167,12 @@ export class AiService {
     if (await this.gate.isPaused()) return { kind: 'failure', code: 'AI_PAUSED' };
     const firstTimeout = deadline - this.clock.now().getTime();
     if (firstTimeout <= 0) return { kind: 'failure', code: 'LLM_TIMEOUT' };
-    const first = await this.attempt(storeId, request, firstTimeout);
+    const first = await retryTransientFailure(await this.attempt(storeId, request, firstTimeout), {
+      deadline,
+      now: () => this.clock.now().getTime(),
+      isStopped: async () => request.signal?.aborted === true || (await this.gate.isPaused()),
+      attempt: (timeoutMs) => this.attempt(storeId, request, timeoutMs, true),
+    });
     if (first.kind !== 'failure' || first.code !== 'AI_OUTPUT_MISMATCH') return first;
     if (await this.gate.isPaused()) return first;
     const retryTimeout = deadline - this.clock.now().getTime();
@@ -178,6 +184,7 @@ export class AiService {
     storeId: string,
     request: AiRequest<T>,
     timeoutMs: number,
+    isRetry = false,
   ): Promise<AiAttempt<T>> {
     const model = this.config.models[request.tier];
     return this.runs.attempt(
@@ -198,6 +205,7 @@ export class AiService {
         promptVersion: request.prompt.version,
         price: Object.hasOwn(this.config.prices, model) ? this.config.prices[model] : undefined,
       },
+      isRetry,
     );
   }
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import type { Database } from '@dakly/db/client';
@@ -144,6 +144,32 @@ describe('AiService', () => {
       code: 'LLM_TIMEOUT',
     });
     expect(runs.map((run) => run.outcome)).toEqual(['timeout']);
+  });
+
+  it('tries again after a failed vendor request, stops after two waits and counts it once', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      const recovered = fixture([new LlmError('LLM_REQUEST_FAILED'), reply]);
+      const pending = recovered.service.run(storeId, request);
+      await vi.advanceTimersByTimeAsync(1000);
+      await expect(pending).resolves.toMatchObject({ kind: 'output' });
+      expect(recovered.runs.map((run) => run.outcome)).toEqual(['failed', 'completed']);
+
+      const broken = fixture([
+        new LlmError('LLM_REQUEST_FAILED'),
+        new LlmError('LLM_REQUEST_FAILED'),
+        new LlmError('LLM_REQUEST_FAILED'),
+        reply,
+      ]);
+      const failing = broken.service.run(storeId, request);
+      await vi.advanceTimersByTimeAsync(5000);
+      await expect(failing).resolves.toMatchObject({ kind: 'failure', code: 'LLM_REQUEST_FAILED' });
+      expect(broken.runs).toHaveLength(3);
+      // The retries of one request count as one provider failure, so the AI is not paused.
+      await expect(broken.service.run(storeId, request)).resolves.toMatchObject({ kind: 'output' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('uses the billing unit for the result purpose', async () => {

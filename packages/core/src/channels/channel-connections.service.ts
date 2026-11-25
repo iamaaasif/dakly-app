@@ -63,7 +63,7 @@ export class ChannelConnectionsService {
     private readonly pageSubscriptions: MetaPageSubscriptionsService,
     @Inject(META_CHANNEL_DRIVER)
     private readonly driver:
-      | (Pick<ChannelDriver, 'send' | 'downloadMedia'> &
+      | (Pick<ChannelDriver, 'send' | 'downloadMedia' | 'showTyping'> &
           ProfileDriver &
           Omit<CommentDriver, 'parseComments'>)
       | null,
@@ -188,6 +188,26 @@ export class ChannelConnectionsService {
       throw error;
     } finally {
       token.fill(0);
+    }
+  }
+
+  // The typing sign is a courtesy: a failure is logged and never stops the reply it precedes.
+  async showMetaTyping(
+    storeId: string,
+    target: {
+      connectionId: string;
+      channel: OutboundMessage['channel'];
+      recipientExternalId: string;
+    },
+  ) {
+    const { connectionId, channel, recipientExternalId } = target;
+    try {
+      const prepared = await this.prepareMetaSend(storeId, connectionId, channel);
+      await this.useMetaToken(prepared, 'meta_typing', (driver, credentials) =>
+        driver.showTyping(credentials, { channel, recipientExternalId }),
+      );
+    } catch (error) {
+      this.logger.warn({ message: 'Typing sign failed', storeId, error: String(error) });
     }
   }
 

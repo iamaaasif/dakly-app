@@ -25,6 +25,7 @@ describe('sales agent tools', () => {
     const withMoney = salesAgentTools.filter((tool) => /taka/i.test(JSON.stringify(tool.units)));
     expect(withMoney.map((tool) => tool.name)).toEqual([
       'search_products',
+      'browse_products',
       'get_product',
       'get_delivery_charge',
       'get_my_orders',
