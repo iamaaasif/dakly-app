@@ -21,6 +21,7 @@ export function useSignUpVerification(
     defaultValues: {
       purpose: 'sign_up' as const,
       phone: account.registration.phone,
+      email: account.registration.email,
       password: account.password,
       code: '',
     },

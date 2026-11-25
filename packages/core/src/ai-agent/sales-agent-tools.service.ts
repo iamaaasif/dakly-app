@@ -4,6 +4,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ZodError } from 'zod';
 
 import {
+  browseProductsTool,
   confirmOrderTool,
   draftOrderTool,
   findAlternativesTool,
@@ -27,9 +28,10 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { BuyerOrdersService } from '../orders/buyer-orders.service';
 import { ChatOrdersService } from '../orders/chat-orders.service';
 import { AppError } from '../platform/errors/app-error';
-import { type PhotoMatch, ProductSearchService } from '../product-search/product-search.service';
+import { ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 import { RestockRequestsService } from '../products/restock-requests.service';
+import { describeAlternatives, describePhotoMatch } from './product-match-results';
 
 // The agent job supplies both ids. No tool argument can name another store or customer.
 export type ToolScope = {
@@ -45,6 +47,7 @@ export type ToolScope = {
 type Handler = (scope: ToolScope, raw: unknown) => Promise<object>;
 
 const SEARCH_PRODUCT_LIMIT = 3;
+const BROWSE_PRODUCT_LIMIT = 5;
 const AREA_LIMIT = 3;
 const ZONE_LIMIT = 20;
 const KNOWLEDGE_LIMIT = 4;
@@ -69,6 +72,7 @@ export const salesAgentLlmTools: readonly LlmTool[] = salesAgentTools.map((tool)
 export class SalesAgentToolsService {
   private readonly handlers: Record<string, Handler> = {
     [searchProductsTool.name]: (scope, raw) => this.searchProducts(scope, raw),
+    [browseProductsTool.name]: (scope, raw) => this.browseProducts(scope, raw),
     [getProductTool.name]: (scope, raw) => this.getProduct(scope, raw),
     [getDeliveryChargeTool.name]: (scope, raw) => this.getDeliveryCharge(scope, raw),
     [searchKnowledgeTool.name]: (scope, raw) => this.searchKnowledge(scope, raw),
@@ -107,6 +111,20 @@ export class SalesAgentToolsService {
     }
   }
 
+  private async browseProducts({ storeId }: ToolScope, raw: unknown) {
+    const { category, maxPriceTaka, sort } = browseProductsTool.input.parse(raw);
+    const found = await this.productSearch.browse(
+      storeId,
+      {
+        category: category ?? undefined,
+        sort: sort ?? undefined,
+        maxPricePoisha: maxPriceTaka === null ? undefined : maxPriceTaka * 100,
+      },
+      BROWSE_PRODUCT_LIMIT,
+    );
+    return { categories: found.categories, products: found.products.map(productResult) };
+  }
+
   private async searchProducts({ storeId, adProductIds }: ToolScope, raw: unknown) {
     const { query } = searchProductsTool.input.parse(raw);
     const found = adProductIds
@@ -119,6 +137,12 @@ export class SalesAgentToolsService {
   async adProducts({ storeId }: ToolScope, productIds: readonly string[]): Promise<object[]> {
     const found = await this.products.getManyForChat(storeId, [...productIds]);
     return found.map(productResult);
+  }
+
+  // The one product a text names clearly, as a photo's words are matched; none when it is unsure.
+  async productNamedBy({ storeId }: ToolScope, text: string): Promise<string[]> {
+    const match = await this.productSearch.matchPhoto(storeId, text);
+    return match.kind === 'sure' ? [match.product.id] : [];
   }
 
   // The customer sent a photo: say which product it shows, or that the shop cannot tell.
@@ -284,7 +308,11 @@ export class SalesAgentToolsService {
 
   private async confirmOrder({ storeId, contactId, suggestAddOns }: ToolScope, raw: unknown) {
     const { orderNumber } = confirmOrderTool.input.parse(raw);
-    const order = await this.chatOrders.confirm(storeId, contactId, orderNumber);
+    const order = await this.chatOrders.confirm(
+      storeId,
+      contactId,
+      await this.orderToConfirm(storeId, contactId, orderNumber),
+    );
     if (!suggestAddOns) return { orderNumber: order.number, stage: order.stage };
     const addOns = await this.productSearch.addOnsFor(storeId, {
       variantIds: order.items.map(({ variantId }) => variantId),
@@ -296,6 +324,15 @@ export class SalesAgentToolsService {
       addOnRule: addOnsRule,
       addOns: addOns.map(productResult),
     };
+  }
+
+  // The model often says yes without the number it saw one message earlier and guesses one. When
+  // the number is none of this customer's orders and exactly one waits for a yes, that one is meant.
+  private async orderToConfirm(storeId: string, contactId: string, orderNumber: number) {
+    const own = await this.orders.list(storeId, contactId, OWN_ORDER_LIMIT);
+    if (own.some(({ number }) => number === orderNumber)) return orderNumber;
+    const waiting = own.filter(({ stage }) => stage === 'to_confirm');
+    return waiting.length === 1 ? waiting[0]!.number : orderNumber;
   }
 
   private async handOver(raw: unknown) {
@@ -328,86 +365,6 @@ function draftKey(
   const items = input.items.map(({ variantId, quantity }) => `${variantId}x${quantity}`).sort();
   const details = [...items, input.phone, input.address, areaId].join('|');
   return `ai-order:${conversationId}:${createHash('sha256').update(details).digest('hex').slice(0, 32)}`;
-}
-
-// The rule tells the model what it may do with the answer, so a guess is never presented as a match.
-export function describePhotoMatch(
-  match: PhotoMatch,
-  present: (product: ChatProduct) => object,
-  alternatives: ChatProduct[],
-): object {
-  if (match.kind === 'sure') return describeSureMatch(match, present);
-  if (match.kind === 'unsure')
-    return {
-      photoMatch: 'unsure',
-      rule: 'Do not pick one. Ask "কোন প্রোডাক্টটি চাচ্ছেন?" and send a card for each product with send_product_card.',
-      products: match.products.map(present),
-    };
-  if (match.kind === 'sold_out')
-    return {
-      photoMatch: 'sold_out',
-      rule: 'The photo shows this product and it has no stock. Say so. Do not offer it or take an order for it.',
-      ...describeAlternatives(match.product, alternatives, present),
-    };
-  return {
-    photoMatch: 'none',
-    rule: 'No product fits the photo. Do not guess. Ask for the product name or a clearer photo.',
-    products: [],
-  };
-}
-
-function describeSureMatch(
-  match: Extract<PhotoMatch, { kind: 'sure' }>,
-  present: (product: ChatProduct) => object,
-) {
-  const products = [present(match.product)];
-  if (match.soldOutVariantId)
-    return {
-      photoMatch: 'sure',
-      rule: 'The photo shows this product but the colour or size in it has no stock. Say so. Offer only the in-stock variants listed here, with their listed prices. Ask "নতুন স্টক এলে জানাবো?" and call join_restock_list with soldOutVariantId only after the customer says yes.',
-      soldOutVariantId: match.soldOutVariantId,
-      products,
-    };
-  if (match.colourMissing)
-    return {
-      photoMatch: 'sure',
-      rule: 'The photo shows this product but the shop has no photo in that colour. Say so and list the colours in the photos. Send a card with withoutPhoto true so another colour is not shown as the one asked for. Price and stock only from the listing.',
-      products,
-    };
-  return {
-    photoMatch: 'sure',
-    rule:
-      'Answer as this product, with its listed price and stock only.' +
-      (match.photoId
-        ? ' Send its card with photoId (and variantId when given) so the customer sees the matching photo.'
-        : ''),
-    ...(match.variantId ? { matchedVariantId: match.variantId } : {}),
-    ...(match.photoId ? { photoId: match.photoId } : {}),
-    products,
-  };
-}
-
-const alternativesRule =
-  'Say the product or size is out of stock. Offer only the in-stock sizes and alternatives listed here, with their listed prices. If there are none, say there is nothing similar in stock now. Then ask "নতুন স্টক এলে জানাবো?". Call join_restock_list with a soldOutVariants variantId only after the customer says yes.';
-
-// What the model may offer in place of a sold-out product, and what the customer can wait for.
-export function describeAlternatives(
-  product: ChatProduct,
-  alternatives: ChatProduct[],
-  present: (product: ChatProduct) => object,
-): object {
-  const soldOut = product.isStockTracked
-    ? product.variants.filter((variant) => variant.available <= 0)
-    : [];
-  return {
-    rule: alternativesRule,
-    products: [present(product)],
-    inStockSizes: product.variants
-      .filter((variant) => !product.isStockTracked || variant.available > 0)
-      .map((variant) => ({ variantId: variant.id, title: variant.title })),
-    soldOutVariants: soldOut.map((variant) => ({ variantId: variant.id, title: variant.title })),
-    alternatives: alternatives.map(present),
-  };
 }
 
 function productResult(product: ChatProduct) {

@@ -2,6 +2,7 @@ import { memberListQuerySchema } from '@dakly/contracts/team';
 
 import { TeamScreen } from '@/features/team/components/team-screen';
 import { requireSession } from '@/lib/require-session';
+import { webSignupCodeChannel } from '@/platform/config/env';
 
 export default async function TeamPage({
   searchParams,
@@ -24,6 +25,10 @@ export default async function TeamPage({
       </p>
     );
   return (
-    <TeamScreen tab={query.tab === 'roles' ? 'roles' : 'members'} cursor={parsed.data.cursor} />
+    <TeamScreen
+      tab={query.tab === 'roles' ? 'roles' : 'members'}
+      cursor={parsed.data.cursor}
+      inviteChannel={webSignupCodeChannel() === 'email' ? 'email' : 'phone'}
+    />
   );
 }

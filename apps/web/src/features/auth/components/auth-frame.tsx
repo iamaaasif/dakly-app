@@ -5,12 +5,15 @@ import Link from 'next/link';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 import { Card } from '@dakly/ui/card';
+import { cn } from '@dakly/ui/cn';
 
 import { AuthBrandPanel } from './auth-brand-panel';
 
 type AuthFrameProps = {
   title: string;
   subtitle?: string;
+  headingIcon?: ReactNode;
+  centerHeading?: boolean;
   // Switch link under the form, such as "New to Dakly? Create an account".
   aside?: ReactNode;
   // A Back button in the top bar, for steps that can return to the one before.
@@ -24,13 +27,23 @@ type AuthFrameProps = {
 export function AuthFrame({
   title,
   subtitle,
+  headingIcon,
+  centerHeading,
   aside,
   step,
   onBack,
   embedded,
   children,
 }: AuthFrameProps) {
-  const heading = <AuthHeading title={title} subtitle={subtitle} step={step} />;
+  const heading = (
+    <AuthHeading
+      title={title}
+      subtitle={subtitle}
+      step={step}
+      headingIcon={headingIcon}
+      centerHeading={centerHeading}
+    />
+  );
   if (embedded)
     return (
       <main className="mx-auto max-w-lg space-y-6 px-4 py-8">
@@ -76,7 +89,9 @@ function AuthHeading({
   title,
   subtitle,
   step,
-}: Pick<AuthFrameProps, 'title' | 'subtitle' | 'step'>) {
+  headingIcon,
+  centerHeading,
+}: Pick<AuthFrameProps, 'title' | 'subtitle' | 'step' | 'headingIcon' | 'centerHeading'>) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const firstTitle = useRef(title);
   useEffect(() => {
@@ -85,9 +100,13 @@ function AuthHeading({
   return (
     <div
       key={title}
-      className="mb-5.5 space-y-2.5 motion-safe:animate-[motion-fade-in_200ms_var(--motion-ease)]"
+      className={cn(
+        'mb-5.5 space-y-2.5 motion-safe:animate-[motion-fade-in_200ms_var(--motion-ease)]',
+        centerHeading && 'mx-auto max-w-88 text-center text-balance',
+      )}
     >
       {step ? <StepBars {...step} /> : null}
+      {headingIcon}
       <h1
         ref={headingRef}
         tabIndex={-1}

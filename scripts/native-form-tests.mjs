@@ -55,6 +55,7 @@ const forms = [
     'sign-up-account',
     'SignUpAccount',
     {
+      channel: 'sms',
       legal: {
         termsUrl: 'https://example.test/terms',
         privacyUrl: 'https://example.test/privacy',

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 
 import { useChatContact } from '../api/chat-contact';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { contactDisplayName } from '../contact-name';
 import { CustomerStatus } from './customer-status';
 import { DeliveryHistory } from './delivery-history';
 import { MakeOrderForm } from './make-order-form';
@@ -73,7 +74,7 @@ function CustomerIdentity({
   phone: string | null | undefined;
 }) {
   const { data: session } = useSessionContext();
-  const name = conversation.contactName ?? 'No name';
+  const name = contactDisplayName(conversation);
   return (
     <div className="flex items-center gap-3">
       <span className="flex size-10 items-center justify-center rounded-full bg-surface-muted text-sm font-semibold text-text-muted">
