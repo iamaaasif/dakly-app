@@ -6,7 +6,7 @@ import { createDatabase } from '@dakly/db/client';
 
 import { scrubPage } from './auth-browser';
 
-test('changes the report period and keeps cards scoped to the selected shop', async ({
+test('shows the compact dashboard and keeps figures scoped to the selected shop', async ({
   page,
   context,
   baseURL,
@@ -19,32 +19,10 @@ test('changes the report period and keeps cards scoped to the selected shop', as
   const [ownerShop, marketerShop] = fixture.storeIds;
   try {
     await database.pool.query(
-      `with days as (
-         select (now() at time zone 'Asia/Dhaka')::date - age as day, age
-         from generate_series(0,59) as age
-       )
-       insert into store_daily_metrics (store_id,day,metric,dimension,value)
-       select $1::uuid,day,'orders','',15 + (59-age)/3 + round(sin(age/3.0)*4)::int from days
-       union all
-       select $1,day,'sales','manual',630000 + (59-age)*17000 + round(sin(age/4.0)*1400)::int*100 from days
-       union all
-       select $1,day,'marketing_revenue','',420000 + (59-age)*12817 from days
-       union all
-       select $1,day,'buyer_activity',gen_random_uuid()::text,day-date '1970-01-01' from days
-       cross join lateral generate_series(1,4+(59-age)/12+round(sin(age/5.0)*2)::int)
-       union all
-       select $1,day,'buyer_activity',gen_random_uuid()::text,day-date '1970-01-01'-120 from days
-       cross join lateral generate_series(1,6+(59-age)/11+round(cos(age/4.0)*2)::int)`,
-      [ownerShop],
-    );
-    await database.pool.query(
       `insert into store_daily_metrics (store_id,day,metric,dimension,value)
-       select $1::uuid,(now() at time zone 'Asia/Dhaka')::date,'lifecycle',stage,count
-       from (values ('stopped_buying',128),('slipping_away',96),('bought_once',811),
-         ('new',186),('regulars',1124),('best',141)) as stages(stage,count)
-       union all
-       select $2,(now() at time zone 'Asia/Dhaka')::date,'lifecycle','new',12`,
-      [ownerShop, marketerShop],
+       values ($1,(now() at time zone 'Asia/Dhaka')::date,'sales','manual',34280000),
+              ($1,(now() at time zone 'Asia/Dhaka')::date,'lifecycle','stopped_buying',128)`,
+      [ownerShop],
     );
     await context.addCookies([
       {
@@ -57,91 +35,95 @@ test('changes the report period and keeps cards scoped to the selected shop', as
     ]);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/dashboard');
-    const figures = page.getByRole('region', { name: 'Key figures' });
     await expect(page.getByText(/^Good (morning|afternoon|evening), রিনা$/)).toBeVisible();
-    for (const title of [
-      'Money from Dakly messages',
-      'Sales',
-      'Customers who came back',
-      'New customers',
-      'Orders',
+    const overview = page.getByRole('region', { name: 'Shop overview' });
+    const tasks = page.getByRole('region', { name: 'Your to-do list' });
+    await expect(overview.getByText('৳3,42,800', { exact: true })).toBeVisible();
+    await expect(tasks.getByText('Win back 128 customers')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Quick actions' })).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: 'Chat with Dakly support on WhatsApp' }),
+    ).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Reporting period' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Reports' })).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'Ask Dakly AI' })).toHaveCount(0);
+    for (const [width, columns] of [
+      [320, 1],
+      [390, 1],
+      [768, 1],
+      [1024, 1],
+      [1100, 1],
+      [1180, 1],
+      [1280, 2],
+      [1440, 2],
     ]) {
-      await expect(figures.getByRole('heading', { name: title, exact: true })).toBeVisible();
-    }
-    const marketing = figures
-      .getByRole('heading', { name: 'Money from Dakly messages' })
-      .locator('..');
-    const amount = marketing.getByText('৳2,97,107', { exact: true });
-    async function expectAmountBesideTrend() {
-      await expect(amount).toBeVisible();
-      const amountBox = (await amount.boundingBox())!;
-      const chart = (await amount.locator('..').locator('svg').boundingBox())!;
-      const card = (await marketing.boundingBox())!;
-      expect(chart.x).toBeGreaterThanOrEqual(amountBox.x + amountBox.width);
-      expect(chart.x + chart.width).toBeLessThan(card.x + card.width);
-      expect(chart.y).toBeLessThan(amountBox.y + amountBox.height);
-      expect(chart.y + chart.height).toBeGreaterThan(amountBox.y);
-      expect(await amount.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-      expect(amountBox.height).toBeLessThan(40);
-    }
-    await expectAmountBesideTrend();
-    const rows = await figures
-      .getByRole('heading')
-      .evaluateAll((elements) =>
-        elements.map((heading) => heading.parentElement!.getBoundingClientRect().top),
+      await page.setViewportSize({ width, height: 900 });
+      const layout = await overview.evaluate((element) => ({
+        columns: getComputedStyle(element).gridTemplateColumns.split(' ').length,
+        overflows: document.documentElement.scrollWidth > innerWidth,
+        compact: element.getBoundingClientRect().width < 580,
+      }));
+      expect(
+        { columns: layout.columns, overflows: layout.overflows },
+        `Dashboard layout at ${width}px`,
+      ).toEqual({ columns, overflows: false });
+      const actionColumns = await tasks.evaluate(
+        (element) => getComputedStyle(element.parentElement!).gridTemplateColumns.split(' ').length,
       );
-    expect(new Set(rows).size).toBe(1);
-    await expect(figures.getByRole('img', { name: 'Up', exact: true })).toHaveCount(5);
-    const lifecycle = page.getByRole('region', { name: 'Your customers at a glance' });
-    await expect(lifecycle.getByText('2,486 customers', { exact: true })).toBeVisible();
-    await page.evaluate(async () => document.fonts.ready);
-    const repeatTitle = figures.getByRole('heading', { name: 'Customers who came back' });
-    expect(await repeatTitle.evaluate((title) => title.scrollWidth <= title.clientWidth)).toBe(
-      true,
-    );
-    if (process.env.DASHBOARD_EVIDENCE) {
-      await page.screenshot({ path: testInfo.outputPath('dashboard-1440x900.png') });
+      const values = await overview.locator('[title]').evaluateAll((elements) =>
+        elements.map((element) => ({
+          top: element.getBoundingClientRect().top,
+          tileWidth: element.closest('a')!.getBoundingClientRect().width,
+        })),
+      );
+      const aligned = (layout.compact ? values.slice(1) : values).map(({ top }) => top);
+      const valueAlignment = Math.max(...aligned) - Math.min(...aligned);
+      if (process.env.DASHBOARD_EVIDENCE && [320, 390, 768, 1180, 1440].includes(width)) {
+        await page.screenshot({ path: testInfo.outputPath(`layout-${width}.png`), fullPage: true });
+      }
+      expect.soft(actionColumns, `Action columns at ${width}px`).toBe(columns);
+      expect.soft(valueAlignment, `Overview values at ${width}px`).toBeLessThanOrEqual(1);
+      if (layout.compact) {
+        const [sales, orders, chats] = values;
+        expect.soft(sales!.top, `Sales leads at ${width}px`).toBeLessThan(orders!.top);
+        expect
+          .soft(sales!.tileWidth, `Sales fills the row at ${width}px`)
+          .toBeGreaterThan(orders!.tileWidth);
+        expect
+          .soft(
+            Math.abs(orders!.tileWidth - chats!.tileWidth),
+            `Matching queue tiles at ${width}px`,
+          )
+          .toBeLessThanOrEqual(1);
+      }
     }
+    await page.setViewportSize({ width: 1180, height: 900 });
+    await page.getByRole('button', { name: 'Collapse navigation' }).click();
+    await expect
+      .poll(() =>
+        overview.evaluate(
+          (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
+        ),
+      )
+      .toBe(2);
+    await page.getByRole('button', { name: 'Expand navigation' }).click();
+    await expect
+      .poll(() =>
+        overview.evaluate(
+          (element) => getComputedStyle(element).gridTemplateColumns.split(' ').length,
+        ),
+      )
+      .toBe(1);
     await page.setViewportSize({ width: 360, height: 800 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       360,
     );
-    await expectAmountBesideTrend();
-    if (process.env.DASHBOARD_EVIDENCE) {
-      await page.screenshot({ path: testInfo.outputPath('dashboard-360x800.png') });
-    }
-    await database.pool.query(
-      `delete from store_daily_metrics where store_id=$1 and metric='orders'
-       and day >= (now() at time zone 'Asia/Dhaka')::date - 6`,
-      [ownerShop],
-    );
-    const period = page.getByRole('navigation', { name: 'Reporting period' });
-    await period.getByRole('link', { name: '7 days', exact: true }).click();
-    await expect(page).toHaveURL(/\/dashboard\?period=7$/);
-    await expect(figures.getByText('vs previous 7 days')).toHaveCount(5);
-    await expect(figures.getByText('No orders in this period.')).toBeVisible();
-    await expect(period.getByRole('link', { name: '7 days', exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
-    await page.goBack();
-    await expect(figures.getByText('vs previous 30 days')).toHaveCount(5);
-
     await page.setViewportSize({ width: 1440, height: 900 });
-    const saleAmount = figures
-      .getByRole('heading', { name: 'Sales', exact: true })
-      .locator('..')
-      .getByText(/^৳[0-9,]+$/);
-    expect(
-      await saleAmount.evaluate((amount) => amount.getBoundingClientRect().height),
-    ).toBeLessThan(48);
     await page.getByRole('combobox', { name: 'Current shop' }).selectOption(marketerShop);
-    await expect(lifecycle.getByText('12 customers', { exact: true })).toBeVisible();
-    await expect(
-      figures.getByRole('heading', { name: 'New customers', exact: true }),
-    ).toBeVisible();
-    await expect(figures.getByRole('heading', { name: 'Sales', exact: true })).toHaveCount(0);
-    await expect(figures.getByRole('heading', { name: 'Orders', exact: true })).toHaveCount(0);
+    await expect(overview.getByText('Sales in 30 days', { exact: true })).toHaveCount(0);
+    await expect(overview.getByText('৳3,42,800', { exact: true })).toHaveCount(0);
+    await expect(overview.getByText('New orders', { exact: true })).toHaveCount(0);
+    await expect(tasks.getByText('Win back 128 customers')).toHaveCount(0);
   } finally {
     await scrubPage(page);
     await database.pool.query('update sessions set active_store_id=$1 where token_hash=$2', [

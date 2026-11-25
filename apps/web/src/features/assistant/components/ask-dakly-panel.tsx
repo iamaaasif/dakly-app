@@ -14,7 +14,6 @@ import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
 
 import { useAskDakly } from '../api/ask-dakly';
-import { takeHandedOffQuestion, useHandedOffQuestion } from '../ask-handoff';
 import { askSuggestions, MAX_SUGGESTIONS } from '../ask-suggestions';
 import { assistantDraftHref } from '@/lib/assistant-product-draft-link';
 import { handOffProductChange } from '@/lib/assistant-product-handoff';
@@ -87,15 +86,6 @@ export function AskDaklyPanel({ turns, onTurns, onClose }: AskDaklyPanelProps) {
       onError: () => setQuestion(parsed.data.question),
     });
   }
-
-  // A question typed in the Dashboard Ask box is sent as soon as the panel is open.
-  const handedOff = useHandedOffQuestion();
-  useEffect(() => {
-    const waiting = takeHandedOffQuestion();
-    if (waiting) send(waiting);
-    // send reads the latest turns; only a newly handed-off question should trigger it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handedOff]);
 
   return (
     <aside
