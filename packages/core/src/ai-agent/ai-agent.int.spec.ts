@@ -257,23 +257,23 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
       { kind: 'user', userId: active.owner },
       { body: 'Internal note must stay private' },
     );
-  const message = await receive(active, 'kapor chera ashche');
-  const inputs = script(classification);
+  const message = await receive(active, 'ekjon manush er sathe kotha bolbo');
+  const inputs = script({ ...classification, asksForPerson: true });
   await agent.reply(active.storeId, message.conversation_id, message.id);
   await agent.reply(active.storeId, message.conversation_id, message.id);
 
   expect(inputs.map((input) => JSON.parse(input))).toEqual([
-    { earlier_messages: [], customer_messages: ['bhai, order ta', 'kapor chera ashche'] },
+    { earlier_messages: [], customer_messages: ['bhai, order ta', 'ekjon manush er sathe kotha bolbo'] },
   ]);
   const { rows: events } = await admin.pool.query(
     "select payload from outbox_events where store_id = $1 and type = 'conversation.handed_over'",
     [active.storeId],
   );
   expect(events).toEqual([
-    { payload: { conversationId: message.conversation_id, reason: 'complaint' } },
+    { payload: { conversationId: message.conversation_id, reason: 'asked_for_person' } },
   ]);
   expect(await observe(active)).toEqual({
-    conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'complaint' }],
+    conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'asked_for_person' }],
     replies: [
       {
         body: 'আপনার বিষয়টি নোট করা হয়েছে। আমাদের টিম খুব শীঘ্রই আপনার সাথে কথা বলবে।',
@@ -721,7 +721,7 @@ it('holds the price on a first discount ask and hands over a repeat ask in a sho
 it('hands over when the model calls hand_over', async () => {
   const active = await sellingShop();
   const message = await receive(active, 'amar order ta ferot dite chai');
-  scriptSequence(classified, toolCalls(['hand_over', { reason: 'refund' }]));
+  scriptSequence(classified, toolCalls(['hand_over', { reason: 'refund', summary: null }]));
   await agent.reply(active.storeId, message.conversation_id, message.id);
   expect(await observe(active)).toMatchObject({
     conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'refund' }],
