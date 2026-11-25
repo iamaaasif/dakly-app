@@ -19,6 +19,7 @@ import { UsageModule } from '../usage/usage.module';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { AiAgentService } from './ai-agent.service';
 import { CardTapRepliesService } from './card-tap-replies.service';
+import { ChatClassifierService } from './chat-classifier.service';
 import { AnswerCardTap } from './jobs/answer-card-tap.job';
 import { ReplyToCustomerJob } from './jobs/reply-to-customer.job';
 import { RestartReturnOnStaffReply } from './jobs/restart-return-on-staff-reply.job';
@@ -48,6 +49,7 @@ import { SalesAgentModule } from './sales-agent.module';
     AiAgentSettingsRepository,
     AiAgentService,
     CardTapRepliesService,
+    ChatClassifierService,
     AnswerCardTap,
     ReplyToCustomerJob,
     RestartReturnOnStaffReply,

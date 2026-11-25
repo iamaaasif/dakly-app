@@ -357,10 +357,12 @@ it('answers a bad call with a result the model can act on', async () => {
     error: 'INVALID_ARGUMENTS',
   });
   expect(await run(storeId, buyer, 'drop_tables', {})).toEqual({ error: 'UNKNOWN_TOOL' });
-  expect(await run(storeId, buyer, 'hand_over', { reason: 'refund' })).toEqual({
-    handedOver: true,
-    reason: 'refund',
-  });
+  expect(
+    await run(storeId, buyer, 'hand_over', {
+      reason: 'refund',
+      summary: 'Order 1042 not received',
+    }),
+  ).toEqual({ handedOver: true, reason: 'refund', summary: 'Order 1042 not received' });
 });
 
 it('takes an order in a chat, prices it in code and waits for the customer to say yes', async () => {

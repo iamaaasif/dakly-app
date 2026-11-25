@@ -8,6 +8,7 @@ import { attackGoldenCases, benignGoldenCases } from './golden-set.attacks';
 import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from './golden-set.bargaining';
 import { chatMemoryGoldenCases, chatMemoryRecordedOutcomes } from './golden-set.chat-memory';
+import { complaintGoldenCases, complaintRecordedOutcomes } from './golden-set.complaints';
 import { memoryGoldenCases } from './golden-set.memory';
 import {
   activeGoldenCases,
@@ -21,7 +22,7 @@ import { stockDeliveryGoldenCases } from './golden-set.stock-delivery';
 describe('scoreEval', () => {
   it('passes the saved sample run', () => {
     const report = scoreEval(sampleGoldenCases, sampleRecordedOutcomes);
-    expect(report).toMatchObject({ total: 6, handoverCases: 3, handoverCorrect: 3, passed: true });
+    expect(report).toMatchObject({ total: 6, handoverCases: 2, handoverCorrect: 2, passed: true });
   });
 
   it('fails when a reply quotes a price the catalog does not hold', () => {
@@ -36,10 +37,10 @@ describe('scoreEval', () => {
   it('counts a wrong hand-over reason and a missed hand-over', () => {
     const report = scoreEval(sampleGoldenCases, {
       ...sampleRecordedOutcomes,
-      'refund-en': { kind: 'handover', reason: 'complaint' },
+      'person-banglish': { kind: 'handover', reason: 'complaint' },
       'discount-bn': { kind: 'reply', text: 'ঠিক আছে।' },
     });
-    expect(report.missedHandoverCaseIds).toEqual(['refund-en', 'discount-bn']);
+    expect(report.missedHandoverCaseIds).toEqual(['person-banglish', 'discount-bn']);
     expect(report.passed).toBe(false);
   });
 
@@ -185,9 +186,9 @@ describe('Bangla and Banglish set', () => {
 describe('replayResponder', () => {
   it('returns the recorded outcome and rejects an unrecorded case', async () => {
     const respond = replayResponder(sampleRecordedOutcomes);
-    await expect(respond(sampleGoldenCases[3]!)).resolves.toEqual({
+    await expect(respond(sampleGoldenCases[4]!)).resolves.toEqual({
       kind: 'handover',
-      reason: 'refund',
+      reason: 'asked_for_person',
     });
     await expect(respond({ ...sampleGoldenCases[0]!, id: 'unknown' })).rejects.toThrow(
       'No recorded outcome',
@@ -335,5 +336,27 @@ describe('a size is not a price', () => {
   it('still fails a wrong price that follows a size', () => {
     expect(score('Canvas shoe size 41 ৳1400-e ache.')).toEqual([sizeCase.id]);
     expect(score('ক্যানভাস সাইজ ৪১ ১৪০০ টাকা।')).toEqual([sizeCase.id]);
+  });
+});
+
+describe('complaint set', () => {
+  it('takes a complaint in first and hands over once the order is known, in Bangla, Banglish and mixed', () => {
+    expect(complaintGoldenCases.every(({ id }) => id in complaintRecordedOutcomes)).toBe(true);
+    expect(new Set(complaintGoldenCases.map(({ language }) => language))).toEqual(
+      new Set(['bangla', 'banglish', 'mixed']),
+    );
+    expect(scoreEval(complaintGoldenCases, complaintRecordedOutcomes)).toMatchObject({
+      unneededHandoverCaseIds: [],
+      missedHandoverCaseIds: [],
+      passed: true,
+    });
+  });
+
+  it('counts an instant hand-over of a first complaint as needless', () => {
+    const report = scoreEval(complaintGoldenCases, {
+      ...complaintRecordedOutcomes,
+      'complaint-late-bn': { kind: 'handover', reason: 'out_of_scope' },
+    });
+    expect(report.unneededHandoverCaseIds).toEqual(['complaint-late-bn']);
   });
 });

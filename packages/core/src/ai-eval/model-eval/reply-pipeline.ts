@@ -14,9 +14,9 @@ import {
 } from '../../ai-agent/chat-memory';
 import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV13 } from '../../ai-agent/prompts/chat-reply.v13';
+import { chatReplyV14 } from '../../ai-agent/prompts/chat-reply.v14';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
-import { classifyChat } from '../../ai-agent/prompts/classify-chat.v2';
+import { classifyChat } from '../../ai-agent/prompts/classify-chat.v3';
 import {
   checkReplyFacts,
   factCheckFailedBlock,
@@ -95,13 +95,14 @@ export function evalShopRules(golden: Pick<GoldenCase, 'holdsPrice' | 'ownerSett
 }
 
 export function handoverFor(
-  golden: Pick<GoldenCase, 'question' | 'holdsPrice' | 'ownerSettings'>,
+  golden: Pick<GoldenCase, 'question' | 'holdsPrice' | 'ownerSettings' | 'earlier'>,
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
     ? handoverReason([golden.question], classified, {
         ...evalShopRules(golden).handover,
         takesOrders: evalShopRules(golden).takeOrders,
+        shopReplies: (golden.earlier ?? []).filter(({ from }) => from === 'shop').length,
       })
     : 'ai_unavailable';
 }
@@ -330,7 +331,7 @@ async function composeOnce(
       history ? `reply:${model}:${history}` : `reply:${model}`,
       {
         model,
-        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV13.instructions,
+        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV14.instructions,
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
