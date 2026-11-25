@@ -20,6 +20,7 @@ afterEach(() => {
 });
 const config = {
   googleClientId: 'fixture.apps.googleusercontent.com',
+  signupCodeChannel: 'email' as const,
   legal: {
     termsUrl: 'https://legal.example.test/terms',
     privacyUrl: 'https://legal.example.test/privacy',

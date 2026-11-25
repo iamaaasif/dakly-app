@@ -12,7 +12,10 @@ import { useUrlQuery } from '@/lib/use-url-query';
 
 type TeamScreenProps = { tab: 'members' | 'roles'; cursor?: string };
 
-export function TeamScreen(initial: TeamScreenProps) {
+export function TeamScreen({
+  inviteChannel,
+  ...initial
+}: TeamScreenProps & { inviteChannel: 'phone' | 'email' }) {
   const { tab, cursor } = useUrlQuery(initial, (raw) => {
     const parsed = memberListQuerySchema.safeParse({ cursor: raw.cursor });
     return parsed.success
@@ -54,7 +57,11 @@ export function TeamScreen(initial: TeamScreenProps) {
             Ownership transfer
           </Link>
         </nav>
-        {tab === 'roles' ? <RolesScreen cursor={cursor} /> : <MembersScreen cursor={cursor} />}
+        {tab === 'roles' ? (
+          <RolesScreen cursor={cursor} />
+        ) : (
+          <MembersScreen cursor={cursor} inviteChannel={inviteChannel} />
+        )}
       </main>
     </StorePage>
   );

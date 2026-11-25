@@ -30,7 +30,7 @@ describe('Sign in', () => {
     let completed = false;
     show(
       <SignInScreen
-        config={{ legal: null, googleClientId: null }}
+        config={{ legal: null, googleClientId: null, signupCodeChannel: 'email' }}
         onAuthenticated={() => {
           completed = true;
         }}
@@ -43,7 +43,9 @@ describe('Sign in', () => {
     await waitFor(() => expect(completed).toBe(true));
   });
   it('offers password sign-in and recovery on the page, and the code only inside an invitation', () => {
-    show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
+    show(
+      <SignInScreen config={{ legal: null, googleClientId: null, signupCodeChannel: 'email' }} />,
+    );
     expect(screen.getByLabelText('Email or mobile number')).toBeTruthy();
     expect(screen.getByLabelText('Password')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Get a code by/ })).toBeNull();
@@ -88,7 +90,7 @@ describe('Sign in', () => {
       });
       show(
         <SignInScreen
-          config={{ legal: null, googleClientId: null }}
+          config={{ legal: null, googleClientId: null, signupCodeChannel: 'email' }}
           method={method}
           onAuthenticated={() => {}}
         />,
@@ -118,7 +120,10 @@ describe('Sign in', () => {
     const client = new QueryClient();
     const view = (method: 'phone' | 'email') => (
       <QueryClientProvider client={client}>
-        <SignInScreen config={{ legal: null, googleClientId: null }} method={method} />
+        <SignInScreen
+          config={{ legal: null, googleClientId: null, signupCodeChannel: 'email' }}
+          method={method}
+        />
       </QueryClientProvider>
     );
     const rendered = render(view('phone'));
@@ -136,7 +141,10 @@ describe('Sign in', () => {
       return new Response(null, { status: 204 });
     });
     show(
-      <SignInScreen config={{ legal: null, googleClientId: null }} onAuthenticated={() => {}} />,
+      <SignInScreen
+        config={{ legal: null, googleClientId: null, signupCodeChannel: 'email' }}
+        onAuthenticated={() => {}}
+      />,
     );
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.type(screen.getByLabelText('Mobile number'), '01712345678');
@@ -162,7 +170,9 @@ describe('Sign in', () => {
         { status: 400 },
       ),
     );
-    show(<SignInScreen config={{ legal: null, googleClientId: null }} />);
+    show(
+      <SignInScreen config={{ legal: null, googleClientId: null, signupCodeChannel: 'email' }} />,
+    );
     const user = userEvent.setup();
     await user.type(screen.getByLabelText('Email or mobile number'), '01712345678');
     await user.type(screen.getByLabelText('Password'), 'password123');
@@ -175,7 +185,9 @@ describe('Sign in', () => {
     expect(screen.getByText('Use your verified contact.')).toBeTruthy();
   });
   it('blocks registration without published legal documents', () => {
-    show(<SignUpScreen config={{ legal: null, googleClientId: null }} />);
+    show(
+      <SignUpScreen config={{ legal: null, googleClientId: null, signupCodeChannel: 'email' }} />,
+    );
     expect(screen.getByRole('status').textContent).toContain('unavailable');
     expect(screen.queryByRole('button', { name: 'Send verification code' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Terms' })).toBeNull();
@@ -186,6 +198,7 @@ describe('Sign in', () => {
         config={{
           legal: { termsUrl: '/terms', privacyUrl: '/privacy', termsVersion: 'v1' },
           googleClientId: null,
+          signupCodeChannel: 'email',
         }}
       />,
     );
@@ -226,6 +239,13 @@ describe('Sign in', () => {
     await screen.findByLabelText('Authenticator or backup code');
     expect(messages).toEqual(['changed']);
     expect(screen.queryByText('Password updated')).toBeNull();
+    await user.type(screen.getByLabelText('Authenticator or backup code'), '654321');
+    await user.click(screen.getByRole('button', { name: 'Finish sign-in' }));
+    expect(await screen.findByRole('heading', { name: 'Password updated' })).toBeTruthy();
+    expect(screen.getByText(/You’re signed in on this device/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Continue to dashboard' }).getAttribute('href')).toBe(
+      '/dashboard',
+    );
   });
   it('shows a wrong reset code on the password step and returns to the code step', async () => {
     vi.stubGlobal('fetch', async (url: string) =>
@@ -260,6 +280,7 @@ describe('Sign in', () => {
     let sent: unknown;
     show(
       <SignUpBusinessStep
+        channel="sms"
         account={{
           email: 'owner@example.com',
           password: 'abcdefg1',

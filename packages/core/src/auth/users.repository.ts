@@ -20,6 +20,7 @@ type NewUser = {
   input: NewAccount;
   now: Date;
   passwordHash?: string;
+  emailVerified?: boolean;
   google?: GoogleIdentity;
   facebook?: FacebookIdentity;
 };
@@ -314,7 +315,7 @@ export class UsersRepository {
 
   async create(
     userId: string,
-    { input, now, passwordHash, google, facebook }: NewUser,
+    { input, now, passwordHash, emailVerified, google, facebook }: NewUser,
   ): Promise<boolean> {
     const rows = await this.database.forUser(userId, (tx) =>
       tx
@@ -325,7 +326,7 @@ export class UsersRepository {
           passwordHash,
           phone: input.phone,
           email: google?.email ?? input.email,
-          emailVerifiedAt: google || facebook ? now : undefined,
+          emailVerifiedAt: emailVerified || google || facebook ? now : undefined,
           googleSubject: google?.subject,
           facebookSubject: facebook?.subject,
           phoneVerifiedAt: input.phone ? now : undefined,

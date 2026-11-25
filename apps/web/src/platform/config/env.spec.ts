@@ -12,7 +12,14 @@ describe('Registration configuration', () => {
       'WEB_GOOGLE_CLIENT_ID',
     ])
       vi.stubEnv(key, '');
-    expect(webAuthConfig()).toEqual({ legal: null, googleClientId: null });
+    vi.stubEnv('SIGNUP_CODE_CHANNEL', undefined);
+    expect(webAuthConfig()).toEqual({
+      legal: null,
+      googleClientId: null,
+      signupCodeChannel: 'email',
+    });
+    vi.stubEnv('SIGNUP_CODE_CHANNEL', 'sms');
+    expect(webAuthConfig().signupCodeChannel).toBe('sms');
   });
   it('rejects unsafe document schemes and invalid Google client identifiers', () => {
     vi.stubEnv('WEB_TERMS_URL', 'javascript:alert(1)');

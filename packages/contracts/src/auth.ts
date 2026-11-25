@@ -3,6 +3,12 @@ import { z } from 'zod';
 import { bdMobileSchema } from './phone';
 
 export const passwordSchema = z.string().min(8).max(128).regex(/[0-9]/);
+export const signUpCodeChannelSchema = z.enum(['email', 'sms']).default('email');
+export type SignUpCodeChannel = z.infer<typeof signUpCodeChannelSchema>;
+export const emailSchema = z
+  .email()
+  .max(254)
+  .transform((value) => value.toLowerCase());
 
 export const signUpSources = [
   'facebook',
@@ -16,8 +22,8 @@ export const signUpSources = [
 export const signUpSchema = z.strictObject({
   purpose: z.literal('sign_up'),
   name: z.string().trim().min(1).max(120),
-  phone: bdMobileSchema,
-  email: z.email().max(254).optional(),
+  phone: bdMobileSchema.optional(),
+  email: emailSchema.optional(),
   termsVersion: z.string().trim().min(1).max(100),
   // How the owner heard about Dakly. The free text is kept only when the source is "other".
   source: z.enum(signUpSources).optional(),
@@ -27,18 +33,20 @@ export const requestCodeSchema = z.discriminatedUnion('purpose', [
   signUpSchema,
   z.strictObject({ purpose: z.literal('sign_in'), phone: bdMobileSchema }),
 ]);
-export const verifyCodeSchema = z
-  .strictObject({
-    purpose: z.enum(['sign_up', 'sign_in']),
+const verificationFields = {
+  code: z.string().regex(/^\d{6}$/),
+  isRemembered: z.boolean().default(false),
+};
+export const verifyCodeSchema = z.discriminatedUnion('purpose', [
+  z.strictObject({
+    ...verificationFields,
+    purpose: z.literal('sign_up'),
     password: passwordSchema.optional(),
-    phone: bdMobileSchema,
-    code: z.string().regex(/^\d{6}$/),
-    isRemembered: z.boolean().default(false),
-  })
-  .refine((input) => input.purpose === 'sign_up' || input.password === undefined, {
-    path: ['password'],
-    message: 'Password is only accepted during signup',
-  });
+    phone: bdMobileSchema.optional(),
+    email: emailSchema.optional(),
+  }),
+  z.strictObject({ ...verificationFields, purpose: z.literal('sign_in'), phone: bdMobileSchema }),
+]);
 export type SignUpSource = (typeof signUpSources)[number];
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type RequestCodeInput = z.infer<typeof requestCodeSchema>;
@@ -59,10 +67,6 @@ export type CodePurpose =
   | 'staff_recovery_phone'
   | 'staff_recovery_email';
 
-export const emailSchema = z
-  .email()
-  .max(254)
-  .transform((value) => value.toLowerCase());
 export const requestEmailCodeSchema = z.strictObject({ email: emailSchema });
 export const verifyEmailCodeSchema = requestEmailCodeSchema.extend({
   code: z.string().regex(/^\d{6}$/),

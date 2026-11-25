@@ -76,7 +76,13 @@ function MemberList({
   );
 }
 
-export function MembersScreen({ cursor }: { cursor?: string }) {
+export function MembersScreen({
+  cursor,
+  inviteChannel = 'email',
+}: {
+  cursor?: string;
+  inviteChannel?: 'phone' | 'email';
+}) {
   const members = useMembers(cursor);
   const { data: context } = useSessionContext();
   const [inviting, setInviting] = useState(false);
@@ -117,7 +123,7 @@ export function MembersScreen({ cursor }: { cursor?: string }) {
 
       {inviting ? (
         <Dialog open title="Invite a team member" onClose={() => setInviting(false)}>
-          <InviteForm onDone={() => setInviting(false)} />
+          <InviteForm defaultChannel={inviteChannel} onDone={() => setInviting(false)} />
         </Dialog>
       ) : null}
 
