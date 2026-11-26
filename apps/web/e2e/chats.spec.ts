@@ -159,7 +159,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByText('Sadia Islam')).toBeVisible();
     await expect(page.getByText('1 need you')).toBeVisible();
     await capture(page, 'all');
-    await page.getByRole('button', { name: 'Select' }).click();
+    await page.getByRole('button', { name: 'Select chats' }).click();
     await page.getByRole('checkbox', { name: 'Select Sadia Islam' }).click();
     await expect(page.getByText('1 selected')).toBeVisible();
     await capture(page, 'bulk-select');

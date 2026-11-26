@@ -64,15 +64,35 @@ export function MakeOrderFields() {
         }
       />
       <PaidInAdvance chargePoisha={chargePoisha} />
-      <dl className="space-y-1 rounded-md bg-surface-muted p-3 text-sm">
-        <Row label="Product" value={formatMoney(subtotal)} />
-        <Row
-          label="Delivery"
-          value={chargePoisha === undefined ? 'Choose a district' : formatMoney(chargePoisha)}
-        />
-        <Row label="Total" value={formatMoney(subtotal + (chargePoisha ?? 0))} strong />
-      </dl>
+      <OrderTotals subtotal={subtotal} chargePoisha={chargePoisha} />
     </>
+  );
+}
+
+function OrderTotals({
+  subtotal,
+  chargePoisha,
+}: {
+  subtotal: number;
+  chargePoisha: number | undefined;
+}) {
+  const { control } = useFormContext<CreateConversationOrderValues>();
+  const advance = useWatch({ control, name: 'advancePaidPoisha' });
+  // A delivery charge paid in advance is not collected again at the door.
+  const paidAhead = Boolean(advance) && advance !== '0';
+  return (
+    <dl className="space-y-1 rounded-md bg-surface-muted p-3 text-sm">
+      <Row label="Product" value={formatMoney(subtotal)} />
+      <Row
+        label="Delivery"
+        value={chargePoisha === undefined ? 'Choose a district' : formatMoney(chargePoisha)}
+      />
+      <Row
+        label="Cash on delivery"
+        value={formatMoney(subtotal + (paidAhead ? 0 : (chargePoisha ?? 0)))}
+        strong
+      />
+    </dl>
   );
 }
 

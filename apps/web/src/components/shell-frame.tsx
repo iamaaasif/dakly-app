@@ -55,7 +55,7 @@ export function ShellFrame({
         />
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="flex min-h-16 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2 md:gap-3 md:px-8">
+        <header className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2 md:gap-3 md:px-8">
           <MobileNavigation session={data} blocked={blocked} onSignOut={onSignOut} />
           <StoreSwitcher session={data} onSwitch={onSwitch} />
           <div className="ml-auto flex shrink-0 items-center gap-2">

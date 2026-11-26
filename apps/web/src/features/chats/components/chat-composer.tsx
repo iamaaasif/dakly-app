@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 import { Textarea } from '@dakly/ui/textarea';
 
 import { useAddNote, useSendReply } from '../api/conversation-thread';
+import { chatChannelLabels } from '../chat-filters';
+import { contactDisplayName } from '../contact-name';
 import { replyWindow } from '../reply-window';
 import { SavedRepliesPicker } from './saved-replies-picker';
 import { useSessionContext } from '@/lib/session-context';
@@ -52,6 +54,7 @@ export function ChatComposer({ conversation }: { conversation: ConversationRespo
       <TabsContent value={mode} className="space-y-2 pt-0">
         <ComposerHint mode={mode} windowLabel={window.state === 'open' ? null : window.label} />
         <WriteBox
+          replyPlaceholder={`Write a reply to ${contactDisplayName(conversation)} via ${chatChannelLabels[conversation.channel]}…`}
           mode={mode}
           text={text}
           disabled={blocked}
@@ -101,6 +104,7 @@ function ModeTabs() {
 }
 
 type WriteBoxProps = {
+  replyPlaceholder: string;
   mode: Mode;
   text: string;
   disabled: boolean;
@@ -109,13 +113,21 @@ type WriteBoxProps = {
   onSend: () => void;
 };
 
-function WriteBox({ mode, text, disabled, pending, onChange, onSend }: WriteBoxProps) {
+function WriteBox({
+  replyPlaceholder,
+  mode,
+  text,
+  disabled,
+  pending,
+  onChange,
+  onSend,
+}: WriteBoxProps) {
   const reply = mode === 'reply';
   return (
     <div className="rounded-md border border-border-strong bg-surface focus-within:border-focus">
       <Textarea
         aria-label={reply ? 'Write a reply' : 'Write an internal note'}
-        placeholder={reply ? 'Write a reply' : 'Write a note for your team'}
+        placeholder={reply ? replyPlaceholder : 'Write a note for your team'}
         maxLength={reply ? 2000 : 4000}
         value={text}
         disabled={disabled}
@@ -133,7 +145,7 @@ function WriteBox({ mode, text, disabled, pending, onChange, onSend }: WriteBoxP
         onChange={(event) => onChange(event.target.value)}
         className="block max-h-32 min-h-16 resize-y rounded-b-none border-0 bg-transparent text-sm focus-visible:outline-none"
       />
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border px-2 py-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 px-2 pb-2">
         {reply ? <SavedRepliesPicker disabled={disabled || pending} onPick={onChange} /> : null}
         <Button
           type="button"
