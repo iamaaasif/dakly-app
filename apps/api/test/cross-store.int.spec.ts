@@ -341,6 +341,33 @@ fixture('GET /orders/catalogue/:productId', async () => {
   await hidden(a, 'GET', url, product.id);
 });
 
+fixture('GET /orders/export', async () => {
+  const { a, b } = await pair();
+  for (const [shop, productName] of [
+    [a, 'Shop A cotton scarf'],
+    [b, 'Shop B silk scarf'],
+  ] as const) {
+    const orderId = await order(shop);
+    const variantId = await orderVariant(shop);
+    await f.admin.pool.query(
+      `insert into order_items (id,store_id,order_id,variant_id,product_name,variant_title,
+        quantity,unit_price_poisha,is_stock_tracked)
+       values ($1,$2,$3,$4,$5,'Default',1,9000,false)`,
+      [randomUUID(), shop.id, orderId, variantId, productName],
+    );
+  }
+  const url = '/orders/export?format=csv';
+  for (const [shop, own, foreign] of [
+    [a, 'Shop A cotton scarf', 'Shop B silk scarf'],
+    [b, 'Shop B silk scarf', 'Shop A cotton scarf'],
+  ] as const) {
+    const result = await success(shop, 'GET', url, 200);
+    expect(result.headers['x-row-count']).toBe('1');
+    expect(result.payload).toContain(own);
+    expect(result.payload).not.toContain(foreign);
+  }
+});
+
 fixture('GET /orders/:orderId', async () => {
   const { a, b } = await pair();
   const id = await order(a);
