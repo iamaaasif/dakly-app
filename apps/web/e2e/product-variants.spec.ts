@@ -18,17 +18,17 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     storeIds: [string, string];
   };
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-17-3');
-  // CI keeps only e2e-artifacts, so each screenshot is also written there.
-  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-17-3');
   const name = 'Cotton T-shirt variants fixture';
   let productId: string | undefined;
-  await mkdir(evidence, { recursive: true });
-  await mkdir(ciCopy, { recursive: true });
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
-  async function capture(screen: string, prepare: (width: number) => Promise<void>) {
+  async function capture(step: 2 | 3, screen: string, prepare: (width: number) => Promise<void>) {
+    const evidence = resolve(process.cwd(), `../../docs/design/evidence/prod-17-${step}`);
+    // CI keeps only e2e-artifacts, so each screenshot is also written there.
+    const ciCopy = resolve(process.cwd(), `e2e-artifacts/prod-17-${step}`);
+    await mkdir(evidence, { recursive: true });
+    await mkdir(ciCopy, { recursive: true });
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
@@ -52,7 +52,7 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
   async function capturePicker(option: string) {
     const name = `Add values to ${option}`;
     const trigger = page.getByRole('button', { name });
-    await capture(`${option.toLowerCase()}-values`, async () => {
+    await capture(2, `${option.toLowerCase()}-values`, async () => {
       await page.keyboard.press('Escape');
       await trigger.scrollIntoViewIfNeeded();
       await trigger.click();
@@ -94,13 +94,13 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByLabel('Available stock', { exact: true }).fill('12');
     await page.getByLabel('Product code').fill('UT-TS-01');
     await expect(page.getByText('Profit')).toBeVisible();
-    await capture('no-options', () =>
+    await capture(2, 'no-options', () =>
       page.getByRole('heading', { name: 'Variations' }).scrollIntoViewIfNeeded(),
     );
 
     await page.getByRole('button', { name: /Suggest options/ }).click();
     await expect(page.getByRole('button', { name: 'Add all' })).toBeVisible();
-    await capture('suggest-options', () =>
+    await capture(2, 'suggest-options', () =>
       page.getByRole('button', { name: 'Add all' }).scrollIntoViewIfNeeded(),
     );
     await page.getByRole('button', { name: 'Dismiss' }).click();
@@ -113,7 +113,7 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByRole('button', { name: 'Apply', exact: true }).click();
 
     await page.getByRole('button', { name: 'Edit Color' }).click();
-    await capture('edit-color', () => page.getByLabel('Option name').scrollIntoViewIfNeeded());
+    await capture(2, 'edit-color', () => page.getByLabel('Option name').scrollIntoViewIfNeeded());
     await page.getByRole('button', { name: 'Cancel option changes' }).click();
 
     const sizes = await openValues('Size');
@@ -159,7 +159,7 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByLabel('Select Black / S').click();
     await page.getByLabel('Select Black / M').click();
     await expect(page.getByText('2 selected')).toBeVisible();
-    await capture('grouped-variants', async (width) => {
+    await capture(3, 'grouped-variants', async (width) => {
       const row = page.getByRole('button', { name: /^Black \/ L summary/ });
       if (width === 360) await expect(row).toContainText('৳');
       await medium.scrollIntoViewIfNeeded();
@@ -177,7 +177,7 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
     await expectStock('Black / S', '12');
     const details = page.getByRole('dialog', { name: 'Black / S', exact: true });
-    await capture('edit-variant', async (width) => {
+    await capture(3, 'edit-variant', async (width) => {
       if (await details.isVisible()) await closeVariant(details);
       const summary = page.getByRole('button', { name: /^Black \/ S summary/ });
       if (width === 360) await summary.click();
@@ -219,7 +219,7 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await closeVariant(sheet);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Why did the stock change?' })).toBeVisible();
-    await capture('stock-reason', () =>
+    await capture(3, 'stock-reason', () =>
       page.getByRole('heading', { name: 'Why did the stock change?' }).scrollIntoViewIfNeeded(),
     );
     await page.getByLabel('Reason').fill('Counted the shelf');
