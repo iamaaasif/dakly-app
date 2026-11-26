@@ -72,6 +72,7 @@ describe('ProductImportService with Postgres', () => {
     {} as FileStorageDriver,
     categories,
     {} as never,
+    {} as never,
   );
   const stock = new ProductStockService(
     new ProductStockRepository(tenant),

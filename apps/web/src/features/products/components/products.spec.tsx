@@ -147,7 +147,14 @@ function show(
     adjust = parameters.get('adjust') ?? undefined;
     rendered.rerender(content());
   });
-  return { client, ...rendered };
+  return {
+    client,
+    ...rendered,
+    setQuery(next: ProductListQuery) {
+      query = next;
+      rendered.rerender(content());
+    },
+  };
 }
 async function openArchiveDialog(table: HTMLElement) {
   await userEvent.click(
@@ -405,6 +412,41 @@ describe('Products screen', () => {
     expect(searchQuery.get('readiness')).toBe('running_low');
     expect(searchQuery.get('cursor')).toBeNull();
   });
+  it('keeps Best selling selected in pagination and filter links', async () => {
+    const nextCursor = `3_2026-11-17T08:00:00Z_${product.id}`;
+    let requested = '';
+    let finishSort!: (value: Response) => void;
+    const sorting = new Promise<Response>((resolve) => {
+      finishSort = resolve;
+    });
+    stubFetch(async (path: string) => {
+      requested = path;
+      return path.includes('sort=best_selling')
+        ? sorting
+        : response({ items: [product], nextCursor: product.id });
+    });
+    const query = { limit: 50, search: 'Cotton', readiness: 'running_low' } as const;
+    const { setQuery } = show(query);
+    await screen.findByRole('link', { name: 'Next page' });
+    setQuery({ ...query, sort: 'best_selling' });
+    expect(screen.queryByRole('link', { name: 'Next page' })).toBeNull();
+    finishSort(response({ items: [product], nextCursor }));
+
+    const next = await screen.findByRole('link', { name: 'Next page' });
+    expect(screen.getByRole('combobox', { name: 'Sort products' }).textContent).toBe(
+      'Best selling',
+    );
+    expect(new URL(requested, 'http://localhost').searchParams.get('sort')).toBe('best_selling');
+    const nextQuery = new URL(next.getAttribute('href')!, 'http://localhost').searchParams;
+    expect(nextQuery.get('sort')).toBe('best_selling');
+    expect(nextQuery.get('cursor')).toBe(nextCursor);
+    const all = screen.getByRole('link', { name: 'All' });
+    const allQuery = new URL(all.getAttribute('href')!, 'http://localhost').searchParams;
+    expect(allQuery.get('sort')).toBe('best_selling');
+    expect(allQuery.get('search')).toBe('Cotton');
+    expect(allQuery.has('readiness')).toBe(false);
+  });
+
   it('opens a selected variant from the address and clears it on close', async () => {
     stubFetch(async () => response({ items: [product], nextCursor: null }));
     show({ limit: 50 }, { adjust: product.variants[0]!.id });

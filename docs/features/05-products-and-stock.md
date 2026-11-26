@@ -121,6 +121,8 @@ In the saved product editor, choose a tone and language to write three descripti
 
 The list shows an Active or Hidden badge, readiness labels (Needs a price, Needs a photo, Running low, Out of stock) and stock per variant. Chat inquiry counts are omitted until chats provide the data, so the prototype's "1 people asked" copy is not shown.
 
+The Products list starts with **Newest**. **Best selling** counts units ordered today and on the previous 29 calendar days in the shop's time zone, excluding cancelled and returned orders. Products with equal sales are ordered by newest first, then by product ID. Products without sales appear last. Search and readiness filters still apply. New sales or order changes can shift the order while you page through the list.
+
 Members who can edit products have a More actions menu on each desktop row and phone card. Duplicate opens `/products/new` with the source details and a “copy” suffix on the name. The new draft starts hidden with empty stock, photos and product codes. It is saved only when the member chooses a save action. Archive asks for confirmation and removes the product from the catalogue while keeping past orders. An open order that uses one of its variants blocks Archive. The dialog offers to hide an active product from customers while the open orders are finished.
 
 When the catalogue has no products, it says “No products yet” and offers Add product to members who can edit. Add product opens the quick add. Empty search and filter results offer Clear filters.

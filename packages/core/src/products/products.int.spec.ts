@@ -77,6 +77,7 @@ describe('ProductsService with Postgres', () => {
     {} as FileStorageDriver,
     categories,
     brands,
+    {} as never,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
   const team = new TeamService({} as ConstructorParameters<typeof TeamService>[0]);

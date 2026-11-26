@@ -98,7 +98,7 @@ function ProductResultList({
             First page
           </UrlLink>
         ) : null}
-        {products.data.nextCursor ? (
+        {!products.isPlaceholderData && products.data.nextCursor ? (
           <UrlLink
             className="inline-flex min-h-10 items-center text-action underline"
             href={pageHref(products.data.nextCursor)}
