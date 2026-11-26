@@ -62,6 +62,7 @@ export const sampleGoldenCases: GoldenCase[] = [
     language: 'bangla',
     question: 'কিছু ছাড় দেওয়া যাবে?',
     expectedHandover: 'discount',
+    handsOverDiscounts: true,
     allowedAmountsTaka: [],
   },
 ];

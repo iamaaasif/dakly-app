@@ -7,7 +7,8 @@ import { handoverReason } from './handover-reason';
 
 // The model has already replied twice, so a complaint, refund or angry message goes to a person.
 const defaultHandoverRules = { ...switchesOn, shopReplies: 2 };
-const holdPrice = { ...defaultHandoverRules, discounts: false };
+const holdPrice = defaultHandoverRules;
+const handOverDiscounts = { ...defaultHandoverRules, discounts: true };
 
 const greeting: ChatClassification = {
   intent: 'greeting',
@@ -26,7 +27,7 @@ describe('handoverReason', () => {
     ['can I get a discount?', 'discount'],
     ['This looks fake', 'complaint'],
   ] as const)('hands over "%s" despite a different model classification', (text, reason) => {
-    expect(handoverReason([text], greeting, defaultHandoverRules)).toBe(reason);
+    expect(handoverReason([text], greeting, handOverDiscounts)).toBe(reason);
   });
 
   it('hands over when the customer asks for a person', () => {
@@ -51,7 +52,7 @@ describe('handoverReason', () => {
     (text) => {
       const price = { ...greeting, intent: 'price' as const, handover: 'discount' as const };
       expect(handoverReason([text], price, holdPrice)).toBeNull();
-      expect(handoverReason([text], price, defaultHandoverRules)).toBe('discount');
+      expect(handoverReason([text], price, handOverDiscounts)).toBe('discount');
     },
   );
 

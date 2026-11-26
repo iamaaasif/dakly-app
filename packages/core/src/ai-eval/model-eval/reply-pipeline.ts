@@ -80,7 +80,9 @@ export async function classifyQuestion(
 }
 
 // The owner's settings a case runs under: the defaults, then what the case changes.
-export function evalShopRules(golden: Pick<GoldenCase, 'holdsPrice' | 'ownerSettings'>): ShopRules {
+export function evalShopRules(
+  golden: Pick<GoldenCase, 'handsOverDiscounts' | 'ownerSettings'>,
+): ShopRules {
   const { handoverOff = [], ...changes } = golden.ownerSettings ?? {};
   return {
     ...defaultShopRules,
@@ -89,13 +91,13 @@ export function evalShopRules(golden: Pick<GoldenCase, 'holdsPrice' | 'ownerSett
     handover: {
       ...defaultShopRules.handover,
       ...Object.fromEntries(handoverOff.map((name) => [name, false])),
-      ...(golden.holdsPrice ? { discounts: false } : {}),
+      ...(golden.handsOverDiscounts ? { discounts: true } : {}),
     },
   };
 }
 
 export function handoverFor(
-  golden: Pick<GoldenCase, 'question' | 'holdsPrice' | 'ownerSettings' | 'earlier'>,
+  golden: Pick<GoldenCase, 'question' | 'handsOverDiscounts' | 'ownerSettings' | 'earlier'>,
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
@@ -124,7 +126,7 @@ type ReplyCase = Pick<
   | 'earlier'
   | 'shownProducts'
   | 'adProducts'
-  | 'holdsPrice'
+  | 'handsOverDiscounts'
   | 'ownerSettings'
   | 'draftedOrder'
 >;
