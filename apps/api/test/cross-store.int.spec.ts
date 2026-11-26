@@ -386,20 +386,22 @@ fixture('GET /orders/:orderId/invoice', async () => {
 
   const productId = randomUUID();
   const variantId = randomUUID();
+  const returnedVariantId = randomUUID();
   await f.admin.pool.query(
     "insert into products (id,store_id,name,price_poisha) values ($1,$2,'পাঞ্জাবি',3500)",
     [productId, a.id],
   );
   await f.admin.pool.query(
-    "insert into product_variants (id,store_id,product_id,title) values ($1,$2,$3,'M')",
-    [variantId, a.id, productId],
+    "insert into product_variants (id,store_id,product_id,title) values ($1,$2,$3,'M'),($4,$2,$3,'L')",
+    [variantId, a.id, productId, returnedVariantId],
   );
   await f.admin.pool.query(
     `insert into order_items (id, store_id, order_id, variant_id, product_name, variant_title,
        quantity, unit_price_poisha, line_discount_poisha, delivered_quantity,
        delivered_line_discount_poisha, is_stock_tracked)
-     values ($1, $2, $3, $4, 'পাঞ্জাবি', 'M', 3, 3200, 600, 2, 400, false)`,
-    [randomUUID(), a.id, id, variantId],
+     values ($1, $2, $3, $4, 'পাঞ্জাবি', 'M', 3, 3200, 600, 2, 400, false),
+            ($5, $2, $3, $6, 'পাঞ্জাবি', 'L', 1, 3200, 200, 0, 0, false)`,
+    [randomUUID(), a.id, id, variantId, randomUUID(), returnedVariantId],
   );
   await f.admin.pool.query(
     `update orders set stage='partially_delivered', order_discount_poisha=900,

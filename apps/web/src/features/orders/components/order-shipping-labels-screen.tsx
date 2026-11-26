@@ -2,31 +2,28 @@
 
 import { Printer } from 'lucide-react';
 import Link from 'next/link';
-import { useRef, type RefObject } from 'react';
+import { useRef } from 'react';
 
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useOrderShippingLabels } from '../api/get-order-shipping-labels';
-import { OrderPrintAccess, usePrintWhenReady } from './order-print';
+import { OrderPrintSession, usePrintWhenReady } from './order-print';
 import { OrderShippingLabel } from './order-shipping-label';
 
 const loadingMessage = 'Loading shipping labels…';
 type LabelBatchProps = { orderIds: string[] };
 
 export function OrderShippingLabelsScreen({ orderIds }: LabelBatchProps) {
-  const printed = useRef(false);
   return (
-    <OrderPrintAccess loadingMessage={loadingMessage}>
-      <VerifiedShippingLabels orderIds={orderIds} printed={printed} />
-    </OrderPrintAccess>
+    <OrderPrintSession loadingMessage={loadingMessage}>
+      <VerifiedShippingLabels orderIds={orderIds} />
+    </OrderPrintSession>
   );
 }
 
-function VerifiedShippingLabels({
-  orderIds,
-  printed,
-}: LabelBatchProps & { printed: RefObject<boolean> }) {
+function VerifiedShippingLabels({ orderIds }: LabelBatchProps) {
+  const printed = useRef(false);
   const query = useOrderShippingLabels(orderIds);
   usePrintWhenReady(query.isSuccess, printed);
   if (query.error)

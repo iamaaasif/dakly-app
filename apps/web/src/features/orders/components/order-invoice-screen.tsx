@@ -1,27 +1,25 @@
 'use client';
 
 import { Printer } from 'lucide-react';
-import { useRef, type RefObject } from 'react';
+import { useRef } from 'react';
 
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useOrderInvoice } from '../api/get-order-invoice';
 import { OrderInvoiceDocument } from './order-invoice';
-import { OrderPrintAccess, usePrintWhenReady } from './order-print';
+import { OrderPrintSession, usePrintWhenReady } from './order-print';
 
 export function OrderInvoiceScreen({ orderId }: { orderId: string }) {
-  const printed = useRef(false);
   return (
-    <OrderPrintAccess loadingMessage="Loading invoice…">
-      <VerifiedOrderInvoice orderId={orderId} printed={printed} />
-    </OrderPrintAccess>
+    <OrderPrintSession loadingMessage="Loading invoice…">
+      <VerifiedOrderInvoice orderId={orderId} />
+    </OrderPrintSession>
   );
 }
 
-type VerifiedOrderInvoiceProps = { orderId: string; printed: RefObject<boolean> };
-
-function VerifiedOrderInvoice({ orderId, printed }: VerifiedOrderInvoiceProps) {
+function VerifiedOrderInvoice({ orderId }: { orderId: string }) {
+  const printed = useRef(false);
   const query = useOrderInvoice(orderId);
   usePrintWhenReady(query.isSuccess, printed);
   if (query.error)

@@ -3,7 +3,7 @@ import { useEffect, type ReactNode, type RefObject } from 'react';
 import { SessionVerificationStatus } from '@/components/session-verification-status';
 import { useSessionBoundary } from '@/lib/use-session-boundary';
 
-export function OrderPrintAccess({
+export function OrderPrintSession({
   loadingMessage,
   children,
 }: {
@@ -11,7 +11,7 @@ export function OrderPrintAccess({
   children: ReactNode;
 }) {
   const boundary = useSessionBoundary();
-  const { data, error, isPending } = boundary.session;
+  const { error, isPending } = boundary.session;
   if (isPending)
     return (
       <p role="status" className="p-6">
@@ -26,12 +26,6 @@ export function OrderPrintAccess({
         error={error}
         onRetry={boundary.verify}
       />
-    );
-  if (!data?.currentStore?.canViewOrders)
-    return (
-      <p role="alert" className="p-6">
-        You do not have Orders access in this shop.
-      </p>
     );
   return children;
 }
