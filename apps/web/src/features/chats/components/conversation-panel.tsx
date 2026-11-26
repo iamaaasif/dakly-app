@@ -86,7 +86,8 @@ function ConversationTopBar({
   canEdit: boolean;
 }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2">
+    // Label and Remind me drop their words when the chat column is narrow, so the actions keep one row.
+    <div className="@container flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2">
       <Link
         href={chatsHref({ ...query, chat: undefined })}
         aria-label="Back to chats"
@@ -96,7 +97,7 @@ function ConversationTopBar({
       </Link>
       {conversation ? <ConversationHeader conversation={conversation} /> : null}
       {conversation && canEdit ? (
-        <div className="order-last ml-auto min-w-0 basis-full xl:order-none xl:basis-auto">
+        <div className="ml-auto min-w-0">
           <ConversationActions conversation={conversation} />
         </div>
       ) : null}
@@ -121,7 +122,7 @@ function ConversationHeader({ conversation }: { conversation: ConversationRespon
   const window = replyWindow(conversation);
   const name = contactDisplayName(conversation);
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+    <div className="flex min-w-0 flex-1 basis-48 items-center gap-2.5">
       <span
         aria-hidden="true"
         className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text-muted"

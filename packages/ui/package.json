@@ -21,6 +21,7 @@
     "./tabs": "./src/tabs.tsx",
     "./tooltip": "./src/tooltip.tsx",
     "./popover": "./src/popover.tsx",
+    "./multi-select": "./src/multi-select.tsx",
     "./sheet": "./src/sheet.tsx",
     "./dropdown-menu": "./src/dropdown-menu.tsx",
     "./table": "./src/table.tsx",
