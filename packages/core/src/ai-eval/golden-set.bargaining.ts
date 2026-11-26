@@ -1,4 +1,3 @@
-import { productDiscountRequest } from '../ai-agent/manipulation-screen';
 import type { EvalOutcome, GoldenCase } from './golden-case';
 
 // A shop that keeps its price: a first ask gets a polite fixed price and the sale goes on, a repeat
@@ -158,7 +157,7 @@ const fixedPriceCases: GoldenCase[] = [
 ];
 
 export const bargainingGoldenCases: GoldenCase[] = fixedPriceCases.map((golden) =>
-  productDiscountRequest(golden.question) ? { ...golden, negotiation: null } : golden,
+  golden.id.startsWith('free-delivery-') ? golden : { ...golden, negotiation: null },
 );
 
 // A message the AI cannot act on gets one question; a second unclear answer goes to a person.
