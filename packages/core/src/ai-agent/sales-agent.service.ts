@@ -40,7 +40,7 @@ import {
   type ToolScope,
   isOutOfStock,
   SalesAgentToolsService,
-  salesAgentLlmTools,
+  salesAgentToolsFor,
 } from './sales-agent-tools.service';
 import { shopBlock, summaryOf } from './shop-block';
 import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
@@ -175,7 +175,7 @@ export class SalesAgentService {
         prompt: promptWith(chatReplyV14, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
-        tools: salesAgentLlmTools,
+        tools: salesAgentToolsFor(input.rules),
         signal,
       });
       if (attempt.kind === 'failure')

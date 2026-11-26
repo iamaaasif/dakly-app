@@ -102,6 +102,8 @@ export type CreateStoreInput = z.infer<typeof createStoreSchema>;
 // The setup screen still asks for both.
 export const setupStoreSchema = createStoreSchema.required({ businessType: true, district: true });
 export type SetupProfile = {
+  businessType: string | null;
+  district: string | null;
   howYouSell: (typeof howYouSellOptions)[number][];
   extensions: string[];
   guideHidden: boolean;
