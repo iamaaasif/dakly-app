@@ -189,7 +189,7 @@ function offerLowerPrice(
 ) {
   const parsed = offerLowerPriceTool.input.safeParse(args);
   if (!parsed.success) return { error: 'INVALID_ARGUMENTS' };
-  const request = productDiscountRequest(customerText);
+  const request = productDiscountRequest(customerText ?? '');
   if (!request) return { error: 'NOT_A_DISCOUNT_ASK' };
   const { productName, variantWords } = parsed.data;
   const query = variantWords ? `${productName} ${variantWords}` : productName;
