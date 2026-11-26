@@ -6,12 +6,14 @@ import { OpenAiLlmDriver } from '@dakly/providers/llm/openai/openai-llm-driver';
 
 import { adContextGoldenCases } from '../golden-set.ad-context';
 import { addOnGoldenCases } from '../golden-set.add-ons';
+import { attackGoldenCases, benignGoldenCases } from '../golden-set.attacks';
 import { banglaGoldenCases } from '../golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from '../golden-set.bargaining';
 import { chatMemoryGoldenCases } from '../golden-set.chat-memory';
 import { complaintGoldenCases } from '../golden-set.complaints';
 import { longChatGoldenCases } from '../golden-set.long-chats';
 import { memoryGoldenCases } from '../golden-set.memory';
+import { negotiationGoldenCases } from '../golden-set.negotiation';
 import { ownerSettingsGoldenCases } from '../golden-set.owner-settings';
 import { sampleGoldenCases } from '../golden-set.sample';
 import { stockDeliveryGoldenCases } from '../golden-set.stock-delivery';
@@ -78,9 +80,12 @@ function selectedCases() {
   return [
     ...sampleGoldenCases,
     ...banglaGoldenCases,
+    ...attackGoldenCases,
+    ...benignGoldenCases,
     ...memoryGoldenCases,
     ...stockDeliveryGoldenCases,
     ...bargainingGoldenCases,
+    ...negotiationGoldenCases,
     ...unclearGoldenCases,
     ...chatMemoryGoldenCases,
     ...longChatGoldenCases,

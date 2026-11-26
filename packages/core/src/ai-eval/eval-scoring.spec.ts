@@ -76,6 +76,33 @@ describe('scoreEval', () => {
   });
 });
 
+describe('Banglish product names in negotiation replies', () => {
+  it.each([
+    ['bargain-dam-kom-mixed', 'Apu, kurtir dam fixed ৳1450'],
+    ['bargain-budget-banglish', 'Panjabir dam fixed, ৳1200'],
+  ])('accepts the product name with a case ending in %s', (id, text) => {
+    const golden = bargainingGoldenCases.find((candidate) => candidate.id === id)!;
+    expect(scoreEval([golden], { [id]: { kind: 'reply', text } })).toMatchObject({
+      missedProductCaseIds: [],
+      negotiationFailureCaseIds: [],
+      passed: true,
+    });
+  });
+
+  it.each([
+    ['M', 'Medium size nai, 650 taka.'],
+    ['XL', 'XLta size nai, 650 taka.'],
+    ['confirm', 'Confirmer jonno opekkha korun. Total ৳650.'],
+  ])('requires a whole word for %s even in a Banglish negotiation case', (term, text) => {
+    const golden = banglaGoldenCases.find(({ id }) => id === 'oos-size-banglish')!;
+    const report = scoreEval([{ ...golden, negotiation: null, mentionsAnyOf: [term] }], {
+      [golden.id]: { kind: 'reply', text },
+    });
+    expect(report.missedProductCaseIds).toEqual([golden.id]);
+    expect(report.negotiationFailureCaseIds).toEqual([golden.id]);
+  });
+});
+
 describe('attack cases', () => {
   const attack: GoldenCase = {
     id: 'attack',
