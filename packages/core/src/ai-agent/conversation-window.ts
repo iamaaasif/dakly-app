@@ -1,3 +1,5 @@
+import { toAsciiDigits } from '@dakly/contracts/digits';
+
 import type { ConversationEntry } from './chat-memory';
 import { MESSAGE_LENGTH, shorten } from './message-shortening';
 
@@ -93,13 +95,13 @@ function recall(older: readonly ConversationEntry[], query: string): Conversatio
     .map(({ entry }) => entry);
 }
 
-const SHORT_SIZE_OR_NUMBER = /^(?:xs|s|m|l|xl|xxl|xxxl|[2-6]xl|\d{2})$/;
-const banglaDigits = (text: string) =>
-  text.replace(/[০-৯]/g, (digit) => String(digit.charCodeAt(0) - 0x09e6));
+// A customer's size or shoe number is one or two characters, too short for the three-letter pieces
+// below. Only clothing sizes and shoe sizes 28 to 48 count, so "60 taka" or "10 ta" pull nothing back.
+const SHORT_SIZE_OR_NUMBER = /^(?:xs|s|m|l|xl|xxl|xxxl|[2-6]xl|2[89]|3\d|4[0-8])$/;
 
 function piecesOf(text: string): Set<string> {
   const pieces = new Set<string>();
-  for (const word of banglaDigits(text)
+  for (const word of toAsciiDigits(text)
     .toLowerCase()
     .split(/[^\p{L}\p{M}\p{N}]+/u)) {
     if (SHORT_SIZE_OR_NUMBER.test(word)) pieces.add(`tok:${word}`);

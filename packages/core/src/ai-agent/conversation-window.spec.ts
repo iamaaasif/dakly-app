@@ -57,6 +57,8 @@ describe('windowConversation', () => {
     expect(windowConversation([lSize, ...padding], ['L hobe?']).recalled).toContainEqual(lSize);
     expect(windowConversation([shoe, ...padding], ['41 ache?']).recalled).toContainEqual(shoe);
     expect(windowConversation([mSize, ...padding], ['ok ta ki']).recalled).toEqual([]);
+    const price = customer('amar budget 60 taka');
+    expect(windowConversation([price, ...padding], ['60 ta ache?']).recalled).toEqual([]);
   });
 
   it('keeps every older customer line, cut short, when nothing matches', () => {
