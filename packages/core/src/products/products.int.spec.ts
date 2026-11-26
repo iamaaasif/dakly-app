@@ -293,7 +293,15 @@ describe('ProductsService with Postgres', () => {
     );
     expect(events.rows).toHaveLength(2);
 
-    const hidden = await service.edit(f.a, loaded.id, { status: 'hidden' }, actor);
+    await expect(
+      service.edit(f.a, loaded.id, { status: 'hidden', expectedVersion: loaded.version }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED', status: 409 });
+    const hidden = await service.edit(
+      f.a,
+      loaded.id,
+      { status: 'hidden', expectedVersion: fresh.version },
+      actor,
+    );
     expect(hidden).toMatchObject({ status: 'hidden', version: 3 });
   });
 

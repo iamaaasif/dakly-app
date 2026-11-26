@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import type { ProductResponse } from '@dakly/contracts/products';
 import { createDatabase } from '@dakly/db/client';
@@ -26,7 +26,7 @@ test('keeps a stale edit and reloads the latest saved product', async ({
   ).toBe(204);
   const created = await context.request.post('/api/products', {
     headers,
-    data: { name: 'Cotton scarf version fixture', pricePoisha: 45000 },
+    data: { name: 'Cotton scarf version fixture', pricePoisha: 45000, status: 'active' },
   });
   expect(created.status()).toBe(201);
   const { id } = (await created.json()) as ProductResponse;
@@ -100,6 +100,35 @@ test('keeps a stale edit and reloads the latest saved product', async ({
     await expect(description).toHaveValue('New saved description');
     await expect(message).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+
+    await name.fill('My second unsaved scarf');
+    const concurrent = await context.request.patch(path, {
+      headers,
+      data: { name: 'Latest saved scarf' },
+    });
+    expect(concurrent.status()).toBe(200);
+    const latest = (await concurrent.json()) as ProductResponse;
+    const staleStatus = await changeStatus(page, path);
+    expect(staleStatus.status()).toBe(409);
+    expect(staleStatus.request().postDataJSON()).toMatchObject({ expectedVersion: recent.version });
+    await expect(message).toBeInViewport();
+    await expect(name).toHaveValue('My second unsaved scarf');
+    await message.getByRole('button', { name: 'Reload' }).click();
+    await expect(name).toHaveValue('Latest saved scarf');
+
+    await name.fill('Saved after Status');
+    const statusSaved = await changeStatus(page, path);
+    expect(statusSaved.status()).toBe(200);
+    expect(statusSaved.request().postDataJSON()).toMatchObject({ expectedVersion: latest.version });
+    const hidden = (await statusSaved.json()) as ProductResponse;
+    await expect(page.getByRole('combobox', { name: 'Status' })).toHaveText('Hidden');
+    await expect(name).toHaveValue('Saved after Status');
+    const save = productPatch(page, path);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const saved = await save;
+    expect(saved.status()).toBe(200);
+    expect(saved.request().postDataJSON()).toMatchObject({ expectedVersion: hidden.version });
+    expect(await saved.json()).toMatchObject({ name: 'Saved after Status', status: 'hidden' });
   } finally {
     const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
     try {
@@ -121,3 +150,17 @@ test('keeps a stale edit and reloads the latest saved product', async ({
     }
   }
 });
+
+function productPatch(page: Page, path: string) {
+  return page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === path && response.request().method() === 'PATCH',
+  );
+}
+
+async function changeStatus(page: Page, path: string) {
+  const changed = productPatch(page, path);
+  await page.getByRole('combobox', { name: 'Status' }).click();
+  await page.getByRole('option', { name: 'Hidden', exact: true }).click();
+  return changed;
+}

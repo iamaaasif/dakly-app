@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import type { ProductResponse } from '@dakly/contracts/products';
+import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
 import { QueryError } from '@dakly/ui/query-error';
@@ -112,31 +113,29 @@ type LoadedProductPageProps = {
 function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedProductPageProps) {
   const router = useRouter();
   const stock = stockKey(product);
-  const [loaded, setLoaded] = useState<LoadedProductVersion>({
-    version: product.version,
-    stock,
-    pendingVersions: [],
-  });
+  const [loaded, setLoaded] = useState({ version: product.version, stock });
+  const changeStatus = useChangeProduct(product.id, (saved) =>
+    setLoaded((previous) => ({ ...previous, version: saved.version })),
+  );
+  const statusError = changeStatus.error;
+  const statusConflict = statusError instanceof ApiError && statusError.code === 'PRODUCT_CHANGED';
   // Stock updates can refresh the form while this is still the version it loaded.
   if (product.version === loaded.version && stock !== loaded.stock) setLoaded({ ...loaded, stock });
-  const acceptVersion = (saved: ProductResponse) =>
-    setLoaded({ version: saved.version, stock: stockKey(saved), pendingVersions: [] });
-  const acceptLocalVersion = (version: number) =>
-    setLoaded((previous) => acceptWrittenVersion(previous, version));
   return (
     <ProductForm
       key={loaded.stock}
       product={product}
       expectedVersion={loaded.version}
+      statusConflict={statusConflict ? statusError : undefined}
       onReload={onReload}
       onSaved={(saved, failedStock) => {
-        acceptVersion(saved);
+        setLoaded({ version: saved.version, stock: stockKey(saved) });
         if (!failedStock.length) void onReload();
       }}
       page={{
         title: product.name,
         backHref: '/products',
-        photos: <ProductPhotos product={product} onVersion={acceptLocalVersion} />,
+        photos: <ProductPhotos product={product} />,
         readOnly,
         notice: <ProductPageNotice readOnly={readOnly} reloadError={reloadError} />,
         status: (
@@ -152,7 +151,11 @@ function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedP
             <StatusCard
               product={product}
               readOnly={readOnly}
-              onStatusSaved={(saved) => acceptLocalVersion(saved.version)}
+              disabled={changeStatus.isPending}
+              error={statusConflict ? null : statusError}
+              onChangeStatus={(status) =>
+                changeStatus.mutate({ status, expectedVersion: loaded.version })
+              }
             />
           </>
         ),
@@ -160,20 +163,6 @@ function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedP
       }}
     />
   );
-}
-
-type LoadedProductVersion = { version: number; stock: string; pendingVersions: number[] };
-
-function acceptWrittenVersion(previous: LoadedProductVersion, version: number) {
-  if (version <= previous.version) return previous;
-  // A gap may be a change from another editor. Wait for our own responses to fill it.
-  const versions = [...previous.pendingVersions, version].sort((a, b) => a - b);
-  let current = previous.version;
-  for (const received of versions) {
-    if (received > current + 1) break;
-    current = received;
-  }
-  return { ...previous, version: current, pendingVersions: versions.filter((n) => n > current) };
 }
 
 function ProductPageNotice({
@@ -213,18 +202,19 @@ function AssistantNotice({ draft }: { draft: AssistantProductDraft }) {
 type StatusCardProps = {
   product?: ProductResponse;
   readOnly?: boolean;
-  onStatusSaved?: (product: ProductResponse) => void;
+  disabled?: boolean;
+  error?: Error | null;
+  onChangeStatus?: (status: 'active' | 'hidden') => void;
 };
 
-function StatusCard({ product, readOnly, onStatusSaved }: StatusCardProps) {
-  const change = useChangeProduct(product?.id ?? '', onStatusSaved);
+function StatusCard({ product, readOnly, disabled, error, onChangeStatus }: StatusCardProps) {
   const [changingStock, setChangingStock] = useState(false);
   return (
     <Card className="space-y-3">
       <ProductStatusField
         savedStatus={product?.status}
-        onChangeStatus={product ? (status) => change.mutate({ status }) : undefined}
-        disabled={change.isPending}
+        onChangeStatus={onChangeStatus}
+        disabled={disabled}
       />
       {product ? (
         <>
@@ -237,7 +227,7 @@ function StatusCard({ product, readOnly, onStatusSaved }: StatusCardProps) {
           {changingStock ? (
             <ChangeStockDialog product={product} onClose={() => setChangingStock(false)} />
           ) : null}
-          <ProductSaveError error={change.error} />
+          <ProductSaveError error={error} />
         </>
       ) : null}
     </Card>

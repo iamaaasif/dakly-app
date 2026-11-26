@@ -70,10 +70,10 @@ describe('ProductSearchIndexService with Postgres', () => {
       return { embeddings: [vector(0.1)], model: 'test-model' };
     }) as typeof ai.embed;
     await app.get(ProductSearchIndexService).index(f.a, productId);
-    expect(await stored()).toEqual({ model: null, hash: null, version: 2 });
+    expect(await stored()).toEqual({ model: null, hash: null, version: 1 });
   });
 
-  it('saves the embedding when the text is unchanged', async () => {
+  it('saves the embedding without advancing the product version', async () => {
     const ai = app.get(AiService);
     ai.embed = (async () => ({
       embeddings: [vector(0.2)],
@@ -81,7 +81,11 @@ describe('ProductSearchIndexService with Postgres', () => {
     })) as typeof ai.embed;
     const before = await stored();
     await app.get(ProductSearchIndexService).index(f.a, productId);
-    expect(await stored()).toMatchObject({ model: 'test-model', version: before.version + 1 });
+    expect(await stored()).toEqual({
+      model: 'test-model',
+      hash: expect.any(String),
+      version: before.version,
+    });
   });
 
   it("does not read another store's product", async () => {

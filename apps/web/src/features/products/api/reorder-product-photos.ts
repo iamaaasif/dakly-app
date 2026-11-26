@@ -6,11 +6,7 @@ import { productPhotosPath } from './product-photos-path';
 import { productsKeys } from '@/lib/product-query-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
-export function useReorderProductPhotos(
-  productId: string,
-  variantId?: string,
-  onVersion?: (version: number) => void,
-) {
+export function useReorderProductPhotos(productId: string, variantId?: string) {
   const { request } = useStoreRequest();
   const client = useQueryClient();
   return useMutation({
@@ -20,9 +16,6 @@ export function useReorderProductPhotos(
         method: 'PATCH',
         body: input,
       }),
-    onSuccess: (product) => {
-      if (!variantId) onVersion?.(product.version);
-      return client.invalidateQueries({ queryKey: productsKeys.all });
-    },
+    onSuccess: () => client.invalidateQueries({ queryKey: productsKeys.all }),
   });
 }

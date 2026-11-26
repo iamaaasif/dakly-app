@@ -10,21 +10,14 @@ import { productPhotosPath } from './product-photos-path';
 import { productsKeys } from '@/lib/product-query-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
-export function useUploadProductPhoto(
-  productId: string,
-  variantId?: string,
-  onVersion?: (version: number) => void,
-) {
+export function useUploadProductPhoto(productId: string, variantId?: string) {
   const { request } = useStoreRequest();
   const client = useQueryClient();
   const path = productPhotosPath(productId, variantId);
   return useMutation({
     gcTime: 0,
     mutationFn: (file: File) => uploadProductPhotoFile(request, path, file),
-    onSuccess: (product) => {
-      if (!variantId) onVersion?.(product.version);
-      return client.invalidateQueries({ queryKey: productsKeys.all });
-    },
+    onSuccess: () => client.invalidateQueries({ queryKey: productsKeys.all }),
   });
 }
 

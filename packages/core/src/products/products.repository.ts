@@ -259,7 +259,7 @@ export class ProductsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ ...input, updatedAt: now })
+        .set({ ...input, updatedAt: now, version: sql`${products.version} + 1` })
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )
@@ -365,7 +365,7 @@ export class ProductsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ status: 'archived', updatedAt: now })
+        .set({ status: 'archived', updatedAt: now, version: sql`${products.version} + 1` })
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )

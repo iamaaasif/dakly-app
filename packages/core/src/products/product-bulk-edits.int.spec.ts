@@ -142,7 +142,7 @@ describe('ProductBulkEditsService', () => {
       price: 120000,
       category: 'Tops',
       on_hand: 40,
-      version: 4,
+      version: 3,
     });
     expect(
       (await f.connection.pool.query('select brand_id from products where id=$1', [id])).rows[0],

@@ -73,6 +73,7 @@ type ProductFormProps = {
   onSaved: (product: ProductResponse, failedStock: string[]) => void;
   page?: ProductFormPage;
   expectedVersion?: number;
+  statusConflict?: ApiError;
   onReload?: () => void;
 };
 
@@ -119,7 +120,7 @@ export function ProductForm(props: ProductFormProps) {
           <ProductFormPageLayout
             page={page}
             actions={actions}
-            saveError={{ error, onReload: props.onReload }}
+            saveError={{ error: props.statusConflict ?? error, onReload: props.onReload }}
             product={product}
             onOptionDraftChange={setEditingOption}
           />
