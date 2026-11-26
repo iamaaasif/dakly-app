@@ -95,19 +95,35 @@ export function ProductPriceFields({ productId, onPage }: ProductFieldsProps) {
   );
 }
 
+type WeightUnit = 'g' | 'kg';
+
 export function ProductDeliveryFields() {
-  const { field } = useController<ProductFormValues, 'weightGrams'>({ name: 'weightGrams' });
-  const [unit, setUnit] = useState('g');
+  const { control, setError, clearErrors } = useFormContext<ProductFormValues>();
+  const { field, fieldState } = useController({ control, name: 'weightGrams' });
+  const [unit, setUnit] = useState<WeightUnit>('g');
   const [amount, setAmount] = useState(field.value ?? '');
   const changeAmount = (value: string) => {
     setAmount(value);
-    if (unit === 'g' || value === '') {
-      field.onChange(value);
+    if (unit === 'kg' && value !== '' && !/^\d+(?:\.\d{1,3})?$/.test(value)) {
+      setError('weightGrams', {
+        type: 'kilograms',
+        message: 'Enter the weight in kg, for example 0.5',
+      });
       return;
     }
-    field.onChange(
-      /^\d+(?:\.\d{1,3})?$/.test(value) ? String(Math.round(Number(value) * 1000)) : '.',
-    );
+    clearErrors('weightGrams');
+    field.onChange(unit === 'kg' && value ? String(Math.round(Number(value) * 1000)) : value);
+  };
+  const changeUnit = (next: WeightUnit) => {
+    setUnit(next);
+    if (fieldState.error?.type === 'kilograms') {
+      clearErrors('weightGrams');
+      field.onChange(amount);
+      return;
+    }
+    const grams = field.value;
+    if (typeof grams === 'string' && /^\d+$/.test(grams))
+      setAmount(next === 'kg' ? String(Number(grams) / 1000) : grams);
   };
   return (
     <>
@@ -126,26 +142,30 @@ export function ProductDeliveryFields() {
             )}
           </FormField>
         </div>
-        <Select
-          value={unit}
-          onValueChange={(next) => {
-            setUnit(next);
-            const grams = field.value;
-            if (typeof grams === 'string' && /^\d+$/.test(grams))
-              setAmount(next === 'kg' ? String(Number(grams) / 1000) : grams);
-          }}
-        >
-          <SelectTrigger aria-label="Weight unit" className="w-auto shrink-0">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="g">g</SelectItem>
-            <SelectItem value="kg">kg</SelectItem>
-          </SelectContent>
-        </Select>
+        <WeightUnitSelect unit={unit} onChange={changeUnit} />
       </div>
       <p className="text-sm text-text-muted">Orders use this weight to work out courier charges.</p>
     </>
+  );
+}
+
+function WeightUnitSelect({
+  unit,
+  onChange,
+}: {
+  unit: WeightUnit;
+  onChange: (unit: WeightUnit) => void;
+}) {
+  return (
+    <Select value={unit} onValueChange={(value) => onChange(value === 'kg' ? 'kg' : 'g')}>
+      <SelectTrigger aria-label="Weight unit" className="w-auto shrink-0">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="g">g</SelectItem>
+        <SelectItem value="kg">kg</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
 

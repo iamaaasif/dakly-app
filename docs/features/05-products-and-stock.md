@@ -149,10 +149,9 @@ Built for the variants grid (part 2, API): saving a product with fewer variants 
   - **Insights on the page**: sales by channel, times asked in chats, and the restock waiting list for each size, shown on the Waiting list tab and in the right column.
   - **Photos**: up to 10 of up to 5 MB (JPEG, PNG, WebP), move earlier, remove with a confirm, photos for each variant, and a retry button when an upload fails. On a phone, **Take photo** opens the camera.
   - **Permissions**: members without Edit Products see the same page read-only, with no Save bar.
-  - **Two people editing**: if the product changed since the page was opened, Save says so and offers to reload, and the typed values stay on screen.
   - **Needs a price and Needs a photo** labels, and the AI readiness line, stay on the page and the list.
 - Plain validation messages on every field; a typed cost is kept when options change.
-- Leaving with unsaved changes asks first. Restock and Change stock stay dialogs.
+- Restock and Change stock stay dialogs.
 - On a phone each variant is one line (name, price, stock) that opens to edit its fields, the bulk bar stays, and the Save bar sticks to the bottom.
 - A readiness line shows what the AI still lacks (photo, price, description).
 
