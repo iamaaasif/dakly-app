@@ -189,6 +189,28 @@ describe('Product form on a full page', () => {
     expect(submitted).toEqual({ pricePoisha: 300000, compareAtPricePoisha: null });
   });
 
+  it('keeps an invalid kilogram amount in view and saves a valid amount as grams', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show({ ...product, weightGrams: 500 }, page);
+    Element.prototype.scrollIntoView = () => undefined;
+    screen.getByRole('combobox', { name: 'Weight unit' }).focus();
+    await userEvent.keyboard('{Enter}{ArrowDown}{Enter}');
+    const weight = screen.getByLabelText<HTMLInputElement>('Parcel weight');
+    expect(weight.value).toBe('0.5');
+    fireEvent.change(weight, { target: { value: '1.2345' } });
+    expect(weight.value).toBe('1.2345');
+    expect(screen.getByText('Enter the weight in kg, for example 0.5')).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true);
+    fireEvent.change(weight, { target: { value: '1.25' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toEqual({ weightGrams: 1250 });
+  });
+
   it('shows the product details without editing controls on a read-only page', () => {
     show(product, { ...page, readOnly: true });
     const name = screen.getByLabelText<HTMLInputElement>('Product name');
