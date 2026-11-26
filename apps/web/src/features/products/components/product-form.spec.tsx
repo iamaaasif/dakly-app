@@ -12,6 +12,10 @@ import { ProductForm } from './product-form';
 import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 const product: ProductResponse = {
   ...createProductSchema.parse({ name: 'Cotton Panjabi', pricePoisha: 245050, status: 'hidden' }),
   id: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
