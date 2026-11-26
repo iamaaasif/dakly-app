@@ -524,24 +524,27 @@ describe('Password authentication over Fastify', () => {
         .error.code,
     ).toBe('AUTH_INVALID_CREDENTIALS');
   });
-  it('revokes every old session on later account and store requests', async () => {
+  it('opens the first shop in a reset session and revokes every old session', async () => {
     const user = await account();
-    const [store] = await admin.db
+    const shops = await admin.db
       .insert(stores)
-      .values({ name: 'রিনার দোকান' })
+      .values([{ name: 'রিনার দোকান' }, { name: 'রিনার দ্বিতীয় দোকান' }])
       .returning({ id: stores.id });
-    storeIds.push(store!.id);
-    await admin.db.insert(memberships).values({
-      storeId: store!.id,
-      userId: user.id,
-      builtInRole: 'support_agent',
-      status: 'active',
-    });
+    const [firstShop, secondShop] = shops.map(({ id }) => id).sort();
+    storeIds.push(firstShop!, secondShop!);
+    await admin.db.insert(memberships).values(
+      shops.map(({ id }) => ({
+        storeId: id,
+        userId: user.id,
+        builtInRole: 'support_agent' as const,
+        status: 'active' as const,
+      })),
+    );
     const service = app.get(SessionsService);
     const existing = await service.resolve(user.cookie.split('=')[1]!);
-    await service.setActiveStore(user.id, existing!.id, store!.id);
+    await service.setActiveStore(user.id, existing!.id, secondShop!);
     const second = await service.create(user.id, { isRemembered: true });
-    await service.setActiveStore(user.id, second.session.id, store!.id);
+    await service.setActiveStore(user.id, second.session.id, secondShop!);
     const cookies = [user.cookie, `dakly_session=${second.token}`];
     for (const cookie of cookies) {
       expect((await app.inject({ url: '/me', headers: { cookie } })).statusCode).toBe(200);
@@ -550,15 +553,16 @@ describe('Password authentication over Fastify', () => {
       ).toBe(200);
     }
     await post('/auth/password-reset', { identifier: user.phone });
-    expect(
-      (
-        await post('/auth/password-reset/confirm', {
-          identifier: user.phone,
-          code: codeFor(user.email!),
-          password: 'newpassword1',
-        })
-      ).statusCode,
-    ).toBe(204);
+    const reset = await post('/auth/password-reset/confirm', {
+      identifier: user.phone,
+      code: codeFor(user.email!),
+      password: 'newpassword1',
+    });
+    expect(reset.statusCode).toBe(204);
+    const cookie = String(reset.headers['set-cookie']).split(';')[0]!;
+    const context = await app.inject({ url: '/me/context', headers: { cookie } });
+    expect(context.statusCode).toBe(200);
+    expect(context.json().currentStore).toMatchObject({ storeId: firstShop });
     for (const cookie of cookies) {
       expect((await app.inject({ url: '/me', headers: { cookie } })).statusCode).toBe(401);
       expect(

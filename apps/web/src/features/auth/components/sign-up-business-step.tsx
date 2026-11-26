@@ -5,7 +5,8 @@ import type { KeyboardEvent } from 'react';
 import { Controller, useForm, type UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
 
-import { signUpSchema, type SignUpInput } from '@dakly/contracts/auth';
+import { signUpSchema, type SignUpCodeChannel, type SignUpInput } from '@dakly/contracts/auth';
+import { bdMobileSchema } from '@dakly/contracts/phone';
 import { storeOfferings } from '@dakly/contracts/stores';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
@@ -22,7 +23,7 @@ import { formError } from '@/lib/form-error';
 const businessSchema = z.object({
   name: signUpSchema.shape.name,
   businessName: z.string().trim().min(1, 'Enter your business name.').max(120),
-  phone: signUpSchema.shape.phone,
+  phone: bdMobileSchema.optional(),
   websiteUrl: z
     .string()
     .trim()
@@ -35,12 +36,15 @@ type BusinessDetails = z.infer<typeof businessSchema>;
 type SignUpBusinessStepProps = {
   account: AccountDetails;
   legal: NonNullable<AuthConfig['legal']>;
+  channel: SignUpCodeChannel;
   onSent: (sent: { registration: SignUpInput; password: string; shop: ShopDetails }) => void;
 };
-export function SignUpBusinessStep({ account, legal, onSent }: SignUpBusinessStepProps) {
+export function SignUpBusinessStep({ account, legal, channel, onSent }: SignUpBusinessStepProps) {
   const form = useForm({
-    resolver: zodResolver(businessSchema),
-    defaultValues: { name: '', businessName: '', phone: '', websiteUrl: '' },
+    resolver: zodResolver(
+      channel === 'sms' ? businessSchema.required({ phone: true }) : businessSchema,
+    ),
+    defaultValues: { name: '', businessName: '', websiteUrl: '' },
   });
   const request = useRequestCode();
   const errors = form.formState.errors;
@@ -70,7 +74,7 @@ export function SignUpBusinessStep({ account, legal, onSent }: SignUpBusinessSte
         }
       })}
     >
-      <BusinessFields form={form} />
+      <BusinessFields form={form} showPhone={channel === 'sms'} />
       {errors.root ? (
         <p role="alert" className="text-danger">
           {errors.root.message}
@@ -87,7 +91,13 @@ export function SignUpBusinessStep({ account, legal, onSent }: SignUpBusinessSte
   );
 }
 
-function BusinessFields({ form }: { form: UseFormReturn<BusinessDetails> }) {
+function BusinessFields({
+  form,
+  showPhone,
+}: {
+  form: UseFormReturn<BusinessDetails>;
+  showPhone: boolean;
+}) {
   const errors = form.formState.errors;
   return (
     <div className="space-y-4.5">
@@ -109,16 +119,18 @@ function BusinessFields({ form }: { form: UseFormReturn<BusinessDetails> }) {
           className={authFieldClass}
         />
       </div>
-      <AuthField
-        label="Phone number"
-        field={form.register('phone')}
-        error={errors.phone}
-        type="tel"
-        autoComplete="tel"
-        prefix="+880"
-        placeholder="1712 345678"
-        className={authPrefixedFieldClass}
-      />
+      {showPhone ? (
+        <AuthField
+          label="Phone number"
+          field={form.register('phone')}
+          error={errors.phone}
+          type="tel"
+          autoComplete="tel"
+          prefix="+880"
+          placeholder="1712 345678"
+          className={authPrefixedFieldClass}
+        />
+      ) : null}
       <AuthField
         label="Website or Facebook Page URL (optional)"
         field={form.register('websiteUrl')}

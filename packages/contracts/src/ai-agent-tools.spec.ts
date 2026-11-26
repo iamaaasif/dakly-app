@@ -25,6 +25,7 @@ describe('sales agent tools', () => {
     const withMoney = salesAgentTools.filter((tool) => /taka/i.test(JSON.stringify(tool.units)));
     expect(withMoney.map((tool) => tool.name)).toEqual([
       'search_products',
+      'browse_products',
       'get_product',
       'get_delivery_charge',
       'get_my_orders',
@@ -80,7 +81,12 @@ describe('sales agent tools', () => {
 
   it('only accept hand-over reasons the model may choose', () => {
     const handOver = salesAgentTools.find((tool) => tool.name === 'hand_over')!;
-    expect(handOver.input.safeParse({ reason: 'refund' }).success).toBe(true);
-    expect(handOver.input.safeParse({ reason: 'allowance_used' }).success).toBe(false);
+    expect(handOver.input.safeParse({ reason: 'refund', summary: null }).success).toBe(true);
+    expect(
+      handOver.input.safeParse({ reason: 'complaint', summary: 'Order 1042 not received' }).success,
+    ).toBe(true);
+    expect(handOver.input.safeParse({ reason: 'allowance_used', summary: null }).success).toBe(
+      false,
+    );
   });
 });

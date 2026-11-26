@@ -163,6 +163,9 @@ export class AuthService {
         input: user.registration,
         now: this.clock.now(),
         passwordHash: user.registrationPasswordHash,
+        emailVerified: Boolean(
+          user.deliveryEmail && user.deliveryEmail === user.registration.email,
+        ),
         google: user.google?.identity,
         facebook: user.facebook?.identity,
       }))

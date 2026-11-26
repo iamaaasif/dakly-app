@@ -120,15 +120,19 @@ export class SessionsService {
 
   async create(
     userId: string,
-    input: CreateSessionInput,
+    { selectFirstStore, ...input }: CreateSessionInput & { selectFirstStore?: boolean },
   ): Promise<{ token: string; session: Session }> {
     const token = randomBytes(32).toString('base64url');
     const now = this.clock.now();
+    const firstStore = selectFirstStore
+      ? (await this.team.storesFor(userId, { limit: 1 })).items[0]
+      : undefined;
     const session = await this.repository.insert(userId, {
       tokenHash: hashToken(token),
       input,
       now,
       expiresAt: new Date(now.getTime() + lifetimeMilliseconds(input.isRemembered)),
+      activeStoreId: firstStore?.storeId,
     });
     return { token, session };
   }

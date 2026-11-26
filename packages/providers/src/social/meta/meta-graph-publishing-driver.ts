@@ -15,7 +15,12 @@ const requestTimeoutMs = 5_000;
 const idResult = z.object({ id: z.string().min(1) });
 const storyResult = z.object({ post_id: z.string().min(1) });
 const errorResult = z.object({
-  error: z.object({ code: z.number(), is_transient: z.boolean().optional() }),
+  error: z.object({
+    code: z.number(),
+    error_subcode: z.number().optional(),
+    message: z.string().optional(),
+    is_transient: z.boolean().optional(),
+  }),
 });
 const retryableCodes = [1, 2, 4, 17, 32, 613, 80001, 80002];
 const containerStates = {
@@ -44,11 +49,19 @@ function responseError(status: number, payload: unknown) {
   const parsed = errorResult.safeParse(payload);
   if (!parsed.success) return new MetaPublishingError('unavailable');
   const { error } = parsed.data;
-  if ([190, 459].includes(error.code)) return new MetaPublishingError('auth_error');
-  if (status < 400 || status === 408 || status >= 500)
-    return new MetaPublishingError('unavailable');
+  const detail = {
+    code: error.code,
+    subcode: error.error_subcode ?? null,
+    message: (error.message ?? '').slice(0, 300),
+  };
+  return new MetaPublishingError(errorKind(status, error), detail);
+}
+
+function errorKind(status: number, error: z.infer<typeof errorResult>['error']) {
+  if ([190, 459].includes(error.code)) return 'auth_error';
+  if (status < 400 || status === 408 || status >= 500) return 'unavailable';
   const retryable = status === 429 || error.is_transient || retryableCodes.includes(error.code);
-  return new MetaPublishingError(retryable ? 'retryable' : 'rejected');
+  return retryable ? 'retryable' : 'rejected';
 }
 
 function insightMetrics({ kind, isStory }: MetaPostRef) {

@@ -58,6 +58,11 @@ export async function reportFast(context: JobContext, models: string[]) {
         reasons.get(golden.id) !== null &&
         reasons.get(golden.id) !== golden.acceptedHandover,
     );
+    if (verbose)
+      for (const golden of wanted.filter((item) => !correct.includes(item)))
+        say(
+          `${model} missed hand-over ${golden.id}: expected ${golden.expectedHandover}, got ${reasons.get(golden.id)}`,
+        );
     const passed = correct.length / wanted.length >= MIN_HANDOVER_ACCURACY;
     rows.push([
       model,

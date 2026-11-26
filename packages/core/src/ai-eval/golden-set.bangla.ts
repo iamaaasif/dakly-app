@@ -307,8 +307,11 @@ export const banglaGoldenCases: GoldenCase[] = [
     id: 'refund-banglish',
     language: 'banglish',
     question: 'product ta vanga, taka ferot chai',
-    expectedHandover: 'refund',
+    // Taken in first: the AI apologises and asks for the order before a person gets it.
+    expectedHandover: null,
+    acceptedHandover: 'refund',
     allowedAmountsTaka: [],
+    mentionsAnyOf: ['অর্ডার', 'order', 'নম্বর', 'number'],
   },
   {
     id: 'discount-banglish',
@@ -409,6 +412,6 @@ export const banglaRecordedOutcomes: Record<string, EvalOutcome> = {
     kind: 'reply',
     text: 'স্নিকার্স এখন নেই। নতুন স্টক এলে আপনাকে জানাবো।',
   },
-  'refund-banglish': { kind: 'handover', reason: 'refund' },
+  'refund-banglish': { kind: 'reply', text: 'দুঃখিত, পণ্যটা ভাঙা পেয়েছেন। অর্ডার নম্বর দেবেন?' },
   'discount-banglish': { kind: 'handover', reason: 'discount' },
 };

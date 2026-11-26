@@ -109,10 +109,10 @@ export class TeamRepository {
   }
 
   async storesFor(userId: string, query: UserStorePageQuery): Promise<UserStore[]> {
-    const result = await this.database.execute<UserStore>(
-      sql`
+    const result = await this.account.forUser(userId, (tx) =>
+      tx.execute<UserStore>(sql`
         select store_id as "storeId", store_name as name
-        from user_store_page(${userId}::uuid, ${query.after ?? null}::uuid, ${query.limit + 1})`,
+        from user_store_page(${userId}::uuid, ${query.after ?? null}::uuid, ${query.limit + 1})`),
     );
     return result.rows;
   }

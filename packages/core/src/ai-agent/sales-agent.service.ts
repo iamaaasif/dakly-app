@@ -18,13 +18,7 @@ import { Clock } from '../platform/clock';
 import { loadEnv } from '../platform/config/env';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
-import {
-  AD_PRODUCT_LIMIT,
-  AD_PRODUCTS_TOOL,
-  adProducts,
-  adProductsVersion,
-  isAdContextFresh,
-} from './ad-context';
+import { AD_PRODUCT_LIMIT, AD_PRODUCTS_TOOL, adProducts, isAdContextFresh } from './ad-context';
 import {
   conversationEntries,
   type ConversationEntry,
@@ -32,7 +26,6 @@ import {
   MATCH_PHOTO_TOOL,
   PRODUCTS_IN_CHAT_TOOL,
   productsInChat,
-  productsInChatVersion,
   recentlyShownProductIds,
   SHOWN_PRODUCTS_SOURCE,
   shownProductIds,
@@ -40,14 +33,16 @@ import {
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV12 } from './prompts/chat-reply.v12';
+import { chatReplyV14 } from './prompts/chat-reply.v14';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
+import { promptWith } from './reply-prompt-version';
 import {
   type ToolScope,
   isOutOfStock,
   SalesAgentToolsService,
   salesAgentLlmTools,
 } from './sales-agent-tools.service';
+import { shopBlock, summaryOf } from './shop-block';
 import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
 
 const MAX_ROUNDS = 4;
@@ -76,7 +71,7 @@ export type ComposedReply =
       earlierCustomerTexts: string[];
       sources: { tool: string; refs: string[] }[];
     }
-  | { kind: 'handover'; reason: Reason }
+  | { kind: 'handover'; reason: Reason; summary?: string }
   | { kind: 'busy' };
 
 // The photo is sent before the text; a card with no photo is text only.
@@ -85,6 +80,14 @@ export type ProductCard = {
   // The same product drawn as a Meta card; absent when it cannot be drawn.
   element?: ProductCardElement;
   image?: { objectKey: string; contentType: string; sizeBytes: number };
+};
+
+export type PreparedReply = {
+  results: ToolResult[];
+  scoped: ComposeInput;
+  ad: { result: ToolResult } | undefined;
+  inChat: ToolResult | undefined;
+  history: readonly HistoryMessage[] | undefined;
 };
 
 export type ComposeInput = ToolScope & { customerTexts: string[]; rules: ShopRules };
@@ -106,8 +109,8 @@ export class SalesAgentService {
 
   // A reply that fails the fact check is written once more with the failure named, so a slip such
   // as an invented amount does not cost the customer a person's wait. A second failure hands over.
-  async compose(input: ComposeInput): Promise<ComposedReply> {
-    const first = await this.composeOnce(input);
+  async compose(input: ComposeInput, prepared?: Promise<PreparedReply>): Promise<ComposedReply> {
+    const first = await this.composeOnce(input, undefined, prepared);
     const failed = first.kind === 'reply' && (await this.factCheckFailure(input, first));
     if (first.kind !== 'reply' || !failed) return first;
     await this.runs.setOutcome(input.storeId, first.aiRunId, 'failed_check', failed);
@@ -136,25 +139,40 @@ export class SalesAgentService {
     return !checked.isSafe && checked.failure;
   }
 
+  // Reads the chat and the products it already points to. The caller may start it while the
+  // hand-over check is still running; the search that costs an AI call waits for the verdict.
+  async prepare(input: ComposeInput): Promise<PreparedReply> {
+    const results: ToolResult[] = [];
+    // A practice question has no saved conversation, so the question itself is the whole history.
+    const [history, products] = await Promise.all([
+      input.chat
+        ? this.inbox.replyHistory(input.storeId, input.chat.conversationId, REPLY_HISTORY_LENGTH)
+        : undefined,
+      this.gatherProducts(input, results),
+    ]);
+    return { results, history, ...products };
+  }
+
   private async composeOnce(
     input: ComposeInput,
     rejected?: { failure: FactCheckFailure; reply: string },
+    prepared?: Promise<PreparedReply>,
   ): Promise<ComposedReply> {
     const { storeId } = input;
     const signal = AbortSignal.timeout(REPLY_BUDGET_MS);
-    const results: ToolResult[] = [];
-    // A practice question has no saved conversation, so the question itself is the whole history.
-    const history = input.chat
-      ? await this.inbox.replyHistory(storeId, input.chat.conversationId, REPLY_HISTORY_LENGTH)
-      : undefined;
-    const { scoped, ad, inChat, candidates } = await this.gatherProducts(input, results);
+    const ready = await (prepared ?? this.prepare(input));
+    // The model's tool rounds add to the list, so a retry must not see the first try's results.
+    const results = [...ready.results];
+    const { scoped, ad, inChat, history } = ready;
+    const candidates = await this.productCandidates(scoped);
+    if (candidates) results.push(candidates);
     const context = await this.context({ input, history, inChat, candidates, ad });
     let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV12, inChat, ad),
+        prompt: promptWith(chatReplyV14, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -179,14 +197,15 @@ export class SalesAgentService {
           ),
         };
       const outcome = await this.answerToolCalls(scoped, attempt.toolCalls, results);
-      if ('handover' in outcome) return { kind: 'handover', reason: outcome.handover };
+      if ('handover' in outcome)
+        return { kind: 'handover', reason: outcome.handover, summary: outcome.summary };
       transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
     }
     return { kind: 'handover', reason: 'out_of_scope' };
   }
 
-  // The ad's products, the products shown earlier and the keyword matches, in the order the prompt
-  // lists them. `scoped` is the input the tools run with: inside the ad's products while it has any.
+  // The ad's products and the products shown earlier, in the order the prompt lists them.
+  // `scoped` is the input the tools run with: inside the ad's products while it has any.
   private async gatherProducts(input: ComposeInput, results: ToolResult[]) {
     const ad = await this.adContext(input);
     if (ad) results.push(ad.result);
@@ -195,9 +214,7 @@ export class SalesAgentService {
       : input;
     const inChat = input.chat ? await this.readProductsInChat(scoped, input.chat) : undefined;
     if (inChat) results.push(inChat);
-    const candidates = await this.productCandidates(scoped);
-    if (candidates) results.push(candidates);
-    return { scoped, ad, inChat, candidates };
+    return { scoped, ad, inChat };
   }
 
   private async cards(storeId: string, results: ToolResult[]): Promise<ProductCard[]> {
@@ -248,7 +265,9 @@ export class SalesAgentService {
     input: ComposeInput,
     calls: readonly { name: string; argumentsJson: string }[],
     results: ToolResult[],
-  ): Promise<{ handover: Reason } | { answered: { name: string; result: object }[] }> {
+  ): Promise<
+    { handover: Reason; summary?: string } | { answered: { name: string; result: object }[] }
+  > {
     const answered: { name: string; result: object }[] = [];
     for (const call of calls) {
       const refusal = refuseToolCall(input.rules, call);
@@ -263,7 +282,7 @@ export class SalesAgentService {
               call.argumentsJson,
             ));
       if (call.name === HAND_OVER_TOOL && 'reason' in result)
-        return { handover: result.reason as Reason };
+        return { handover: result.reason as Reason, summary: summaryOf(result) };
       results.push({ tool: call.name, result });
       answered.push({ name: call.name, result });
     }
@@ -279,10 +298,13 @@ export class SalesAgentService {
     if (!input.chat) return undefined;
     const referral = await this.inbox.referralOf(input.storeId, input.chat.conversationId);
     if (!referral || !isAdContextFresh(referral.referredAt, this.clock.now())) return undefined;
-    const productIds = (await this.adLinks.productIdsFor(input.storeId, referral)).slice(
-      0,
-      AD_PRODUCT_LIMIT,
-    );
+    const linkedIds = await this.adLinks.productIdsFor(input.storeId, referral);
+    // No saved link: the ad's own title still names its product when it matches exactly one.
+    const productIds = (
+      linkedIds.length || !referral.title
+        ? linkedIds
+        : await this.tools.productNamedBy(input, referral.title)
+    ).slice(0, AD_PRODUCT_LIMIT);
     const products = await this.tools.adProducts(input, productIds);
     return {
       // A linked product that is no longer offered drops out here, so search cannot reach it.
@@ -349,7 +371,7 @@ export class SalesAgentService {
       ? conversationEntries(history)
       : input.customerTexts.map((text) => ({ from: 'customer', text: shorten(text) }));
     return [
-      `<shop>${JSON.stringify({ name: shop.name, phone: shop.phone, district: shop.district })}</shop>`,
+      shopBlock(shop),
       shopRulesBlock(input.rules),
       ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
       ...conversationBlocks(windowConversation(conversation, input.customerTexts)),
@@ -390,20 +412,6 @@ function isUnconfirmed(
 // The retry's first lines tell the model why its last reply was not sent.
 function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | undefined) {
   return rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
-}
-
-// A run that was shown the products block records its version with the reply prompt's.
-function promptWith(
-  prompt: typeof chatReplyV12,
-  inChat: ToolResult | undefined,
-  ad: object | undefined,
-) {
-  const parts = [
-    prompt.version,
-    ...(inChat ? [productsInChatVersion] : []),
-    ...(ad ? [adProductsVersion] : []),
-  ];
-  return { ...prompt, version: parts.join('+') };
 }
 
 // Saved with the reply, so the next turn knows which products "this one" can mean.

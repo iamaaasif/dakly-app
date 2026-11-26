@@ -29,6 +29,7 @@ function build(memoryText: string | undefined = undefined) {
   const tools = {
     run: vi.fn().mockResolvedValue({ products: [] }),
     adProducts: vi.fn().mockResolvedValue([]),
+    productNamedBy: vi.fn().mockResolvedValue([]),
   } as unknown as SalesAgentToolsService;
   const inbox = {
     replyHistory: vi.fn().mockResolvedValue([]),
@@ -167,7 +168,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v12+products-in-chat.v2');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v14+products-in-chat.v2');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
@@ -269,7 +270,7 @@ it('adds no shown products when the chat has none, so the model still asks which
   });
 
   expect(run.mock.calls[0]![1].input).not.toContain('products_in_this_chat');
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v12');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v14');
   expect(tools.run).not.toHaveBeenCalledWith(expect.anything(), 'get_product', expect.anything());
 });
 
@@ -470,7 +471,7 @@ it('answers a bare price question from the ad’s products and limits search to 
   const call = run.mock.calls[0]![1];
   expect(call.input).toContain('<ad_products>');
   expect(call.input).toContain('নীল কুর্তি');
-  expect(call.prompt.version).toBe('chat-reply.v12+ad-products.v1');
+  expect(call.prompt.version).toBe('chat-reply.v14+ad-products.v1');
   expect(tools.run).toHaveBeenCalledWith(
     expect.objectContaining({ adProductIds: ['p-red', 'p-blue'] }),
     'search_products',
@@ -497,6 +498,25 @@ it('keeps an ad with no linked products in the prompt so the model asks, and sea
     expect.anything(),
     expect.anything(),
   );
+});
+
+it('uses the ad title to find the product when the owner saved no link', async () => {
+  const { service, run, tools, inbox } = build();
+  vi.mocked(inbox.referralOf).mockResolvedValue(fromAd('2026-11-23T11:00:00Z'));
+  vi.mocked(tools.productNamedBy).mockResolvedValue(['p-kurti']);
+  vi.mocked(tools.adProducts).mockResolvedValue([{ productId: 'p-kurti', name: 'ঈদ কুর্তি' }]);
+
+  await service.compose({
+    storeId,
+    contactId: 'c-1',
+    chat,
+    customerTexts: ['price?'],
+    rules: defaultShopRules,
+  });
+
+  expect(tools.productNamedBy).toHaveBeenCalledWith(expect.anything(), 'Eid kurti');
+  expect(tools.adProducts).toHaveBeenCalledWith(expect.anything(), ['p-kurti']);
+  expect(run.mock.calls[0]![1].input).toContain('ঈদ কুর্তি');
 });
 
 it('ignores an ad the customer came from more than a day ago', async () => {
@@ -539,3 +559,21 @@ it.each([true, false])(
     );
   },
 );
+
+it('answers from reads started earlier without reading the chat again', async () => {
+  const { service, run, inbox } = build();
+  const input = {
+    storeId,
+    contactId: 'c-1',
+    chat: { conversationId: 'chat-1', channel: 'messenger' as const },
+    customerTexts: ['Price koto?'],
+    rules: defaultShopRules,
+  };
+
+  const prepared = service.prepare(input);
+  const composed = await service.compose(input, prepared);
+
+  expect(composed.kind).toBe('reply');
+  expect(inbox.replyHistory).toHaveBeenCalledTimes(1);
+  expect(run).toHaveBeenCalledTimes(1);
+});

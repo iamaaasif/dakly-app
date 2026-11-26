@@ -13,6 +13,7 @@ import { FakeSmsDriver } from '@dakly/providers/sms/fake-sms-driver';
 import { MailpitSmsDriver } from '@dakly/providers/sms/mailpit/mailpit-sms-driver';
 
 import { ValkeyClient } from '../platform/cache/valkey-client';
+import { resetEnvForTests } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
 import { registerSessionCookies } from '../platform/http/session-cookie';
@@ -49,6 +50,8 @@ describe('SMS authentication over Fastify', () => {
   const codeFor = (target: string) =>
     fake.messages.findLast((message) => message.to === target)!.text.match(/\b\d{6}\b/)![0];
   beforeAll(async () => {
+    vi.stubEnv('SIGNUP_CODE_CHANNEL', 'sms');
+    resetEnvForTests();
     vi.spyOn(MailpitSmsDriver.prototype, 'send').mockImplementation((message) =>
       fake.send(message),
     );
@@ -89,6 +92,8 @@ describe('SMS authentication over Fastify', () => {
     await admin.pool.end();
     await app?.close();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    resetEnvForTests();
   });
   it('sets an initial Argon2id password only after consuming signup phone proof', async () => {
     const input = registration();

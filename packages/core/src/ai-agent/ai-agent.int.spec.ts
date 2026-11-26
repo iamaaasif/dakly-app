@@ -215,7 +215,7 @@ it('replaces a delayed job for a burst and ignores a reordered event', async () 
   const first = await receive(active, 'Hello');
   await agent.schedule(active.storeId, first.conversation_id, first.id);
   const previous = await queue.getJob(`ai-reply-${first.id}`);
-  expect(previous?.delay).toBe(8000);
+  expect(previous?.delay).toBe(3000);
   const newest = await receive(active, 'I need a person');
   await agent.schedule(active.storeId, newest.conversation_id, newest.id);
   await agent.schedule(active.storeId, first.conversation_id, first.id);
@@ -257,32 +257,37 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
       { kind: 'user', userId: active.owner },
       { body: 'Internal note must stay private' },
     );
-  const message = await receive(active, 'kapor chera ashche');
-  const inputs = script(classification);
+  const message = await receive(active, 'ekjon manush er sathe kotha bolbo');
+  const inputs = script({ ...classification, asksForPerson: true });
   await agent.reply(active.storeId, message.conversation_id, message.id);
   await agent.reply(active.storeId, message.conversation_id, message.id);
 
   expect(inputs.map((input) => JSON.parse(input))).toEqual([
-    { earlier_messages: [], customer_messages: ['bhai, order ta', 'kapor chera ashche'] },
+    {
+      earlier_messages: [],
+      customer_messages: ['bhai, order ta', 'ekjon manush er sathe kotha bolbo'],
+    },
   ]);
   const { rows: events } = await admin.pool.query(
     "select payload from outbox_events where store_id = $1 and type = 'conversation.handed_over'",
     [active.storeId],
   );
   expect(events).toEqual([
-    { payload: { conversationId: message.conversation_id, reason: 'complaint' } },
+    { payload: { conversationId: message.conversation_id, reason: 'asked_for_person' } },
   ]);
   expect(await observe(active)).toEqual({
-    conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'complaint' }],
+    conversations: [
+      { status: 'needs_you', responder: 'human', handover_reason: 'asked_for_person' },
+    ],
     replies: [
       {
-        body: 'একটু অপেক্ষা করুন, আমাদের টিম আপনাকে জানাবে।',
+        body: 'আপনার বিষয়টি নোট করা হয়েছে। আমাদের টিম খুব শীঘ্রই আপনার সাথে কথা বলবে।',
         author_type: 'system',
         recipient_identity_id: message.sender_identity_id,
       },
     ],
     notices: [{ user_id: assignee, type: 'conversation.handed_over' }],
-    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v2' }],
+    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v3' }],
     usage: [],
   });
 });
@@ -573,9 +578,9 @@ it('answers price and delivery from tool results, saves the run and sources, and
     runs: [
       { purpose: 'classify' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v12' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v14' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v12' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v14' },
     ],
     usage: [{ id: expect.any(String) }],
   });
@@ -721,7 +726,7 @@ it('holds the price on a first discount ask and hands over a repeat ask in a sho
 it('hands over when the model calls hand_over', async () => {
   const active = await sellingShop();
   const message = await receive(active, 'amar order ta ferot dite chai');
-  scriptSequence(classified, toolCalls(['hand_over', { reason: 'refund' }]));
+  scriptSequence(classified, toolCalls(['hand_over', { reason: 'refund', summary: null }]));
   await agent.reply(active.storeId, message.conversation_id, message.id);
   expect(await observe(active)).toMatchObject({
     conversations: [{ status: 'needs_you', responder: 'human', handover_reason: 'refund' }],

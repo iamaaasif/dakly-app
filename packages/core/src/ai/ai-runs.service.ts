@@ -67,9 +67,10 @@ export class AiRunsService {
     storeId: string,
     request: Attempt<T>,
     context: RunContext,
+    isRetry = false,
   ): Promise<AiAttempt<T>> {
     const startedAt = this.clock.now();
-    const { result, usage, model } = await this.callModel(request);
+    const { result, usage, model } = await this.callModel(request, isRetry);
     const aiRunId = await this.record(storeId, context, {
       model,
       startedAt,
@@ -168,7 +169,12 @@ export class AiRunsService {
     });
   }
 
-  private async callModel<T>(request: Attempt<T>): Promise<{
+  // A quick retry of one request is not another sign of an outage, so only the first try counts
+  // towards pausing the AI for every store.
+  private async callModel<T>(
+    request: Attempt<T>,
+    isRetry: boolean,
+  ): Promise<{
     result: AttemptResult<T>;
     usage: LlmResult['usage'];
     model: string;
@@ -178,7 +184,7 @@ export class AiRunsService {
       model = await this.driver.respond(request);
     } catch (error) {
       if (!(error instanceof LlmError)) throw error;
-      if (providerFailures.has(error.code)) await this.gate.recordFailure();
+      if (providerFailures.has(error.code) && !isRetry) await this.gate.recordFailure();
       return {
         result: { kind: 'failure', code: error.code },
         usage: error.usage ?? emptyUsage,

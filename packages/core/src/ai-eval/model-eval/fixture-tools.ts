@@ -1,8 +1,5 @@
-import {
-  addOnsRule,
-  describeAlternatives,
-  describePhotoMatch,
-} from '../../ai-agent/sales-agent-tools.service';
+import { describeAlternatives, describePhotoMatch } from '../../ai-agent/product-match-results';
+import { addOnsRule } from '../../ai-agent/sales-agent-tools.service';
 import { pickAddOns } from '../../product-search/product-add-ons';
 import { pickAlternatives } from '../../product-search/product-alternatives';
 import { decidePhotoMatch } from '../../product-search/product-photo-match';
@@ -119,9 +116,12 @@ const handlers: Record<string, Handler> = {
       : [],
   }),
   get_my_orders: () => ({ orders: [] }),
-  get_order_status: () => ({ error: 'ORDER_NOT_FOUND' }),
+  get_order_status: ({ orderNumber }) =>
+    Number(orderNumber) === 1042
+      ? { orderNumber: 1042, stage: 'shipped', courier: 'Pathao', trackingCode: 'PT1042' }
+      : { error: 'ORDER_NOT_FOUND' },
   draft_order: () => ({ error: 'NOT_IN_A_CHAT' }),
-  hand_over: ({ reason }) => ({ reason }),
+  hand_over: ({ reason, summary }) => ({ reason, summary }),
 };
 
 type OrderContext = { draftedOrder?: readonly string[]; suggestAddOns: boolean };
