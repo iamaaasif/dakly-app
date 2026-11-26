@@ -18,18 +18,18 @@ export function SetupCard() {
   const hide = useHideSetupChecklist();
   if (!store || !data || data.hidden) return null;
 
-  const steps = visibleSetupSteps(data.steps);
+  const { steps } = data;
   if (!steps.length) return null;
 
   const doneCount = steps.filter(({ done }) => done).length;
   const allDone = doneCount === steps.length;
-  const canHide = store.canChangeExtensions && data.steps.every(({ done }) => done);
+  const canHide = store.canChangeExtensions && steps.every(({ done }) => done);
 
   return (
     <Card
       aria-labelledby="setup-guide-title"
       role="region"
-      className="shadow-xs @container overflow-hidden rounded-dashboard-card p-0"
+      className="shadow-xs @container overflow-hidden rounded-lg p-0"
     >
       <SetupCardHeader
         allDone={allDone}
@@ -47,11 +47,6 @@ export function SetupCard() {
       <SetupSteps steps={steps} store={store} />
     </Card>
   );
-}
-
-function visibleSetupSteps(steps: SetupChecklistResponse['steps']) {
-  // A local server or cache can still return step IDs from an older dashboard.
-  return steps.filter(({ id }) => Object.hasOwn(setupStepCopy, id));
 }
 
 function SetupSteps({
@@ -103,7 +98,7 @@ function SetupStepCard(props: {
   return (
     <li
       className={cn(
-        'flex min-w-0 flex-col gap-4 rounded-dashboard-tile border bg-surface p-4 sm:p-5',
+        'flex min-w-0 flex-col gap-4 rounded-lg border bg-surface p-4 sm:p-5',
         isNext ? 'shadow-xs border-border-strong' : 'border-border',
       )}
     >

@@ -12,6 +12,7 @@ export function useSetupChecklist(hasStore: boolean) {
     queryKey: [...setupKeys.all, contextTag],
     queryFn: ({ signal }) => request<SetupChecklistResponse>('/setup-checklist', { signal }),
     enabled: Boolean(contextTag && hasStore),
+    // Always refetch on mount so the guide ticks a step after the shop saved it on another page.
     staleTime: 0,
   });
 }

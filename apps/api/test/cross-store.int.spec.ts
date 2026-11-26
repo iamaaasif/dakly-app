@@ -3045,40 +3045,15 @@ fixture('GET /setup-checklist', async () => {
 
 fixture('PATCH /setup-checklist', async () => {
   const { a, b } = await pair();
-  const before = await f.row('stores', b.id);
-  const changed = await success(a, 'PATCH', '/setup-checklist', 200, {
-    howYouSell: ['social_media'],
-  });
-  expect(changed.json()).toMatchObject({
-    howYouSell: ['social_media'],
-    hidden: false,
-    turnedOn: ['sales', 'chats', 'social_auto_post'],
-  });
-  expect(changed.json().steps).toHaveLength(3);
-  expect(await f.row('stores', b.id)).toEqual(before);
-  expect((await f.row('stores', a.id)).extensions).toEqual(['sales', 'chats', 'social_auto_post']);
-  // Answering again turns nothing off and nothing on twice.
-  const again = await success(a, 'PATCH', '/setup-checklist', 200, {
-    howYouSell: ['online_store', 'social_media'],
-  });
-  expect(again.json().turnedOn).toEqual([]);
-  expect(again.json().steps).toHaveLength(3);
-  const staff = await f.request(a.member, 'PATCH', '/setup-checklist', {
-    howYouSell: ['online_store'],
-  });
-  expect(staff.statusCode, staff.body).toBe(403);
-  expect(staff.json().error.code).toBe('STORE_SETUP_DENIED');
-  expect((await f.row('stores', a.id)).how_you_sell).toEqual(['online_store', 'social_media']);
+  await setupGuide(a, ['social_media'], ['chats', 'sales', 'social_auto_post']);
   const open = await f.request(a.owner, 'PATCH', '/setup-checklist', { hidden: true });
   expect(open.statusCode, open.body).toBe(409);
   expect(open.json().error.code).toBe('SETUP_STEPS_OPEN');
   for (const payload of [
     {},
     { hidden: false },
-    { howYouSell: [] },
-    { howYouSell: ['online_store', 'online_store'] },
-    { howYouSell: ['online_store'], hidden: true },
-    { storeId: b.id, howYouSell: ['online_store'] },
+    { howYouSell: ['online_store'] },
+    { storeId: b.id, hidden: true },
   ])
     expect((await f.request(a.owner, 'PATCH', '/setup-checklist', payload)).statusCode).toBe(400);
   await success(a, 'PATCH', '/store', 200, { businessType: 'Clothing', district: 'Dhaka' });
@@ -3087,6 +3062,10 @@ fixture('PATCH /setup-checklist', async () => {
     "insert into channel_connections(id,store_id,kind,external_account_id,display_name) values(gen_random_uuid(),$1,'facebook_page',gen_random_uuid()::text,'Page')",
     [a.id],
   );
+  const staff = await f.request(a.member, 'PATCH', '/setup-checklist', { hidden: true });
+  expect(staff.statusCode, staff.body).toBe(403);
+  expect(staff.json().error.code).toBe('STORE_SETUP_DENIED');
+  expect((await success(a, 'GET', '/setup-checklist', 200)).json().hidden).toBe(false);
   expect((await success(a, 'PATCH', '/setup-checklist', 200, { hidden: true })).json().hidden).toBe(
     true,
   );
@@ -3098,10 +3077,6 @@ fixture('PATCH /setup-checklist', async () => {
   expect(hiddenGuide.json().hidden).toBe(true);
   expect((await success(b, 'GET', '/setup-checklist', 200)).json().hidden).toBe(true);
   expect((await success(a, 'GET', '/setup-checklist', 200)).json().hidden).toBe(true);
-  const reopened = await success(b, 'PATCH', '/setup-checklist', 200, {
-    howYouSell: ['online_store'],
-  });
-  expect(reopened.json().hidden).toBe(false);
 });
 
 fixture('GET /audit-log', async () => {

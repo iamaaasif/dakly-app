@@ -1101,11 +1101,11 @@ audit log, store closing and export are separate tasks.
 
 ### Setup checklist API (ACC-13, first PR)
 
-`GET /setup-checklist` returns the steps for the shop in order, each as an id and a `done` flag, with the saved "how you sell" answers and whether the guide is hidden. The API sends ids and state only; the Dashboard owns the titles, texts and buttons. Any member can read it.
+`GET /setup-checklist` returns the steps for the shop in order, each as an id and a `done` flag, and whether the guide is hidden. The API sends ids and state only; the Dashboard owns the titles, texts and buttons. Any member can read it.
 
 Add store details checks the store category and district. Connect a channel needs Chats and an active Messenger, Instagram or WhatsApp connection. Create your first product needs Sales and a product the AI can show in chats.
 
-`PATCH /setup-checklist` takes either `{ howYouSell }` or `{ hidden: true }`. New answers replace the saved ones, turn on the extensions from ACC-R5 that are still off (never turning one off), bring a hidden guide back, and return the extensions turned on in `turnedOn` for the toast. `hidden: true` is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can change it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`.
+`PATCH /setup-checklist` takes `{ hidden: true }` and puts the guide away. It is accepted only when every step is done (`SETUP_STEPS_OPEN` otherwise). Only the Owner or an Admin can do it (`STORE_SETUP_DENIED`). The hidden flag is stored in the store's `settings` as `setupGuideHidden`. The "how you sell" answers are asked once when the shop is created and are not changed from the guide.
 
 ### Owner audit log API (ACC-13, fourth PR)
 

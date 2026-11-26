@@ -1,10 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type {
-  ChangeSetupChecklistInput,
-  SetupChecklistResponse,
-  setupStepIds,
-} from '@dakly/contracts/setup-checklist';
+import type { SetupChecklistResponse, setupStepIds } from '@dakly/contracts/setup-checklist';
 import type { SetupProfile } from '@dakly/contracts/stores';
 import type { StoreAccess } from '@dakly/contracts/team';
 
@@ -26,38 +22,22 @@ export class SetupChecklistService {
   ) {}
 
   async view(storeId: string): Promise<SetupChecklistResponse> {
-    return this.build(storeId, await this.stores.setupProfile(storeId), []);
+    return this.build(storeId, await this.stores.setupProfile(storeId));
   }
 
-  async change(
-    storeId: string,
-    input: ChangeSetupChecklistInput,
-    actor: Actor,
-  ): Promise<SetupChecklistResponse> {
-    if (input.howYouSell) {
-      const { profile, turnedOn } = await this.stores.changeHowYouSell(
-        storeId,
-        input.howYouSell,
-        actor,
-      );
-      return this.build(storeId, profile, turnedOn);
-    }
+  async hide(storeId: string, actor: Actor): Promise<SetupChecklistResponse> {
     // Only a finished guide is put away, so an owner cannot lose sight of open steps.
     const current = await this.view(storeId);
     if (current.steps.some(({ done }) => !done)) throw setupChecklistError('SETUP_STEPS_OPEN');
-    return this.build(storeId, await this.stores.hideSetupGuide(storeId, actor), []);
+    return this.build(storeId, await this.stores.hideSetupGuide(storeId, actor));
   }
 
-  private async build(
-    storeId: string,
-    profile: SetupProfile,
-    turnedOn: string[],
-  ): Promise<SetupChecklistResponse> {
+  private async build(storeId: string, profile: SetupProfile): Promise<SetupChecklistResponse> {
     const ids = setupStepIdsFor(profile.extensions);
     const steps = await Promise.all(
       ids.map(async (id) => ({ id, done: await this.isDone(storeId, id, profile) })),
     );
-    return { howYouSell: profile.howYouSell, hidden: profile.guideHidden, steps, turnedOn };
+    return { hidden: profile.guideHidden, steps };
   }
 
   // A step is done when its real condition is true, never because someone clicked it.
