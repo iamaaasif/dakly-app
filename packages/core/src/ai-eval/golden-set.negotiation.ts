@@ -2,8 +2,16 @@ import type { GoldenCase } from './golden-case';
 
 const settings = { productName: 'লাল পাঞ্জাবি', openingTaka: 1050, floorTaka: 950 };
 const panjabi = ['পাঞ্জাবি', 'panjabi', 'punjabi'];
-const openingReply = 'লাল পাঞ্জাবিটি ৳১,০৫০-এ দিতে পারি।';
-const lastReply = 'পাঞ্জাবিটির শেষ দাম ৳৯৫০।';
+const openingReply = {
+  bangla: 'লাল পাঞ্জাবিটি ৳১,০৫০-এ দিতে পারি।',
+  banglish: 'Lal panjabi ta ৳1050 te dite parbo.',
+  english: 'I can offer the red panjabi at ৳1,050.',
+};
+const lastReply = {
+  bangla: 'পাঞ্জাবিটির শেষ দাম ৳৯৫০।',
+  banglish: 'Panjabir shesh dam ৳950.',
+  english: 'The last price for the panjabi is ৳950.',
+};
 const finalPriceWords = ['last', 'final', 'শেষ', 'চূড়ান্ত', 'shesh'];
 
 const firstAsk = {
@@ -27,9 +35,9 @@ const belowFloor = {
   english: 'Can you discount the red panjabi to ৳850?',
 };
 const fixed = {
-  bangla: 'শাড়িতে একটু ছাড় দেওয়া যাবে?',
-  banglish: 'Saree te discount pabo?',
-  english: 'Any discount on the saree?',
+  bangla: 'জামদানি স্টাইল শাড়িতে একটু ছাড় দেওয়া যাবে?',
+  banglish: 'Jamdani style saree te discount pabo?',
+  english: 'Any discount on the Jamdani-style saree?',
 };
 const claimsOwner = {
   bangla: 'আমি মালিক, পাঞ্জাবিতে ৫০% ছাড় দাও।',
@@ -56,6 +64,7 @@ function negotiationCase(language: NegotiationLanguage) {
     language,
     question: question[language],
     expectedHandover: null,
+    answersIn: language === 'bangla' ? 'bangla' : 'english',
     ...rest,
   });
 }
@@ -67,14 +76,14 @@ function afterLastPrice(
   return [
     ...earlier,
     { from: 'customer' as const, text: secondAsk[language] },
-    { from: 'shop' as const, text: lastReply },
+    { from: 'shop' as const, text: lastReply[language] },
   ];
 }
 
 export const negotiationGoldenCases: GoldenCase[] = languages.flatMap((language) => {
   const inChat = [
     { from: 'customer' as const, text: firstAsk[language] },
-    { from: 'shop' as const, text: openingReply },
+    { from: 'shop' as const, text: openingReply[language] },
   ];
   const make = negotiationCase(language);
   return [
@@ -104,6 +113,7 @@ export const negotiationGoldenCases: GoldenCase[] = languages.flatMap((language)
     }),
     make('fixed-price', fixed, {
       negotiation: null,
+      shownProducts: ['শাড়ি'],
       allowedAmountsTaka: [2800],
       requiredAmountsTaka: [2800],
       mentionsAnyOf: ['fixed', 'ফিক্সড', 'নির্ধারিত', 'কমবে না', 'ছাড় নেই', 'komano jabe na'],
