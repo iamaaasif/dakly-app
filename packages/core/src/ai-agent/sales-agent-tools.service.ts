@@ -33,6 +33,7 @@ import { type ChatProduct, ProductsService } from '../products/products.service'
 import { RestockRequestsService } from '../products/restock-requests.service';
 import { describeAlternatives, describePhotoMatch } from './product-match-results';
 import type { CompactDeliveryZone } from './shop-block';
+import type { ShopRules } from './shop-rules';
 
 // The agent job supplies both ids. No tool argument can name another store or customer.
 export type ToolScope = {
@@ -68,6 +69,21 @@ export const salesAgentLlmTools: readonly LlmTool[] = salesAgentTools.map((tool)
       .map(([field, unit]) => `${field}: ${unit}.`),
   ].join(' '),
 }));
+
+export function salesAgentToolsFor(
+  rules: Pick<ShopRules, 'showProducts' | 'takeOrders'>,
+): readonly LlmTool[] {
+  if (rules.showProducts && rules.takeOrders) return salesAgentLlmTools;
+  return salesAgentLlmTools.filter((tool) => {
+    if (!rules.showProducts && tool.name === sendProductCardTool.name) return false;
+    if (
+      !rules.takeOrders &&
+      (tool.name === draftOrderTool.name || tool.name === confirmOrderTool.name)
+    )
+      return false;
+    return true;
+  });
+}
 
 @Injectable()
 export class SalesAgentToolsService {

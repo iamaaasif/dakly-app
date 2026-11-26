@@ -10,7 +10,7 @@ const leakPattern =
 // "ছাড় নেই", "discount dite parbo na" and "no discount" refuse an offer, so a reply that holds the
 // price can name the word. A number with a percent is never treated as refused.
 const refusedAfter = new RegExp(
-  String.raw`^[\p{L}\p{M}]*(?:\s+(?:কোনো|দেওয়া|দেয়া|যাচ্ছে|যাচ্ছি|যায়|দিতে|দেওয়ার|দেবার|দেব|দেবো|দিব|দিবো|দিই|দেই|করা|যাবে|পারব|পারবো|পারছি|পারি|হবে|হয়|সম্ভব|সুযোগ|dewa|deya|deoa|dite|dibo|debo|dei|kora|jabe|jacche|jay|parbo|parchi|pari|hobe|hoy|sombhob|sujog|possible))*\s+(?:না|নেই|নাই|na|nai|nei)(?![\p{L}\p{M}])(?!\s*(?:কেন|keno|ken)(?![\p{L}\p{M}]))`,
+  String.raw`^[\p{L}\p{M}]*(?:\s+(?:কোনো|ডেলিভারি|ডেলিভারী|দেওয়া|দেয়া|যাচ্ছে|যাচ্ছি|যায়|দিতে|দেওয়ার|দেবার|দেব|দেবো|দিব|দিবো|দিই|দেই|করা|যাবে|পারব|পারবো|পারছি|পারি|হবে|হয়|সম্ভব|সুযোগ|delivery|is|available|offered|allowed|dewa|deya|deoa|dite|dibo|debo|dei|kora|jabe|jacche|jay|parbo|parchi|pari|hobe|hoy|sombhob|sujog|possible))*\s+(?:না|নেই|নাই|na|nai|nei|not\s+(?:available|offered|possible|allowed)|unavailable)(?![\p{L}\p{M}])(?!\s*(?:কেন|keno|ken)(?![\p{L}\p{M}]))`,
   'iu',
 );
 const refusedBefore =

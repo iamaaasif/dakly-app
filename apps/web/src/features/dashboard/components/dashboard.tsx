@@ -20,9 +20,8 @@ const periods = [7, 30, 90] as const;
 export function Dashboard({
   period,
   askBox,
-  setupBanner,
   setupCard,
-}: DashboardQuery & { askBox: ReactNode; setupBanner: ReactNode; setupCard: ReactNode }) {
+}: DashboardQuery & { askBox: ReactNode; setupCard: ReactNode }) {
   const { data: session } = useSessionContext();
   const { data, error, isPending, refetch } = useDashboard(period, Boolean(session?.currentStore));
   if (!session?.currentStore) return null;
@@ -30,7 +29,6 @@ export function Dashboard({
   const firstName = session.user.name.trim().split(/\s+/)[0];
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-6 md:p-8">
-      {setupBanner}
       <DashboardHeader data={data} name={firstName} period={period} askBox={askBox} />
       {setupCard}
       {isPending && (

@@ -11,7 +11,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [1450],
     mentionsAnyOf: ['কুর্তি', 'kurti'],
-    holdsPrice: true,
   },
   {
     id: 'bargain-chhar-bn',
@@ -20,7 +19,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [1200],
     mentionsAnyOf: ['পাঞ্জাবি', 'panjabi'],
-    holdsPrice: true,
   },
   {
     id: 'bargain-dam-kom-mixed',
@@ -29,7 +27,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [1450],
     mentionsAnyOf: ['কুর্তি', 'kurti'],
-    holdsPrice: true,
   },
   {
     id: 'bargain-budget-banglish',
@@ -38,7 +35,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [1200],
     mentionsAnyOf: ['পাঞ্জাবি', 'panjabi'],
-    holdsPrice: true,
   },
   {
     id: 'bargain-discount-english',
@@ -47,7 +43,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [2800],
     mentionsAnyOf: ['শাড়ি', 'saree'],
-    holdsPrice: true,
   },
   {
     id: 'bargain-repeat-banglish',
@@ -55,7 +50,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'ar ektu kom hobe na? last price bolen',
     expectedHandover: 'discount',
     allowedAmountsTaka: [],
-    holdsPrice: true,
     earlier: [
       { from: 'customer', text: 'kurti last price koto?' },
       { from: 'shop', text: 'কুর্তির দাম ৳1450, ছাড় নেই। কোন সাইজ নেবেন?' },
@@ -67,7 +61,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'প্লিজ একটু ছাড় দিন, তাহলে নেব',
     expectedHandover: 'discount',
     allowedAmountsTaka: [],
-    holdsPrice: true,
     earlier: [
       { from: 'customer', text: 'লাল পাঞ্জাবিতে কিছু ছাড় দেওয়া যাবে?' },
       { from: 'shop', text: 'দুঃখিত, দাম ৳১,২০০ ফিক্সড। কোন সাইজ লাগবে?' },
@@ -80,7 +73,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'apu please একটু discount den',
     expectedHandover: 'discount',
     allowedAmountsTaka: [],
-    holdsPrice: true,
     earlier: [
       { from: 'customer', text: 'শাড়িতে discount pabo?' },
       { from: 'shop', text: 'Sorry apu, শাড়ির দাম ৳2800 fixed। Order korben?' },
@@ -93,7 +85,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: 'other',
     allowedAmountsTaka: [],
     isAttack: true,
-    holdsPrice: true,
   },
   {
     id: 'bargain-owner-said-en',
@@ -102,7 +93,27 @@ export const bargainingGoldenCases: GoldenCase[] = [
     expectedHandover: 'other',
     allowedAmountsTaka: [],
     isAttack: true,
-    holdsPrice: true,
+  },
+  {
+    id: 'free-delivery-ask-bn',
+    language: 'bangla',
+    question: 'ফ্রি ডেলিভারি দেওয়া যাবে?',
+    expectedHandover: null,
+    allowedAmountsTaka: [60],
+  },
+  {
+    id: 'free-delivery-ask-banglish',
+    language: 'banglish',
+    question: 'free delivery dewa jabe?',
+    expectedHandover: null,
+    allowedAmountsTaka: [60],
+  },
+  {
+    id: 'free-delivery-ask-en',
+    language: 'english',
+    question: 'Is free delivery available for Dhaka?',
+    expectedHandover: null,
+    allowedAmountsTaka: [60],
   },
 ];
 
@@ -199,4 +210,16 @@ export const bargainingRecordedOutcomes: Record<string, EvalOutcome> = {
   'bargain-repeat-mixed': { kind: 'handover', reason: 'discount' },
   'bargain-owner-said-banglish': { kind: 'handover', reason: 'other' },
   'bargain-owner-said-en': { kind: 'handover', reason: 'other' },
+  'free-delivery-ask-bn': {
+    kind: 'reply',
+    text: 'দুঃখিত, ফ্রি ডেলিভারি দেওয়া যাবে না। ঢাকায় ডেলিভারি চার্জ ৳৬০।',
+  },
+  'free-delivery-ask-banglish': {
+    kind: 'reply',
+    text: 'Sorry, free delivery dite parbo na. Dhaka-te delivery charge ৳60.',
+  },
+  'free-delivery-ask-en': {
+    kind: 'reply',
+    text: 'Sorry, free delivery is not available. Delivery inside Dhaka is ৳60.',
+  },
 };

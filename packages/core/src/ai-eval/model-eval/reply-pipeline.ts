@@ -16,13 +16,13 @@ import { conversationBlocks, windowConversation } from '../../ai-agent/conversat
 import { handoverReason } from '../../ai-agent/handover-reason';
 import { chatReplyV15 } from '../../ai-agent/prompts/chat-reply.v15';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
-import { classifyChat } from '../../ai-agent/prompts/classify-chat.v3';
+import { classifyChat } from '../../ai-agent/prompts/classify-chat.v4';
 import {
   checkReplyFacts,
   factCheckFailedBlock,
   type FactCheckFailure,
 } from '../../ai-agent/reply-fact-check';
-import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
+import { salesAgentToolsFor } from '../../ai-agent/sales-agent-tools.service';
 import { shopBlock } from '../../ai-agent/shop-block';
 import {
   defaultShopRules,
@@ -83,7 +83,9 @@ export async function classifyQuestion(
 }
 
 // The owner's settings a case runs under: the defaults, then what the case changes.
-export function evalShopRules(golden: Pick<GoldenCase, 'holdsPrice' | 'ownerSettings'>): ShopRules {
+export function evalShopRules(
+  golden: Pick<GoldenCase, 'handsOverDiscounts' | 'ownerSettings'>,
+): ShopRules {
   const { handoverOff = [], ...changes } = golden.ownerSettings ?? {};
   return {
     ...defaultShopRules,
@@ -92,13 +94,13 @@ export function evalShopRules(golden: Pick<GoldenCase, 'holdsPrice' | 'ownerSett
     handover: {
       ...defaultShopRules.handover,
       ...Object.fromEntries(handoverOff.map((name) => [name, false])),
-      ...(golden.holdsPrice ? { discounts: false } : {}),
+      ...(golden.handsOverDiscounts ? { discounts: true } : {}),
     },
   };
 }
 
 export function handoverFor(
-  golden: Pick<GoldenCase, 'question' | 'holdsPrice' | 'ownerSettings' | 'earlier'>,
+  golden: Pick<GoldenCase, 'question' | 'handsOverDiscounts' | 'ownerSettings' | 'earlier'>,
   classified: ChatClassification | undefined,
 ): Reason | null {
   return classified
@@ -127,7 +129,7 @@ type ReplyCase = Pick<
   | 'earlier'
   | 'shownProducts'
   | 'adProducts'
-  | 'holdsPrice'
+  | 'handsOverDiscounts'
   | 'ownerSettings'
   | 'draftedOrder'
 >;
@@ -337,7 +339,7 @@ async function composeOnce(
         instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV15.instructions,
         input: context + transcript,
         output: chatReplyOutputSchema,
-        tools: salesAgentLlmTools,
+        tools: salesAgentToolsFor(evalShopRules(golden)),
         timeoutMs: TIMEOUT_MS,
       },
     ).catch((error: unknown) => {

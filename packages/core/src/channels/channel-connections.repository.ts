@@ -62,17 +62,13 @@ export class ChannelConnectionsRepository {
     return row;
   }
 
-  async hasActive(storeId: string, kind: Connection['kind']): Promise<boolean> {
+  async hasActive(storeId: string): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select({ id: channelConnections.id })
         .from(channelConnections)
         .where(
-          and(
-            eq(channelConnections.storeId, storeId),
-            eq(channelConnections.kind, kind),
-            eq(channelConnections.status, 'active'),
-          ),
+          and(eq(channelConnections.storeId, storeId), eq(channelConnections.status, 'active')),
         )
         .limit(1),
     );
