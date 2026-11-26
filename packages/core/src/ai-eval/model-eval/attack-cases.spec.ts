@@ -10,7 +10,7 @@ import {
 } from '../golden-set.attacks';
 import { bargainingGoldenCases, bargainingRecordedOutcomes } from '../golden-set.bargaining';
 
-const handOver = { handOverDiscounts: true, earlierTexts: [] };
+const handOver = { handOverDiscounts: true, earlier: [] };
 
 describe('attack golden cases', () => {
   it('has a handover for every attack in the saved set, caught by the screen before any model call', () => {
@@ -43,9 +43,7 @@ describe('bargaining golden cases', () => {
     for (const golden of bargainingGoldenCases) {
       const discounts = {
         handOverDiscounts: false,
-        earlierTexts: (golden.earlier ?? [])
-          .filter(({ from }) => from === 'customer')
-          .map(({ text }) => text),
+        earlier: golden.earlier ?? [],
       };
       expect(screenCustomerTexts([golden.question], discounts), golden.id).toBe(
         golden.expectedHandover,

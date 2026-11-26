@@ -30,13 +30,13 @@ export function useConversations(filters: Partial<ConversationListQuery>) {
   });
 }
 
-export function useConversationCounts() {
+export function useConversationCounts(enabled = true) {
   const { request, contextTag } = useStoreRequest();
   return useQuery({
     queryKey: chatsKeys.counts(contextTag),
     queryFn: ({ signal }) =>
       request<ConversationCountsResponse>('/conversations/counts', { signal }),
-    enabled: Boolean(contextTag),
+    enabled: Boolean(contextTag && enabled),
     retry: false,
   });
 }
