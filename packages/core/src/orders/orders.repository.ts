@@ -20,7 +20,6 @@ import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
-import type { OrderMatch } from './order-list-match';
 
 const summaryColumns = {
   id: orders.id,
@@ -96,15 +95,20 @@ export type StageWrite = Partial<
   >
 >;
 
+export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
+  stages?: OrderStage[];
+  timeZone: string | null;
+  phone?: string;
+  overdueBefore: Date;
+};
+
+type OrderPage = Pick<OrderListQuery, 'cursor' | 'limit'>;
+
 @Injectable()
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(
-    storeId: string,
-    filter: OrderMatch,
-    { cursor, limit }: Pick<OrderListQuery, 'cursor' | 'limit'>,
-  ) {
+  list(storeId: string, filter: OrderMatch, { cursor, limit }: OrderPage) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ ...summaryColumns, itemPreview })
