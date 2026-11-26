@@ -1,5 +1,5 @@
 'use client';
-import { Sparkles, UserRound } from 'lucide-react';
+import { Bot, Sparkles, UserRound } from 'lucide-react';
 import Link from 'next/link';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
@@ -56,7 +56,7 @@ function HandlingBanner({
       className={
         ai
           ? 'flex shrink-0 items-center gap-2 border-b border-border bg-success-soft px-3 py-2'
-          : 'flex shrink-0 items-center gap-2 border-b border-border bg-surface-muted px-3 py-2'
+          : 'flex shrink-0 items-center gap-2 border-b border-warning bg-warning-soft px-3 py-2 text-warning'
       }
     >
       <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
@@ -65,6 +65,7 @@ function HandlingBanner({
       </p>
       {canEdit ? (
         <Button variant="secondary" loading={action.isPending} onClick={confirm}>
+          {!ai && <Bot aria-hidden="true" size={16} strokeWidth={1.75} />}
           {ai ? 'Take over' : 'Hand back to Dakly AI'}
         </Button>
       ) : null}
