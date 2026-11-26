@@ -28,8 +28,6 @@ import { OrderProductArchiveController } from './order-product-archive.controlle
 import { OrderProductChangesService } from './order-product-changes.service';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
-import { OrderSetupRepository } from './order-setup.repository';
-import { OrderSetupService } from './order-setup.service';
 import { OrderStageCountsService } from './order-stage-counts.service';
 import { OrdersController } from './orders.controller';
 import { OrdersRepository } from './orders.repository';
@@ -64,8 +62,6 @@ import { OrdersService } from './orders.service';
     OrderStageCountsService,
     OrdersService,
     OrderAdvancesService,
-    OrderSetupRepository,
-    OrderSetupService,
     OrderReportingRepository,
     OrderReportingService,
     OrderAttributionRepository,
@@ -83,7 +79,6 @@ import { OrdersService } from './orders.service';
     KhataSalesService,
     OrderStageCountsService,
     OrdersService,
-    OrderSetupService,
     OrderReportingService,
     OrderAttributionService,
     OrderConfirmationService,
