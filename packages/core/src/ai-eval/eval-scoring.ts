@@ -222,7 +222,7 @@ const outOfStockPhrase =
   /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\b(?:nei|nai|out of stock|sold out|unavailable|not (?:currently )?(?:in stock|available))\b/iu;
 // A restock notice promises a message after the item returns.
 const restockNotice =
-  /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|রিস্টক\s+হলে|\b(?:stock\s*-?\s*e|restock)\s*(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
+  /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|রিস্টক\s+হলে|\b(?:stock(?:\s*-?\s*e\s*|\s+)|restock\s*)(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
 const recalledPreference = /মনে\s+আছে|\bmone\s+ache\b/iu;
 const inStockPhrase =
   /(?:স্টকে\s+)?আছে|\b(?:ache|in stock|available|(?:can|will)\s+(?:ship|send|deliver)\s+it\s+(?:today|now|right away))\b/iu;

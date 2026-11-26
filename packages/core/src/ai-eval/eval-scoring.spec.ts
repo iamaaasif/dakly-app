@@ -332,6 +332,10 @@ describe('out-of-stock offers', () => {
       'Polo shirt-er XL size ekhon stock-e nei m o l ache, protiti 650 taka. XL restock hole janabo?',
     ],
     [
+      'long-chat-size-banglish',
+      'Bhai, polo shirt-er apnar XL size ekhon stock-e nei. M o L ache, tobe ekhon similar kono product stock-e nei. XL-er notun stock ele janabo?',
+    ],
+    [
       'long-chat-spam-between-bn',
       'পোলো শার্টের XL সাইজ এখন স্টকে নেই M ও L আছে, প্রতিটি ৳৬৫০। XL নতুন স্টকে এলে জানাবো?',
     ],
@@ -353,6 +357,10 @@ describe('out-of-stock offers', () => {
     [
       'chat-memory-other-channel-stock-banglish',
       'Polo XL ekhon stock-e nei M o L size ache, dam ৳650',
+    ],
+    [
+      'chat-memory-other-channel-stock-banglish',
+      'Polo shirt-er XL size ekhon stock-e nei. M o L size ache, dam ৳650. XL size-er notun stock ele janabo?',
     ],
     ['long-chat-size-banglish', 'Available now: Polo M (XL sold out).'],
     ['long-chat-size-banglish', 'Polo XL (sold out).'],
