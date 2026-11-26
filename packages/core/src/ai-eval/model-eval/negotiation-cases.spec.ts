@@ -88,25 +88,28 @@ describe('negotiation golden cases', () => {
     ).toEqual({ error: 'NOT_A_DISCOUNT_ASK' });
   });
 
-  it('drafts an order at the live offer price without a price argument', () => {
-    const golden = cases.find(({ id }) => id === 'negotiation-order-discount-english')!;
-    const variant = evalProducts.find(({ name }) => name === golden.negotiation?.productName)
-      ?.variants[0];
-    const input = {
-      items: [{ variantId: variant?.variantId, quantity: 1 }],
-      recipientName: 'Nila',
-      phone: '01811223344',
-      address: 'House 10 Road 2, Mirpur 1',
-      area: 'Dhaka',
-    };
-    expect(
-      runFixtureTool('draft_order', JSON.stringify(input), {
-        suggestAddOns: false,
-        negotiation: golden.negotiation,
-      }),
-    ).toMatchObject({
-      items: [{ unitPriceTaka: 1050, lineDiscountTaka: 150, quantity: 1 }],
-      totalTaka: 1110,
-    });
-  });
+  it.each(['Dhaka', 'মিরপুর ১', 'Mirpur'])(
+    'drafts an order to %s at the live offer price',
+    (area) => {
+      const golden = cases.find(({ id }) => id === 'negotiation-order-discount-english')!;
+      const variant = evalProducts.find(({ name }) => name === golden.negotiation?.productName)
+        ?.variants[0];
+      const input = {
+        items: [{ variantId: variant?.variantId, quantity: 1 }],
+        recipientName: 'Nila',
+        phone: '01811223344',
+        address: 'House 10 Road 2, Mirpur 1',
+        area,
+      };
+      expect(
+        runFixtureTool('draft_order', JSON.stringify(input), {
+          suggestAddOns: false,
+          negotiation: golden.negotiation,
+        }),
+      ).toMatchObject({
+        items: [{ unitPriceTaka: 1050, lineDiscountTaka: 150, quantity: 1 }],
+        totalTaka: 1110,
+      });
+    },
+  );
 });

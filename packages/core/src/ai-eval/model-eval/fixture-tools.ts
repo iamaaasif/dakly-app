@@ -247,7 +247,10 @@ function draftWithOffer(args: Args, negotiation: NonNullable<GoldenCase['negotia
     ];
   });
   if (items.length !== parsed.data.items.length) return { error: 'PRODUCT_VARIANT_NOT_FOUND' };
-  const zone = deliveryZones.find(({ name }) => name === parsed.data.area);
+  const area = parsed.data.area;
+  const zone = deliveryZones.find(
+    ({ isDefault }) => isDefault && /\b(?:dhaka|mirpur)\b|ঢাকা|মিরপুর/iu.test(area),
+  );
   if (!zone) return { error: 'DELIVERY_AREA_NOT_FOUND' };
   const deliveryChargeTaka = zone.chargeTaka;
   return {
