@@ -72,6 +72,8 @@ function HandlingBanner({
         {canEdit ? (
           <Button
             variant="secondary"
+            size="sm"
+            className="shrink-0"
             loading={action.isPending}
             onClick={() => action.mutate(undefined, { onSuccess: () => showToast(look.toast) })}
           >

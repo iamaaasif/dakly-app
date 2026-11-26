@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import type { CommentResponse } from '@dakly/contracts/comments';
@@ -133,9 +133,20 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
   });
 }
 
+let wideScreen = true;
+
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: wideScreen,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  wideScreen = true;
   paths = [];
   connectionKinds = [];
   connectionsForbidden = false;
@@ -248,6 +259,18 @@ describe('Chat list', () => {
       screen.getByRole('button', { name: 'Collapse inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('true');
     expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+  });
+
+  it('starts with the Inbox folders collapsed on a narrow screen', async () => {
+    wideScreen = false;
+    respond(() => ok([sadia]));
+    show();
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Chat tabs' })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Expand inbox folders' }).getAttribute('aria-expanded'),
+    ).toBe('false');
+    expect(screen.getByRole('combobox', { name: 'Chat folder' })).toBeTruthy();
   });
 
   it('shows each chat with its name, last message and unread count, and the tab counts', async () => {
