@@ -37,7 +37,20 @@ const sadia: ConversationResponse = {
   windowExpiresAt: null,
   unreadCount: 3,
 };
-const counts = { all: 13, needsYou: 1, aiHandling: 9, followUp: 1 };
+const counts = {
+  all: 13,
+  mine: 6,
+  unassigned: 3,
+  unreplied: 2,
+  ai_handling: 9,
+  order_request: 4,
+  not_customers: 0,
+  spam: 2,
+  unread: 1,
+  needsYou: 1,
+  snoozed: 0,
+  resolved: 1,
+};
 const defaults = chatScreenQuerySchema.parse({});
 
 let paths: string[] = [];
@@ -66,14 +79,12 @@ const ok = (items: ConversationResponse[]) =>
   Response.json({ items, nextCursor: null }, { headers: { 'x-session-context': 'verified' } });
 
 let pastOrders: unknown[] = [];
-let summary: unknown = { aiRepliesToday: 49, chatOrdersToday: { count: 7, totalPoisha: 2478000 } };
 let autoReplyOn = true;
 
 // The answers every chats screen asks for besides the chat itself.
 function sidebarResponse(path: string) {
   const verified = { headers: { 'x-session-context': 'verified' } };
   if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
-  if (path.startsWith('/api/conversations/summary')) return Response.json(summary, verified);
   if (path.startsWith('/api/conversations/assignees')) return Response.json([], verified);
   if (path.startsWith('/api/conversations/labels'))
     return Response.json(['VIP', 'Wholesale'], verified);
@@ -159,26 +170,6 @@ afterEach(() => {
   connectionsForbidden = false;
   pastOrders = [];
   autoReplyOn = true;
-  summary = { aiRepliesToday: 49, chatOrdersToday: { count: 7, totalPoisha: 2478000 } };
-});
-
-describe('Header pills', () => {
-  it('shows how many chats need you, the AI auto-reply state and the orders from chats today', async () => {
-    respond(() => ok([sadia]));
-    show();
-    expect(await screen.findByText('1 need you')).toBeTruthy();
-    expect(await screen.findByText('AI auto-reply on · 49 replies today')).toBeTruthy();
-    expect(await screen.findByText('7 orders from chats today · ৳24,780')).toBeTruthy();
-  });
-
-  it('says the auto-reply is off and leaves out the order figures a member may not see', async () => {
-    autoReplyOn = false;
-    summary = { aiRepliesToday: 0, chatOrdersToday: null };
-    respond(() => ok([sadia]));
-    show();
-    expect(await screen.findByText('AI auto-reply off · 0 replies today')).toBeTruthy();
-    expect(screen.queryByText(/orders from chats today/)).toBeNull();
-  });
 });
 
 describe('Bulk select', () => {
@@ -236,11 +227,22 @@ describe('Bulk select', () => {
     expect(screen.getByText('2 selected')).toBeTruthy();
   });
 
-  it('offers no Select button to a member who can only read chats', async () => {
+  it('starts picking with the chat whose avatar box was ticked', async () => {
+    respondToList();
+    show();
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Rumana Akter' }));
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    expect(
+      screen.getByRole('checkbox', { name: 'Select Rumana Akter' }).getAttribute('aria-checked'),
+    ).toBe('true');
+  });
+
+  it('offers no way to pick chats to a member who can only read them', async () => {
     respondToList();
     show(defaults, { canEditChats: false });
     expect(await screen.findByText('Sadia Islam')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Select chats' })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
   });
 });
 
@@ -249,12 +251,12 @@ describe('Chat list', () => {
     respond(() => ok([sadia]));
     show();
     const toggle = screen.getByRole('button', { name: 'Collapse inbox folders' });
-    expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Chat folders' })).toBeTruthy();
     await userEvent.click(toggle);
     expect(
       screen.getByRole('button', { name: 'Expand inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('false');
-    expect(screen.queryByRole('navigation', { name: 'Chat tabs' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Chat folders' })).toBeNull();
     const toolbar = screen.getByRole('group', { name: 'Inbox controls' });
     expect(within(toolbar).getByRole('heading', { name: 'Inbox' })).toBeTruthy();
     expect(document.activeElement).toBe(
@@ -265,7 +267,7 @@ describe('Chat list', () => {
     expect(
       screen.getByRole('button', { name: 'Collapse inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('true');
-    expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Chat folders' })).toBeTruthy();
   });
 
   it('shows the main navigation as an icon rail while the Inbox is open', async () => {
@@ -282,7 +284,7 @@ describe('Chat list', () => {
     respond(() => ok([sadia]));
     show();
     expect(await screen.findByText('Sadia Islam')).toBeTruthy();
-    expect(screen.queryByRole('navigation', { name: 'Chat tabs' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Chat folders' })).toBeNull();
     expect(
       screen.getByRole('button', { name: 'Expand inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('false');
@@ -310,25 +312,42 @@ describe('Chat list', () => {
     expect(screen.getAllByText('Assigned to you')).toHaveLength(1);
   });
 
-  it('shows each chat with its name, last message and unread count, and the tab counts', async () => {
+  it('shows each chat with its name, last message and unread count, and the folder counts', async () => {
     respond(() => ok([sadia]));
     show();
     expect(await screen.findByText('Sadia Islam')).toBeTruthy();
     expect(screen.getByText('Price koto? Mirpur e delivery charge koto?')).toBeTruthy();
     expect(screen.getByText('Unread:').parentElement?.textContent).toBe('Unread: 3');
     expect(await screen.findByRole('link', { name: /AI handling\s*9/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /All\s*13/ }).getAttribute('aria-current')).toBe(
-      'page',
+    expect(
+      screen
+        .getByRole('link', { name: /All conversations\s*1\s*unread\s*13/ })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+    expect(screen.getByRole('link', { name: /Spam\s*2/ })).toBeTruthy();
+  });
+
+  it('marks Resolved, not All conversations, while the resolved chats are shown', async () => {
+    respond(() => ok([]));
+    show(chatScreenQuerySchema.parse({ state: 'resolved' }));
+    const resolved = await screen.findByRole('link', { name: /Resolved\s*1/ });
+    expect(resolved.getAttribute('aria-current')).toBe('page');
+    expect(
+      screen.getByRole('link', { name: /All conversations/ }).getAttribute('aria-current'),
+    ).toBeNull();
+    expect(screen.getByRole('link', { name: /Mine\s*6/ }).getAttribute('href')).toBe(
+      '/chats?folder=mine',
     );
   });
 
-  it('asks for the chats of the chosen tab and channel', async () => {
+  it('asks for the chats of the chosen folder, state and channel', async () => {
     respond(() => ok([]));
-    show(chatScreenQuerySchema.parse({ tab: 'needs-you', channel: 'whatsapp' }));
+    show(chatScreenQuerySchema.parse({ folder: 'mine', state: 'snoozed', channel: 'whatsapp' }));
     expect(await screen.findByText('No chats here yet.')).toBeTruthy();
     const list = paths.find((path) => path.startsWith('/api/conversations?'))!;
     const params = new URL(list, 'http://shop.test').searchParams;
-    expect(params.get('status')).toBe('needs_you');
+    expect(params.get('folder')).toBe('mine');
+    expect(params.get('state')).toBe('snoozed');
     expect(params.get('channel')).toBe('whatsapp');
   });
 

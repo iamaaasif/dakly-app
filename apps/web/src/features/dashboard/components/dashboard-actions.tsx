@@ -28,7 +28,7 @@ function dashboardTaskList({ activity, store, stoppedBuying = 0 }: ActionsProps)
           title: `Reply to ${pluralize(chatsWaiting, 'customer')}`,
           description: 'Waiting in Chats',
           label: 'Open chats',
-          href: '/chats?tab=needs-you',
+          href: '/chats',
           icon: MessageSquare,
           color: 'bg-primary-soft text-action',
         }

@@ -249,7 +249,7 @@ it('reopens a conversation when its timer fires while the inbound message is bei
   expect(rows).toEqual([{ status: 'open', responder: 'ai', ai_resumes_at: null }]);
 });
 
-it('counts the inbox tabs for one shop and shows the contact name in the list', async () => {
+it('counts the inbox folders for one shop and shows the contact name in the list', async () => {
   const storeId = await store();
   const otherStore = await store();
   const connectionId = await connection(storeId);
@@ -277,22 +277,22 @@ it('counts the inbox tabs for one shop and shows the contact name in the list', 
     [storeId],
   );
   const inbox = app.get(InboxService);
-  expect(await inbox.counts(storeId)).toEqual({
-    all: 3,
+  const actor = { kind: 'user', userId: randomUUID() } as const;
+  expect(await inbox.counts(storeId, actor)).toEqual({
+    all: 2,
+    mine: 0,
+    unassigned: 2,
+    unreplied: 2,
+    ai_handling: 2,
+    order_request: 0,
+    not_customers: 0,
+    spam: 0,
+    unread: 2,
     needsYou: 1,
-    aiHandling: 2,
-    followUp: 1,
-    done: 0,
-    notCustomers: 0,
+    snoozed: 1,
+    resolved: 0,
   });
-  expect(await inbox.counts(otherStore)).toEqual({
-    all: 0,
-    needsYou: 0,
-    aiHandling: 0,
-    followUp: 0,
-    done: 0,
-    notCustomers: 0,
-  });
+  expect((await inbox.counts(otherStore, actor)).all).toBe(0);
   await admin.pool.query("update contacts set name = 'Sadia Islam' where store_id = $1", [storeId]);
   const { items } = await inbox.list(
     storeId,

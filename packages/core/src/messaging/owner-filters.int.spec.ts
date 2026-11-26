@@ -59,7 +59,7 @@ describe('inbox filters without RLS assistance', () => {
     const first = await conversation(f.a);
     const second = await conversation(f.b);
     const page = { limit: 50 };
-    expect((await repository.list(f.b, page)).map(({ id }) => id)).toEqual([second.id]);
+    expect((await repository.list(f.b, f.userB, page)).map(({ id }) => id)).toEqual([second.id]);
     expect(await repository.find(f.b, first.id)).toBeUndefined();
     expect(await repository.find(f.b, second.id)).toMatchObject({ id: second.id });
     expect(await repository.messages(f.b, first.id, page)).toEqual([]);

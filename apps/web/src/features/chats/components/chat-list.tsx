@@ -29,11 +29,12 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3.5 py-3">
         <ChatSearchBar query={query} />
         {canEdit && !selected ? (
+          // Touch screens have no hover to show the tick box on the avatar.
           <Button
             variant="secondary"
             aria-label="Select chats"
             title="Select chats"
-            className="shrink-0 p-0"
+            className="hidden shrink-0 p-0 pointer-coarse:inline-flex"
             onClick={() => setSelected([])}
           >
             <ListChecks aria-hidden="true" size={16} />
@@ -42,7 +43,7 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
       </div>
       {selected ? <ChatBulkBar selected={selected} onDone={() => setSelected(null)} /> : null}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ChatRows query={query} selected={selected} onSelect={setSelected} />
+        <ChatRows query={query} selected={selected} canSelect={canEdit} onSelect={setSelected} />
       </div>
     </section>
   );
@@ -51,10 +52,11 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
 type ChatRowsProps = {
   query: ChatScreenQuery;
   selected: string[] | null;
+  canSelect: boolean;
   onSelect: (selected: string[]) => void;
 };
 
-function ChatRows({ query, selected, onSelect }: ChatRowsProps) {
+function ChatRows({ query, selected, canSelect, onSelect }: ChatRowsProps) {
   const conversations = useConversations(conversationFilters(query));
   if (conversations.error)
     return (
@@ -91,6 +93,7 @@ function ChatRows({ query, selected, onSelect }: ChatRowsProps) {
             conversation={conversation}
             query={query}
             selection={selectionFor(conversation.id, selected, onSelect)}
+            onStartSelection={canSelect ? () => onSelect([conversation.id]) : undefined}
           />
         ))}
       </ul>
