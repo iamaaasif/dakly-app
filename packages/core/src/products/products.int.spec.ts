@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createProductSchema } from '@dakly/contracts/products';
+import type { StoreAccess } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
@@ -13,9 +14,7 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
-import { builtInRoleAccess } from '../team/built-in-roles';
-import type { TeamRepository } from '../team/team.repository';
-import { TeamService } from '../team/team.service';
+import type { TeamService } from '../team/team.service';
 import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
@@ -73,7 +72,7 @@ describe('ProductsService with Postgres', () => {
     brands,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
-  const controller = new ProductsController(service, new TeamService({} as TeamRepository));
+  const controller = new ProductsController(service, {} as TeamService);
   beforeAll(() => f.setup());
   afterAll(async () => {
     for (const table of [
@@ -132,7 +131,13 @@ describe('ProductsService with Postgres', () => {
       ...settings,
     });
     const product = await service.create(f.a, input, actor);
-    const owner = builtInRoleAccess.owner;
+    const owner: StoreAccess = {
+      role: 'owner',
+      areas: { products: 'edit' },
+      seeFullPhone: true,
+      exportLists: true,
+      refund: true,
+    };
     const viewer = { ...owner, role: 'custom' as const, areas: { products: 'view' as const } };
 
     expect(await controller.getById(f.a, owner, product.id)).toMatchObject(settings);
