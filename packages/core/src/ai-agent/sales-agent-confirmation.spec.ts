@@ -34,7 +34,7 @@ function agent(steps: Step[], customerTexts: string[]) {
   const service = new SalesAgentService(
     ai,
     {
-      run: (_scope: unknown, name: string) => run(name),
+      run: async (_scope: unknown, name: string) => ({ result: await run(name) }),
       deliveryZones: async () => [],
     } as unknown as SalesAgentToolsService,
     { messages: async () => ({ items: [] }) } as unknown as InboxService,

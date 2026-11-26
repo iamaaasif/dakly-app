@@ -32,18 +32,15 @@ import {
 } from './chat-memory';
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
+import { quotedOfferSources, type OfferQuote } from './offer-lower-price';
 import { customerConfirms } from './order-confirmation';
 import { chatReplyV16 } from './prompts/chat-reply.v16';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import { promptWith } from './reply-prompt-version';
-import {
-  type ToolScope,
-  isOutOfStock,
-  SalesAgentToolsService,
-  salesAgentToolsFor,
-} from './sales-agent-tools.service';
-import { type CompactDeliveryZone, shopBlock, summaryOf } from './shop-block';
-import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
+import { salesAgentToolsFor } from './sales-agent-tool-definitions';
+import { type ToolScope, isOutOfStock, SalesAgentToolsService } from './sales-agent-tools.service';
+import { type CompactDeliveryZone, shopBlock } from './shop-block';
+import { refuseToolCall, type ShopRules, shopRulesBlock, toolHandover } from './shop-rules';
 
 const MAX_ROUNDS = 4;
 const REPLY_BUDGET_MS = 20_000;
@@ -52,13 +49,12 @@ const HISTORY_LENGTH = 20;
 const REPLY_HISTORY_LENGTH = 300;
 const PHOTO_QUERY_LENGTH = 1000;
 const CARD_TOOL = 'send_product_card';
-const HAND_OVER_TOOL = 'hand_over';
 const DRAFT_TOOL = 'draft_order';
 const CONFIRM_TOOL = 'confirm_order';
 const SOURCE_KEYS = ['productId', 'itemId', 'orderNumber'];
 
 type Reason = (typeof handoverReasons)[number];
-type ToolResult = { tool: string; result: object };
+type ToolResult = { tool: string; result: object; quote?: OfferQuote };
 
 export type ComposedReply =
   | {
@@ -179,7 +175,10 @@ export class SalesAgentService {
         prompt: promptWith(chatReplyV16, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
-        tools: salesAgentToolsFor(input.rules),
+        tools: salesAgentToolsFor(
+          input.rules,
+          Boolean(input.chat?.discountAskMessageId && !input.rules.handover.discounts),
+        ),
         signal,
       });
       if (attempt.kind === 'failure')
@@ -196,7 +195,7 @@ export class SalesAgentService {
           toolNames: results.map(({ tool }) => tool),
           earlierCustomerTexts: customerLines(history),
           sources: withShownProducts(
-            sourcesOf(results),
+            sourcesOf(results, attempt.output.reply),
             shownProductIds(results, attempt.output.reply),
           ),
         };
@@ -276,18 +275,18 @@ export class SalesAgentService {
     for (const call of calls) {
       const refusal = refuseToolCall(input.rules, call);
       if (refusal?.kind === 'handover') return { handover: refusal.reason };
-      const result =
-        refusal?.result ??
+      const { result, quote } =
+        (refusal ? { result: refusal.result } : undefined) ??
         (isUnconfirmed(call, input.customerTexts, results)
-          ? { error: 'CONFIRMATION_NOT_GIVEN' }
+          ? { result: { error: 'CONFIRMATION_NOT_GIVEN' } }
           : await this.tools.run(
               { ...input, suggestAddOns: input.rules.suggestAddOns },
               call.name,
               call.argumentsJson,
             ));
-      if (call.name === HAND_OVER_TOOL && 'reason' in result)
-        return { handover: result.reason as Reason, summary: summaryOf(result) };
-      results.push({ tool: call.name, result });
+      const handover = toolHandover(call.name, result);
+      if (handover) return handover;
+      results.push({ tool: call.name, result, quote });
       answered.push({ name: call.name, result });
     }
     return { answered };
@@ -325,7 +324,7 @@ export class SalesAgentService {
     if (photo) return { tool: MATCH_PHOTO_TOOL, result: await this.tools.matchPhoto(input, photo) };
     const query = input.customerTexts.join(' ').slice(0, 100).trim();
     if (query.length < 3) return undefined;
-    const result = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
+    const { result } = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
     return { tool: 'search_products', result };
   }
 
@@ -343,7 +342,7 @@ export class SalesAgentService {
       HISTORY_LENGTH,
     );
     for (const productId of recentlyShownProductIds(shown)) {
-      const product = await this.tools.run(
+      const { result: product } = await this.tools.run(
         input,
         getProductTool.name,
         JSON.stringify({ productId }),
@@ -431,10 +430,11 @@ function customerLines(history: readonly HistoryMessage[] | undefined) {
   );
 }
 
-function sourcesOf(results: ToolResult[]) {
+function sourcesOf(results: ToolResult[], reply: string) {
   return results
     .map(({ tool, result }) => ({ tool, refs: refsIn(result) }))
-    .filter((s) => s.refs.length);
+    .filter((s) => s.refs.length)
+    .concat(quotedOfferSources(results, reply));
 }
 
 function refsIn(value: unknown): string[] {

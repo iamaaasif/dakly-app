@@ -29,19 +29,32 @@ export class ChatOrdersService {
   // repeated draft return the same order.
   draft(
     storeId: string,
-    input: Omit<CreateOrderInput, 'buyer' | 'confirm'> & { contactId: string },
-    chat: { channel: ChatOrderChannel; idempotencyKey: string },
+    input: Omit<CreateOrderInput, 'buyer' | 'confirm' | 'items'> & {
+      contactId: string;
+      items: Pick<CreateOrderInput['items'][number], 'variantId' | 'quantity'>[];
+    },
+    chat: { channel: ChatOrderChannel; idempotencyKey: string; conversationId: string },
   ): Promise<OrderDetail> {
     const { contactId, ...rest } = input;
     return this.orders.createOrder(
       storeId,
-      { ...rest, buyer: { contactId }, confirm: false },
+      {
+        ...rest,
+        items: rest.items.map(({ variantId, quantity }) => ({
+          variantId,
+          quantity,
+          lineDiscountPoisha: 0,
+        })),
+        buyer: { contactId },
+        confirm: false,
+      },
       {
         idempotencyKey: chat.idempotencyKey,
         access,
         actor: { kind: 'system' },
         source: chat.channel,
         createdByType: 'ai',
+        offerConversationId: chat.conversationId,
       },
     );
   }
