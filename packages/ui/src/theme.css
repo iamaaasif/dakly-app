@@ -32,6 +32,28 @@
   --color-instagram: #b82d7c;
   --color-ai: #7a2b8a;
   --color-ai-soft: #f1e3f6;
+  --color-inbox-thread: #faf8f7;
+  --color-inbox-avatar: #efece2;
+  --color-inbox-avatar-border: #e1ddd2;
+  --color-inbox-avatar-text: #57534c;
+  --color-inbox-selected: #fff3e9;
+  --color-inbox-reply-border: #f2d8c5;
+  --color-inbox-note-border: #f1dba4;
+  --color-inbox-scroll-thumb: #e1ddd9;
+  --color-inbox-scroll-track: #f8f8f8;
+
+  --spacing-inbox-folders: 13.5rem;
+  --spacing-inbox-chat-list: 21.25rem;
+  --spacing-inbox-customer: 19.9375rem;
+  --spacing-inbox-toolbar: 3.4375rem;
+  --spacing-inbox-thread-header: 3.5625rem;
+  --spacing-inbox-search-row: 4.1875rem;
+  --spacing-inbox-control: 2.125rem;
+  --spacing-inbox-field: 2.25rem;
+  --spacing-inbox-composer-input: 4.625rem;
+
+  --text-inbox-detail: 0.6875rem;
+  --text-inbox-detail--line-height: 1rem;
 
   --text-xs: 0.75rem;
   --text-xs--line-height: 1.125rem;
@@ -59,13 +81,35 @@
   --radius-md: 0.5rem;
   --radius-control: 0.625rem;
   --radius-lg: 0.75rem;
+  --radius-inbox-bubble: 1rem;
   --radius-full: 9999px;
   --shadow-*: initial;
   --shadow-overlay: 0 8px 24px #211a1626;
+  --shadow-inbox-folder: 0 1px 2px #211a160a;
 }
 
 @theme inline {
   --font-sans: var(--font-inter), var(--font-bengali), sans-serif;
+}
+
+@layer components {
+  .inbox-theme {
+    --color-border: #ebe6e2;
+    --color-border-strong: #ded7d2;
+    --color-input-border: #998c82;
+    --color-surface-muted: #f4f1ed;
+    --color-text: #28231f;
+    --color-text-muted: #6e645c;
+    --color-inverse: #251f1b;
+    --color-primary: #fa6100;
+    --color-primary-soft: var(--color-inbox-selected);
+    --color-success: #16713d;
+    --color-success-soft: #e5f4ec;
+    --color-warning: #76500b;
+    --color-warning-soft: #fff7e5;
+    --color-danger: #b92318;
+    --color-danger-soft: #ffebe8;
+  }
 }
 
 @layer base {

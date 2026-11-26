@@ -48,6 +48,10 @@ The brand orange on white measures 3.235:1 and is decorative. White text uses th
 
 Status badges pair each status text token with its matching soft fill (all exceed 5.3:1). Essential input boundaries exceed 3.5:1 against white and the page background. Do not use action text on primary-soft: that pair falls below 4.5:1. Use action-hover text there instead.
 
+### Inbox
+
+The Inbox and its menus use a scoped palette from the Figma Inbox. The thread uses `#FAF8F7`, selected conversations and sent replies use `#FFF3E9`, and panel dividers use `#EBE6E2`. The orange selection rail uses `#FA6100`. Primary buttons use the shared action token for text contrast.
+
 ## Type
 
 Font: Inter, with `"Noto Sans Bengali"` next in the stack so Bangla AI output and customer names render well. Load both with `next/font`. Bangla-tagged content, including inherited language, uses 1.5 line height for heading defaults. Explicit leading must keep at least that minimum; larger unitless or fixed leading is preserved. Nested English content uses the original sizes and line heights below.
