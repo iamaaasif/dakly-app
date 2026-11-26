@@ -46,7 +46,11 @@ const product: ProductResponse = {
   updatedAt: '2026-11-18T04:00:00Z',
 };
 
-function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductForm>['page']) {
+function show(
+  initial?: ProductResponse,
+  page?: ComponentProps<typeof ProductForm>['page'],
+  duplicateSource?: ProductResponse,
+) {
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -101,7 +105,12 @@ function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductFor
   const onSaved = vi.fn();
   const tree = (current?: ProductResponse) => (
     <QueryClientProvider client={client}>
-      <ProductForm product={current} onSaved={onSaved} page={page} />
+      <ProductForm
+        product={current}
+        onSaved={onSaved}
+        page={page}
+        duplicateSource={duplicateSource}
+      />
     </QueryClientProvider>
   );
   const rendered = render(tree(initial));
@@ -217,6 +226,50 @@ describe('Product form on a full page', () => {
     expect(name.value).toBe(product.name);
     expect(name.matches(':disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.queryByRole('switch', { name: 'Let the AI negotiate' })).toBeNull();
+  });
+
+  it('warns about selling below cost and still saves negotiation prices', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(product, page);
+    const toggle = screen.getByRole('switch', { name: 'Let the AI negotiate' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    await userEvent.click(toggle);
+    fireEvent.change(screen.getByLabelText('Opening offer ৳'), { target: { value: '2000.50' } });
+    fireEvent.change(screen.getByLabelText('Lowest price ৳'), { target: { value: '1200.50' } });
+    expect(screen.getByText('The lowest price is below the product cost.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toEqual({
+      negotiationEnabled: true,
+      negotiationOpeningPoisha: 200050,
+      negotiationFloorPoisha: 120050,
+    });
+  });
+
+  it('disables negotiation when the product has a variant with its own price', () => {
+    show(
+      { ...product, variants: [{ ...product.variants[0]!, priceOverridePoisha: 200000 }] },
+      page,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>('switch', { name: 'Let the AI negotiate' }).disabled,
+    ).toBe(true);
+    expect(screen.getByText('A variant has its own price.')).toBeTruthy();
+  });
+
+  it('compares the opening offer with the price the customer pays', async () => {
+    const { onSaved } = show({ ...product, compareAtPricePoisha: 300000 }, page);
+    await userEvent.click(screen.getByRole('switch', { name: 'Let the AI negotiate' }));
+    fireEvent.change(screen.getByLabelText('Opening offer ৳'), { target: { value: '2450.50' } });
+    fireEvent.change(screen.getByLabelText('Lowest price ৳'), { target: { value: '1800' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Enter an opening offer below the selling price.')).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
   });
 
   it('rejects a sell price equal to the regular price', async () => {
@@ -231,6 +284,51 @@ describe('Product form on a full page', () => {
     await waitFor(() =>
       expect(screen.queryByText('Enter a sell price below the regular price.')).toBeNull(),
     );
+  });
+
+  it('fills a new copy with the selling details and leaves stock and product codes blank', async () => {
+    const writes: unknown[] = [];
+    vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
+      if (init.method === 'POST') writes.push([path, JSON.parse(String(init.body))]);
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    show(undefined, page, {
+      ...product,
+      description: 'Handwoven cotton',
+      status: 'active',
+      compareAtPricePoisha: 295000,
+      weightGrams: 1250,
+      imageFileIds: ['original-photo'],
+      variants: [{ ...product.variants[0]!, imageFileIds: ['original-variant-photo'] }],
+    });
+    expect(screen.getByLabelText<HTMLInputElement>('Product name').value).toBe(
+      'Cotton Panjabi copy',
+    );
+    expect(screen.getByLabelText<HTMLInputElement>('Regular price ৳').value).toBe('2950.00');
+    expect(screen.getByLabelText<HTMLInputElement>('Sell price ৳').value).toBe('2450.50');
+    expect(writes).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual([
+      '/api/products',
+      expect.objectContaining({
+        name: 'Cotton Panjabi copy',
+        description: 'Handwoven cotton',
+        pricePoisha: 245050,
+        compareAtPricePoisha: 295000,
+        weightGrams: 1250,
+        status: 'hidden',
+        variants: [
+          {
+            optionValues: {},
+            sku: null,
+            priceOverridePoisha: null,
+            costPoisha: 120075,
+            lowStockThreshold: null,
+          },
+        ],
+      }),
+    ]);
   });
 
   it('shows one Save product button for a saved product', () => {

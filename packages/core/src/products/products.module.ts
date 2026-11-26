@@ -8,6 +8,7 @@ import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
+import { TeamModule } from '../team/team.module';
 import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductBulkEditsController } from './product-bulk-edits.controller';
@@ -48,6 +49,7 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     MessagingModule,
     OutboxModule,
     StoresModule,
+    TeamModule,
     FileStorageModule,
   ],
   controllers: [
