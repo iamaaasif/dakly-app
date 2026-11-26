@@ -1,5 +1,7 @@
 import type { handoverReasons } from '@dakly/contracts/chats';
 
+import type { ConversationEntry } from './chat-memory';
+
 type Reason = (typeof handoverReasons)[number];
 
 // Words that try to change the assistant's rules or role, or to learn its instructions.
@@ -36,17 +38,16 @@ export type DiscountScreen = {
   // On, every discount ask goes to a person. Off, the model holds the price once and a repeat ask
   // goes to a person.
   handOverDiscounts: boolean;
-  // Customer messages earlier in the same chat, before this burst.
-  earlierTexts: readonly string[];
-  // Shop messages earlier in the same chat, used to confirm the shop already refused a discount.
-  earlierShopTexts?: readonly string[];
+  // Messages earlier in the same chat, before this burst, oldest first.
+  earlier: readonly ConversationEntry[];
 };
 
 const discountDeclinedPattern =
   /\b(?:no|without|don'?t need|dont need)\s+(?:a\s+|any\s+)?discount\b|\bdiscount\s+(?:lagbe na|chai na|charai|chara)\b|ছাড়\s*(?:লাগবে না|চাই না|ছাড়াই)/u;
 
+// Only phrases about the price or a discount: a shop saying "we cannot deliver today" is no refusal.
 const shopRefusalPattern =
-  /\b(?:fixed|no discount|cannot|can't)\b|নির্ধারিত|ফিক্সড|ছাড় নেই|ছাড় দেওয়া|কমানো যাবে না|komano jabe na|chhar nei|dam fixed/u;
+  /\b(?:fixed|no discount|cannot (?:give|offer|reduce)|can't (?:give|offer|reduce))\b|নির্ধারিত|ফিক্সড|ছাড় নেই|ছাড় দেওয়া|কমানো যাবে না|komano jabe na|chhar nei|dam fixed/u;
 
 // Runs before any model call, so an attack costs no tokens and cannot talk the model round.
 export function screenCustomerTexts(
@@ -58,14 +59,15 @@ export function screenCustomerTexts(
   const latest = normalize(texts.at(-1) ?? '');
   if (!asksForDiscount(latest) || discountDeclinedPattern.test(latest)) return null;
   if (discounts.handOverDiscounts) return 'discount';
-  const askedBefore = asksForDiscount(normalize(discounts.earlierTexts.join('\n')));
-  if (!askedBefore) return null;
-  if (discounts.earlierShopTexts) {
-    return shopRefusalPattern.test(normalize(discounts.earlierShopTexts.join('\n')))
-      ? 'discount'
-      : null;
-  }
-  return 'discount';
+  const firstAsk = discounts.earlier.findIndex(
+    ({ from, text }) => from === 'customer' && asksForDiscount(normalize(text)),
+  );
+  if (firstAsk === -1) return null;
+  // A repeat ask goes to a person only once the shop has refused after the first ask.
+  const refused = discounts.earlier
+    .slice(firstAsk + 1)
+    .some(({ from, text }) => from === 'shop' && shopRefusalPattern.test(normalize(text)));
+  return refused ? 'discount' : null;
 }
 
 const asksForDiscount = (text: string) => discountPatterns.some((pattern) => pattern.test(text));

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { screenCustomerTexts } from './manipulation-screen';
 
-const handOver = { handOverDiscounts: true, earlierTexts: [] };
-const holdPrice = { handOverDiscounts: false, earlierTexts: [] };
+const handOver = { handOverDiscounts: true, earlier: [] };
+const holdPrice = { handOverDiscounts: false, earlier: [] };
 
 describe('screenCustomerTexts', () => {
   it.each([
@@ -82,9 +82,16 @@ describe('screenCustomerTexts', () => {
     ['discount pabo?', 'ektu ছাড় den na apu'],
     ['panjabi last price koto?', 'ar ektu kom hobe na apu?'],
     ['দাম কত? ছাড় আছে?', 'আর একটু কম হবে না?'],
-  ])('hands over a repeat discount ask in the same chat: %s then %s', (first, second) => {
+  ])('hands over a repeat discount ask after the shop refused: %s then %s', (first, second) => {
     expect(
-      screenCustomerTexts([second], { handOverDiscounts: false, earlierTexts: [first, 'L size'] }),
+      screenCustomerTexts([second], {
+        handOverDiscounts: false,
+        earlier: [
+          { from: 'customer', text: first },
+          { from: 'shop', text: 'দুঃখিত, দাম ফিক্সড।' },
+          { from: 'customer', text: 'L size' },
+        ],
+      }),
     ).toBe('discount');
   });
 
@@ -96,9 +103,11 @@ describe('screenCustomerTexts', () => {
   it('does not hand over when the latest message accepts the price or moves on to size or delivery', () => {
     const afterRefusal = {
       handOverDiscounts: false,
-      earlierTexts: ['discount pabo?'],
-      earlierShopTexts: ['দুঃখিত, দাম ৳১,৪৫০ ফিক্সড।'],
-    };
+      earlier: [
+        { from: 'customer', text: 'discount pabo?' },
+        { from: 'shop', text: 'দুঃখিত, দাম ৳১,৪৫০ ফিক্সড।' },
+      ],
+    } as const;
     expect(
       screenCustomerTexts(['last price koto?', 'accha thik ache, M size den'], afterRefusal),
     ).toBeNull();
@@ -106,19 +115,42 @@ describe('screenCustomerTexts', () => {
     expect(screenCustomerTexts(['ঠিক আছে, ছাড় লাগবে না, L সাইজ দিন'], afterRefusal)).toBeNull();
   });
 
-  it('hands over a repeat discount ask only after the shop already refused', () => {
+  it.each([
+    ['the shop only asked a question', 'কোন সাইজ লাগবে?'],
+    ['the shop said it cannot deliver today', 'We cannot deliver today, sorry.'],
+    ["the shop said it can't find that size", "Sorry, we can't find that size."],
+  ])('does not hand over a repeat discount ask when %s', (_case, shopText) => {
     expect(
       screenCustomerTexts(['ektu discount den na'], {
         handOverDiscounts: false,
-        earlierTexts: ['discount pabo?'],
-        earlierShopTexts: ['কোন সাইজ লাগবে?'],
+        earlier: [
+          { from: 'customer', text: 'discount pabo?' },
+          { from: 'shop', text: shopText },
+        ],
       }),
     ).toBeNull();
+  });
+
+  it('ignores a refusal that came before the first discount ask', () => {
     expect(
       screenCustomerTexts(['ektu discount den na'], {
         handOverDiscounts: false,
-        earlierTexts: ['discount pabo?'],
-        earlierShopTexts: ['দুঃখিত, দাম ৳১,৪৫০ ফিক্সড, ছাড় নেই।'],
+        earlier: [
+          { from: 'shop', text: 'দাম ফিক্সড।' },
+          { from: 'customer', text: 'discount pabo?' },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('hands over a repeat discount ask after the shop refused', () => {
+    expect(
+      screenCustomerTexts(['ektu discount den na'], {
+        handOverDiscounts: false,
+        earlier: [
+          { from: 'customer', text: 'discount pabo?' },
+          { from: 'shop', text: 'দুঃখিত, দাম ৳১,৪৫০ ফিক্সড, ছাড় নেই।' },
+        ],
       }),
     ).toBe('discount');
   });

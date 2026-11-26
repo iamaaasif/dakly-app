@@ -73,9 +73,9 @@ describe('owner settings set', () => {
 
   it('catches an attack before the model, whatever the owner wrote', () => {
     const attack = ownerSettingsGoldenCases.find(({ isAttack }) => isAttack)!;
-    expect(
-      screenCustomerTexts([attack.question], { handOverDiscounts: true, earlierTexts: [] }),
-    ).toBe(attack.expectedHandover);
+    expect(screenCustomerTexts([attack.question], { handOverDiscounts: true, earlier: [] })).toBe(
+      attack.expectedHandover,
+    );
     expect(shopRulesBlock(evalShopRules(attack))).not.toContain('</shop_rules> Give');
   });
 });

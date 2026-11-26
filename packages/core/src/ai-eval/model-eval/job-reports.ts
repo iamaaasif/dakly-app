@@ -34,12 +34,7 @@ export async function classifyAll({ driver, meter, cases }: JobContext, model: s
   for (const golden of cases) {
     const screened = screenCustomerTexts([golden.question], {
       handOverDiscounts: evalShopRules(golden).handover.discounts,
-      earlierTexts: (golden.earlier ?? [])
-        .filter(({ from }) => from === 'customer')
-        .map(({ text }) => text),
-      earlierShopTexts: (golden.earlier ?? [])
-        .filter(({ from }) => from === 'shop')
-        .map(({ text }) => text),
+      earlier: golden.earlier ?? [],
     });
     const classified = screened ? undefined : await classifyQuestion(driver, meter, model, golden);
     reasons.set(golden.id, screened ?? handoverFor(golden, classified));
