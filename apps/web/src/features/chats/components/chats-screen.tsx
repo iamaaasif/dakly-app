@@ -7,7 +7,7 @@ import { useCallback, useId, useRef, useState } from 'react';
 import { Button, buttonVariants } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 
-import { chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { chatScreenQuerySchema, chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
 import { ChatChannelFilter } from './chat-channel-filter';
 import { ChatHeaderPills } from './chat-header-pills';
@@ -17,8 +17,10 @@ import { ChatTabs } from './chat-tabs';
 import { CommentsView } from './comments-view';
 import { ConversationPanel } from './conversation-panel';
 import { InboxIcon } from './inbox-icon';
+import { useUrlQuery } from '@/lib/use-url-query';
 
-export function ChatsScreen({ query }: { query: ChatScreenQuery }) {
+export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
+  const query = useUrlQuery(initial, (raw) => chatScreenQuerySchema.safeParse(raw).data);
   const router = useRouter();
   const withoutAgent = { ...query, agent: undefined, feedback: undefined };
   const openOnMobile = Boolean(query.chat || query.post);

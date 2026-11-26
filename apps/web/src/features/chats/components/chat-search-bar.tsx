@@ -1,5 +1,4 @@
 'use client';
-import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
@@ -18,12 +17,13 @@ import {
 } from '../chat-filters';
 import { InboxIcon } from './inbox-icon';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 const anyone = 'anyone';
 const anyLabel = 'any-label';
 
 export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const [words, setWords] = useState(query.q ?? '');
   const settled = useDebouncedValue(words.trim(), 300);
 
@@ -51,7 +51,7 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
 }
 
 export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channel: ReactNode }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   return (
     <>
       <ChatFolderSelect query={query} />
@@ -96,7 +96,7 @@ export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channe
 }
 
 function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   return (
     <Select
       value={query.tab}
@@ -132,7 +132,7 @@ function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
 }
 
 function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const assignees = useConversationAssignees();
   return (
     <div className="space-y-3">
@@ -182,7 +182,7 @@ function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
 }
 
 function LabelFilter({ query }: { query: ChatScreenQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const labels = useConversationLabels();
   return (
     <div className="space-y-1">
