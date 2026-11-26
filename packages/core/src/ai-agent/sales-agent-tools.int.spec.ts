@@ -16,7 +16,8 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { AiAgentModule } from './ai-agent.module';
-import { SalesAgentToolsService, salesAgentLlmTools } from './sales-agent-tools.service';
+import { salesAgentLlmTools } from './sales-agent-tool-definitions';
+import { SalesAgentToolsService } from './sales-agent-tools.service';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeIds: string[] = [];

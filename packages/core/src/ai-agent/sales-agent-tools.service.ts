@@ -15,13 +15,11 @@ import {
   handOverTool,
   joinRestockListTool,
   offerLowerPriceTool,
-  salesAgentTools,
   searchKnowledgeTool,
   searchProductsTool,
   sendProductCardTool,
 } from '@dakly/contracts/ai-agent-tools';
 import { formatMoney } from '@dakly/contracts/money';
-import type { LlmTool } from '@dakly/providers/llm/llm-driver';
 
 import { KnowledgeSearchService } from '../ai/knowledge-search.service';
 import { ContactMatchSuggestionsService } from '../contacts/contact-match-suggestions.service';
@@ -36,7 +34,6 @@ import { RestockRequestsService } from '../products/restock-requests.service';
 import { offerLowerPrice, type OfferQuote } from './offer-lower-price';
 import { describeAlternatives, describePhotoMatch } from './product-match-results';
 import type { CompactDeliveryZone } from './shop-block';
-import type { ShopRules } from './shop-rules';
 import type { ToolScope } from './tool-scope';
 
 export type { ToolScope };
@@ -48,37 +45,6 @@ const AREA_LIMIT = 3;
 const ZONE_LIMIT = 20;
 const KNOWLEDGE_LIMIT = 4;
 const OWN_ORDER_LIMIT = 5;
-
-const ALIAS_LIMIT = 3;
-
-// The field names already say taka, so only the units that add something go to the model.
-export const salesAgentLlmTools: readonly LlmTool[] = salesAgentTools.map((tool) => ({
-  name: tool.name,
-  input: tool.input,
-  description: [
-    tool.description,
-    `Words customers use: ${tool.aliases.slice(0, ALIAS_LIMIT).join(', ')}.`,
-    ...Object.entries(tool.units)
-      .filter(([, unit]) => !unit.endsWith('converted from poisha'))
-      .map(([field, unit]) => `${field}: ${unit}.`),
-  ].join(' '),
-}));
-
-export function salesAgentToolsFor(
-  rules: Pick<ShopRules, 'showProducts' | 'takeOrders'>,
-  canOffer = false,
-): readonly LlmTool[] {
-  return salesAgentLlmTools.filter((tool) => {
-    if (!canOffer && tool.name === offerLowerPriceTool.name) return false;
-    if (!rules.showProducts && tool.name === sendProductCardTool.name) return false;
-    if (
-      !rules.takeOrders &&
-      (tool.name === draftOrderTool.name || tool.name === confirmOrderTool.name)
-    )
-      return false;
-    return true;
-  });
-}
 
 @Injectable()
 export class SalesAgentToolsService {
