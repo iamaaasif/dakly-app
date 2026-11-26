@@ -68,12 +68,12 @@ function AssigneePicker({ conversation }: { conversation: ConversationResponse }
   const me = session?.user.id;
   return (
     <Select
-      value={conversation.assigneeUserId ?? nobody}
+      value={conversation.assigneeUserId ?? ''}
       onValueChange={(value) => update.mutate({ assigneeUserId: value === nobody ? null : value })}
     >
       <SelectTrigger aria-label="Assigned to" className="w-auto max-w-28 sm:max-w-40">
         <UserPlus aria-hidden="true" size={16} />
-        <SelectValue />
+        <SelectValue placeholder="Assign" />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={nobody}>Nobody</SelectItem>

@@ -273,6 +273,14 @@ describe('Chat list', () => {
     expect(screen.getByRole('combobox', { name: 'Chat folder' })).toBeTruthy();
   });
 
+  it('says why a chat needs the team on its row', async () => {
+    respond(() =>
+      ok([{ ...sadia, status: 'needs_you', responder: 'human', handoverReason: 'refund' }]),
+    );
+    show();
+    expect(await screen.findByText('Needs you · Refund or exchange')).toBeTruthy();
+  });
+
   it('shows each chat with its name, last message and unread count, and the tab counts', async () => {
     respond(() => ok([sadia]));
     show();
@@ -593,6 +601,7 @@ describe('Conversation actions', () => {
     respondToActions({ responder: 'human', handoverReason: 'complaint', handoverSummary: summary });
     show(chatScreenQuerySchema.parse({ chat: chatId }));
     expect(await screen.findByText('Your team is handling this chat')).toBeTruthy();
+    expect(screen.getByText('· Complaint')).toBeTruthy();
     expect(screen.getByText(summary)).toBeTruthy();
     cleanup();
     respondToActions({ responder: 'ai', handoverSummary: null });

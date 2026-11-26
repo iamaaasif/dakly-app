@@ -10,6 +10,8 @@ import { useToast } from '@dakly/ui/toast';
 import { useAgentSettings } from '../api/agent-settings';
 import { useReturnToAi, useTakeOverConversation } from '../api/conversation-actions';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { handoverReasonLabels } from '../handover-reasons';
+import { formatDate, formatShortDateTime, formatTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
 // Only the AI and a person who took over are shown; a paused chat has no one to hand to.
@@ -68,7 +70,10 @@ function HandlingBanner({
     <div className={cn('shrink-0 border-b', look.border)}>
       <div className={cn('flex items-center gap-2 px-3 py-2', look.bar)}>
         <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
-        <p className="min-w-0 flex-1 font-medium">{look.title}</p>
+        <p className="min-w-0 flex-1">
+          <span className="font-medium">{look.title}</span>
+          {ai ? null : <HandoverDetails conversation={conversation} />}
+        </p>
         {canEdit ? (
           <Button
             variant="secondary"
@@ -90,6 +95,21 @@ function HandlingBanner({
       {ai ? null : <HandoverSummary summary={conversation.handoverSummary} />}
     </div>
   );
+}
+
+function HandoverDetails({ conversation }: { conversation: ConversationResponse }) {
+  const { handoverReason, aiResumesAt } = conversation;
+  return (
+    <>
+      {handoverReason ? <span> · {handoverReasonLabels[handoverReason]}</span> : null}
+      {aiResumesAt ? <span> · Back to Dakly AI at {resumeTime(aiResumesAt)}</span> : null}
+    </>
+  );
+}
+
+function resumeTime(value: string) {
+  const today = formatDate(value, new Date().toISOString()) === 'Today';
+  return today ? formatTime(value) : formatShortDateTime(value);
 }
 
 function HandoverSummary({ summary }: { summary: string | null }) {
