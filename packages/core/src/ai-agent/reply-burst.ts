@@ -2,7 +2,9 @@ import { isAwaitingReading, messageAttachmentsSchema } from '@dakly/contracts/ch
 
 import type { InboxService } from '../messaging/inbox.service';
 import { MINUTE_MS } from '../platform/time';
+import { productDiscountRequest, requestedDiscountPoisha } from './manipulation-screen';
 import { MESSAGE_LENGTH, shorten } from './message-shortening';
+import type { ToolScope } from './tool-scope';
 
 type Turn = NonNullable<Awaited<ReturnType<InboxService['aiReplyTurn']>>>;
 
@@ -52,10 +54,36 @@ export function burstText(turn: Turn, delay: number, now: Date) {
     if (unread && now.getTime() - receivedAt < MEDIA_WAIT_LIMIT_MS) awaitingMedia = true;
     previous = receivedAt;
   }
-  return { texts: texts.reverse(), screenTexts, messageIds, awaitingMedia };
+  return {
+    texts: texts.reverse(),
+    screenTexts,
+    messageIds,
+    awaitingMedia,
+    ...discountScope(turn.latest),
+  };
+}
+
+function discountScope(message: Turn['latest']) {
+  const latest = message.body?.slice(0, SCREEN_LENGTH) ?? '';
+  const request = productDiscountRequest(latest);
+  return {
+    discountAskMessageId: request ? message.id : undefined,
+    requestedPricePoisha: request ? requestedDiscountPoisha(request) : undefined,
+  };
 }
 
 type TurnSnapshot = { target: { contactId: string }; turn: Turn };
+
+export function replyToolChat(
+  conversationId: string,
+  channel: NonNullable<ToolScope['chat']>['channel'],
+  {
+    discountAskMessageId,
+    requestedPricePoisha,
+  }: Pick<ReturnType<typeof burstText>, 'discountAskMessageId' | 'requestedPricePoisha'>,
+): NonNullable<ToolScope['chat']> {
+  return { conversationId, channel, discountAskMessageId, requestedPricePoisha };
+}
 
 // True when the same customer has the same messages in the same chat version, so nothing arrived
 // while the model was working.

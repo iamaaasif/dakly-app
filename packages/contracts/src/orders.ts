@@ -271,7 +271,9 @@ export type OrderDetail = OrderSummary & {
   items: OrderItem[];
   // Packed weight of all items in grams; null when any item's product has no weight set.
   parcelWeightGrams: number | null;
-  timeline: OrderStageHistoryEntry[];
+  timeline: (
+    OrderStageHistoryEntry | { id: string; reason: 'AI price offer'; occurredAt: string }
+  )[];
 };
 
 const courierText = z.string().trim().min(1).max(100).optional();
