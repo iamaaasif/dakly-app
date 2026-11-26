@@ -1,7 +1,7 @@
 'use client';
 
 import { Printer } from 'lucide-react';
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
@@ -13,8 +13,7 @@ import { useSessionBoundary } from '@/lib/use-session-boundary';
 
 export function OrderInvoiceScreen({ orderId }: { orderId: string }) {
   const boundary = useSessionBoundary();
-  const { data, error, isPending } = boundary.session;
-  const printed = useRef(false);
+  const { error, isPending } = boundary.session;
   if (isPending)
     return (
       <p role="status" className="p-6">
@@ -30,20 +29,24 @@ export function OrderInvoiceScreen({ orderId }: { orderId: string }) {
         onRetry={boundary.verify}
       />
     );
-  if (!data?.currentStore?.canViewOrders)
-    return (
-      <p role="alert" className="p-6">
-        You do not have Orders access in this shop.
-      </p>
-    );
-  return <VerifiedOrderInvoice orderId={orderId} printed={printed} />;
+  return <VerifiedOrderInvoice orderId={orderId} />;
 }
 
-type VerifiedOrderInvoiceProps = { orderId: string; printed: RefObject<boolean> };
-
-function VerifiedOrderInvoice({ orderId, printed }: VerifiedOrderInvoiceProps) {
+function VerifiedOrderInvoice({ orderId }: { orderId: string }) {
+  const printed = useRef(false);
   const query = useOrderInvoice(orderId);
-  usePrintFromDrawer(query.isSuccess, printed);
+  useEffect(() => {
+    if (!query.isSuccess || printed.current || window.location.hash !== '#print') return;
+    let cancelled = false;
+    void document.fonts.ready.then(() => {
+      if (cancelled || printed.current) return;
+      printed.current = true;
+      window.print();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [query.isSuccess]);
   if (query.error)
     return (
       <main className="p-6">
@@ -78,19 +81,4 @@ function VerifiedOrderInvoice({ orderId, printed }: VerifiedOrderInvoiceProps) {
       <OrderInvoiceDocument invoice={query.data} />
     </main>
   );
-}
-
-function usePrintFromDrawer(ready: boolean, printed: RefObject<boolean>) {
-  useEffect(() => {
-    if (!ready || printed.current || window.location.hash !== '#print') return;
-    let cancelled = false;
-    void document.fonts.ready.then(() => {
-      if (cancelled || printed.current) return;
-      printed.current = true;
-      window.print();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [ready, printed]);
 }

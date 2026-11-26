@@ -34,7 +34,7 @@ export class OrderInvoiceService {
       orderDiscountPoisha: deliveredOrderDiscountPoisha ?? snapshot.orderDiscountPoisha,
       isPartialDelivery: rows.some(({ item }) => item !== null && item.deliveredQuantity !== null),
       items: rows.flatMap(({ item }) => {
-        if (!item) return [];
+        if (!item || item.deliveredQuantity === 0) return [];
         const { deliveredQuantity, deliveredLineDiscountPoisha, ...line } = item;
         return [
           {

@@ -267,8 +267,8 @@ name and phone, order number and date in the shop's time zone, the buyer and
 delivery recipient, the saved item quantities, unit prices and line discounts, and
 the item subtotal, delivery charge, order discount, advance paid and COD amount.
 For a partial delivery it uses the saved delivered quantities, discounts and
-subtotal, with the original unit prices. Staff without full-phone access see a
-masked recipient number.
+subtotal, with the original unit prices. It leaves out lines with zero delivered
+units. Staff without full-phone access see a masked recipient number.
 
 The print page at `/orders/[orderId]/print` loads its data in the browser through
 `GET /orders/:orderId/invoice`. Bulk shipping labels and order export remain
