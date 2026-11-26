@@ -1,6 +1,7 @@
 import {
   amountPatterns,
   hasWrongAmount,
+  isBudgetLimit,
   leaksInstructions,
   offerWords,
 } from '@dakly/contracts/reply-wording';
@@ -142,32 +143,57 @@ function offersTerm(clause: string, term: RegExp, expectedTerms: readonly string
   const mentions = [...clause.matchAll(term)];
   const stockPhrases = [...clause.matchAll(stockWording)];
   return mentions.some((mention, index) => {
-    const before = clause.slice(0, mention.index);
-    if (availabilityHeading.test(before) && before.lastIndexOf('(') <= before.lastIndexOf(')')) {
-      return true;
-    }
+    const endOfMention = mention.index + mention[0].length;
     const nextMention = mentions[index + 1]?.index ?? clause.length;
     const following = stockPhrases.filter(
       (phrase) =>
-        phrase.index + phrase[0].length > mention.index + mention[0].length &&
-        phrase.index < nextMention,
+        phrase.index + phrase[0].length > endOfMention &&
+        phrase.index < nextMention &&
+        !parentheticalAlternative(clause.slice(endOfMention, phrase.index), expectedTerms),
     );
-    if (following.length === 0) {
-      const preceding = stockPhrases.findLast((phrase) => phrase.index < mention.index);
-      return !preceding || preceding.groups?.inStock !== undefined;
-    }
+    const preceding = stockPhrases.findLast((phrase) => phrase.index < mention.index);
+    const first = following[0];
+    if (!first) return !preceding || preceding.groups?.inStock !== undefined;
+    if (offersBeforeStockPhrase(clause, endOfMention, first, preceding)) return true;
     return following.some((wording, wordingIndex) => {
       if (wording.groups?.inStock === undefined) return false;
       const earlierWording = following[wordingIndex - 1];
       if (!earlierWording) return true;
       // In "XL নেই M ও L আছে", the two stock phrases describe different sizes.
       const subject = clause.slice(earlierWording.index + earlierWording[0].length, wording.index);
-      return (
-        sameItemReference.test(subject) ||
-        (!sizeLabel.test(subject) && !mentionsAny(subject, expectedTerms))
-      );
+      return sameItemReference.test(subject) || !namesAlternative(subject, expectedTerms);
     });
   });
+}
+
+function offersBeforeStockPhrase(
+  clause: string,
+  endOfMention: number,
+  following: RegExpExecArray,
+  preceding: RegExpExecArray | undefined,
+) {
+  const beforeStockPhrase = clause.slice(endOfMention, following.index);
+  return (
+    quotesPrice(beforeStockPhrase) ||
+    (following.groups?.recalled !== undefined &&
+      preceding?.groups?.inStock !== undefined &&
+      clause.slice(0, preceding.index).trim() === '')
+  );
+}
+
+function parentheticalAlternative(text: string, expectedTerms: readonly string[]) {
+  const start = text.lastIndexOf('(');
+  return start > text.lastIndexOf(')') && namesAlternative(text.slice(start + 1), expectedTerms);
+}
+
+function namesAlternative(text: string, expectedTerms: readonly string[]) {
+  return sizeLabel.test(text) || mentionsAny(text, expectedTerms);
+}
+
+function quotesPrice(text: string) {
+  if (isBudgetLimit(text)) return false;
+  const ascii = toAsciiDigits(text);
+  return amountPatterns.some((pattern) => ascii.search(pattern) !== -1);
 }
 
 const sizeLabel = /(?<![\p{L}\p{M}\p{N}])(?:XS|S|M|L|X+L)(?![\p{L}\p{M}\p{N}])/iu;
@@ -183,12 +209,11 @@ const outOfStockPhrase =
 const restockNotice =
   /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|রিস্টক\s+হলে|\b(?:stock\s*-?\s*e|restock)\s*(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
 const recalledPreference = /মনে\s+আছে|\bmone\s+ache\b/iu;
-const inStockPhrase = /আছে|\b(?:ache|in stock|available)\b/iu;
-const availabilityHeading = /^\s*(?:(?:now|currently)\s+)?(?:available|in stock)(?:\s+now)?\s*:/iu;
+const inStockPhrase = /(?:স্টকে\s+)?আছে|\b(?:ache|in stock|available)\b/iu;
 const sameItemReference =
-  /\b(?:have|offer)\s+(?:it|this one|that one)\b|(?<![\p{L}\p{M}])(?:এটা|ওটা|সেটা)(?:ও|ই)?(?:\s+(?:এখন|স্টকে))*\s*$/iu;
+  /\b(?:(?:have|offer)\s+(?:it|this one|that one)|both\s+it\s+and)\b|(?<![\p{L}\p{M}])(?:এটা|ওটা|সেটা)(?:ও|ই)?(?:\s+(?:এখন|স্টকে))*\s*$/iu;
 const stockWording = new RegExp(
-  `${outOfStockPhrase.source}|${restockNotice.source}|${recalledPreference.source}|(?<inStock>${inStockPhrase.source})`,
+  `${outOfStockPhrase.source}|${restockNotice.source}|(?<recalled>${recalledPreference.source})|(?<inStock>${inStockPhrase.source})`,
   'giu',
 );
 
@@ -208,10 +233,12 @@ function hasWrongLanguage({ golden, outcome }: Scored) {
   return golden.answersIn === 'bangla' ? !hasBangla : hasBangla;
 }
 
+function toAsciiDigits(text: string) {
+  return text.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
+}
+
 function hasWrongPrice(reply: string, allowed: readonly number[], question: string) {
-  const toAscii = (text: string) =>
-    text.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
-  const text = toAscii(reply);
+  const text = toAsciiDigits(reply);
   const amounts = amountPatterns
     .flatMap((pattern) => [...text.matchAll(pattern)])
     .map((match) => ({
@@ -219,7 +246,9 @@ function hasWrongPrice(reply: string, allowed: readonly number[], question: stri
       around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),
     }));
   const customerNumbers = new Set(
-    (toAscii(question).match(/\d+(?:,\d+)*/g) ?? []).map((n) => Number(n.replaceAll(',', ''))),
+    (toAsciiDigits(question).match(/\d+(?:,\d+)*/g) ?? []).map((n) =>
+      Number(n.replaceAll(',', '')),
+    ),
   );
   return hasWrongAmount(amounts, (value) => allowed.includes(value), customerNumbers);
 }
