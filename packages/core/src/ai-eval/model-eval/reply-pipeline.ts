@@ -16,7 +16,7 @@ import { conversationBlocks, windowConversation } from '../../ai-agent/conversat
 import { handoverReason } from '../../ai-agent/handover-reason';
 import { chatReplyV14 } from '../../ai-agent/prompts/chat-reply.v14';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
-import { classifyChat } from '../../ai-agent/prompts/classify-chat.v3';
+import { classifyChat } from '../../ai-agent/prompts/classify-chat.v4';
 import {
   checkReplyFacts,
   factCheckFailedBlock,

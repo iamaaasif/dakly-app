@@ -287,7 +287,7 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
       },
     ],
     notices: [{ user_id: assignee, type: 'conversation.handed_over' }],
-    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v3' }],
+    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v4' }],
     usage: [],
   });
 });
