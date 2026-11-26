@@ -307,7 +307,11 @@ describe('checkReplyFacts negotiation', () => {
   it('holds the price without quoting any number on a final refusal', () => {
     const final = [{ kind: 'final' }, ...results];
     expect(check('The price is final.', final)).toEqual({ isSafe: true });
-    expect(check('The final price is 850.', final)).toEqual({ isSafe: false, failure: 'amount' });
+    expect(check('The final price is just 850.', final)).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+    expect(check('I can do 850.', final)).toEqual({ isSafe: false, failure: 'amount' });
     expect(check('The price is final at ৳1050.', [...final, { priceTaka: 1050 }])).toEqual({
       isSafe: false,
       failure: 'amount',

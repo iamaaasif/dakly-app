@@ -1,5 +1,6 @@
 import {
   amountPatterns,
+  bareOfferPattern,
   hasWrongAmount,
   leaksInstructions,
   offerWords,
@@ -172,7 +173,9 @@ function hasWrongPrice(reply: string, golden: GoldenCase) {
   const toAscii = (text: string) =>
     text.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
   const text = toAscii(reply);
-  const amounts = amountPatterns
+  const patterns =
+    golden.negotiation === undefined ? amountPatterns : [...amountPatterns, bareOfferPattern];
+  const amounts = patterns
     .flatMap((pattern) => [...text.matchAll(pattern)])
     .map((match) => ({
       value: Number((match[1] ?? '').replaceAll(',', '')),

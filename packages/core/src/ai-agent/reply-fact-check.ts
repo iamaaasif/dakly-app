@@ -1,5 +1,6 @@
 import {
   amountPatterns,
+  bareOfferPattern,
   type ClaimedAmount,
   hasWrongAmount,
   leaksInstructions,
@@ -7,7 +8,7 @@ import {
   offerWords,
 } from '@dakly/contracts/reply-wording';
 
-import { fixedPricesTaka, quotedOfferPricesPoisha } from './offer-lower-price';
+import { fixedPricesTaka, quotedOfferPricesPoisha, quotedOfferRefs } from './offer-lower-price';
 
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
@@ -93,10 +94,11 @@ function isNegotiationResult(value: unknown): value is NegotiationResult {
 function negotiationAmountIsWrong(
   text: string,
   toolResults: readonly unknown[],
-  amounts: readonly ClaimedAmount[],
+  markedAmounts: readonly ClaimedAmount[],
 ) {
   const results = toolResults.filter(isNegotiationResult);
   if (!results.length) return undefined;
+  const amounts = [...markedAmounts, ...claimedAmounts(text, [bareOfferPattern])];
   const offered = new Set(
     results.flatMap((result) => (result.kind === 'offered' ? [result.priceTaka] : [])),
   );
@@ -104,6 +106,7 @@ function negotiationAmountIsWrong(
     const quoted = quotedOfferPricesPoisha(text);
     return (
       !amounts.length ||
+      [...quotedOfferRefs(results, quoted).values()].includes(null) ||
       amounts.some(({ value }) => !offered.has(value) || !quoted.has(Math.round(value * 100)))
     );
   }
@@ -131,8 +134,8 @@ function wordingFailure(text: string, toolResults: readonly unknown[]) {
   return offerWords(text).some((word) => !policyText.includes(word)) ? 'offer' : undefined;
 }
 
-function claimedAmounts(text: string) {
-  return amountPatterns.flatMap((pattern) =>
+function claimedAmounts(text: string, patterns = amountPatterns) {
+  return patterns.flatMap((pattern) =>
     [...text.matchAll(pattern)].map((match) => ({
       value: parseNumber(match[1]!),
       around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),

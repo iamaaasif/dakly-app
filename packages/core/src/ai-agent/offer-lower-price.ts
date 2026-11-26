@@ -64,14 +64,14 @@ export function quotedOfferPricesPoisha(reply: string) {
           !denialWording.test(sentence) &&
           !sentence.trimEnd().endsWith('?'),
       )
-      .flatMap((sentence) => [...quotedPricesPoisha(sentence)]),
+      .flatMap((sentence) => [...quotedPricesPoisha(sentence)])
+      .filter((price) => price !== undefined),
   );
 }
 
-export function quotedOfferSources(results: readonly { result: object }[], reply: string) {
-  const prices = quotedOfferPricesPoisha(reply);
+export function quotedOfferRefs(results: readonly object[], prices: ReadonlySet<number>) {
   const quoted = new Map<number, string | null>();
-  for (const { result } of results) {
+  for (const result of results) {
     const quote = recordedQuotes.get(result);
     if (!quote || !prices.has(quote.pricePoisha)) continue;
     const previous = quoted.get(quote.pricePoisha);
@@ -80,6 +80,14 @@ export function quotedOfferSources(results: readonly { result: object }[], reply
       previous === undefined || previous === quote.ref ? quote.ref : null,
     );
   }
+  return quoted;
+}
+
+export function quotedOfferSources(results: readonly { result: object }[], reply: string) {
+  const quoted = quotedOfferRefs(
+    results.map(({ result }) => result),
+    quotedOfferPricesPoisha(reply),
+  );
   const refs = [...quoted.values()].filter((ref) => ref !== null);
   return refs.length ? [{ tool: 'price_offer', refs }] : [];
 }
