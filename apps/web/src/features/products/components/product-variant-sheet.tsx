@@ -79,6 +79,7 @@ export function ProductVariantSheet(props: ProductVariantSheetProps) {
   const { index, options, variant, product, saved, productPrice, showStock, readOnly } = props;
   const label = variantLabel(variant, options);
   const input = { index, variant, label, readOnly, onChange: props.onChange };
+  const photoVariant = saved && { ...saved, title: label };
   const profit = profitPercent(variant.priceOverridePoisha || productPrice, variant.costPoisha);
   return (
     <Sheet
@@ -105,12 +106,8 @@ export function ProductVariantSheet(props: ProductVariantSheetProps) {
           <p className="text-sm text-text-muted">Always available</p>
         )}
         <VariantEditorField {...input} field="sku" />
-        {product && saved ? (
-          <ProductPhotos
-            product={product}
-            variant={{ ...saved, title: label }}
-            readOnly={readOnly}
-          />
+        {product && photoVariant ? (
+          <ProductPhotos product={product} variant={photoVariant} readOnly={readOnly} />
         ) : (
           <p className="text-sm text-text-muted">Save this variant to add photos.</p>
         )}

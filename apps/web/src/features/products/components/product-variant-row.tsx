@@ -132,15 +132,12 @@ function VariantGroupHeader({
   );
 }
 
-function GroupAmount({
-  group,
-  field,
-  onChange,
-}: {
+function GroupAmount(props: {
   group: VariantGroup;
   field: 'priceOverridePoisha' | 'costPoisha';
   onChange: (value: string) => void;
 }) {
+  const { group, field, onChange } = props;
   const label = field === 'priceOverridePoisha' ? 'Price' : 'Cost';
   const first = group.rows[0]?.variant[field] ?? '';
   const mixed = group.rows.some(({ variant }) => (variant[field] ?? '') !== first);

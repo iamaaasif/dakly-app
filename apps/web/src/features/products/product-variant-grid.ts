@@ -207,12 +207,8 @@ export function groupVariants(
   );
 }
 
-function rowStock(variant: GridVariant): number {
-  return Number(variant.initialStock) || 0;
-}
-
-export function availableStock(variant: GridVariant, reserved?: number) {
-  return Math.max(0, rowStock(variant) - (reserved ?? 0));
+export function availableStock(variant: GridVariant, reserved = 0) {
+  return Math.max(0, (Number(variant.initialStock) || 0) - reserved);
 }
 
 function takaNumber(text: string | undefined): number | null {

@@ -99,10 +99,8 @@ function useVariantGrouping(options: GridOption[]) {
   const router = useUrlRouter();
   const address = useSearchParams();
   const requested = useUrlQuery(address?.get('groupBy') ?? '', (raw) => raw.groupBy ?? '');
-  const position = Math.max(
-    0,
-    options.findIndex(({ name }) => name === requested),
-  );
+  const requestedPosition = options.findIndex(({ name }) => name === requested);
+  const position = Math.max(0, requestedPosition);
   return {
     position,
     select: (name: string) => {
@@ -230,11 +228,7 @@ function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: Varian
         />
       )}
       <div className="@container rounded-lg border border-border">
-        <TableHeader
-          allSelected={allSelected}
-          {...{ readOnly, showStock }}
-          onSelectAll={rows.onSelectAll}
-        />
+        <TableHeader {...{ allSelected, readOnly, showStock }} onSelectAll={rows.onSelectAll} />
         {rows.groups.map((group) => (
           <VariantGroupRows
             key={group.label}

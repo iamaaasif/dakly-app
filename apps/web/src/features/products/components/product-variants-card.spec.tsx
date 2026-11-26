@@ -163,9 +163,23 @@ describe('Variants card', () => {
   });
 
   it('uses the selected option in the URL to group rows and apply a group price', async () => {
-    show(saved);
-    await choosePresets('Color', 'Black', 'White');
-    await choosePresets('Size', 'S', 'M');
+    const colors = ['Black', 'White'];
+    const sizes = ['S', 'M'];
+    show({
+      ...saved,
+      options: [
+        { name: 'Color', values: colors },
+        { name: 'Size', values: sizes },
+      ],
+      variants: colors.flatMap((color, colorIndex) =>
+        sizes.map((size, sizeIndex) => ({
+          ...saved.variants[0]!,
+          id: `019c01ea-cf15-7d31-a7f5-d73d66007af${colorIndex * sizes.length + sizeIndex}`,
+          optionValues: { Color: color, Size: size },
+          title: `${color} / ${size}`,
+        })),
+      ),
+    });
     await userEvent.selectOptions(screen.getByLabelText('Show by'), 'Size');
     expect(new URLSearchParams(window.location.search).get('groupBy')).toBe('Size');
 
