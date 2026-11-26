@@ -78,7 +78,12 @@ export function ShellNavigation({
             title={collapsed ? 'Log out' : undefined}
             className="flex min-h-10 w-full min-w-10 items-center gap-3 rounded-md p-2 font-medium text-danger hover:bg-danger-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
-            <LogOut aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
+            <LogOut
+              aria-hidden="true"
+              size={collapsed ? 16 : 20}
+              strokeWidth={1.75}
+              className="shrink-0"
+            />
             <span className={cn(collapsed && 'sr-only')}>Log out</span>
           </button>
           {onCollapse ? <CollapseNavigation collapsed={collapsed} onCollapse={onCollapse} /> : null}
@@ -131,7 +136,7 @@ function NavigationLinkContent({
   const { pending } = useLinkStatus();
   return (
     <>
-      <Icon aria-hidden="true" size={20} strokeWidth={1.75} className="shrink-0" />
+      <Icon aria-hidden="true" size={collapsed ? 16 : 20} strokeWidth={1.75} className="shrink-0" />
       <span className={cn(collapsed && 'sr-only')} data-pending={pending}>
         {label}
       </span>
@@ -265,7 +270,7 @@ function settingsGroups(store: SessionContext['currentStore']): NavigationGroup[
 
 function NavigationLogo({ collapsed }: Pick<ShellNavigationProps, 'collapsed'>) {
   return (
-    <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border px-4 max-md:pr-16">
+    <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-3.5 max-md:pr-16">
       <span
         aria-hidden="true"
         className="grid size-9 shrink-0 place-items-center rounded-md bg-primary text-md font-bold text-on-primary"
@@ -289,13 +294,20 @@ function NavigationGroups({
 }: { groups: NavigationGroup[] } & Pick<ShellNavigationProps, 'collapsed' | 'onNavigate'>) {
   const groupId = useId();
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto p-3">
+    // Relative keeps the collapsed rail's screen-reader labels inside this scroll box.
+    <div
+      className={cn(
+        'relative min-h-0 flex-1 overflow-y-auto p-3',
+        collapsed ? 'space-y-2' : 'space-y-4',
+      )}
+    >
       {groups.map((group, index) => (
         <div
           key={group.heading}
           role="group"
           aria-labelledby={`${groupId}-${index}`}
-          className="space-y-1"
+          // The rail has no room for headings, so a rule separates the groups instead.
+          className={cn('space-y-1', collapsed && index > 0 && 'border-t border-border pt-2')}
         >
           <p
             id={`${groupId}-${index}`}

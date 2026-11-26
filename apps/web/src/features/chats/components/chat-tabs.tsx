@@ -42,12 +42,14 @@ export function ChatTabs({ query }: { query: ChatScreenQuery }) {
               post: undefined,
             })}
             aria-current={query.tab === tab ? 'page' : undefined}
-            className="flex min-h-10 min-w-0 shrink-0 items-center gap-2 rounded-md border border-transparent px-2.5 text-sm text-text-muted hover:bg-surface hover:text-text aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-text"
+            className="flex min-h-10 min-w-0 shrink-0 items-center gap-2 rounded-md border border-transparent px-2.5 text-base text-text hover:bg-surface aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-text"
           >
-            <Icon aria-hidden="true" size={16} />
+            <Icon aria-hidden="true" size={16} className="shrink-0 text-text-muted" />
             <span className="flex-1 truncate">{chatTabLabels[tab]}</span>
             {counts ? (
-              <span className="font-normal tabular-nums">{counts[countKeys[tab]]}</span>
+              <span className="text-sm font-normal text-text-muted tabular-nums">
+                {counts[countKeys[tab]]}
+              </span>
             ) : null}
           </Link>
         );

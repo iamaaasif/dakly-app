@@ -29,7 +29,9 @@ export function ProductVariantsCard({
   return (
     <div className="space-y-4">
       <h2 className="text-base font-semibold text-text">Variations</h2>
-      <ProductOptionEditor product={product} onDraftChange={onOptionDraftChange} />
+      <fieldset disabled={readOnly} className="min-w-0">
+        <ProductOptionEditor product={product} onDraftChange={onOptionDraftChange} />
+      </fieldset>
       {options.length ? <ProductVariantTable product={product} readOnly={readOnly} /> : null}
       {error ? (
         <p role="alert" className="text-danger">

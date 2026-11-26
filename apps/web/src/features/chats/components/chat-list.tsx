@@ -1,4 +1,5 @@
 'use client';
+import { ListChecks } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
@@ -30,11 +31,12 @@ export function ChatList({ query }: { query: ChatScreenQuery }) {
         {canEdit && !selected ? (
           <Button
             variant="secondary"
-            size="sm"
-            className="shrink-0"
+            aria-label="Select chats"
+            title="Select chats"
+            className="shrink-0 p-0"
             onClick={() => setSelected([])}
           >
-            Select
+            <ListChecks aria-hidden="true" size={16} />
           </Button>
         ) : null}
       </div>

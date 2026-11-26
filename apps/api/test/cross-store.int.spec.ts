@@ -24,6 +24,7 @@ import { DATABASE_CONNECTION } from '@dakly/core/platform/database/database.toke
 import { FILE_STORAGE_DRIVER } from '@dakly/core/platform/file-storage/file-storage.provider';
 import { createHttpServer } from '@dakly/core/platform/http/http-server';
 import { registerSessionCookies, SESSION_COOKIE } from '@dakly/core/platform/http/session-cookie';
+import type { ProductsService } from '@dakly/core/products/products.service';
 import { SessionsService } from '@dakly/core/sessions/sessions.service';
 import { SmsService } from '@dakly/core/sms/sms.service';
 
@@ -5637,6 +5638,8 @@ fixture('POST /assistant/messages', async () => {
 
 let logs: ReturnType<typeof captureRequestLogs>;
 
+type ProductResponse = Awaited<ReturnType<ProductsService['getById']>>;
+
 describe('every production shop route isolates its data', () => {
   beforeEach(() => logs.beginTest());
   beforeAll(async () => {
@@ -5953,6 +5956,55 @@ describe('every production shop route isolates its data', () => {
       expect(created.json()).toMatchObject({ error: { code: 'PRODUCT_VARIANT_NOT_FOUND' } });
     }
   });
+  it('PATCH /products/:productId reorders options without changing variant IDs, stock or prices', async () => {
+    const shop = await f.shop();
+    const created = (
+      await success(shop, 'POST', '/products', 201, {
+        name: 'Cotton T-shirt',
+        pricePoisha: 120000,
+        options: [
+          { name: 'Color', values: ['Black', 'White'] },
+          { name: 'Size', values: ['S', 'M'] },
+        ],
+        variants: [
+          {
+            optionValues: { Color: 'Black', Size: 'M' },
+            sku: 'BLACK-M',
+            priceOverridePoisha: 135000,
+          },
+          { optionValues: { Color: 'White', Size: 'S' }, sku: 'WHITE-S' },
+        ],
+      })
+    ).json<ProductResponse>();
+    await success(shop, 'POST', `/variants/${created.variants[0]!.id}/stock-adjustments`, 204, {
+      quantity: 7,
+      reason: 'Counted the shelf',
+    });
+
+    const url = `/products/${created.id}`;
+    await success(shop, 'PATCH', url, 200, {
+      options: [...created.options].reverse(),
+      variants: [...created.variants]
+        .reverse()
+        .map(({ id, optionValues, sku, priceOverridePoisha, costPoisha, lowStockThreshold }) => ({
+          id,
+          optionValues,
+          sku,
+          priceOverridePoisha,
+          costPoisha,
+          lowStockThreshold,
+        })),
+    });
+
+    const updated = (await success(shop, 'GET', url, 200)).json<ProductResponse>();
+    expect(updated.options.map(({ name }) => name)).toEqual(['Size', 'Color']);
+    expect(updated.variants.map(({ title }) => title)).toEqual(['S / White', 'M / Black']);
+    expect(updated.variants).toMatchObject([
+      { id: created.variants[1]!.id, sku: 'WHITE-S', pricePoisha: 120000, onHand: 0 },
+      { id: created.variants[0]!.id, sku: 'BLACK-M', pricePoisha: 135000, onHand: 7 },
+    ]);
+  });
+
   it('PATCH /products/:productId keeps a variant that an open order uses', async () => {
     const { b } = await pair();
     const created = await success(b, 'POST', '/products', 201, {

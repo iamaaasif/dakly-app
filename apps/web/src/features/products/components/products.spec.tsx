@@ -149,6 +149,14 @@ function show(
   });
   return { client, ...rendered };
 }
+async function openArchiveDialog(table: HTMLElement) {
+  await userEvent.click(
+    within(table).getByRole('button', { name: 'More actions for Cotton Panjabi' }),
+  );
+  await userEvent.click(screen.getByRole('menuitem', { name: 'Archive' }));
+  return screen.findByRole('dialog', { name: 'Archive Cotton Panjabi?' });
+}
+
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
     this.setAttribute('open', '');
@@ -178,10 +186,123 @@ describe('Products screen', () => {
     expect(within(table).getByText('৳2,950').tagName).toBe('DEL');
     expect(within(table).getByText('Default 3')).toBeTruthy();
     expect(within(table).getByText('Running low')).toBeTruthy();
-    expect(within(table).queryByText('Needs a photo')).toBeNull();
+    expect(within(table).getByText('Needs a photo')).toBeTruthy();
+    expect(within(table).getByText('Active')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'More actions for Cotton Panjabi' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Adjust stock/ })).toBeNull();
     expect(screen.queryByText(/asked|Best seller|Stock value/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Import|AI/ })).toBeNull();
+  });
+  it('opens Duplicate from the desktop row and phone card', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
+    show();
+    await screen.findByRole('table');
+    for (const container of [
+      screen.getByRole('table'),
+      screen.getByRole('list', { name: 'Products' }),
+    ]) {
+      await userEvent.click(
+        within(container).getByRole('button', { name: 'More actions for Cotton Panjabi' }),
+      );
+      expect(screen.getByRole('menuitem', { name: 'Duplicate' }).getAttribute('href')).toBe(
+        `/products/new?duplicate=${product.id}`,
+      );
+      await userEvent.keyboard('{Escape}');
+    }
+  });
+  it('returns focus to the row menu after cancelling archive', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null }));
+    show();
+    const table = await screen.findByRole('table', { name: 'Products' });
+    const trigger = within(table).getByRole('button', { name: 'More actions for Cotton Panjabi' });
+    const dialog = await openArchiveDialog(table);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+  it('removes an archived product from the catalogue and bulk selection', async () => {
+    let archived = false;
+    stubFetch(async (path, init) => {
+      if (path === `/api/products/${product.id}` && init.method === 'DELETE') {
+        archived = true;
+        return new Response(null, { status: 204, headers: { 'x-session-context': 'verified' } });
+      }
+      return response({ items: archived ? [] : [product], nextCursor: null });
+    });
+    show();
+    const table = await screen.findByRole('table');
+    await userEvent.click(within(table).getByRole('checkbox', { name: 'Select Cotton Panjabi' }));
+    const dialog = await openArchiveDialog(table);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Archive product' }));
+    expect(await screen.findByRole('heading', { name: 'No products yet' })).toBeTruthy();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByText('1 selected')).toBeNull();
+  });
+  it('closes the bulk review when an archived product was selected', async () => {
+    const scarf = {
+      ...product,
+      id: '019c01ea-cf15-7d31-a7f5-d73d66007ae4',
+      name: 'Silk scarf',
+    };
+    let archived = false;
+    stubFetch(async (path, init) => {
+      if (path === `/api/products/${product.id}` && init.method === 'DELETE') {
+        archived = true;
+        return new Response(null, { status: 204, headers: { 'x-session-context': 'verified' } });
+      }
+      return response({ items: archived ? [scarf] : [product, scarf], nextCursor: null });
+    });
+    show();
+    const table = await screen.findByRole('table', { name: 'Products' });
+    await userEvent.click(
+      within(table).getByRole('checkbox', { name: 'Select all products on this page' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /^Hide$/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review 2 changes' }));
+    expect(screen.getByRole('region', { name: 'Review changes' })).toBeTruthy();
+
+    const dialog = await openArchiveDialog(table);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Archive product' }));
+
+    expect(await screen.findByText('1 selected')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Review changes' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^Hide$/ }));
+    expect(screen.getByRole('button', { name: 'Review 1 change' })).toBeTruthy();
+    expect(screen.queryByLabelText('Status for Cotton Panjabi')).toBeNull();
+    expect(screen.getByLabelText('Status for Silk scarf')).toBeTruthy();
+  });
+  it('offers Hide when open orders prevent archiving and refreshes the selected product', async () => {
+    let status = 'active';
+    stubFetch(async (path, init) => {
+      if (path === `/api/products/${product.id}` && init.method === 'DELETE')
+        return Response.json(
+          {
+            error: {
+              code: 'PRODUCT_HAS_OPEN_ORDERS',
+              message: 'Finish or cancel open orders before archiving this product',
+            },
+          },
+          { status: 409, headers: { 'x-session-context': 'verified' } },
+        );
+      if (path === `/api/products/${product.id}` && init.method === 'PATCH') {
+        status = JSON.parse(String(init.body)).status;
+        return response({ ...product, status });
+      }
+      return response({ items: [{ ...product, status }], nextCursor: null });
+    });
+    show();
+    const table = await screen.findByRole('table');
+    await userEvent.click(within(table).getByRole('checkbox', { name: 'Select Cotton Panjabi' }));
+    const dialog = await openArchiveDialog(table);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Archive product' }));
+    expect(await within(dialog).findByRole('alert')).toBeTruthy();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hide product' }));
+    expect(await within(table).findByText('Hidden')).toBeTruthy();
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit in grid' }));
+    expect(screen.getByLabelText('Status for Cotton Panjabi')).toHaveProperty('value', 'hidden');
   });
   it('links each product to its full page', async () => {
     stubFetch(async () => response({ items: [product], nextCursor: null }));
@@ -237,6 +358,19 @@ describe('Products screen', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Products could not load');
     failed = false;
     await userEvent.click(screen.getByRole('button', { name: 'Retry products' }));
+    expect(await screen.findByRole('heading', { name: 'No products yet' })).toBeTruthy();
+    const catalogue = screen.getByRole('region', { name: 'Product catalogue' });
+    expect(
+      within(catalogue).getByText(
+        'Products you add show here, and Dakly uses them to answer chats and take orders.',
+      ),
+    ).toBeTruthy();
+    await userEvent.click(within(catalogue).getByRole('button', { name: 'Add product' }));
+    expect(await screen.findByRole('dialog', { name: 'Add product' })).toBeTruthy();
+  });
+  it('offers to clear filters when a search has no products', async () => {
+    stubFetch(async () => response({ items: [], nextCursor: null }));
+    show({ limit: 50, search: 'Cotton' });
     expect(await screen.findByText('No products on this page.')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Clear filters' }).getAttribute('href')).toBe(
       '/products',
@@ -465,7 +599,7 @@ describe('Product editor navigation', () => {
     ).toBeTruthy();
   });
 
-  it('shows Selling status when product is active and not running low, and Needs a price when price is 0', async () => {
+  it('shows Active status and labels a product that needs a price', async () => {
     const sellingItem: ProductResponse = {
       ...product,
       id: '019c01ea-cf15-7d31-a7f5-d73d66007ae5',
@@ -481,7 +615,8 @@ describe('Product editor navigation', () => {
     stubFetch(async () => response({ items: [sellingItem, noPriceItem], nextCursor: null }));
     show({ limit: 50 });
     const table = await screen.findByRole('table');
-    expect(within(table).getByText('Selling')).toBeTruthy();
+    const row = within(table).getByRole('row', { name: /Selling Shirt/ });
+    expect(within(row).getByText('Active')).toBeTruthy();
     expect(within(table).getByText('Needs a price')).toBeTruthy();
   });
 

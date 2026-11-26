@@ -13,6 +13,7 @@ import { useGetProduct } from '../api/get-product';
 import { assistantFilledFields } from '../product-assistant-draft';
 import type { QuickAddHandoff } from '../quick-add-handoff';
 import { ChangeStockDialog } from './change-stock-dialog';
+import { ProductActionsMenu } from './product-actions-menu';
 import { ProductChatPreview } from './product-chat-preview';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
@@ -21,14 +22,40 @@ import { ProductStatusField } from './product-status-field';
 import { ProductsLoading } from './products-loading';
 import { useSessionContext } from '@/lib/session-context';
 
-type NewProductPageProps = { initial?: QuickAddHandoff; assistantDraft?: AssistantProductDraft };
+type NewProductPageProps = {
+  initial?: QuickAddHandoff;
+  assistantDraft?: AssistantProductDraft;
+  duplicateId?: string;
+};
 
-export function NewProductPage({ initial, assistantDraft }: NewProductPageProps) {
+export function NewProductPage({ duplicateId, ...draft }: NewProductPageProps) {
+  if (duplicateId) return <DuplicateProduct key={duplicateId} productId={duplicateId} />;
+  return <NewProductForm {...draft} />;
+}
+
+function DuplicateProduct({ productId }: { productId: string }) {
+  const { data, error, refetch } = useGetProduct(productId);
+  if (!data && error)
+    return (
+      <div className="p-6">
+        <QueryError message={error.message} onRetry={() => refetch()} retryLabel="Retry product" />
+      </div>
+    );
+  if (!data) return <ProductsLoading />;
+  return <NewProductForm duplicateSource={data} />;
+}
+
+type NewProductFormProps = Omit<NewProductPageProps, 'duplicateId'> & {
+  duplicateSource?: ProductResponse;
+};
+
+function NewProductForm({ initial, assistantDraft, duplicateSource }: NewProductFormProps) {
   const router = useRouter();
   return (
     <ProductForm
       initial={initial}
       assistantDraft={assistantDraft}
+      duplicateSource={duplicateSource}
       onSaved={(product) => router.replace(`/products/${product.id}`)}
       page={{
         title: 'New product',
@@ -57,10 +84,12 @@ export function EditProductPage({ productId }: { productId: string }) {
       </div>
     );
   if (isPending) return <ProductsLoading />;
+  // A refresh that only reorders variants must keep the editor mounted.
+  const stock = data.variants.map(({ id, onHand }) => `${id}:${onHand}`).sort();
   // After a save the form starts again from what the server holds, so new rows have their ids.
   return (
     <LoadedProductPage
-      key={`${data.id}:${saves}:${data.variants.map((variant) => variant.onHand).join(',')}`}
+      key={`${data.id}:${saves}:${stock.join(',')}`}
       product={data}
       readOnly={!session?.currentStore?.canEditProducts}
       onSaved={async () => {
@@ -78,6 +107,7 @@ type LoadedProductPageProps = {
 };
 
 function LoadedProductPage({ product, readOnly, onSaved }: LoadedProductPageProps) {
+  const router = useRouter();
   return (
     <ProductForm
       product={product}
@@ -94,7 +124,19 @@ function LoadedProductPage({ product, readOnly, onSaved }: LoadedProductPageProp
             You can view products but not edit them.
           </p>
         ) : undefined,
-        status: <StatusCard product={product} readOnly={readOnly} />,
+        status: (
+          <>
+            {readOnly ? null : (
+              <div className="flex justify-end">
+                <ProductActionsMenu
+                  product={product}
+                  onArchived={() => router.replace('/products')}
+                />
+              </div>
+            )}
+            <StatusCard product={product} readOnly={readOnly} />
+          </>
+        ),
         preview: <ProductChatPreview product={product} />,
       }}
     />

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { z } from 'zod';
 
 import { NewProductPage } from '@/features/products/components/product-page';
 import { parseQuickAddHandoff } from '@/features/products/quick-add-handoff';
@@ -18,7 +19,12 @@ export default async function NewProduct({
       </p>
     );
   const raw = await searchParams;
+  const duplicate = z.uuid().safeParse(raw.duplicate);
   return (
-    <NewProductPage initial={parseQuickAddHandoff(raw)} assistantDraft={parseAssistantDraft(raw)} />
+    <NewProductPage
+      initial={parseQuickAddHandoff(raw)}
+      assistantDraft={parseAssistantDraft(raw)}
+      duplicateId={duplicate.data}
+    />
   );
 }
