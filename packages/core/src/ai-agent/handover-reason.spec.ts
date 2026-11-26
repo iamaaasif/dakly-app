@@ -164,8 +164,22 @@ describe('a question the classifier cannot place', () => {
     },
   );
 
-  it('does not read ছাড়া (without) as a discount ask', () => {
+  it('does not read ছাড়া (without) or plain policy/question words as a hand-over', () => {
     expect(handoverReason(['ডেলিভারি ছাড়া দাম কত?'], greeting, defaultHandoverRules)).toBeNull();
+    expect(handoverReason(['exchange policy ki?'], greeting, defaultHandoverRules)).toBeNull();
+    expect(handoverReason(['refund policy ki?'], greeting, defaultHandoverRules)).toBeNull();
+    expect(handoverReason(['damaged hole ki korbo?'], greeting, defaultHandoverRules)).toBeNull();
+    expect(
+      handoverReason(['discount niye kichu janaben?'], greeting, defaultHandoverRules),
+    ).toBeNull();
+  });
+
+  it.each([
+    ['taka ferot chai', 'refund'],
+    ['refund den', 'refund'],
+    ['টাকা ফেরত চাই', 'refund'],
+  ] as const)('still hands over explicit refund demand "%s"', (text, reason) => {
+    expect(handoverReason([text], greeting, defaultHandoverRules)).toBe(reason);
   });
 });
 
