@@ -162,7 +162,8 @@ function useSubmitProduct(
   const reason = useRef<string | null>(null);
   const onSubmit = form.handleSubmit((parsed) => {
     const input = product ? parsed : shareCostAcrossSizes(parsed);
-    if (product && reason.current === null && hasStockEdits(form.getValues(), product)) {
+    const values = form.getValues();
+    if (product && reason.current === null && hasStockEdits(values, product)) {
       setAskReason(true);
       return;
     }
@@ -172,7 +173,7 @@ function useSubmitProduct(
       });
     const writeStock = async (saved: ProductResponse) => {
       const failed = await writeStockChanges(
-        stockChanges(saved, form.getValues(), product),
+        stockChanges(saved, values, product),
         reason.current ?? 'Initial stock',
         adjustStock.mutateAsync,
       );
@@ -184,10 +185,7 @@ function useSubmitProduct(
       onSaved(saved, failed);
     };
     if (product) {
-      change.mutate(productChanges(input, dirtyFields), {
-        onSuccess: writeStock,
-        onError: setError,
-      });
+      void change.mutateAsync(productChanges(input, dirtyFields)).then(writeStock, setError);
       return;
     }
     create.mutate(input, { onError: setError, onSuccess: writeStock });

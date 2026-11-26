@@ -16,10 +16,12 @@ export type FormFieldProps = {
   action?: ReactNode;
   hint?: string;
   optional?: boolean;
+  hideLabel?: boolean;
   children: (control: FieldControlProps) => ReactNode;
 };
 
-export function FormField({ name, label, action, hint, optional, children }: FormFieldProps) {
+export function FormField(props: FormFieldProps) {
+  const { name, label, action, hint, optional, hideLabel, children } = props;
   const { errors } = useFormState({ name });
   // get() reads nested names such as "address.district".
   const field = get(errors, name);
@@ -32,7 +34,7 @@ export function FormField({ name, label, action, hint, optional, children }: For
   const describedBy = [hint && hintId, error && errorId].filter(Boolean).join(' ');
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between gap-1.5">
+      <div className={hideLabel ? 'sr-only' : 'flex items-center justify-between gap-1.5'}>
         <div className="flex items-center gap-1.5">
           <Label htmlFor={id}>{label}</Label>
           {optional ? <span className="text-xs text-text-muted">· optional</span> : null}

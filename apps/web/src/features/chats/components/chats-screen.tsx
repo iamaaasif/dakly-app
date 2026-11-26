@@ -16,6 +16,7 @@ import { ChatToolbar } from './chat-search-bar';
 import { ChatTabs } from './chat-tabs';
 import { CommentsView } from './comments-view';
 import { ConversationPanel } from './conversation-panel';
+import { useCollapsedShellNavigation } from '@/components/shell-navigation-collapse';
 import { useUrlQuery } from '@/lib/use-url-query';
 
 export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
@@ -23,6 +24,7 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
   const router = useRouter();
   const withoutAgent = { ...query, agent: undefined, feedback: undefined };
   const folders = useInboxFolders();
+  useCollapsedShellNavigation();
   return (
     <main
       data-full-width
