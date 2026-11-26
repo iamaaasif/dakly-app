@@ -694,6 +694,55 @@ fixture('GET /products', async () => {
         .json()
         .items.map((row: { id: string }) => row.id),
     ).toEqual([id]);
+
+  const first = await orderVariant(a);
+  const second = await orderVariant(a);
+  const extraVariant = randomUUID();
+  await f.admin.pool.query(
+    `insert into product_variants(id,store_id,product_id,title,position)
+     select $1,store_id,product_id,'Red',1 from product_variants where store_id=$2 and id=$3`,
+    [extraVariant, a.id, first],
+  );
+  const orderId = await order(a);
+  for (const [variantId, quantity] of [
+    [first, 2],
+    [extraVariant, 1],
+    [second, 3],
+  ] as const)
+    await f.admin.pool.query(
+      `insert into order_items(id,store_id,order_id,variant_id,product_name,variant_title,quantity,
+        unit_price_poisha,is_stock_tracked) values ($1,$2,$3,$4,'Panjabi','Default',$5,125000,false)`,
+      [randomUUID(), a.id, orderId, variantId, quantity],
+    );
+
+  const path = '/products?sort=best_selling&limit=1';
+  expect((await f.request(a.owner, 'GET', `${path}&cursor=${aId}`)).statusCode).toBe(400);
+  expect(
+    (await f.request(a.owner, 'GET', `${path}&cursor=2_0000-11-26T00:00:00Z_${aId}`)).statusCode,
+  ).toBe(400);
+  const pageOne = (await success(a, 'GET', path, 200)).json();
+  expect(pageOne.nextCursor).toMatch(/^3_/);
+  expect(
+    pageOne.items.map(({ variants }: { variants: { id: string }[] }) => variants[0]?.id),
+  ).toEqual([second]);
+  const next = (cursor: string) =>
+    success(a, 'GET', `${path}&cursor=${encodeURIComponent(cursor)}`, 200);
+  expect(
+    (await f.request(a.owner, 'GET', `/products?cursor=${encodeURIComponent(pageOne.nextCursor)}`))
+      .statusCode,
+  ).toBe(400);
+  await f.admin.pool.query("update products set status='archived' where store_id=$1 and id=$2", [
+    a.id,
+    pageOne.items[0].id,
+  ]);
+  const pageTwo = (await next(pageOne.nextCursor)).json();
+  expect(pageTwo.nextCursor).toMatch(/^3_/);
+  expect(
+    pageTwo.items.map(({ variants }: { variants: { id: string }[] }) => variants[0]?.id),
+  ).toEqual([first]);
+  const pageThree = (await next(pageTwo.nextCursor)).json();
+  expect(pageThree.items.map(({ id }: { id: string }) => id)).toEqual([aId]);
+  expect(pageThree.nextCursor).toBeNull();
 });
 async function productCategory(shop: Shop, name: string) {
   return (await success(shop, 'POST', '/products/categories', 201, { name })).json().id as string;

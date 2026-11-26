@@ -3,10 +3,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Search } from 'lucide-react';
 import { useFormContext, FormProvider, useForm } from 'react-hook-form';
 
-import { productListQuerySchema, type ProductListQuery } from '@dakly/contracts/products';
+import { productListBaseQuerySchema, type ProductListQuery } from '@dakly/contracts/products';
 import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { categoryOptions, useProductBrands, useProductCategories } from '../api/get-categories';
 import { productsSearch } from '../api/products';
@@ -14,7 +15,7 @@ import { readinessLabels } from '../product-labels';
 import { UrlLink } from '@/components/url-link';
 import { useUrlRouter } from '@/lib/use-url-query';
 
-const searchSchema = productListQuerySchema.pick({ search: true });
+const searchSchema = productListBaseQuerySchema.pick({ search: true });
 const readinessFilters = [
   undefined,
   'running_low',
@@ -126,6 +127,18 @@ function ListFilters({ query }: ProductFiltersProps) {
         options={brands.map((brand) => ({ value: brand.id, label: brand.name }))}
         onChange={(brandId) => choose({ brandId })}
       />
+      <Select
+        value={query.sort ?? 'newest'}
+        onValueChange={(sort) => choose({ sort: sort === 'best_selling' ? sort : 'newest' })}
+      >
+        <SelectTrigger aria-label="Sort products">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="newest">Newest</SelectItem>
+          <SelectItem value="best_selling">Best selling</SelectItem>
+        </SelectContent>
+      </Select>
     </div>
   );
 }

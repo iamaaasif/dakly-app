@@ -21,6 +21,7 @@ import type {
 import { MAX_PRODUCT_PHOTOS, productNegotiationIssue } from '@dakly/contracts/products';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
+import { OrderProductSalesService } from '../orders/order-product-sales.service';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -57,6 +58,7 @@ export class ProductsService {
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
     @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
     @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
+    @Inject(OrderProductSalesService) private readonly sales: OrderProductSalesService,
   ) {}
 
   create(
@@ -132,12 +134,17 @@ export class ProductsService {
     showNegotiationPrices = false,
   ): Promise<ProductListResponse> {
     const { stock } = await this.stores.settings(storeId);
-    const rows = await this.repository.list(storeId, query, stock.lowStockThreshold);
+    const sales = query.sort === 'best_selling' ? await this.sales.recentUnits(storeId) : undefined;
+    const rows = await this.repository.list(storeId, query, stock.lowStockThreshold, sales);
     const page = rows.slice(0, query.limit);
     const items = page.map((product) =>
       productResponse(product, stock.lowStockThreshold, this.storage, showNegotiationPrices),
     );
-    return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+    const last = page.at(-1);
+    const nextCursor = last?.rankCreatedAt
+      ? `${last.unitsSold}_${last.rankCreatedAt}_${last.id}`
+      : (last?.id ?? null);
+    return { items, nextCursor: rows.length > query.limit ? nextCursor : null };
   }
 
   async listForOrders(storeId: string, query: OrderCatalogueQuery): Promise<OrderCataloguePage> {

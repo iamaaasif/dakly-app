@@ -276,7 +276,7 @@ const productReadinessValues = [
 ] as const;
 export type ProductReadiness = (typeof productReadinessValues)[number];
 
-export const productListQuerySchema = z.strictObject({
+export const productListBaseQuerySchema = z.strictObject({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   search: z.string().trim().min(3).max(200).optional(),
@@ -286,11 +286,31 @@ export const productListQuerySchema = z.strictObject({
   brandId: z.uuid().optional(),
 });
 
+const unitsSoldSchema = z.int().nonnegative();
+const bestSellingCursorSchema = z
+  .templateLiteral([unitsSoldSchema, '_', z.iso.datetime(), '_', z.uuid()])
+  .refine((cursor) => {
+    const [units, date] = cursor.split('_');
+    return unitsSoldSchema.safeParse(Number(units)).success && !date?.startsWith('0000-');
+  });
+
+export const productListQuerySchema = productListBaseQuerySchema
+  .extend({
+    sort: z.enum(['newest', 'best_selling']).optional(),
+    cursor: z.union([z.uuid(), bestSellingCursorSchema]).optional(),
+  })
+  .refine(
+    ({ cursor, sort }) =>
+      cursor === undefined ||
+      (sort === 'best_selling' ? bestSellingCursorSchema : z.uuid()).safeParse(cursor).success,
+    { path: ['cursor'], message: 'Choose a cursor for the selected product sort.' },
+  );
+
 export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type ProductListQuery = z.infer<typeof productListQuerySchema>;
 
 export const productScreenQuerySchema = productListQuerySchema
-  .extend({
+  .safeExtend({
     adjust: z.uuid().optional(),
     import: z.literal('1').optional(),
   })
