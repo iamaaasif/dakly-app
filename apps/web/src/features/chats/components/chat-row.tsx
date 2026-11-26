@@ -1,4 +1,3 @@
-import { Facebook, Instagram, MessageCircle, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
@@ -10,17 +9,15 @@ import { useConversationAssignees } from '../api/conversations';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { contactDisplayName } from '../contact-name';
 import { handoverReasonLabels } from '../handover-reasons';
+import { ChannelLogo } from '@/components/channel-logo';
 import { formatDate, formatShortDate, formatTime } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
 
-const channelMarks: Record<
-  ConversationResponse['channel'],
-  { icon: LucideIcon; label: string; colour: string }
-> = {
-  messenger: { icon: Facebook, label: 'Messenger', colour: 'bg-facebook' },
-  instagram: { icon: Instagram, label: 'Instagram', colour: 'bg-instagram' },
-  whatsapp: { icon: MessageCircle, label: 'WhatsApp', colour: 'bg-success' },
+const channelMarks: Record<ConversationResponse['channel'], { label: string; colour: string }> = {
+  messenger: { label: 'Messenger', colour: 'bg-facebook' },
+  instagram: { label: 'Instagram', colour: 'bg-instagram' },
+  whatsapp: { label: 'WhatsApp', colour: 'bg-whatsapp' },
 };
 
 type ChatRowProps = {
@@ -110,10 +107,10 @@ function ChatRowContent({
 }
 
 function Avatar({ name, channel }: { name: string; channel: ConversationResponse['channel'] }) {
-  const { icon: Icon, label, colour } = channelMarks[channel];
+  const { label, colour } = channelMarks[channel];
   return (
     <div className="relative shrink-0 self-start">
-      <span className="flex size-10 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text-muted">
+      <span className="flex size-10 items-center justify-center rounded-full bg-neutral-soft text-xs font-semibold text-text-secondary">
         {initialsOf(name)}
       </span>
       <span
@@ -124,7 +121,7 @@ function Avatar({ name, channel }: { name: string; channel: ConversationResponse
           colour,
         )}
       >
-        <Icon aria-hidden="true" size={9} strokeWidth={2.5} />
+        <ChannelLogo channel={channel} size={10} />
       </span>
     </div>
   );
