@@ -45,6 +45,9 @@ import type { ShopRules } from './shop-rules';
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
 const MEDIA_WAIT_MS = 3000;
+// With no summary from the model, staff still get the customer's own words; a notification body
+// stays short.
+const FALLBACK_SUMMARY_ISSUE_LENGTH = 200;
 // Enough to see the product or question the latest messages answer, few enough to stay cheap.
 const CLASSIFY_HISTORY_LENGTH = 6;
 type Reason = (typeof handoverReasons)[number];
@@ -329,7 +332,7 @@ export class AiAgentService {
       const latestText = current.turn.latest.body?.trim();
       const handoverSummary =
         summary?.trim() ||
-        `Reason: ${reason}${latestText ? ` | Issue: ${latestText.slice(0, 200)}` : ''}`;
+        `Reason: ${reason}${latestText ? ` | Issue: ${latestText.slice(0, FALLBACK_SUMMARY_ISSUE_LENGTH)}` : ''}`;
       const change = await this.inbox.handOver(storeId, conversationId, {
         reason,
         returnAfterMinutes: current.claimTimeoutMinutes,

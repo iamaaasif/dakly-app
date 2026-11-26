@@ -62,6 +62,8 @@ export const conversations = pgTable(
     responder: text('responder', { enum: conversationResponders }).notNull().default('ai'),
     assigneeUserId: uuid('assignee_user_id').references(() => users.id),
     handoverReason: text('handover_reason', { enum: handoverReasons }),
+    // What the AI collected for staff at hand-over; cleared with the reason when the chat leaves it.
+    handoverSummary: text('handover_summary'),
     handedOverAt: timestamptz('handed_over_at'),
     // When the AI takes the chat back after a person's last message (return timer).
     aiResumesAt: timestamptz('ai_resumes_at'),

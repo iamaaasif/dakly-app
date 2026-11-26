@@ -743,6 +743,13 @@
       "when": 1795486520631,
       "tag": "0105_ai_reply_debounce",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1795658389036,
+      "tag": "0106_handover_summary",
+      "breakpoints": true
     }
   ]
 }

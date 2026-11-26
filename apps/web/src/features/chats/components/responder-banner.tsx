@@ -75,21 +75,12 @@ function HandlingBanner({
           </p>
         ) : null}
       </div>
-      {!ai && <HandoverSummary summary={conversation.aiSummary} />}
-    </div>
-  );
-}
-
-function HandoverSummary({ summary }: { summary?: string | null }) {
-  const text = summary?.trim();
-  if (!text) return null;
-  return (
-    <div
-      data-testid="handover-summary"
-      className="text-ink-muted border-t border-border bg-surface-muted px-3 py-2 text-xs"
-    >
-      <span className="text-ink font-medium">Handover summary: </span>
-      <span>{text}</span>
+      {!ai && conversation.handoverSummary ? (
+        <p className="border-t border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
+          <span className="font-medium text-text">Handover summary: </span>
+          {conversation.handoverSummary}
+        </p>
+      ) : null}
     </div>
   );
 }
