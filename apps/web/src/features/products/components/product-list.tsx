@@ -84,7 +84,7 @@ function ProductRestockButton({
   const variant = lowestStockVariant(product.variants);
   if (!variant) return null;
   return (
-    <div className="flex flex-wrap justify-end gap-2">
+    <div className="flex flex-wrap justify-end gap-2 md:flex-nowrap">
       <Button
         variant="secondary"
         className={className}
@@ -126,9 +126,7 @@ function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
         <TableHead>Stock</TableHead>
         <TableHead>Status</TableHead>
         {onAdjust ? (
-          <TableHead className="w-28 text-right">
-            <span className="sr-only">Actions</span>
-          </TableHead>
+          <TableHead className="w-px text-right whitespace-nowrap">Actions</TableHead>
         ) : null}
       </TableRow>
     </TableHeader>
@@ -169,7 +167,7 @@ function ProductTable({ products, onAdjust, onChangeStock, selection }: ProductL
                   onAdjust={onAdjust}
                   onChangeStock={onChangeStock}
                   selection={selection}
-                  className="h-8 min-h-8 rounded-md px-3 text-xs font-medium"
+                  className="h-8 min-h-8 rounded-md px-3 text-xs font-medium whitespace-nowrap"
                 />
               </TableCell>
             ) : null}
