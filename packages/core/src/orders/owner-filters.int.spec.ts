@@ -3,11 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { OrderInvoiceRepository } from './order-invoice.repository';
 import { OrderReportingRepository } from './order-reporting.repository';
 
 describe('order summaries without RLS assistance', () => {
   const fixture = new OwnerIsolationFixture();
   const repository = new OrderReportingRepository(fixture.tenant);
+  const invoices = new OrderInvoiceRepository(fixture.tenant);
   const timeZone = 'Asia/Dhaka';
   const day = '2026-11-05';
 
@@ -20,6 +22,7 @@ describe('order summaries without RLS assistance', () => {
   });
 
   it('looks up and counts only orders in the selected store', async () => {
+    const ownOrder = randomUUID();
     const foreignOrder = randomUUID();
     const foreignBuyer = randomUUID();
     await fixture.connection.pool.query(
@@ -32,9 +35,13 @@ describe('order summaries without RLS assistance', () => {
         cod_amount_poisha,created_at,buyer_contact_id) values
        ($1,$2,1001,'manual','user','রিনা','01710000005','Mirpur','Dhaka',12000,12000,'2026-11-05T05:00:00Z',null),
        ($3,$4,1001,'manual','user','রিনা','01710000005','Mirpur','Dhaka',50000,50000,'2026-11-05T05:00:00Z',$5)`,
-      [randomUUID(), fixture.a, foreignOrder, fixture.b, foreignBuyer],
+      [ownOrder, fixture.a, foreignOrder, fixture.b, foreignBuyer],
     );
     expect(await repository.reportingAnchor(fixture.a, foreignOrder, timeZone)).toBeUndefined();
+    expect(await invoices.find(fixture.a, ownOrder)).toMatchObject([
+      { order: { codAmountPoisha: 12000 }, item: null },
+    ]);
+    expect(await invoices.find(fixture.a, foreignOrder)).toEqual([]);
     expect(await repository.buyerActivityDays(fixture.a, foreignBuyer, timeZone, day)).toEqual([]);
     expect(
       await repository.dailyOrderMetrics(fixture.a, { from: day, through: day, timeZone }),

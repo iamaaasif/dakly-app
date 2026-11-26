@@ -384,6 +384,76 @@ fixture('GET /orders/:orderId', async () => {
   await hidden(b, 'GET', (value) => `/orders/${value}`, id);
 });
 
+fixture('GET /orders/:orderId/invoice', async () => {
+  const { a, b } = await pair();
+  const id = await order(a);
+  const url = (value: string) => `/orders/${value}/invoice`;
+  await f.admin.pool.query(
+    "update stores set name='Mirpur Shop', phone='01701000015' where id=$1",
+    [a.id],
+  );
+  const readOnlyRole = await success(a, 'POST', '/roles', 201, {
+    name: 'Print orders',
+    permissions: { ...permissions, areas: { orders: 'view' } },
+  });
+  await f.admin.pool.query('update memberships set built_in_role=null,role_id=$2 where id=$1', [
+    a.membership,
+    readOnlyRole.json().id,
+  ]);
+  const restricted = await f.request(a.member, 'GET', url(id));
+  expect(restricted.statusCode, restricted.body).toBe(200);
+  expect(restricted.json()).toMatchObject({
+    number: 1001,
+    store: { name: 'Mirpur Shop', phone: '01701000015', timeZone: 'Asia/Dhaka' },
+    recipientPhone: `${a.owner.phone.slice(0, 5)}-XXX${a.owner.phone.slice(-3)}`,
+    items: [],
+    codAmountPoisha: 9000,
+  });
+  expect((await f.request(a.member, 'GET', '/store')).statusCode).toBe(403);
+
+  const productId = randomUUID();
+  const variantId = randomUUID();
+  const returnedVariantId = randomUUID();
+  await f.admin.pool.query(
+    "insert into products (id,store_id,name,price_poisha) values ($1,$2,'পাঞ্জাবি',3500)",
+    [productId, a.id],
+  );
+  await f.admin.pool.query(
+    "insert into product_variants (id,store_id,product_id,title) values ($1,$2,$3,'M'),($4,$2,$3,'L')",
+    [variantId, a.id, productId, returnedVariantId],
+  );
+  await f.admin.pool.query(
+    `insert into order_items (id, store_id, order_id, variant_id, product_name, variant_title,
+       quantity, unit_price_poisha, line_discount_poisha, delivered_quantity,
+       delivered_line_discount_poisha, is_stock_tracked)
+     values ($1, $2, $3, $4, 'পাঞ্জাবি', 'M', 3, 3200, 600, 2, 400, false),
+            ($5, $2, $3, $6, 'পাঞ্জাবি', 'L', 1, 3200, 200, 0, 0, false)`,
+    [randomUUID(), a.id, id, variantId, randomUUID(), returnedVariantId],
+  );
+  await f.admin.pool.query(
+    `update orders set stage='partially_delivered', order_discount_poisha=900,
+       delivered_items_subtotal_poisha=6000, delivered_order_discount_poisha=600,
+       cod_amount_poisha=5400 where id=$1`,
+    [id],
+  );
+  expect((await success(a, 'GET', url(id), 200)).json()).toMatchObject({
+    isPartialDelivery: true,
+    itemsSubtotalPoisha: 6000,
+    orderDiscountPoisha: 600,
+    codAmountPoisha: 5400,
+    items: [
+      { productName: 'পাঞ্জাবি', quantity: 2, unitPricePoisha: 3200, lineDiscountPoisha: 400 },
+    ],
+  });
+
+  await hidden(b, 'GET', url, id);
+  await f.admin.pool.query(
+    "update memberships set role_id=null,built_in_role='marketer' where id=$1",
+    [a.membership],
+  );
+  expect((await f.request(a.member, 'GET', url(id))).statusCode).toBe(403);
+});
+
 fixture('POST /orders/:orderId/courier', async () => {
   const { a, b } = await pair();
   const foreign = await order(a);
