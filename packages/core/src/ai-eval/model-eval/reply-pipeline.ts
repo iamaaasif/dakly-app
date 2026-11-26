@@ -14,7 +14,7 @@ import {
 } from '../../ai-agent/chat-memory';
 import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV14 } from '../../ai-agent/prompts/chat-reply.v14';
+import { chatReplyV15 } from '../../ai-agent/prompts/chat-reply.v15';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v4';
 import {
@@ -23,6 +23,7 @@ import {
   type FactCheckFailure,
 } from '../../ai-agent/reply-fact-check';
 import { salesAgentToolsFor } from '../../ai-agent/sales-agent-tools.service';
+import { shopBlock } from '../../ai-agent/shop-block';
 import {
   defaultShopRules,
   refuseToolCall,
@@ -30,13 +31,15 @@ import {
   shopRulesBlock,
 } from '../../ai-agent/shop-rules';
 import type { EvalOutcome, GoldenCase } from '../golden-case';
-import { evalPhotoKey, evalProducts, evalShop } from './eval-catalog';
+import { deliveryZones, evalPhotoKey, evalProducts, evalShop } from './eval-catalog';
 import type { EvalMeter } from './eval-meter';
 import { matchEvalPhoto, runFixtureTool } from './fixture-tools';
 
 const MAX_ROUNDS = 4;
 const TIMEOUT_MS = 60_000;
 const MIN_SEARCH_LENGTH = 3;
+// The zones the agent puts in the shop block, without the flag only the delivery tool reads.
+const evalShopZones = deliveryZones.map(({ name, chargeTaka }) => ({ name, chargeTaka }));
 type Reason = (typeof handoverReasons)[number];
 
 // A failed call still billed its tokens, so the meter counts them before the error goes on.
@@ -149,7 +152,7 @@ function replyContext({
     { from: 'customer', text: golden.question },
   ];
   return [
-    `<shop>${JSON.stringify(evalShop)}</shop>`,
+    shopBlock({ address: null, ...evalShop }, evalShopZones),
     shopRulesBlock(evalShopRules(golden)),
     ...(golden.memory
       ? [`<customer_memory untrusted="true">${golden.memory}</customer_memory>`]
@@ -333,7 +336,7 @@ async function composeOnce(
       history ? `reply:${model}:${history}` : `reply:${model}`,
       {
         model,
-        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV14.instructions,
+        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV15.instructions,
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentToolsFor(evalShopRules(golden)),
