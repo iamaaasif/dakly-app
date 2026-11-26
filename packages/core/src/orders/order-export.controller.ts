@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Query, Res } from '@nestjs/common';
+import { Controller, Get, Inject, Query, Res, StreamableFile } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 
 import { orderExportQuerySchema, type OrderExportQuery } from '@dakly/contracts/orders';
@@ -22,17 +22,13 @@ export class OrderExportController {
     @CurrentUser() userId: string,
     @CurrentAccess() access: StoreAccess,
     @Query(new ZodValidationPipe(orderExportQuerySchema)) query: OrderExportQuery,
-    @Res() reply: FastifyReply,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     const { filename, type, body, rowCount } = await this.exports.export(storeId, query, access, {
       kind: 'user',
       userId,
     });
-    return reply
-      .header('Cache-Control', 'no-store')
-      .header('Content-Disposition', `attachment; filename="${filename}"`)
-      .header('X-Row-Count', String(rowCount))
-      .type(type)
-      .send(body);
+    reply.header('Cache-Control', 'no-store').header('X-Row-Count', String(rowCount));
+    return new StreamableFile(body, { type, disposition: `attachment; filename="${filename}"` });
   }
 }
