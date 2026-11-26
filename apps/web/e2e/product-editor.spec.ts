@@ -6,6 +6,8 @@ import { expect, test } from '@playwright/test';
 import type { ProductResponse } from '@dakly/contracts/products';
 import { createDatabase } from '@dakly/db/client';
 
+import { waitForProductIndex } from './fixtures/product-index';
+
 test.use({ screenshot: 'off' });
 
 test('creates a product on its page, manages photos, edits it and changes stock', async ({
@@ -81,6 +83,7 @@ test('creates a product on its page, manages photos, edits it and changes stock'
     productId = created.id;
     expect(created.status).toBe('hidden');
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
+    await waitForProductIndex(database, fixture.storeIds[0], productId);
     expect(
       (
         await request(`/variants/${created.variants[0]!.id}/stock-adjustments`, {

@@ -6,6 +6,8 @@ import { expect, test } from '@playwright/test';
 import type { ProductResponse } from '@dakly/contracts/products';
 import { createDatabase } from '@dakly/db/client';
 
+import { waitForProductIndex } from './fixtures/product-index';
+
 test.use({ screenshot: 'off' });
 
 test('builds a variants grid, saves it and writes one stock reason', async ({
@@ -175,6 +177,8 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByRole('button', { name: 'Create', exact: true }).click();
     productId = ((await (await created).json()) as ProductResponse).id;
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
+    const initialHash = await waitForProductIndex(database, fixture.storeIds[0], productId);
+    await page.reload();
     await expectStock('Black / S', '12');
     const details = page.getByRole('dialog', { name: 'Black / S', exact: true });
     await capture(3, 'edit-variant', async (width) => {
@@ -211,6 +215,7 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
         .getByRole('button', { name: 'Save', exact: true })
         .and(page.locator(':disabled:not([aria-busy="true"])')),
     ).toBeVisible();
+    await waitForProductIndex(database, fixture.storeIds[0], productId, initialHash);
     await page.reload();
     await expectStock('S / Black', '12', 'UT-TS-01');
     await moveSize.press('ArrowDown');

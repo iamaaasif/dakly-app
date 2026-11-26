@@ -6,6 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
 import type { ProductResponse } from '@dakly/contracts/products';
 import { createDatabase } from '@dakly/db/client';
 
+import { waitForProductIndex } from './fixtures/product-index';
+
 test.use({ screenshot: 'off' });
 
 test('adds a product on a full page and keeps Save in the top bar', async ({
@@ -81,6 +83,8 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
       compareAtPricePoisha: 60000,
     });
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
+    await waitForProductIndex(database, fixture.storeIds[0], productId);
+    await page.reload();
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Media', exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeVisible();

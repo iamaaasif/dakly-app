@@ -112,15 +112,35 @@ type LoadedProductPageProps = {
 function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedProductPageProps) {
   const router = useRouter();
   const stock = stockKey(product);
-  const [loaded, setLoaded] = useState({ version: product.version, stock });
+  const [loaded, setLoaded] = useState<{
+    version: number;
+    stock: string;
+    pendingVersions: number[];
+  }>({
+    version: product.version,
+    stock,
+    pendingVersions: [],
+  });
   // Stock updates can refresh the form while this is still the version it loaded.
   if (product.version === loaded.version && stock !== loaded.stock) setLoaded({ ...loaded, stock });
   const acceptVersion = (saved: ProductResponse) =>
-    setLoaded({ version: saved.version, stock: stockKey(saved) });
+    setLoaded({ version: saved.version, stock: stockKey(saved), pendingVersions: [] });
   const acceptLocalVersion = (version: number) =>
-    setLoaded((previous) =>
-      version === previous.version + 1 ? { ...previous, version } : previous,
-    );
+    setLoaded((previous) => {
+      if (version <= previous.version) return previous;
+      // A gap may be a change from another editor. Wait for our own responses to fill it.
+      const versions = [...previous.pendingVersions, version].sort((a, b) => a - b);
+      let current = previous.version;
+      for (const received of versions) {
+        if (received > current + 1) break;
+        current = received;
+      }
+      return {
+        ...previous,
+        version: current,
+        pendingVersions: versions.filter((n) => n > current),
+      };
+    });
   return (
     <ProductForm
       key={loaded.stock}

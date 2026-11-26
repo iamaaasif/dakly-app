@@ -559,7 +559,11 @@ describe('Product form', () => {
     });
     const { onSaved, refresh } = show({ ...product, status: 'active' });
     await userEvent.type(screen.getByLabelText('Description'), 'Made with cotton');
-    refresh(product);
+    refresh({
+      ...product,
+      version: 2,
+      variants: product.variants.map((variant) => ({ ...variant, onHand: 6, available: 4 })),
+    });
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toEqual({ description: 'Made with cotton' });

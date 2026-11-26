@@ -79,6 +79,7 @@ type ProductFormProps = {
 export function ProductForm(props: ProductFormProps) {
   const { product, assistantDraft, duplicateSource, onSaved, page } = props;
   const [editingOption, setEditingOption] = useState(false);
+  const [formProduct] = useState(product);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(page ? pageFormSchema : productFormSchema),
     defaultValues: {
@@ -87,13 +88,13 @@ export function ProductForm(props: ProductFormProps) {
       negotiationEnabled: false,
       negotiationOpeningPoisha: '',
       negotiationFloorPoisha: '',
-      ...formValues(props),
+      ...formValues({ ...props, product: formProduct }),
     },
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   useDraftCategory(form, assistantDraft);
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
-    product,
+    product: formProduct,
     isDuplicate: Boolean(duplicateSource),
     dirtyFields,
     expectedVersion: props.expectedVersion,
