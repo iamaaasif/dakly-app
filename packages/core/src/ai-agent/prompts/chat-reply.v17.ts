@@ -1,4 +1,3 @@
-// v17 lets the negotiation tool give the owner’s prices and keeps the fixed-price rule elsewhere.
 export const chatReplyV17 = {
   version: 'chat-reply.v17',
   instructions: [
