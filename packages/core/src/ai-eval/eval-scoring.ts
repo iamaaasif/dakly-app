@@ -188,7 +188,7 @@ function offersBeforeStockPhrase({
   if (preceding?.groups?.inStock === undefined) return false;
   const opening = clause.slice(0, preceding.index).trim();
   return (
-    /^(?:stock|currently|now)?$/iu.test(opening) &&
+    !namesAlternative(opening, expectedTerms) &&
     (following.groups?.recalled !== undefined || namesAlternative(beforeStockPhrase, expectedTerms))
   );
 }

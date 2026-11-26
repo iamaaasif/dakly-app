@@ -367,6 +367,7 @@ describe('out-of-stock offers', () => {
     ['long-chat-size-banglish', 'Available now: Polo XL (M sold out).'],
     ['long-chat-size-banglish', 'Currently available is Polo XL (M sold out).'],
     ['long-chat-size-banglish', 'Stock available for Polo XL while M is sold out.'],
+    ['long-chat-size-banglish', 'The only size available is Polo XL now that M is sold out.'],
     ['long-chat-size-banglish', 'Stock available for Polo XL and M is sold out.'],
     ['long-chat-spam-between-bn', 'পোলো XL নেই বলেছিলাম এখন M এর সাথে এটাও আছে।'],
     ['long-chat-spam-between-bn', 'স্টকে আছে পোলো XL মনে আছে তো?'],
