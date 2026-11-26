@@ -135,6 +135,7 @@ export const longChatGoldenCases: GoldenCase[] = [
     language: 'banglish',
     question: 'oi punjabi ta ager dam e debe?',
     expectedHandover: 'discount',
+    handsOverDiscounts: true,
     allowedAmountsTaka: [1200],
     earlier: padded(30, [customer('lal punjabi ache?'), shop('জি, লাল পাঞ্জাবি আছে। দাম ৳৯৯০।')]),
     shownProducts: ['লাল পাঞ্জাবি'],
