@@ -28,11 +28,13 @@ type ChatRowProps = {
   query: ChatScreenQuery;
   // Set while picking chats for a bulk action: the row then ticks instead of opening.
   selection?: { selected: boolean; onToggle: () => void };
+  // Ticking the box that replaces the avatar on hover starts picking with this chat.
+  onStartSelection?: () => void;
 };
 
 const rowClasses = 'flex gap-3 border-l-2 border-transparent px-3.5 py-3 hover:bg-surface-muted';
 
-export function ChatRow({ conversation, query, selection }: ChatRowProps) {
+export function ChatRow({ conversation, query, selection, onStartSelection }: ChatRowProps) {
   const name = contactDisplayName(conversation);
   const content = <ChatRowContent conversation={conversation} name={name} />;
   if (selection)
@@ -49,7 +51,7 @@ export function ChatRow({ conversation, query, selection }: ChatRowProps) {
       </li>
     );
   return (
-    <li>
+    <li className="group relative">
       <Link
         href={chatsHref({ ...query, chat: conversation.id })}
         aria-current={query.chat === conversation.id ? 'true' : undefined}
@@ -60,6 +62,15 @@ export function ChatRow({ conversation, query, selection }: ChatRowProps) {
       >
         {content}
       </Link>
+      {onStartSelection ? (
+        <span className="absolute top-3 left-4 hidden size-10 items-center justify-center rounded-full bg-surface opacity-0 group-hover:opacity-100 focus-within:opacity-100 pointer-fine:flex">
+          <Checkbox
+            aria-label={`Select ${name}`}
+            checked={false}
+            onCheckedChange={onStartSelection}
+          />
+        </span>
+      ) : null}
     </li>
   );
 }

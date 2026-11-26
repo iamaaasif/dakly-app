@@ -23,7 +23,7 @@ export const chatSortLabels: Record<(typeof chatSorts)[number], string> = {
 };
 
 export const chatTabLabels: Record<(typeof chatTabs)[number], string> = {
-  all: 'All',
+  all: 'All conversations',
   'needs-you': 'Needs you',
   'ai-handling': 'AI handling',
   'follow-up': 'Follow up',
