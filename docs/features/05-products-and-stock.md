@@ -165,11 +165,13 @@ Members with Edit Products can switch on **Let the AI negotiate** in the Price c
 
 The product API returns both amounts only to members with Edit Products. Chat cards, order links and catalogue exports exclude the amounts.
 
+For an eligible product, the sales agent can record an opening offer and then a final offer in a conversation. Each offer lasts 24 hours. `customer_message_id` keeps retries of one customer turn from advancing the offer. An offer can advance the negotiation or reduce a draft price once its quote appears in a sent reply. A draft from the same conversation shows **AI price offer** in order history when it uses the offer. The shop's discount hand-over switch takes priority.
+
 #### Not built
 
 - Bulk editing the negotiation settings.
 - Importing the negotiation settings.
-- Using negotiation settings to offer discounts in chat and apply them to orders. See [steps 6 and 7](../plans/product-page-redesign.md#prs).
+- The reply prompt changes and model checks for negotiating in chat. See [step 7](../plans/product-page-redesign.md#prs).
 
 ### Catalogue tools beside the full page (planned)
 

@@ -20,13 +20,16 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { PriceOffersService } from '../price-offers/price-offers.service';
 import { ProductStockService } from '../products/product-stock.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
+import { orderItemSnapshots } from './order-item-snapshots';
 import { toOrderListItem } from './order-list-item';
 import { orderParcelWeightGrams } from './order-parcel-weight';
+import { applyPriceOffers, recordPriceOffer } from './order-price-offers';
 import { moveOrderReservations } from './order-reservations';
 import { orderRiskFields } from './order-risk';
 import {
@@ -58,6 +61,7 @@ type PlacedBy = {
   actor: AuditEntry['actor'];
   source?: OrderWrite['source'];
   createdByType?: OrderWrite['createdByType'];
+  offerConversationId?: string;
 };
 
 @Injectable()
@@ -74,6 +78,7 @@ export class OrdersService {
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(OrderAttributionService) private readonly attribution: OrderAttributionService,
+    @Inject(PriceOffersService) private readonly priceOffers: PriceOffersService,
   ) {}
 
   archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
@@ -85,11 +90,8 @@ export class OrdersService {
     });
   }
 
-  createOrder(
-    storeId: string,
-    input: CreateOrderInput,
-    { idempotencyKey, access, actor, source = 'manual', createdByType = 'user' }: PlacedBy,
-  ): Promise<OrderDetail> {
+  createOrder(storeId: string, input: CreateOrderInput, placed: PlacedBy) {
+    const { idempotencyKey, access, actor, source = 'manual', createdByType = 'user' } = placed;
     return this.transaction.runLocked(storeId, async () => {
       const existing = await this.repository.findByIdempotencyKey(storeId, idempotencyKey);
       if (existing) return this.getById(storeId, existing.id, access);
@@ -110,7 +112,9 @@ export class OrdersService {
         recipient.areaId,
         input.deliveryChargePoisha,
       );
-      const items = await this.orderItems(storeId, input.items);
+      const items = await orderItemSnapshots(storeId, this.products, input.items);
+      const party = { conversationId: placed.offerConversationId, contactId: contact.id };
+      await applyPriceOffers(storeId, party, items, this.priceOffers);
       const totals = orderTotals(items, {
         ...input,
         deliveryChargePoisha: delivery.deliveryChargePoisha,
@@ -160,7 +164,9 @@ export class OrdersService {
       requireEditableOrder(order, expectedUpdatedAt);
       const delivery = await this.editedDelivery(storeId, input, order);
       const previous = await this.repository.items(storeId, orderId);
-      const items = input.items ? await this.orderItems(storeId, input.items, previous) : previous;
+      const items = input.items
+        ? await orderItemSnapshots(storeId, this.products, input.items, previous)
+        : previous;
       const totals = editedOrderTotals(items, order, input, delivery.deliveryChargePoisha);
       const now = this.clock.now();
       const possibleDuplicateOfOrderId = await this.repository.findDuplicate(storeId, {
@@ -234,8 +240,9 @@ export class OrdersService {
   }
 
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
-    const order = await this.repository.find(storeId, orderId);
-    if (!order) throw orderError('ORDER_NOT_FOUND');
+    const row = await this.repository.find(storeId, orderId);
+    if (!row) throw orderError('ORDER_NOT_FOUND');
+    const { createdByType, ...order } = row;
     const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
     const items = await this.repository.items(storeId, orderId);
     return {
@@ -256,7 +263,7 @@ export class OrdersService {
       ...orderRiskFields(outcomes[0]),
       items,
       parcelWeightGrams: await orderParcelWeightGrams(this.products, storeId, items),
-      timeline: await orderStageHistory(storeId, orderId, this.audit),
+      timeline: await orderStageHistory(storeId, orderId, this.audit, createdByType === 'ai'),
     };
   }
 
@@ -364,6 +371,7 @@ export class OrdersService {
       items.map((item) => ({ ...item, createdAt })),
     );
     await this.contacts.markOrderLinked(storeId, buyerContactId, actor);
+    if (order.createdByType === 'ai') await recordPriceOffer(storeId, id, items, this.audit);
     await recordOrderCreation(storeId, order, actor, { audit: this.audit, outbox: this.outbox });
   }
 
@@ -398,22 +406,5 @@ export class OrdersService {
       deliveryChargePoisha: override ?? zone.chargePoisha,
       isDeliveryChargeOverridden: override !== undefined,
     };
-  }
-
-  private async orderItems(
-    storeId: string,
-    items: CreateOrderInput['items'],
-    previous: OrderItemWrite[] = [],
-  ): Promise<OrderItemWrite[]> {
-    const byId = new Map(previous.map((item) => [item.variantId, item]));
-    const newIds = items
-      .filter(({ variantId }) => !byId.has(variantId))
-      .map(({ variantId }) => variantId);
-    const variants = await this.products.orderVariants(storeId, newIds, [...byId.keys()]);
-    for (const variant of variants) {
-      if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
-      byId.set(variant.variantId, { ...variant, quantity: 0 });
-    }
-    return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
 }

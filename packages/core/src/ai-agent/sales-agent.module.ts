@@ -9,6 +9,7 @@ import { DeliveryModule } from '../delivery/delivery.module';
 import { InboxModule } from '../messaging/inbox.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
+import { PriceOffersModule } from '../price-offers/price-offers.module';
 import { ProductSearchModule } from '../product-search/product-search.module';
 import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
@@ -26,6 +27,7 @@ import { SalesAgentService } from './sales-agent.service';
     InboxModule,
     KnowledgeSearchModule,
     OrdersModule,
+    PriceOffersModule,
     ProductSearchModule,
     ProductsModule,
     StoresModule,
