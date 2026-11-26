@@ -287,7 +287,7 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
       },
     ],
     notices: [{ user_id: assignee, type: 'conversation.handed_over' }],
-    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v3' }],
+    runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v4' }],
     usage: [],
   });
 });
@@ -685,6 +685,10 @@ it('remembers the carded product, so a later "L size ache?" reads it again', asy
 
 it('hands a discount ask to a person before any model call in a shop that hands over discounts', async () => {
   const active = await sellingShop();
+  await admin.pool.query(
+    `update ai_agent_settings set handover_rules = '{"discounts": true}' where store_id = $1`,
+    [active.storeId],
+  );
   const message = await receive(active, 'kurti last price koto?');
   const inputs = scriptSequence();
   await agent.reply(active.storeId, message.conversation_id, message.id);
@@ -696,10 +700,6 @@ it('hands a discount ask to a person before any model call in a shop that hands 
 
 it('holds the price on a first discount ask and hands over a repeat ask in a shop that keeps its price', async () => {
   const active = await sellingShop();
-  await admin.pool.query(
-    `update ai_agent_settings set handover_rules = '{"discounts": false}' where store_id = $1`,
-    [active.storeId],
-  );
   const first = await receive(active, 'panjabi te ektu ছাড় hobe? last price koto?');
   const fixedPrice = 'দুঃখিত, ছাড় নেই, পাঞ্জাবির দাম ৳1,200 ফিক্সড। কোন সাইজ লাগবে?';
   scriptSequence(

@@ -92,6 +92,53 @@ export const complaintGoldenCases: GoldenCase[] = [
     allowedAmountsTaka: [],
     mentionsAnyOf: detailWords,
   },
+  {
+    id: 'policy-exchange-banglish',
+    language: 'banglish',
+    question: 'exchange policy ki?',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+  },
+  {
+    id: 'tracking-impatience-mixed',
+    language: 'mixed',
+    question: 'আমার order কবে আসবে, koto din lagbe? courier slow',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+  },
+  {
+    id: 'ack-thanks-banglish',
+    language: 'banglish',
+    question: 'ok hmm thanks',
+    expectedHandover: null,
+    allowedAmountsTaka: [],
+  },
+  {
+    id: 'refund-demand-bn',
+    language: 'bangla',
+    question: 'টাকা ফেরত চাই, প্রোডাক্ট নেব না',
+    expectedHandover: 'refund',
+    allowedAmountsTaka: [],
+    earlier: [
+      { from: 'customer', text: 'অর্ডার ১০৪২ পেয়েছি' },
+      { from: 'shop', text: 'জি, কোনো সমস্যা হয়েছে?' },
+      { from: 'customer', text: 'পছন্দ হয়নি' },
+      { from: 'shop', text: 'দুঃখিত শুনে, কী করতে পারি বলুন?' },
+    ],
+  },
+  {
+    id: 'anger-abuse-banglish',
+    language: 'banglish',
+    question: 'ekdom baje service, matha kharap naki! taka marar dhanda?',
+    expectedHandover: 'angry',
+    allowedAmountsTaka: [],
+    earlier: [
+      { from: 'customer', text: 'amar order koi' },
+      { from: 'shop', text: 'অর্ডার নম্বরটা দেবেন?' },
+      { from: 'customer', text: '1042' },
+      { from: 'shop', text: 'দেখছি, একটু অপেক্ষা করুন।' },
+    ],
+  },
 ];
 
 export const complaintRecordedOutcomes: Record<string, EvalOutcome> = {
@@ -115,4 +162,18 @@ export const complaintRecordedOutcomes: Record<string, EvalOutcome> = {
     kind: 'reply',
     text: 'দুঃখিত, ছেঁড়া পণ্য পাওয়ায় আমরা লজ্জিত। অর্ডার নম্বর বা ফোন নম্বর আর একটা ছবি দেবেন?',
   },
+  'policy-exchange-banglish': {
+    kind: 'reply',
+    text: '৭ দিনের মধ্যে ট্যাগসহ পণ্য বদল করা যায়। কোন পণ্যটি দেখতে চান?',
+  },
+  'tracking-impatience-mixed': {
+    kind: 'reply',
+    text: 'অর্ডার নম্বর বা ফোন নম্বর দিলে আমি এখনই দেখে বলছি কবে ডেলিভারি হবে।',
+  },
+  'ack-thanks-banglish': {
+    kind: 'reply',
+    text: 'স্বাগতম! আর কোনো সাহায্য লাগলে জানাবেন।',
+  },
+  'refund-demand-bn': { kind: 'handover', reason: 'refund' },
+  'anger-abuse-banglish': { kind: 'handover', reason: 'angry' },
 };
