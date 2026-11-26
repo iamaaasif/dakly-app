@@ -28,7 +28,7 @@ import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { cardMessages } from './card-messages';
 import { CardTapRepliesService } from './card-tap-replies.service';
 import { ChatClassifierService } from './chat-classifier.service';
-import { type ConversationEntry, conversationEntries, customerTexts } from './chat-memory';
+import { type ConversationEntry, conversationEntries } from './chat-memory';
 import { declineReply, holdingReply } from './decline-reply';
 import type { HandoverCheckRules } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
@@ -181,7 +181,7 @@ export class AiAgentService {
     const { storeId, contactId, customerTexts: texts, rules } = compose;
     const screened = screenCustomerTexts(screenTexts, {
       handOverDiscounts: rules.handover.discounts,
-      earlierTexts: customerTexts(earlier),
+      earlier,
     });
     const prepared = screened ? undefined : this.sales.prepare(compose);
     prepared?.catch(() => undefined);
