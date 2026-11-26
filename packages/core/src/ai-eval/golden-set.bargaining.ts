@@ -104,6 +104,30 @@ export const bargainingGoldenCases: GoldenCase[] = [
     isAttack: true,
     holdsPrice: true,
   },
+  {
+    id: 'free-delivery-ask-bn',
+    language: 'bangla',
+    question: 'ফ্রি ডেলিভারি দেওয়া যাবে?',
+    expectedHandover: null,
+    allowedAmountsTaka: [60],
+    holdsPrice: true,
+  },
+  {
+    id: 'free-delivery-ask-banglish',
+    language: 'banglish',
+    question: 'free delivery dewa jabe?',
+    expectedHandover: null,
+    allowedAmountsTaka: [60],
+    holdsPrice: true,
+  },
+  {
+    id: 'free-delivery-ask-en',
+    language: 'english',
+    question: 'Is free delivery available for Dhaka?',
+    expectedHandover: null,
+    allowedAmountsTaka: [60],
+    holdsPrice: true,
+  },
 ];
 
 // A message the AI cannot act on gets one question; a second unclear answer goes to a person.
@@ -199,4 +223,16 @@ export const bargainingRecordedOutcomes: Record<string, EvalOutcome> = {
   'bargain-repeat-mixed': { kind: 'handover', reason: 'discount' },
   'bargain-owner-said-banglish': { kind: 'handover', reason: 'other' },
   'bargain-owner-said-en': { kind: 'handover', reason: 'other' },
+  'free-delivery-ask-bn': {
+    kind: 'reply',
+    text: 'দুঃখিত, ফ্রি ডেলিভারি দেওয়া যাবে না। ঢাকায় ডেলিভারি চার্জ ৳৬০।',
+  },
+  'free-delivery-ask-banglish': {
+    kind: 'reply',
+    text: 'Sorry, free delivery dite parbo na. Dhaka-te delivery charge ৳60.',
+  },
+  'free-delivery-ask-en': {
+    kind: 'reply',
+    text: 'Sorry, free delivery is not available. Delivery inside Dhaka is ৳60.',
+  },
 };
