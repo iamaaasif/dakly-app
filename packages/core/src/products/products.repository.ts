@@ -47,6 +47,11 @@ const productColumns = {
   createdAt: products.createdAt,
   updatedAt: products.updatedAt,
 };
+const negotiationColumns = {
+  negotiationEnabled: products.negotiationEnabled,
+  negotiationOpeningPoisha: products.negotiationOpeningPoisha,
+  negotiationFloorPoisha: products.negotiationFloorPoisha,
+};
 const variantColumns = {
   id: productVariants.id,
   productId: productVariants.productId,
@@ -60,10 +65,12 @@ const variantColumns = {
   reserved: productVariants.reserved,
   isDefault: productVariants.isDefault,
 };
-export type CatalogueProduct = Product & {
+export type CatalogueProduct = Omit<Product, keyof typeof negotiationColumns> & {
   variants: CatalogueVariant[];
   photos: PhotoRef[];
 };
+export type EditableCatalogueProduct = CatalogueProduct &
+  Pick<Product, keyof typeof negotiationColumns>;
 type PhotoWrite = ConfirmProductPhotoInput & {
   objectKey: string;
   uploadedByUserId: string | null;
@@ -89,11 +96,12 @@ type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & 
 export class ProductsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async findById(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
+  async findById(storeId: string, id: string): Promise<EditableCatalogueProduct | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
           ...productColumns,
+          ...negotiationColumns,
           variants: variantSnapshot(storeId),
           photos: photoSnapshot(storeId),
         })
@@ -109,11 +117,12 @@ export class ProductsRepository {
     storeId: string,
     query: ProductListQuery,
     lowStockThreshold: number,
-  ): Promise<CatalogueProduct[]> {
+  ): Promise<EditableCatalogueProduct[]> {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({
           ...productColumns,
+          ...negotiationColumns,
           variants: variantSnapshot(storeId),
           photos: photoSnapshot(storeId),
         })
@@ -234,7 +243,7 @@ export class ProductsRepository {
       tx
         .insert(products)
         .values({ storeId, ...input, createdAt: now, updatedAt: now })
-        .returning(productColumns),
+        .returning({ ...productColumns, ...negotiationColumns }),
     );
     return rows[0]!;
   }
@@ -252,7 +261,7 @@ export class ProductsRepository {
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )
-        .returning(productColumns),
+        .returning({ ...productColumns, ...negotiationColumns }),
     );
     return rows[0];
   }

@@ -1,8 +1,12 @@
 import type { OrderCatalogueProduct } from '@dakly/contracts/orders';
-import type { ProductResponse } from '@dakly/contracts/products';
+import type { ProductReadiness, ProductResponse } from '@dakly/contracts/products';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
-import type { CatalogueProduct, CatalogueVariant } from './products.repository';
+import type {
+  CatalogueProduct,
+  CatalogueVariant,
+  EditableCatalogueProduct,
+} from './products.repository';
 
 type OrderCatalogueVariant = OrderCatalogueProduct['variants'][number];
 type ChatPhoto = {
@@ -70,5 +74,57 @@ export function orderCatalogueProduct(
     name: product.name,
     isStockTracked: product.isStockTracked,
     variants: product.variants.map((variant) => orderCatalogueVariant(product, variant, storage)),
+  };
+}
+
+export function productResponse(
+  {
+    negotiationOpeningPoisha,
+    negotiationFloorPoisha,
+    variants: rows,
+    ...product
+  }: EditableCatalogueProduct,
+  lowStockThreshold: number,
+  storage: FileStorageDriver,
+  showNegotiationPrices: boolean,
+): ProductResponse {
+  const variants = rows.map(({ productId: _productId, ...variant }) => ({
+    ...variant,
+    photos: variant.photos.map((photo) => ({
+      id: photo.id,
+      url: storage.createDownloadUrl(photo.objectKey, 15 * 60),
+    })),
+    pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
+    available: variant.onHand - variant.reserved,
+  }));
+  const readiness: ProductReadiness[] = [];
+  if (variants.some((variant) => variant.pricePoisha === 0)) readiness.push('needs_price');
+  if (!product.imageFileIds.length) readiness.push('needs_photo');
+  if (product.status === 'hidden') readiness.push('hidden');
+  if (
+    product.isStockTracked &&
+    variants.length &&
+    variants.every((variant) => variant.available <= 0)
+  )
+    readiness.push('out_of_stock');
+  else if (
+    product.isStockTracked &&
+    variants.some(
+      (variant) => variant.available <= (variant.lowStockThreshold ?? lowStockThreshold),
+    )
+  )
+    readiness.push('running_low');
+  return {
+    ...product,
+    ...(showNegotiationPrices ? { negotiationOpeningPoisha, negotiationFloorPoisha } : {}),
+    status: product.status,
+    photos: product.photos.map((photo) => ({
+      id: photo.id,
+      url: storage.createDownloadUrl(photo.objectKey, 15 * 60),
+    })),
+    variants,
+    readiness,
+    createdAt: product.createdAt.toISOString(),
+    updatedAt: product.updatedAt.toISOString(),
   };
 }
