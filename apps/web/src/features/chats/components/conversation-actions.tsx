@@ -28,7 +28,7 @@ export function ConversationActions({ conversation }: { conversation: Conversati
           onClick={() => update.mutate({ status: 'open' })}
         >
           <RotateCcw aria-hidden="true" size={16} strokeWidth={1.75} />
-          Reopen
+          <span className="sr-only @xl:not-sr-only">Reopen</span>
         </Button>
       ) : (
         <Button
@@ -38,7 +38,7 @@ export function ConversationActions({ conversation }: { conversation: Conversati
           onClick={() => update.mutate({ status: 'later' })}
         >
           <Bell aria-hidden="true" size={16} />
-          Remind me
+          <span className="sr-only @xl:not-sr-only">Remind me</span>
         </Button>
       )}
       {done ? null : (
