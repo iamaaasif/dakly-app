@@ -757,6 +757,13 @@
       "when": 1795679113279,
       "tag": "0107_product_negotiation",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1795680617070,
+      "tag": "0108_price_offers",
+      "breakpoints": true
     }
   ]
 }
