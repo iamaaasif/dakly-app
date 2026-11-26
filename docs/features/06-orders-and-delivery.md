@@ -258,6 +258,22 @@ Staff with Orders edit can enter the buyer and delivery details, select variants
 
 The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
 
+### Print an order invoice (ORD-10)
+
+Staff with Orders view can choose **Print invoice** in the order drawer. The invoice
+opens in a new tab and brings up the browser print dialog once it loads. The preview
+also has a Print invoice button. The invoice uses A4 portrait and shows the shop
+name and phone, order number and date in the shop's time zone, the buyer and
+delivery recipient, the saved item quantities, unit prices and line discounts, and
+the item subtotal, delivery charge, order discount, advance paid and COD amount.
+For a partial delivery it uses the saved delivered quantities, discounts and
+subtotal, with the original unit prices. It leaves out lines with zero delivered
+units. Staff without full-phone access see a masked recipient number.
+
+The print page at `/orders/[orderId]/print` loads its data in the browser through
+`GET /orders/:orderId/invoice`. Bulk shipping labels and order export remain
+part of ORD-10. [Desktop, phone and print evidence](../design/evidence/ord-10-invoice/).
+
 ### How it works
 
 An order has two state fields: `stage` for fulfilment and `paymentStatus` for money.

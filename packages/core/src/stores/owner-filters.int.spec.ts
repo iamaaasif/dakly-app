@@ -22,6 +22,7 @@ describe('store filters without RLS assistance', () => {
       id: f.b,
       extensions: ['chats'],
     });
+    expect(await repository.contactDetails(f.b)).toMatchObject({ name: 'নতুন দোকান' });
     expect(await f.row('stores', f.a)).toEqual(before);
   });
   it('reads the sending settings of the requested store only', async () => {
