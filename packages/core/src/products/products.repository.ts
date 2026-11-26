@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, getTableName, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, getTableName, inArray, ne, sql } from 'drizzle-orm';
 
 import type {
   CreateProductInput,
@@ -13,6 +13,7 @@ import { products, productVariants } from '@dakly/db/schema/products';
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { brandNameSql, categoryPathSql } from './product-list-names.repository';
+import { productListRank } from './product-list-rank.repository';
 import {
   photoSnapshot,
   type CatalogueVariant,
@@ -117,16 +118,21 @@ export class ProductsRepository {
     storeId: string,
     query: ProductListQuery,
     lowStockThreshold: number,
-  ): Promise<EditableCatalogueProduct[]> {
-    return this.database.forStore(storeId, (tx) =>
-      tx
+    sales?: { variantId: string; units: number }[],
+  ) {
+    const rank = productListRank(storeId, query.cursor, sales);
+    return this.database.forStore(storeId, (tx) => {
+      const list = tx
         .select({
           ...productColumns,
           ...negotiationColumns,
           variants: variantSnapshot(storeId),
           photos: photoSnapshot(storeId),
+          unitsSold: rank.unitsSold,
+          rankCreatedAt: rank.rankCreatedAt,
         })
-        .from(products)
+        .from(products);
+      return (rank.join ? list.leftJoin(rank.join, sql`sales.product_id = ${products.id}`) : list)
         .where(
           and(
             eq(products.storeId, storeId),
@@ -146,12 +152,12 @@ export class ProductsRepository {
               ? sql`(${products.categoryId} = ${query.categoryId} or ${products.categoryId} in (select id from product_categories where store_id = ${storeId} and parent_id = ${query.categoryId}))`
               : undefined,
             query.brandId ? eq(products.brandId, query.brandId) : undefined,
-            query.cursor ? lt(products.id, query.cursor) : undefined,
+            rank.after,
           ),
         )
-        .orderBy(desc(products.id))
-        .limit(query.limit + 1),
-    );
+        .orderBy(...rank.order)
+        .limit(query.limit + 1);
+    });
   }
 
   // The AI agent may only offer active products the shop shows in chats.
