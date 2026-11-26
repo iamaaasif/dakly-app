@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import type { CommentResponse } from '@dakly/contracts/comments';
@@ -11,6 +11,7 @@ import { ToastProvider } from '@dakly/ui/toast';
 
 import { chatScreenQuerySchema } from '../chat-filters';
 import { ChatsScreen } from './chats-screen';
+import { ShellNavigationCollapse } from '@/components/shell-navigation-collapse';
 import { sessionContextKey } from '@/lib/session-context';
 
 vi.mock('next/navigation', () => ({
@@ -83,6 +84,8 @@ function sidebarResponse(path: string) {
   return undefined;
 }
 
+let setNavigationCollapsed = vi.fn();
+
 function show(query = defaults, access: Partial<SessionContext['currentStore']> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const context: SessionContext = {
@@ -126,16 +129,30 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
   client.setQueryData(sessionContextKey, context);
   return render(<ChatsScreen query={query} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>
-        <ToastProvider>{children}</ToastProvider>
-      </QueryClientProvider>
+      <ShellNavigationCollapse value={setNavigationCollapsed}>
+        <QueryClientProvider client={client}>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryClientProvider>
+      </ShellNavigationCollapse>
     ),
   });
 }
 
+let wideScreen = true;
+
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: wideScreen,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  wideScreen = true;
+  setNavigationCollapsed = vi.fn();
   paths = [];
   connectionKinds = [];
   connectionsForbidden = false;
@@ -248,6 +265,35 @@ describe('Chat list', () => {
       screen.getByRole('button', { name: 'Collapse inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('true');
     expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+  });
+
+  it('shows the main navigation as an icon rail while the Inbox is open', async () => {
+    respond(() => ok([sadia]));
+    const { unmount } = show();
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    expect(setNavigationCollapsed).toHaveBeenLastCalledWith(true);
+    unmount();
+    expect(setNavigationCollapsed).toHaveBeenLastCalledWith(false);
+  });
+
+  it('starts with the Inbox folders collapsed on a narrow screen', async () => {
+    wideScreen = false;
+    respond(() => ok([sadia]));
+    show();
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Chat tabs' })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Expand inbox folders' }).getAttribute('aria-expanded'),
+    ).toBe('false');
+    expect(screen.getByRole('combobox', { name: 'Chat folder' })).toBeTruthy();
+  });
+
+  it('says why a chat needs the team on its row', async () => {
+    respond(() =>
+      ok([{ ...sadia, status: 'needs_you', responder: 'human', handoverReason: 'refund' }]),
+    );
+    show();
+    expect(await screen.findByText('Needs you · Refund or exchange')).toBeTruthy();
   });
 
   it('shows each chat with its name, last message and unread count, and the tab counts', async () => {
@@ -570,6 +616,7 @@ describe('Conversation actions', () => {
     respondToActions({ responder: 'human', handoverReason: 'complaint', handoverSummary: summary });
     show(chatScreenQuerySchema.parse({ chat: chatId }));
     expect(await screen.findByText('Your team is handling this chat')).toBeTruthy();
+    expect(screen.getByText('· Complaint')).toBeTruthy();
     expect(screen.getByText(summary)).toBeTruthy();
     cleanup();
     respondToActions({ responder: 'ai', handoverSummary: null });

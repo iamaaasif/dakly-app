@@ -8,6 +8,7 @@ import { cn } from '@dakly/ui/cn';
 import { AccountMenu } from './account-menu';
 import { MobileNavigation } from './mobile-navigation';
 import { ShellNavigation } from './shell-navigation';
+import { ShellNavigationCollapse } from './shell-navigation-collapse';
 import { StoreRequired } from './store-required';
 import { StoreSwitcher } from './store-switcher';
 
@@ -65,10 +66,12 @@ export function ShellFrame({
         <div
           id="page-content"
           tabIndex={-1}
-          className="mx-auto max-w-7xl"
+          className="mx-auto max-w-7xl has-[[data-full-width]]:max-w-none"
           key={`${data.contextTag}:${generation}`}
         >
-          {needsStore ? <StoreRequired hasMemberships={data.hasMemberships} /> : children}
+          <ShellNavigationCollapse value={setCollapsed}>
+            {needsStore ? <StoreRequired hasMemberships={data.hasMemberships} /> : children}
+          </ShellNavigationCollapse>
         </div>
       </div>
     </div>

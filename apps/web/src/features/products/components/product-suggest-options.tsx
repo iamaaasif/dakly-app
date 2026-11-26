@@ -22,7 +22,7 @@ type Suggestion = { fromAi: boolean; options: SuggestedOptionsResponse['options'
 
 type ProductSuggestOptionsProps = {
   product?: ProductResponse;
-  onAdd: (suggested: GridOption[]) => void;
+  onAdd: (suggested: GridOption[]) => string | null;
 };
 
 export function ProductSuggestOptions({ product, onAdd }: ProductSuggestOptionsProps) {
@@ -31,8 +31,10 @@ export function ProductSuggestOptions({ product, onAdd }: ProductSuggestOptionsP
   const { watch } = useFormContext<ProductFormValues>();
   const suggest = useSuggestProductOptions();
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const name = (watch('name') ?? '').trim();
   const ask = () => {
+    setError(null);
     if (!name && !(productId && hasPhotos))
       return setSuggestion({ fromAi: false, options: plainSuggestions });
     suggest.mutate(
@@ -62,9 +64,11 @@ export function ProductSuggestOptions({ product, onAdd }: ProductSuggestOptionsP
       {suggestion ? (
         <SuggestionBox
           suggestion={suggestion}
+          error={error}
           onAdd={(options) => {
-            onAdd(options);
-            setSuggestion(null);
+            const problem = onAdd(options);
+            setError(problem);
+            if (!problem) setSuggestion(null);
           }}
           onDismiss={() => setSuggestion(null)}
         />
@@ -75,11 +79,12 @@ export function ProductSuggestOptions({ product, onAdd }: ProductSuggestOptionsP
 
 type SuggestionBoxProps = {
   suggestion: Suggestion;
+  error: string | null;
   onAdd: (options: GridOption[]) => void;
   onDismiss: () => void;
 };
 
-function SuggestionBox({ suggestion, onAdd, onDismiss }: SuggestionBoxProps) {
+function SuggestionBox({ suggestion, error, onAdd, onDismiss }: SuggestionBoxProps) {
   const [options, setOptions] = useState(suggestion.options);
   const remove = (name: string, value: string) =>
     setOptions((current) =>
@@ -96,27 +101,12 @@ function SuggestionBox({ suggestion, onAdd, onDismiss }: SuggestionBoxProps) {
         <span aria-hidden="true">✦ </span>
         {suggestion.fromAi ? 'Suggested from the title and photos' : 'Common options to start from'}
       </p>
-      {options.map((option) => (
-        <div key={option.name} className="flex flex-wrap items-center gap-2">
-          <span className="text-sm text-text-muted">{option.name}</span>
-          {option.values.map((value) => (
-            <span
-              key={value}
-              className="inline-flex min-h-8 items-center gap-1 rounded-full border border-border-strong bg-surface px-2.5 text-sm text-text"
-            >
-              {value}
-              <button
-                type="button"
-                aria-label={`Remove suggested ${value}`}
-                className="rounded-full p-0.5 text-text-muted hover:text-danger"
-                onClick={() => remove(option.name, value)}
-              >
-                <X className="size-3.5" aria-hidden="true" />
-              </button>
-            </span>
-          ))}
-        </div>
-      ))}
+      <SuggestionChips options={options} onRemove={remove} />
+      {error ? (
+        <p role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -134,5 +124,38 @@ function SuggestionBox({ suggestion, onAdd, onDismiss }: SuggestionBoxProps) {
         </p>
       </div>
     </div>
+  );
+}
+
+type SuggestionChipsProps = {
+  options: Suggestion['options'];
+  onRemove: (name: string, value: string) => void;
+};
+
+function SuggestionChips({ options, onRemove }: SuggestionChipsProps) {
+  return (
+    <>
+      {options.map((option) => (
+        <div key={option.name} className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-text-muted">{option.name}</span>
+          {option.values.map((value) => (
+            <span
+              key={value}
+              className="inline-flex min-h-8 items-center gap-1 rounded-full border border-border-strong bg-surface px-2.5 text-sm text-text"
+            >
+              {value}
+              <button
+                type="button"
+                aria-label={`Remove suggested ${value}`}
+                className="rounded-full p-0.5 text-text-muted hover:text-danger"
+                onClick={() => onRemove(option.name, value)}
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ))}
+    </>
   );
 }

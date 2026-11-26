@@ -69,6 +69,7 @@ export function ProductForm({
   onSaved,
   page,
 }: ProductFormProps) {
+  const [editingOption, setEditingOption] = useState(false);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(page ? pageFormSchema : productFormSchema),
     defaultValues: {
@@ -88,7 +89,9 @@ export function ProductForm({
   const actions = (
     <ProductFormActions
       isPending={isPending}
-      canSave={(!product || isDirty) && !errors.weightGrams}
+      editingOption={editingOption}
+      isDirty={isDirty}
+      invalidWeight={Boolean(errors.weightGrams)}
       product={product}
       cancelHref={page?.backHref}
     />
@@ -109,6 +112,7 @@ export function ProductForm({
             actions={actions}
             serverError={errorMessage}
             product={product}
+            onOptionDraftChange={setEditingOption}
           />
         ) : (
           <ProductFormFields product={product}>
@@ -157,7 +161,8 @@ function useSubmitProduct(
   const reason = useRef<string | null>(null);
   const onSubmit = form.handleSubmit((parsed) => {
     const input = product || isDuplicate ? parsed : shareCostAcrossSizes(parsed);
-    if (product && reason.current === null && hasStockEdits(form.getValues(), product)) {
+    const values = form.getValues();
+    if (product && reason.current === null && hasStockEdits(values, product)) {
       setAskReason(true);
       return;
     }
@@ -167,7 +172,7 @@ function useSubmitProduct(
       });
     const writeStock = async (saved: ProductResponse) => {
       const failed = await writeStockChanges(
-        stockChanges(saved, form.getValues(), product),
+        stockChanges(saved, values, product),
         reason.current ?? 'Initial stock',
         adjustStock.mutateAsync,
       );
@@ -179,10 +184,7 @@ function useSubmitProduct(
       onSaved(saved, failed);
     };
     if (product) {
-      change.mutate(productChanges(input, dirtyFields), {
-        onSuccess: writeStock,
-        onError: setError,
-      });
+      void change.mutateAsync(productChanges(input, dirtyFields)).then(writeStock, setError);
       return;
     }
     create.mutate(input, { onError: setError, onSuccess: writeStock });
@@ -215,12 +217,21 @@ function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
 
 type ProductFormActionsProps = {
   isPending: boolean;
-  canSave: boolean;
+  editingOption: boolean;
+  isDirty: boolean;
+  invalidWeight: boolean;
   product?: ProductResponse;
   cancelHref?: string;
 };
 
-function ProductFormActions({ isPending, canSave, product, cancelHref }: ProductFormActionsProps) {
+function ProductFormActions({
+  isPending,
+  editingOption,
+  isDirty,
+  invalidWeight,
+  product,
+  cancelHref,
+}: ProductFormActionsProps) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {cancelHref ? (
@@ -228,7 +239,11 @@ function ProductFormActions({ isPending, canSave, product, cancelHref }: Product
           Cancel
         </Link>
       ) : null}
-      <Button type="submit" loading={isPending} disabled={!canSave}>
+      <Button
+        type="submit"
+        loading={isPending}
+        disabled={editingOption || invalidWeight || (Boolean(product) && !isDirty)}
+      >
         {product ? 'Save' : 'Create'}
       </Button>
     </div>

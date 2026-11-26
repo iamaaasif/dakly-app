@@ -84,10 +84,12 @@ export function EditProductPage({ productId }: { productId: string }) {
       </div>
     );
   if (isPending) return <ProductsLoading />;
+  // A refresh that only reorders variants must keep the editor mounted.
+  const stock = data.variants.map(({ id, onHand }) => `${id}:${onHand}`).sort();
   // After a save the form starts again from what the server holds, so new rows have their ids.
   return (
     <LoadedProductPage
-      key={`${data.id}:${saves}:${data.variants.map((variant) => variant.onHand).join(',')}`}
+      key={`${data.id}:${saves}:${stock.join(',')}`}
       product={data}
       readOnly={!session?.currentStore?.canEditProducts}
       onSaved={async () => {

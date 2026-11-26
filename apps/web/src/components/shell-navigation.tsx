@@ -289,7 +289,8 @@ function NavigationGroups({
 }: { groups: NavigationGroup[] } & Pick<ShellNavigationProps, 'collapsed' | 'onNavigate'>) {
   const groupId = useId();
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto p-3">
+    // Relative keeps the collapsed rail's screen-reader labels inside this scroll box.
+    <div className="relative min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
       {groups.map((group, index) => (
         <div
           key={group.heading}

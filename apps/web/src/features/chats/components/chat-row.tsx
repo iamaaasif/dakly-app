@@ -8,6 +8,7 @@ import { cn } from '@dakly/ui/cn';
 
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { contactDisplayName } from '../contact-name';
+import { handoverReasonLabels } from '../handover-reasons';
 import { formatDate, formatTime } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
@@ -96,7 +97,7 @@ function ChatRowContent({
 function Avatar({ name, channel }: { name: string; channel: ConversationResponse['channel'] }) {
   const { icon: Icon, label } = channelIcons[channel];
   return (
-    <div className="relative shrink-0">
+    <div className="relative shrink-0 self-start">
       <span className="flex size-10 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text-muted">
         {initialsOf(name)}
       </span>
@@ -124,10 +125,16 @@ function ChatRowBadges({ conversation }: { conversation: ConversationResponse })
   const { data: session } = useSessionContext();
   return (
     <div className="mt-1 flex flex-wrap gap-1">
+      {conversation.status === 'needs_you' ? (
+        <Badge variant="danger">
+          {conversation.handoverReason
+            ? `Needs you · ${handoverReasonLabels[conversation.handoverReason]}`
+            : 'Needs you'}
+        </Badge>
+      ) : null}
       <Badge variant={conversation.responder === 'ai' ? 'inverse' : 'neutral'}>
         {responderLabel(conversation, session?.user.id)}
       </Badge>
-      {conversation.status === 'needs_you' ? <Badge variant="danger">Needs you</Badge> : null}
     </div>
   );
 }

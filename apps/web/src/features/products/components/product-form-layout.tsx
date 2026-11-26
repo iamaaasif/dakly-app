@@ -39,6 +39,7 @@ type ProductFormPageLayoutProps = {
   product?: ProductResponse;
   actions: ReactNode;
   serverError: ReactNode;
+  onOptionDraftChange: (editing: boolean) => void;
 };
 
 export function ProductFormPageLayout({
@@ -46,23 +47,24 @@ export function ProductFormPageLayout({
   product,
   actions,
   serverError,
+  onOptionDraftChange,
 }: ProductFormPageLayoutProps) {
   const productId = product?.id;
   return (
     <>
       <ProductPageHeader {...page} actions={actions} />
-      <fieldset
-        disabled={page.readOnly}
-        className="grid min-w-0 items-start gap-4 px-4 pt-6 pb-24 md:px-8 md:pb-6 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_1fr]"
-      >
-        <div className="min-w-0 space-y-4">
+      <div className="grid min-w-0 items-start gap-4 px-4 pt-6 pb-24 md:px-8 md:pb-6 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_1fr]">
+        <fieldset disabled={page.readOnly} className="min-w-0 space-y-4">
           {page.notice}
           <FieldCard title="Basics">
             <ProductNameFields productId={productId} onPage />
             <ProductDescriptionFields productId={productId} />
           </FieldCard>
-        </div>
-        <aside className="space-y-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        </fieldset>
+        <fieldset
+          disabled={page.readOnly}
+          className="min-w-0 space-y-4 lg:col-start-2 lg:row-span-2 lg:row-start-1"
+        >
           {page.status}
           <FieldCard title="Organisation">
             <ProductCategoryField />
@@ -75,21 +77,27 @@ export function ProductFormPageLayout({
             <ProductVisibilityFields />
           </FieldCard>
           {page.preview}
-        </aside>
+        </fieldset>
         <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-2">
-          <Card className="space-y-3.5">{page.photos}</Card>
-          <FieldCard title="Price">
-            <ProductPriceFields productId={productId} onPage />
-          </FieldCard>
-          <FieldCard title="Inventory">
-            <ProductInventory />
-          </FieldCard>
+          <fieldset disabled={page.readOnly} className="min-w-0 space-y-4">
+            <Card className="space-y-3.5">{page.photos}</Card>
+            <FieldCard title="Price">
+              <ProductPriceFields productId={productId} onPage />
+            </FieldCard>
+            <FieldCard title="Inventory">
+              <ProductInventory />
+            </FieldCard>
+          </fieldset>
           <Card>
-            <ProductVariantsCard product={product} readOnly={page.readOnly} />
+            <ProductVariantsCard
+              product={product}
+              readOnly={page.readOnly}
+              onOptionDraftChange={onOptionDraftChange}
+            />
           </Card>
           {serverError}
         </div>
-      </fieldset>
+      </div>
     </>
   );
 }
