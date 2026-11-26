@@ -285,8 +285,8 @@ Each label gets one 100 × 150 mm portrait page. It shows the shop name and phon
 the saved recipient name, phone, address and district, the item count and the
 order number as a Code 128 barcode with the number printed below it. The item
 count uses saved delivered quantities where available.
-The label shows the saved COD amount when money is due. It shows Paid for a zero
-amount, a paid or COD-collected order, or a returned or cancelled order. Staff
+The label shows the saved COD amount less any recorded collection. It shows Paid
+when nothing is due, including for returned or cancelled orders. Staff
 with Orders view can see their shop phone. The recipient phone uses the same masking
 as the order drawer.
 

@@ -488,6 +488,10 @@ fixture('GET /orders/shipping-labels', async () => {
       { id: cancelled, number: 1004, codDuePoisha: 0 },
     ],
   });
+  await f.admin.pool.query('update orders set cod_collected_poisha=3000 where id=$1', [paid]);
+  expect((await success(a, 'GET', url(paid), 200)).json().labels).toMatchObject([
+    { id: paid, codDuePoisha: 6000 },
+  ]);
   expect((await success(a, 'GET', url(cod), 200)).json().labels[0].recipientPhone).toBe(
     a.owner.phone,
   );

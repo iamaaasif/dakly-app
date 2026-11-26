@@ -40,7 +40,7 @@ export function OrderShippingLabel({ store, label }: OrderShippingLabelProps) {
       )}
     >
       <header className="border-b border-border pb-4">
-        <p className="text-xs font-medium text-text-muted">From</p>
+        <p className="text-xs font-medium text-text-muted print:text-text">From</p>
         <p className="text-lg font-semibold">{store.name}</p>
         {store.phone ? <p className="text-sm">{formatPhone(store.phone)}</p> : null}
       </header>
@@ -52,7 +52,7 @@ export function OrderShippingLabel({ store, label }: OrderShippingLabelProps) {
           </p>
           <div className="text-right">
             {label.codDuePoisha > 0 ? (
-              <p className="text-xs font-medium text-text-muted">COD</p>
+              <p className="text-xs font-medium text-text-muted print:text-text">COD</p>
             ) : null}
             <p className="shipping-label-amount text-2xl font-bold tabular-nums">
               {label.codDuePoisha > 0 ? formatMoney(label.codDuePoisha) : 'Paid'}
@@ -76,7 +76,7 @@ export function OrderShippingLabel({ store, label }: OrderShippingLabelProps) {
 function ShippingLabelRecipient({ label }: Pick<OrderShippingLabelProps, 'label'>) {
   return (
     <section>
-      <p className="text-xs font-medium text-text-muted">Deliver to</p>
+      <p className="text-xs font-medium text-text-muted print:text-text">Deliver to</p>
       <p className="text-xl font-semibold">{label.recipientName}</p>
       {label.recipientPhone ? (
         <p className="text-base font-medium">{formatPhone(label.recipientPhone)}</p>

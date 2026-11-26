@@ -25,17 +25,23 @@ export class OrderShippingLabelsService {
     const labels = orderIds.map((id) => {
       const row = byId.get(id);
       if (!row) throw orderError('ORDER_NOT_FOUND');
-      const { recipientPhone, stage, paymentStatus, codAmountPoisha, ...label } = row;
+      const {
+        recipientPhone,
+        stage,
+        paymentStatus,
+        codAmountPoisha,
+        codCollectedPoisha,
+        ...label
+      } = row;
       const skipCodCollection =
-        stage === 'returned' ||
-        stage === 'cancelled' ||
-        paymentStatus === 'paid' ||
-        paymentStatus === 'cod_collected';
+        stage === 'returned' || stage === 'cancelled' || paymentStatus === 'paid';
       return {
         ...label,
         recipientPhone:
           seeFullPhone || !recipientPhone ? recipientPhone : maskPhone(recipientPhone),
-        codDuePoisha: skipCodCollection ? 0 : codAmountPoisha,
+        codDuePoisha: skipCodCollection
+          ? 0
+          : Math.max(0, codAmountPoisha - (codCollectedPoisha ?? 0)),
       };
     });
     const { name, phone } = await this.stores.contactDetails(storeId);

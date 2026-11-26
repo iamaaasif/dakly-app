@@ -20,6 +20,7 @@ export class OrderShippingLabelsRepository {
           recipientAddress: orders.recipientAddress,
           recipientDistrict: orders.recipientDistrict,
           codAmountPoisha: orders.codAmountPoisha,
+          codCollectedPoisha: orders.codCollectedPoisha,
           paymentStatus: orders.paymentStatus,
           stage: orders.stage,
           itemCount:
