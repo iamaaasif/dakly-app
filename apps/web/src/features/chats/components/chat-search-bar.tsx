@@ -107,7 +107,7 @@ function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
         )
       }
     >
-      <SelectTrigger aria-label="Chat folder" className="hidden w-auto min-[1440px]:flex">
+      <SelectTrigger aria-label="Chat folder" className="hidden w-auto xl:flex">
         <MessageSquare aria-hidden="true" size={16} />
         <SelectValue />
       </SelectTrigger>

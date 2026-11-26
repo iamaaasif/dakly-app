@@ -67,9 +67,7 @@ function MessageMeta({ message }: { message: ConversationMessageResponse }) {
   const delivery = message.direction === 'out' && message.kind !== 'note';
   return (
     <div className="flex items-center gap-2 px-1 text-xs text-text-muted">
-      {message.authorType === 'ai' ? (
-        <Badge className="bg-inverse text-on-primary">AI</Badge>
-      ) : null}
+      {message.authorType === 'ai' ? <Badge variant="inverse">AI</Badge> : null}
       <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
       {delivery ? <span>{statusLabels[message.status]}</span> : null}
       {message.body ? <CopyMessageButton body={message.body} /> : null}
@@ -91,7 +89,7 @@ function CopyMessageButton({ body }: { body: string }) {
         });
       }}
     >
-      {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={16} />}
+      {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
     </button>
   );
 }

@@ -29,7 +29,7 @@ export function ChatTabs({ query }: { query: ChatScreenQuery }) {
   return (
     <nav
       aria-label="Chat tabs"
-      className="flex shrink-0 gap-1 overflow-x-auto p-2.5 min-[1440px]:flex-col min-[1440px]:overflow-visible"
+      className="flex shrink-0 gap-1 overflow-x-auto p-2.5 xl:flex-col xl:overflow-visible"
     >
       {chatTabs.map((tab) => {
         const Icon = folderIcons[tab];

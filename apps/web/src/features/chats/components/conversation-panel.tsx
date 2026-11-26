@@ -124,7 +124,7 @@ function ConversationHeader({ conversation }: { conversation: ConversationRespon
     <div className="flex min-w-0 flex-1 items-center gap-2.5">
       <span
         aria-hidden="true"
-        className="border-inbox-avatar-border bg-inbox-avatar text-inbox-avatar-text grid size-10 shrink-0 place-items-center rounded-full border text-xs font-semibold"
+        className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text-muted"
       >
         {initialsOf(name)}
       </span>

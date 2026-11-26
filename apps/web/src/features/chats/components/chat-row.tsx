@@ -97,7 +97,7 @@ function Avatar({ name, channel }: { name: string; channel: ConversationResponse
   const { icon: Icon, label } = channelIcons[channel];
   return (
     <div className="relative shrink-0">
-      <span className="border-inbox-avatar-border bg-inbox-avatar text-inbox-avatar-text flex size-10 items-center justify-center rounded-full border text-xs font-semibold">
+      <span className="flex size-10 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text-muted">
         {initialsOf(name)}
       </span>
       <Icon
@@ -124,7 +124,7 @@ function ChatRowBadges({ conversation }: { conversation: ConversationResponse })
   const { data: session } = useSessionContext();
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      <Badge className={conversation.responder === 'ai' ? 'bg-inverse text-on-primary' : undefined}>
+      <Badge variant={conversation.responder === 'ai' ? 'inverse' : 'neutral'}>
         {responderLabel(conversation, session?.user.id)}
       </Badge>
       {conversation.status === 'needs_you' ? <Badge variant="danger">Needs you</Badge> : null}

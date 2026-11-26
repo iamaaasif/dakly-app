@@ -113,7 +113,7 @@ function MakeOrderFooter({ placed, create, busy, onConfirm }: MakeOrderFooterPro
         </p>
       ) : null}
       <div className="flex flex-col gap-2">
-        <Button type="submit" loading={create.isPending} className="w-full rounded-md">
+        <Button type="submit" loading={create.isPending} className="w-full">
           <ShoppingBag aria-hidden="true" size={16} />
           {create.mustRetry ? 'Retry save' : 'Create order'}
         </Button>

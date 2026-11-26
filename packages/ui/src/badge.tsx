@@ -12,6 +12,7 @@ const badgeVariants = cva('inline-flex items-center rounded-sm px-2 py-1 text-xs
       danger: 'bg-danger-soft text-danger',
       info: 'bg-info-soft text-info',
       ai: 'bg-ai-soft text-ai',
+      inverse: 'bg-inverse text-on-primary',
     },
   },
   defaultVariants: { variant: 'neutral' },

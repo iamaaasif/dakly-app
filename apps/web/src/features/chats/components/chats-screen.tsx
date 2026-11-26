@@ -25,7 +25,7 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
   const openOnMobile = Boolean(query.chat || query.post);
   const folders = useInboxFolders();
   return (
-    <main className="flex h-[calc(100dvh-9.25rem)] min-h-[32rem] flex-col bg-surface text-text min-[1440px]:flex-row md:h-[calc(100dvh-4.25rem)]">
+    <main className="flex h-[calc(100dvh-9.25rem)] min-h-[32rem] flex-col bg-surface text-text md:h-[calc(100dvh-4.25rem)] xl:flex-row">
       <InboxFolders query={query} openOnMobile={openOnMobile} folders={folders} />
       <div
         data-chat={query.chat && query.channel !== 'comments' ? 'open' : undefined}
@@ -107,7 +107,7 @@ function InboxFolders({
   return (
     <aside
       className={cn(
-        'shrink-0 border-b border-border bg-surface-muted min-[1440px]:flex min-[1440px]:w-56 min-[1440px]:flex-col min-[1440px]:overflow-y-auto min-[1440px]:border-r min-[1440px]:border-b-0',
+        'shrink-0 border-b border-border bg-surface-muted xl:flex xl:w-56 xl:flex-col xl:overflow-y-auto xl:border-r xl:border-b-0',
         openOnMobile && 'hidden lg:block',
       )}
     >
@@ -153,7 +153,7 @@ function InboxAgentLink({ query }: { query: ChatScreenQuery }) {
       className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }), 'ml-auto')}
     >
       <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />
-      <span className="min-[1440px]:sr-only">AI agent</span>
+      <span className="xl:sr-only">AI agent</span>
     </Link>
   );
 }
