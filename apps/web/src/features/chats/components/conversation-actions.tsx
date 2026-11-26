@@ -71,7 +71,11 @@ function AssigneePicker({ conversation }: { conversation: ConversationResponse }
       value={conversation.assigneeUserId ?? ''}
       onValueChange={(value) => update.mutate({ assigneeUserId: value === nobody ? null : value })}
     >
-      <SelectTrigger aria-label="Assigned to" className="w-auto max-w-28 sm:max-w-40">
+      {/* Looks like the buttons beside it: the design has no picker arrow here. */}
+      <SelectTrigger
+        aria-label="Assigned to"
+        className="min-h-9 w-auto max-w-28 px-2.5 py-1 text-sm data-[placeholder]:text-text sm:max-w-40 [&>svg:last-child]:hidden"
+      >
         <UserPlus aria-hidden="true" size={16} />
         <SelectValue placeholder="Assign" />
       </SelectTrigger>

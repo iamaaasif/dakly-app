@@ -33,3 +33,19 @@ The three entries from the auth screens were built in ACC-19 parts 5 and 6: sign
 - Why: sellers can stay on the page and save when they navigate by mistake.
 - Expected API: none. The app shell handles the navigation.
 - Workaround in the UI: the product editor saves when the seller presses Create or Save.
+
+### Best selling sort
+
+- Screen: `/products`, [products list design](../design/screenshots/products-and-stock/redesign/products-list.webp)
+- Missing: The products list has no sort by sales.
+- Why: A seller can find their top-selling products while browsing the catalogue.
+- Expected API: `GET /products` accepts a best-selling sort and returns the existing product items and next cursor in that order. The sale stages, time period and tie-breaker need to be defined before implementation.
+- Workaround in the UI: The list keeps its current order.
+
+### Product column settings
+
+- Screen: `/products`, [products list design](../design/screenshots/products-and-stock/redesign/products-list.webp)
+- Missing: The products list has no saved column preferences.
+- Why: A seller can keep the columns they use visible and reclaim space from the others.
+- Expected API: Read and update the visible product column keys. The endpoint and whether preferences belong to a shop or a member need to be defined before implementation.
+- Workaround in the UI: The list shows its standard columns.

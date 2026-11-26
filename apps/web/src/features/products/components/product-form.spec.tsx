@@ -46,7 +46,11 @@ const product: ProductResponse = {
   updatedAt: '2026-11-18T04:00:00Z',
 };
 
-function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductForm>['page']) {
+function show(
+  initial?: ProductResponse,
+  page?: ComponentProps<typeof ProductForm>['page'],
+  duplicateSource?: ProductResponse,
+) {
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -101,7 +105,12 @@ function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductFor
   const onSaved = vi.fn();
   const tree = (current?: ProductResponse) => (
     <QueryClientProvider client={client}>
-      <ProductForm product={current} onSaved={onSaved} page={page} />
+      <ProductForm
+        product={current}
+        onSaved={onSaved}
+        page={page}
+        duplicateSource={duplicateSource}
+      />
     </QueryClientProvider>
   );
   const rendered = render(tree(initial));
@@ -275,6 +284,51 @@ describe('Product form on a full page', () => {
     await waitFor(() =>
       expect(screen.queryByText('Enter a sell price below the regular price.')).toBeNull(),
     );
+  });
+
+  it('fills a new copy with the selling details and leaves stock and product codes blank', async () => {
+    const writes: unknown[] = [];
+    vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
+      if (init.method === 'POST') writes.push([path, JSON.parse(String(init.body))]);
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    show(undefined, page, {
+      ...product,
+      description: 'Handwoven cotton',
+      status: 'active',
+      compareAtPricePoisha: 295000,
+      weightGrams: 1250,
+      imageFileIds: ['original-photo'],
+      variants: [{ ...product.variants[0]!, imageFileIds: ['original-variant-photo'] }],
+    });
+    expect(screen.getByLabelText<HTMLInputElement>('Product name').value).toBe(
+      'Cotton Panjabi copy',
+    );
+    expect(screen.getByLabelText<HTMLInputElement>('Regular price ৳').value).toBe('2950.00');
+    expect(screen.getByLabelText<HTMLInputElement>('Sell price ৳').value).toBe('2450.50');
+    expect(writes).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual([
+      '/api/products',
+      expect.objectContaining({
+        name: 'Cotton Panjabi copy',
+        description: 'Handwoven cotton',
+        pricePoisha: 245050,
+        compareAtPricePoisha: 295000,
+        weightGrams: 1250,
+        status: 'hidden',
+        variants: [
+          {
+            optionValues: {},
+            sku: null,
+            priceOverridePoisha: null,
+            costPoisha: 120075,
+            lowStockThreshold: null,
+          },
+        ],
+      }),
+    ]);
   });
 
   it('shows one Save product button for a saved product', () => {
