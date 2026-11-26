@@ -53,7 +53,7 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
 }
 
 // Toolbar pickers match the compact secondary buttons beside them.
-const toolbarSelect = 'min-h-9 w-auto px-2.5 py-1 text-sm';
+const toolbarSelect = 'min-h-9 w-auto px-2.5 py-1 text-sm font-medium';
 
 type ChatToolbarProps = { query: ChatScreenQuery; foldersOpen: boolean; channel: ReactNode };
 

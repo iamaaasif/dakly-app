@@ -363,7 +363,11 @@ export class OrdersService {
       items.map((item) => ({ ...item, createdAt })),
     );
     await this.contacts.markOrderLinked(storeId, buyerContactId, actor);
-    if (order.createdByType === 'ai') await recordPriceOffer(storeId, id, items, this.audit);
+    if (
+      order.createdByType === 'ai' &&
+      items.some(({ lineDiscountPoisha }) => (lineDiscountPoisha ?? 0) > 0)
+    )
+      await recordPriceOffer(storeId, id, this.audit);
     await recordOrderCreation(storeId, order, actor, { audit: this.audit, outbox: this.outbox });
   }
 
