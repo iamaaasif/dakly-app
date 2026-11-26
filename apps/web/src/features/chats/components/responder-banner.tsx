@@ -1,5 +1,5 @@
 'use client';
-import { Sparkles } from 'lucide-react';
+import { Bot, Sparkles, UserRound } from 'lucide-react';
 import Link from 'next/link';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
@@ -9,7 +9,6 @@ import { useToast } from '@dakly/ui/toast';
 import { useAgentSettings } from '../api/agent-settings';
 import { useReturnToAi, useTakeOverConversation } from '../api/conversation-actions';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
-import { InboxIcon } from './inbox-icon';
 import { useSessionContext } from '@/lib/session-context';
 
 // Only the AI and a person who took over are shown; a paused chat has no one to hand to.
@@ -51,26 +50,22 @@ function HandlingBanner({
             : 'Dakly AI is handling this chat again.',
         ),
     });
+  const Icon = ai ? Sparkles : UserRound;
   return (
     <div
       className={
         ai
-          ? 'flex min-h-11 shrink-0 items-center gap-2 border-b border-border bg-success-soft px-3.5 py-1.5'
-          : 'flex min-h-11 shrink-0 items-center gap-2 border-b border-inbox-note-border bg-warning-soft px-3.5 py-1.5 text-warning'
+          ? 'flex shrink-0 items-center gap-2 border-b border-border bg-success-soft px-3 py-2'
+          : 'flex shrink-0 items-center gap-2 border-b border-warning bg-warning-soft px-3 py-2 text-warning'
       }
     >
-      {ai ? <Sparkles aria-hidden="true" size={16} /> : <InboxIcon name="handoff" />}
-      <p className="min-w-0 flex-1 text-sm font-medium">
+      <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
+      <p className="min-w-0 flex-1 font-medium">
         {ai ? 'Dakly AI is handling this chat' : 'Your team is handling this chat'}
       </p>
       {canEdit ? (
-        <Button
-          variant="secondary"
-          className="min-h-10 border-border-strong px-2.5 py-1 text-sm md:min-h-8"
-          loading={action.isPending}
-          onClick={confirm}
-        >
-          {!ai && <InboxIcon name="back-ai" />}
+        <Button variant="secondary" loading={action.isPending} onClick={confirm}>
+          {!ai && <Bot aria-hidden="true" size={16} strokeWidth={1.75} />}
           {ai ? 'Take over' : 'Hand back to Dakly AI'}
         </Button>
       ) : null}
@@ -86,7 +81,7 @@ function HandlingBanner({
 function AutoReplyOffBanner({ query }: { query: ChatScreenQuery }) {
   const canChangeSettings = Boolean(useSessionContext().data?.currentStore?.canEditStoreSettings);
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-inbox-note-border bg-warning-soft px-3.5 py-1.5">
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-warning-soft px-3 py-2">
       <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />
       <p className="min-w-48 flex-1 font-medium">
         AI auto-reply is off, so Dakly AI will not answer this chat.
