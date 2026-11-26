@@ -29,6 +29,26 @@ export function ResponderBanner({
   return <HandlingBanner conversation={conversation} canEdit={canEdit} />;
 }
 
+const aiLook = {
+  icon: Sparkles,
+  title: 'Dakly AI is handling this chat',
+  border: 'border-border',
+  bar: 'bg-success-soft',
+  button: 'Take over',
+  buttonIcon: null,
+  toast: "You're handling this chat. Dakly AI paused here.",
+};
+
+const teamLook = {
+  icon: UserRound,
+  title: 'Your team is handling this chat',
+  border: 'border-warning',
+  bar: 'bg-warning-soft text-warning',
+  button: 'Hand back to Dakly AI',
+  buttonIcon: <Bot aria-hidden="true" size={16} strokeWidth={1.75} />,
+  toast: 'Dakly AI is handling this chat again.',
+};
+
 function HandlingBanner({
   conversation,
   canEdit,
@@ -41,33 +61,21 @@ function HandlingBanner({
   const returnToAi = useReturnToAi(conversation.id);
   const ai = conversation.responder === 'ai';
   const action = ai ? takeOver : returnToAi;
-  const confirm = () =>
-    action.mutate(undefined, {
-      onSuccess: () =>
-        showToast(
-          ai
-            ? "You're handling this chat. Dakly AI paused here."
-            : 'Dakly AI is handling this chat again.',
-        ),
-    });
-  const Icon = ai ? Sparkles : UserRound;
+  const look = ai ? aiLook : teamLook;
+  const Icon = look.icon;
   return (
-    <div className={ai ? 'shrink-0 border-b border-border' : 'shrink-0 border-b border-warning'}>
-      <div
-        className={
-          ai
-            ? 'flex items-center gap-2 bg-success-soft px-3 py-2'
-            : 'flex items-center gap-2 bg-warning-soft px-3 py-2 text-warning'
-        }
-      >
+    <div className={`shrink-0 border-b ${look.border}`}>
+      <div className={`flex items-center gap-2 px-3 py-2 ${look.bar}`}>
         <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
-        <p className="min-w-0 flex-1 font-medium">
-          {ai ? 'Dakly AI is handling this chat' : 'Your team is handling this chat'}
-        </p>
+        <p className="min-w-0 flex-1 font-medium">{look.title}</p>
         {canEdit ? (
-          <Button variant="secondary" loading={action.isPending} onClick={confirm}>
-            {!ai && <Bot aria-hidden="true" size={16} strokeWidth={1.75} />}
-            {ai ? 'Take over' : 'Hand back to Dakly AI'}
+          <Button
+            variant="secondary"
+            loading={action.isPending}
+            onClick={() => action.mutate(undefined, { onSuccess: () => showToast(look.toast) })}
+          >
+            {look.buttonIcon}
+            {look.button}
           </Button>
         ) : null}
         {action.error ? (
@@ -76,13 +84,18 @@ function HandlingBanner({
           </p>
         ) : null}
       </div>
-      {!ai && conversation.handoverSummary ? (
-        <p className="border-t border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
-          <span className="font-medium text-text">Handover summary: </span>
-          {conversation.handoverSummary}
-        </p>
-      ) : null}
+      {ai ? null : <HandoverSummary summary={conversation.handoverSummary} />}
     </div>
+  );
+}
+
+function HandoverSummary({ summary }: { summary: string | null }) {
+  if (!summary) return null;
+  return (
+    <p className="border-t border-border bg-surface-muted px-3 py-2 text-xs text-text-muted">
+      <span className="font-medium text-text">Handover summary: </span>
+      {summary}
+    </p>
   );
 }
 
