@@ -139,6 +139,8 @@ function offersOutOfStock({ golden, outcome }: Scored) {
   });
 }
 
+// Each mention is judged by the stock phrase for that item. A price quote without a sold-out
+// statement can also offer the item.
 function offersTerm(clause: string, term: RegExp, expectedTerms: readonly string[]) {
   const mentions = [...clause.matchAll(term)];
   const stockPhrases = [...clause.matchAll(stockWording)];
@@ -218,6 +220,7 @@ const clarificationQuestion =
   /^(?:(?:apni\s+)?kon\s+[\p{L}\p{M}\s-]+\s+kotha\s+bolchen|(?:আপনি\s+)?কোন\s+[\p{L}\p{M}\s-]+\s+কথা\s+বলছেন|which\s+[\p{L}\p{M}\s-]+\s+do\s+you\s+mean)\s*\?$/iu;
 const outOfStockPhrase =
   /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\b(?:nei|nai|out of stock|sold out|unavailable|not (?:currently )?(?:in stock|available))\b/iu;
+// A restock notice promises a message after the item returns.
 const restockNotice =
   /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|রিস্টক\s+হলে|\b(?:stock\s*-?\s*e|restock)\s*(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
 const recalledPreference = /মনে\s+আছে|\bmone\s+ache\b/iu;

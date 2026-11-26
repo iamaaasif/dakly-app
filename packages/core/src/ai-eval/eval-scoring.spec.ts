@@ -369,6 +369,23 @@ describe('out-of-stock offers', () => {
   });
 
   it.each([
+    ['XL', 'XXL'],
+    ['M', 'Medium'],
+  ])('accepts %s being excluded while the reply offers %s', (excluded, alternative) => {
+    const golden = {
+      ...cases.find(({ id }) => id === 'long-chat-size-banglish')!,
+      neverOffer: [excluded],
+    };
+    const outcomes = {
+      [golden.id]: { kind: 'reply' as const, text: `Polo ${alternative} size ache, dam ৳650.` },
+    };
+    expect(scoreEval([golden], outcomes)).toMatchObject({
+      outOfStockOfferCaseIds: [],
+      passed: true,
+    });
+  });
+
+  it.each([
     ['long-chat-size-banglish', 'Polo XL and L are available, 650 taka.'],
     [
       'chat-memory-other-channel-stock-banglish',
