@@ -32,7 +32,7 @@ export class OrderInvoiceService {
       recipientPhone: seeFullPhone || !recipientPhone ? recipientPhone : maskPhone(recipientPhone),
       itemsSubtotalPoisha: deliveredItemsSubtotalPoisha ?? snapshot.itemsSubtotalPoisha,
       orderDiscountPoisha: deliveredOrderDiscountPoisha ?? snapshot.orderDiscountPoisha,
-      isPartialDelivery: deliveredItemsSubtotalPoisha !== null,
+      isPartialDelivery: rows.some(({ item }) => item !== null && item.deliveredQuantity !== null),
       items: rows.flatMap(({ item }) => {
         if (!item) return [];
         const { deliveredQuantity, deliveredLineDiscountPoisha, ...line } = item;

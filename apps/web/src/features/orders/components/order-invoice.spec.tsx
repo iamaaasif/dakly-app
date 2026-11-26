@@ -59,7 +59,7 @@ it('prints the buyer, delivery snapshot and recorded invoice amounts', () => {
     ['Delivery charge', '৳60'],
     ['Order discount', '-৳90'],
     ['Advance paid', '-৳200'],
-    ['COD to collect', '৳2,261'],
+    ['COD amount', '৳2,261'],
   ]) {
     expect(screen.getByText(label!).nextElementSibling?.textContent).toBe(amount);
   }

@@ -39,7 +39,7 @@ export function OrderInvoiceDocument({ invoice }: { invoice: OrderInvoice }) {
         </div>
       </dl>
 
-      <InvoiceItems invoice={invoice} />
+      {invoice.items.length ? <InvoiceItems invoice={invoice} /> : null}
 
       <dl className="ml-auto max-w-xs space-y-2 text-sm tabular-nums print:break-inside-avoid">
         <InvoiceAmount label="Items subtotal" amount={invoice.itemsSubtotalPoisha} />
@@ -47,7 +47,7 @@ export function OrderInvoiceDocument({ invoice }: { invoice: OrderInvoice }) {
         <InvoiceAmount label="Order discount" amount={-invoice.orderDiscountPoisha} />
         <InvoiceAmount label="Advance paid" amount={-invoice.advancePaidPoisha} />
         <div className="flex justify-between gap-4 border-t border-border pt-3 text-base font-semibold">
-          <dt>COD to collect</dt>
+          <dt>COD amount</dt>
           <dd className="text-right wrap-anywhere">{formatMoney(invoice.codAmountPoisha)}</dd>
         </div>
       </dl>
