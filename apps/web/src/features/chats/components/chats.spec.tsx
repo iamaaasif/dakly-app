@@ -11,6 +11,7 @@ import { ToastProvider } from '@dakly/ui/toast';
 
 import { chatScreenQuerySchema } from '../chat-filters';
 import { ChatsScreen } from './chats-screen';
+import { ShellNavigationCollapse } from '@/components/shell-navigation-collapse';
 import { sessionContextKey } from '@/lib/session-context';
 
 vi.mock('next/navigation', () => ({
@@ -83,6 +84,8 @@ function sidebarResponse(path: string) {
   return undefined;
 }
 
+let setNavigationCollapsed = vi.fn();
+
 function show(query = defaults, access: Partial<SessionContext['currentStore']> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const context: SessionContext = {
@@ -126,9 +129,11 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
   client.setQueryData(sessionContextKey, context);
   return render(<ChatsScreen query={query} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>
-        <ToastProvider>{children}</ToastProvider>
-      </QueryClientProvider>
+      <ShellNavigationCollapse value={setNavigationCollapsed}>
+        <QueryClientProvider client={client}>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryClientProvider>
+      </ShellNavigationCollapse>
     ),
   });
 }
@@ -147,6 +152,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   wideScreen = true;
+  setNavigationCollapsed = vi.fn();
   paths = [];
   connectionKinds = [];
   connectionsForbidden = false;
@@ -259,6 +265,15 @@ describe('Chat list', () => {
       screen.getByRole('button', { name: 'Collapse inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('true');
     expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+  });
+
+  it('shows the main navigation as an icon rail while the Inbox is open', async () => {
+    respond(() => ok([sadia]));
+    const { unmount } = show();
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    expect(setNavigationCollapsed).toHaveBeenLastCalledWith(true);
+    unmount();
+    expect(setNavigationCollapsed).toHaveBeenLastCalledWith(false);
   });
 
   it('starts with the Inbox folders collapsed on a narrow screen', async () => {

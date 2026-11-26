@@ -25,10 +25,12 @@ export function CustomerPanel({
   const { data: session } = useSessionContext();
   const contact = useChatContact(conversation.contactId);
   return (
+    // Relative keeps the checkbox's hidden form input inside this scroll box; without it
+    // the input is placed against the page and makes the whole Inbox scroll.
     <aside
       aria-label="Customer"
       className={cn(
-        'col-start-1 row-start-2 min-h-0 min-w-0 flex-col overflow-y-auto border-border bg-surface lg:col-start-2 lg:border-l xl:col-start-3 xl:row-span-2 xl:row-start-1',
+        'relative col-start-1 row-start-2 min-h-0 min-w-0 flex-col overflow-y-auto border-border bg-surface lg:col-start-2 lg:border-l xl:col-start-3 xl:row-span-2 xl:row-start-1',
         query.panel ? 'flex' : 'hidden xl:flex',
       )}
     >
