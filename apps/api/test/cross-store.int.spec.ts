@@ -4121,11 +4121,17 @@ fixture('GET /conversations/counts', async () => {
   await enableChats(b);
   expect((await success(b, 'GET', '/conversations/counts', 200)).json()).toEqual({
     all: 1,
+    mine: 0,
+    unassigned: 1,
+    unreplied: 0,
+    ai_handling: 1,
+    order_request: 0,
+    not_customers: 0,
+    spam: 0,
+    unread: 0,
     needsYou: 0,
-    aiHandling: 1,
-    followUp: 0,
-    done: 0,
-    notCustomers: 0,
+    snoozed: 0,
+    resolved: 0,
   });
 });
 
