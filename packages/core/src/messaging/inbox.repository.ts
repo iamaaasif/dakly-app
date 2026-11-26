@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import type {
+  ConversationCountsResponse,
   ConversationListQuery,
   ConversationMessageListQuery,
   UpdateConversationInput,
@@ -14,6 +15,7 @@ import { contacts } from '@dakly/db/schema/contacts';
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { folderCondition, folderCounts, statusOfState } from './conversation-folders.repository';
 
 const fields = {
   id: conversations.id,
@@ -100,7 +102,7 @@ export class InboxRepository {
     return result.rows;
   }
 
-  list(storeId: string, query: ConversationListQuery, contactIds?: string[]) {
+  list(storeId: string, userId: string, query: ConversationListQuery, contactIds?: string[]) {
     const waitingLongest = query.sort === 'waiting';
     // Chats with no message sort last in both directions.
     const activityAt = sql`coalesce(${conversations.lastMessageAt}, ${waitingLongest ? sql`'infinity'` : sql`'-infinity'`}::timestamptz)`;
@@ -122,10 +124,9 @@ export class InboxRepository {
             eq(conversations.storeId, storeId),
             isNull(contacts.deletedAt),
             beforeCursor,
-            query.status ? eq(conversations.status, query.status) : undefined,
-            query.responder ? eq(conversations.responder, query.responder) : undefined,
+            query.folder ? folderCondition(query.folder, userId) : undefined,
+            query.state ? statusOfState[query.state] : undefined,
             query.channel ? eq(conversations.channel, query.channel) : undefined,
-            query.contactKind ? eq(contacts.kind, query.contactKind) : undefined,
             query.label ? sql`${query.label} = any(${contacts.tags})` : undefined,
             query.assigneeUserId
               ? eq(conversations.assigneeUserId, query.assigneeUserId)
@@ -142,17 +143,10 @@ export class InboxRepository {
     );
   }
 
-  async counts(storeId: string) {
+  async counts(storeId: string, userId: string): Promise<ConversationCountsResponse> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({
-          all: sql<number>`count(*)::int`,
-          needsYou: sql<number>`(count(*) filter (where ${conversations.status} = 'needs_you'))::int`,
-          aiHandling: sql<number>`(count(*) filter (where ${conversations.responder} = 'ai'))::int`,
-          followUp: sql<number>`(count(*) filter (where ${conversations.status} = 'later'))::int`,
-          done: sql<number>`(count(*) filter (where ${conversations.status} = 'done'))::int`,
-          notCustomers: sql<number>`(count(*) filter (where ${contacts.kind} = 'not_customer'))::int`,
-        })
+        .select(folderCounts(userId))
         .from(conversations)
         .innerJoin(
           contacts,

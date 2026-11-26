@@ -22,7 +22,7 @@ const people = [
   ['Habib Rahman', 'whatsapp', 'ai', 'later', 'Name Habib Rahman, address: House 12, Road 4', 1],
 ] as const;
 
-test('lists chats by tab and channel and shows the tab counts', async ({
+test('lists chats by folder, state and channel and shows the folder counts', async ({
   page,
   context,
   baseURL,
@@ -152,10 +152,13 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     // The folder column starts open only at 1,536px and wider.
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/chats');
-    await expect(page.getByRole('link', { name: /^All conversations\s*4$/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /^Needs you\s*1$/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /^AI handling\s*3$/ })).toBeVisible();
-    await expect(page.getByRole('link', { name: /^Follow up\s*1$/ })).toBeVisible();
+    // Habib's chat is snoozed, so All conversations counts the other three.
+    await expect(
+      page.getByRole('link', { name: /^All conversations\s*3\s*unread\s*3$/ }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: /^AI handling\s*2$/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Snoozed\s*1$/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Unassigned\s*3$/ })).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeVisible();
     await capture(page, 'all');
     // A mouse picks chats from the tick box that covers the avatar on hover.
@@ -165,14 +168,14 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await capture(page, 'bulk-select');
     await page.getByRole('button', { name: 'Cancel' }).click();
 
-    await page.getByRole('link', { name: /^Needs you/ }).click();
-    await expect(page).toHaveURL(/tab=needs-you/);
-    await expect(page.getByText('Mizan (Pathao rider)')).toBeVisible();
+    await page.getByRole('link', { name: /^Snoozed/ }).click();
+    await expect(page).toHaveURL(/state=snoozed/);
+    await expect(page.getByText('Habib Rahman')).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeHidden();
 
-    await page.getByRole('link', { name: /^All conversations\s*4$/ }).click();
-    // Wait for the tab to clear, or the Instagram link is clicked with the old tab still in it.
-    await expect(page).not.toHaveURL(/tab=/);
+    await page.getByRole('link', { name: /^All conversations/ }).click();
+    // Wait for the state to clear, or the Instagram link is clicked with the old state still in it.
+    await expect(page).not.toHaveURL(/state=/);
     await page.getByRole('button', { name: 'Channels' }).click();
     await page
       .getByRole('navigation', { name: 'Channel' })
@@ -199,7 +202,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     const expandedLeft = await chatList.evaluate((element) => element.getBoundingClientRect().left);
     await inboxToggle.click();
     await expect(inboxToggle).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.getByRole('navigation', { name: 'Chat tabs' })).toBeHidden();
+    await expect(page.getByRole('navigation', { name: 'Chat folders' })).toBeHidden();
     const controls = page.getByRole('group', { name: 'Inbox controls' });
     await expect(controls.getByRole('heading', { name: 'Inbox' })).toBeVisible();
     await expect(controls.getByRole('button', { name: 'Expand inbox folders' })).toBeFocused();
@@ -213,7 +216,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(replyBox).toHaveValue('Unsent reply');
     await inboxToggle.click();
     await expect(inboxToggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByRole('navigation', { name: 'Chat tabs' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Chat folders' })).toBeVisible();
     await replyBox.clear();
     await capture(page, 'thread');
     await expect(page.getByText('Dakly AI is handling this chat')).toBeVisible();
@@ -286,9 +289,9 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/chats');
 
-    await page.getByRole('searchbox', { name: 'Search chats' }).fill('Habib');
-    await expect(page).toHaveURL(/q=Habib/);
-    await expect(page.getByText('Habib Rahman', { exact: true })).toBeVisible();
+    await page.getByRole('searchbox', { name: 'Search chats' }).fill('Rumana');
+    await expect(page).toHaveURL(/q=Rumana/);
+    await expect(page.getByText('Rumana Akter', { exact: true })).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeHidden();
     await page.getByRole('button', { name: 'Filter' }).click();
     await expect(page.getByText('Assigned to')).toBeVisible();

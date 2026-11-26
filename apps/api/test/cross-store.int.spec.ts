@@ -4229,7 +4229,7 @@ fixture('GET /conversations', async () => {
   expect(result.json()).toMatchObject({ items: [{ id: own }], nextCursor: null });
   const second = await seedConversation(b);
   await success(b, 'PATCH', `/conversations/${own}`, 200, { status: 'later' });
-  expect((await success(b, 'GET', '/conversations?status=later', 200)).json()).toMatchObject({
+  expect((await success(b, 'GET', '/conversations?state=snoozed', 200)).json()).toMatchObject({
     items: [{ id: own, status: 'later' }],
     nextCursor: null,
   });

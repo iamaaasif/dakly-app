@@ -2,18 +2,13 @@ import { z } from 'zod';
 
 import { aiFeedbackFilters } from '@dakly/contracts/ai-feedback';
 import { chatChannels, type ChannelConnection } from '@dakly/contracts/channels';
-import type { ConversationListQuery } from '@dakly/contracts/chats';
+import {
+  conversationFolders,
+  conversationStates,
+  type ConversationListQuery,
+} from '@dakly/contracts/chats';
 
 import { agentTabs } from './agent-tabs';
-
-export const chatTabs = [
-  'all',
-  'needs-you',
-  'ai-handling',
-  'follow-up',
-  'done',
-  'not-customers',
-] as const;
 
 export const chatSorts = ['needs_you', 'unread', 'waiting'] as const;
 export const chatSortLabels: Record<(typeof chatSorts)[number], string> = {
@@ -22,13 +17,21 @@ export const chatSortLabels: Record<(typeof chatSorts)[number], string> = {
   waiting: 'Waiting longest',
 };
 
-export const chatTabLabels: Record<(typeof chatTabs)[number], string> = {
+export const chatFolderLabels: Record<(typeof conversationFolders)[number], string> = {
   all: 'All conversations',
-  'needs-you': 'Needs you',
-  'ai-handling': 'AI handling',
-  'follow-up': 'Follow up',
-  done: 'Done',
-  'not-customers': 'Not customers',
+  mine: 'Mine',
+  unassigned: 'Unassigned',
+  unreplied: 'Unreplied',
+  ai_handling: 'AI handling',
+  order_request: 'Order Request',
+  not_customers: 'Not customers',
+  spam: 'Spam',
+};
+
+export const chatStateLabels: Record<(typeof conversationStates)[number], string> = {
+  open: 'Open Chats',
+  snoozed: 'Snoozed',
+  resolved: 'Resolved',
 };
 
 // Comments are not a conversation channel: they have their own list, so the filter adds them here.
@@ -60,7 +63,8 @@ export function connectedScreenChannels(
 }
 
 export const chatScreenQuerySchema = z.strictObject({
-  tab: z.enum(chatTabs).default('all'),
+  folder: z.enum(conversationFolders).default('all'),
+  state: z.enum(conversationStates).default('open'),
   channel: z.enum(chatScreenChannels).optional(),
   sort: z.enum(chatSorts).default('needs_you'),
   // The list's search words; a name, a phone number or the start of one.
@@ -82,18 +86,10 @@ export const chatScreenQuerySchema = z.strictObject({
 
 export type ChatScreenQuery = z.infer<typeof chatScreenQuerySchema>;
 
-const tabFilters: Record<ChatScreenQuery['tab'], Partial<ConversationListQuery>> = {
-  all: {},
-  'needs-you': { status: 'needs_you' },
-  'ai-handling': { responder: 'ai' },
-  'follow-up': { status: 'later' },
-  done: { status: 'done' },
-  'not-customers': { contactKind: 'not_customer' },
-};
-
 export function conversationFilters(query: ChatScreenQuery): Partial<ConversationListQuery> {
   return {
-    ...tabFilters[query.tab],
+    folder: query.folder,
+    state: query.state,
     channel: query.channel === 'comments' ? undefined : query.channel,
     sort: query.sort,
     q: canSearch(query.q) ? query.q : undefined,
@@ -107,9 +103,15 @@ export function canSearch(words: string | undefined): words is string {
   return Boolean(words && (words.length >= 3 || /^\d+$/.test(words)));
 }
 
+// Default values stay out of the address.
+function unlessDefault<Value extends string>(value: Value | undefined, fallback: Value) {
+  return value === fallback ? undefined : value;
+}
+
 export function chatsHref(query: Partial<ChatScreenQuery>) {
   const entries: [string, string | undefined][] = [
-    ['tab', query.tab === 'all' ? undefined : query.tab],
+    ['folder', unlessDefault(query.folder, 'all')],
+    ['state', unlessDefault(query.state, 'open')],
     ['channel', query.channel],
     ['sort', query.sort === 'needs_you' ? undefined : query.sort],
     ['q', query.q],

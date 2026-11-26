@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { chatChannels } from './channels';
-import { contactKinds } from './contacts';
 import { searchText } from './search-text';
 
 export const conversationStatuses = ['open', 'needs_you', 'later', 'done'] as const;
@@ -156,6 +155,19 @@ export const conversationMessageListQuerySchema = z.strictObject({
 });
 
 export const conversationSorts = ['recent', 'needs_you', 'unread', 'waiting'] as const;
+// The Inbox folders. Snoozed and Resolved are states, not folders: see conversationStates.
+export const conversationFolders = [
+  'all',
+  'mine',
+  'unassigned',
+  'unreplied',
+  'ai_handling',
+  'order_request',
+  'not_customers',
+  'spam',
+] as const;
+// Open covers needs_you, Snoozed is later and Resolved is done.
+export const conversationStates = ['open', 'snoozed', 'resolved'] as const;
 const conversationCursorSchema = z.union([
   messageCursorSchema,
   z.templateLiteral(['none_', z.uuid()]),
@@ -172,9 +184,8 @@ export const conversationListQuerySchema = conversationMessageListQuerySchema.ex
   sort: z.enum(conversationSorts).default('recent'),
   // A name, a full phone number, or the start of a number for members who see full phones.
   q: z.string().trim().min(1).max(120).optional(),
-  contactKind: z.enum(contactKinds).optional(),
-  status: z.enum(conversationStatuses).optional(),
-  responder: z.enum(conversationResponders).optional(),
+  folder: z.enum(conversationFolders).optional(),
+  state: z.enum(conversationStates).optional(),
   channel: z.enum(chatChannels).optional(),
   assigneeUserId: z.uuid().optional(),
   label: labelText.optional(),
@@ -248,13 +259,12 @@ export type ConversationMessageResponse = {
   sentAt: string | null;
 };
 
-export type ConversationCountsResponse = {
-  all: number;
+// Folder counts are of open chats; the rest count All conversations. The dashboard reads needsYou.
+export type ConversationCountsResponse = Record<(typeof conversationFolders)[number], number> & {
+  unread: number;
   needsYou: number;
-  aiHandling: number;
-  followUp: number;
-  done: number;
-  notCustomers: number;
+  snoozed: number;
+  resolved: number;
 };
 
 export type ConversationAssigneeResponse = { userId: string; name: string };
