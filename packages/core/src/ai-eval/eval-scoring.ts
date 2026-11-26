@@ -127,7 +127,13 @@ function offersOutOfStock({ golden, outcome }: Scored) {
   if (outcome.kind !== 'reply' || !golden.neverOffer?.length) return false;
   const terms = golden.neverOffer.map(termPattern);
   return outcome.text.split(clauseBreak).some((clause) => {
-    if (clarificationQuestion.test(clause.trim()) && !inStockPhrase.test(clause)) return false;
+    const text = clause.trim();
+    if (
+      customerSize.test(text) ||
+      (clarificationQuestion.test(text) && !inStockPhrase.test(text))
+    ) {
+      return false;
+    }
     return terms.some((term) => offersTerm(clause, term, golden.mentionsAnyOf ?? []));
   });
 }
@@ -136,6 +142,10 @@ function offersTerm(clause: string, term: RegExp, expectedTerms: readonly string
   const mentions = [...clause.matchAll(term)];
   const stockPhrases = [...clause.matchAll(stockWording)];
   return mentions.some((mention, index) => {
+    const before = clause.slice(0, mention.index);
+    if (availabilityHeading.test(before) && before.lastIndexOf('(') <= before.lastIndexOf(')')) {
+      return true;
+    }
     const nextMention = mentions[index + 1]?.index ?? clause.length;
     const following = stockPhrases.filter(
       (phrase) =>
@@ -152,21 +162,31 @@ function offersTerm(clause: string, term: RegExp, expectedTerms: readonly string
       if (!earlierWording) return true;
       // In "XL নেই M ও L আছে", the two stock phrases describe different sizes.
       const subject = clause.slice(earlierWording.index + earlierWording[0].length, wording.index);
-      return !sizeLabel.test(subject) && !mentionsAny(subject, expectedTerms);
+      return (
+        sameItemReference.test(subject) ||
+        (!sizeLabel.test(subject) && !mentionsAny(subject, expectedTerms))
+      );
     });
   });
 }
 
 const sizeLabel = /(?<![\p{L}\p{M}\p{N}])(?:XS|S|M|L|X+L)(?![\p{L}\p{M}\p{N}])/iu;
+const customerSize = new RegExp(
+  `^(?:আপনার\\s+(?:মাপ|সাইজ)|apnar\\s+(?:map|size)|your\\s+size\\s+is)\\s+${sizeLabel.source}$`,
+  'iu',
+);
 const clauseBreak = /[।.!,;—–\n]|(?<=\?)|\s(?:তবে|কিন্তু|but|kintu|tobe)\s/iu;
 const clarificationQuestion =
   /^(?:(?:apni\s+)?kon\s+[\p{L}\p{M}\s-]+\s+kotha\s+bolchen|(?:আপনি\s+)?কোন\s+[\p{L}\p{M}\s-]+\s+কথা\s+বলছেন|which\s+[\p{L}\p{M}\s-]+\s+do\s+you\s+mean)\s*\?$/iu;
 const outOfStockPhrase =
   /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\b(?:nei|nai|out of stock|sold out|unavailable|not (?:currently )?(?:in stock|available))\b/iu;
 const restockNotice =
-  /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|\b(?:stock\s*-?\s*e|restock)\s*(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
+  /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|রিস্টক\s+হলে|\b(?:stock\s*-?\s*e|restock)\s*(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
 const recalledPreference = /মনে\s+আছে|\bmone\s+ache\b/iu;
 const inStockPhrase = /আছে|\b(?:ache|in stock|available)\b/iu;
+const availabilityHeading = /^\s*(?:(?:now|currently)\s+)?(?:available|in stock)(?:\s+now)?\s*:/iu;
+const sameItemReference =
+  /\b(?:have|offer)\s+(?:it|this one|that one)\b|(?<![\p{L}\p{M}])(?:এটা|ওটা|সেটা)(?:ও|ই)?(?:\s+(?:এখন|স্টকে))*\s*$/iu;
 const stockWording = new RegExp(
   `${outOfStockPhrase.source}|${restockNotice.source}|${recalledPreference.source}|(?<inStock>${inStockPhrase.source})`,
   'giu',
