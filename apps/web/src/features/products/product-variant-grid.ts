@@ -14,16 +14,24 @@ export const colourSuggestions = [
   'Blue',
   'Green',
   'Grey',
+  'Silver',
   'Navy',
   'Pink',
   'Brown',
   'Yellow',
 ];
 
+export function optionNameKey(name: string) {
+  const key = name.trim().toLowerCase();
+  return key === 'colour' ? 'color' : key;
+}
+
 export function valueSuggestions(optionName: string): string[] {
-  const name = optionName.trim().toLowerCase();
-  if (name === 'size') return sizeSuggestions;
-  return name === 'colour' || name === 'color' ? colourSuggestions : [];
+  const name = optionNameKey(optionName);
+  if (name === 'size') return ['XS', ...sizeSuggestions, 'XXXL'];
+  if (name === 'material')
+    return ['Cotton', 'Linen', 'Polyester', 'Wool', 'Silk', 'Denim', 'Leather'];
+  return name === 'color' ? colourSuggestions : [];
 }
 
 // Rows keep their option values by option position, so renaming an option changes nothing.
@@ -105,6 +113,26 @@ export function applyOptions(
     )
     .map((values) => blankVariant(next, values, kept[0] ?? variants[0]));
   return sortRows(next, [...kept, ...added]).slice(0, MAX_VARIANTS);
+}
+
+export function moveOption(
+  options: GridOption[],
+  variants: GridVariant[],
+  { from, to }: { from: number; to: number },
+) {
+  const positions = options.map((_, position) => position);
+  positions.splice(to, 0, positions.splice(from, 1)[0]!);
+  const ordered = positions.map((position) => options[position]!);
+  const rows = variants.map((variant) => ({
+    ...variant,
+    optionValues: Object.fromEntries(
+      positions.flatMap((previous, position) => {
+        const value = valueAt(variant, previous);
+        return value === undefined ? [] : [[position, value]];
+      }),
+    ),
+  }));
+  return { options: ordered, variants: sortRows(ordered, rows) };
 }
 
 export function removeOptionAt(
@@ -210,9 +238,8 @@ export function cleanPastedNumber(cell: string): string {
 export function withSuggestions(options: GridOption[], suggested: GridOption[]): GridOption[] {
   const next = options.map((option) => ({ ...option, values: [...option.values] }));
   for (const suggestion of suggested) {
-    const match = next.find(
-      (option) => option.name.trim().toLowerCase() === suggestion.name.toLowerCase(),
-    );
+    const key = optionNameKey(suggestion.name);
+    const match = next.find((option) => optionNameKey(option.name) === key);
     if (match) {
       const known = new Set(match.values.map((value) => value.toLowerCase()));
       match.values.push(...suggestion.values.filter((value) => !known.has(value.toLowerCase())));

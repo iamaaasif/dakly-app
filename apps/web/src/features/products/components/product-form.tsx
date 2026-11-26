@@ -60,6 +60,7 @@ type ProductFormProps = {
 };
 
 export function ProductForm({ product, initial, assistantDraft, onSaved, page }: ProductFormProps) {
+  const [editingOption, setEditingOption] = useState(false);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(page ? pageFormSchema : productFormSchema),
     defaultValues: {
@@ -78,7 +79,9 @@ export function ProductForm({ product, initial, assistantDraft, onSaved, page }:
   const actions = (
     <ProductFormActions
       isPending={isPending}
-      canSave={(!product || isDirty) && !errors.weightGrams}
+      editingOption={editingOption}
+      isDirty={isDirty}
+      invalidWeight={Boolean(errors.weightGrams)}
       product={product}
       cancelHref={page?.backHref}
     />
@@ -99,6 +102,7 @@ export function ProductForm({ product, initial, assistantDraft, onSaved, page }:
             actions={actions}
             serverError={errorMessage}
             product={product}
+            onOptionDraftChange={setEditingOption}
           />
         ) : (
           <ProductFormFields product={product}>
@@ -204,12 +208,21 @@ function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
 
 type ProductFormActionsProps = {
   isPending: boolean;
-  canSave: boolean;
+  editingOption: boolean;
+  isDirty: boolean;
+  invalidWeight: boolean;
   product?: ProductResponse;
   cancelHref?: string;
 };
 
-function ProductFormActions({ isPending, canSave, product, cancelHref }: ProductFormActionsProps) {
+function ProductFormActions({
+  isPending,
+  editingOption,
+  isDirty,
+  invalidWeight,
+  product,
+  cancelHref,
+}: ProductFormActionsProps) {
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {cancelHref ? (
@@ -217,7 +230,11 @@ function ProductFormActions({ isPending, canSave, product, cancelHref }: Product
           Cancel
         </Link>
       ) : null}
-      <Button type="submit" loading={isPending} disabled={!canSave}>
+      <Button
+        type="submit"
+        loading={isPending}
+        disabled={editingOption || invalidWeight || (Boolean(product) && !isDirty)}
+      >
         {product ? 'Save' : 'Create'}
       </Button>
     </div>
