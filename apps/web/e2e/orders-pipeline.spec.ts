@@ -224,6 +224,8 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await page.keyboard.press('Tab');
     await expect(content).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(detail.getByRole('link', { name: 'Print invoice' })).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(detail.getByRole('button', { name: 'Cancel order' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(detail.getByRole('button', { name: 'More' })).toBeFocused();
