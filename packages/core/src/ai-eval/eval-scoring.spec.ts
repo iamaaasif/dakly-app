@@ -317,7 +317,12 @@ describe('ad context set', () => {
 });
 
 describe('out-of-stock offers', () => {
-  const cases = [...longChatGoldenCases, ...adContextGoldenCases, ...banglaGoldenCases];
+  const cases = [
+    ...longChatGoldenCases,
+    ...adContextGoldenCases,
+    ...banglaGoldenCases,
+    ...chatMemoryGoldenCases,
+  ];
   const score = (id: string, text: string) =>
     scoreEval([cases.find((candidate) => candidate.id === id)!], { [id]: { kind: 'reply', text } });
 
@@ -341,6 +346,14 @@ describe('out-of-stock offers', () => {
     ],
     ['long-chat-spam-between-bn', 'পোলো XL নেই এটার বদলে M আছে।'],
     ['long-chat-size-banglish', 'Polo XL is not in stock. M and L are available.'],
+    [
+      'chat-memory-other-channel-stock-banglish',
+      'Polo XL ekhon stock-e nei. M o L size ache, dam ৳650',
+    ],
+    [
+      'chat-memory-other-channel-stock-banglish',
+      'Polo XL ekhon stock-e nei M o L size ache, dam ৳650',
+    ],
     ['long-chat-size-banglish', 'Available now: Polo M (XL sold out).'],
     ['long-chat-size-banglish', 'Polo XL (sold out).'],
     ['long-chat-size-banglish', 'Polo XL is sold out and I have M in stock.'],
@@ -357,6 +370,10 @@ describe('out-of-stock offers', () => {
 
   it.each([
     ['long-chat-size-banglish', 'Polo XL and L are available, 650 taka.'],
+    [
+      'chat-memory-other-channel-stock-banglish',
+      'Polo XL ekhon stock-e ache. M o L size ache, dam ৳650',
+    ],
     ['long-chat-size-banglish', 'Polo XL, 650 taka.'],
     ['long-chat-size-banglish', 'Polo XL is 650 taka (M restock hole janabo).'],
     ['long-chat-size-banglish', 'Polo XL is 650 taka M restock hole janabo.'],
