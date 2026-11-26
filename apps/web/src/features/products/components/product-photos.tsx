@@ -23,8 +23,9 @@ type ProductPhotosProps = {
   // Photos of one variant; without it the product's own photos are shown.
   variant?: Pick<ProductVariantResponse, 'id' | 'title' | 'photos'>;
   readOnly?: boolean;
+  onVersion?: (version: number) => void;
 };
-export function ProductPhotos({ product, variant, readOnly }: ProductPhotosProps) {
+export function ProductPhotos({ product, variant, readOnly, onVersion }: ProductPhotosProps) {
   const { data } = useSessionContext();
   const scope = variant
     ? {
@@ -50,7 +51,7 @@ export function ProductPhotos({ product, variant, readOnly }: ProductPhotosProps
         </span>
       </div>
       {!readOnly && data?.currentStore?.canEditProducts ? (
-        <EditablePhotos scope={scope} />
+        <EditablePhotos scope={scope} onVersion={onVersion} />
       ) : (
         <PhotoList scope={scope} />
       )}
@@ -71,10 +72,12 @@ type PhotoScope = {
   photos: ProductResponse['photos'];
 };
 
-function EditablePhotos({ scope }: { scope: PhotoScope }) {
-  const upload = useUploadProductPhoto(scope.id, scope.variantId);
-  const reorder = useReorderProductPhotos(scope.id, scope.variantId);
-  const remove = useRemoveProductPhoto(scope.id, scope.variantId);
+type EditablePhotosProps = { scope: PhotoScope; onVersion?: ProductPhotosProps['onVersion'] };
+
+function EditablePhotos({ scope, onVersion }: EditablePhotosProps) {
+  const upload = useUploadProductPhoto(scope.id, scope.variantId, onVersion);
+  const reorder = useReorderProductPhotos(scope.id, scope.variantId, onVersion);
+  const remove = useRemoveProductPhoto(scope.id, scope.variantId, onVersion);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const chooser = useRef<HTMLInputElement>(null);
   const removeOpener = useRef<HTMLButtonElement>(null);

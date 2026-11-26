@@ -16,6 +16,7 @@ import { ChangeStockDialog } from './change-stock-dialog';
 import { ProductActionsMenu } from './product-actions-menu';
 import { ProductChatPreview } from './product-chat-preview';
 import { ProductForm } from './product-form';
+import { ProductSaveError } from './product-form-layout';
 import { ProductPhotos } from './product-photos';
 import { ProductReadiness } from './product-readiness';
 import { ProductStatusField } from './product-status-field';
@@ -74,27 +75,28 @@ function NewProductForm({ initial, assistantDraft, duplicateSource }: NewProduct
 }
 
 export function EditProductPage({ productId }: { productId: string }) {
-  const { data, error, isPending, refetch } = useGetProduct(productId);
+  const { data, error, refetch } = useGetProduct(productId);
   const [saves, setSaves] = useState(0);
+  const [reloadError, setReloadError] = useState<Error | null>(null);
   const { data: session } = useSessionContext();
-  if (error)
+  if (!data && error)
     return (
       <div className="p-6">
         <QueryError message={error.message} onRetry={() => refetch()} retryLabel="Retry product" />
       </div>
     );
-  if (isPending) return <ProductsLoading />;
-  // A refresh that only reorders variants must keep the editor mounted.
-  const stock = data.variants.map(({ id, onHand }) => `${id}:${onHand}`).sort();
+  if (!data) return <ProductsLoading />;
   // After a save the form starts again from what the server holds, so new rows have their ids.
   return (
     <LoadedProductPage
-      key={`${data.id}:${saves}:${stock.join(',')}`}
+      key={`${data.id}:${saves}`}
       product={data}
+      reloadError={reloadError}
       readOnly={!session?.currentStore?.canEditProducts}
-      onSaved={async () => {
-        await refetch();
-        setSaves((count) => count + 1);
+      onReload={async () => {
+        const next = await refetch();
+        setReloadError(next.error);
+        if (next.isSuccess) setSaves((count) => count + 1);
       }}
     />
   );
@@ -103,27 +105,38 @@ export function EditProductPage({ productId }: { productId: string }) {
 type LoadedProductPageProps = {
   product: ProductResponse;
   readOnly: boolean;
-  onSaved: () => Promise<void>;
+  onReload: () => Promise<void>;
+  reloadError: Error | null;
 };
 
-function LoadedProductPage({ product, readOnly, onSaved }: LoadedProductPageProps) {
+function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedProductPageProps) {
   const router = useRouter();
+  const stock = stockKey(product);
+  const [loaded, setLoaded] = useState({ version: product.version, stock });
+  // Stock updates can refresh the form while this is still the version it loaded.
+  if (product.version === loaded.version && stock !== loaded.stock) setLoaded({ ...loaded, stock });
+  const acceptVersion = (saved: ProductResponse) =>
+    setLoaded({ version: saved.version, stock: stockKey(saved) });
+  const acceptLocalVersion = (version: number) =>
+    setLoaded((previous) =>
+      version === previous.version + 1 ? { ...previous, version } : previous,
+    );
   return (
     <ProductForm
+      key={loaded.stock}
       product={product}
-      onSaved={(_saved, failedStock) => {
-        if (!failedStock.length) void onSaved();
+      expectedVersion={loaded.version}
+      onReload={onReload}
+      onSaved={(saved, failedStock) => {
+        acceptVersion(saved);
+        if (!failedStock.length) void onReload();
       }}
       page={{
         title: product.name,
         backHref: '/products',
-        photos: <ProductPhotos product={product} />,
+        photos: <ProductPhotos product={product} onVersion={acceptLocalVersion} />,
         readOnly,
-        notice: readOnly ? (
-          <p role="status" className="text-sm text-text-muted">
-            You can view products but not edit them.
-          </p>
-        ) : undefined,
+        notice: <ProductPageNotice readOnly={readOnly} reloadError={reloadError} />,
         status: (
           <>
             {readOnly ? null : (
@@ -134,13 +147,41 @@ function LoadedProductPage({ product, readOnly, onSaved }: LoadedProductPageProp
                 />
               </div>
             )}
-            <StatusCard product={product} readOnly={readOnly} />
+            <StatusCard
+              product={product}
+              readOnly={readOnly}
+              onStatusSaved={(saved) => acceptLocalVersion(saved.version)}
+            />
           </>
         ),
         preview: <ProductChatPreview product={product} />,
       }}
     />
   );
+}
+
+function ProductPageNotice({
+  readOnly,
+  reloadError,
+}: Pick<LoadedProductPageProps, 'readOnly' | 'reloadError'>) {
+  if (reloadError)
+    return (
+      <p role="alert" className="text-danger">
+        {reloadError.message}
+      </p>
+    );
+  return readOnly ? (
+    <p role="status" className="text-sm text-text-muted">
+      You can view products but not edit them.
+    </p>
+  ) : null;
+}
+
+function stockKey(product: ProductResponse) {
+  return product.variants
+    .map(({ id, onHand }) => `${id}:${onHand}`)
+    .sort()
+    .join(',');
 }
 
 function AssistantNotice({ draft }: { draft: AssistantProductDraft }) {
@@ -153,10 +194,14 @@ function AssistantNotice({ draft }: { draft: AssistantProductDraft }) {
   );
 }
 
-type StatusCardProps = { product?: ProductResponse; readOnly?: boolean };
+type StatusCardProps = {
+  product?: ProductResponse;
+  readOnly?: boolean;
+  onStatusSaved?: (product: ProductResponse) => void;
+};
 
-function StatusCard({ product, readOnly }: StatusCardProps) {
-  const change = useChangeProduct(product?.id ?? '');
+function StatusCard({ product, readOnly, onStatusSaved }: StatusCardProps) {
+  const change = useChangeProduct(product?.id ?? '', onStatusSaved);
   const [changingStock, setChangingStock] = useState(false);
   return (
     <Card className="space-y-3">
@@ -176,11 +221,7 @@ function StatusCard({ product, readOnly }: StatusCardProps) {
           {changingStock ? (
             <ChangeStockDialog product={product} onClose={() => setChangingStock(false)} />
           ) : null}
-          {change.error ? (
-            <p role="alert" className="text-danger">
-              {change.error.message}
-            </p>
-          ) : null}
+          <ProductSaveError error={change.error} />
         </>
       ) : null}
     </Card>

@@ -13,19 +13,15 @@ export class ProductOrderVariantsRepository {
     const [product] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
+          version: products.version,
+          status: products.status,
           pricePoisha: products.pricePoisha,
           negotiationEnabled: products.negotiationEnabled,
           negotiationOpeningPoisha: products.negotiationOpeningPoisha,
           negotiationFloorPoisha: products.negotiationFloorPoisha,
         })
         .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            eq(products.id, productId),
-            ne(products.status, 'archived'),
-          ),
-        )
+        .where(and(eq(products.storeId, storeId), eq(products.id, productId)))
         .for('no key update'),
     );
     return product;
@@ -34,14 +30,21 @@ export class ProductOrderVariantsRepository {
   lockArchiveVariants(storeId: string, productId: string) {
     return this.database.forStore(storeId, async (tx) => {
       // Product edits already lock the product before changing its variants.
-      if (!(await this.lockProduct(storeId, productId))) return null;
+      const product = await this.lockProduct(storeId, productId);
+      if (!product) return null;
+      if (product.status === 'archived')
+        return { version: product.version, status: product.status, variantIds: [] };
       const variants = await tx
         .select({ id: productVariants.id })
         .from(productVariants)
         .where(and(eq(productVariants.storeId, storeId), eq(productVariants.productId, productId)))
         .orderBy(productVariants.id)
         .for('no key update');
-      return variants.map(({ id }) => id);
+      return {
+        variantIds: variants.map(({ id }) => id),
+        version: product.version,
+        status: product.status,
+      };
     });
   }
 

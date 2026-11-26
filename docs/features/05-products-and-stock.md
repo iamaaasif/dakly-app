@@ -159,6 +159,10 @@ Built for the variants grid (part 2, API): saving a product with fewer variants 
 - On a phone, tap a variant's name, price and stock row to open its sheet. The bulk bar stays on the page, and the Save bar sticks to the bottom. Members with view permission can change the grouping and open a read-only sheet.
 - A readiness line shows what the AI still lacks (photo, price, description).
 
+### Saving a product changed by someone else (PROD-19)
+
+An edit sends the version the page loaded. If the product changed in the meantime, the page keeps the typed values and says “This product changed since you opened it.” Reload fetches the saved product and resets the form. The API returns `PRODUCT_CHANGED` with status 409 when the optional `expectedVersion` on `PATCH /products/:productId` differs from the saved version. Every update to the product row increments the version.
+
 ### Price negotiation settings (PROD-18)
 
 Members with Edit Products can switch on **Let the AI negotiate** in the Price card. The **Opening offer** must be below the selling price, and the **Lowest price** can equal the opening offer. A lowest price below a variant's cost shows a warning and can still be saved. Products whose variants all inherit the selling price can use these settings. The switch is off for existing and new products by default.

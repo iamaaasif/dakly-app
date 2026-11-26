@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0107_snapshot.json`: **110 tables, 1450 columns, 438 explicit indexes and 340 foreign keys**.
+Built from `packages/db/migrations/meta/0108_snapshot.json`: **110 tables, 1451 columns, 438 explicit indexes and 340 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1007,6 +1007,7 @@ erDiagram
         text embedding_model "NULL; text"
         text search_text_hash "NULL; text"
         text external_ref "NULL; text"
+        integer version "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
     }

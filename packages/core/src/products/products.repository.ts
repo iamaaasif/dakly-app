@@ -28,6 +28,7 @@ const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.iden
 
 const productColumns = {
   id: products.id,
+  version: products.version,
   name: products.name,
   description: products.description,
   categoryId: products.categoryId,
@@ -80,6 +81,7 @@ type PhotoWrite = ConfirmProductPhotoInput & {
 type ProductDetails = Omit<CreateProductInput, 'variants'>;
 export type Product = ProductDetails & {
   id: string;
+  version: number;
   category: string | null;
   brand: string | null;
   imageFileIds: string[];
