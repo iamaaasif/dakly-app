@@ -44,6 +44,7 @@ function useKeySet() {
 
 function useVariantEdits() {
   const form = useFormContext<ProductFormValues>();
+  const [regularPrice, sellPrice] = form.watch(['pricePoisha', 'compareAtPricePoisha']);
   const { options, variants } = useGridOptions();
   const setVariants = (next: GridVariant[]) => form.setValue('variants', next, dirty);
   const setWhere = (
@@ -83,13 +84,13 @@ function useVariantEdits() {
     setWhere,
     paste,
     showStock: form.watch('isStockTracked') !== false,
-    productPrice: String(form.watch('pricePoisha') ?? ''),
+    productPrice: String(sellPrice || regularPrice || ''),
   };
 }
 
-type ProductVariantTableProps = { product?: ProductResponse };
+type ProductVariantTableProps = { product?: ProductResponse; readOnly?: boolean };
 
-export function ProductVariantTable({ product }: ProductVariantTableProps) {
+export function ProductVariantTable({ product, readOnly }: ProductVariantTableProps) {
   const edits = useVariantEdits();
   const { options, variants, showStock, setVariants, setWhere } = edits;
   const selected = useKeySet();
@@ -136,7 +137,7 @@ export function ProductVariantTable({ product }: ProductVariantTableProps) {
                 saved={product?.variants.find(({ id }) => id === variant.id)}
                 showStock={showStock}
                 selected={selected.keys.has(rowKey(variant))}
-                open={open.keys.has(rowKey(variant))}
+                open={Boolean(readOnly) || open.keys.has(rowKey(variant))}
                 onSelect={(on) => selected.set(rowKey(variant), on)}
                 onToggle={() => open.set(rowKey(variant), !open.keys.has(rowKey(variant)))}
                 onChange={(field, value) => setWhere((_, at) => at === index, field, value)}

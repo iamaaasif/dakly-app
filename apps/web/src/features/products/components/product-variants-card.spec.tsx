@@ -91,9 +91,10 @@ describe('Variants card', () => {
   it('shows plain stock, code and warn-at fields while a product has no options', () => {
     show(saved);
     const card = screen.getByRole('heading', { name: 'Variants' }).parentElement!;
-    expect((within(card).getByLabelText('Stock') as HTMLInputElement).value).toBe('12');
-    expect((within(card).getByLabelText(/Product code/) as HTMLInputElement).value).toBe('TS-1');
-    expect(within(card).getByLabelText(/Warn me when stock is at/)).toBeTruthy();
+    const inventory = screen.getByRole('heading', { name: 'Inventory' }).parentElement!;
+    expect(within(inventory).getByLabelText<HTMLInputElement>('Available stock').value).toBe('12');
+    expect(within(inventory).getByLabelText<HTMLInputElement>('Product code').value).toBe('TS-1');
+    expect(within(inventory).getByLabelText('Low stock warning')).toBeTruthy();
     expect(within(card).getByRole('button', { name: 'Add options' })).toBeTruthy();
     expect(within(card).getByRole('button', { name: /Suggest options/ })).toBeTruthy();
     expect(screen.queryByRole('table')).toBeNull();
@@ -197,10 +198,10 @@ describe('Variants card', () => {
       return Response.json(saved, { headers: { 'x-session-context': 'verified' } });
     });
     show(saved);
-    const stock = screen.getByLabelText('Stock');
+    const stock = screen.getByLabelText('Available stock');
     await userEvent.clear(stock);
     await userEvent.type(stock, '9');
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await userEvent.type(await screen.findByLabelText('Reason'), 'Counted the shelf');
     await userEvent.click(screen.getByRole('button', { name: 'Save with this reason' }));
     await waitFor(() => expect(calls).toHaveLength(2));

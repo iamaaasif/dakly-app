@@ -85,6 +85,8 @@ A new look for the full product page that PROD-11 already built (`/products/new`
 
 3.11 **Copy.** Use "No products yet" and "Products you add show here, and Dakly uses them to answer chats and take orders." Fix "bellow" to "below" and "Threashold" to "Low stock warning". Fix "This is user help text..." placeholders as well. Labels follow the glossary.
 
+3.12 **Product version check.** A product version check on save is a separate API task. See the [backend todo list](../development/frontend-polish-backend-todo.md).
+
 ## 4. Kept from today (must stay on the page)
 
 These are not in the design, but the feature doc requires them:
@@ -99,8 +101,6 @@ These are not in the design, but the feature doc requires them:
 - Quick add modal.
 - Edit mode: the product name as the title, Save, Hide or Show.
 - Read-only page for members without Edit Products.
-- "Changed since you opened it" on save.
-- Unsaved-changes guard.
 - Write with AI.
 - The Ask Dakly draft fill.
 

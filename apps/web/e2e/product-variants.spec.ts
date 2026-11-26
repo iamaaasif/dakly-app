@@ -78,10 +78,10 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     expect(activated.status()).toBe(204);
 
     await page.goto('/products/new');
-    await page.getByLabel('Name', { exact: true }).fill(name);
-    await page.getByLabel('Selling price ৳', { exact: true }).fill('1200');
-    await page.getByLabel('Your cost ৳', { exact: true }).fill('650');
-    await page.getByLabel('Stock', { exact: true }).fill('12');
+    await page.getByLabel('Product name', { exact: true }).fill(name);
+    await page.getByLabel('Regular price ৳', { exact: true }).fill('1200');
+    await page.getByLabel('Product cost ৳', { exact: true }).fill('650');
+    await page.getByLabel('Available stock', { exact: true }).fill('12');
     await page.getByLabel('Product code').fill('UT-TS-01');
     await expect(page.getByText('Profit')).toBeVisible();
     await capture('no-options');
@@ -120,7 +120,7 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
         response.request().method() === 'POST' &&
         response.status() === 201,
     );
-    await page.getByRole('button', { name: 'Save as hidden', exact: true }).click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
     productId = ((await (await created).json()) as ProductResponse).id;
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
     await expect(page.getByLabel('Stock for Black / S')).toHaveValue('12');
@@ -129,7 +129,7 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     expect(first.variants.find(({ title }) => title === 'Black / M')?.onHand).toBe(20);
 
     await page.getByLabel('Stock for Black / S').fill('9');
-    await page.getByRole('button', { name: 'Save product', exact: true }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Why did the stock change?' })).toBeVisible();
     await capture('stock-reason');
     await page.getByLabel('Reason').fill('Counted the shelf');

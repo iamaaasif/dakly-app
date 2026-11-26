@@ -69,14 +69,14 @@ test('creates a product on its page, manages photos, edits it and changes stock'
       204,
     );
     await page.goto('/products/new');
-    await page.getByLabel('Name', { exact: true }).fill(name);
+    await page.getByLabel('Product name', { exact: true }).fill(name);
     const createdResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/products') &&
         response.request().method() === 'POST' &&
         response.status() === 201,
     );
-    await page.getByRole('button', { name: 'Save as hidden', exact: true }).click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
     const created = (await (await createdResponse).json()) as ProductResponse;
     productId = created.id;
     expect(created.status).toBe('hidden');
@@ -137,11 +137,11 @@ test('creates a product on its page, manages photos, edits it and changes stock'
     await changeStockOnPage('-1', 'Damaged');
     await expect.poll(async () => (await saved()).variants[0]!.onHand).toBe(2);
 
-    await page.getByLabel('Selling price ৳', { exact: true }).fill('2450.50');
+    await page.getByLabel('Regular price ৳', { exact: true }).fill('2450.50');
     await page.getByLabel('Description', { exact: true }).fill('Cotton fabric with a regular fit.');
     await page.getByLabel('Other names', { exact: true }).fill('স্কার্ফ\nScarf');
-    await page.getByRole('button', { name: 'Save product', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Save product', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     const changed = await saved();
     expect(changed.status).toBe('hidden');
     expect(changed.pricePoisha).toBe(245050);

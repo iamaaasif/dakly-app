@@ -18,11 +18,11 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
     storeIds: [string, string];
   };
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-11-page');
+  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-17-1');
   const name = 'Cotton shirt page fixture';
   let productId: string | undefined;
   // CI keeps only e2e-artifacts, so each screenshot is also written there.
-  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-11-page');
+  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-17-1');
   await mkdir(evidence, { recursive: true });
   await mkdir(ciCopy, { recursive: true });
   await context.addCookies([
@@ -34,6 +34,7 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.mouse.move(width - 1, height - 1);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -56,8 +57,13 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
     await page.getByRole('button', { name: /More details/ }).click();
     await expect(page).toHaveURL(/\/products\/new$/);
     await expect(page.getByRole('heading', { name: 'New product', exact: true })).toBeVisible();
-    await expect(page.getByText('Save the product to add photos.')).toBeVisible();
-    await page.getByLabel('Name', { exact: true }).fill(name);
+    await expect(page.getByText('Create the product to add photos.')).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Status' })).toHaveText('Hidden');
+    await page.getByLabel('Product name', { exact: true }).fill(name);
+    await page.getByLabel('Regular price ৳', { exact: true }).fill('600');
+    await page.getByLabel('Sell price ৳', { exact: true }).fill('400');
+    await page.getByLabel('Product cost ৳', { exact: true }).fill('260');
+    await expect(page.getByText('35%')).toBeVisible();
     await capture('new');
 
     const created = page.waitForResponse(
@@ -66,13 +72,19 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
         response.request().method() === 'POST' &&
         response.status() === 201,
     );
-    await page.getByRole('button', { name: 'Save as hidden', exact: true }).click();
-    productId = ((await (await created).json()) as ProductResponse).id;
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    const saved = (await (await created).json()) as ProductResponse;
+    productId = saved.id;
+    expect(saved).toMatchObject({
+      status: 'hidden',
+      pricePoisha: 40000,
+      compareAtPricePoisha: 60000,
+    });
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Photos', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Media', exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Save product', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     await capture('saved');
   } finally {
     try {

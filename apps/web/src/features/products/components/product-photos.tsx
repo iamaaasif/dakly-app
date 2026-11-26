@@ -41,7 +41,7 @@ export function ProductPhotos({ product, variant }: ProductPhotosProps) {
         {variant ? (
           <h3 className="text-sm font-semibold text-text">{variant.title}</h3>
         ) : (
-          <h2 className="text-sm font-semibold text-text">Photos</h2>
+          <h2 className="text-base font-semibold text-text">Media</h2>
         )}
         <span className="text-xs text-text-muted">
           {scope.photos.length} photo{scope.photos.length === 1 ? '' : 's'}

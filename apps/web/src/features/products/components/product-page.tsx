@@ -1,16 +1,12 @@
 'use client';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { useFormContext } from 'react-hook-form';
 
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import type { ProductResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
-import { FormField } from '@dakly/ui/form-field';
 import { QueryError } from '@dakly/ui/query-error';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
@@ -21,6 +17,7 @@ import { ProductChatPreview } from './product-chat-preview';
 import { ProductForm } from './product-form';
 import { ProductPhotos } from './product-photos';
 import { ProductReadiness } from './product-readiness';
+import { ProductStatusField } from './product-status-field';
 import { ProductsLoading } from './products-loading';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -37,7 +34,12 @@ export function NewProductPage({ initial, assistantDraft }: NewProductPageProps)
         title: 'New product',
         backHref: '/products',
         notice: assistantDraft ? <AssistantNotice draft={assistantDraft} /> : undefined,
-        photos: <p className="text-sm text-text-muted">Save the product to add photos.</p>,
+        photos: (
+          <>
+            <h2 className="text-base font-semibold text-text">Media</h2>
+            <p className="text-sm text-text-muted">Create the product to add photos.</p>
+          </>
+        ),
         status: <StatusCard />,
       }}
     />
@@ -55,17 +57,12 @@ export function EditProductPage({ productId }: { productId: string }) {
       </div>
     );
   if (isPending) return <ProductsLoading />;
-  if (!session?.currentStore?.canEditProducts)
-    return (
-      <p role="status" className="p-6">
-        You can view products but not edit them. <Link href="/products">Back to products</Link>.
-      </p>
-    );
   // After a save the form starts again from what the server holds, so new rows have their ids.
   return (
     <LoadedProductPage
       key={`${data.id}:${saves}:${data.variants.map((variant) => variant.onHand).join(',')}`}
       product={data}
+      readOnly={!session?.currentStore?.canEditProducts}
       onSaved={async () => {
         await refetch();
         setSaves((count) => count + 1);
@@ -74,9 +71,13 @@ export function EditProductPage({ productId }: { productId: string }) {
   );
 }
 
-type LoadedProductPageProps = { product: ProductResponse; onSaved: () => Promise<void> };
+type LoadedProductPageProps = {
+  product: ProductResponse;
+  readOnly: boolean;
+  onSaved: () => Promise<void>;
+};
 
-function LoadedProductPage({ product, onSaved }: LoadedProductPageProps) {
+function LoadedProductPage({ product, readOnly, onSaved }: LoadedProductPageProps) {
   return (
     <ProductForm
       product={product}
@@ -87,12 +88,14 @@ function LoadedProductPage({ product, onSaved }: LoadedProductPageProps) {
         title: product.name,
         backHref: '/products',
         photos: <ProductPhotos product={product} />,
-        status: (
-          <>
-            <StatusCard product={product} />
-            <ProductChatPreview product={product} />
-          </>
-        ),
+        readOnly,
+        notice: readOnly ? (
+          <p role="status" className="text-sm text-text-muted">
+            You can view products but not edit them.
+          </p>
+        ) : undefined,
+        status: <StatusCard product={product} readOnly={readOnly} />,
+        preview: <ProductChatPreview product={product} />,
       }}
     />
   );
@@ -103,46 +106,27 @@ function AssistantNotice({ draft }: { draft: AssistantProductDraft }) {
     <p role="status" className="rounded-lg border border-ai-soft bg-ai-soft p-3 text-sm text-text">
       <span className="font-semibold">Filled in by Dakly AI:</span>{' '}
       {assistantFilledFields(draft).join(', ')}. Check each one. Nothing is saved until you press
-      Save.
+      Create.
     </p>
   );
 }
 
-type StatusCardProps = { product?: ProductResponse };
+type StatusCardProps = { product?: ProductResponse; readOnly?: boolean };
 
-function StatusCard({ product }: StatusCardProps) {
+function StatusCard({ product, readOnly }: StatusCardProps) {
   const change = useChangeProduct(product?.id ?? '');
-  const form = useFormContext<{ status: 'active' | 'hidden' }>();
   const [changingStock, setChangingStock] = useState(false);
-  const status = product ? product.status : form.watch('status');
-  // A saved product changes at once; a new one waits for Save.
-  const choose = (next: string) => {
-    const value = next === 'active' ? 'active' : 'hidden';
-    if (product) change.mutate({ status: value });
-    else form.setValue('status', value, { shouldDirty: true });
-  };
   return (
     <Card className="space-y-3">
-      <FormField name="status" label="Status">
-        {(control) => (
-          <Select value={status} onValueChange={choose} disabled={change.isPending}>
-            <SelectTrigger {...control}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="hidden">Hidden</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-      </FormField>
-      <p className="text-xs text-text-muted">
-        Hidden products are not offered to customers in chats, the shop or the order link.
-      </p>
+      <ProductStatusField
+        savedStatus={product?.status}
+        onChangeStatus={product ? (status) => change.mutate({ status }) : undefined}
+        disabled={change.isPending}
+      />
       {product ? (
         <>
           <ProductReadiness product={product} />
-          {product.isStockTracked ? (
+          {product.isStockTracked && !readOnly ? (
             <Button type="button" variant="secondary" onClick={() => setChangingStock(true)}>
               Change stock
             </Button>

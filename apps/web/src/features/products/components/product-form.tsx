@@ -13,8 +13,7 @@ import {
   type ProductResponse,
 } from '@dakly/contracts/products';
 import { ApiError } from '@dakly/ui/api-client';
-import { Button } from '@dakly/ui/button';
-import { Card } from '@dakly/ui/card';
+import { Button, buttonVariants } from '@dakly/ui/button';
 
 import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
@@ -23,27 +22,32 @@ import { assistantDraftValues } from '../product-assistant-draft';
 import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
 import type { QuickAddHandoff } from '../quick-add-handoff';
 import { useDraftCategory } from '../use-draft-category';
-import {
-  ProductDeliveryFields,
-  ProductDescriptionFields,
-  ProductFields,
-  ProductNameFields,
-  ProductPriceFields,
-  ProductStockFields,
-} from './product-fields';
+import { ProductFields } from './product-fields';
+import { ProductFormPageLayout, type ProductFormPage } from './product-form-layout';
 import { ProductOptions } from './product-options';
-import { ProductVariantsCard } from './product-variants-card';
+import { ProductStatusField } from './product-status-field';
 import { StockReasonDialog } from './stock-reason-dialog';
 import { takaInputFromPoisha } from '@/lib/format-money';
 
-// The full page keeps Save in a top bar that stays in view and puts photos and status beside the fields.
-type ProductFormPage = {
-  title: string;
-  backHref: string;
-  photos: ReactNode;
-  status: ReactNode;
-  notice?: ReactNode;
-};
+// The page enters regular and sell prices in this order. The API stores the price paid first.
+const pageFormSchema = productFormSchema
+  .superRefine(({ pricePoisha, compareAtPricePoisha }, context) => {
+    if (compareAtPricePoisha !== null && compareAtPricePoisha >= pricePoisha)
+      context.addIssue({
+        code: 'custom',
+        path: ['compareAtPricePoisha'],
+        message: 'Enter a sell price below the regular price.',
+      });
+  })
+  .transform((input) =>
+    input.compareAtPricePoisha === null
+      ? input
+      : {
+          ...input,
+          pricePoisha: input.compareAtPricePoisha,
+          compareAtPricePoisha: input.pricePoisha,
+        },
+  );
 
 type ProductFormProps = {
   product?: ProductResponse;
@@ -52,21 +56,17 @@ type ProductFormProps = {
   // Details Ask Dakly AI filled in from the owner's prompt; nothing is saved until Save.
   assistantDraft?: AssistantProductDraft;
   onSaved: (product: ProductResponse, failedStock: string[]) => void;
-  onCancel?: () => void;
   page?: ProductFormPage;
 };
 
-export function ProductForm({
-  product,
-  initial,
-  assistantDraft,
-  onSaved,
-  onCancel,
-  page,
-}: ProductFormProps) {
+export function ProductForm({ product, initial, assistantDraft, onSaved, page }: ProductFormProps) {
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
-    resolver: zodResolver(productFormSchema),
-    defaultValues: formValues(product, initial, assistantDraft),
+    resolver: zodResolver(page ? pageFormSchema : productFormSchema),
+    defaultValues: {
+      isVisibleInChats: true,
+      isVisibleInOrderLink: true,
+      ...formValues({ product, initial, assistantDraft, page }),
+    },
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   useDraftCategory(form, assistantDraft);
@@ -78,15 +78,15 @@ export function ProductForm({
   const actions = (
     <ProductFormActions
       isPending={isPending}
-      canSave={!product || isDirty}
+      canSave={(!product || isDirty) && !errors.weightGrams}
       product={product}
-      onCancel={onCancel}
-      onSetStatus={(status) => form.setValue('status', status)}
+      cancelHref={page?.backHref}
     />
   );
-  const serverError = errors.root?.server?.message ? (
+  const serverError = errors.root?.server?.message;
+  const errorMessage = serverError ? (
     <p role="alert" className="text-danger">
-      {errors.root.server.message}
+      {serverError}
     </p>
   ) : null;
 
@@ -96,22 +96,36 @@ export function ProductForm({
         {page ? (
           <ProductFormPageLayout
             page={page}
-            productId={product?.id}
             actions={actions}
-            serverError={serverError}
+            serverError={errorMessage}
             product={product}
           />
         ) : (
-          <>
-            <ProductFields productId={product?.id} />
-            <ProductOptions mode={product ? 'edit' : 'create'} />
-            {serverError}
+          <ProductFormFields product={product}>
+            {errorMessage}
             {actions}
-          </>
+          </ProductFormFields>
         )}
       </form>
       {dialog}
     </FormProvider>
+  );
+}
+
+function ProductFormFields({
+  product,
+  children,
+}: {
+  product?: ProductResponse;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <ProductFields productId={product?.id} />
+      {product ? null : <ProductStatusField />}
+      <ProductOptions mode={product ? 'edit' : 'create'} />
+      {children}
+    </>
   );
 }
 
@@ -175,70 +189,6 @@ function useSubmitProduct(
   return { onSubmit, dialog, isPending: (product ? change : create).isPending };
 }
 
-function FieldCard({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Card className="space-y-3.5">
-      <h2 className="text-base font-semibold text-text">{title}</h2>
-      {children}
-    </Card>
-  );
-}
-
-type ProductFormPageLayoutProps = {
-  page: ProductFormPage;
-  product?: ProductResponse;
-  productId?: string;
-  actions: ReactNode;
-  serverError: ReactNode;
-};
-
-function ProductFormPageLayout({
-  page,
-  product,
-  productId,
-  actions,
-  serverError,
-}: ProductFormPageLayoutProps) {
-  return (
-    <>
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-border bg-background px-4 py-3 md:px-8">
-        <Link href={page.backHref} aria-label="Back to products" className="text-text-muted">
-          ←
-        </Link>
-        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-text">{page.title}</h1>
-        {/* On a phone the save buttons sit in a bar at the bottom so the title keeps its room. */}
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background px-4 py-3 md:static md:z-auto md:border-0 md:bg-transparent md:p-0">
-          {actions}
-        </div>
-      </div>
-      <div className="grid gap-6 px-4 pt-6 pb-24 md:px-8 md:pb-6 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-4">
-          {page.notice}
-          <Card>{page.photos}</Card>
-          <FieldCard title="Basics">
-            <ProductNameFields productId={productId} showCode={false} />
-            <ProductDescriptionFields productId={productId} />
-          </FieldCard>
-          <FieldCard title="Price">
-            <ProductPriceFields productId={productId} />
-          </FieldCard>
-          <FieldCard title="Delivery">
-            <ProductDeliveryFields />
-          </FieldCard>
-          <Card>
-            <ProductVariantsCard product={product} />
-          </Card>
-          <FieldCard title="Stock settings">
-            <ProductStockFields productId={productId} withWarnAt />
-          </FieldCard>
-          {serverError}
-        </div>
-        <div className="space-y-4">{page.status}</div>
-      </div>
-    </>
-  );
-}
-
 // On a new product the cost field edits the first variant only, so sizes left without a cost use it.
 function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
   const cost = input.variants[0]?.costPoisha ?? null;
@@ -256,52 +206,30 @@ type ProductFormActionsProps = {
   isPending: boolean;
   canSave: boolean;
   product?: ProductResponse;
-  onCancel?: () => void;
-  onSetStatus: (status: 'active' | 'hidden') => void;
+  cancelHref?: string;
 };
 
-function ProductFormActions({
-  isPending,
-  canSave,
-  product,
-  onCancel,
-  onSetStatus,
-}: ProductFormActionsProps) {
-  const actions = product
-    ? [{ label: 'Save product', variant: 'primary' as const }]
-    : [
-        { status: 'hidden' as const, label: 'Save as hidden', variant: 'secondary' as const },
-        { status: 'active' as const, label: 'Save and show', variant: 'primary' as const },
-      ];
-
+function ProductFormActions({ isPending, canSave, product, cancelHref }: ProductFormActionsProps) {
   return (
-    <div className="flex flex-wrap justify-end gap-2 pt-2">
-      {onCancel ? (
-        <Button type="button" variant="secondary" onClick={onCancel}>
+    <div className="flex flex-wrap justify-end gap-2">
+      {cancelHref ? (
+        <Link href={cancelHref} className={buttonVariants({ variant: 'secondary' })}>
           Cancel
-        </Button>
+        </Link>
       ) : null}
-      {actions.map((action) => (
-        <Button
-          key={action.label}
-          type="submit"
-          variant={action.variant}
-          loading={isPending}
-          disabled={!canSave}
-          onClick={() => 'status' in action && onSetStatus(action.status)}
-        >
-          {action.label}
-        </Button>
-      ))}
+      <Button type="submit" loading={isPending} disabled={!canSave}>
+        {product ? 'Save' : 'Create'}
+      </Button>
     </div>
   );
 }
 
-function formValues(
-  product?: ProductResponse,
-  initial?: QuickAddHandoff,
-  assistantDraft?: AssistantProductDraft,
-): ProductFormValues {
+function formValues({
+  product,
+  initial,
+  assistantDraft,
+  page,
+}: Pick<ProductFormProps, 'product' | 'initial' | 'assistantDraft' | 'page'>): ProductFormValues {
   if (!product && assistantDraft) return assistantDraftValues(assistantDraft);
   if (!product)
     return {
@@ -329,8 +257,7 @@ function formValues(
     weightGrams: weightText(product.weightGrams),
     aliases: product.aliases,
     options: product.options,
-    pricePoisha: takaInputFromPoisha(product.pricePoisha),
-    compareAtPricePoisha: takaInputFromPoisha(product.compareAtPricePoisha),
+    ...priceFields(product, Boolean(page)),
     variants: product.variants.map(
       ({ id, optionValues, sku, priceOverridePoisha, costPoisha, lowStockThreshold, onHand }) => ({
         id,
@@ -350,6 +277,20 @@ function formValues(
   };
 }
 
+function priceFields(product: ProductResponse, onPage: boolean) {
+  const price = product.pricePoisha;
+  const oldPrice = product.compareAtPricePoisha;
+  if (onPage && oldPrice !== null && oldPrice > price)
+    return {
+      pricePoisha: takaInputFromPoisha(oldPrice),
+      compareAtPricePoisha: takaInputFromPoisha(price),
+    };
+  return {
+    pricePoisha: takaInputFromPoisha(price),
+    compareAtPricePoisha: takaInputFromPoisha(onPage ? null : oldPrice),
+  };
+}
+
 function weightText(grams: number | null) {
   return grams === null ? '' : String(grams);
 }
@@ -361,7 +302,13 @@ function productChanges(
   const changes = Object.fromEntries(
     Object.entries(fields).filter(([name]) => dirty[name as keyof typeof fields]),
   );
-  return dirty.options || dirty.variants ? { ...changes, options, variants } : changes;
+  const prices =
+    dirty.pricePoisha || dirty.compareAtPricePoisha
+      ? { pricePoisha: fields.pricePoisha, compareAtPricePoisha: fields.compareAtPricePoisha }
+      : {};
+  return dirty.options || dirty.variants
+    ? { ...changes, ...prices, options, variants }
+    : { ...changes, ...prices };
 }
 
 function productErrorField(
