@@ -2,6 +2,7 @@ import {
   amountPatterns,
   bareOfferPattern,
   hasWrongAmount,
+  isBudgetLimit,
   leaksInstructions,
   offerWords,
 } from '@dakly/contracts/reply-wording';
@@ -137,27 +138,114 @@ function hasWrongPriceReply({ golden, outcome }: Scored) {
   return hasWrongPrice(outcome.text, golden);
 }
 
-// Saying a size or product is sold out is right and is not an offer. A clause counts as an offer
-// when it names the term without an out-of-stock phrase, or says the term is there.
 function offersOutOfStock({ golden, outcome }: Scored) {
-  if (outcome.kind !== 'reply') return false;
-  return outcome.text
-    .split(clauseBreak)
-    .some(
-      (clause) =>
-        mentionsAny(clause, golden.neverOffer ?? []) &&
-        !restockNotice.test(clause) &&
-        (!outOfStockPhrase.test(clause) || inStockPhrase.test(clause)),
-    );
+  if (outcome.kind !== 'reply' || !golden.neverOffer?.length) return false;
+  const terms = golden.neverOffer.map((term) => termPattern(term));
+  return outcome.text.split(clauseBreak).some((clause) => {
+    const text = clause.trim();
+    if (
+      customerSize.test(text) ||
+      (clarificationQuestion.test(text) && !inStockPhrase.test(text))
+    ) {
+      return false;
+    }
+    return terms.some((term) => offersTerm(clause, term, golden.mentionsAnyOf ?? []));
+  });
 }
 
-const clauseBreak = /[।.!?,;—–\n]|\s(?:তবে|কিন্তু|but|kintu|tobe)\s/iu;
+// Each mention is judged by the stock phrase for that item. A price quote without a sold-out
+// statement can also offer the item.
+function offersTerm(clause: string, term: RegExp, expectedTerms: readonly string[]) {
+  const mentions = [...clause.matchAll(term)];
+  const stockPhrases = [...clause.matchAll(stockWording)];
+  return mentions.some((mention, index) => {
+    const endOfMention = mention.index + mention[0].length;
+    const nextMention = mentions[index + 1]?.index ?? clause.length;
+    const following = stockPhrases.filter(
+      (phrase) =>
+        phrase.index + phrase[0].length > endOfMention &&
+        phrase.index < nextMention &&
+        !parentheticalAlternative(clause.slice(endOfMention, phrase.index), expectedTerms),
+    );
+    const preceding = stockPhrases.findLast((phrase) => phrase.index < mention.index);
+    const first = following[0];
+    if (!first) return !preceding || preceding.groups?.inStock !== undefined;
+    if (
+      offersBeforeStockPhrase({ clause, endOfMention, following: first, preceding, expectedTerms })
+    ) {
+      return true;
+    }
+    return following.some((wording, wordingIndex) => {
+      if (wording.groups?.inStock === undefined) return false;
+      const earlierWording = following[wordingIndex - 1];
+      if (!earlierWording) return true;
+      // In "XL নেই M ও L আছে", the two stock phrases describe different sizes.
+      const subject = clause.slice(earlierWording.index + earlierWording[0].length, wording.index);
+      return sameItemReference.test(subject) || !namesAlternative(subject, expectedTerms);
+    });
+  });
+}
+
+function offersBeforeStockPhrase({
+  clause,
+  endOfMention,
+  following,
+  preceding,
+  expectedTerms,
+}: {
+  clause: string;
+  endOfMention: number;
+  following: RegExpExecArray;
+  preceding: RegExpExecArray | undefined;
+  expectedTerms: readonly string[];
+}) {
+  const beforeStockPhrase = clause.slice(endOfMention, following.index);
+  if (following.groups?.unavailable === undefined && quotesPrice(beforeStockPhrase)) return true;
+  if (preceding?.groups?.inStock === undefined) return false;
+  const opening = clause.slice(0, preceding.index).trim();
+  return (
+    !namesAlternative(opening, expectedTerms) &&
+    (following.groups?.recalled !== undefined || namesAlternative(beforeStockPhrase, expectedTerms))
+  );
+}
+
+function parentheticalAlternative(text: string, expectedTerms: readonly string[]) {
+  const start = text.lastIndexOf('(');
+  return start > text.lastIndexOf(')') && namesAlternative(text.slice(start + 1), expectedTerms);
+}
+
+function namesAlternative(text: string, expectedTerms: readonly string[]) {
+  return sizeLabel.test(text) || mentionsAny(text, expectedTerms);
+}
+
+function quotesPrice(text: string) {
+  if (isBudgetLimit(text)) return false;
+  const ascii = toAsciiDigits(text);
+  return amountPatterns.some((pattern) => ascii.search(pattern) !== -1);
+}
+
+const sizeLabel = /(?<![\p{L}\p{M}\p{N}])(?:XS|S|M|L|X+L)(?![\p{L}\p{M}\p{N}])/iu;
+const customerSize = new RegExp(
+  `^(?:আপনার\\s+(?:মাপ|সাইজ)|apnar\\s+(?:map|size)|your\\s+size\\s+is)\\s+${sizeLabel.source}$`,
+  'iu',
+);
+const clauseBreak = /[।.!,;—–\n]|(?<=\?)|\s(?:তবে|কিন্তু|but|kintu|tobe)\s/iu;
+const clarificationQuestion =
+  /^(?:(?:apni\s+)?kon\s+[\p{L}\p{M}\s-]+\s+kotha\s+bolchen|(?:আপনি\s+)?কোন\s+[\p{L}\p{M}\s-]+\s+কথা\s+বলছেন|which\s+[\p{L}\p{M}\s-]+\s+do\s+you\s+mean)\s*\?$/iu;
 const outOfStockPhrase =
-  /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\bnei\b|\bnai\b|out of stock|sold out|not available|unavailable/iu;
-// Promising to tell the customer when the item is back is not an offer to sell it now.
+  /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\b(?:nei|nai|out of stock|sold out|unavailable|not (?:currently )?(?:in stock|available))\b/iu;
+// A restock notice promises a message after the item returns.
 const restockNotice =
-  /আবার\s*স্টকে\s*(?:এলে|আসলে)|stock\s*-?\s*e\s*(?:ashle|aile|ele)|(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে)|\b(?:when|once|if)\b[^.]*\bback in stock/iu;
-const inStockPhrase = /আছে|\bache\b|\bin stock\b|(?<!not |un)available/iu;
+  /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|রিস্টক\s+হলে|\b(?:stock(?:\s*-?\s*e\s*|\s+)|restock\s*)(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
+const recalledPreference = /মনে\s+আছে|\bmone\s+ache\b/iu;
+const inStockPhrase =
+  /(?:স্টকে\s+)?আছে|\b(?:ache|in stock|available|(?:can|will)\s+(?:ship|send|deliver)\s+it\s+(?:today|now|right away))\b/iu;
+const sameItemReference =
+  /\b(?:(?:have|offer)\s+(?:it|this one|that one)|it\s+and)\b|(?<![\p{L}\p{M}])(?:এটা|ওটা|সেটা)(?:ও|ই)?(?:\s+(?:এখন|স্টকে))*\s*$/iu;
+const stockWording = new RegExp(
+  `(?<unavailable>${outOfStockPhrase.source})|${restockNotice.source}|(?<recalled>${recalledPreference.source})|(?<inStock>${inStockPhrase.source})`,
+  'giu',
+);
 
 function hasWrongPhoto({ golden, outcome }: Scored) {
   return (
@@ -175,10 +263,12 @@ function hasWrongLanguage({ golden, outcome }: Scored) {
   return golden.answersIn === 'bangla' ? !hasBangla : hasBangla;
 }
 
+function toAsciiDigits(text: string) {
+  return text.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
+}
+
 function hasWrongPrice(reply: string, golden: GoldenCase) {
-  const toAscii = (text: string) =>
-    text.replace(/[০-৯]/g, (digit) => String(banglaDigits.indexOf(digit)));
-  const text = toAscii(reply);
+  const text = toAsciiDigits(reply);
   const patterns =
     golden.negotiation === undefined ? amountPatterns : [...amountPatterns, bareOfferPattern];
   const amounts = patterns
@@ -188,7 +278,7 @@ function hasWrongPrice(reply: string, golden: GoldenCase) {
       around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),
     }));
   const customerNumbers = new Set(
-    (toAscii(golden.question).match(/\d+(?:,\d+)*/g) ?? []).map((n) =>
+    (toAsciiDigits(golden.question).match(/\d+(?:,\d+)*/g) ?? []).map((n) =>
       Number(n.replaceAll(',', '')),
     ),
   );
@@ -203,17 +293,18 @@ function hasWrongPrice(reply: string, golden: GoldenCase) {
   );
 }
 
-// Latin terms use word boundaries, so "M" does not match "Medium". For Banglish negotiations
-// a product name can take a case ending. Bangla product names can match with a suffix.
 function mentionsAny(reply: string, terms: readonly string[], banglish = false) {
-  return terms.some((term) => {
-    if (!/^[\x20-\x7e]+$/.test(term)) return reply.includes(term);
-    const ending = banglish && productNames.has(term.toLowerCase()) ? '(?:er|r|ta|ti|te)?' : '';
-    return new RegExp(
-      `(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(term)}${ending}(?![\\p{L}\\p{M}\\p{N}])`,
-      'iu',
-    ).test(reply);
-  });
+  return terms.some((term) => termPattern(term, banglish).test(reply));
+}
+
+// Latin terms use word boundaries, so "M" does not match "Medium". Banglish negotiation
+// names can take a case ending, and Bangla names can match with a suffix.
+function termPattern(term: string, banglish = false) {
+  const literal = escapeRegExp(term);
+  const ending = banglish && productNames.has(term.toLowerCase()) ? '(?:er|r|ta|ti|te)?' : '';
+  return /^[\x20-\x7e]+$/.test(term)
+    ? new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${literal}${ending}(?![\\p{L}\\p{M}\\p{N}])`, 'giu')
+    : new RegExp(literal, 'gu');
 }
 
 function escapeRegExp(text: string) {
