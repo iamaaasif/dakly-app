@@ -76,10 +76,19 @@ function show(product?: ProductResponse) {
 }
 
 async function addValues(optionLabel: string, ...values: string[]) {
-  for (const value of values) {
-    const box = screen.getByLabelText(new RegExp(`^Add a value to ${optionLabel}`));
-    await userEvent.type(box, `${value}{Enter}`);
-  }
+  await userEvent.click(screen.getByRole('button', { name: `Add values to ${optionLabel}` }));
+  for (const value of values)
+    await userEvent.type(screen.getByLabelText('Add new value'), `${value}{Enter}`);
+  await userEvent.keyboard('{Escape}');
+  await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+}
+
+async function choosePresets(optionLabel: string, ...values: string[]) {
+  await userEvent.click(screen.getByRole('button', { name: `+ ${optionLabel}` }));
+  await userEvent.click(screen.getByRole('button', { name: `Add values to ${optionLabel}` }));
+  for (const value of values) await userEvent.click(screen.getByRole('checkbox', { name: value }));
+  await userEvent.keyboard('{Escape}');
+  await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 }
 
 afterEach(() => {
@@ -90,20 +99,37 @@ afterEach(() => {
 describe('Variants card', () => {
   it('shows plain stock, code and warn-at fields while a product has no options', () => {
     show(saved);
-    const card = screen.getByRole('heading', { name: 'Variants' }).parentElement!;
+    const card = screen.getByRole('heading', { name: 'Variations' }).parentElement!;
     const inventory = screen.getByRole('heading', { name: 'Inventory' }).parentElement!;
     expect(within(inventory).getByLabelText<HTMLInputElement>('Available stock').value).toBe('12');
     expect(within(inventory).getByLabelText<HTMLInputElement>('Product code').value).toBe('TS-1');
     expect(within(inventory).getByLabelText('Low stock warning')).toBeTruthy();
-    expect(within(card).getByRole('button', { name: 'Add options' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: '+ Other option' })).toBeTruthy();
     expect(within(card).getByRole('button', { name: /Suggest options/ })).toBeTruthy();
     expect(screen.queryByRole('table')).toBeNull();
   });
 
+  it('applies selected presets together and keeps a cancelled edit out of the grid', async () => {
+    show(saved);
+    await userEvent.click(screen.getByRole('button', { name: '+ Color' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add values to Color' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Black' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'White' }));
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByLabelText('Price for Black')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(screen.getByLabelText('Price for Black')).toBeTruthy();
+    expect(screen.getByLabelText('Price for White')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit Color' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Black from Color' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel option changes' }));
+    expect(screen.getByLabelText('Price for Black')).toBeTruthy();
+  });
+
   it('builds the grid as values are typed and moves the stock to the first value', async () => {
     show(saved);
-    await userEvent.click(screen.getByRole('button', { name: 'Add options' }));
-    await userEvent.type(screen.getByLabelText('Option 1 name'), 'Size');
+    await userEvent.click(screen.getByRole('button', { name: '+ Other option' }));
+    await userEvent.type(screen.getByLabelText('Option name'), 'Size');
     await addValues('Size', 'S', 'M', 'L');
     const first = screen.getByLabelText('Stock for S') as HTMLInputElement;
     expect(first.value).toBe('12');
@@ -114,14 +140,8 @@ describe('Variants card', () => {
 
   it('suggests common sizes and groups rows by the first option', async () => {
     show(saved);
-    await userEvent.click(screen.getByRole('button', { name: 'Add options' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Colour' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Black' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add White' }));
-    await userEvent.click(screen.getByRole('button', { name: /Add option/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add Size' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add S' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Add M' }));
+    await choosePresets('Color', 'Black', 'White');
+    await choosePresets('Size', 'S', 'M');
     const black = screen.getByRole('region', { name: 'Black variants' });
     expect(within(black).getAllByRole('listitem')).toHaveLength(2);
     await userEvent.click(within(black).getByRole('button', { name: /^Black2 variants/ }));
@@ -131,8 +151,8 @@ describe('Variants card', () => {
 
   it('sets a price on the chosen rows and keeps removed rows out until asked', async () => {
     show(saved);
-    await userEvent.click(screen.getByRole('button', { name: 'Add options' }));
-    await userEvent.type(screen.getByLabelText('Option 1 name'), 'Size');
+    await userEvent.click(screen.getByRole('button', { name: '+ Other option' }));
+    await userEvent.type(screen.getByLabelText('Option name'), 'Size');
     await addValues('Size', 'S', 'M', 'L');
     await userEvent.click(screen.getByLabelText('Select S'));
     await userEvent.click(screen.getByLabelText('Select M'));
@@ -148,8 +168,8 @@ describe('Variants card', () => {
 
   it('fills the grid from a spreadsheet paste', async () => {
     show(saved);
-    await userEvent.click(screen.getByRole('button', { name: 'Add options' }));
-    await userEvent.type(screen.getByLabelText('Option 1 name'), 'Size');
+    await userEvent.click(screen.getByRole('button', { name: '+ Other option' }));
+    await userEvent.type(screen.getByLabelText('Option name'), 'Size');
     await addValues('Size', 'S', 'M');
     await userEvent.click(screen.getByLabelText('Price for S'));
     await userEvent.paste('1,200\t650\n1,300\t700');
