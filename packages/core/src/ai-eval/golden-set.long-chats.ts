@@ -19,17 +19,17 @@ const sideTalk: Turn[][] = [
   [customer('থ্রি পিস কত?'), shop('থ্রি পিস ৳২,২০০।')],
   [customer('wait korun'), shop('জি, অপেক্ষা করছি।')],
   [customer('bhai kal reply dibo'), shop('ঠিক আছে ভাই।')],
-  [customer('ক্যানভাস জুতা আছে?'), shop('জি, ৪১ সাইজে আছে। দাম ৳১,৫০০।')],
+  [customer('ক্যানভাস জুতা আছে?'), shop('জি, ক্যানভাস জুতা আছে। দাম ৳১,৫০০।')],
   [customer('return policy ki?'), shop('ডেলিভারির সময় দেখে নিতে পারবেন।')],
   [customer('thik ache'), shop('ধন্যবাদ ভাই।')],
   [customer('আপনাদের পেজ কতদিনের?'), shop('অনেকদিন ধরেই আছি, ভাই।')],
 ];
 
-function padded(pairs: number, early: Turn[], middle: Turn[] = []): Turn[] {
-  const filler = Array.from(
-    { length: pairs },
-    (_, index) => sideTalk[index % sideTalk.length] ?? [],
-  );
+// Side talk without a product price, for a case where any other product would be a fair answer.
+const smallTalk = sideTalk.filter((pair) => !pair.some(({ text }) => text.includes('৳')));
+
+function padded(pairs: number, early: Turn[], middle: Turn[] = [], talk = sideTalk): Turn[] {
+  const filler = Array.from({ length: pairs }, (_, index) => talk[index % talk.length] ?? []);
   const half = Math.floor(filler.length / 2);
   return [...early, ...filler.slice(0, half).flat(), ...middle, ...filler.slice(half).flat()];
 }
@@ -178,6 +178,7 @@ export const longChatGoldenCases: GoldenCase[] = [
       30,
       [customer('আমি XL পরি, সবসময় XL লাগে'), shop('জি ভাই।'), ...poloTalk],
       [customer('ভাই ভাই ভাই ভাই '.repeat(250)), shop('জি ভাই, বলুন।')],
+      smallTalk,
     ),
     shownProducts: ['পোলো শার্ট'],
   },
