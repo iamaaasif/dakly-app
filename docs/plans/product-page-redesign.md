@@ -77,13 +77,13 @@ A new look for the full product page that PROD-11 already built (`/products/new`
 - A blank price means the product price. A typed price must be above zero.
 - When options exist, hide the Available stock and product code fields in the Inventory card, because they live in the table. The design shows both at once; that is dummy.
 
-  3.10 **List.** Show the Status column with the Active / Hidden badge. Keep the readiness labels (Needs a price, Needs a photo, Running low, Out of stock).
+3.10 **List.** Show the Status column with the Active / Hidden badge. Keep the readiness labels (Needs a price, Needs a photo, Running low, Out of stock).
 
 - Row menu: Duplicate and Archive, not Delete, because we never delete products (archive is blocked while an order is open, and offers Hide).
 - Duplicate opens `/products/new` filled from the product (name with " copy", no stock, no photos). It is frontend only, like the quick add handoff.
 - "Best selling" sort and the column settings icon need backend work (the list query has no sort today). Leave them out of this build and list them in [the backend todo list](../development/frontend-polish-backend-todo.md).
 
-  3.11 **Copy.** Use "No products yet" and "Products you add show here, and Dakly uses them to answer chats and take orders." Fix "bellow" to "below" and "Threashold" to "Low stock warning". Fix "This is user help text..." placeholders as well. Labels follow the glossary.
+3.11 **Copy.** Use "No products yet" and "Products you add show here, and Dakly uses them to answer chats and take orders." Fix "bellow" to "below" and "Threashold" to "Low stock warning". Fix "This is user help text..." placeholders as well. Labels follow the glossary.
 
 ## 4. Kept from today (must stay on the page)
 
