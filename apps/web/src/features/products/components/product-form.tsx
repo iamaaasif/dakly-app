@@ -61,21 +61,15 @@ type ProductFormProps = {
   page?: ProductFormPage;
 };
 
-export function ProductForm({
-  product,
-  initial,
-  assistantDraft,
-  duplicateSource,
-  onSaved,
-  page,
-}: ProductFormProps) {
+export function ProductForm(props: ProductFormProps) {
+  const { product, assistantDraft, duplicateSource, onSaved, page } = props;
   const [editingOption, setEditingOption] = useState(false);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(page ? pageFormSchema : productFormSchema),
     defaultValues: {
       isVisibleInChats: true,
       isVisibleInOrderLink: true,
-      ...formValues({ product, initial, assistantDraft, duplicateSource, page }),
+      ...formValues(props),
     },
   });
   const { dirtyFields, errors, isDirty } = form.formState;
