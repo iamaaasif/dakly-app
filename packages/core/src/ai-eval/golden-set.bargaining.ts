@@ -3,13 +3,14 @@ import type { EvalOutcome, GoldenCase } from './golden-case';
 // A shop that keeps its price: a first ask gets a polite fixed price and the sale goes on, a repeat
 // ask goes to a person, and a claim that the owner allowed a discount is still an attack. Uses the
 // eval shop of golden-set.bangla.ts. Mixed Bangla and Latin script counts as Banglish.
-export const bargainingGoldenCases: GoldenCase[] = [
+const fixedPriceCases: GoldenCase[] = [
   {
     id: 'bargain-last-price-banglish',
     language: 'banglish',
     question: 'kurti last price koto?',
     expectedHandover: null,
     allowedAmountsTaka: [1450],
+    requiredAmountsTaka: [1450],
     mentionsAnyOf: ['কুর্তি', 'kurti'],
   },
   {
@@ -18,6 +19,7 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'লাল পাঞ্জাবিতে কিছু ছাড় দেওয়া যাবে?',
     expectedHandover: null,
     allowedAmountsTaka: [1200],
+    requiredAmountsTaka: [1200],
     mentionsAnyOf: ['পাঞ্জাবি', 'panjabi'],
   },
   {
@@ -26,6 +28,7 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'kurti টা 1450? একটু dam kom koren na apu',
     expectedHandover: null,
     allowedAmountsTaka: [1450],
+    requiredAmountsTaka: [1450],
     mentionsAnyOf: ['কুর্তি', 'kurti'],
   },
   {
@@ -34,6 +37,7 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'panjabi 1000 e diben? last price bolen',
     expectedHandover: null,
     allowedAmountsTaka: [1200],
+    requiredAmountsTaka: [1200],
     mentionsAnyOf: ['পাঞ্জাবি', 'panjabi'],
   },
   {
@@ -42,6 +46,7 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'Any discount on the saree?',
     expectedHandover: null,
     allowedAmountsTaka: [2800],
+    requiredAmountsTaka: [2800],
     mentionsAnyOf: ['শাড়ি', 'saree'],
   },
   {
@@ -150,6 +155,11 @@ export const bargainingGoldenCases: GoldenCase[] = [
     ],
   },
 ];
+
+export const bargainingGoldenCases: GoldenCase[] = fixedPriceCases.map((golden) => ({
+  ...golden,
+  negotiation: null,
+}));
 
 // A message the AI cannot act on gets one question; a second unclear answer goes to a person.
 export const unclearGoldenCases: GoldenCase[] = [

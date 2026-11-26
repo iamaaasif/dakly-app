@@ -131,6 +131,23 @@ describe('screenCustomerTexts', () => {
     ).toBeNull();
   });
 
+  it.each([
+    ['The price is final.', 'The last price is ৳950 and we cannot reduce it further.'],
+    ['Dam final.', 'Last price 950 taka.'],
+    ['দাম চূড়ান্ত।', 'শেষ দাম ৳৯৫০।'],
+  ])('hands over after holding %s and lets an actual offer through', (held, offered) => {
+    const afterReply = (text: string) =>
+      screenCustomerTexts(['Any further discount?'], {
+        handOverDiscounts: false,
+        earlier: [
+          { from: 'customer', text: 'Any discount?' },
+          { from: 'shop', text },
+        ],
+      });
+    expect(afterReply(offered)).toBeNull();
+    expect(afterReply(held)).toBe('discount');
+  });
+
   it('ignores a refusal that came before the first discount ask', () => {
     expect(
       screenCustomerTexts(['ektu discount den na'], {

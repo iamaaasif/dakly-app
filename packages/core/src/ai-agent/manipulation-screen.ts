@@ -1,4 +1,7 @@
 import type { handoverReasons } from '@dakly/contracts/chats';
+import { toAsciiDigits } from '@dakly/contracts/digits';
+import { takaInput } from '@dakly/contracts/products';
+import { amountPatterns } from '@dakly/contracts/reply-wording';
 
 import type { ConversationEntry } from './chat-memory';
 
@@ -46,6 +49,9 @@ const discountDeclinedPattern =
   /\b(?:no|without|don'?t need|dont need)\s+(?:a\s+|any\s+)?discount\b|\bdiscount\s+(?:lagbe na|chai na|charai|chara)\b|ছাড়\s*(?:লাগবে না|চাই না|ছাড়াই)/u;
 
 // Only phrases about the price or a discount: a shop saying "we cannot deliver today" is no refusal.
+const finalPricePattern =
+  /\b(?:price is final|final price|last price|dam (?:shesh|final)|(?:shesh|final) dam)\b|শেষ দাম|দাম(?:টাই|ই|টি)?\s+(?:শেষ|চূড়ান্ত)|চূড়ান্ত দাম/u;
+
 const shopRefusalPattern =
   /\b(?:fixed|no discount|cannot (?:give|offer|reduce)|can't (?:give|offer|reduce))\b|নির্ধারিত|ফিক্সড|ছাড় নেই|ছাড় দেওয়া|কমানো যাবে না|komano jabe na|chhar nei|dam fixed/u;
 
@@ -66,8 +72,14 @@ export function screenCustomerTexts(
   // A repeat ask goes to a person only once the shop has refused after the first ask.
   const refused = discounts.earlier
     .slice(firstAsk + 1)
-    .some(({ from, text }) => from === 'shop' && shopRefusalPattern.test(normalize(text)));
+    .some(({ from, text }) => from === 'shop' && refusedDiscount(normalize(text)));
   return refused ? 'discount' : null;
+}
+
+function refusedDiscount(text: string) {
+  if (!finalPricePattern.test(text)) return shopRefusalPattern.test(text);
+  const digits = toAsciiDigits(text);
+  return !amountPatterns.some((pattern) => [...digits.matchAll(pattern)].length);
 }
 
 const asksForDiscount = (text: string) => discountPatterns.some((pattern) => pattern.test(text));

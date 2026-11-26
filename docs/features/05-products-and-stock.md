@@ -165,11 +165,12 @@ Members with Edit Products can switch on **Let the AI negotiate** in the Price c
 
 The product API returns both amounts only to members with Edit Products. Chat cards, order links and catalogue exports exclude the amounts.
 
+When the shop's discount hand-over rule is off, the AI can quote an opening offer and then a last price in the same chat. A live offer lasts 24 hours. A new draft order in that chat applies the offer to that product as a line discount and records **AI price offer** in its history. See [Chats and AI agent](04-chats-and-ai-agent.md#guardrails-against-manipulation).
+
 #### Not built
 
 - Bulk editing the negotiation settings.
 - Importing the negotiation settings.
-- Using negotiation settings to offer discounts in chat and apply them to orders. See [steps 6 and 7](../plans/product-page-redesign.md#prs).
 
 ### Catalogue tools beside the full page (planned)
 

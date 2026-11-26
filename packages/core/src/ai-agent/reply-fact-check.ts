@@ -67,11 +67,48 @@ export function checkReplyFacts(
   const wording = wordingFailure(text, toolResults);
   if (wording) return { isSafe: false, failure: wording };
   const known = numbersIn(toolResults);
-  if (hasWrongAmount(claimedAmounts(text), (value) => known.has(value), numbersIn(customerTexts)))
+  const amounts = claimedAmounts(text);
+  const offerPrices = negotiatedPrices(toolResults);
+  if (
+    offerPrices
+      ? amounts.some(({ value }) => !offerPrices.has(value))
+      : hasWrongAmount(amounts, (value) => known.has(value), numbersIn(customerTexts))
+  )
     return { isSafe: false, failure: 'amount' };
   if (claimedNumbers(text, stockPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'stock' };
   return { isSafe: true };
+}
+
+function negotiatedPrices(toolResults: readonly unknown[]) {
+  const prices = new Set<number>();
+  let negotiation = false;
+  let fixed = false;
+  for (const result of toolResults) {
+    if (!result || typeof result !== 'object' || !('kind' in result)) continue;
+    if (result.kind === 'final') negotiation = true;
+    if (result.kind === 'fixed') fixed = true;
+    if (
+      result.kind === 'offered' &&
+      'priceTaka' in result &&
+      typeof result.priceTaka === 'number'
+    ) {
+      negotiation = true;
+      prices.add(result.priceTaka);
+    }
+  }
+  if (negotiation) return prices;
+  return fixed ? cataloguePrices(toolResults, prices) : undefined;
+}
+
+function cataloguePrices(value: unknown, found: Set<number>): Set<number> {
+  if (Array.isArray(value)) for (const item of value) cataloguePrices(item, found);
+  else if (value && typeof value === 'object')
+    for (const [key, child] of Object.entries(value)) {
+      if (key === 'priceTaka' && typeof child === 'number') found.add(child);
+      else cataloguePrices(child, found);
+    }
+  return found;
 }
 
 function contactFailure(text: string, shop: Shop, customerTexts: readonly string[]) {

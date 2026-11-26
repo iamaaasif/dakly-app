@@ -14,7 +14,8 @@ import {
 } from '../../ai-agent/chat-memory';
 import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV16 } from '../../ai-agent/prompts/chat-reply.v16';
+import { productDiscountRequest } from '../../ai-agent/manipulation-screen';
+import { chatReplyV17 } from '../../ai-agent/prompts/chat-reply.v17';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v4';
 import {
@@ -132,6 +133,7 @@ type ReplyCase = Pick<
   | 'handsOverDiscounts'
   | 'ownerSettings'
   | 'draftedOrder'
+  | 'negotiation'
 >;
 
 function replyContext({
@@ -226,10 +228,10 @@ function answerToolCalls({
   calls: ToolCall[];
   toolResults: object[];
   note: Note;
-  shop: { rules: ShopRules; draftedOrder: readonly string[] | undefined };
+  shop: { rules: ShopRules; golden: Pick<ReplyCase, 'draftedOrder' | 'negotiation' | 'question'> };
   onlyProductIds: readonly string[] | undefined;
 }) {
-  const { rules, draftedOrder } = shop;
+  const { rules, golden } = shop;
   const answered: { name: string; result: object }[] = [];
   for (const call of calls) {
     const refusal = refuseToolCall(rules, call);
@@ -239,7 +241,12 @@ function answerToolCalls({
       runFixtureTool(
         call.name,
         call.argumentsJson,
-        { draftedOrder, suggestAddOns: rules.suggestAddOns },
+        {
+          draftedOrder: golden.draftedOrder,
+          suggestAddOns: rules.suggestAddOns,
+          negotiation: golden.negotiation,
+          customerText: golden.question,
+        },
         onlyProductIds,
       );
     if (call.name === 'hand_over' && 'reason' in result) {
@@ -318,6 +325,14 @@ function replyBlocks(history: Run['history'], golden: ReplyCase, toolResults: ob
   return { context, onlyProductIds };
 }
 
+function replyModelConfiguration(rules: ShopRules, question: string, history: Run['history']) {
+  if (history === 'last20') {
+    return { instructions: chatReplyV9.instructions, tools: salesAgentToolsFor(rules) };
+  }
+  const canOffer = !rules.handover.discounts && Boolean(productDiscountRequest(question));
+  return { instructions: chatReplyV17.instructions, tools: salesAgentToolsFor(rules, canOffer) };
+}
+
 // One pass of the loop, with fixture tools instead of the database.
 async function composeOnce(
   { driver, meter, model, history }: Run,
@@ -328,6 +343,8 @@ async function composeOnce(
   const ended = (outcome: EvalOutcome): Composed => ({ kind: 'ended', outcome });
   const toolResults: object[] = [];
   const { context, onlyProductIds } = replyBlocks(history, golden, toolResults);
+  const rules = evalShopRules(golden);
+  const configuration = replyModelConfiguration(rules, golden.question, history);
   let transcript = rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(
@@ -336,10 +353,9 @@ async function composeOnce(
       history ? `reply:${model}:${history}` : `reply:${model}`,
       {
         model,
-        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV16.instructions,
+        ...configuration,
         input: context + transcript,
         output: chatReplyOutputSchema,
-        tools: salesAgentToolsFor(evalShopRules(golden)),
         timeoutMs: TIMEOUT_MS,
       },
     ).catch((error: unknown) => {
@@ -357,7 +373,7 @@ async function composeOnce(
       calls: result.toolCalls,
       toolResults,
       note,
-      shop: { rules: evalShopRules(golden), draftedOrder: golden.draftedOrder },
+      shop: { rules, golden },
       onlyProductIds,
     });
     if (outcome.handover) return ended({ kind: 'handover', reason: outcome.handover });
