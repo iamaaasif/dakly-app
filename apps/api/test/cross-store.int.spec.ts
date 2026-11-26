@@ -717,9 +717,12 @@ fixture('GET /products', async () => {
 
   const path = '/products?sort=best_selling&limit=1';
   expect((await f.request(a.owner, 'GET', `${path}&cursor=${aId}`)).statusCode).toBe(400);
-  expect(
-    (await f.request(a.owner, 'GET', `${path}&cursor=2_0000-11-26T00:00:00Z_${aId}`)).statusCode,
-  ).toBe(400);
+  for (const cursor of [
+    `2_0000-11-26T00:00:00Z_${aId}`,
+    `-1_2026-11-26T00:00:00Z_${aId}`,
+    `9223372036854775808_2026-11-26T00:00:00Z_${aId}`,
+  ])
+    expect((await f.request(a.owner, 'GET', `${path}&cursor=${cursor}`)).statusCode).toBe(400);
   const pageOne = (await success(a, 'GET', path, 200)).json();
   expect(pageOne.nextCursor).toMatch(/^3_/);
   expect(

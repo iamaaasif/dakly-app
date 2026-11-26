@@ -289,6 +289,7 @@ export const productListBaseQuerySchema = z.strictObject({
 const unitsSoldSchema = z.int().nonnegative();
 const bestSellingCursorSchema = z
   .templateLiteral([unitsSoldSchema, '_', z.iso.datetime(), '_', z.uuid()])
+  // The template checks the shape. PostgreSQL rejects year zero.
   .refine((cursor) => {
     const [units, date] = cursor.split('_');
     return unitsSoldSchema.safeParse(Number(units)).success && !date?.startsWith('0000-');

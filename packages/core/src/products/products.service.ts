@@ -141,10 +141,12 @@ export class ProductsService {
       productResponse(product, stock.lowStockThreshold, this.storage, showNegotiationPrices),
     );
     const last = page.at(-1);
-    const nextCursor = last?.rankCreatedAt
-      ? `${last.unitsSold}_${last.rankCreatedAt}_${last.id}`
-      : (last?.id ?? null);
-    return { items, nextCursor: rows.length > query.limit ? nextCursor : null };
+    if (!last || rows.length <= query.limit) return { items, nextCursor: null };
+    const nextCursor =
+      query.sort === 'best_selling'
+        ? `${last.unitsSold}_${last.rankCreatedAt}_${last.id}`
+        : last.id;
+    return { items, nextCursor };
   }
 
   async listForOrders(storeId: string, query: OrderCatalogueQuery): Promise<OrderCataloguePage> {
