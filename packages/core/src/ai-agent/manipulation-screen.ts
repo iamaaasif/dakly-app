@@ -28,7 +28,7 @@ const manipulationPatterns: RegExp[] = [
   /দাম.{0,10}(০|শূন্য|ফ্রি|ফ্রী).{0,10}(কর|করে)/u,
 ];
 
-// A customer asking for a lower price is a request only a person may grant.
+// The discount screen also covers coupons, free items and delivery.
 const discountPatterns: RegExp[] = [
   /\b(discount|bargain|lower price|last price|final price|lowest price|best price|coupon|promo code|cashback)\b/u,
   /\b\d{1,3}\s*%\s*(off|discount)\b|\b(half|50) ?(price|off)\b|\bfor free\b|\bfree of charge\b/u,
@@ -38,8 +38,7 @@ const discountPatterns: RegExp[] = [
 ];
 
 export type DiscountScreen = {
-  // On, every discount ask goes to a person. Off, the model holds the price once and a repeat ask
-  // goes to a person.
+  // On, every discount ask goes to a person. Off, the shop can use its saved product offer.
   handOverDiscounts: boolean;
   // Messages earlier in the same chat, before this burst, oldest first.
   earlier: readonly ConversationEntry[];
@@ -62,7 +61,7 @@ export function screenCustomerTexts(
   if (!isDiscountRequest(texts.at(-1))) return null;
   if (discounts.handOverDiscounts) return 'discount';
   const firstAsk = discounts.earlier.findIndex(
-    ({ from, text }) => from === 'customer' && asksForDiscount(normalize(text)),
+    ({ from, text }) => from === 'customer' && isDiscountRequest(text),
   );
   if (firstAsk === -1) return null;
   // A repeat ask goes to a person only once the shop has refused after the first ask.
@@ -95,7 +94,7 @@ export function productDiscountRequest(text: string): string | undefined {
 }
 
 const counterofferWords =
-  /\b(?:can you do|could you do|would you take|taka e dite|takay hobe)\b|টাকায় হবে|টাকায় হবে/u;
+  /\b(?:can you do|could you do|can i pay|would you take|would you accept|taka e dite|takay hobe)\b|টাকায় হবে|টাকায় হবে/u;
 const isCounteroffer = (text: string) =>
   counterofferWords.test(text) && requestedDiscountPoisha(text) !== undefined;
 
