@@ -21,20 +21,22 @@ describe('inbox list order and filters', () => {
        values ($1::uuid, $2, 'facebook_page', $1::text, 'Order fixture')`,
       [connectionId, f.a],
     );
-    // name, status, unread, minutes after 09:00, contact kind
+    // name, status, unread, minutes after 09:00, not-a-customer reason
     const rows = [
-      ['oldNeeds', 'needs_you', 0, 1, 'customer'],
-      ['newOpenUnread', 'open', 2, 30, 'customer'],
-      ['newestDone', 'done', 0, 40, 'customer'],
-      ['oldOpenUnread', 'open', 1, 5, 'customer'],
-      ['supplier', 'open', 0, 20, 'not_customer'],
+      ['oldNeeds', 'needs_you', 0, 1, null],
+      ['newOpenUnread', 'open', 2, 30, null],
+      ['newestDone', 'done', 0, 40, null],
+      ['oldOpenUnread', 'open', 1, 5, null],
+      ['supplier', 'open', 0, 20, 'supplier'],
+      ['spammer', 'open', 0, 25, 'spam'],
+      ['snoozed', 'later', 0, 10, null],
     ] as const;
-    for (const [name, status, unread, minutes, kind] of rows) {
+    for (const [name, status, unread, minutes, reason] of rows) {
       ids[name] = randomUUID();
       contactIds[name] = randomUUID();
       await f.connection.pool.query(
-        "insert into contacts (id, store_id, source, kind, not_customer_reason) values ($1, $2, 'messenger', $3, case when $3 = 'not_customer' then 'supplier' end)",
-        [contactIds[name], f.a, kind],
+        "insert into contacts (id, store_id, source, kind, not_customer_reason) values ($1, $2, 'messenger', case when $3::text is null then 'customer' else 'not_customer' end, $3)",
+        [contactIds[name], f.a, reason],
       );
       await f.connection.pool.query(
         `insert into conversations (id, store_id, contact_id, channel_connection_id, channel, status, unread_count, last_message_at)
@@ -71,7 +73,7 @@ describe('inbox list order and filters', () => {
   });
   const names = async (change: Partial<ConversationListQuery>, contactFilter?: string[]) => {
     const byId = Object.fromEntries(Object.entries(ids).map(([name, id]) => [id, name]));
-    const rows = await repository.list(f.a, query(change), contactFilter);
+    const rows = await repository.list(f.a, f.userA, query(change), contactFilter);
     return rows.map((row) => byId[row.id]);
   };
 
@@ -80,7 +82,9 @@ describe('inbox list order and filters', () => {
       'oldNeeds',
       'newestDone',
       'newOpenUnread',
+      'spammer',
       'supplier',
+      'snoozed',
       'oldOpenUnread',
     ]);
   });
@@ -104,7 +108,7 @@ describe('inbox list order and filters', () => {
       const seen: string[] = [];
       let cursor: ConversationListQuery['cursor'];
       for (let page = 0; page < 5; page += 1) {
-        const rows = await repository.list(f.a, query({ sort, limit: 2, cursor }));
+        const rows = await repository.list(f.a, f.userA, query({ sort, limit: 2, cursor }));
         const shown = rows.slice(0, 2);
         seen.push(...shown.map((row) => row.id));
         const last = shown.at(-1);
@@ -116,9 +120,56 @@ describe('inbox list order and filters', () => {
     }
   });
 
-  it('filters by contact kind, status and a list of contacts', async () => {
-    expect(await names({ contactKind: 'not_customer' })).toEqual(['supplier']);
-    expect(await names({ status: 'done' })).toEqual(['newestDone']);
+  it('filters by folder, state and a list of contacts', async () => {
+    expect(await names({ folder: 'all', state: 'open' })).toEqual([
+      'newOpenUnread',
+      'oldOpenUnread',
+      'oldNeeds',
+    ]);
+    expect(await names({ folder: 'not_customers' })).toEqual(['supplier']);
+    expect(await names({ folder: 'spam' })).toEqual(['spammer']);
+    expect(await names({ folder: 'all', state: 'snoozed' })).toEqual(['snoozed']);
+    expect(await names({ state: 'resolved' })).toEqual(['newestDone']);
     expect(await names({}, [contactIds.oldNeeds!])).toEqual(['oldNeeds']);
+  });
+
+  it('puts a chat in Mine, Unassigned, Unreplied, AI handling and Order request by its fields', async () => {
+    await f.connection.pool.query(
+      `update conversations set assignee_user_id = $2, responder = 'human',
+         last_inbound_at = '2026-11-19T09:00:00Z', last_outbound_at = '2026-11-19T09:05:00Z'
+       where id = $1`,
+      [ids.newOpenUnread, f.userA],
+    );
+    await f.connection.pool.query(
+      `update conversations set responder = 'ai', intent_tag = 'order',
+         last_inbound_at = '2026-11-19T09:10:00Z', last_outbound_at = '2026-11-19T09:05:00Z'
+       where id = $1`,
+      [ids.oldOpenUnread],
+    );
+    await f.connection.pool.query(
+      "update conversations set responder = 'human', last_inbound_at = '2026-11-19T09:00:00Z' where id = $1",
+      [ids.oldNeeds],
+    );
+    const open = (folder: ConversationListQuery['folder']) => names({ folder, state: 'open' });
+    expect(await open('mine')).toEqual(['newOpenUnread']);
+    expect(await open('unassigned')).toEqual(['oldOpenUnread', 'oldNeeds']);
+    expect(await open('unreplied')).toEqual(['oldOpenUnread', 'oldNeeds']);
+    expect(await open('ai_handling')).toEqual(['oldOpenUnread']);
+    expect(await open('order_request')).toEqual(['oldOpenUnread']);
+    expect(await repository.counts(f.a, f.userA)).toEqual({
+      all: 3,
+      mine: 1,
+      unassigned: 2,
+      unreplied: 2,
+      ai_handling: 1,
+      order_request: 1,
+      not_customers: 1,
+      spam: 1,
+      unread: 2,
+      needsYou: 1,
+      snoozed: 1,
+      resolved: 1,
+    });
+    expect((await repository.counts(f.b, f.userA)).all).toBe(0);
   });
 });

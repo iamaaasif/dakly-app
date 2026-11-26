@@ -58,7 +58,7 @@ export class InboxService {
       ? await this.contacts.searchIds(storeId, query.q, access, actor)
       : undefined;
     if (contactIds && !contactIds.length) return { items: [], nextCursor: null };
-    const rows = await this.repository.list(storeId, query, contactIds);
+    const rows = await this.repository.list(storeId, actor.userId, query, contactIds);
     const page = rows.slice(0, query.limit);
     const items = page.map(({ sortGroup: _group, ...row }) => conversationResponse(row));
     const last = page.at(-1);
@@ -79,9 +79,9 @@ export class InboxService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async counts(storeId: string): Promise<ConversationCountsResponse> {
+  async counts(storeId: string, actor: UserActor): Promise<ConversationCountsResponse> {
     await this.requireChats(storeId);
-    return this.repository.counts(storeId);
+    return this.repository.counts(storeId, actor.userId);
   }
 
   async summary(storeId: string, access: StoreAccess): Promise<ConversationSummaryResponse> {

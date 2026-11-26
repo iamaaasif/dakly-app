@@ -4189,11 +4189,17 @@ fixture('GET /conversations/counts', async () => {
   await enableChats(b);
   expect((await success(b, 'GET', '/conversations/counts', 200)).json()).toEqual({
     all: 1,
+    mine: 0,
+    unassigned: 1,
+    unreplied: 0,
+    ai_handling: 1,
+    order_request: 0,
+    not_customers: 0,
+    spam: 0,
+    unread: 0,
     needsYou: 0,
-    aiHandling: 1,
-    followUp: 0,
-    done: 0,
-    notCustomers: 0,
+    snoozed: 0,
+    resolved: 0,
   });
 });
 
@@ -4297,7 +4303,7 @@ fixture('GET /conversations', async () => {
   expect(result.json()).toMatchObject({ items: [{ id: own }], nextCursor: null });
   const second = await seedConversation(b);
   await success(b, 'PATCH', `/conversations/${own}`, 200, { status: 'later' });
-  expect((await success(b, 'GET', '/conversations?status=later', 200)).json()).toMatchObject({
+  expect((await success(b, 'GET', '/conversations?state=snoozed', 200)).json()).toMatchObject({
     items: [{ id: own, status: 'later' }],
     nextCursor: null,
   });
