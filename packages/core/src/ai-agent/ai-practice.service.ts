@@ -95,7 +95,7 @@ export class AiPracticeService {
     const { rules } = await this.settings.practice(storeId);
     const screened = screenCustomerTexts([question], {
       handOverDiscounts: rules.handover.discounts,
-      earlierTexts: [],
+      earlier: [],
     });
     if (screened) return this.stopped(screened, rules.replyLanguage, question);
     const classified = await this.ai.run(storeId, {
