@@ -131,21 +131,19 @@ export class SalesAgentToolsService {
     const found = adProductIds
       ? await this.productSearch.searchWithin(storeId, adProductIds, query, SEARCH_PRODUCT_LIMIT)
       : await this.productSearch.search(storeId, query, SEARCH_PRODUCT_LIMIT);
-    const soldOut = found.filter(
-      (product) =>
-        product.isStockTracked && product.variants.every((variant) => variant.available <= 0),
-    );
-    const alternatives = (
-      await Promise.all(
-        soldOut.map((product) => this.productSearch.alternativesFor(storeId, product)),
-      )
-    )
-      .flat()
-      .filter(
-        (alt, index, list) =>
-          !found.some((item) => item.id === alt.id) &&
-          list.findIndex((item) => item.id === alt.id) === index,
-      );
+    const soldOut = found.filter(isProductSoldOut);
+    const alternatives = [
+      ...new Map(
+        (
+          await Promise.all(
+            soldOut.map((product) => this.productSearch.alternativesFor(storeId, product)),
+          )
+        )
+          .flat()
+          .filter((alternative) => !found.some(({ id }) => id === alternative.id))
+          .map((alternative) => [alternative.id, alternative]),
+      ).values(),
+    ];
     return {
       products: found.map(productResult),
       ...(alternatives.length ? { alternatives: alternatives.map(productResult) } : {}),
@@ -427,6 +425,9 @@ type ChatVariant = ChatProduct['variants'][number];
 
 export const isOutOfStock = (product: ChatProduct, variant: ChatVariant) =>
   product.isStockTracked && variant.available <= 0;
+
+export const isProductSoldOut = (product: ChatProduct) =>
+  product.isStockTracked && product.variants.every((variant) => isOutOfStock(product, variant));
 
 export function productCardText(product: ChatProduct, only?: ChatVariant) {
   const lines = (only ? [only] : product.variants).map(

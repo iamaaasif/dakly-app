@@ -33,7 +33,7 @@ import {
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV14 } from './prompts/chat-reply.v14';
+import { chatReplyV15 } from './prompts/chat-reply.v15';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import { promptWith } from './reply-prompt-version';
 import {
@@ -150,7 +150,7 @@ export class SalesAgentService {
         ? this.inbox.replyHistory(input.storeId, input.chat.conversationId, REPLY_HISTORY_LENGTH)
         : undefined,
       this.gatherProducts(input, results),
-      this.tools.deliveryZones?.(input.storeId) ?? Promise.resolve([]),
+      this.tools.deliveryZones(input.storeId),
     ]);
     if (deliveryZones.length)
       results.push({ tool: 'delivery_zones', result: { zones: deliveryZones } });
@@ -176,7 +176,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV14, inChat, ad),
+        prompt: promptWith(chatReplyV15, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,

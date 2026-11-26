@@ -30,6 +30,7 @@ function build(memoryText: string | undefined = undefined) {
     run: vi.fn().mockResolvedValue({ products: [] }),
     adProducts: vi.fn().mockResolvedValue([]),
     productNamedBy: vi.fn().mockResolvedValue([]),
+    deliveryZones: vi.fn().mockResolvedValue([]),
   } as unknown as SalesAgentToolsService;
   const inbox = {
     replyHistory: vi.fn().mockResolvedValue([]),
@@ -168,7 +169,7 @@ it('reads the products shown earlier in the chat again, so "L ache?" quotes that
     'get_product',
     JSON.stringify({ productId: 'p-kurti' }),
   );
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v14+products-in-chat.v2');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v15+products-in-chat.v2');
   const input: string = run.mock.calls[0]![1].input;
   expect(input).toMatch(/<products_in_this_chat>.*"stock":8.*<\/products_in_this_chat>/);
   // The fact check reads the same result, so the price the model quotes from it is allowed.
@@ -270,7 +271,7 @@ it('adds no shown products when the chat has none, so the model still asks which
   });
 
   expect(run.mock.calls[0]![1].input).not.toContain('products_in_this_chat');
-  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v14');
+  expect(run.mock.calls[0]![1].prompt.version).toBe('chat-reply.v15');
   expect(tools.run).not.toHaveBeenCalledWith(expect.anything(), 'get_product', expect.anything());
 });
 
@@ -471,7 +472,7 @@ it('answers a bare price question from the ad’s products and limits search to 
   const call = run.mock.calls[0]![1];
   expect(call.input).toContain('<ad_products>');
   expect(call.input).toContain('নীল কুর্তি');
-  expect(call.prompt.version).toBe('chat-reply.v14+ad-products.v1');
+  expect(call.prompt.version).toBe('chat-reply.v15+ad-products.v1');
   expect(tools.run).toHaveBeenCalledWith(
     expect.objectContaining({ adProductIds: ['p-red', 'p-blue'] }),
     'search_products',
@@ -580,12 +581,10 @@ it('answers from reads started earlier without reading the chat again', async ()
 
 it('includes compact delivery zones in <shop> and allows quoting their charges', async () => {
   const { service, run, tools } = build();
-  (tools as unknown as { deliveryZones: ReturnType<typeof vi.fn> }).deliveryZones = vi
-    .fn()
-    .mockResolvedValue([
-      { name: 'Inside Dhaka', chargeTaka: 60 },
-      { name: 'Outside Dhaka', chargeTaka: 120 },
-    ]);
+  vi.mocked(tools.deliveryZones).mockResolvedValue([
+    { name: 'Inside Dhaka', chargeTaka: 60 },
+    { name: 'Outside Dhaka', chargeTaka: 120 },
+  ]);
   run.mockResolvedValue({
     kind: 'output',
     aiRunId: 'run-1',

@@ -580,6 +580,21 @@ it('offers in-stock products of the same category for a sold-out one, never anot
   ]);
 });
 
+it('brings the alternatives of a sold-out search result, once each and never a product already found', async () => {
+  const storeId = await shop();
+  const buyer = await contact(storeId);
+  await product(storeId, { name: 'স্নিকার্স', aliases: ['sneakers'], category: 'জুতা', stock: 2 });
+  await product(storeId, { name: 'ক্যানভাস জুতা', category: 'জুতা', pricePoisha: 150000 });
+  const result = (await run(storeId, buyer, 'search_products', { query: 'sneakers' })) as {
+    products: { name: string }[];
+    alternatives: { name: string }[];
+  };
+  expect(result.products.map(({ name }) => name)).toEqual(['স্নিকার্স']);
+  expect(result.alternatives.map(({ name }) => name)).toEqual(['ক্যানভাস জুতা']);
+  const inStock = (await run(storeId, buyer, 'search_products', { query: 'canvas' })) as object;
+  expect(inStock).not.toHaveProperty('alternatives');
+});
+
 it('puts a customer on the restock list once, only for a sold-out size, only in a chat', async () => {
   const storeId = await shop();
   const buyer = await contact(storeId);

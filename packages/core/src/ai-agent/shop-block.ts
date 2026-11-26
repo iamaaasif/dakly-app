@@ -1,8 +1,4 @@
-export type CompactDeliveryZone = {
-  name: string;
-  chargeTaka: number;
-  days?: string | null;
-};
+export type CompactDeliveryZone = { name: string; chargeTaka: number };
 
 export const shopBlock = (
   shop: {
@@ -11,7 +7,7 @@ export const shopBlock = (
     address: string | null;
     district: string | null;
   },
-  deliveryZones?: readonly CompactDeliveryZone[],
+  deliveryZones: readonly CompactDeliveryZone[],
 ) =>
   `<shop>${JSON.stringify({
     name: shop.name,
