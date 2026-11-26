@@ -131,7 +131,7 @@ function ListFilters({ query }: ProductFiltersProps) {
         value={query.sort ?? 'newest'}
         onValueChange={(sort) => choose({ sort: sort === 'best_selling' ? sort : 'newest' })}
       >
-        <SelectTrigger aria-label="Sort products">
+        <SelectTrigger aria-label="Sort products" className="w-auto">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

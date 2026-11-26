@@ -221,7 +221,9 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await page.getByRole('option', { name: 'Best selling' }).click();
     await expect(page).toHaveURL(/sort=best_selling/);
     await expect(page.getByRole('table').getByRole('row').nth(1)).toContainText('Cotton Panjabi');
-    await capture('best-selling', salesEvidence, { target: sort });
+    await capture('best-selling', salesEvidence, {
+      target: catalogue.getByText('Cotton Panjabi', { exact: true }).filter({ visible: true }),
+    });
     await page.reload();
     await expect(sort).toHaveText('Best selling');
 
