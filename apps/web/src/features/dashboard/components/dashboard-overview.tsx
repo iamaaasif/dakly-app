@@ -157,7 +157,7 @@ function overviewTiles({
       value: displayCount(chatsWaiting),
       count: chatsWaiting,
       detail: waitingLabel(chatsWaiting),
-      href: '/chats?tab=needs-you',
+      href: '/chats',
     },
   ];
 }

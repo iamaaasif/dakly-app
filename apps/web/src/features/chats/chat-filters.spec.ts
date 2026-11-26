@@ -16,13 +16,17 @@ describe('chat filters', () => {
     expect(chatsHref(query)).toBe(`/chats?sort=unread&q=Sadia&assignee=${assignee}`);
     expect(chatsHref({ ...query, label: 'VIP' })).toContain('&label=VIP');
     expect(chatsHref(chatScreenQuerySchema.parse({}))).toBe('/chats');
+    expect(chatsHref(chatScreenQuerySchema.parse({ folder: 'spam', state: 'resolved' }))).toBe(
+      '/chats?folder=spam&state=resolved',
+    );
   });
 
-  it('sends the tab, sort and search to the list', () => {
+  it('sends the folder, state, sort and search to the list', () => {
     expect(
-      conversationFilters(chatScreenQuerySchema.parse({ tab: 'not-customers', q: 'ab' })),
+      conversationFilters(chatScreenQuerySchema.parse({ folder: 'not_customers', q: 'ab' })),
     ).toEqual({
-      contactKind: 'not_customer',
+      folder: 'not_customers',
+      state: 'open',
       sort: 'needs_you',
       channel: undefined,
       q: undefined,

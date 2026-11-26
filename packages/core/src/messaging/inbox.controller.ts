@@ -77,8 +77,8 @@ export class InboxController {
 
   @Get('counts')
   @RequirePermission('chats.view')
-  counts(@CurrentStore() storeId: string) {
-    return this.inbox.counts(storeId);
+  counts(@CurrentStore() storeId: string, @CurrentUser() userId: string) {
+    return this.inbox.counts(storeId, { kind: 'user', userId });
   }
 
   @Get('summary')
