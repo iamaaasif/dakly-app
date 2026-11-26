@@ -30,29 +30,49 @@ export async function draftItemSnapshots(
   return items;
 }
 
-function applyPriceOffers(
-  items: OrderItemWrite[],
-  rows: Awaited<ReturnType<PriceOffersService['forOrder']>>,
+type LiveOffers = Awaited<ReturnType<PriceOffersService['forOrder']>>;
+
+export function offerChanges(
+  previous: OrderItemWrite[],
+  rows: LiveOffers,
   now: Date,
-) {
+  discountRoomPoisha: number,
+): CreateOrderInput['items'] | undefined {
+  const byVariant = new Map(rows.map((row) => [row.variantId, row]));
+  let extraDiscount = 0;
+  const items = previous.map((item) => {
+    const offer = byVariant.get(item.variantId);
+    const applied = offerDiscount(item, offer, now) ?? 0;
+    const saved = item.lineDiscountPoisha ?? 0;
+    const lineDiscountPoisha = Math.max(saved, applied);
+    extraDiscount += lineDiscountPoisha - saved;
+    return {
+      variantId: item.variantId,
+      quantity: item.quantity,
+      lineDiscountPoisha,
+    };
+  });
+  return extraDiscount > 0 && extraDiscount <= discountRoomPoisha ? items : undefined;
+}
+
+function applyPriceOffers(items: OrderItemWrite[], rows: LiveOffers, now: Date) {
   const byVariant = new Map(rows.map((row) => [row.variantId, row]));
   for (const item of items) {
-    const offer = byVariant.get(item.variantId);
-    if (!offer || offer.expiresAt <= now || offer.pricePoisha !== item.unitPricePoisha) continue;
-    const discount =
-      BigInt(item.unitPricePoisha - offer.offeredPricePoisha) * BigInt(item.quantity);
-    if (discount > Number.MAX_SAFE_INTEGER) throw orderError('ORDER_TOTAL_INVALID');
-    item.lineDiscountPoisha = Number(discount);
+    const applied = offerDiscount(item, byVariant.get(item.variantId), now);
+    if (applied !== undefined) item.lineDiscountPoisha = applied;
   }
 }
 
-export async function recordPriceOffer(
-  storeId: string,
-  orderId: string,
-  items: OrderItemWrite[],
-  audit: AuditService,
-) {
-  if (!items.some(({ lineDiscountPoisha }) => (lineDiscountPoisha ?? 0) > 0)) return;
+function offerDiscount(item: OrderItemWrite, offer: LiveOffers[number] | undefined, now: Date) {
+  if (!offer || offer.expiresAt <= now || offer.pricePoisha !== item.unitPricePoisha)
+    return undefined;
+  const discount =
+    BigInt(Math.max(0, item.unitPricePoisha - offer.offeredPricePoisha)) * BigInt(item.quantity);
+  if (discount > Number.MAX_SAFE_INTEGER) throw orderError('ORDER_TOTAL_INVALID');
+  return Number(discount);
+}
+
+export async function recordPriceOffer(storeId: string, orderId: string, audit: AuditService) {
   await audit.record(storeId, {
     action: 'order.ai_price_offer',
     entityType: 'order',

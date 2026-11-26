@@ -7,7 +7,7 @@ const badgeVariants = cva('inline-flex items-center rounded-sm text-xs font-medi
   variants: {
     size: { md: 'px-2 py-1', sm: 'px-1.5 py-px' },
     variant: {
-      neutral: 'bg-surface-muted text-text',
+      neutral: 'bg-neutral-soft text-text',
       success: 'bg-success-soft text-success',
       warning: 'bg-warning-soft text-warning',
       danger: 'bg-danger-soft text-danger',
