@@ -6,11 +6,12 @@ import type { OrderItemWrite } from './orders.repository';
 export function applyPriceOffers(
   items: OrderItemWrite[],
   rows: Awaited<ReturnType<PriceOffersService['forOrder']>>,
+  now: Date,
 ) {
   const byVariant = new Map(rows.map((row) => [row.variantId, row]));
   for (const item of items) {
     const offer = byVariant.get(item.variantId);
-    if (!offer || offer.pricePoisha !== item.unitPricePoisha) continue;
+    if (!offer || offer.expiresAt <= now || offer.pricePoisha !== item.unitPricePoisha) continue;
     const discount =
       BigInt(item.unitPricePoisha - offer.offeredPricePoisha) * BigInt(item.quantity);
     if (discount > Number.MAX_SAFE_INTEGER) throw orderError('ORDER_TOTAL_INVALID');

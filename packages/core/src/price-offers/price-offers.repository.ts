@@ -93,6 +93,7 @@ export class PriceOffersRepository {
         .select({
           productId: priceOffers.productId,
           offeredPricePoisha: priceOffers.offeredPricePoisha,
+          expiresAt: priceOffers.expiresAt,
         })
         .from(priceOffers)
         .where(

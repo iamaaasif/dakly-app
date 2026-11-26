@@ -37,10 +37,12 @@ function fixture() {
     } as AiAgentSettingsService,
     { now: () => state.now },
     {
-      lockNegotiationTerms: async () => ({
-        ...state.product,
-        variants: [{ priceOverridePoisha: state.override }],
-      }),
+      lockNegotiationTerms: async () => [
+        {
+          ...state.product,
+          variants: [{ priceOverridePoisha: state.override }],
+        },
+      ],
     } as ProductsService,
   );
   return {

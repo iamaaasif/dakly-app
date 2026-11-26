@@ -120,7 +120,7 @@ export class OrdersService {
           )
         : [];
       const items = await orderItemSnapshots(storeId, this.products, input.items);
-      applyPriceOffers(items, offers);
+      applyPriceOffers(items, offers, this.clock.now());
       const totals = orderTotals(items, {
         ...input,
         deliveryChargePoisha: delivery.deliveryChargePoisha,

@@ -19,6 +19,8 @@ type OfferPrices = {
   negotiationFloorPoisha: number;
 };
 
+type NegotiationTerms = Awaited<ReturnType<ProductsService['lockNegotiationTerms']>>[number];
+
 export type { OfferParty, OfferTurn };
 
 @Injectable()
@@ -41,7 +43,8 @@ export class PriceOffersService {
       if (!(await this.repository.isCustomerTurn(storeId, turn))) return { kind: 'fixed' };
       if ((await this.settings.view(storeId)).handoverRules.discounts) return { kind: 'handover' };
 
-      const product = await this.eligibleProduct(storeId, productId);
+      const [terms] = await this.products.lockNegotiationTerms(storeId, [productId]);
+      const product = eligibleProduct(terms);
       if (!product) return { kind: 'fixed' };
       if (
         requestedPricePoisha !== undefined &&
@@ -50,20 +53,6 @@ export class PriceOffersService {
         return { kind: 'final' };
       return this.offerForTurn(storeId, turn, { productId, product });
     });
-  }
-
-  private async eligibleProduct(storeId: string, productId: string) {
-    const product = await this.products.lockNegotiationTerms(storeId, productId);
-    if (!product?.negotiationEnabled) return undefined;
-    const { negotiationFloorPoisha, negotiationOpeningPoisha } = product;
-    if (
-      negotiationFloorPoisha === null ||
-      negotiationOpeningPoisha === null ||
-      negotiationFloorPoisha < 0
-    )
-      return undefined;
-    if (productNegotiationIssue(product)) return undefined;
-    return { ...product, negotiationFloorPoisha, negotiationOpeningPoisha };
   }
 
   private async offerForTurn(
@@ -100,13 +89,17 @@ export class PriceOffersService {
     const productIds = await this.products.productIdsOfVariants(storeId, variantIds);
     if (!productIds.length) return [];
     const rows = await this.repository.forOrder(storeId, party, productIds, this.clock.now());
-    const offers = [];
+    if (!rows.length) return [];
     // Product edits lock the product before its variants. The draft uses the same order.
-    for (const productId of [...new Set(rows.map((row) => row.productId))].sort()) {
-      const product = await this.eligibleProduct(storeId, productId);
+    const products = await this.products.lockNegotiationTerms(storeId, [
+      ...new Set(rows.map(({ productId }) => productId)),
+    ]);
+    const offers = [];
+    for (const terms of products) {
+      const product = eligibleProduct(terms);
       if (!product) continue;
       const offer = rows.find(
-        (row) => row.productId === productId && priceIsEligible(row.offeredPricePoisha, product),
+        (row) => row.productId === product.id && priceIsEligible(row.offeredPricePoisha, product),
       );
       if (!offer) continue;
       for (const { id: variantId } of product.variants) {
@@ -115,11 +108,25 @@ export class PriceOffersService {
             variantId,
             pricePoisha: product.pricePoisha,
             offeredPricePoisha: offer.offeredPricePoisha,
+            expiresAt: offer.expiresAt,
           });
       }
     }
     return offers;
   }
+}
+
+function eligibleProduct(product: NegotiationTerms | undefined) {
+  if (!product?.negotiationEnabled) return undefined;
+  const { negotiationFloorPoisha, negotiationOpeningPoisha } = product;
+  if (
+    negotiationFloorPoisha === null ||
+    negotiationOpeningPoisha === null ||
+    negotiationFloorPoisha < 0 ||
+    productNegotiationIssue(product)
+  )
+    return undefined;
+  return { ...product, negotiationFloorPoisha, negotiationOpeningPoisha };
 }
 
 function priceIsEligible(offered: number, { pricePoisha, negotiationFloorPoisha }: OfferPrices) {
