@@ -9,11 +9,15 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 export class ProductOrderVariantsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  lockArchiveVariants(storeId: string, productId: string) {
-    return this.database.forStore(storeId, async (tx) => {
-      // Product edits already lock the product before changing its variants.
-      const [product] = await tx
-        .select({ id: products.id })
+  async lockProduct(storeId: string, productId: string) {
+    const [product] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          pricePoisha: products.pricePoisha,
+          negotiationEnabled: products.negotiationEnabled,
+          negotiationOpeningPoisha: products.negotiationOpeningPoisha,
+          negotiationFloorPoisha: products.negotiationFloorPoisha,
+        })
         .from(products)
         .where(
           and(
@@ -22,8 +26,15 @@ export class ProductOrderVariantsRepository {
             ne(products.status, 'archived'),
           ),
         )
-        .for('no key update');
-      if (!product) return null;
+        .for('no key update'),
+    );
+    return product;
+  }
+
+  lockArchiveVariants(storeId: string, productId: string) {
+    return this.database.forStore(storeId, async (tx) => {
+      // Product edits already lock the product before changing its variants.
+      if (!(await this.lockProduct(storeId, productId))) return null;
       const variants = await tx
         .select({ id: productVariants.id })
         .from(productVariants)

@@ -35,6 +35,7 @@ const product = (overrides: Partial<ProductResponse>): ProductResponse => ({
   aliases: [],
   pricePoisha: 245000,
   compareAtPricePoisha: null,
+  negotiationEnabled: false,
   options: [],
   isStockTracked: true,
   isVisibleInChats: true,

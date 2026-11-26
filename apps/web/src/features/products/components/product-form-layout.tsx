@@ -13,6 +13,7 @@ import {
   ProductVisibilityFields,
 } from './product-fields';
 import { ProductBrandField, ProductCategoryField } from './product-list-fields';
+import { ProductNegotiationFields } from './product-negotiation-fields';
 import { ProductInventory, ProductVariantsCard } from './product-variants-card';
 
 export type ProductFormPage = {
@@ -80,6 +81,7 @@ export function ProductFormPageLayout({
           <Card className="space-y-3.5">{page.photos}</Card>
           <FieldCard title="Price">
             <ProductPriceFields productId={productId} onPage />
+            {page.readOnly ? null : <ProductNegotiationFields />}
           </FieldCard>
           <FieldCard title="Inventory">
             <ProductInventory />

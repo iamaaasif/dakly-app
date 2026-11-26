@@ -158,7 +158,19 @@ Built for the variants grid (part 2, API): saving a product with fewer variants 
 
 ### Redesign of the full page (planned)
 
-A new design for the add and edit page and the list is planned as PROD-17, with AI price negotiation as PROD-18 ([D50](../product/decisions.md)). The plan, the design images and every correction to them are in [product-page-redesign.md](../plans/product-page-redesign.md). Until those tasks are Done, this section describes the page as built.
+A new design for the add and edit page and the list is planned as PROD-17, with AI price negotiation as PROD-18 ([D50](../product/decisions.md)). The plan, the design images and every correction to them are in [product-page-redesign.md](../plans/product-page-redesign.md).
+
+### Price negotiation settings (PROD-18)
+
+Members with Edit Products can switch on **Let the AI negotiate** in the Price card. The **Opening offer** must be below the selling price, and the **Lowest price** can equal the opening offer. A lowest price below a variant's cost shows a warning and can still be saved. Products whose variants all inherit the selling price can use these settings. The switch is off for existing and new products by default.
+
+The product API returns both amounts only to members with Edit Products. Chat cards, order links and catalogue exports exclude the amounts.
+
+#### Not built
+
+- Bulk editing the negotiation settings.
+- Importing the negotiation settings.
+- Using negotiation settings to offer discounts in chat and apply them to orders. See [steps 6 and 7](../plans/product-page-redesign.md#prs).
 
 ### Catalogue tools beside the full page (planned)
 

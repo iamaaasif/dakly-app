@@ -99,6 +99,9 @@ export const products = pgTable(
     // (PROD-R1): such a product is not offered in chats, shop sales or the order link.
     pricePoisha: poisha('price_poisha').notNull().default(0),
     compareAtPricePoisha: poisha('compare_at_price_poisha'),
+    negotiationEnabled: boolean('negotiation_enabled').notNull().default(false),
+    negotiationOpeningPoisha: poisha('negotiation_opening_poisha'),
+    negotiationFloorPoisha: poisha('negotiation_floor_poisha'),
     imageFileIds: uuid('image_file_ids')
       .array()
       .notNull()
@@ -144,6 +147,10 @@ export const products = pgTable(
       .on(table.storeId, table.externalRef)
       .where(sql`${table.externalRef} is not null`),
     check('products_status', isOneOf(table.status, productStatuses)),
+    check(
+      'products_negotiation_price_order',
+      sql`${table.negotiationFloorPoisha} <= ${table.negotiationOpeningPoisha}`,
+    ),
     check(
       'products_price',
       sql`${table.pricePoisha} >= 0 and coalesce(${table.compareAtPricePoisha}, 0) >= 0`,

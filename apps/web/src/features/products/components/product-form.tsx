@@ -7,6 +7,8 @@ import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import {
   productFormSchema,
+  productNegotiationIssue,
+  productNegotiationIssues,
   type ChangeProductInput,
   type ProductFormInput,
   type ProductFormValues,
@@ -47,7 +49,14 @@ const pageFormSchema = productFormSchema
           pricePoisha: input.compareAtPricePoisha,
           compareAtPricePoisha: input.pricePoisha,
         },
-  );
+  )
+  .superRefine((input, context) => {
+    const code = productNegotiationIssue(input);
+    if (code) {
+      const { field, message } = productNegotiationIssues[code];
+      context.addIssue({ code: 'custom', path: [field], message });
+    }
+  });
 
 type ProductFormProps = {
   product?: ProductResponse;
@@ -65,6 +74,9 @@ export function ProductForm({ product, initial, assistantDraft, onSaved, page }:
     defaultValues: {
       isVisibleInChats: true,
       isVisibleInOrderLink: true,
+      negotiationEnabled: false,
+      negotiationOpeningPoisha: '',
+      negotiationFloorPoisha: '',
       ...formValues({ product, initial, assistantDraft, page }),
     },
   });
@@ -289,6 +301,7 @@ function formValues({
     aliases: product.aliases,
     options: product.options,
     ...priceFields(product, Boolean(page)),
+    ...negotiationFields(product),
     variants: product.variants.map(
       ({ id, optionValues, sku, priceOverridePoisha, costPoisha, lowStockThreshold, onHand }) => ({
         id,
@@ -322,6 +335,14 @@ function priceFields(product: ProductResponse, onPage: boolean) {
   };
 }
 
+function negotiationFields(product: ProductResponse) {
+  return {
+    negotiationEnabled: product.negotiationEnabled,
+    negotiationOpeningPoisha: takaInputFromPoisha(product.negotiationOpeningPoisha ?? null),
+    negotiationFloorPoisha: takaInputFromPoisha(product.negotiationFloorPoisha ?? null),
+  };
+}
+
 function weightText(grams: number | null) {
   return grams === null ? '' : String(grams);
 }
@@ -342,12 +363,11 @@ function productChanges(
     : { ...changes, ...prices };
 }
 
-function productErrorField(
-  error: Error,
-  variantCount: number,
-): 'root.server' | 'variants' | 'variants.0.sku' {
-  if (error instanceof ApiError && error.code === 'PRODUCT_VARIANT_IN_OPEN_ORDERS')
-    return 'variants';
-  if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
-  return variantCount === 1 ? 'variants.0.sku' : 'variants';
+function productErrorField(error: Error, variantCount: number) {
+  if (!(error instanceof ApiError)) return 'root.server';
+  if (Object.hasOwn(productNegotiationIssues, error.code))
+    return productNegotiationIssues[error.code as keyof typeof productNegotiationIssues].field;
+  if (error.code === 'PRODUCT_VARIANT_IN_OPEN_ORDERS') return 'variants';
+  if (error.code === 'PRODUCT_SKU_TAKEN') return variantCount === 1 ? 'variants.0.sku' : 'variants';
+  return 'root.server';
 }

@@ -13,11 +13,15 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { builtInRoleAccess } from '../team/built-in-roles';
+import type { TeamRepository } from '../team/team.repository';
+import { TeamService } from '../team/team.service';
 import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
+import { ProductsController } from './products.controller';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
 
@@ -69,6 +73,7 @@ describe('ProductsService with Postgres', () => {
     brands,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
+  const controller = new ProductsController(service, new TeamService({} as TeamRepository));
   beforeAll(() => f.setup());
   afterAll(async () => {
     for (const table of [
@@ -113,6 +118,86 @@ describe('ProductsService with Postgres', () => {
       [f.a, 'product.updated'],
     );
     expect(events.rows.map((row) => row.payload)).toContainEqual({ productId: product.id });
+  });
+
+  it('only exposes negotiation prices to product editors', async () => {
+    const settings = {
+      negotiationEnabled: true,
+      negotiationOpeningPoisha: 180025,
+      negotiationFloorPoisha: 150050,
+    };
+    const input = createProductSchema.parse({
+      name: 'Negotiable panjabi',
+      pricePoisha: 200000,
+      ...settings,
+    });
+    const product = await service.create(f.a, input, actor);
+    const owner = builtInRoleAccess.owner;
+    const viewer = { ...owner, role: 'custom' as const, areas: { products: 'view' as const } };
+
+    expect(await controller.getById(f.a, owner, product.id)).toMatchObject(settings);
+    expect(
+      (await controller.list(f.a, owner, { limit: 1, search: input.name })).items[0],
+    ).toMatchObject(settings);
+    const publicViews = [
+      await controller.getById(f.a, viewer, product.id),
+      (await controller.list(f.a, viewer, { limit: 1, search: input.name })).items[0],
+      await service.getById(f.a, product.id),
+      await service.getForChat(f.a, product.id),
+      await service.getForOrderLink(f.a, product.id),
+    ];
+    for (const view of publicViews) {
+      expect(view).toHaveProperty('id', product.id);
+      expect(view).not.toHaveProperty('negotiationOpeningPoisha');
+      expect(view).not.toHaveProperty('negotiationFloorPoisha');
+    }
+  });
+
+  it('validates changes against the saved prices and the resulting variant list', async () => {
+    const input = createProductSchema.parse({
+      name: 'Price changes',
+      pricePoisha: 200000,
+      negotiationEnabled: true,
+      negotiationOpeningPoisha: 170000,
+      negotiationFloorPoisha: 140000,
+    });
+    const product = await service.create(f.a, input, actor);
+    const variant = {
+      id: product.variants[0]!.id,
+      optionValues: {},
+      sku: null,
+      priceOverridePoisha: 175000,
+      costPoisha: null,
+      lowStockThreshold: null,
+    };
+    await expect(
+      service.edit(f.a, product.id, { pricePoisha: 170000 }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_OPENING_PRICE' });
+    await expect(
+      service.edit(f.a, product.id, { negotiationFloorPoisha: 180000 }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_FLOOR_PRICE' });
+    await expect(
+      service.edit(f.a, product.id, { options: [], variants: [variant] }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_VARIANT_PRICE' });
+    const edited = await service.edit(
+      f.a,
+      product.id,
+      {
+        negotiationEnabled: false,
+        options: [],
+        variants: [variant],
+      },
+      actor,
+    );
+    expect(edited).toMatchObject({ pricePoisha: 200000, negotiationEnabled: false });
+    await expect(
+      service.edit(f.a, product.id, { negotiationEnabled: true }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_VARIANT_PRICE' });
+    expect(await controller.getById(f.a, builtInRoleAccess.owner, product.id)).toMatchObject({
+      negotiationEnabled: false,
+      negotiationOpeningPoisha: 170000,
+      negotiationFloorPoisha: 140000,
+    });
   });
 
   it('edits variant prices while preserving variant ids and stock', async () => {

@@ -5,6 +5,8 @@ export type SwitchProps = {
   checked?: boolean;
   disabled?: boolean;
   'aria-labelledby'?: string;
+  'aria-describedby'?: string;
+  'aria-invalid'?: boolean;
   onCheckedChange: (checked: boolean) => void;
 };
 
@@ -14,6 +16,8 @@ export function Switch({
   disabled,
   onCheckedChange,
   'aria-labelledby': labelledBy,
+  'aria-describedby': describedBy,
+  'aria-invalid': invalid,
 }: SwitchProps) {
   return (
     <button
@@ -22,6 +26,8 @@ export function Switch({
       role="switch"
       aria-checked={checked}
       aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
+      aria-invalid={invalid}
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed disabled:opacity-50 ${
