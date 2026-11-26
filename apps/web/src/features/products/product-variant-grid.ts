@@ -188,19 +188,27 @@ export function variantLabel(variant: GridVariant, options: GridOption[]): strin
 
 export type VariantGroup = { label: string; rows: { variant: GridVariant; index: number }[] };
 
-export function groupVariants(options: GridOption[], variants: GridVariant[]): VariantGroup[] {
+export function groupVariants(
+  options: GridOption[],
+  variants: GridVariant[],
+  position = 0,
+): VariantGroup[] {
   const groups = new Map<string, VariantGroup>();
   variants.forEach((variant, index) => {
-    const label = valueAt(variant, 0) ?? '';
+    const label = valueAt(variant, position) ?? '';
     const group = groups.get(label) ?? { label, rows: [] };
     group.rows.push({ variant, index });
     groups.set(label, group);
   });
-  return options.length ? [...groups.values()] : [];
+  const option = options[position];
+  if (!option) return [];
+  return [...groups.values()].sort(
+    (a, b) => option.values.indexOf(a.label) - option.values.indexOf(b.label),
+  );
 }
 
-export function rowStock(variant: GridVariant): number {
-  return Number(variant.initialStock) || 0;
+export function availableStock(variant: GridVariant, reserved = 0) {
+  return Math.max(0, (Number(variant.initialStock) || 0) - reserved);
 }
 
 function takaNumber(text: string | undefined): number | null {
@@ -252,4 +260,5 @@ export function rowKey(variant: GridVariant): string {
   return variant.id ?? `new:${JSON.stringify(variant.optionValues)}`;
 }
 
-export type EditableField = 'priceOverridePoisha' | 'costPoisha' | 'initialStock' | 'sku';
+export type EditableField =
+  'priceOverridePoisha' | 'costPoisha' | 'initialStock' | 'sku' | 'lowStockThreshold';

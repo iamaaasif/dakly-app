@@ -72,10 +72,10 @@ Weights: 400, 500, 600, 700 only. Numbers in tables and KPI cards use `tabular-n
 
 ## Layout
 
-- Sidebar 248 px on desktop, icons only at 64 px when collapsed, a sheet on phone.
+- Sidebar 248 px on desktop, icons only at 64 px when collapsed, a sheet on phone. The top bar is 56 px.
 - Content max width 1280 px; forms max 640 px.
 - Breakpoints: Tailwind defaults. Design phone first (360 px), then `md` (768) and `lg` (1024).
 
 ## Icons
 
-`lucide-react`, 16 px in buttons and tables, 20 px in nav, stroke width 1.75. No emoji in the UI.
+`lucide-react`, 16 px in buttons and tables, 20 px in nav and 16 px in the collapsed icon rail, stroke width 1.75. No emoji in the UI.

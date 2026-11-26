@@ -8,6 +8,7 @@ import { cn } from '@dakly/ui/cn';
 import { AccountMenu } from './account-menu';
 import { MobileNavigation } from './mobile-navigation';
 import { ShellNavigation } from './shell-navigation';
+import { ShellNavigationCollapse } from './shell-navigation-collapse';
 import { StoreRequired } from './store-required';
 import { StoreSwitcher } from './store-switcher';
 
@@ -54,7 +55,7 @@ export function ShellFrame({
         />
       </aside>
       <div className="min-w-0 flex-1">
-        <header className="flex min-h-16 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2 md:gap-3 md:px-8">
+        <header className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2 md:gap-3 md:px-8">
           <MobileNavigation session={data} blocked={blocked} onSignOut={onSignOut} />
           <StoreSwitcher session={data} onSwitch={onSwitch} />
           <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -68,7 +69,9 @@ export function ShellFrame({
           className="mx-auto max-w-7xl has-[[data-full-width]]:max-w-none"
           key={`${data.contextTag}:${generation}`}
         >
-          {needsStore ? <StoreRequired hasMemberships={data.hasMemberships} /> : children}
+          <ShellNavigationCollapse value={setCollapsed}>
+            {needsStore ? <StoreRequired hasMemberships={data.hasMemberships} /> : children}
+          </ShellNavigationCollapse>
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ import { ChatToolbar } from './chat-search-bar';
 import { ChatTabs } from './chat-tabs';
 import { CommentsView } from './comments-view';
 import { ConversationPanel } from './conversation-panel';
+import { useCollapsedShellNavigation } from '@/components/shell-navigation-collapse';
 import { useUrlQuery } from '@/lib/use-url-query';
 
 export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
@@ -23,10 +24,11 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
   const router = useRouter();
   const withoutAgent = { ...query, agent: undefined, feedback: undefined };
   const folders = useInboxFolders();
+  useCollapsedShellNavigation();
   return (
     <main
       data-full-width
-      className="flex h-[calc(100dvh-9.25rem)] min-h-[32rem] bg-surface text-text md:h-[calc(100dvh-4.25rem)]"
+      className="flex h-[calc(100dvh-6.5625rem)] min-h-[32rem] bg-surface text-text md:h-[calc(100dvh-3.5625rem)]"
     >
       <InboxFolders query={query} folders={folders} />
       <div
@@ -105,7 +107,7 @@ function InboxControls({ query, folders }: { query: ChatScreenQuery; folders: In
       role="group"
       aria-label="Inbox controls"
       className={cn(
-        'col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-2 border-b border-border px-3.5 py-2.5 lg:col-span-2',
+        'col-start-1 row-start-1 flex min-h-14 min-w-0 flex-wrap items-center gap-2 border-b border-border px-3.5 py-2.5 lg:col-span-2',
         Boolean(query.chat || query.post) && 'hidden lg:flex',
       )}
     >
@@ -129,7 +131,7 @@ function InboxFolders({ query, folders }: { query: ChatScreenQuery; folders: Inb
 
   return (
     <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface-muted lg:flex">
-      <div className="flex items-center border-b border-border px-3.5 py-3.5">
+      <div className="flex min-h-14 items-center border-b border-border px-3.5">
         <InboxHeading folders={folders} />
       </div>
       <div id={folders.id}>

@@ -8,14 +8,16 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
+import { readinessLabels } from '../product-labels';
 import { firstVariantProfitPercent, productPriceRange } from '../product-prices';
-import { ProductReadiness } from './product-readiness';
+import { ProductActionsMenu } from './product-actions-menu';
 import { ProductThumbnail } from './product-thumbnail';
 
 export type ProductSelection = {
   selectedIds: ReadonlySet<string>;
   onToggle: (product: ProductResponse) => void;
   onTogglePage: (products: ProductResponse[], selected: boolean) => void;
+  onProductChanged: (productId: string, saved: ProductResponse | null) => void;
 };
 type ProductListProps = {
   products: ProductResponse[];
@@ -82,7 +84,7 @@ function ProductRestockButton({
   const variant = lowestStockVariant(product.variants);
   if (!variant) return null;
   return (
-    <div className="flex flex-wrap justify-end gap-2">
+    <div className="flex flex-wrap justify-end gap-2 md:flex-nowrap">
       <Button
         variant="secondary"
         className={className}
@@ -124,9 +126,7 @@ function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
         <TableHead>Stock</TableHead>
         <TableHead>Status</TableHead>
         {onAdjust ? (
-          <TableHead className="w-28 text-right">
-            <span className="sr-only">Actions</span>
-          </TableHead>
+          <TableHead className="w-px text-right whitespace-nowrap">Actions</TableHead>
         ) : null}
       </TableRow>
     </TableHeader>
@@ -136,12 +136,7 @@ function ProductTableHead({ products, onAdjust, selection }: ProductListProps) {
 function ProductTable({ products, onAdjust, onChangeStock, selection }: ProductListProps) {
   return (
     <Table aria-label="Products">
-      <ProductTableHead
-        products={products}
-
-        onAdjust={onAdjust}
-        selection={selection}
-      />
+      <ProductTableHead products={products} onAdjust={onAdjust} selection={selection} />
       <TableBody>
         {products.map((product) => (
           <TableRow key={product.id}>
@@ -151,7 +146,10 @@ function ProductTable({ products, onAdjust, onChangeStock, selection }: ProductL
               </TableCell>
             ) : null}
             <TableCell>
-              <ProductIdentity product={product} />
+              <div className="space-y-2">
+                <ProductIdentity product={product} />
+                <ListReadiness product={product} />
+              </div>
             </TableCell>
             <TableCell className="text-right tabular-nums">
               <ProductPrice product={product} />
@@ -160,15 +158,16 @@ function ProductTable({ products, onAdjust, onChangeStock, selection }: ProductL
               <ProductStock product={product} onAdjust={onAdjust} />
             </TableCell>
             <TableCell>
-              <ProductReadiness product={product} />
+              <ProductVisibility product={product} />
             </TableCell>
             {onAdjust ? (
               <TableCell className="text-right">
-                <ProductRestockButton
+                <ProductRowActions
                   product={product}
                   onAdjust={onAdjust}
                   onChangeStock={onChangeStock}
-                  className="h-8 min-h-8 rounded-md px-3 text-xs font-medium"
+                  selection={selection}
+                  className="h-8 min-h-8 rounded-md px-3 text-xs font-medium whitespace-nowrap"
                 />
               </TableCell>
             ) : null}
@@ -192,22 +191,68 @@ function ProductCards({ products, onAdjust, onChangeStock, selection }: ProductL
             </div>
           </div>
           <ProductStock product={product} onAdjust={onAdjust} />
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <ProductReadiness product={product} />
-            <ProductRestockButton
-              product={product}
-              onAdjust={onAdjust}
-              onChangeStock={onChangeStock}
-              className="min-h-11 rounded-md px-4 text-sm font-medium"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            <ProductVisibility product={product} />
+            <ListReadiness product={product} />
           </div>
+          <ProductRowActions
+            product={product}
+            onAdjust={onAdjust}
+            onChangeStock={onChangeStock}
+            selection={selection}
+            className="min-h-11 rounded-md px-4 text-sm font-medium"
+          />
         </li>
       ))}
     </ul>
   );
 }
 
+function ProductRowActions({
+  selection,
+  ...restock
+}: ProductRestockButtonProps & Pick<ProductListProps, 'selection'>) {
+  if (!restock.onAdjust) return null;
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <ProductRestockButton {...restock} />
+      <ProductActionsMenu
+        product={restock.product}
+        onArchived={() => selection?.onProductChanged(restock.product.id, null)}
+        onHidden={(saved) => selection?.onProductChanged(saved.id, saved)}
+      />
+    </div>
+  );
+}
+
 type ProductPartProps = { product: ProductResponse };
+
+function ProductVisibility({ product }: ProductPartProps) {
+  const active = product.status === 'active';
+  return (
+    <Badge variant={active ? 'success' : 'neutral'} className="rounded-full">
+      {active ? 'Active' : 'Hidden'}
+    </Badge>
+  );
+}
+
+function ListReadiness({ product }: ProductPartProps) {
+  const readiness = product.readiness.filter((label) => label !== 'hidden');
+  if (!readiness.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {readiness.map((label) => (
+        <Badge
+          key={label}
+          variant={label === 'needs_price' || label === 'out_of_stock' ? 'danger' : 'warning'}
+          className="rounded-full"
+        >
+          {readinessLabels[label]}
+        </Badge>
+      ))}
+    </div>
+  );
+}
 
 function ProductIdentity({ product }: ProductPartProps) {
   const href = `/products/${product.id}`;
