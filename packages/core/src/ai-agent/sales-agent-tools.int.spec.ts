@@ -163,11 +163,16 @@ async function order(storeId: string, contactId: string, number: number) {
   );
 }
 
+async function toolResult(...args: Parameters<SalesAgentToolsService['run']>) {
+  const { result } = await tools.run(...args);
+  return result;
+}
+
 const run = (storeId: string, contactId: string, name: string, args: object) =>
-  tools.run({ storeId, contactId }, name, JSON.stringify(args));
+  toolResult({ storeId, contactId }, name, JSON.stringify(args));
 
 const runInChat = (storeId: string, contactId: string, name: string, args: object) =>
-  tools.run(
+  toolResult(
     { storeId, contactId, chat: { conversationId: randomUUID(), channel: 'messenger' } },
     name,
     JSON.stringify(args),
@@ -382,7 +387,7 @@ it('takes an order in a chat, prices it in code and waits for the customer to sa
   };
   const args = JSON.stringify(draft(variantId));
 
-  const drafted = await tools.run(scope, 'draft_order', args);
+  const drafted = await toolResult(scope, 'draft_order', args);
   expect(drafted).toMatchObject({
     stage: 'to_confirm',
     items: [{ product: 'পাঞ্জাবি', quantity: 2, unitPriceTaka: 1200 }],
@@ -390,7 +395,7 @@ it('takes an order in a chat, prices it in code and waits for the customer to sa
     totalTaka: 2460,
   });
   // The same details in the same chat return the order already made.
-  expect(await tools.run(scope, 'draft_order', args)).toEqual(drafted);
+  expect(await toolResult(scope, 'draft_order', args)).toEqual(drafted);
   const { rows } = await admin.pool.query(
     'select source, created_by_type, buyer_contact_id from orders where store_id = $1',
     [storeId],
@@ -453,14 +458,14 @@ it('names add-ons after a confirmed order only when the owner turned them on', a
   const chat = { conversationId: randomUUID(), channel: 'messenger' as const };
   const place = async (address: string, suggestAddOns: boolean) => {
     const scope = { storeId, contactId: buyer, chat, suggestAddOns };
-    const drafted = (await tools.run(
+    const drafted = (await toolResult(
       scope,
       'draft_order',
       JSON.stringify(
         draft(variant!.id, { address, items: [{ variantId: variant!.id, quantity: 1 }] }),
       ),
     )) as { orderNumber: number };
-    return tools.run(scope, 'confirm_order', JSON.stringify({ orderNumber: drafted.orderNumber }));
+    return toolResult(scope, 'confirm_order', JSON.stringify({ orderNumber: drafted.orderNumber }));
   };
 
   const withAddOns = await place('মিরপুর ১০', true);
@@ -596,7 +601,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
   const scope = { storeId, contactId: buyer, chat, adProductIds: [changed.rows[0]!.id] };
   const turn = () => askForDiscount(storeId, buyer, conversationId);
   const offer = (discountAskMessageId: string) =>
-    tools.run(
+    toolResult(
       { ...scope, chat: { ...chat, discountAskMessageId } },
       'offer_lower_price',
       '{"productName":"পাঞ্জাবি","variantWords":null}',
@@ -613,7 +618,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
       ],
     );
   expect(
-    await tools.run(scope, 'offer_lower_price', '{"productName":"পাঞ্জাবি","variantWords":null}'),
+    await toolResult(scope, 'offer_lower_price', '{"productName":"পাঞ্জাবি","variantWords":null}'),
   ).toEqual({
     error: 'NOT_A_DISCOUNT_ASK',
   });
@@ -624,7 +629,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
   expect(await Promise.all([calls(), calls()])).toEqual([opening, opening]);
   await outgoing(first, 'queued');
   const singleItem = JSON.stringify(draft(variantId, { items: [{ variantId, quantity: 1 }] }));
-  expect(await tools.run(scope, 'draft_order', singleItem)).toMatchObject({ totalTaka: 1260 });
+  expect(await toolResult(scope, 'draft_order', singleItem)).toMatchObject({ totalTaka: 1260 });
   const delivered = await turn();
   expect(await offer(delivered)).toEqual(opening);
   await outgoing(delivered, 'sent');
@@ -635,12 +640,12 @@ it('offers one price per customer ask and discounts only the draft in that conve
   expect(await calls()).toEqual(opening);
 
   const orderArgs = JSON.stringify(draft(variantId));
-  const drafted = await tools.run(scope, 'draft_order', orderArgs);
+  const drafted = await toolResult(scope, 'draft_order', orderArgs);
   expect(drafted).toMatchObject({
     items: [{ unitPriceTaka: 950, lineDiscountTaka: 500, quantity: 2 }],
     totalTaka: 1960,
   });
-  expect(await tools.run(scope, 'draft_order', orderArgs)).toEqual(drafted);
+  expect(await toolResult(scope, 'draft_order', orderArgs)).toEqual(drafted);
   const orders = await admin.pool.query<{ id: string }>(
     'select id from orders where store_id=$1 and number=$2',
     [storeId, (drafted as { orderNumber: number }).orderNumber],
@@ -653,7 +658,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
     timeline: [{ reason: 'AI price offer' }],
   });
 
-  const other = await tools.run(
+  const other = await toolResult(
     { ...scope, chat: { ...chat, conversationId: otherConversation } },
     'draft_order',
     orderArgs,
@@ -664,6 +669,13 @@ it('offers one price per customer ask and discounts only the draft in that conve
     variantId,
   ]);
   expect(await offer(await turn())).toEqual({ kind: 'fixed' });
+  expect(
+    await toolResult(
+      scope,
+      'draft_order',
+      JSON.stringify(draft(variantId, { address: 'Changed variant price' })),
+    ),
+  ).toMatchObject({ totalTaka: 2660 });
   await admin.pool.query('update product_variants set price_override_poisha = null where id=$1', [
     variantId,
   ]);
@@ -672,7 +684,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
     [storeId],
   );
   expect(
-    await tools.run(
+    await toolResult(
       scope,
       'draft_order',
       JSON.stringify(
@@ -750,7 +762,7 @@ it('puts a customer on the restock list once, only for a sold-out size, only in 
   const buyer = await contact(storeId);
   const conversationId = await conversation(storeId, buyer);
   const inChat = (name: string, args: object) =>
-    tools.run(
+    toolResult(
       { storeId, contactId: buyer, chat: { conversationId, channel: 'messenger' } },
       name,
       JSON.stringify(args),
@@ -784,7 +796,7 @@ it('limits search and product reads to the ad’s products, and reads their pric
   const inAd = await product(storeId, { name: 'Ad panjabi', aliases: ['panjabi'], stock: 5 });
   const outsideAd = await product(storeId, { name: 'Shop panjabi', aliases: ['panjabi'] });
   const scope = { storeId, contactId: buyer, adProductIds: [inAd] };
-  const call = (name: string, args: object) => tools.run(scope, name, JSON.stringify(args));
+  const call = (name: string, args: object) => toolResult(scope, name, JSON.stringify(args));
 
   expect(await call('search_products', { query: 'panjabi' })).toEqual({
     products: [expect.objectContaining({ productId: inAd })],

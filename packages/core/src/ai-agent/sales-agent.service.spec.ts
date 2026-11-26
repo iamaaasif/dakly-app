@@ -28,7 +28,7 @@ function build(memoryText: string | undefined = undefined) {
   });
   const ai = { run } as unknown as AiService;
   const tools = {
-    run: vi.fn().mockResolvedValue({ products: [] }),
+    run: vi.fn().mockResolvedValue({ result: { products: [] } }),
     adProducts: vi.fn().mockResolvedValue([]),
     productNamedBy: vi.fn().mockResolvedValue([]),
     deliveryZones: vi.fn().mockResolvedValue([]),
@@ -153,9 +153,9 @@ const shownKurtiReply = {
 it('reads the products shown earlier in the chat again, so "L ache?" quotes that one', async () => {
   const { service, run, inbox, tools } = build();
   vi.mocked(inbox.shownProductHistory).mockResolvedValue([shownKurtiReply]);
-  vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
-    name === 'get_product' ? kurti : { products: [] },
-  );
+  vi.mocked(tools.run).mockImplementation(async (_scope, name) => ({
+    result: name === 'get_product' ? kurti : { products: [] },
+  }));
 
   const composed = await service.compose({
     storeId,
@@ -193,9 +193,9 @@ it.each(['ওইটা এখনো আছে?', 'oita ekhono ache?', 'oita এ�
       ...kurti,
       variants: [{ variantId: 'v-l', title: 'L', priceTaka: 1550, stock: 0 }],
     };
-    vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
-      name === 'get_product' ? today : { products: [] },
-    );
+    vi.mocked(tools.run).mockImplementation(async (_scope, name) => ({
+      result: name === 'get_product' ? today : { products: [] },
+    }));
 
     await service.compose({
       storeId,
@@ -218,9 +218,9 @@ it.each(['ওইটা এখনো আছে?', 'oita ekhono ache?', 'oita এ�
 it('leaves a shown product out when it can no longer be read', async () => {
   const { service, run, inbox, tools } = build();
   vi.mocked(inbox.shownProductHistory).mockResolvedValue([shownKurtiReply]);
-  vi.mocked(tools.run).mockImplementation(async (_scope, name) =>
-    name === 'get_product' ? { error: 'PRODUCT_NOT_FOUND' } : { products: [] },
-  );
+  vi.mocked(tools.run).mockImplementation(async (_scope, name) => ({
+    result: name === 'get_product' ? { error: 'PRODUCT_NOT_FOUND' } : { products: [] },
+  }));
 
   await service.compose({
     storeId,
@@ -278,7 +278,7 @@ it('adds no shown products when the chat has none, so the model still asks which
 
 it('saves the product a reply names with its sources, for the next turn', async () => {
   const { service, run, tools } = build();
-  vi.mocked(tools.run).mockResolvedValue({ products: [kurti] });
+  vi.mocked(tools.run).mockResolvedValue({ result: { products: [kurti] } });
   run.mockResolvedValue({
     kind: 'output',
     aiRunId: 'run-1',
@@ -391,7 +391,7 @@ it('lets the model answer a refund itself when the owner turned that hand-over o
 
 it('hands over a refund when the owner left that hand-over on', async () => {
   const { service, run, tools } = build();
-  vi.mocked(tools.run).mockResolvedValue({ reason: 'refund' });
+  vi.mocked(tools.run).mockResolvedValue({ result: { reason: 'refund' } });
   run.mockResolvedValueOnce(toolCall('hand_over', { reason: 'refund' }));
 
   const composed = await service.compose({

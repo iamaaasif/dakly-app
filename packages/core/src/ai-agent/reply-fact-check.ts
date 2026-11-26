@@ -8,7 +8,8 @@ import {
   offerWords,
 } from '@dakly/contracts/reply-wording';
 
-import { fixedPricesTaka, quotedOfferPricesPoisha, quotedOfferRefs } from './offer-lower-price';
+import { quotedPricesPoisha } from './manipulation-screen';
+import { quotedOfferRefs, type OfferQuote } from './offer-lower-price';
 
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
@@ -57,6 +58,7 @@ export function checkReplyFacts(
   toolResults: readonly unknown[],
   shop: Shop,
   customerTexts: readonly string[] = [],
+  offerQuotes: readonly OfferQuote[] = [],
 ): { isSafe: true } | { isSafe: false; failure: FactCheckFailure } {
   const text = toAsciiDigits(reply);
   if (!text.trim()) return { isSafe: false, failure: 'empty' };
@@ -72,7 +74,9 @@ export function checkReplyFacts(
   if (wording) return { isSafe: false, failure: wording };
   const known = numbersIn(toolResults);
   const amounts = claimedAmounts(text);
-  const invalidPrice = negotiationAmountIsWrong(text, toolResults, amounts);
+  const negotiation = toolResults.filter(isNegotiationResult);
+  if (negotiation.length) amounts.push(...claimedAmounts(text, [bareOfferPattern]));
+  const invalidPrice = negotiationAmountIsWrong(text, negotiation, amounts, offerQuotes);
   if (
     invalidPrice ??
     hasWrongAmount(amounts, (value) => known.has(value), numbersIn(customerTexts))
@@ -83,35 +87,46 @@ export function checkReplyFacts(
   return { isSafe: true };
 }
 
-type NegotiationResult = { kind: 'offered'; priceTaka: number } | { kind: 'fixed' | 'final' };
+type NegotiationResult =
+  | { kind: 'offered'; priceTaka: number }
+  | { kind: 'fixed'; pricesTaka: number[] }
+  | { kind: 'final' };
 
 function isNegotiationResult(value: unknown): value is NegotiationResult {
   if (!value || typeof value !== 'object' || !('kind' in value)) return false;
-  if (value.kind === 'fixed' || value.kind === 'final') return true;
+  if (value.kind === 'final') return true;
+  if (value.kind === 'fixed')
+    return (
+      'pricesTaka' in value &&
+      Array.isArray(value.pricesTaka) &&
+      value.pricesTaka.every((price) => typeof price === 'number')
+    );
   return value.kind === 'offered' && 'priceTaka' in value && typeof value.priceTaka === 'number';
 }
 
 function negotiationAmountIsWrong(
   text: string,
-  toolResults: readonly unknown[],
-  markedAmounts: readonly ClaimedAmount[],
+  results: readonly NegotiationResult[],
+  amounts: readonly ClaimedAmount[],
+  offerQuotes: readonly OfferQuote[],
 ) {
-  const results = toolResults.filter(isNegotiationResult);
   if (!results.length) return undefined;
-  const amounts = [...markedAmounts, ...claimedAmounts(text, [bareOfferPattern])];
   const offered = new Set(
     results.flatMap((result) => (result.kind === 'offered' ? [result.priceTaka] : [])),
   );
   if (offered.size) {
-    const quoted = quotedOfferPricesPoisha(text);
-    return (
-      !amounts.length ||
-      [...quotedOfferRefs(results, quoted).values()].includes(null) ||
-      amounts.some(({ value }) => !offered.has(value) || !quoted.has(Math.round(value * 100)))
-    );
+    const quoted = quotedPricesPoisha(text);
+    if (
+      ![...offered].some((price) => quoted.has(Math.round(price * 100))) ||
+      [...quotedOfferRefs(offerQuotes, text).values()].includes(null)
+    )
+      return true;
+    return undefined;
   }
   if (results.some(({ kind }) => kind === 'final')) return amounts.length > 0;
-  const prices = new Set(results.flatMap(fixedPricesTaka));
+  const prices = new Set(
+    results.flatMap((result) => (result.kind === 'fixed' ? result.pricesTaka : [])),
+  );
   return amounts.some(({ value }) => !prices.has(value));
 }
 

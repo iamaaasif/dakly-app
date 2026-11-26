@@ -32,7 +32,7 @@ import {
 } from './chat-memory';
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
-import { quotedOfferSources } from './offer-lower-price';
+import { quotedOfferSources, type OfferQuote } from './offer-lower-price';
 import { customerConfirms } from './order-confirmation';
 import { chatReplyV17 } from './prompts/chat-reply.v17';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
@@ -58,7 +58,7 @@ const CONFIRM_TOOL = 'confirm_order';
 const SOURCE_KEYS = ['productId', 'itemId', 'orderNumber'];
 
 type Reason = (typeof handoverReasons)[number];
-type ToolResult = { tool: string; result: object };
+type ToolResult = { tool: string; result: object; quote?: OfferQuote };
 
 export type ComposedReply =
   | {
@@ -68,6 +68,7 @@ export type ComposedReply =
       cards: ProductCard[];
       toolResults: object[];
       toolNames: string[];
+      offerQuotes: OfferQuote[];
       earlierCustomerTexts: string[];
       sources: { tool: string; refs: string[] }[];
     }
@@ -136,6 +137,7 @@ export class SalesAgentService {
         earlierCustomerTexts: composed.earlierCustomerTexts,
       },
       input.customerTexts,
+      composed.offerQuotes,
     );
     return !checked.isSafe && checked.failure;
   }
@@ -189,7 +191,8 @@ export class SalesAgentService {
         return attempt.code === 'AI_STORE_BUSY'
           ? { kind: 'busy' }
           : { kind: 'handover', reason: 'ai_unavailable' };
-      if (attempt.kind === 'output')
+      if (attempt.kind === 'output') {
+        const offerQuotes = results.flatMap(({ quote }) => (quote ? [quote] : []));
         return {
           kind: 'reply',
           text: attempt.output.reply,
@@ -197,12 +200,14 @@ export class SalesAgentService {
           cards: await this.cards(storeId, results),
           toolResults: results.map(({ result }) => result),
           toolNames: results.map(({ tool }) => tool),
+          offerQuotes,
           earlierCustomerTexts: customerLines(history),
           sources: withShownProducts(
-            sourcesOf(results, attempt.output.reply),
+            sourcesOf(results, attempt.output.reply, offerQuotes),
             shownProductIds(results, attempt.output.reply),
           ),
         };
+      }
       const outcome = await this.answerToolCalls(scoped, attempt.toolCalls, results);
       if ('handover' in outcome)
         return { kind: 'handover', reason: outcome.handover, summary: outcome.summary };
@@ -279,10 +284,10 @@ export class SalesAgentService {
     for (const call of calls) {
       const refusal = refuseToolCall(input.rules, call);
       if (refusal?.kind === 'handover') return { handover: refusal.reason };
-      const result =
-        refusal?.result ??
+      const { result, quote } =
+        (refusal ? { result: refusal.result } : undefined) ??
         (isUnconfirmed(call, input.customerTexts, results)
-          ? { error: 'CONFIRMATION_NOT_GIVEN' }
+          ? { result: { error: 'CONFIRMATION_NOT_GIVEN' } }
           : await this.tools.run(
               { ...input, suggestAddOns: input.rules.suggestAddOns },
               call.name,
@@ -290,7 +295,7 @@ export class SalesAgentService {
             ));
       const handover = toolHandover(call.name, result);
       if (handover) return handover;
-      results.push({ tool: call.name, result });
+      results.push({ tool: call.name, result, quote });
       answered.push({ name: call.name, result });
     }
     return { answered };
@@ -328,7 +333,7 @@ export class SalesAgentService {
     if (photo) return { tool: MATCH_PHOTO_TOOL, result: await this.tools.matchPhoto(input, photo) };
     const query = input.customerTexts.join(' ').slice(0, 100).trim();
     if (query.length < 3) return undefined;
-    const result = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
+    const { result } = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
     return { tool: 'search_products', result };
   }
 
@@ -346,7 +351,7 @@ export class SalesAgentService {
       HISTORY_LENGTH,
     );
     for (const productId of recentlyShownProductIds(shown)) {
-      const product = await this.tools.run(
+      const { result: product } = await this.tools.run(
         input,
         getProductTool.name,
         JSON.stringify({ productId }),
@@ -434,11 +439,11 @@ function customerLines(history: readonly HistoryMessage[] | undefined) {
   );
 }
 
-function sourcesOf(results: ToolResult[], reply: string) {
+function sourcesOf(results: ToolResult[], reply: string, offerQuotes: OfferQuote[]) {
   return results
     .map(({ tool, result }) => ({ tool, refs: refsIn(result) }))
     .filter((s) => s.refs.length)
-    .concat(quotedOfferSources(results, reply));
+    .concat(quotedOfferSources(offerQuotes, reply));
 }
 
 function refsIn(value: unknown): string[] {

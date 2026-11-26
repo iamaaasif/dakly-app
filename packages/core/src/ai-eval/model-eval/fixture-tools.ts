@@ -4,7 +4,6 @@ import {
   productDiscountRequest,
   requestedDiscountPoisha,
 } from '../../ai-agent/manipulation-screen';
-import { fixedPriceResult } from '../../ai-agent/offer-lower-price';
 import { describeAlternatives, describePhotoMatch } from '../../ai-agent/product-match-results';
 import { addOnsRule, isProductSoldOut } from '../../ai-agent/sales-agent-tools.service';
 import { pickAddOns } from '../../product-search/product-add-ons';
@@ -197,7 +196,10 @@ function offerLowerPrice(
   const product = evalProductNamedForOffer(query, onlyProductIds);
   if (!product) return { error: 'PRODUCT_NOT_FOUND' };
   if (!negotiation || product.name !== negotiation.productName)
-    return fixedPriceResult(product.variants.map(({ priceTaka }) => priceTaka));
+    return {
+      kind: 'fixed',
+      pricesTaka: [...new Set(product.variants.map(({ priceTaka }) => priceTaka))],
+    };
   if (fixtureOfferIsFinal(negotiation, request)) return { kind: 'final' };
   const isFinal = negotiation.previousStep === 'opening';
   return {

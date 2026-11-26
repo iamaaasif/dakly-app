@@ -14,6 +14,8 @@ export class ProductOrderVariantsRepository {
       tx
         .select({
           pricePoisha: products.pricePoisha,
+          status: products.status,
+          isVisibleInChats: products.isVisibleInChats,
           negotiationEnabled: products.negotiationEnabled,
           negotiationOpeningPoisha: products.negotiationOpeningPoisha,
           negotiationFloorPoisha: products.negotiationFloorPoisha,

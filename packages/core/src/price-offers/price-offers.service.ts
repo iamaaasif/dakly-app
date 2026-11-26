@@ -6,6 +6,7 @@ import { AiAgentSettingsService } from '../ai-agent/ai-agent-settings.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { DAY_MS } from '../platform/time';
+import { ProductsService } from '../products/products.service';
 import { PriceOffersRepository, type OfferParty, type OfferTurn } from './price-offers.repository';
 
 type OfferResult =
@@ -27,6 +28,7 @@ export class PriceOffersService {
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(AiAgentSettingsService) private readonly settings: AiAgentSettingsService,
     @Inject(Clock) private readonly clock: Clock,
+    @Inject(ProductsService) private readonly products: ProductsService,
   ) {}
 
   offer(
@@ -51,7 +53,7 @@ export class PriceOffersService {
   }
 
   private async eligibleProduct(storeId: string, productId: string) {
-    const product = await this.repository.lockProduct(storeId, productId);
+    const product = await this.products.lockNegotiationTerms(storeId, productId);
     if (!product?.negotiationEnabled) return undefined;
     const { negotiationFloorPoisha, negotiationOpeningPoisha } = product;
     if (
@@ -60,8 +62,7 @@ export class PriceOffersService {
       negotiationFloorPoisha < 0
     )
       return undefined;
-    const variants = await this.repository.variantPrices(storeId, productId);
-    if (productNegotiationIssue({ ...product, variants })) return undefined;
+    if (productNegotiationIssue(product)) return undefined;
     return { ...product, negotiationFloorPoisha, negotiationOpeningPoisha };
   }
 
@@ -96,7 +97,28 @@ export class PriceOffersService {
   async forOrder(storeId: string, party: OfferParty, variantIds: string[]) {
     if (!variantIds.length || (await this.settings.view(storeId)).handoverRules.discounts)
       return [];
-    return this.repository.forOrder(storeId, party, variantIds, this.clock.now());
+    const productIds = await this.products.productIdsOfVariants(storeId, variantIds);
+    if (!productIds.length) return [];
+    const rows = await this.repository.forOrder(storeId, party, productIds, this.clock.now());
+    const offers = [];
+    // Product edits lock the product before its variants. The draft uses the same order.
+    for (const productId of [...new Set(rows.map((row) => row.productId))].sort()) {
+      const product = await this.eligibleProduct(storeId, productId);
+      if (!product) continue;
+      const offer = rows.find(
+        (row) => row.productId === productId && priceIsEligible(row.offeredPricePoisha, product),
+      );
+      if (!offer) continue;
+      for (const { id: variantId } of product.variants) {
+        if (variantIds.includes(variantId))
+          offers.push({
+            variantId,
+            pricePoisha: product.pricePoisha,
+            offeredPricePoisha: offer.offeredPricePoisha,
+          });
+      }
+    }
+    return offers;
   }
 }
 

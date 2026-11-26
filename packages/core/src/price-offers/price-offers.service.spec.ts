@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AiAgentSettingsService } from '../ai-agent/ai-agent-settings.service';
+import type { ProductsService } from '../products/products.service';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { PriceOffersRepository } from './price-offers.repository';
 import { PriceOffersService } from './price-offers.service';
@@ -24,8 +25,6 @@ function fixture() {
   const service = new PriceOffersService(
     {
       isCustomerTurn: async () => true,
-      lockProduct: async () => state.product,
-      variantPrices: async () => [{ priceOverridePoisha: state.override }],
       forTurn: async (_store: string, turn: { customerMessageId: string }) =>
         rows.find((row) => row.customerMessageId === turn.customerMessageId),
       latestLive: async (_store: string, _chat: object, _product: string, now: Date) =>
@@ -37,6 +36,12 @@ function fixture() {
       view: async () => ({ handoverRules: { discounts: state.discounts } }),
     } as AiAgentSettingsService,
     { now: () => state.now },
+    {
+      lockNegotiationTerms: async () => ({
+        ...state.product,
+        variants: [{ priceOverridePoisha: state.override }],
+      }),
+    } as ProductsService,
   );
   return {
     rows,
