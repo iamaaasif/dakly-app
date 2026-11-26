@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { Controller, useFormContext } from 'react-hook-form';
+import { Controller, useController, useFormContext } from 'react-hook-form';
 
 import type { ProductFormValues } from '@dakly/contracts/products';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
+import { Input } from '@dakly/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { profitPercent } from '../product-variant-grid';
 import { ProductDescriptionField } from './product-description-field';
@@ -11,13 +13,12 @@ import { ProductInputField } from './product-input-field';
 import { ProductLinesField } from './product-lines-field';
 import { ProductBrandField, ProductCategoryField } from './product-list-fields';
 import { ProductTrackStock } from './product-track-stock';
-import { ProductWarnAtField } from './product-warn-at-field';
 
 const extraFlags = [
   ['isVisibleInChats', 'Show in chat replies'],
   ['isVisibleInOrderLink', 'Show in the order link'],
 ] as const;
-type ProductFieldsProps = { productId?: string; showCode?: boolean; withWarnAt?: boolean };
+type ProductFieldsProps = { productId?: string; onPage?: boolean };
 
 // The modal shows every field in one flow; the full page puts the same parts in titled cards.
 export function ProductFields({ productId }: ProductFieldsProps) {
@@ -37,66 +38,114 @@ function useShowSkuAndCost(productId?: string) {
   return { simple, showSkuAndCost: !productId || simple };
 }
 
-export function ProductNameFields({ productId, showCode = true }: ProductFieldsProps) {
+export function ProductNameFields({ productId, onPage }: ProductFieldsProps) {
   const { showSkuAndCost } = useShowSkuAndCost(productId);
   return (
     <>
       <ProductInputField
         name="name"
-        label="Name"
+        label={onPage ? 'Product name' : 'Name'}
         placeholder="e.g. Cotton Panjabi"
         autoFocus={!productId}
       />
-      <div className="grid gap-3 md:grid-cols-2">
-        <ProductCategoryField />
-        <ProductBrandField />
-        {showSkuAndCost && showCode ? (
-          <ProductInputField
-            name="variants.0.sku"
-            label="Product code"
-            placeholder="e.g. UT-PJ-01"
-            optional
-          />
-        ) : null}
-      </div>
+      {onPage ? null : (
+        <div className="grid gap-3 md:grid-cols-2">
+          <ProductCategoryField />
+          <ProductBrandField />
+          {showSkuAndCost ? (
+            <ProductInputField
+              name="variants.0.sku"
+              label="Product code"
+              placeholder="e.g. UT-PJ-01"
+              optional
+            />
+          ) : null}
+        </div>
+      )}
     </>
   );
 }
 
-export function ProductPriceFields({ productId }: ProductFieldsProps) {
+export function ProductPriceFields({ productId, onPage }: ProductFieldsProps) {
   const { simple, showSkuAndCost } = useShowSkuAndCost(productId);
   return (
     <>
-      <div className={simple ? 'grid gap-3 md:grid-cols-4' : 'grid gap-3 md:grid-cols-3'}>
-        <ProductInputField name="pricePoisha" label="Selling price ৳" />
-        <ProductInputField name="compareAtPricePoisha" label="Old price ৳" placeholder="Optional" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <ProductInputField
+          name="pricePoisha"
+          label={onPage ? 'Regular price ৳' : 'Selling price ৳'}
+          deps={onPage ? 'compareAtPricePoisha' : undefined}
+        />
+        <ProductInputField
+          name="compareAtPricePoisha"
+          label={onPage ? 'Sell price ৳' : 'Old price ৳'}
+          optional
+        />
         {showSkuAndCost ? (
           <ProductInputField
             name="variants.0.costPoisha"
-            label="Your cost ৳"
-            placeholder="Optional"
+            label={onPage ? 'Product cost ৳' : 'Your cost ৳'}
+            optional
           />
         ) : null}
-        {simple ? <PlainProfit /> : null}
       </div>
+      {simple ? <PlainProfit onPage={onPage} /> : null}
       {simple ? <DefaultOverride /> : null}
     </>
   );
 }
 
 export function ProductDeliveryFields() {
+  const { field } = useController<ProductFormValues, 'weightGrams'>({ name: 'weightGrams' });
+  const [unit, setUnit] = useState('g');
+  const [amount, setAmount] = useState(field.value ?? '');
+  const changeAmount = (value: string) => {
+    setAmount(value);
+    if (unit === 'g' || value === '') {
+      field.onChange(value);
+      return;
+    }
+    field.onChange(
+      /^\d+(?:\.\d{1,3})?$/.test(value) ? String(Math.round(Number(value) * 1000)) : '.',
+    );
+  };
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      <ProductInputField
-        name="weightGrams"
-        label="Parcel weight (grams)"
-        placeholder="e.g. 500"
-        optional
-      />
-      <p className="self-end pb-2 text-sm text-text-muted">
-        Used for courier charges. Orders add it up so you do not retype it.
-      </p>
-    </div>
+    <>
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <FormField name="weightGrams" label="Parcel weight" optional>
+            {(control) => (
+              <Input
+                {...control}
+                ref={field.ref}
+                value={amount}
+                inputMode={unit === 'kg' ? 'decimal' : 'numeric'}
+                onBlur={field.onBlur}
+                onChange={(event) => changeAmount(event.target.value)}
+              />
+            )}
+          </FormField>
+        </div>
+        <Select
+          value={unit}
+          onValueChange={(next) => {
+            setUnit(next);
+            const grams = field.value;
+            if (typeof grams === 'string' && /^\d+$/.test(grams))
+              setAmount(next === 'kg' ? String(Number(grams) / 1000) : grams);
+          }}
+        >
+          <SelectTrigger aria-label="Weight unit" className="w-auto shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="g">g</SelectItem>
+            <SelectItem value="kg">kg</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-sm text-text-muted">Orders use this weight to work out courier charges.</p>
+    </>
   );
 }
 
@@ -111,19 +160,16 @@ export function ProductDescriptionFields({ productId }: ProductFieldsProps) {
   );
 }
 
-export function ProductStockFields({ productId, withWarnAt }: ProductFieldsProps) {
-  const form = useFormContext<ProductFormValues>();
-  const hasOptions = Boolean(form.watch('options')?.length);
+function ProductStockFields({ productId }: ProductFieldsProps) {
   return (
     <>
       <ProductTrackStock />
-      {withWarnAt && hasOptions ? <ProductWarnAtField /> : null}
-      {productId ? <ExtraFlags /> : null}
+      {productId ? <ProductVisibilityFields /> : null}
     </>
   );
 }
 
-function ExtraFlags() {
+export function ProductVisibilityFields() {
   const form = useFormContext<ProductFormValues>();
   return (
     <div className="space-y-3">
@@ -150,16 +196,17 @@ function ExtraFlags() {
   );
 }
 
-function PlainProfit() {
+function PlainProfit({ onPage }: Pick<ProductFieldsProps, 'onPage'>) {
   const form = useFormContext<ProductFormValues>();
-  const profit = profitPercent(form.watch('pricePoisha'), form.watch('variants.0.costPoisha'));
-  return (
-    <div className="space-y-1">
-      <p className="text-sm font-medium text-text">Profit</p>
-      <p className="flex min-h-10 items-center text-success">
-        {profit === null ? '' : `${profit}%`}
-      </p>
-    </div>
+  const regular = form.watch('pricePoisha');
+  const sell = form.watch('compareAtPricePoisha');
+  const [override, cost] = form.watch(['variants.0.priceOverridePoisha', 'variants.0.costPoisha']);
+  const paidPrice = (onPage && (override || sell)) || regular;
+  const profit = profitPercent(paidPrice, cost);
+  return profit === null ? null : (
+    <p className="text-sm text-text">
+      Profit: <span className="font-medium">{profit}%</span>
+    </p>
   );
 }
 

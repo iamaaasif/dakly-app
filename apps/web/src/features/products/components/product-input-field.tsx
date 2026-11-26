@@ -10,6 +10,7 @@ type ProductInputFieldProps = {
   placeholder?: string;
   optional?: boolean;
   autoFocus?: boolean;
+  deps?: FieldPath<ProductFormValues>;
 };
 
 function inputModeFor(name: string) {
@@ -23,6 +24,7 @@ export function ProductInputField({
   placeholder,
   optional,
   autoFocus,
+  deps,
 }: ProductInputFieldProps) {
   const { register } = useFormContext<ProductFormValues>();
   return (
@@ -33,7 +35,7 @@ export function ProductInputField({
           autoFocus={autoFocus}
           placeholder={placeholder}
           inputMode={inputModeFor(name)}
-          {...register(name)}
+          {...register(name, { deps })}
         />
       )}
     </FormField>
