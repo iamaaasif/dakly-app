@@ -6,7 +6,10 @@ import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react
 
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import {
+  createProductSchema,
   productFormSchema,
+  productNegotiationIssue,
+  productNegotiationIssues,
   type ChangeProductInput,
   type ProductFormInput,
   type ProductFormValues,
@@ -47,32 +50,45 @@ const pageFormSchema = productFormSchema
           pricePoisha: input.compareAtPricePoisha,
           compareAtPricePoisha: input.pricePoisha,
         },
-  );
+  )
+  .superRefine((input, context) => {
+    const code = productNegotiationIssue(input);
+    if (code) {
+      const { field, message } = productNegotiationIssues[code];
+      context.addIssue({ code: 'custom', path: [field], message });
+    }
+  });
 
 type ProductFormProps = {
   product?: ProductResponse;
   // Values typed in the quick add, used only for a new product.
   initial?: QuickAddHandoff;
+  duplicateSource?: ProductResponse;
   // Details Ask Dakly AI filled in from the owner's prompt; nothing is saved until Save.
   assistantDraft?: AssistantProductDraft;
   onSaved: (product: ProductResponse, failedStock: string[]) => void;
   page?: ProductFormPage;
 };
 
-export function ProductForm({ product, initial, assistantDraft, onSaved, page }: ProductFormProps) {
+export function ProductForm(props: ProductFormProps) {
+  const { product, assistantDraft, duplicateSource, onSaved, page } = props;
   const [editingOption, setEditingOption] = useState(false);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(page ? pageFormSchema : productFormSchema),
     defaultValues: {
       isVisibleInChats: true,
       isVisibleInOrderLink: true,
-      ...formValues({ product, initial, assistantDraft, page }),
+      negotiationEnabled: false,
+      negotiationOpeningPoisha: '',
+      negotiationFloorPoisha: '',
+      ...formValues(props),
     },
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   useDraftCategory(form, assistantDraft);
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
     product,
+    isDuplicate: Boolean(duplicateSource),
     dirtyFields,
     onSaved,
   });
@@ -135,13 +151,14 @@ function ProductFormFields({
 
 type SubmitProductArgs = {
   product?: ProductResponse;
+  isDuplicate: boolean;
   dirtyFields: FormState<ProductFormValues>['dirtyFields'];
   onSaved: ProductFormProps['onSaved'];
 };
 
 function useSubmitProduct(
   form: UseFormReturn<ProductFormValues, undefined, ProductFormInput>,
-  { product, dirtyFields, onSaved }: SubmitProductArgs,
+  { product, isDuplicate, dirtyFields, onSaved }: SubmitProductArgs,
 ) {
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
@@ -149,7 +166,7 @@ function useSubmitProduct(
   const [askReason, setAskReason] = useState(false);
   const reason = useRef<string | null>(null);
   const onSubmit = form.handleSubmit((parsed) => {
-    const input = product ? parsed : shareCostAcrossSizes(parsed);
+    const input = product || isDuplicate ? parsed : shareCostAcrossSizes(parsed);
     const values = form.getValues();
     if (product && reason.current === null && hasStockEdits(values, product)) {
       setAskReason(true);
@@ -243,53 +260,75 @@ function formValues({
   product,
   initial,
   assistantDraft,
+  duplicateSource,
   page,
-}: Pick<ProductFormProps, 'product' | 'initial' | 'assistantDraft' | 'page'>): ProductFormValues {
-  if (!product && assistantDraft) return assistantDraftValues(assistantDraft);
-  if (!product)
-    return {
-      name: initial?.name ?? '',
-      options: [],
-      pricePoisha: initial?.price ?? '',
-      variants: [
-        {
-          optionValues: {},
-          sku: null,
-          priceOverridePoisha: '',
-          costPoisha: '',
-          lowStockThreshold: '',
-          initialStock: Number(initial?.stock || 0),
-        },
-      ],
-      isStockTracked: true,
-      status: 'hidden',
-    };
+}: Pick<
+  ProductFormProps,
+  'product' | 'initial' | 'assistantDraft' | 'duplicateSource' | 'page'
+>): ProductFormValues {
+  if (product) return sourceFormValues(product, Boolean(page), false);
+  if (duplicateSource) return sourceFormValues(duplicateSource, Boolean(page), true);
+  if (assistantDraft) return assistantDraftValues(assistantDraft);
   return {
-    name: product.name,
-    description: product.description,
-    categoryId: product.categoryId,
-    brandId: product.brandId,
-    weightGrams: weightText(product.weightGrams),
-    aliases: product.aliases,
-    options: product.options,
-    ...priceFields(product, Boolean(page)),
-    variants: product.variants.map(
+    name: initial?.name ?? '',
+    options: [],
+    pricePoisha: initial?.price ?? '',
+    variants: [
+      {
+        optionValues: {},
+        sku: null,
+        priceOverridePoisha: '',
+        costPoisha: '',
+        lowStockThreshold: '',
+        initialStock: Number(initial?.stock || 0),
+      },
+    ],
+    isStockTracked: true,
+    status: 'hidden',
+  };
+}
+
+function sourceFormValues(
+  source: ProductResponse,
+  onPage: boolean,
+  isDuplicate: boolean,
+): ProductFormValues {
+  return {
+    name: isDuplicate ? copyName(source.name) : source.name,
+    description: source.description,
+    categoryId: source.categoryId,
+    brandId: source.brandId,
+    weightGrams: weightText(source.weightGrams),
+    aliases: source.aliases,
+    options: source.options,
+    ...priceFields(source, onPage),
+    ...(isDuplicate ? {} : negotiationFields(source)),
+    variants: source.variants.map(
       ({ id, optionValues, sku, priceOverridePoisha, costPoisha, lowStockThreshold, onHand }) => ({
-        id,
+        id: isDuplicate ? undefined : id,
         optionValues: Object.fromEntries(
-          product.options.map(({ name }, index) => [index, optionValues[name]!]),
+          source.options.map(({ name }, index) => [index, optionValues[name]!]),
         ),
-        sku,
+        // Each product code is unique within the shop.
+        sku: isDuplicate ? null : sku,
         priceOverridePoisha: takaInputFromPoisha(priceOverridePoisha),
         costPoisha: takaInputFromPoisha(costPoisha),
         lowStockThreshold: lowStockThreshold === null ? '' : String(lowStockThreshold),
-        initialStock: onHand,
+        initialStock: isDuplicate ? 0 : onHand,
       }),
     ),
-    isStockTracked: product.isStockTracked,
-    isVisibleInChats: product.isVisibleInChats,
-    isVisibleInOrderLink: product.isVisibleInOrderLink,
+    isStockTracked: source.isStockTracked,
+    isVisibleInChats: source.isVisibleInChats,
+    isVisibleInOrderLink: source.isVisibleInOrderLink,
+    status: isDuplicate ? 'hidden' : undefined,
   };
+}
+
+function copyName(name: string) {
+  const suffix = ' copy';
+  const limit = createProductSchema.shape.name.maxLength;
+  const stem = limit === null ? name : name.slice(0, limit - suffix.length).trimEnd();
+  return `${stem}${suffix}`;
 }
 
 function priceFields(product: ProductResponse, onPage: boolean) {
@@ -303,6 +342,14 @@ function priceFields(product: ProductResponse, onPage: boolean) {
   return {
     pricePoisha: takaInputFromPoisha(price),
     compareAtPricePoisha: takaInputFromPoisha(onPage ? null : oldPrice),
+  };
+}
+
+function negotiationFields(product: ProductResponse) {
+  return {
+    negotiationEnabled: product.negotiationEnabled,
+    negotiationOpeningPoisha: takaInputFromPoisha(product.negotiationOpeningPoisha ?? null),
+    negotiationFloorPoisha: takaInputFromPoisha(product.negotiationFloorPoisha ?? null),
   };
 }
 
@@ -326,12 +373,11 @@ function productChanges(
     : { ...changes, ...prices };
 }
 
-function productErrorField(
-  error: Error,
-  variantCount: number,
-): 'root.server' | 'variants' | 'variants.0.sku' {
-  if (error instanceof ApiError && error.code === 'PRODUCT_VARIANT_IN_OPEN_ORDERS')
-    return 'variants';
-  if (!(error instanceof ApiError) || error.code !== 'PRODUCT_SKU_TAKEN') return 'root.server';
-  return variantCount === 1 ? 'variants.0.sku' : 'variants';
+function productErrorField(error: Error, variantCount: number) {
+  if (!(error instanceof ApiError)) return 'root.server';
+  if (Object.hasOwn(productNegotiationIssues, error.code))
+    return productNegotiationIssues[error.code as keyof typeof productNegotiationIssues].field;
+  if (error.code === 'PRODUCT_VARIANT_IN_OPEN_ORDERS') return 'variants';
+  if (error.code === 'PRODUCT_SKU_TAKEN') return variantCount === 1 ? 'variants.0.sku' : 'variants';
+  return 'root.server';
 }

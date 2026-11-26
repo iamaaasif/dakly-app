@@ -28,6 +28,9 @@ const kurti = {
   status: 'hidden',
   isStockTracked: true,
   pricePoisha: 120000,
+  negotiationEnabled: true,
+  negotiationOpeningPoisha: 107050,
+  negotiationFloorPoisha: 100025,
   options: [{ name: 'Size', values: ['M', 'L'] }],
   variants: [variant('KURTI-M', 'M', 120000, 10), variant('KURTI-L', 'L', 125050, 0)],
 } as unknown as ProductResponse;

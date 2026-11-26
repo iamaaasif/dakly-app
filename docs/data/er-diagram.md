@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0106_snapshot.json`: **110 tables, 1447 columns, 438 explicit indexes and 340 foreign keys**.
+Built from `packages/db/migrations/meta/0108_snapshot.json`: **111 tables, 1459 columns, 442 explicit indexes and 344 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -902,6 +902,10 @@ erDiagram
     stores ||..o{ products : "store_id"
     product_categories |o..o{ products : "store_id, category_id"
     product_brands |o..o{ products : "store_id, brand_id"
+    stores ||..o{ price_offers : "store_id"
+    conversations ||..o{ price_offers : "store_id, conversation_id"
+    contacts ||..o{ price_offers : "store_id, contact_id"
+    products ||..o{ price_offers : "store_id, product_id"
     stores ||..o{ product_variants : "store_id"
     products ||..o{ product_variants : "product_id"
     products ||..o{ product_variants : "store_id, product_id"
@@ -992,6 +996,9 @@ erDiagram
         text__ aliases "NOT NULL; text[]"
         bigint price_poisha "NOT NULL; bigint"
         bigint compare_at_price_poisha "NULL; bigint"
+        boolean negotiation_enabled "NOT NULL; boolean"
+        bigint negotiation_opening_poisha "NULL; bigint"
+        bigint negotiation_floor_poisha "NULL; bigint"
         uuid__ image_file_ids "NOT NULL; uuid[]"
         jsonb options "NOT NULL; jsonb"
         boolean is_stock_tracked "NOT NULL; boolean"
@@ -1006,6 +1013,17 @@ erDiagram
         text external_ref "NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    price_offers {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid conversation_id FK "NOT NULL; uuid"
+        uuid contact_id FK "NOT NULL; uuid"
+        uuid product_id FK "NOT NULL; uuid"
+        uuid customer_message_id "NOT NULL; uuid"
+        bigint offered_price_poisha "NOT NULL; bigint"
+        text step "NOT NULL; text"
+        timestamp_with_time_zone expires_at "NOT NULL; timestamp with time zone"
     }
     product_variants {
         uuid id PK "NOT NULL; uuid"
@@ -2364,6 +2382,10 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `files_uploaded_by_staff_id_staff_users_id_fk`                       | `files(uploaded_by_staff_id)`                             | `staff_users(id)`                           | no action |
 | `notifications_store_id_stores_id_fk`                                | `notifications(store_id)`                                 | `stores(id)`                                | no action |
 | `notifications_user_id_users_id_fk`                                  | `notifications(user_id)`                                  | `users(id)`                                 | cascade   |
+| `price_offers_store_id_stores_id_fk`                                 | `price_offers(store_id)`                                  | `stores(id)`                                | no action |
+| `price_offers_conversation_store_fk`                                 | `price_offers(store_id, conversation_id)`                 | `conversations(store_id, id)`               | cascade   |
+| `price_offers_contact_store_fk`                                      | `price_offers(store_id, contact_id)`                      | `contacts(store_id, id)`                    | cascade   |
+| `price_offers_product_store_fk`                                      | `price_offers(store_id, product_id)`                      | `products(store_id, id)`                    | cascade   |
 | `product_brands_store_id_stores_id_fk`                               | `product_brands(store_id)`                                | `stores(id)`                                | no action |
 | `product_bulk_edits_store_id_stores_id_fk`                           | `product_bulk_edits(store_id)`                            | `stores(id)`                                | no action |
 | `product_bulk_edits_actor_user_id_users_id_fk`                       | `product_bulk_edits(actor_user_id)`                       | `users(id)`                                 | no action |

@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import type { ProductResponse } from '@dakly/contracts/products';
 import { createDatabase } from '@dakly/db/client';
@@ -53,7 +53,7 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
     expect(activated.status()).toBe(204);
 
     await page.goto('/products');
-    await page.getByRole('button', { name: 'Add product', exact: true }).click();
+    await page.locator('header').getByRole('button', { name: 'Add product', exact: true }).click();
     await page.getByRole('button', { name: /More details/ }).click();
     await expect(page).toHaveURL(/\/products\/new$/);
     await expect(page.getByRole('heading', { name: 'New product', exact: true })).toBeVisible();
@@ -86,6 +86,7 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
     await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
     await capture('saved');
+    await saveNegotiationPrices(page);
   } finally {
     try {
       if (productId) {
@@ -108,3 +109,46 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
     }
   }
 });
+
+async function saveNegotiationPrices(page: Page) {
+  const priceCard = page.getByRole('heading', { name: 'Price', exact: true }).locator('..');
+  const toggle = priceCard.getByRole('switch', { name: 'Let the AI negotiate' });
+  await expect(toggle).toHaveAttribute('aria-checked', 'false');
+  await toggle.click();
+  await priceCard.getByLabel('Opening offer ৳').fill('340');
+  await priceCard.getByLabel('Lowest price ৳').fill('240');
+  await expect(priceCard.getByText('The lowest price is below the product cost.')).toBeVisible();
+
+  const directories = [
+    resolve(process.cwd(), '../../docs/design/evidence/prod-17-5'),
+    resolve(process.cwd(), 'e2e-artifacts/prod-17-5'),
+  ];
+  await Promise.all(directories.map((directory) => mkdir(directory, { recursive: true })));
+  for (const [width, height] of [
+    [1440, 900],
+    [360, 800],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.mouse.move(width - 1, height - 1);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true);
+    for (const directory of directories)
+      await priceCard.screenshot({
+        path: resolve(directory, `price-negotiation-${width}x${height}.png`),
+      });
+  }
+
+  const changed = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname.startsWith('/api/products/') &&
+      response.request().method() === 'PATCH' &&
+      response.status() === 200,
+  );
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  expect(await (await changed).json()).toMatchObject({
+    negotiationEnabled: true,
+    negotiationOpeningPoisha: 34000,
+    negotiationFloorPoisha: 24000,
+  });
+}

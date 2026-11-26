@@ -14,5 +14,6 @@ import { KnowledgeSummaryService } from './knowledge-summary.service';
   imports: [AuditModule, ClockModule, DeliveryModule, ProductsModule],
   controllers: [AiAgentSettingsController, KnowledgeSummaryController],
   providers: [AiAgentSettingsRepository, AiAgentSettingsService, KnowledgeSummaryService],
+  exports: [AiAgentSettingsService],
 })
 export class AiAgentSettingsModule {}

@@ -59,6 +59,9 @@ export const createProductSchema = z
     aliases: z.array(text).max(100).default([]),
     pricePoisha: money.default(0),
     compareAtPricePoisha: money.nullable().default(null),
+    negotiationEnabled: z.boolean().default(false),
+    negotiationOpeningPoisha: money.nullable().default(null),
+    negotiationFloorPoisha: money.nullable().default(null),
     options: z.array(optionSchema).max(3).default([]),
     variants: z.array(variantSchema).max(100).default([]),
     isStockTracked: z.boolean().default(true),
@@ -110,6 +113,9 @@ export const changeProductSchema = z
     aliases: z.array(text).max(100).optional(),
     pricePoisha: money.optional(),
     compareAtPricePoisha: money.nullable().optional(),
+    negotiationEnabled: z.boolean().optional(),
+    negotiationOpeningPoisha: money.nullable().optional(),
+    negotiationFloorPoisha: money.nullable().optional(),
     options: z.array(optionSchema).max(3).optional(),
     variants: z.array(editVariantSchema).max(100).optional(),
     isStockTracked: z.boolean().optional(),
@@ -183,6 +189,8 @@ export const productFormSchema = z
       .union([z.literal('').transform(() => 0), takaInput], { error: takaMessage })
       .default(0),
     compareAtPricePoisha: optionalTakaInput.default(null),
+    negotiationOpeningPoisha: optionalTakaInput.default(null),
+    negotiationFloorPoisha: optionalTakaInput.default(null),
     weightGrams: optionalWeightInput.default(null),
     variants: z
       .array(
@@ -220,6 +228,44 @@ export const productFormSchema = z
   .superRefine(validateVariants);
 export type ProductFormValues = z.input<typeof productFormSchema>;
 export type ProductFormInput = z.output<typeof productFormSchema>;
+
+export const productNegotiationIssues = {
+  PRODUCT_NEGOTIATION_VARIANT_PRICE: {
+    field: 'negotiationEnabled',
+    message: 'A variant has its own price.',
+  },
+  PRODUCT_NEGOTIATION_OPENING_PRICE: {
+    field: 'negotiationOpeningPoisha',
+    message: 'Enter an opening offer below the selling price.',
+  },
+  PRODUCT_NEGOTIATION_FLOOR_PRICE: {
+    field: 'negotiationFloorPoisha',
+    message: 'Enter a lowest price at or below the opening offer.',
+  },
+} as const;
+
+export function productNegotiationIssue({
+  pricePoisha,
+  negotiationEnabled,
+  negotiationOpeningPoisha: opening,
+  negotiationFloorPoisha: floor,
+  variants,
+}: Pick<
+  CreateProductInput,
+  'pricePoisha' | 'negotiationEnabled' | 'negotiationOpeningPoisha' | 'negotiationFloorPoisha'
+> & { variants: readonly { priceOverridePoisha: number | null }[] }):
+  keyof typeof productNegotiationIssues | undefined {
+  if (
+    negotiationEnabled &&
+    variants.some(({ priceOverridePoisha }) => priceOverridePoisha !== null)
+  )
+    return 'PRODUCT_NEGOTIATION_VARIANT_PRICE';
+  if (negotiationEnabled && (opening === null || opening >= pricePoisha))
+    return 'PRODUCT_NEGOTIATION_OPENING_PRICE';
+  if (floor === null) return negotiationEnabled ? 'PRODUCT_NEGOTIATION_FLOOR_PRICE' : undefined;
+  if (opening !== null && floor > opening) return 'PRODUCT_NEGOTIATION_FLOOR_PRICE';
+  return undefined;
+}
 
 const productReadinessValues = [
   'needs_price',
@@ -264,8 +310,13 @@ export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   reserved: number;
   available: number;
 };
-export type ProductResponse = Omit<CreateProductInput, 'variants'> & {
+export type ProductResponse = Omit<
+  CreateProductInput,
+  'variants' | 'negotiationOpeningPoisha' | 'negotiationFloorPoisha'
+> & {
   id: string;
+  negotiationOpeningPoisha?: number | null;
+  negotiationFloorPoisha?: number | null;
   // The category's name, with its parent first ("Clothing > T-shirts"), and the brand's name.
   category: string | null;
   brand: string | null;

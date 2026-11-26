@@ -9,20 +9,35 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 export class ProductOrderVariantsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  lockArchiveVariants(storeId: string, productId: string) {
-    return this.database.forStore(storeId, async (tx) => {
-      // Product edits already lock the product before changing its variants.
-      const [product] = await tx
-        .select({ id: products.id })
+  lockProducts(storeId: string, productIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: products.id,
+          pricePoisha: products.pricePoisha,
+          status: products.status,
+          isVisibleInChats: products.isVisibleInChats,
+          negotiationEnabled: products.negotiationEnabled,
+          negotiationOpeningPoisha: products.negotiationOpeningPoisha,
+          negotiationFloorPoisha: products.negotiationFloorPoisha,
+        })
         .from(products)
         .where(
           and(
             eq(products.storeId, storeId),
-            eq(products.id, productId),
+            inArray(products.id, productIds),
             ne(products.status, 'archived'),
           ),
         )
-        .for('no key update');
+        .orderBy(products.id)
+        .for('no key update'),
+    );
+  }
+
+  lockArchiveVariants(storeId: string, productId: string) {
+    return this.database.forStore(storeId, async (tx) => {
+      // Product edits already lock the product before changing its variants.
+      const [product] = await this.lockProducts(storeId, [productId]);
       if (!product) return null;
       const variants = await tx
         .select({ id: productVariants.id })
