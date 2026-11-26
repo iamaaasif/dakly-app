@@ -11,6 +11,7 @@ import {
 import { formatMoney } from '@dakly/contracts/money';
 import type { OrderListItem, OrderSummary } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
+import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 
 import { isFinishedOrder } from '../order-actions';
@@ -36,9 +37,14 @@ const sourceStyles: Record<OrderSummary['source'], SourceStyle> = {
   khata_import: { icon: ShoppingBag, bgClass: 'bg-surface-muted', textClass: 'text-text' },
 };
 
-type OrderRowProps = { order: OrderListItem; href: string; canEdit: boolean };
+type OrderRowProps = {
+  order: OrderListItem;
+  href: string;
+  canEdit: boolean;
+  selection?: { checked: boolean; disabled: boolean; onToggle: () => void };
+};
 
-export function OrderRow({ order, href, canEdit }: OrderRowProps) {
+export function OrderRow({ order, href, canEdit, selection }: OrderRowProps) {
   const style = sourceStyles[order.source] ?? {
     icon: ClipboardList,
     bgClass: 'bg-surface-muted',
@@ -48,15 +54,25 @@ export function OrderRow({ order, href, canEdit }: OrderRowProps) {
 
   return (
     <li className="grid grid-cols-[auto_1fr] items-center gap-3 p-4 md:grid-cols-[auto_1fr_auto_auto] md:gap-4">
-      <span
-        className={cn(
-          'grid size-9 shrink-0 place-items-center rounded-lg',
-          style.bgClass,
-          style.textClass,
-        )}
-      >
-        <Icon size={16} strokeWidth={2} aria-hidden="true" />
-      </span>
+      <div className="flex items-center gap-1.5">
+        {selection ? (
+          <Checkbox
+            aria-label={`Select order #${order.number} for shipping labels`}
+            checked={selection.checked}
+            disabled={selection.disabled}
+            onCheckedChange={selection.onToggle}
+          />
+        ) : null}
+        <span
+          className={cn(
+            'grid size-9 shrink-0 place-items-center rounded-lg',
+            style.bgClass,
+            style.textClass,
+          )}
+        >
+          <Icon size={16} strokeWidth={2} aria-hidden="true" />
+        </span>
+      </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <UrlLink

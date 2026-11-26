@@ -32,6 +32,9 @@ import { OrderProductArchiveController } from './order-product-archive.controlle
 import { OrderProductChangesService } from './order-product-changes.service';
 import { OrderReportingRepository } from './order-reporting.repository';
 import { OrderReportingService } from './order-reporting.service';
+import { OrderShippingLabelsController } from './order-shipping-labels.controller';
+import { OrderShippingLabelsRepository } from './order-shipping-labels.repository';
+import { OrderShippingLabelsService } from './order-shipping-labels.service';
 import { OrderStageCountsService } from './order-stage-counts.service';
 import { OrdersController } from './orders.controller';
 import { OrdersRepository } from './orders.repository';
@@ -54,6 +57,7 @@ import { OrdersService } from './orders.service';
     OrderProductArchiveController,
     OrderCatalogueController,
     OrderInvoiceController,
+    OrderShippingLabelsController,
     OrderConfirmationController,
     OrderLinkController,
   ],
@@ -69,6 +73,8 @@ import { OrdersService } from './orders.service';
     OrdersService,
     OrderInvoiceRepository,
     OrderInvoiceService,
+    OrderShippingLabelsRepository,
+    OrderShippingLabelsService,
     OrderAdvancesService,
     OrderReportingRepository,
     OrderReportingService,
