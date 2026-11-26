@@ -44,6 +44,7 @@ const product: ProductResponse = {
   aliases: [],
   pricePoisha: 245000,
   compareAtPricePoisha: 295000,
+  negotiationEnabled: false,
   options: [],
   isStockTracked: true,
   isVisibleInChats: true,

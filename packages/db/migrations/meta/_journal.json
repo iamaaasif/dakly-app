@@ -750,6 +750,13 @@
       "when": 1795658389036,
       "tag": "0106_handover_summary",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1795679113279,
+      "tag": "0107_product_negotiation",
+      "breakpoints": true
     }
   ]
 }

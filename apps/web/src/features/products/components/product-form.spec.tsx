@@ -226,6 +226,50 @@ describe('Product form on a full page', () => {
     expect(name.value).toBe(product.name);
     expect(name.matches(':disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.queryByRole('switch', { name: 'Let the AI negotiate' })).toBeNull();
+  });
+
+  it('warns about selling below cost and still saves negotiation prices', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(product, page);
+    const toggle = screen.getByRole('switch', { name: 'Let the AI negotiate' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    await userEvent.click(toggle);
+    fireEvent.change(screen.getByLabelText('Opening offer ৳'), { target: { value: '2000.50' } });
+    fireEvent.change(screen.getByLabelText('Lowest price ৳'), { target: { value: '1200.50' } });
+    expect(screen.getByText('The lowest price is below the product cost.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toEqual({
+      negotiationEnabled: true,
+      negotiationOpeningPoisha: 200050,
+      negotiationFloorPoisha: 120050,
+    });
+  });
+
+  it('disables negotiation when the product has a variant with its own price', () => {
+    show(
+      { ...product, variants: [{ ...product.variants[0]!, priceOverridePoisha: 200000 }] },
+      page,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>('switch', { name: 'Let the AI negotiate' }).disabled,
+    ).toBe(true);
+    expect(screen.getByText('A variant has its own price.')).toBeTruthy();
+  });
+
+  it('compares the opening offer with the price the customer pays', async () => {
+    const { onSaved } = show({ ...product, compareAtPricePoisha: 300000 }, page);
+    await userEvent.click(screen.getByRole('switch', { name: 'Let the AI negotiate' }));
+    fireEvent.change(screen.getByLabelText('Opening offer ৳'), { target: { value: '2450.50' } });
+    fireEvent.change(screen.getByLabelText('Lowest price ৳'), { target: { value: '1800' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Enter an opening offer below the selling price.')).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
   });
 
   it('rejects a sell price equal to the regular price', async () => {

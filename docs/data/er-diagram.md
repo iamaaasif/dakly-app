@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0106_snapshot.json`: **110 tables, 1447 columns, 438 explicit indexes and 340 foreign keys**.
+Built from `packages/db/migrations/meta/0107_snapshot.json`: **110 tables, 1450 columns, 438 explicit indexes and 340 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -992,6 +992,9 @@ erDiagram
         text__ aliases "NOT NULL; text[]"
         bigint price_poisha "NOT NULL; bigint"
         bigint compare_at_price_poisha "NULL; bigint"
+        boolean negotiation_enabled "NOT NULL; boolean"
+        bigint negotiation_opening_poisha "NULL; bigint"
+        bigint negotiation_floor_poisha "NULL; bigint"
         uuid__ image_file_ids "NOT NULL; uuid[]"
         jsonb options "NOT NULL; jsonb"
         boolean is_stock_tracked "NOT NULL; boolean"

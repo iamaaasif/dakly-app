@@ -1,3 +1,5 @@
+import { productNegotiationIssues } from '@dakly/contracts/products';
+
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const PRODUCT_ERRORS = {
@@ -21,6 +23,18 @@ const PRODUCT_ERRORS = {
   },
   PRODUCT_NOT_FOUND: { status: 404, message: 'Product not found' },
   PRODUCT_VARIANT_NOT_FOUND: { status: 404, message: 'Product variant not found' },
+  PRODUCT_NEGOTIATION_VARIANT_PRICE: {
+    status: 400,
+    message: productNegotiationIssues.PRODUCT_NEGOTIATION_VARIANT_PRICE.message,
+  },
+  PRODUCT_NEGOTIATION_OPENING_PRICE: {
+    status: 400,
+    message: productNegotiationIssues.PRODUCT_NEGOTIATION_OPENING_PRICE.message,
+  },
+  PRODUCT_NEGOTIATION_FLOOR_PRICE: {
+    status: 400,
+    message: productNegotiationIssues.PRODUCT_NEGOTIATION_FLOOR_PRICE.message,
+  },
   RESTOCK_CONTACT_NOT_FOUND: { status: 404, message: 'Customer not found' },
   RESTOCK_REQUEST_NOT_FOUND: { status: 404, message: 'Restock request not found' },
   RESTOCK_VARIANT_STILL_OUT: { status: 409, message: 'This size is still out of stock' },
