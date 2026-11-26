@@ -42,8 +42,7 @@ export function offerChanges(
   let extraDiscount = 0;
   const items = previous.map((item) => {
     const offer = byVariant.get(item.variantId);
-    const applied =
-      offer && offer.expiresAt > now ? lineDiscount(item, offer.offeredPricePoisha) : 0;
+    const applied = offerDiscount(item, offer, now) ?? 0;
     const saved = item.lineDiscountPoisha ?? 0;
     const lineDiscountPoisha = Math.max(saved, applied);
     extraDiscount += lineDiscountPoisha - saved;
@@ -59,15 +58,16 @@ export function offerChanges(
 function applyPriceOffers(items: OrderItemWrite[], rows: LiveOffers, now: Date) {
   const byVariant = new Map(rows.map((row) => [row.variantId, row]));
   for (const item of items) {
-    const offer = byVariant.get(item.variantId);
-    if (!offer || offer.expiresAt <= now || offer.pricePoisha !== item.unitPricePoisha) continue;
-    item.lineDiscountPoisha = lineDiscount(item, offer.offeredPricePoisha);
+    const applied = offerDiscount(item, byVariant.get(item.variantId), now);
+    if (applied !== undefined) item.lineDiscountPoisha = applied;
   }
 }
 
-function lineDiscount(item: OrderItemWrite, offeredPricePoisha: number) {
+function offerDiscount(item: OrderItemWrite, offer: LiveOffers[number] | undefined, now: Date) {
+  if (!offer || offer.expiresAt <= now || offer.pricePoisha !== item.unitPricePoisha)
+    return undefined;
   const discount =
-    BigInt(Math.max(0, item.unitPricePoisha - offeredPricePoisha)) * BigInt(item.quantity);
+    BigInt(Math.max(0, item.unitPricePoisha - offer.offeredPricePoisha)) * BigInt(item.quantity);
   if (discount > Number.MAX_SAFE_INTEGER) throw orderError('ORDER_TOTAL_INVALID');
   return Number(discount);
 }

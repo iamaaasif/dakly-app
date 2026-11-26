@@ -101,6 +101,7 @@ export class ChatOrdersService {
     const variantIds = previous.map(({ variantId }) => variantId);
     const offers = await this.priceOffers.forOrder(storeId, party, variantIds);
     if (!offers.length) return this.orders.getById(storeId, orderId, access);
+    // An offer can expire while waiting for the variant locks that editOrder also needs.
     await this.products.orderVariants(storeId, [], variantIds);
     const discountRoomPoisha = order.itemsSubtotalPoisha - order.orderDiscountPoisha;
     const items = offerChanges(previous, offers, this.clock.now(), discountRoomPoisha);

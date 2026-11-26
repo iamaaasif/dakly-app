@@ -79,7 +79,7 @@ Inquiry-only outcomes recorded for reporting: Lost inquiry, No response.
 
 The confirm message is a WhatsApp utility template with order number, items, total including delivery, address and "reply হ্যাঁ to confirm". A "হ্যাঁ" (or yes, ji, ok, confirm, ঠিক আছে) reply moves the order to To pack. Without WhatsApp it goes by SMS with a one-tap confirm link instead, because Bangladesh A2P SMS cannot receive replies. No reply in 24 hours raises the "waiting over 12 hours" alert at 12 hours and suggests a call at 24.
 
-When the AI opens the same draft again in the same chat, a later price offer it already sent can lower a line while the draft still waits for confirmation. The AI gives the new total and asks the customer to confirm. The order history shows **AI price offer**. A retry does not raise a price or change a confirmed order.
+When the AI opens the same draft again in the same chat, a later price offer it already sent can lower a line while the draft waits for confirmation and the saved regular price still matches. The AI gives the new total and asks the customer to confirm. The order history shows **AI price offer**. A retry does not raise a price or change a confirmed order.
 
 **Return risk**
 
