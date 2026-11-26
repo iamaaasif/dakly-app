@@ -1,20 +1,12 @@
 import type { AuditService } from '../audit/audit.service';
-import type { OfferParty, PriceOffersService } from '../price-offers/price-offers.service';
+import type { PriceOffersService } from '../price-offers/price-offers.service';
 import { orderError } from './orders.errors';
 import type { OrderItemWrite } from './orders.repository';
 
-export async function applyPriceOffers(
-  storeId: string,
-  party: Omit<OfferParty, 'conversationId'> & { conversationId: string | undefined },
+export function applyPriceOffers(
   items: OrderItemWrite[],
-  offers: PriceOffersService,
+  rows: Awaited<ReturnType<PriceOffersService['forOrder']>>,
 ) {
-  if (!party.conversationId) return;
-  const rows = await offers.forOrder(
-    storeId,
-    { ...party, conversationId: party.conversationId },
-    items.map(({ variantId }) => variantId),
-  );
   const byVariant = new Map(rows.map((row) => [row.variantId, row]));
   for (const item of items) {
     const offer = byVariant.get(item.variantId);

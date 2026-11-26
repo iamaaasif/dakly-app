@@ -5,7 +5,7 @@ import type { ProductSearchService } from '../product-search/product-search.serv
 import { offerLowerPrice, quotedOfferSources } from './offer-lower-price';
 
 it('records only a quoted offer in the outbound sources and keeps its reference out of the model result', async () => {
-  const result = await offerLowerPrice(
+  const { result, quote } = await offerLowerPrice(
     {
       offer: async () => ({ kind: 'offered', pricePoisha: 110050, isFinal: false }),
     } as PriceOffersService,
@@ -19,15 +19,11 @@ it('records only a quoted offer in the outbound sources and keeps its reference 
     { productName: 'Panjabi', variantWords: null },
   );
   expect(result).toEqual({ kind: 'offered', priceTaka: 1100.5, isFinal: false });
-  expect(quotedOfferSources([{ result }], 'The price is fixed.')).toEqual([]);
-  expect(quotedOfferSources([{ result }], 'I can’t do ৳1,100.50.')).toEqual([]);
-  expect(quotedOfferSources([{ result }], '৳১,১০০.৫০-এ দিতে পারব না।')).toEqual([]);
-  expect(quotedOfferSources([{ result }], '৳1100.50 te dite parbo na.')).toEqual([]);
-  expect(quotedOfferSources([{ result }], 'Did you say the price is ৳1,100.50?')).toEqual([]);
-  expect(quotedOfferSources([{ result }], 'It’s ৳1,100.50, with ৳60 delivery.')).toEqual([
+  expect(quotedOfferSources([{ quote }], 'The price is fixed.')).toEqual([]);
+  expect(quotedOfferSources([{ quote }], 'It’s ৳1,100.50, with ৳60 delivery.')).toEqual([
     { tool: 'price_offer', refs: ['ask:product'] },
   ]);
-  expect(quotedOfferSources([{ result }], 'পাঞ্জাবিটির শেষ দাম ৳১,১০০.৫০।')).toEqual([
+  expect(quotedOfferSources([{ quote }], '৳১,১০০.৫০ এ দিতে পারব, এর নিচে না।')).toEqual([
     { tool: 'price_offer', refs: ['ask:product'] },
   ]);
 });

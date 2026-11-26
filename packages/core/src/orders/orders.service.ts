@@ -112,9 +112,15 @@ export class OrdersService {
         recipient.areaId,
         input.deliveryChargePoisha,
       );
+      const offers = placed.offerConversationId
+        ? await this.priceOffers.forOrder(
+            storeId,
+            { conversationId: placed.offerConversationId, contactId: contact.id },
+            input.items.map(({ variantId }) => variantId),
+          )
+        : [];
       const items = await orderItemSnapshots(storeId, this.products, input.items);
-      const party = { conversationId: placed.offerConversationId, contactId: contact.id };
-      await applyPriceOffers(storeId, party, items, this.priceOffers);
+      applyPriceOffers(items, offers);
       const totals = orderTotals(items, {
         ...input,
         deliveryChargePoisha: delivery.deliveryChargePoisha,

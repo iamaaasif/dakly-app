@@ -1,21 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import {
-  and,
-  desc,
-  eq,
-  exists,
-  gt,
-  gte,
-  inArray,
-  isNotNull,
-  lt,
-  ne,
-  notExists,
-  sql,
-} from 'drizzle-orm';
+import { and, desc, eq, exists, gt, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import { conversations, messages } from '@dakly/db/schema/chats';
-import { priceOffers, products, productVariants } from '@dakly/db/schema/products';
+import { priceOffers } from '@dakly/db/schema/products';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -32,13 +19,6 @@ const offerColumns = {
   expiresAt: priceOffers.expiresAt,
 };
 const finalFirst = desc(sql`${priceOffers.step} = 'final'`);
-const productPrices = {
-  pricePoisha: products.pricePoisha,
-  negotiationEnabled: products.negotiationEnabled,
-  negotiationOpeningPoisha: products.negotiationOpeningPoisha,
-  negotiationFloorPoisha: products.negotiationFloorPoisha,
-};
-
 @Injectable()
 export class PriceOffersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
@@ -63,39 +43,6 @@ export class PriceOffersRepository {
         ),
     );
     return Boolean(row);
-  }
-
-  async lockProduct(storeId: string, id: string) {
-    const [row] = await this.database.forStore(storeId, (tx) =>
-      tx
-        .select(productPrices)
-        .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            eq(products.id, id),
-            eq(products.status, 'active'),
-            eq(products.isVisibleInChats, true),
-          ),
-        )
-        .for('no key update'),
-    );
-    return row;
-  }
-
-  variantPrices(storeId: string, productId: string) {
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .select({ priceOverridePoisha: productVariants.priceOverridePoisha })
-        .from(productVariants)
-        .where(
-          and(
-            eq(productVariants.storeId, storeId),
-            eq(productVariants.productId, productId),
-            ne(productVariants.status, 'archived'),
-          ),
-        ),
-    );
   }
 
   async forTurn(storeId: string, turn: OfferTurn, productId: string) {
@@ -140,54 +87,24 @@ export class PriceOffersRepository {
     });
   }
 
-  forOrder(storeId: string, party: OfferParty, variantIds: string[], now: Date) {
-    return this.database.forStore(storeId, (tx) => {
-      const overrides = tx
-        .select({ id: productVariants.id })
-        .from(productVariants)
-        .where(
-          and(
-            eq(productVariants.storeId, storeId),
-            eq(productVariants.productId, products.id),
-            ne(productVariants.status, 'archived'),
-            isNotNull(productVariants.priceOverridePoisha),
-          ),
-        );
-      return tx
-        .selectDistinctOn([productVariants.id], {
-          variantId: productVariants.id,
-          pricePoisha: products.pricePoisha,
+  forOrder(storeId: string, party: OfferParty, productIds: string[], now: Date) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          productId: priceOffers.productId,
           offeredPricePoisha: priceOffers.offeredPricePoisha,
         })
         .from(priceOffers)
-        .innerJoin(
-          products,
-          and(eq(products.id, priceOffers.productId), eq(products.storeId, storeId)),
-        )
-        .innerJoin(
-          productVariants,
-          and(eq(productVariants.productId, products.id), eq(productVariants.storeId, storeId)),
-        )
         .where(
           and(
             offerParty(storeId, party),
             gt(priceOffers.expiresAt, now),
             sentOffer(tx),
-            inArray(productVariants.id, variantIds),
-            ne(productVariants.status, 'archived'),
-            eq(products.status, 'active'),
-            eq(products.isVisibleInChats, true),
-            eq(products.negotiationEnabled, true),
-            gte(products.negotiationFloorPoisha, 0),
-            gte(products.negotiationOpeningPoisha, products.negotiationFloorPoisha),
-            lt(products.negotiationOpeningPoisha, products.pricePoisha),
-            gte(priceOffers.offeredPricePoisha, products.negotiationFloorPoisha),
-            lt(priceOffers.offeredPricePoisha, products.pricePoisha),
-            notExists(overrides),
+            inArray(priceOffers.productId, productIds),
           ),
         )
-        .orderBy(productVariants.id, finalFirst, desc(priceOffers.expiresAt), desc(priceOffers.id));
-    });
+        .orderBy(finalFirst, desc(priceOffers.expiresAt), desc(priceOffers.id)),
+    );
   }
 }
 

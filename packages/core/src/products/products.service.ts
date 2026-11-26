@@ -210,6 +210,15 @@ export class ProductsService {
     });
   }
 
+  lockNegotiationTerms(storeId: string, productId: string) {
+    return this.transaction.run(storeId, async () => {
+      const product = await this.orderVariantRepository.lockProduct(storeId, productId);
+      if (product?.status !== 'active' || !product.isVisibleInChats) return undefined;
+      const variants = await this.repository.findVariants(storeId, [productId]);
+      return { ...product, variants };
+    });
+  }
+
   async lockArchiveVariants(storeId: string, productId: string): Promise<string[]> {
     const ids = await this.orderVariantRepository.lockArchiveVariants(storeId, productId);
     if (!ids) throw productError('PRODUCT_NOT_FOUND');

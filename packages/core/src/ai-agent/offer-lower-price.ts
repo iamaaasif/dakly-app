@@ -5,11 +5,7 @@ import type { ProductSearchService } from '../product-search/product-search.serv
 import { quotedPricesPoisha } from './manipulation-screen';
 import type { ToolScope } from './tool-scope';
 
-const recordedQuotes = new WeakMap<object, { ref: string; pricePoisha: number }>();
-const offerWording =
-  /\b(?:can (?:do|offer|sell|give)|(?:it|that)(?: is|['’]s)|price is|(?:last|final|best|lowest) (?:price|dam)|(?:dite|rakhte|korte) (?:pari|parbo))\b|দাম|দিতে পারি|দিতে পারব|রাখতে পারি|অফার/u;
-const denialWording =
-  /\b(?:can ?not|can['’]t|won['’]t|wouldn['’]t|unable|unavailable|not|no|na|nai|nei)\b|(?:^|[\s,])(?:না|নাই|নেই)(?![\p{L}\p{M}])|অসম্ভব/u;
+export type OfferQuote = { ref: string; pricePoisha: number };
 
 export async function offerLowerPrice(
   offers: PriceOffersService,
@@ -18,10 +14,10 @@ export async function offerLowerPrice(
   raw: unknown,
 ) {
   const { productName, variantWords } = offerLowerPriceTool.input.parse(raw);
-  if (!chat?.discountAskMessageId) return { error: 'NOT_A_DISCOUNT_ASK' };
+  if (!chat?.discountAskMessageId) return { result: { error: 'NOT_A_DISCOUNT_ASK' } };
   const query = variantWords ? `${productName} ${variantWords}` : productName;
   const product = await productNamedForOffer(search, storeId, query, adProductIds);
-  if (!product) return { error: 'PRODUCT_NOT_FOUND' };
+  if (!product) return { result: { error: 'PRODUCT_NOT_FOUND' } };
   const result = await offers.offer(
     storeId,
     {
@@ -33,29 +29,18 @@ export async function offerLowerPrice(
     chat.requestedPricePoisha,
   );
   // Offer references belong to the outbound message, outside the model's tool result.
-  if (result.kind !== 'offered') return result;
+  if (result.kind !== 'offered') return { result };
   const { kind, pricePoisha, isFinal } = result;
-  const quote = { kind, priceTaka: pricePoisha / 100, isFinal };
-  recordedQuotes.set(quote, { ref: `${chat.discountAskMessageId}:${product.id}`, pricePoisha });
-  return quote;
+  return {
+    result: { kind, priceTaka: pricePoisha / 100, isFinal },
+    quote: { ref: `${chat.discountAskMessageId}:${product.id}`, pricePoisha },
+  };
 }
 
-export function quotedOfferSources(results: readonly { result: object }[], reply: string) {
-  const prices = new Set(
-    reply
-      .toLowerCase()
-      .split(/\n|(?<=[.!?।])\s+/u)
-      .filter(
-        (sentence) =>
-          offerWording.test(sentence) &&
-          !denialWording.test(sentence) &&
-          !sentence.trimEnd().endsWith('?'),
-      )
-      .flatMap((sentence) => [...quotedPricesPoisha(sentence)]),
-  );
+export function quotedOfferSources(results: readonly { quote?: OfferQuote }[], reply: string) {
+  const prices = quotedPricesPoisha(reply);
   const quoted = new Map<number, string | null>();
-  for (const { result } of results) {
-    const quote = recordedQuotes.get(result);
+  for (const { quote } of results) {
     if (!quote || !prices.has(quote.pricePoisha)) continue;
     const previous = quoted.get(quote.pricePoisha);
     quoted.set(

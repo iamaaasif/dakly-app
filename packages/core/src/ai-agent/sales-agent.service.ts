@@ -32,7 +32,7 @@ import {
 } from './chat-memory';
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
-import { quotedOfferSources } from './offer-lower-price';
+import { quotedOfferSources, type OfferQuote } from './offer-lower-price';
 import { customerConfirms } from './order-confirmation';
 import { chatReplyV16 } from './prompts/chat-reply.v16';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
@@ -58,7 +58,7 @@ const CONFIRM_TOOL = 'confirm_order';
 const SOURCE_KEYS = ['productId', 'itemId', 'orderNumber'];
 
 type Reason = (typeof handoverReasons)[number];
-type ToolResult = { tool: string; result: object };
+type ToolResult = { tool: string; result: object; quote?: OfferQuote };
 
 export type ComposedReply =
   | {
@@ -279,10 +279,10 @@ export class SalesAgentService {
     for (const call of calls) {
       const refusal = refuseToolCall(input.rules, call);
       if (refusal?.kind === 'handover') return { handover: refusal.reason };
-      const result =
-        refusal?.result ??
+      const { result, quote } =
+        (refusal ? { result: refusal.result } : undefined) ??
         (isUnconfirmed(call, input.customerTexts, results)
-          ? { error: 'CONFIRMATION_NOT_GIVEN' }
+          ? { result: { error: 'CONFIRMATION_NOT_GIVEN' } }
           : await this.tools.run(
               { ...input, suggestAddOns: input.rules.suggestAddOns },
               call.name,
@@ -290,7 +290,7 @@ export class SalesAgentService {
             ));
       const handover = toolHandover(call.name, result);
       if (handover) return handover;
-      results.push({ tool: call.name, result });
+      results.push({ tool: call.name, result, quote });
       answered.push({ name: call.name, result });
     }
     return { answered };
@@ -328,7 +328,7 @@ export class SalesAgentService {
     if (photo) return { tool: MATCH_PHOTO_TOOL, result: await this.tools.matchPhoto(input, photo) };
     const query = input.customerTexts.join(' ').slice(0, 100).trim();
     if (query.length < 3) return undefined;
-    const result = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
+    const { result } = await this.tools.run(input, 'search_products', JSON.stringify({ query }));
     return { tool: 'search_products', result };
   }
 
@@ -346,7 +346,7 @@ export class SalesAgentService {
       HISTORY_LENGTH,
     );
     for (const productId of recentlyShownProductIds(shown)) {
-      const product = await this.tools.run(
+      const { result: product } = await this.tools.run(
         input,
         getProductTool.name,
         JSON.stringify({ productId }),

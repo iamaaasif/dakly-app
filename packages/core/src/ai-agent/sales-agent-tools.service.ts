@@ -33,7 +33,7 @@ import { PriceOffersService } from '../price-offers/price-offers.service';
 import { ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 import { RestockRequestsService } from '../products/restock-requests.service';
-import { offerLowerPrice } from './offer-lower-price';
+import { offerLowerPrice, type OfferQuote } from './offer-lower-price';
 import { describeAlternatives, describePhotoMatch } from './product-match-results';
 import type { CompactDeliveryZone } from './shop-block';
 import type { ShopRules } from './shop-rules';
@@ -86,8 +86,6 @@ export class SalesAgentToolsService {
     [searchProductsTool.name]: (scope, raw) => this.searchProducts(scope, raw),
     [browseProductsTool.name]: (scope, raw) => this.browseProducts(scope, raw),
     [getProductTool.name]: (scope, raw) => this.getProduct(scope, raw),
-    [offerLowerPriceTool.name]: (scope, raw) =>
-      offerLowerPrice(this.priceOffers, this.productSearch, scope, raw),
     [getDeliveryChargeTool.name]: (scope, raw) => this.getDeliveryCharge(scope, raw),
     [searchKnowledgeTool.name]: (scope, raw) => this.searchKnowledge(scope, raw),
     [getMyOrdersTool.name]: (scope, raw) => this.getMyOrders(scope, raw),
@@ -114,14 +112,25 @@ export class SalesAgentToolsService {
   ) {}
 
   // The result goes back to the model, so a failure the model can act on is a result, not a throw.
-  async run(scope: ToolScope, name: string, argumentsJson: string): Promise<object> {
+  async run(
+    scope: ToolScope,
+    name: string,
+    argumentsJson: string,
+  ): Promise<{ result: object; quote?: OfferQuote }> {
     const handler = Object.hasOwn(this.handlers, name) ? this.handlers[name] : undefined;
-    if (!handler) return { error: 'UNKNOWN_TOOL' };
     try {
-      return await handler(scope, parseJson(argumentsJson));
+      if (name === offerLowerPriceTool.name)
+        return await offerLowerPrice(
+          this.priceOffers,
+          this.productSearch,
+          scope,
+          parseJson(argumentsJson),
+        );
+      if (!handler) return { result: { error: 'UNKNOWN_TOOL' } };
+      return { result: await handler(scope, parseJson(argumentsJson)) };
     } catch (error) {
-      if (error instanceof ZodError) return { error: 'INVALID_ARGUMENTS' };
-      if (error instanceof AppError && error.status < 500) return { error: error.code };
+      if (error instanceof ZodError) return { result: { error: 'INVALID_ARGUMENTS' } };
+      if (error instanceof AppError && error.status < 500) return { result: { error: error.code } };
       throw error;
     }
   }
