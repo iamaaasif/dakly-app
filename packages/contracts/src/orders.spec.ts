@@ -5,6 +5,7 @@ import {
   createOrderSchema,
   dispatchOrderSchema,
   editOrderSchema,
+  orderExportQuerySchema,
   orderListQuerySchema,
   orderStageChangeSchema,
   partialDeliveryFormSchema,
@@ -36,6 +37,24 @@ describe('order list query', () => {
     { search: 'invalid\0text' },
   ])('rejects an unsupported filter %j', (query) => {
     expect(orderListQuerySchema.safeParse(query).success).toBe(false);
+  });
+});
+
+describe('order export query', () => {
+  it('takes the pipeline filters and a CSV or XLSX format', () => {
+    const filters = { stage: 'delivered', alert: 'cod', search: 'Karim', source: 'manual' };
+    for (const format of ['csv', 'xlsx'])
+      expect(orderExportQuerySchema.parse({ ...filters, format })).toEqual({ ...filters, format });
+  });
+
+  it.each([
+    { format: 'xls' },
+    { format: 'csv', cursor: '123' },
+    { format: 'csv', limit: '1' },
+    { format: 'csv', selected: '019c01ea-cf15-7d31-a7f5-d73d66007ad8' },
+    { format: 'csv', createdFrom: '2026-11-18', createdThrough: '2026-11-17' },
+  ])('rejects a query that cannot describe an export %j', (query) => {
+    expect(orderExportQuerySchema.safeParse(query).success).toBe(false);
   });
 });
 

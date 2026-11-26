@@ -97,6 +97,7 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
       canEditProducts: false,
       canViewOrders: false,
       canEditOrders: false,
+      canExportOrders: false,
       canViewDueBook: false,
       canEditDueBook: false,
       canViewCampaigns: false,

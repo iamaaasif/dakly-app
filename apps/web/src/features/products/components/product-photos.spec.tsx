@@ -25,6 +25,7 @@ const context: SessionContext = {
     canEditProducts: true,
     canViewOrders: false,
     canEditOrders: false,
+    canExportOrders: false,
     canViewDueBook: false,
     canEditDueBook: false,
     canViewCampaigns: false,

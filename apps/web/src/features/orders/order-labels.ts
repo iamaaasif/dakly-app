@@ -2,9 +2,10 @@ import type {
   cancelReasons,
   onHoldReasons,
   OrderDetail,
-  OrderStage,
   OrderSummary,
 } from '@dakly/contracts/orders';
+
+export { orderStageLabels } from '@dakly/contracts/order-stages';
 
 type OrderSource = OrderSummary['source'];
 
@@ -38,17 +39,6 @@ export const cancelReasonLabels: Record<(typeof cancelReasons)[number], string> 
   wrong_order: 'Wrong order',
   customer_cancelled: 'Customer cancelled',
   other: 'Other',
-};
-
-export const orderStageLabels: Record<OrderStage, string> = {
-  to_confirm: 'To confirm',
-  on_hold: 'On hold',
-  to_pack: 'To pack',
-  with_courier: 'With courier',
-  delivered: 'Delivered',
-  partially_delivered: 'Partly delivered',
-  returned: 'Returned',
-  cancelled: 'Cancelled',
 };
 
 export const courierLabels: Record<NonNullable<OrderDetail['courier']>, string> = {

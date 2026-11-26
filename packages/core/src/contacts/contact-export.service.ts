@@ -1,12 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import { type ContactExportQuery, MAX_EXPORT_ROWS } from '@dakly/contracts/contacts';
+import type { ContactExportQuery } from '@dakly/contracts/contacts';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { MAX_EXPORT_ROWS, spreadsheetXlsx, XLSX_TYPE } from '../platform/spreadsheet';
 import { ContactExportRepository, type ExportedContact } from './contact-export.repository';
 import type { MatchFilter } from './contact-filters.repository';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
@@ -17,7 +18,6 @@ type Access = Pick<StoreAccess, 'seeFullPhone' | 'exportLists'>;
 type Actor = Extract<AuditEntry['actor'], { kind: 'user' }>;
 
 const PAGE_SIZE = 1000;
-const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 // The columns are the import's fields, so an exported file can be imported again. The phones are
 // left out for members who do not see full numbers, because a masked number is no use in a file.
@@ -52,13 +52,10 @@ export class ContactExportService {
 
     const rows = await this.readAll(storeId, { ...filter, ...match });
     const shown = columns.filter((column) => !column.phone || access.seeFullPhone);
-    const sheet = [
-      shown.map(({ header }) => ({ value: header, fontWeight: 'bold' as const })),
-      ...rows.map((contact) => shown.map((column) => ({ value: column.value(contact) }))),
-    ];
-    // The package ships as an ES module, which this CommonJS build can only load this way.
-    const { default: writeXlsxFile } = await import('write-excel-file/node');
-    const body = await writeXlsxFile(sheet).toBuffer();
+    const body = await spreadsheetXlsx([
+      shown.map(({ header }) => header),
+      ...rows.map((contact) => shown.map((column) => column.value(contact))),
+    ]);
     // A download of customers is a record of who took them, so it is saved with its size.
     await this.transaction.run(storeId, () =>
       this.audit.record(storeId, {

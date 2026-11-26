@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { calendarDate } from './calendar-date';
 import type { returnRiskLevels } from './contacts';
+import { orderStages, type OrderStage } from './order-stages';
 import { bdMobileSchema } from './phone';
 import {
   productListQuerySchema,
@@ -10,6 +11,14 @@ import {
   type ProductVariantResponse,
 } from './products';
 import { searchText } from './search-text';
+
+export {
+  editableOrderStages,
+  orderStages,
+  orderStageTransitions,
+  orderTabs,
+  type OrderStage,
+} from './order-stages';
 
 export const orderSources = [
   'messenger',
@@ -22,17 +31,6 @@ export const orderSources = [
   'shopify',
   'woocommerce',
   'khata_import',
-] as const;
-// Fulfilment and money are separate fields. Allowed moves are in orders/order-stage.ts.
-export const orderStages = [
-  'to_confirm',
-  'on_hold',
-  'to_pack',
-  'with_courier',
-  'delivered',
-  'partially_delivered',
-  'returned',
-  'cancelled',
 ] as const;
 export const orderPaymentStatuses = [
   'cod_pending',
@@ -77,62 +75,55 @@ export const bdAreaKinds = ['division', 'district', 'upazila'] as const;
 export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const;
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
-export type OrderStage = (typeof orderStages)[number];
-export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
-  to_confirm: ['to_pack', 'on_hold', 'cancelled'],
-  on_hold: ['to_confirm', 'to_pack', 'cancelled'],
-  to_pack: ['with_courier', 'on_hold', 'cancelled'],
-  with_courier: ['delivered', 'partially_delivered', 'returned'],
-  delivered: ['returned'],
-  partially_delivered: ['returned'],
-  returned: [],
-  cancelled: [],
-};
-
-export const editableOrderStages: readonly OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
 export const editablePaymentStatuses: readonly (typeof orderPaymentStatuses)[number][] = [
   'cod_pending',
   'advance_paid',
 ];
 
-export const orderTabs = [
-  'to_confirm',
-  'to_pack',
-  'with_courier',
-  'delivered',
-  'returned',
-] as const;
-
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 export type OrderParcelHistory = { parcels: number; returned: number };
 
-export const orderListQuerySchema = z
-  .strictObject({
-    stage: z.enum(orderStages).optional(),
-    source: z.enum(orderSources).optional(),
-    courier: z.enum(couriers).optional(),
-    createdFrom: calendarDate.optional(),
-    createdThrough: calendarDate.optional(),
-    alert: z.enum(['waiting', 'risk', 'cod']).optional(),
-    search: searchText.max(120).optional(),
-    // One customer's orders, for the chat's customer panel.
-    buyerContactId: z.uuid().optional(),
+const orderFiltersSchema = z.strictObject({
+  stage: z.enum(orderStages).optional(),
+  source: z.enum(orderSources).optional(),
+  courier: z.enum(couriers).optional(),
+  createdFrom: calendarDate.optional(),
+  createdThrough: calendarDate.optional(),
+  alert: z.enum(['waiting', 'risk', 'cod']).optional(),
+  search: searchText.max(120).optional(),
+  // One customer's orders, for the chat's customer panel.
+  buyerContactId: z.uuid().optional(),
+});
+
+function orderDatesInSequence({
+  createdFrom,
+  createdThrough,
+}: z.infer<typeof orderFiltersSchema>): boolean {
+  return !createdFrom || !createdThrough || createdFrom <= createdThrough;
+}
+
+const reversedOrderDates = {
+  path: ['createdThrough'],
+  message: 'End date must be on or after the start date',
+};
+
+export const orderListQuerySchema = orderFiltersSchema
+  .extend({
     cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
     limit: z.coerce.number<string>().int().min(1).max(100).default(50),
   })
-  .refine(
-    ({ createdFrom, createdThrough }) =>
-      !createdFrom || !createdThrough || createdFrom <= createdThrough,
-    {
-      path: ['createdThrough'],
-      message: 'End date must be on or after the start date',
-    },
-  );
+  .refine(orderDatesInSequence, reversedOrderDates);
 
 export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
 export const orderScreenQuerySchema = orderListQuerySchema.safeExtend({
   selected: z.uuid().optional(),
 });
+
+export const orderExportQuerySchema = orderFiltersSchema
+  .extend({ format: z.enum(['csv', 'xlsx']) })
+  .refine(orderDatesInSequence, reversedOrderDates);
+
+export type OrderExportQuery = z.infer<typeof orderExportQuerySchema>;
 
 export type OrderSummary = {
   id: string;

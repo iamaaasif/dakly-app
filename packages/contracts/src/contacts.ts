@@ -122,7 +122,6 @@ export const contactListQuerySchema = z.strictObject({
 
 // The export takes the list's filters and everything they match, so it has no cursor or limit.
 export const contactExportQuerySchema = contactListQuerySchema.omit({ cursor: true, limit: true });
-export const MAX_EXPORT_ROWS = 50_000;
 
 export const matchSuggestionListQuerySchema = z.strictObject({ contactId: z.uuid() });
 

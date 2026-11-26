@@ -14,6 +14,7 @@ import { parseOrdersScreen } from '../orders-url';
 import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
 import { NewOrderDialog } from './order-editor-dialog';
+import { OrderExportMenu } from './order-export-menu';
 import { OrderFilters } from './order-filters';
 import { OrdersList } from './orders-list';
 import { Refreshing } from '@/components/refreshing';
@@ -37,6 +38,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
       <main className="mx-auto max-w-7xl space-y-4 p-6 md:p-8">
         <OrdersHeader
           heading={heading}
+          query={query}
           onSaved={(id) => router.replace(`/orders?${ordersSearch({ ...query, selected: id })}`)}
         />
         {orders.data ? <OrderAlerts alerts={orders.data.alerts} /> : null}
@@ -73,13 +75,15 @@ export function OrdersScreen(initial: OrdersScreenProps) {
 
 type OrdersHeaderProps = {
   heading: RefObject<HTMLHeadingElement | null>;
+  query: OrderListQuery;
   onSaved: (id: string) => void;
 };
 
-function OrdersHeader({ heading, onSaved }: OrdersHeaderProps) {
+function OrdersHeader({ heading, query, onSaved }: OrdersHeaderProps) {
   const { data } = useSessionContext();
   const [open, setOpen] = useState(false);
-  const canCreate = data?.currentStore?.canEditOrders;
+  const store = data?.currentStore;
+  const canCreate = store?.canEditOrders;
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -95,11 +99,14 @@ function OrdersHeader({ heading, onSaved }: OrdersHeaderProps) {
           in hand.
         </p>
       </div>
-      {canCreate && (
-        <Button className="min-h-11 sm:min-h-10" onClick={() => setOpen(true)}>
-          <span aria-hidden="true">+ </span>New order
-        </Button>
-      )}
+      <div className="flex flex-wrap items-start gap-2">
+        {store?.canExportOrders ? <OrderExportMenu query={query} /> : null}
+        {canCreate ? (
+          <Button className="min-h-11 sm:min-h-10" onClick={() => setOpen(true)}>
+            <span aria-hidden="true">+ </span>New order
+          </Button>
+        ) : null}
+      </div>
       {open && (
         <NewOrderDialog
           onClose={() => setOpen(false)}
