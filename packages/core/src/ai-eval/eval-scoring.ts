@@ -113,10 +113,12 @@ function failedNegotiation({ golden, outcome }: Scored) {
 }
 
 function missedProduct({ golden, outcome }: Scored) {
+  const banglish =
+    golden.negotiation !== undefined && ['banglish', 'mixed'].includes(golden.language);
   return (
     golden.mentionsAnyOf !== undefined &&
     !isAcceptedHandover(golden, outcome) &&
-    !(outcome.kind === 'reply' && mentionsAny(outcome.text, golden.mentionsAnyOf))
+    !(outcome.kind === 'reply' && mentionsAny(outcome.text, golden.mentionsAnyOf, banglish))
   );
 }
 
@@ -197,13 +199,13 @@ function hasWrongPrice(reply: string, golden: GoldenCase) {
   );
 }
 
-// A Latin term must be a whole word, so the size "M" is not found in "Medium". A Bangla term may
-// carry a suffix ("কুর্তির", "কুর্তিটা"), so it matches as text.
-function mentionsAny(reply: string, terms: readonly string[]) {
+// Latin terms use word boundaries, so "M" does not match "Medium". For Banglish negotiations
+// a product name can take a case ending. Bangla product names can match with a suffix.
+function mentionsAny(reply: string, terms: readonly string[], banglish = false) {
   return terms.some((term) =>
     /^[\x20-\x7e]+$/.test(term)
       ? new RegExp(
-          `(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(term)}(?![\\p{L}\\p{M}\\p{N}])`,
+          `(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(term)}${banglish && term.length > 1 ? '(?:er|r|ta|ti|te)?' : ''}(?![\\p{L}\\p{M}\\p{N}])`,
           'iu',
         ).test(reply)
       : reply.includes(term),
