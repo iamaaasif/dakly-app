@@ -22,6 +22,9 @@ import { OrderCatalogueController } from './order-catalogue.controller';
 import { OrderConfirmationController } from './order-confirmation.controller';
 import { OrderConfirmationRepository } from './order-confirmation.repository';
 import { OrderConfirmationService } from './order-confirmation.service';
+import { OrderExportController } from './order-export.controller';
+import { OrderExportRepository } from './order-export.repository';
+import { OrderExportService } from './order-export.service';
 import { OrderInvoiceController } from './order-invoice.controller';
 import { OrderInvoiceRepository } from './order-invoice.repository';
 import { OrderInvoiceService } from './order-invoice.service';
@@ -50,6 +53,7 @@ import { OrdersService } from './orders.service';
     StoresModule,
   ],
   controllers: [
+    OrderExportController,
     OrdersController,
     OrderProductArchiveController,
     OrderCatalogueController,
@@ -65,6 +69,8 @@ import { OrdersService } from './orders.service';
     KhataSalesRepository,
     KhataSalesService,
     OrdersRepository,
+    OrderExportRepository,
+    OrderExportService,
     OrderStageCountsService,
     OrdersService,
     OrderInvoiceRepository,

@@ -271,8 +271,7 @@ subtotal, with the original unit prices. It leaves out lines with zero delivered
 units. Staff without full-phone access see a masked recipient number.
 
 The print page at `/orders/[orderId]/print` loads its data in the browser through
-`GET /orders/:orderId/invoice`. Bulk shipping labels and order export remain
-part of ORD-10. [Desktop, phone and print evidence](../design/evidence/ord-10-invoice/).
+`GET /orders/:orderId/invoice`. [Desktop, phone and print evidence](../design/evidence/ord-10-invoice/).
 
 ### How it works
 
@@ -397,3 +396,11 @@ Removing a line from an editable order deletes that `order_items` row, adjusts i
 ## Open questions
 
 Q7 (Inquiry as a stage).
+
+## Orders pipeline export (ORD-10)
+
+Export in the Orders header downloads a CSV or Excel file for the current stage, search and filters across all pages. Staff need both Orders view and Download customer lists. The recipient phone stays masked unless the staff member can see full phone numbers. The rules for exact phone search are the same as in the pipeline.
+
+The file carries one row per saved order line. The columns are Order number, Order date, Stage, Buyer, Recipient, Phone, District, Product, Variant, Quantity, Unit price, Line discount, Delivery charge, Order discount, Advance and COD to collect. Order dates follow the shop time zone. Amounts come from the saved order and line snapshots, in taka. Each order-level amount is repeated on every line of the order. For a partial delivery, the file uses saved delivered quantities and discounts, keeping the saved unit prices.
+
+CSV escapes text that could run as a spreadsheet formula, and Excel stores that content as text. A file can hold up to 50,000 order lines. Larger results ask staff to narrow the filters. Each successful export records who downloaded it and the number of rows.

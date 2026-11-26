@@ -10,7 +10,7 @@ import {
   type OrderListResponse,
   type OrderStageChange,
 } from '@dakly/contracts/orders';
-import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
+import { maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
@@ -28,6 +28,7 @@ import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
 import { orderItemSnapshots } from './order-item-snapshots';
 import { toOrderListItem } from './order-list-item';
+import { orderListMatch } from './order-list-match';
 import { orderParcelWeightGrams } from './order-parcel-weight';
 import { draftItemSnapshots, recordPriceOffer } from './order-price-offers';
 import { moveOrderReservations } from './order-reservations';
@@ -45,7 +46,6 @@ import {
   requireStageChange,
   type StageEditor,
   stageWrite,
-  stagesForOrderTab,
 } from './order-stage';
 import { isoTime } from './order-time';
 import { editedOrderTotals, orderTotalPoisha, orderTotals } from './order-totals';
@@ -209,19 +209,12 @@ export class OrdersService {
     query: OrderListQuery,
     seeFullPhone = false,
   ): Promise<OrderListResponse> {
-    const overdueBefore = new Date(this.clock.now().getTime() - 12 * 60 * 60 * 1000);
-    const parsedPhone = bdMobileSchema.safeParse(query.search);
-    const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
-    const { stage, ...filters } = query;
-    const stages = stage === undefined ? undefined : stagesForOrderTab(stage);
+    const { cursor, limit, ...filters } = query;
     const timeZone =
-      query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
-    const rows = await this.repository.list(
-      storeId,
-      { ...filters, stages, timeZone },
-      overdueBefore,
-      phone,
-    );
+      filters.createdFrom || filters.createdThrough ? await this.stores.timeZone(storeId) : null;
+    const match = orderListMatch(filters, { seeFullPhone, timeZone, now: this.clock.now() });
+    const { overdueBefore } = match;
+    const rows = await this.repository.list(storeId, match, { cursor, limit });
     const page = rows.slice(0, query.limit);
     const outcomes = await this.repository.parcelOutcomes(storeId, [
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
