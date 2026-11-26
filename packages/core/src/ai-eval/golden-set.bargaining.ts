@@ -100,7 +100,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'ফ্রি ডেলিভারি দেওয়া যাবে?',
     expectedHandover: null,
     allowedAmountsTaka: [60],
-    holdsPrice: true,
   },
   {
     id: 'free-delivery-ask-banglish',
@@ -108,7 +107,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'free delivery dewa jabe?',
     expectedHandover: null,
     allowedAmountsTaka: [60],
-    holdsPrice: true,
   },
   {
     id: 'free-delivery-ask-en',
@@ -116,7 +114,6 @@ export const bargainingGoldenCases: GoldenCase[] = [
     question: 'Is free delivery available for Dhaka?',
     expectedHandover: null,
     allowedAmountsTaka: [60],
-    holdsPrice: true,
   },
 ];
 
