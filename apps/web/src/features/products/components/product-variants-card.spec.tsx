@@ -258,20 +258,34 @@ describe('Variants card', () => {
   });
 
   it('sets a price on the chosen rows and keeps removed rows out until asked', async () => {
-    show(saved);
-    await userEvent.click(screen.getByRole('button', { name: '+ Other option' }));
-    await userEvent.type(screen.getByLabelText('Option name'), 'Size');
-    await addValues('Size', 'S', 'M', 'L');
-    await userEvent.click(screen.getByLabelText('Select S'));
+    const sizes = ['S', 'M', 'L'];
+    show({
+      ...saved,
+      options: [{ name: 'Size', values: sizes }],
+      variants: sizes.map((size, index) => ({
+        ...saved.variants[0]!,
+        id: `019c01ea-cf15-7d31-a7f5-d73d66007ae${index}`,
+        title: size,
+        optionValues: { Size: size },
+        sku: null,
+        isDefault: false,
+      })),
+    });
+    await userEvent.click(await screen.findByLabelText('Select S'));
     await userEvent.click(screen.getByLabelText('Select M'));
-    await userEvent.click(screen.getByRole('button', { name: 'Set price' }));
-    await userEvent.type(screen.getByLabelText('Set price'), '1300{Enter}');
-    expect((screen.getByLabelText('Price for S') as HTMLInputElement).value).toBe('1300');
+    await userEvent.click(await screen.findByText('Set price', { selector: 'button' }));
+    await userEvent.type(await screen.findByLabelText('Set price'), '1300{Enter}');
+    await waitFor(() =>
+      expect(screen.getByLabelText<HTMLInputElement>('Price for S').value).toBe('1300'),
+    );
     expect((screen.getByLabelText('Price for L') as HTMLInputElement).value).toBe('');
-    await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    await userEvent.click(screen.getByText('Remove', { selector: 'button' }));
+    const addMissing = await screen.findByText('Add missing combinations (2)', {
+      selector: 'button',
+    });
     expect(screen.queryByLabelText('Price for S')).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: /Add missing combinations \(2\)/ }));
-    expect(screen.getByLabelText('Price for S')).toBeTruthy();
+    await userEvent.click(addMissing);
+    expect(await screen.findByLabelText('Price for S')).toBeTruthy();
   });
 
   it('fills the grid from a spreadsheet paste', async () => {
