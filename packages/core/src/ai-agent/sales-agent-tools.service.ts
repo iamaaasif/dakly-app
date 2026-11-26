@@ -32,6 +32,7 @@ import { ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 import { RestockRequestsService } from '../products/restock-requests.service';
 import { describeAlternatives, describePhotoMatch } from './product-match-results';
+import type { CompactDeliveryZone } from './shop-block';
 
 // The agent job supplies both ids. No tool argument can name another store or customer.
 export type ToolScope = {
@@ -130,7 +131,28 @@ export class SalesAgentToolsService {
     const found = adProductIds
       ? await this.productSearch.searchWithin(storeId, adProductIds, query, SEARCH_PRODUCT_LIMIT)
       : await this.productSearch.search(storeId, query, SEARCH_PRODUCT_LIMIT);
-    return { products: found.map(productResult) };
+    const soldOut = found.filter(isProductSoldOut);
+    const alternatives = [
+      ...new Map(
+        (
+          await Promise.all(
+            soldOut.map((product) => this.productSearch.alternativesFor(storeId, product)),
+          )
+        )
+          .flat()
+          .filter((alternative) => !found.some(({ id }) => id === alternative.id))
+          .map((alternative) => [alternative.id, alternative]),
+      ).values(),
+    ];
+    return {
+      products: found.map(productResult),
+      ...(alternatives.length ? { alternatives: alternatives.map(productResult) } : {}),
+    };
+  }
+
+  async deliveryZones(storeId: string): Promise<CompactDeliveryZone[]> {
+    const zones = await this.delivery.listZones(storeId, { limit: ZONE_LIMIT });
+    return zones.items.map((zone) => ({ name: zone.name, chargeTaka: taka(zone.chargePoisha) }));
   }
 
   // What the ad sells, read now so a price or stock count is never an old one.
@@ -403,6 +425,9 @@ type ChatVariant = ChatProduct['variants'][number];
 
 export const isOutOfStock = (product: ChatProduct, variant: ChatVariant) =>
   product.isStockTracked && variant.available <= 0;
+
+export const isProductSoldOut = (product: ChatProduct) =>
+  product.isStockTracked && product.variants.every((variant) => isOutOfStock(product, variant));
 
 export function productCardText(product: ChatProduct, only?: ChatVariant) {
   const lines = (only ? [only] : product.variants).map(

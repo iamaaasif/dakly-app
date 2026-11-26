@@ -33,7 +33,10 @@ function agent(steps: Step[], customerTexts: string[]) {
   } as unknown as AiService;
   const service = new SalesAgentService(
     ai,
-    { run: (_scope: unknown, name: string) => run(name) } as unknown as SalesAgentToolsService,
+    {
+      run: (_scope: unknown, name: string) => run(name),
+      deliveryZones: async () => [],
+    } as unknown as SalesAgentToolsService,
     { messages: async () => ({ items: [] }) } as unknown as InboxService,
     {
       settings: async () => ({ name: 'Shop', phone: null, district: null }),

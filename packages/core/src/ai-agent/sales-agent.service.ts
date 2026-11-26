@@ -33,7 +33,7 @@ import {
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV14 } from './prompts/chat-reply.v14';
+import { chatReplyV15 } from './prompts/chat-reply.v15';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import { promptWith } from './reply-prompt-version';
 import {
@@ -42,7 +42,7 @@ import {
   SalesAgentToolsService,
   salesAgentLlmTools,
 } from './sales-agent-tools.service';
-import { shopBlock, summaryOf } from './shop-block';
+import { type CompactDeliveryZone, shopBlock, summaryOf } from './shop-block';
 import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
 
 const MAX_ROUNDS = 4;
@@ -88,6 +88,7 @@ export type PreparedReply = {
   ad: { result: ToolResult } | undefined;
   inChat: ToolResult | undefined;
   history: readonly HistoryMessage[] | undefined;
+  deliveryZones: CompactDeliveryZone[];
 };
 
 export type ComposeInput = ToolScope & { customerTexts: string[]; rules: ShopRules };
@@ -144,13 +145,16 @@ export class SalesAgentService {
   async prepare(input: ComposeInput): Promise<PreparedReply> {
     const results: ToolResult[] = [];
     // A practice question has no saved conversation, so the question itself is the whole history.
-    const [history, products] = await Promise.all([
+    const [history, products, deliveryZones] = await Promise.all([
       input.chat
         ? this.inbox.replyHistory(input.storeId, input.chat.conversationId, REPLY_HISTORY_LENGTH)
         : undefined,
       this.gatherProducts(input, results),
+      this.tools.deliveryZones(input.storeId),
     ]);
-    return { results, history, ...products };
+    if (deliveryZones.length)
+      results.push({ tool: 'delivery_zones', result: { zones: deliveryZones } });
+    return { results, history, deliveryZones, ...products };
   }
 
   private async composeOnce(
@@ -163,16 +167,16 @@ export class SalesAgentService {
     const ready = await (prepared ?? this.prepare(input));
     // The model's tool rounds add to the list, so a retry must not see the first try's results.
     const results = [...ready.results];
-    const { scoped, ad, inChat, history } = ready;
+    const { scoped, ad, inChat, history, deliveryZones } = ready;
     const candidates = await this.productCandidates(scoped);
     if (candidates) results.push(candidates);
-    const context = await this.context({ input, history, inChat, candidates, ad });
+    const context = await this.context({ input, history, inChat, candidates, ad, deliveryZones });
     let transcript = rejectedBlock(rejected);
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV14, inChat, ad),
+        prompt: promptWith(chatReplyV15, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentLlmTools,
@@ -358,12 +362,14 @@ export class SalesAgentService {
     inChat,
     candidates,
     ad,
+    deliveryZones,
   }: {
     input: ComposeInput;
     history: readonly HistoryMessage[] | undefined;
     inChat: ToolResult | undefined;
     candidates: ToolResult | undefined;
     ad: { result: ToolResult } | undefined;
+    deliveryZones: CompactDeliveryZone[];
   }) {
     const shop = await this.stores.settings(input.storeId);
     const memory = await this.memory.contextFor(input.storeId, input.contactId);
@@ -371,7 +377,7 @@ export class SalesAgentService {
       ? conversationEntries(history)
       : input.customerTexts.map((text) => ({ from: 'customer', text: shorten(text) }));
     return [
-      shopBlock(shop),
+      shopBlock(shop, deliveryZones),
       shopRulesBlock(input.rules),
       ...(memory ? [`<customer_memory untrusted="true">${memory}</customer_memory>`] : []),
       ...conversationBlocks(windowConversation(conversation, input.customerTexts)),
