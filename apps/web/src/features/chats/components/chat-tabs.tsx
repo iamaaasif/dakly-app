@@ -27,7 +27,7 @@ const folderIcons = {
 export function ChatTabs({ query }: { query: ChatScreenQuery }) {
   const { data: counts } = useConversationCounts();
   return (
-    <nav aria-label="Chat tabs" className="flex shrink-0 flex-col gap-1 p-2.5">
+    <nav aria-label="Chat tabs" className="flex shrink-0 flex-col p-2.5">
       {chatTabs.map((tab) => {
         const Icon = folderIcons[tab];
         return (

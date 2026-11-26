@@ -132,7 +132,7 @@ function ChatFolderSelect({
       <SelectContent>
         {chatTabs.map((tab) => (
           <SelectItem key={tab} value={tab}>
-            {tab === 'all' ? 'All chats' : chatTabLabels[tab]}
+            {chatTabLabels[tab]}
           </SelectItem>
         ))}
       </SelectContent>

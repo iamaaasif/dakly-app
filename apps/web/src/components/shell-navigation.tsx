@@ -1,6 +1,7 @@
 'use client';
 import {
   BookOpen,
+  Bot,
   CalendarDays,
   ChartLine,
   House,
@@ -102,11 +103,7 @@ function NavigationItem({
   collapsed,
   onNavigate,
 }: NavigationLink & Pick<ShellNavigationProps, 'collapsed' | 'onNavigate'>) {
-  const current = currentState(
-    { href, related, nested },
-    usePathname(),
-    useSearchParams().get('tab'),
-  );
+  const current = currentState({ href, related, nested }, usePathname(), useSearchParams());
   return (
     <Link
       href={href}
@@ -263,6 +260,13 @@ function settingsGroups(store: SessionContext['currentStore']): NavigationGroup[
           icon: Plug,
           visible: store?.canViewStoreSettings,
         },
+        // The Inbox design has no room for it, so the agent drawer opens from here.
+        {
+          href: '/chats?agent=settings',
+          label: 'AI agent',
+          icon: Bot,
+          visible: store?.canViewChats,
+        },
       ],
     },
   ];
@@ -337,12 +341,15 @@ function NavigationGroups({
 export function currentState(
   { href, related, nested }: Pick<NavigationLink, 'href' | 'related' | 'nested'>,
   pathname: string,
-  tab: string | null,
+  search: Pick<URLSearchParams, 'get'>,
 ) {
-  const [path, query] = href.split('?');
-  const linkTab = new URLSearchParams(query).get('tab');
+  const link = new URL(href, 'http://link.invalid');
+  const path = link.pathname;
+  const linkParams = [...link.searchParams];
   if (nested && pathname.startsWith(`${path}/`)) return 'page';
   if (pathname !== path) return related?.includes(pathname) ? 'location' : undefined;
-  if (linkTab) return tab === linkTab ? 'page' : undefined;
-  return related && tab ? 'location' : 'page';
+  if (linkParams.length) {
+    return linkParams.every(([key, value]) => search.get(key) === value) ? 'page' : undefined;
+  }
+  return related && search.get('tab') ? 'location' : 'page';
 }

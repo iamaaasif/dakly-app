@@ -152,14 +152,14 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     // The folder column starts open only at 1,536px and wider.
     await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/chats');
-    await expect(page.getByRole('link', { name: /^All\s*4$/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^All conversations\s*4$/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /^Needs you\s*1$/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /^AI handling\s*3$/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /^Follow up\s*1$/ })).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeVisible();
-    await expect(page.getByText('1 need you')).toBeVisible();
     await capture(page, 'all');
-    await page.getByRole('button', { name: 'Select chats' }).click();
+    // A mouse picks chats from the tick box that covers the avatar on hover.
+    await page.getByRole('link', { name: /Sadia Islam/ }).hover();
     await page.getByRole('checkbox', { name: 'Select Sadia Islam' }).click();
     await expect(page.getByText('1 selected')).toBeVisible();
     await capture(page, 'bulk-select');
@@ -170,7 +170,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByText('Mizan (Pathao rider)')).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeHidden();
 
-    await page.getByRole('link', { name: /^All\s*4$/ }).click();
+    await page.getByRole('link', { name: /^All conversations\s*4$/ }).click();
     // Wait for the tab to clear, or the Instagram link is clicked with the old tab still in it.
     await expect(page).not.toHaveURL(/tab=/);
     await page.getByRole('button', { name: 'Channels' }).click();
