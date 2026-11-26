@@ -4,6 +4,7 @@ import {
   productDiscountRequest,
   requestedDiscountPoisha,
 } from '../../ai-agent/manipulation-screen';
+import { fixedPriceResult } from '../../ai-agent/offer-lower-price';
 import { describeAlternatives, describePhotoMatch } from '../../ai-agent/product-match-results';
 import { addOnsRule, isProductSoldOut } from '../../ai-agent/sales-agent-tools.service';
 import { pickAddOns } from '../../product-search/product-add-ons';
@@ -195,7 +196,8 @@ function offerLowerPrice(
   const query = variantWords ? `${productName} ${variantWords}` : productName;
   const product = evalProductNamedForOffer(query, onlyProductIds);
   if (!product) return { error: 'PRODUCT_NOT_FOUND' };
-  if (!negotiation || product !== negotiation.productName) return { kind: 'fixed' };
+  if (!negotiation || product.name !== negotiation.productName)
+    return fixedPriceResult(product.variants.map(({ priceTaka }) => priceTaka));
   if (fixtureOfferIsFinal(negotiation, request)) return { kind: 'final' };
   const isFinal = negotiation.previousStep === 'opening';
   return {
@@ -216,10 +218,12 @@ function fixtureOfferIsFinal(
 function evalProductNamedForOffer(query: string, onlyProductIds?: readonly string[]) {
   if (onlyProductIds) {
     const found = searchEvalProducts(query, 2, onlyProductIds);
-    return found.length === 1 ? found[0]?.name : undefined;
+    return found.length === 1 ? found[0] : undefined;
   }
   const match = evalPhotoMatch(query);
-  return match.kind === 'sure' ? match.product.name : undefined;
+  return match.kind === 'sure'
+    ? evalProducts.find(({ productId }) => productId === match.product.id)
+    : undefined;
 }
 
 function draftWithOffer(args: Args, negotiation: NonNullable<GoldenCase['negotiation']>) {

@@ -5,6 +5,7 @@ import type { ProductSearchService } from '../product-search/product-search.serv
 import { quotedPricesPoisha } from './manipulation-screen';
 import type { ToolScope } from './tool-scope';
 
+const fixedPrices = new WeakMap<object, readonly number[]>();
 const recordedQuotes = new WeakMap<object, { ref: string; pricePoisha: number }>();
 const offerWording =
   /\b(?:can (?:do|offer|sell|give)|(?:it|that)(?: is|['’]s)|price is|(?:last|final|best|lowest) (?:price|dam)|(?:dite|rakhte|korte) (?:pari|parbo))\b|দাম|দিতে পারি|দিতে পারব|রাখতে পারি|অফার/u;
@@ -33,6 +34,8 @@ export async function offerLowerPrice(
     chat.requestedPricePoisha,
   );
   // Offer references belong to the outbound message, outside the model's tool result.
+  if (result.kind === 'fixed')
+    return fixedPriceResult(product.variants.map(({ pricePoisha }) => pricePoisha / 100));
   if (result.kind !== 'offered') return result;
   const { kind, pricePoisha, isFinal } = result;
   const quote = { kind, priceTaka: pricePoisha / 100, isFinal };
@@ -40,8 +43,18 @@ export async function offerLowerPrice(
   return quote;
 }
 
-export function quotedOfferSources(results: readonly { result: object }[], reply: string) {
-  const prices = new Set(
+export function fixedPriceResult(pricesTaka: readonly number[]) {
+  const result = { kind: 'fixed' as const };
+  fixedPrices.set(result, pricesTaka);
+  return result;
+}
+
+export function fixedPricesTaka(result: object) {
+  return fixedPrices.get(result) ?? [];
+}
+
+export function quotedOfferPricesPoisha(reply: string) {
+  return new Set(
     reply
       .toLowerCase()
       .split(/\n|(?<=[.!?।])\s+/u)
@@ -53,6 +66,10 @@ export function quotedOfferSources(results: readonly { result: object }[], reply
       )
       .flatMap((sentence) => [...quotedPricesPoisha(sentence)]),
   );
+}
+
+export function quotedOfferSources(results: readonly { result: object }[], reply: string) {
+  const prices = quotedOfferPricesPoisha(reply);
   const quoted = new Map<number, string | null>();
   for (const { result } of results) {
     const quote = recordedQuotes.get(result);

@@ -40,6 +40,12 @@ describe('negotiation golden cases', () => {
     });
   });
 
+  it('rejects a bare amount below the floor on a held turn', () => {
+    const golden = cases.find(({ id }) => id === 'negotiation-below-floor-english')!;
+    const outcome = { kind: 'reply' as const, text: 'The final price is 850.' };
+    expect(scoreEval([golden], { [golden.id]: outcome }).wrongPriceCaseIds).toEqual([golden.id]);
+  });
+
   it('only supplies the amount for this offer step', () => {
     const args = '{"productName":"red panjabi","variantWords":null}';
     const expected = {

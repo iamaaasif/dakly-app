@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { fixedPriceResult } from './offer-lower-price';
 import { checkReplyFacts } from './reply-fact-check';
 
 const shop = { phone: '01712345678', linkBaseUrl: 'https://dkly.link/l' };
@@ -279,6 +280,12 @@ describe('checkReplyFacts negotiation', () => {
     ).toEqual({ isSafe: false, failure: 'amount' });
   });
 
+  it('rejects a quote the order cannot apply', () => {
+    expect(check('Could you pay ৳1050?', [opening])).toEqual({ isSafe: false, failure: 'amount' });
+    expect(check('I cannot do ৳1050.', [opening])).toEqual({ isSafe: false, failure: 'amount' });
+    expect(check('I can offer ৳1050. Would you like it?', [opening])).toEqual({ isSafe: true });
+  });
+
   it('rejects a stock count as the price while negotiating', () => {
     expect(check('I can do ৳60.', [opening, { stock: 60 }])).toEqual({
       isSafe: false,
@@ -288,17 +295,19 @@ describe('checkReplyFacts negotiation', () => {
 
   it('allows only a catalogue price for a fixed-price product', () => {
     const fixed = [
-      { kind: 'fixed' },
+      fixedPriceResult([1200]),
       { deliveryChargeTaka: 60 },
-      { variants: [{ priceTaka: 1200 }] },
+      { variants: [{ priceTaka: 800 }] },
     ];
     expect(check('The fixed price is ৳1200.', fixed)).toEqual({ isSafe: true });
     expect(check('The fixed price is ৳60.', fixed)).toEqual({ isSafe: false, failure: 'amount' });
+    expect(check('The fixed price is ৳800.', fixed)).toEqual({ isSafe: false, failure: 'amount' });
   });
 
   it('holds the price without quoting any number on a final refusal', () => {
     const final = [{ kind: 'final' }, ...results];
     expect(check('The price is final.', final)).toEqual({ isSafe: true });
+    expect(check('The final price is 850.', final)).toEqual({ isSafe: false, failure: 'amount' });
     expect(check('The price is final at ৳1050.', [...final, { priceTaka: 1050 }])).toEqual({
       isSafe: false,
       failure: 'amount',

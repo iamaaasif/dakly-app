@@ -60,6 +60,10 @@ export const amountPatterns = [
   new RegExp(String.raw`৳\s*${number}`, 'giu'),
   new RegExp(String.raw`${notASize}${number}\s*(?:৳|tk\b|taka[yr]?\b|টাকা)`, 'giu'),
   new RegExp(String.raw`\b(?:tk\.?|bdt|taka|rs\.?)\s*${number}`, 'giu'),
+  new RegExp(
+    String.raw`(?:\b(?:price|dam)\b|দাম(?:টি|টাই|ই)?)[\s:]+(?:(?:is|at)\s+)?${number}`,
+    'giu',
+  ),
   // A limit with no currency word, such as "১০০০ এর মধ্যে" or "under 1000".
   new RegExp(String.raw`${notASize}${number}\s*(?:এর|er)?\s*(?:মধ্যে|নিচে|moddhe|niche)`, 'giu'),
   new RegExp(String.raw`\b(?:under|below|within|up to)\s*${number}`, 'giu'),
