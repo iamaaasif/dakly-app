@@ -270,8 +270,7 @@ function TableHeader({ allSelected, readOnly, showStock, onSelectAll }: TableHea
           onCheckedChange={(value) => onSelectAll(value === true)}
         />
       )}
-      <span>Image</span>
-      <span>Variant</span>
+      <span className="col-span-2">Variant</span>
       <span>Price</span>
       <span>Cost</span>
       <span>{showStock ? 'Available' : 'Stock'}</span>
