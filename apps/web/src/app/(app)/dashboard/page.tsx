@@ -2,10 +2,10 @@ import { redirect } from 'next/navigation';
 
 import { dashboardQuerySchema } from '@dakly/contracts/dashboard';
 
-import { DashboardAskBox } from '@/features/assistant/components/dashboard-ask-box';
-import { Dashboard } from '@/features/dashboard/components/dashboard';
+import { DashboardScreen } from './dashboard-screen';
 import { SetupCard } from '@/features/setup-guide/components/setup-card';
 import { requireSession } from '@/lib/require-session';
+import { webSupportWhatsapp } from '@/platform/config/env';
 
 export default async function DashboardPage({
   searchParams,
@@ -16,10 +16,10 @@ export default async function DashboardPage({
   if (!session.hasMemberships) redirect('/setup');
   const parsed = dashboardQuerySchema.safeParse({ period: (await searchParams).period });
   return (
-    <Dashboard
+    <DashboardScreen
       period={parsed.success ? parsed.data.period : 30}
-      askBox={<DashboardAskBox />}
       setupCard={<SetupCard />}
+      support={webSupportWhatsapp()}
     />
   );
 }

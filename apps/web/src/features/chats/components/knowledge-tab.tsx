@@ -11,6 +11,7 @@ import { useKnowledgeItems, useKnowledgeSummary } from '../api/knowledge-items';
 import { KnowledgeAnswerCard } from './knowledge-answer-card';
 import { KnowledgeAnswerForm } from './knowledge-answer-form';
 import { KnowledgeFiles } from './knowledge-files';
+import { pluralize } from '@/lib/pluralize';
 
 // Files and website links are sources Dakly reads; every other item is an answer the owner wrote.
 const isSource = (item: KnowledgeItemResponse) => item.kind === 'file' || item.kind === 'url';
@@ -30,10 +31,6 @@ function SummaryCard({ icon: Icon, title, count, hint }: SummaryCardProps) {
   );
 }
 
-function plural(count: number, word: string) {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
-}
-
 export function KnowledgeTab({ canEdit }: { canEdit: boolean }) {
   const items = useKnowledgeItems();
   const summary = useKnowledgeSummary();
@@ -49,25 +46,25 @@ export function KnowledgeTab({ canEdit }: { canEdit: boolean }) {
         <SummaryCard
           icon={Package}
           title="Products"
-          count={summary.data ? plural(summary.data.productsCount, 'product') : '—'}
+          count={summary.data ? pluralize(summary.data.productsCount, 'product') : '—'}
           hint="Prices, sizes and stock, synced"
         />
         <SummaryCard
           icon={Store}
           title="Store rules"
-          count={summary.data ? plural(summary.data.storeRulesCount, 'rule') : '—'}
+          count={summary.data ? pluralize(summary.data.storeRulesCount, 'rule') : '—'}
           hint="Delivery charges and your extra rules"
         />
         <SummaryCard
           icon={MessageSquare}
           title="Your answers"
-          count={plural(answers.length, 'answer')}
+          count={pluralize(answers.length, 'answer')}
           hint="Questions you taught Dakly"
         />
         <SummaryCard
           icon={FileText}
           title="Files and links"
-          count={plural(files.length, 'source')}
+          count={pluralize(files.length, 'source')}
           hint="Policies, size charts, your website"
         />
       </div>
