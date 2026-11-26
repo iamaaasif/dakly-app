@@ -11,6 +11,7 @@ import { ToastProvider } from '@dakly/ui/toast';
 
 import { chatScreenQuerySchema } from '../chat-filters';
 import { ChatsScreen } from './chats-screen';
+import { ShellNavigationCollapse } from '@/components/shell-navigation-collapse';
 import { sessionContextKey } from '@/lib/session-context';
 
 vi.mock('next/navigation', () => ({
@@ -83,6 +84,8 @@ function sidebarResponse(path: string) {
   return undefined;
 }
 
+let setNavigationCollapsed = vi.fn();
+
 function show(query = defaults, access: Partial<SessionContext['currentStore']> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const context: SessionContext = {
@@ -126,9 +129,11 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
   client.setQueryData(sessionContextKey, context);
   return render(<ChatsScreen query={query} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>
-        <ToastProvider>{children}</ToastProvider>
-      </QueryClientProvider>
+      <ShellNavigationCollapse value={setNavigationCollapsed}>
+        <QueryClientProvider client={client}>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryClientProvider>
+      </ShellNavigationCollapse>
     ),
   });
 }
@@ -147,6 +152,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   wideScreen = true;
+  setNavigationCollapsed = vi.fn();
   paths = [];
   connectionKinds = [];
   connectionsForbidden = false;
@@ -203,7 +209,7 @@ describe('Bulk select', () => {
   it('marks the ticked chats done and leaves select mode', async () => {
     respondToList();
     show();
-    await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Select chats' }));
     expect(screen.getByText('0 selected')).toBeTruthy();
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Sadia Islam' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Rumana Akter' }));
@@ -221,7 +227,7 @@ describe('Bulk select', () => {
   it('keeps the chats selected and says so when some could not change', async () => {
     respondToList('chat-rumana');
     show();
-    await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Select chats' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Sadia Islam' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Rumana Akter' }));
     await userEvent.click(screen.getByRole('button', { name: 'Mark done' }));
@@ -233,7 +239,7 @@ describe('Bulk select', () => {
     respondToList();
     show(defaults, { canEditChats: false });
     expect(await screen.findByText('Sadia Islam')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Select chats' })).toBeNull();
   });
 });
 
@@ -261,6 +267,15 @@ describe('Chat list', () => {
     expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
   });
 
+  it('shows the main navigation as an icon rail while the Inbox is open', async () => {
+    respond(() => ok([sadia]));
+    const { unmount } = show();
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    expect(setNavigationCollapsed).toHaveBeenLastCalledWith(true);
+    unmount();
+    expect(setNavigationCollapsed).toHaveBeenLastCalledWith(false);
+  });
+
   it('starts with the Inbox folders collapsed on a narrow screen', async () => {
     wideScreen = false;
     respond(() => ok([sadia]));
@@ -279,6 +294,19 @@ describe('Chat list', () => {
     );
     show();
     expect(await screen.findByText('Needs you · Refund or exchange')).toBeTruthy();
+  });
+
+  it('marks the chats assigned to you and shows recent activity in minutes', async () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    respond(() =>
+      ok([
+        { ...sadia, assigneeUserId: 'member', lastMessageAt: fiveMinutesAgo },
+        { ...sadia, id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e61', contactName: 'Rumana Akter' },
+      ]),
+    );
+    show();
+    expect(await screen.findByText('5 min')).toBeTruthy();
+    expect(screen.getAllByText('Assigned to you')).toHaveLength(1);
   });
 
   it('shows each chat with its name, last message and unread count, and the tab counts', async () => {
@@ -590,7 +618,7 @@ describe('Conversation actions', () => {
   it('hands a chat back to the AI', async () => {
     respondToActions({ responder: 'human' });
     show(chatScreenQuerySchema.parse({ chat: chatId }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Hand back to Dakly AI' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Back to AI' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.path).toBe(`/api/conversations/${chatId}/return-to-ai`);
     expect(await screen.findByText('Dakly AI is handling this chat again.')).toBeTruthy();
@@ -720,8 +748,8 @@ describe('Customer panel', () => {
       canEditOrders: true,
     });
     expect(await screen.findByText('Not a lead yet')).toBeTruthy();
-    expect(await screen.findByText('01712345678')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open profile' }).getAttribute('href')).toBe(
+    expect(await screen.findByText('01712-345678')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'View in Customers' }).getAttribute('href')).toBe(
       `/customers/${sadia.contactId}`,
     );
   });
