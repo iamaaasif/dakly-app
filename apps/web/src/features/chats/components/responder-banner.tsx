@@ -4,6 +4,7 @@ import Link from 'next/link';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Button, buttonVariants } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { useToast } from '@dakly/ui/toast';
 
 import { useAgentSettings } from '../api/agent-settings';
@@ -64,8 +65,8 @@ function HandlingBanner({
   const look = ai ? aiLook : teamLook;
   const Icon = look.icon;
   return (
-    <div className={`shrink-0 border-b ${look.border}`}>
-      <div className={`flex items-center gap-2 px-3 py-2 ${look.bar}`}>
+    <div className={cn('shrink-0 border-b', look.border)}>
+      <div className={cn('flex items-center gap-2 px-3 py-2', look.bar)}>
         <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
         <p className="min-w-0 flex-1 font-medium">{look.title}</p>
         {canEdit ? (
