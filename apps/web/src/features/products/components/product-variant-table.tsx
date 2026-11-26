@@ -68,7 +68,6 @@ function useVariantEdits() {
   };
 }
 
-// Spreadsheet rows follow the visible order, which can differ from the saved variant order.
 function pasteVariants(
   event: ClipboardEvent<HTMLElement>,
   variants: GridVariant[],
