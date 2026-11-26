@@ -1,202 +1,286 @@
-'use client';
-import { Camera, ChevronDown } from 'lucide-react';
+import { Camera, ChevronDown, CircleAlert, Eye, Pencil } from 'lucide-react';
 import Image from 'next/image';
-import { useFormContext } from 'react-hook-form';
+import { useFormState } from 'react-hook-form';
 
 import { formatMoney } from '@dakly/contracts/money';
-import type { ProductFormValues, ProductVariantResponse } from '@dakly/contracts/products';
+import {
+  takaInput,
+  type ProductFormValues,
+  type ProductVariantResponse,
+} from '@dakly/contracts/products';
+import { Button } from '@dakly/ui/button';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
 
-import { useUploadProductPhoto } from '../api/upload-product-photo';
 import {
-  profitPercent,
-  rowStock,
+  availableStock,
+  rowKey,
   variantLabel,
   type EditableField,
   type GridOption,
   type GridVariant,
+  type VariantGroup,
 } from '../product-variant-grid';
+import { VariantEditorField } from './product-variant-sheet';
 
-export type VariantRowProps = {
-  index: number;
-  variant: GridVariant;
+export const variantTableColumns =
+  'grid-cols-[1.5rem_2rem_minmax(0,1fr)_2.5rem] gap-2 @lg:grid-cols-[1.5rem_2rem_minmax(0,1.5fr)_minmax(4.5rem,1fr)_minmax(4.5rem,1fr)_minmax(4rem,0.8fr)_2.5rem]';
+
+type VariantGroupRowsProps = {
+  group: VariantGroup;
   options: GridOption[];
+  savedById: Map<string, ProductVariantResponse>;
   productPrice: string;
-  productId?: string;
-  saved?: ProductVariantResponse;
   showStock: boolean;
-  selected: boolean;
-  open: boolean;
-  onSelect: (selected: boolean) => void;
+  readOnly?: boolean;
+  selected: string[];
+  collapsed: boolean;
   onToggle: () => void;
-  onChange: (field: EditableField, value: string) => void;
+  onSelect: (key: string, checked: boolean) => void;
+  onEdit: (key: string, button: HTMLButtonElement) => void;
+  onChange: (indexes: number[], field: EditableField, value: string) => void;
 };
 
-export const variantGridColumns =
-  'md:grid-cols-[2rem_3rem_minmax(0,1fr)_6rem_6rem_4rem_5rem_7rem] md:gap-2 md:px-3';
-
-export function VariantRow(props: VariantRowProps) {
-  const { variant, options, productPrice, saved, showStock, selected, open } = props;
-  const label = variantLabel(variant, options);
-  const price = variant.priceOverridePoisha || productPrice;
-  const profit = profitPercent(price, variant.costPoisha);
+export function VariantGroupRows(props: VariantGroupRowsProps) {
+  const { group, options, savedById, productPrice, showStock, readOnly, selected, collapsed } =
+    props;
+  const { label, rows } = group;
   return (
-    <li className={cn('border-t border-border md:grid md:items-start md:py-2', variantGridColumns)}>
-      <div className="flex items-center gap-2 py-2 md:contents md:py-0">
-        <Checkbox
-          aria-label={`Select ${label}`}
-          checked={selected}
-          onCheckedChange={(value) => props.onSelect(value === true)}
-          className="md:mt-2"
-        />
-        <PhotoCell productId={props.productId} saved={saved} label={label} />
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-label={`${label} summary`}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-medium text-text md:mt-2 md:cursor-default"
-          onClick={props.onToggle}
-        >
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-          <span className="shrink-0 font-normal text-text-muted md:hidden">
-            {summaryPrice(price)}
-            {showStock ? ` · ${rowStock(variant)} pcs` : ''}
-          </span>
-          <ChevronDown
-            aria-hidden="true"
-            className={cn('size-4 shrink-0 text-text-muted md:hidden', open && 'rotate-180')}
-          />
-        </button>
-      </div>
-      <div className={cn(open ? 'grid grid-cols-2 gap-2 pb-3' : 'hidden', 'md:contents')}>
-        <Cell
-          {...props}
-          field="priceOverridePoisha"
-          label="Price"
-          name={label}
-          placeholder={productPrice}
-        />
-        <Cell {...props} field="costPoisha" label="Cost" name={label} />
-        <p
-          className="order-last col-span-2 text-sm text-success md:order-none md:col-span-1 md:mt-2.5"
-          aria-label={`Profit for ${label}`}
-        >
-          {profit === null ? '' : <ProfitText percent={profit} />}
-        </p>
-        {showStock ? <Cell {...props} field="initialStock" label="Stock" name={label} /> : <span />}
-        <Cell {...props} field="sku" label="Code" name={label} placeholder="Code" />
-      </div>
-    </li>
+    <section aria-label={`${label} variants`}>
+      <VariantGroupHeader {...props} />
+      {!collapsed && (
+        <ul>
+          {rows.map(({ variant, index }) => {
+            const key = rowKey(variant);
+            return (
+              <VariantTableRow
+                key={key}
+                index={index}
+                variant={variant}
+                label={variantLabel(variant, options)}
+                saved={savedById.get(variant.id ?? '')}
+                productPrice={productPrice}
+                showStock={showStock}
+                selected={selected.includes(key)}
+                readOnly={readOnly}
+                onSelect={(checked) => props.onSelect(key, checked)}
+                onEdit={(button) => props.onEdit(key, button)}
+                onChange={(field, value) => props.onChange([index], field, value)}
+              />
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
-function summaryPrice(taka: string): string {
-  const poisha = Math.round(Number(taka) * 100);
-  return taka.trim() && Number.isFinite(poisha) ? formatMoney(poisha) : 'No price';
-}
-
-type CellProps = VariantRowProps & {
-  field: EditableField;
-  label: string;
-  name: string;
-  placeholder?: string;
-};
-
-function Cell({ field, label, name, placeholder, variant, index, onChange }: CellProps) {
-  const { formState } = useFormContext<ProductFormValues>();
-  const error = formState.errors.variants?.[index]?.[field]?.message;
+function VariantGroupHeader({
+  group,
+  savedById,
+  showStock,
+  readOnly,
+  collapsed,
+  onToggle,
+  onChange,
+}: VariantGroupRowsProps) {
+  const { label, rows } = group;
+  const indexes = rows.map(({ index }) => index);
+  const available = rows.reduce(
+    (total, { variant }) =>
+      total + availableStock(variant, savedById.get(variant.id ?? '')?.reserved),
+    0,
+  );
+  const amountLabel = showStock ? `${available} pcs` : 'Always available';
   return (
-    <div>
-      <span aria-hidden="true" className="block text-xs text-text-muted md:hidden">
-        {label}
+    <div
+      className={cn(
+        'grid items-center border-t border-border bg-surface-muted px-2 py-1',
+        variantTableColumns,
+      )}
+    >
+      <button
+        type="button"
+        aria-expanded={!collapsed}
+        className="col-span-4 flex min-h-10 min-w-0 items-center gap-2 rounded-sm text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus @lg:col-span-3"
+        onClick={onToggle}
+      >
+        <ChevronDown
+          aria-hidden="true"
+          className={cn('size-4 shrink-0', collapsed && '-rotate-90')}
+        />
+        <span className="min-w-0 truncate font-semibold text-text">{label}</span>
+        <span className="shrink-0 text-xs text-text-muted">
+          {rows.length} {rows.length === 1 ? 'variant' : 'variants'}
+        </span>
+        <span className="ml-auto shrink-0 text-xs text-text-muted @lg:hidden">{amountLabel}</span>
+      </button>
+      {!readOnly &&
+        (['priceOverridePoisha', 'costPoisha'] as const).map((field) => (
+          <GroupAmount
+            key={field}
+            group={group}
+            field={field}
+            onChange={(value) => onChange(indexes, field, value)}
+          />
+        ))}
+      <span className="hidden text-xs text-text-muted @lg:col-start-6 @lg:block">
+        {amountLabel}
       </span>
-      <Input
-        aria-label={`${label} for ${name}`}
-        aria-invalid={error ? true : undefined}
-        inputMode={field === 'sku' ? undefined : 'decimal'}
-        placeholder={placeholder}
-        value={String(variant[field] ?? '')}
-        data-grid-row={index}
-        data-grid-field={field}
-        className="mt-0.5 min-h-9 px-2 py-1 text-sm"
-        onChange={(event) => onChange(field, event.target.value)}
-      />
-      {error ? <p className="mt-0.5 text-xs text-danger">{error}</p> : null}
     </div>
   );
 }
 
-// A saved variant can take its own photo at once; a new row has nothing to attach it to yet.
-function PhotoCell({
-  productId,
-  saved,
-  label,
+function GroupAmount({
+  group,
+  field,
+  onChange,
 }: {
-  productId?: string;
-  saved?: ProductVariantResponse;
-  label: string;
+  group: VariantGroup;
+  field: 'priceOverridePoisha' | 'costPoisha';
+  onChange: (value: string) => void;
 }) {
-  if (!productId || !saved)
-    return (
-      <span
-        aria-hidden="true"
-        className="size-10 rounded-md border border-dashed border-border-strong"
-      />
-    );
-  return <SavedPhotoCell productId={productId} saved={saved} label={label} />;
-}
-
-function SavedPhotoCell({
-  productId,
-  saved,
-  label,
-}: {
-  productId: string;
-  saved: ProductVariantResponse;
-  label: string;
-}) {
-  const upload = useUploadProductPhoto(productId, saved.id);
-  const photo = saved.photos[0];
+  const label = field === 'priceOverridePoisha' ? 'Price' : 'Cost';
+  const first = group.rows[0]?.variant[field] ?? '';
+  const mixed = group.rows.some(({ variant }) => (variant[field] ?? '') !== first);
   return (
-    <label
-      title={upload.error?.message ?? `Photo for ${label}`}
-      className="relative grid size-10 shrink-0 cursor-pointer place-items-center overflow-hidden rounded-md border border-dashed border-border-strong text-text-muted focus-within:outline-2 focus-within:outline-focus"
-    >
-      {photo ? (
-        <Image
-          src={photo.url}
-          alt=""
-          width={40}
-          height={40}
-          unoptimized
-          className="size-10 object-cover"
-        />
-      ) : (
-        <Camera aria-hidden="true" className="size-4" />
-      )}
-      <input
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        aria-label={`Photo for ${label}`}
-        className="sr-only"
-        disabled={upload.isPending}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) upload.mutate(file);
-          event.target.value = '';
-        }}
+    <label className="col-span-2 space-y-1 text-xs text-text-muted @lg:col-span-1">
+      <span className="@lg:sr-only">{label} for group</span>
+      <Input
+        aria-label={`${label} for all ${group.label} variants`}
+        inputMode="decimal"
+        value={mixed ? '' : first}
+        placeholder={mixed ? 'Mixed' : label}
+        className="px-1.5 py-1 text-sm"
+        onChange={(event) => onChange(event.target.value)}
       />
     </label>
   );
 }
 
-function ProfitText({ percent }: { percent: number }) {
+type VariantTableRowProps = {
+  index: number;
+  variant: GridVariant;
+  label: string;
+  saved?: ProductVariantResponse;
+  productPrice: string;
+  showStock: boolean;
+  selected: boolean;
+  readOnly?: boolean;
+  onSelect: (checked: boolean) => void;
+  onEdit: (button: HTMLButtonElement) => void;
+  onChange: (field: EditableField, value: string) => void;
+};
+
+function VariantTableRow(props: VariantTableRowProps) {
+  const { index, variant, label, saved, productPrice, showStock, readOnly, selected } = props;
+  const fields = { index, variant, label, readOnly, onChange: props.onChange };
+  const stock = showStock ? `${availableStock(variant, saved?.reserved)} pcs` : 'Always available';
+  const Icon = readOnly ? Eye : Pencil;
   return (
-    <>
-      <span className="md:hidden">Profit </span>
-      {percent}%
-    </>
+    <li
+      className={cn(
+        'grid min-h-12 items-center border-t border-border px-2 py-1',
+        variantTableColumns,
+      )}
+    >
+      {readOnly ? (
+        <span />
+      ) : (
+        <Checkbox
+          aria-label={`Select ${label}`}
+          checked={selected}
+          onCheckedChange={(value) => props.onSelect(value === true)}
+        />
+      )}
+      <VariantPhoto image={saved?.photos[0]} label={label} />
+      <RowSummary
+        {...{ index, label, stock }}
+        price={variant.priceOverridePoisha || productPrice}
+        onEdit={props.onEdit}
+      />
+      <div className="hidden @lg:block">
+        <VariantEditorField
+          {...fields}
+          inline
+          field="priceOverridePoisha"
+          placeholder={productPrice}
+        />
+      </div>
+      <div className="hidden @lg:block">
+        <VariantEditorField {...fields} inline field="costPoisha" />
+      </div>
+      <span className="hidden text-xs text-text-muted tabular-nums @lg:block">{stock}</span>
+      <Button
+        type="button"
+        variant="secondary"
+        className="px-0"
+        aria-label={`${readOnly ? 'View' : 'Edit'} variant ${label}`}
+        onClick={(event) => props.onEdit(event.currentTarget)}
+      >
+        <Icon size={16} aria-hidden="true" />
+      </Button>
+    </li>
+  );
+}
+
+function VariantPhoto({
+  image,
+  label,
+}: {
+  image?: ProductVariantResponse['photos'][number];
+  label: string;
+}) {
+  return image ? (
+    <Image
+      src={image.url}
+      alt={`Photo for ${label}`}
+      width={32}
+      height={32}
+      unoptimized
+      className="size-8 rounded-sm object-cover"
+    />
+  ) : (
+    <span className="grid size-8 place-items-center rounded-sm border border-dashed border-border-strong text-text-muted">
+      <Camera aria-hidden="true" size={16} />
+    </span>
+  );
+}
+
+function RowSummary({
+  index,
+  label,
+  stock,
+  price,
+  onEdit,
+}: {
+  index: number;
+  label: string;
+  stock: string;
+  price: string;
+  onEdit: (button: HTMLButtonElement) => void;
+}) {
+  const { errors } = useFormState<ProductFormValues>({ name: `variants.${index}` });
+  const paid = takaInput.safeParse(price);
+  const summary = `${paid.success ? formatMoney(paid.data) : 'No price'} · ${stock}`;
+  return (
+    <div className="min-w-0">
+      <button
+        type="button"
+        aria-label={`${label} summary, ${summary}`}
+        onClick={(event) => onEdit(event.currentTarget)}
+        className="flex min-h-10 w-full min-w-0 items-center gap-1 rounded-sm text-left text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus @lg:hidden"
+      >
+        <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
+        <span className="max-w-[65%] truncate text-xs text-text-muted">{summary}</span>
+      </button>
+      <span className="hidden text-sm font-medium wrap-anywhere @lg:block">{label}</span>
+      {errors.variants?.[index] && (
+        <span className="flex items-center gap-1 text-xs text-danger">
+          <CircleAlert aria-hidden="true" size={14} /> Check fields
+        </span>
+      )}
+    </div>
   );
 }

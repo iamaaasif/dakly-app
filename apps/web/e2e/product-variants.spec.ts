@@ -18,9 +18,9 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     storeIds: [string, string];
   };
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-17-2');
+  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-17-3');
   // CI keeps only e2e-artifacts, so each screenshot is also written there.
-  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-17-2');
+  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-17-3');
   const name = 'Cotton T-shirt variants fixture';
   let productId: string | undefined;
   await mkdir(evidence, { recursive: true });
@@ -58,6 +58,20 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
       await trigger.click();
       await expect(page.getByRole('dialog', { name })).toBeInViewport({ ratio: 0.9 });
     });
+  }
+  async function variantSheet(label: string) {
+    await page.getByRole('button', { name: `Edit variant ${label}`, exact: true }).click();
+    return page.getByRole('dialog', { name: label, exact: true });
+  }
+  async function closeVariant(sheet: Awaited<ReturnType<typeof variantSheet>>) {
+    await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(sheet).toBeHidden();
+  }
+  async function expectStock(label: string, value: string, code?: string) {
+    const sheet = await variantSheet(label);
+    await expect(sheet.getByLabel(`Stock for ${label}`)).toHaveValue(value);
+    if (code) await expect(sheet.getByLabel(`Code for ${label}`)).toHaveValue(code);
+    await closeVariant(sheet);
   }
   async function loadProduct() {
     const response = await context.request.get(`/api/products/${productId}`);
@@ -118,25 +132,39 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
 
     const moveSize = page.getByRole('button', { name: 'Move Size' });
     await moveSize.dragTo(page.getByRole('button', { name: 'Move Color' }));
-    await expect(page.getByLabel('Stock for S / Black')).toHaveValue('12');
+    await expectStock('S / Black', '12');
     await moveSize.press('ArrowDown');
-    await expect(page.getByLabel('Stock for Black / S')).toHaveValue('12');
-    await expect(page.getByLabel('Code for Black / S')).toHaveValue('UT-TS-01');
+    await expectStock('Black / S', '12', 'UT-TS-01');
     const stocks: [string, string][] = [
       ['Black / M', '20'],
       ['Black / L', '8'],
       ['White / S', '12'],
       ['White / M', '20'],
     ];
-    for (const [label, stock] of stocks) await page.getByLabel(`Stock for ${label}`).fill(stock);
+    for (const [label, stock] of stocks) {
+      const sheet = await variantSheet(label);
+      await sheet.getByLabel(`Stock for ${label}`).fill(stock);
+      await closeVariant(sheet);
+    }
+    await page.getByLabel('Show by').selectOption('Size');
+    await expect(page).toHaveURL(/groupBy=Size/);
+    const medium = page.getByRole('region', { name: 'M variants', exact: true });
+    await expect(
+      medium.getByText('40 pcs', { exact: true }).filter({ visible: true }),
+    ).toBeVisible();
+    await medium.getByLabel('Price for all M variants').fill('1350');
+    await expect(medium.getByLabel('Price for Black / M', { exact: true })).toHaveValue('1350');
+    await expect(medium.getByLabel('Price for White / M', { exact: true })).toHaveValue('1350');
+    await expect(page.getByLabel('Price for Black / S', { exact: true })).toHaveValue('');
     await page.getByLabel('Select Black / S').click();
     await page.getByLabel('Select Black / M').click();
     await expect(page.getByText('2 selected')).toBeVisible();
-    await capture('grid', async (width) => {
-      if (width !== 360) return;
-      await expect(page.getByRole('button', { name: 'Black / L summary' })).toContainText('৳');
-      await page.getByRole('button', { name: 'Black / L summary' }).click();
+    await capture('grouped-variants', async (width) => {
+      const row = page.getByRole('button', { name: /^Black \/ L summary/ });
+      if (width === 360) await expect(row).toContainText('৳');
+      await medium.scrollIntoViewIfNeeded();
     });
+    await page.getByLabel('Show by').selectOption('Color');
 
     const created = page.waitForResponse(
       (response) =>
@@ -147,7 +175,18 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByRole('button', { name: 'Create', exact: true }).click();
     productId = ((await (await created).json()) as ProductResponse).id;
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
-    await expect(page.getByLabel('Stock for Black / S')).toHaveValue('12');
+    await expectStock('Black / S', '12');
+    const details = page.getByRole('dialog', { name: 'Black / S', exact: true });
+    await capture('edit-variant', async (width) => {
+      if (await details.isVisible()) await closeVariant(details);
+      const summary = page.getByRole('button', { name: /^Black \/ S summary/ });
+      if (width === 360) await summary.click();
+      else await variantSheet('Black / S');
+      await expect(details.getByLabel('Code for Black / S')).toHaveValue('UT-TS-01');
+      await expect(details.getByLabel('Low stock warning for Black / S')).toBeVisible();
+      await expect(details).toBeInViewport({ ratio: 0.95 });
+    });
+    await closeVariant(details);
     const first = await loadProduct();
     expect(first.variants).toHaveLength(6);
     expect(first.variants.find(({ title }) => title === 'Black / M')?.onHand).toBe(20);
@@ -155,8 +194,10 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await moveSize.press('ArrowUp');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    await expect
+      .poll(async () => (await loadProduct()).options.map(({ name }) => name))
+      .toEqual(['Size', 'Color']);
     const reordered = await loadProduct();
-    expect(reordered.options.map(({ name }) => name)).toEqual(['Size', 'Color']);
     for (const original of first.variants)
       expect(reordered.variants.find(({ id }) => id === original.id)).toMatchObject({
         optionValues: original.optionValues,
@@ -165,8 +206,17 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
         costPoisha: original.costPoisha,
         sku: original.sku,
       });
+    await expect(
+      page
+        .getByRole('button', { name: 'Save', exact: true })
+        .and(page.locator(':disabled:not([aria-busy="true"])')),
+    ).toBeVisible();
+    await page.reload();
+    await expectStock('S / Black', '12', 'UT-TS-01');
     await moveSize.press('ArrowDown');
-    await page.getByLabel('Stock for Black / S').fill('9');
+    const sheet = await variantSheet('Black / S');
+    await sheet.getByLabel('Stock for Black / S').fill('9');
+    await closeVariant(sheet);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Why did the stock change?' })).toBeVisible();
     await capture('stock-reason', () =>

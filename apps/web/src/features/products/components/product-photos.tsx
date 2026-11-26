@@ -21,8 +21,9 @@ type ProductPhotosProps = {
   product: Pick<ProductResponse, 'id' | 'name' | 'photos'>;
   // Photos of one variant; without it the product's own photos are shown.
   variant?: Pick<ProductVariantResponse, 'id' | 'title' | 'photos'>;
+  readOnly?: boolean;
 };
-export function ProductPhotos({ product, variant }: ProductPhotosProps) {
+export function ProductPhotos({ product, variant, readOnly }: ProductPhotosProps) {
   const { data } = useSessionContext();
   const scope = variant
     ? {
@@ -47,16 +48,19 @@ export function ProductPhotos({ product, variant }: ProductPhotosProps) {
           {scope.photos.length} photo{scope.photos.length === 1 ? '' : 's'}
         </span>
       </div>
-      {data?.currentStore?.canEditProducts ? (
+      {!readOnly && data?.currentStore?.canEditProducts ? (
         <EditablePhotos scope={scope} />
       ) : (
         <PhotoList scope={scope} />
       )}
-      {variant && !scope.photos.length ? (
-        <p className="text-xs text-text-muted">No photos. The product photos show instead.</p>
-      ) : null}
+      <VariantPhotoFallback scope={scope} />
     </section>
   );
+}
+
+function VariantPhotoFallback({ scope }: { scope: PhotoScope }) {
+  if (!scope.variantId || scope.photos.length) return null;
+  return <p className="text-xs text-text-muted">No photos. The product photos show instead.</p>;
 }
 
 type PhotoScope = {
@@ -74,7 +78,6 @@ function EditablePhotos({ scope }: { scope: PhotoScope }) {
   const chooser = useRef<HTMLInputElement>(null);
   const inputId = useId();
   const busy = upload.isPending || reorder.isPending || remove.isPending;
-  const error = upload.error ?? reorder.error;
   function handleMoveEarlier(index: number, onMoved: () => void) {
     upload.reset();
     const fileIds = scope.photos.map((photo) => photo.id);
@@ -107,12 +110,7 @@ function EditablePhotos({ scope }: { scope: PhotoScope }) {
           <PhotoInput id={inputId} input={chooser} disabled={busy} onFile={handleUpload} />
         ) : null}
       </PhotoList>
-      {upload.isPending ? <p role="status">Uploading photo…</p> : null}
-      {error ? (
-        <p role="alert" className="text-danger">
-          {error.message}
-        </p>
-      ) : null}
+      <PhotoUploadStatus upload={upload} reorderError={reorder.error} disabled={busy} />
       {removeId ? (
         <RemovePhotoDialog
           productName={scope.name}
@@ -122,6 +120,31 @@ function EditablePhotos({ scope }: { scope: PhotoScope }) {
           onRemove={() => handleRemove(removeId)}
         />
       ) : null}
+    </>
+  );
+}
+
+type PhotoUploadStatusProps = {
+  upload: ReturnType<typeof useUploadProductPhoto>;
+  reorderError: Error | null;
+  disabled: boolean;
+};
+
+function PhotoUploadStatus({ upload, reorderError, disabled }: PhotoUploadStatusProps) {
+  const error = upload.error ?? reorderError;
+  const failedFile = upload.error && upload.variables;
+  if (upload.isPending) return <p role="status">Uploading photo…</p>;
+  if (!error) return null;
+  return (
+    <>
+      <p role="alert" className="text-danger">
+        {error.message}
+      </p>
+      {failedFile && (
+        <Button variant="secondary" disabled={disabled} onClick={() => upload.mutate(failedFile)}>
+          Retry upload
+        </Button>
+      )}
     </>
   );
 }
