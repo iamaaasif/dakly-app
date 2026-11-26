@@ -1,7 +1,8 @@
 'use client';
-import { ArrowUpDown, MessageSquare, Plus, Search } from 'lucide-react';
+import { ArrowUpDown, Inbox, MessageSquare, Plus, Search } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 
+import { conversationFolders, conversationStates } from '@dakly/contracts/chats';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
@@ -10,10 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { useConversationAssignees, useConversationLabels } from '../api/conversations';
 import {
+  chatFolderLabels,
   chatSortLabels,
   chatSorts,
-  chatTabLabels,
-  chatTabs,
+  chatStateLabels,
   chatsHref,
   type ChatScreenQuery,
 } from '../chat-filters';
@@ -52,7 +53,7 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
 }
 
 // Toolbar pickers match the compact secondary buttons beside them.
-const toolbarSelect = 'min-h-9 w-auto px-2.5 py-1 text-sm';
+const toolbarSelect = 'min-h-9 w-auto px-2.5 py-1 text-sm font-medium';
 
 type ChatToolbarProps = { query: ChatScreenQuery; foldersOpen: boolean; channel: ReactNode };
 
@@ -61,6 +62,7 @@ export function ChatToolbar({ query, foldersOpen, channel }: ChatToolbarProps) {
   return (
     <>
       <ChatFolderSelect query={query} foldersOpen={foldersOpen} />
+      <ChatStateSelect query={query} />
       <Select
         value={query.sort}
         onValueChange={(sort) =>
@@ -108,12 +110,12 @@ function ChatFolderSelect({
   const router = useUrlRouter();
   return (
     <Select
-      value={query.tab}
-      onValueChange={(tab) =>
+      value={query.folder}
+      onValueChange={(folder) =>
         router.push(
           chatsHref({
             ...query,
-            tab: tab as ChatScreenQuery['tab'],
+            folder: folder as ChatScreenQuery['folder'],
             channel: query.channel === 'comments' ? undefined : query.channel,
             chat: undefined,
             panel: undefined,
@@ -126,13 +128,39 @@ function ChatFolderSelect({
         aria-label="Chat folder"
         className={cn(toolbarSelect, foldersOpen && 'lg:hidden')}
       >
+        <Inbox aria-hidden="true" size={16} />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {conversationFolders.map((folder) => (
+          <SelectItem key={folder} value={folder}>
+            {chatFolderLabels[folder]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ChatStateSelect({ query }: { query: ChatScreenQuery }) {
+  const router = useUrlRouter();
+  return (
+    <Select
+      value={query.state}
+      onValueChange={(state) =>
+        router.push(
+          chatsHref({ ...query, state: state as ChatScreenQuery['state'], chat: undefined }),
+        )
+      }
+    >
+      <SelectTrigger aria-label="Chat state" className={toolbarSelect}>
         <MessageSquare aria-hidden="true" size={16} />
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {chatTabs.map((tab) => (
-          <SelectItem key={tab} value={tab}>
-            {tab === 'all' ? 'All chats' : chatTabLabels[tab]}
+        {conversationStates.map((state) => (
+          <SelectItem key={state} value={state}>
+            {chatStateLabels[state]}
           </SelectItem>
         ))}
       </SelectContent>

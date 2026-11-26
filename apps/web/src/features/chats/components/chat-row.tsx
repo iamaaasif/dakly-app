@@ -1,4 +1,3 @@
-import { Facebook, Instagram, MessageCircle, type LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
@@ -10,17 +9,15 @@ import { useConversationAssignees } from '../api/conversations';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { contactDisplayName } from '../contact-name';
 import { handoverReasonLabels } from '../handover-reasons';
+import { ChannelLogo } from '@/components/channel-logo';
 import { formatDate, formatShortDate, formatTime } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
 
-const channelMarks: Record<
-  ConversationResponse['channel'],
-  { icon: LucideIcon; label: string; colour: string }
-> = {
-  messenger: { icon: Facebook, label: 'Messenger', colour: 'bg-facebook' },
-  instagram: { icon: Instagram, label: 'Instagram', colour: 'bg-instagram' },
-  whatsapp: { icon: MessageCircle, label: 'WhatsApp', colour: 'bg-success' },
+const channelMarks: Record<ConversationResponse['channel'], { label: string; colour: string }> = {
+  messenger: { label: 'Messenger', colour: 'bg-facebook' },
+  instagram: { label: 'Instagram', colour: 'bg-instagram' },
+  whatsapp: { label: 'WhatsApp', colour: 'bg-whatsapp' },
 };
 
 type ChatRowProps = {
@@ -28,11 +25,13 @@ type ChatRowProps = {
   query: ChatScreenQuery;
   // Set while picking chats for a bulk action: the row then ticks instead of opening.
   selection?: { selected: boolean; onToggle: () => void };
+  // Ticking the box that replaces the avatar on hover starts picking with this chat.
+  onStartSelection?: () => void;
 };
 
 const rowClasses = 'flex gap-3 border-l-2 border-transparent px-3.5 py-3 hover:bg-surface-muted';
 
-export function ChatRow({ conversation, query, selection }: ChatRowProps) {
+export function ChatRow({ conversation, query, selection, onStartSelection }: ChatRowProps) {
   const name = contactDisplayName(conversation);
   const content = <ChatRowContent conversation={conversation} name={name} />;
   if (selection)
@@ -49,7 +48,7 @@ export function ChatRow({ conversation, query, selection }: ChatRowProps) {
       </li>
     );
   return (
-    <li>
+    <li className="group relative">
       <Link
         href={chatsHref({ ...query, chat: conversation.id })}
         aria-current={query.chat === conversation.id ? 'true' : undefined}
@@ -60,6 +59,15 @@ export function ChatRow({ conversation, query, selection }: ChatRowProps) {
       >
         {content}
       </Link>
+      {onStartSelection ? (
+        <span className="absolute top-3 left-4 hidden size-10 items-center justify-center rounded-full bg-surface opacity-0 group-hover:opacity-100 focus-within:opacity-100 pointer-fine:flex">
+          <Checkbox
+            aria-label={`Select ${name}`}
+            checked={false}
+            onCheckedChange={onStartSelection}
+          />
+        </span>
+      ) : null}
     </li>
   );
 }
@@ -99,10 +107,10 @@ function ChatRowContent({
 }
 
 function Avatar({ name, channel }: { name: string; channel: ConversationResponse['channel'] }) {
-  const { icon: Icon, label, colour } = channelMarks[channel];
+  const { label, colour } = channelMarks[channel];
   return (
     <div className="relative shrink-0 self-start">
-      <span className="flex size-10 items-center justify-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text-muted">
+      <span className="flex size-10 items-center justify-center rounded-full bg-neutral-soft text-xs font-semibold text-text-secondary">
         {initialsOf(name)}
       </span>
       <span
@@ -113,7 +121,7 @@ function Avatar({ name, channel }: { name: string; channel: ConversationResponse
           colour,
         )}
       >
-        <Icon aria-hidden="true" size={9} strokeWidth={2.5} />
+        <ChannelLogo channel={channel} size={10} />
       </span>
     </div>
   );

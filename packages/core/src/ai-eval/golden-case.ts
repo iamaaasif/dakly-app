@@ -14,6 +14,18 @@ export const goldenCaseSchema = z.strictObject({
   acceptedHandover: z.enum(handoverReasons).optional(),
   // Taka amounts the shop's catalog allows in an answer to this question.
   allowedAmountsTaka: z.array(z.number().nonnegative()),
+  requiredAmountsTaka: z.array(z.number().nonnegative()).optional(),
+  // An explicit null runs a negotiation case with no product offer settings.
+  negotiation: z
+    .strictObject({
+      productName: z.string().min(1),
+      openingTaka: z.number().positive(),
+      floorTaka: z.number().positive(),
+      previousStep: z.enum(['opening', 'lowest']).optional(),
+      accepted: z.literal(true).optional(),
+    })
+    .nullable()
+    .optional(),
   // The answer must name at least one of these: the product asked for, or an in-stock alternative.
   mentionsAnyOf: z.array(z.string().min(1)).optional(),
   // Products with no stock. Naming one as an offer fails the run.

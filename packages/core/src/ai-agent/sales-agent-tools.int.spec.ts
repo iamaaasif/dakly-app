@@ -588,6 +588,19 @@ async function askForDiscount(storeId: string, buyer: string, conversationId: st
   return message;
 }
 
+function recordQuote(
+  storeId: string,
+  conversationId: string,
+  ref: string,
+  status: 'queued' | 'sent',
+) {
+  return admin.pool.query(
+    `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body, status, sent_at, ai_sources)
+     values (gen_random_uuid(), $1, $2, 'out', 'ai', 'text', 'Quote', $3, case when $3='sent' then now() end, $4)`,
+    [storeId, conversationId, status, JSON.stringify([{ tool: 'price_offer', refs: [ref] }])],
+  );
+}
+
 it('offers one price per customer ask and discounts only the draft in that conversation', async () => {
   const { storeId, variantId } = await orderShop();
   const buyer = await contact(storeId);
@@ -608,16 +621,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
       '{"productName":"পাঞ্জাবি","variantWords":null}',
     );
   const outgoing = (messageId: string, status: 'queued' | 'sent') =>
-    admin.pool.query(
-      `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body, status, sent_at, ai_sources)
-     values (gen_random_uuid(), $1, $2, 'out', 'ai', 'text', 'Quote', $3, case when $3='sent' then now() end, $4)`,
-      [
-        storeId,
-        conversationId,
-        status,
-        JSON.stringify([{ tool: 'price_offer', refs: [`${messageId}:${scope.adProductIds[0]}`] }]),
-      ],
-    );
+    recordQuote(storeId, conversationId, `${messageId}:${scope.adProductIds[0]}`, status);
   expect(
     await toolResult(scope, 'offer_lower_price', '{"productName":"পাঞ্জাবি","variantWords":null}'),
   ).toEqual({
@@ -669,7 +673,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
   await admin.pool.query('update product_variants set price_override_poisha = 130000 where id=$1', [
     variantId,
   ]);
-  expect(await offer(await turn())).toEqual({ kind: 'fixed' });
+  expect(await offer(await turn())).toEqual({ kind: 'fixed', pricesTaka: [1300] });
   expect(
     await toolResult(
       scope,
@@ -693,8 +697,114 @@ it('offers one price per customer ask and discounts only the draft in that conve
       ),
     ),
   ).toMatchObject({ totalTaka: 1260 });
-  expect(await calls()).toEqual({ kind: 'fixed' });
+  expect(await calls()).toEqual({ kind: 'fixed', pricesTaka: [1200] });
   expect(await offer(await turn())).toEqual(opening);
+});
+
+it('lowers an existing draft after a sent offer and keeps that draft and discount on retry', async () => {
+  const { storeId, variantId } = await orderShop();
+  const buyer = await contact(storeId);
+  const conversationId = await conversation(storeId, buyer);
+  const changed = await admin.pool.query<{ id: string }>(
+    `update products set negotiation_enabled=true, negotiation_opening_poisha=110000, negotiation_floor_poisha=95000
+     where store_id=$1 returning id`,
+    [storeId],
+  );
+  const productId = changed.rows[0]!.id;
+  const chat = { conversationId, channel: 'messenger' as const };
+  const scope = { storeId, contactId: buyer, chat, adProductIds: [productId] };
+  const args = JSON.stringify(draft(variantId));
+  const first = (await toolResult(scope, 'draft_order', args)) as { orderNumber: number };
+  expect(first).toMatchObject({ totalTaka: 2460, stage: 'to_confirm' });
+
+  const customerMessageId = await askForDiscount(storeId, buyer, conversationId);
+  await toolResult(
+    { ...scope, chat: { ...chat, discountAskMessageId: customerMessageId } },
+    'offer_lower_price',
+    '{"productName":"পাঞ্জাবি","variantWords":null}',
+  );
+  await recordQuote(storeId, conversationId, `${customerMessageId}:${productId}`, 'queued');
+  expect(await toolResult(scope, 'draft_order', args)).toEqual(first);
+  await recordQuote(storeId, conversationId, `${customerMessageId}:${productId}`, 'sent');
+
+  const rows = await admin.pool.query<{ id: string }>(
+    'select id from orders where store_id=$1 and number=$2',
+    [storeId, first.orderNumber],
+  );
+  const orders = app.get(OrdersService);
+  const orderId = rows.rows[0]!.id;
+  const staff = { actor: { kind: 'system' as const }, access: { seeFullPhone: false } };
+  await orders.editOrder(storeId, orderId, { orderDiscountPoisha: 235000 }, staff);
+  expect(await toolResult(scope, 'draft_order', args)).toMatchObject({ totalTaka: 110 });
+  await orders.editOrder(storeId, orderId, { orderDiscountPoisha: 0 }, staff);
+
+  const repriced = await toolResult(scope, 'draft_order', args);
+  expect(repriced).toMatchObject({
+    orderNumber: first.orderNumber,
+    stage: 'to_confirm',
+    items: [{ unitPriceTaka: 1100, lineDiscountTaka: 200, quantity: 2 }],
+    totalTaka: 2260,
+  });
+  expect(await toolResult(scope, 'draft_order', args)).toEqual(repriced);
+  const order = await orders.getById(storeId, orderId, staff.access);
+  expect(order.timeline.filter(({ reason }) => reason === 'AI price offer')).toHaveLength(1);
+
+  const finalAsk = await askForDiscount(storeId, buyer, conversationId);
+  expect(
+    await toolResult(
+      { ...scope, chat: { ...chat, discountAskMessageId: finalAsk } },
+      'offer_lower_price',
+      '{"productName":"পাঞ্জাবি","variantWords":null}',
+    ),
+  ).toEqual({ kind: 'offered', priceTaka: 950, isFinal: true });
+  await admin.pool.query(
+    "update price_offers set expires_at = now() - interval '1 second' where store_id=$1 and customer_message_id=$2",
+    [storeId, customerMessageId],
+  );
+  expect(await toolResult(scope, 'draft_order', args)).toEqual(repriced);
+
+  await orders.changeStage(storeId, orderId, { to: 'to_pack' }, staff);
+  await recordQuote(storeId, conversationId, `${finalAsk}:${productId}`, 'sent');
+  expect(await toolResult(scope, 'draft_order', args)).toMatchObject({
+    orderNumber: first.orderNumber,
+    stage: 'to_pack',
+    totalTaka: 2260,
+  });
+});
+
+it('keeps an existing draft when an offer was made on a different regular price', async () => {
+  const { storeId, variantId } = await orderShop();
+  const buyer = await contact(storeId);
+  const conversationId = await conversation(storeId, buyer);
+  const productId = (
+    await admin.pool.query<{ id: string }>(
+      'select product_id as id from product_variants where id=$1',
+      [variantId],
+    )
+  ).rows[0]!.id;
+  const chat = { conversationId, channel: 'messenger' as const };
+  const scope = { storeId, contactId: buyer, chat, adProductIds: [productId] };
+  const args = JSON.stringify(draft(variantId));
+  const first = await toolResult(scope, 'draft_order', args);
+  expect(first).toMatchObject({ totalTaka: 2460, stage: 'to_confirm' });
+
+  await admin.pool.query(
+    `update products set price_poisha=130000, negotiation_enabled=true,
+       negotiation_opening_poisha=110000, negotiation_floor_poisha=95000
+     where store_id=$1 and id=$2`,
+    [storeId, productId],
+  );
+  const customerMessageId = await askForDiscount(storeId, buyer, conversationId);
+  expect(
+    await toolResult(
+      { ...scope, chat: { ...chat, discountAskMessageId: customerMessageId } },
+      'offer_lower_price',
+      '{"productName":"পাঞ্জাবি","variantWords":null}',
+    ),
+  ).toEqual({ kind: 'offered', priceTaka: 1100, isFinal: false });
+  await recordQuote(storeId, conversationId, `${customerMessageId}:${productId}`, 'sent');
+
+  expect(await toolResult(scope, 'draft_order', args)).toEqual(first);
 });
 
 it('enforces store isolation on price offers with app-role RLS', async () => {
