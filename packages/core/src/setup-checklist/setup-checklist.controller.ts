@@ -27,12 +27,13 @@ export class SetupChecklistController {
   // The service checks the Owner or Admin role, as it does for extensions.
   @Patch()
   @AnyMember()
-  change(
+  hide(
     @CurrentStore() storeId: string,
     @CurrentUser() userId: string,
     @CurrentAccess() access: StoreAccess,
-    @Body(new ZodValidationPipe(changeSetupChecklistSchema)) input: ChangeSetupChecklistInput,
+    // The body only has to be { hidden: true }; there is nothing else to read from it.
+    @Body(new ZodValidationPipe(changeSetupChecklistSchema)) _body: ChangeSetupChecklistInput,
   ): Promise<SetupChecklistResponse> {
-    return this.checklist.change(storeId, input, { userId, access });
+    return this.checklist.hide(storeId, { userId, access });
   }
 }

@@ -231,28 +231,6 @@ export class StoresRepository {
     return row as SetupProfile | undefined;
   }
 
-  // New answers mean new steps, so the guide comes back if it was hidden.
-  async changeHowYouSell(
-    storeId: string,
-    howYouSell: SetupProfile['howYouSell'],
-    extensions: string[],
-    updatedAt: Date,
-  ): Promise<SetupProfile | undefined> {
-    const [row] = await this.tenant.forStore(storeId, (tx) =>
-      tx
-        .update(stores)
-        .set({
-          howYouSell,
-          extensions,
-          updatedAt,
-          settings: sql`${stores.settings} - 'setupGuideHidden'`,
-        })
-        .where(eq(stores.id, storeId))
-        .returning(setupColumns),
-    );
-    return row as SetupProfile | undefined;
-  }
-
   async hideSetupGuide(storeId: string, updatedAt: Date): Promise<SetupProfile | undefined> {
     const [row] = await this.tenant.forStore(storeId, (tx) =>
       tx

@@ -10,9 +10,7 @@ import { SetupCard } from './setup-card';
 import { sessionContextKey } from '@/lib/session-context';
 
 const checklist: SetupChecklistResponse = {
-  howYouSell: ['social_media'],
   hidden: false,
-  turnedOn: [],
   steps: [
     { id: 'add_store_details', done: true },
     { id: 'connect_channel', done: false },
@@ -65,13 +63,6 @@ describe('setup guide', () => {
     expect(
       within(steps).getByRole('link', { name: 'Create your first product' }).getAttribute('href'),
     ).toBe('/products/new');
-  });
-
-  it('handles a cached response with a retired step', async () => {
-    show([...checklist.steps, { id: 'chats_to_orders', done: true }]);
-    expect(await screen.findByText('1 of 3 done')).toBeTruthy();
-    const steps = await screen.findByRole('list', { name: 'Setup steps' });
-    expect(within(steps).getAllByRole('heading', { level: 3 })).toHaveLength(3);
   });
 
   it('keeps setup links within the member’s permissions', async () => {
