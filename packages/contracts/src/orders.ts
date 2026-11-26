@@ -4,7 +4,7 @@ import { calendarDate } from './calendar-date';
 import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
 import {
-  productListQuerySchema,
+  productListBaseQuerySchema,
   takaInput,
   type ProductResponse,
   type ProductVariantResponse,
@@ -178,7 +178,7 @@ export type OrderListResponse = {
   nextCursor: number | null;
 };
 
-export const orderCatalogueQuerySchema = productListQuerySchema.pick({
+export const orderCatalogueQuerySchema = productListBaseQuerySchema.pick({
   cursor: true,
   limit: true,
   search: true,

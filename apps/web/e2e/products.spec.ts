@@ -24,9 +24,15 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
   const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-4');
   const restockEvidence = resolve(process.cwd(), '../../docs/design/evidence/web-7-restock');
   const redesignEvidence = resolve(process.cwd(), '../../docs/design/evidence/prod-17-4');
+  const salesEvidence = resolve(
+    process.cwd(),
+    '../../docs/design/evidence/prod-20-best-selling-sort',
+  );
   await mkdir(evidence, { recursive: true });
   await mkdir(restockEvidence, { recursive: true });
   await mkdir(redesignEvidence, { recursive: true });
+  await mkdir(salesEvidence, { recursive: true });
+  const salesOrderId = randomUUID();
   const contactIds = [randomUUID(), randomUUID(), randomUUID()];
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
@@ -197,8 +203,33 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
       openMenu: true,
     });
 
+    await database.pool.query(
+      `insert into orders(id,store_id,number,source,created_by_type,recipient_name,recipient_phone,
+        recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha)
+       values ($1,$2,900001,'manual','user','Rina','01710000005','Mirpur','Dhaka',490000,490000)`,
+      [salesOrderId, fixture.storeIds[0]],
+    );
+    await database.pool.query(
+      `insert into order_items(id,store_id,order_id,variant_id,product_name,variant_title,quantity,
+        unit_price_poisha,is_stock_tracked) values ($1,$2,$3,$4,'Cotton Panjabi','M',2,245000,true)`,
+      [randomUUID(), fixture.storeIds[0], salesOrderId, panjabi.variants[0]!.id],
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const sort = page.getByRole('combobox', { name: 'Sort products' });
+    await expect(sort).toHaveText('Newest');
+    await sort.click();
+    await page.getByRole('option', { name: 'Best selling' }).click();
+    await expect(page).toHaveURL(/sort=best_selling/);
+    await expect(page.getByRole('table').getByRole('row').nth(1)).toContainText('Cotton Panjabi');
+    await capture('best-selling', salesEvidence, {
+      target: catalogue.getByText('Cotton Panjabi', { exact: true }).filter({ visible: true }),
+    });
+    await page.reload();
+    await expect(sort).toHaveText('Best selling');
+
     await page.getByRole('link', { name: 'Running low', exact: true }).click();
     await expect(page).toHaveURL(/readiness=running_low/);
+    await expect(page).toHaveURL(/sort=best_selling/);
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(page.getByRole('table').getByRole('row')).toHaveCount(2);
     await capture('running-low');
@@ -262,6 +293,10 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     } finally {
       const ids = products.map((product) => product.id);
       const variants = products.flatMap((product) => product.variants.map((variant) => variant.id));
+      await database.pool.query('delete from orders where store_id=$1 and id=$2', [
+        fixture.storeIds[0],
+        salesOrderId,
+      ]);
       await database.pool.query(
         "delete from outbox_events where store_id=$1 and (payload->>'productId'=any($2::text[]) or payload->>'variantId'=any($3::text[]))",
         [fixture.storeIds[0], ids, variants],
