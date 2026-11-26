@@ -75,9 +75,11 @@ export function screenCustomerTexts(
 }
 
 function refusedDiscount(text: string) {
-  if (!finalPricePattern.test(text)) return shopRefusalPattern.test(text);
-  const digits = toAsciiDigits(text);
-  return !amountPatterns.some((pattern) => [...digits.matchAll(pattern)].length);
+  const final = text
+    .split(/\n|[!?।]|[.,]\s+|\s+(?:and|with|plus|আর|এবং)\s+/u)
+    .filter((clause) => finalPricePattern.test(clause));
+  if (!final.length) return shopRefusalPattern.test(text);
+  return final.some((clause) => quotedPricesPoisha(clause).size === 0);
 }
 
 const asksForDiscount = (text: string) => discountPatterns.some((pattern) => pattern.test(text));

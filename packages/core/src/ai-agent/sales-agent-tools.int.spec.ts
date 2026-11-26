@@ -669,7 +669,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
   await admin.pool.query('update product_variants set price_override_poisha = 130000 where id=$1', [
     variantId,
   ]);
-  expect(await offer(await turn())).toEqual({ kind: 'fixed' });
+  expect(await offer(await turn())).toEqual({ kind: 'fixed', pricesTaka: [1300] });
   expect(
     await toolResult(
       scope,
@@ -693,7 +693,7 @@ it('offers one price per customer ask and discounts only the draft in that conve
       ),
     ),
   ).toMatchObject({ totalTaka: 1260 });
-  expect(await calls()).toEqual({ kind: 'fixed' });
+  expect(await calls()).toEqual({ kind: 'fixed', pricesTaka: [1200] });
   expect(await offer(await turn())).toEqual(opening);
 });
 

@@ -133,6 +133,7 @@ describe('screenCustomerTexts', () => {
 
   it.each([
     ['The price is final.', 'The last price is ৳950 and we cannot reduce it further.'],
+    ['The price is final and delivery is ৳60.', 'The last price is ৳950 with ৳60 delivery.'],
     ['Dam final.', 'Last price 950 taka.'],
     ['দাম চূড়ান্ত।', 'শেষ দাম ৳৯৫০।'],
   ])('hands over after holding %s and lets an actual offer through', (held, offered) => {

@@ -292,6 +292,20 @@ describe('checkReplyFacts negotiation', () => {
     });
   });
 
+  it('keeps product prices and delivery charges in their own place', () => {
+    expect(check('The panjabi is ৳60. Delivery is ৳1050.', [...results, opening])).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+    expect(check('I can do ৳60. The price used to be ৳1050.', [opening, { stock: 60 }])).toEqual({
+      isSafe: false,
+      failure: 'amount',
+    });
+    expect(
+      check('I can do it at 1050, no less, with ৳60 delivery.', [...results, opening]),
+    ).toEqual({ isSafe: true });
+  });
+
   it('rejects a stock count as the price while negotiating', () => {
     expect(check('I can do ৳60.', [opening, { stock: 60 }])).toEqual({
       isSafe: false,

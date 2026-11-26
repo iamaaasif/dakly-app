@@ -8,7 +8,7 @@ import {
   offerWords,
 } from '@dakly/contracts/reply-wording';
 
-import { offerPricesInReply, quotedOfferRefs, type OfferQuote } from './offer-lower-price';
+import { quotedOfferRefs, type OfferQuote } from './offer-lower-price';
 
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
@@ -20,6 +20,14 @@ const stockPatterns = [
     'giu',
   ),
   new RegExp(String.raw`(?:stock|available|স্টক|মজুদ)[^\d\n]{0,12}${number}`, 'giu'),
+];
+const deliveryWord = String.raw`(?:\b(?:delivery|shipping|courier)\b|ডেলিভারি|ডেলিভারী|কুরিয়ার|কুরিয়ার)`;
+const deliveryChargePatterns = [
+  new RegExp(
+    String.raw`${deliveryWord}(?:\s+(?:charge|fee|cost|চার্জ|খরচ))?\s*(?:(?:is|হলো|হল)\s*)?[:=]?\s*৳?\s*${number}`,
+    'giu',
+  ),
+  new RegExp(String.raw`${number}\s*(?:(?:tk|taka|টাকা)\s+)?(?:for\s+)?${deliveryWord}`, 'giu'),
 ];
 const phonePattern = /(?:\+?880|0)1[3-9](?:[\s-]?\d){8}/g;
 const linkPattern =
@@ -75,11 +83,12 @@ export function checkReplyFacts(
   const amounts = claimedAmounts(text);
   const negotiation = toolResults.filter(isNegotiationResult);
   if (negotiation.length) amounts.push(...claimedAmounts(text, [bareOfferPattern]));
-  const invalidPrice = negotiationAmountIsWrong(text, negotiation, amounts, offerQuotes);
-  if (
-    invalidPrice ??
-    hasWrongAmount(amounts, (value) => known.has(value), numbersIn(customerTexts))
-  )
+  const customerNumbers = numbersIn(customerTexts);
+  const invalidPrice = negotiationAmountIsWrong(text, negotiation, amounts, offerQuotes, {
+    toolResults,
+    customerNumbers,
+  });
+  if (invalidPrice ?? hasWrongAmount(amounts, (value) => known.has(value), customerNumbers))
     return { isSafe: false, failure: 'amount' };
   if (claimedNumbers(text, stockPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'stock' };
@@ -106,27 +115,45 @@ function isNegotiationResult(value: unknown): value is NegotiationResult {
 function negotiationAmountIsWrong(
   text: string,
   results: readonly NegotiationResult[],
-  amounts: readonly ClaimedAmount[],
+  amounts: readonly (ClaimedAmount & { at: number })[],
   offerQuotes: readonly OfferQuote[],
+  {
+    toolResults,
+    customerNumbers,
+  }: { toolResults: readonly unknown[]; customerNumbers: ReadonlySet<number> },
 ) {
   if (!results.length) return undefined;
   const offered = new Set(
     results.flatMap((result) => (result.kind === 'offered' ? [result.priceTaka] : [])),
   );
   if (offered.size) {
-    const quoted = offerPricesInReply(text);
-    if (
-      ![...offered].some((price) => quoted.has(Math.round(price * 100))) ||
-      [...quotedOfferRefs(offerQuotes, text).values()].includes(null)
-    )
-      return true;
-    return undefined;
+    const delivery = claimedAmounts(text, deliveryChargePatterns);
+    const deliveryPositions = new Set(delivery.map(({ at }) => at));
+    const prices = amounts.filter(({ at }) => !deliveryPositions.has(at));
+    const quoted = new Set(prices.map(({ value }) => Math.round(value * 100)));
+    const charges = new Set(toolResults.flatMap(deliveryChargesIn));
+    return (
+      !prices.some(({ value }) => offered.has(value)) ||
+      [...quotedOfferRefs(offerQuotes, quoted).values()].includes(null) ||
+      delivery.some(({ value }) => !charges.has(value)) ||
+      hasWrongAmount(prices, (value) => offered.has(value), customerNumbers)
+    );
   }
   if (results.some(({ kind }) => kind === 'final')) return amounts.length > 0;
   const prices = new Set(
     results.flatMap((result) => (result.kind === 'fixed' ? result.pricesTaka : [])),
   );
   return amounts.some(({ value }) => !prices.has(value));
+}
+
+function deliveryChargesIn(value: unknown): number[] {
+  if (Array.isArray(value)) return value.flatMap(deliveryChargesIn);
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, item]) =>
+    (key === 'chargeTaka' || key === 'deliveryChargeTaka') && typeof item === 'number'
+      ? [item]
+      : deliveryChargesIn(item),
+  );
 }
 
 function contactFailure(text: string, shop: Shop, customerTexts: readonly string[]) {
@@ -152,6 +179,7 @@ function claimedAmounts(text: string, patterns = amountPatterns) {
   return patterns.flatMap((pattern) =>
     [...text.matchAll(pattern)].map((match) => ({
       value: parseNumber(match[1]!),
+      at: match.index + match[0].lastIndexOf(match[1]!),
       around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),
     })),
   );

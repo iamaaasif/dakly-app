@@ -42,12 +42,14 @@ export async function offerLowerPrice(
   };
 }
 
-export function offerPricesInReply(reply: string) {
+function offerPricesInReply(reply: string) {
   return quotedPricesPoisha(reply, [...amountPatterns, bareOfferPattern]);
 }
 
-export function quotedOfferRefs(quotes: readonly OfferQuote[], reply: string) {
-  const prices = offerPricesInReply(reply);
+export function quotedOfferRefs(
+  quotes: readonly OfferQuote[],
+  prices: ReadonlySet<number | undefined>,
+) {
   const quoted = new Map<number, string | null>();
   for (const quote of quotes) {
     if (!prices.has(quote.pricePoisha)) continue;
@@ -61,7 +63,9 @@ export function quotedOfferRefs(quotes: readonly OfferQuote[], reply: string) {
 }
 
 export function quotedOfferSources(quotes: readonly OfferQuote[], reply: string) {
-  const refs = [...quotedOfferRefs(quotes, reply).values()].filter((ref) => ref !== null);
+  const refs = [...quotedOfferRefs(quotes, offerPricesInReply(reply)).values()].filter(
+    (ref) => ref !== null,
+  );
   return refs.length ? [{ tool: 'price_offer', refs }] : [];
 }
 
