@@ -9,9 +9,9 @@ import { cn } from '@dakly/ui/cn';
 import { chatScreenQuerySchema, chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
 import { ChatChannelFilter } from './chat-channel-filter';
+import { ChatFolders } from './chat-folders';
 import { ChatList } from './chat-list';
 import { ChatToolbar } from './chat-search-bar';
-import { ChatTabs } from './chat-tabs';
 import { CommentsView } from './comments-view';
 import { ConversationPanel } from './conversation-panel';
 import { useCollapsedShellNavigation } from '@/components/shell-navigation-collapse';
@@ -132,7 +132,7 @@ function InboxFolders({ query, folders }: { query: ChatScreenQuery; folders: Inb
         <InboxHeading folders={folders} />
       </div>
       <div id={folders.id}>
-        <ChatTabs query={query} />
+        <ChatFolders query={query} />
       </div>
     </aside>
   );
