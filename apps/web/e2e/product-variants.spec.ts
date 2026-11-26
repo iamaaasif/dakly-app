@@ -165,6 +165,8 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
         costPoisha: original.costPoisha,
         sku: original.sku,
       });
+    await page.reload();
+    await expect(page.getByLabel('Stock for S / Black')).toHaveValue('12');
     await moveSize.press('ArrowDown');
     await page.getByLabel('Stock for Black / S').fill('9');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
