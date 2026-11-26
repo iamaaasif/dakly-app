@@ -37,6 +37,7 @@ The tokens Dakly's web app is built from. Values were measured from the design p
 | `--color-facebook`       | `#1665D8` | The Continue with Facebook button (white text, 5.4:1)                                  |
 | `--color-facebook-hover` | `#1255B3` | Hover fill of the Facebook button                                                      |
 | `--color-instagram`      | `#B82D7C` | Instagram channel icon (white icon, 5.7:1; the single pink stands in for the gradient) |
+| `--color-whatsapp`       | `#25D366` | WhatsApp channel logo only                                                             |
 | `--color-ai`             | `#7A2B8A` | The AI badge and AI-written labels                                                     |
 | `--color-ai-soft`        | `#F1E3F6` | AI badge background                                                                    |
 
