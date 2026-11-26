@@ -9,6 +9,7 @@ import type { Clock } from '../platform/clock';
 import type { ProductsService } from '../products/products.service';
 import type { StoresService } from '../stores/stores.service';
 import type { SalesAgentToolsService } from './sales-agent-tools.service';
+import { salesAgentToolsFor } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
 import { defaultShopRules } from './shop-rules';
 
@@ -576,4 +577,12 @@ it('answers from reads started earlier without reading the chat again', async ()
   expect(composed.kind).toBe('reply');
   expect(inbox.replyHistory).toHaveBeenCalledTimes(1);
   expect(run).toHaveBeenCalledTimes(1);
+});
+
+it('omits order tools when takeOrders is false and card tool when showProducts is false while keeping order', () => {
+  const allNames = salesAgentToolsFor({ showProducts: true, takeOrders: true }).map((t) => t.name);
+  const noOrders = salesAgentToolsFor({ showProducts: true, takeOrders: false }).map((t) => t.name);
+  const noCards = salesAgentToolsFor({ showProducts: false, takeOrders: true }).map((t) => t.name);
+  expect(noOrders).toEqual(allNames.filter((n) => n !== 'draft_order' && n !== 'confirm_order'));
+  expect(noCards).toEqual(allNames.filter((n) => n !== 'send_product_card'));
 });
