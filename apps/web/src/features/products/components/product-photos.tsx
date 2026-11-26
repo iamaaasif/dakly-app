@@ -10,6 +10,7 @@ import {
 } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
 import { Label } from '@dakly/ui/label';
+import { SheetDialog } from '@dakly/ui/sheet';
 
 import { useRemoveProductPhoto } from '../api/remove-product-photo';
 import { useReorderProductPhotos } from '../api/reorder-product-photos';
@@ -76,6 +77,7 @@ function EditablePhotos({ scope }: { scope: PhotoScope }) {
   const remove = useRemoveProductPhoto(scope.id, scope.variantId);
   const [removeId, setRemoveId] = useState<string | null>(null);
   const chooser = useRef<HTMLInputElement>(null);
+  const removeOpener = useRef<HTMLButtonElement>(null);
   const inputId = useId();
   const busy = upload.isPending || reorder.isPending || remove.isPending;
   function handleMoveEarlier(index: number, onMoved: () => void) {
@@ -88,7 +90,8 @@ function EditablePhotos({ scope }: { scope: PhotoScope }) {
     reorder.reset();
     upload.mutate(file);
   }
-  function handleRequestRemoval(id: string) {
+  function handleRequestRemoval(id: string, opener: HTMLButtonElement) {
+    removeOpener.current = opener;
     remove.reset();
     setRemoveId(id);
   }
@@ -116,7 +119,11 @@ function EditablePhotos({ scope }: { scope: PhotoScope }) {
           productName={scope.name}
           error={remove.error?.message}
           pending={remove.isPending}
-          onClose={() => setRemoveId(null)}
+          inSheet={Boolean(scope.variantId)}
+          onClose={() => {
+            setRemoveId(null);
+            requestAnimationFrame(() => removeOpener.current?.focus());
+          }}
           onRemove={() => handleRemove(removeId)}
         />
       ) : null}
@@ -155,7 +162,7 @@ type PhotoListProps = {
   actions?: {
     disabled: boolean;
     onMove: (index: number, onMoved: () => void) => void;
-    onRemove: (id: string) => void;
+    onRemove: (id: string, opener: HTMLButtonElement) => void;
   };
 };
 function PhotoList({ scope, actions, children }: PhotoListProps) {
@@ -225,7 +232,7 @@ function PhotoEntry({ name, photo, index, actions }: PhotoEntryProps) {
             className="px-2"
             disabled={actions.disabled}
             aria-label={`Remove photo ${index + 1}`}
-            onClick={() => actions.onRemove(photo.id)}
+            onClick={(event) => actions.onRemove(photo.id, event.currentTarget)}
           >
             <Trash2 aria-hidden="true" size={16} strokeWidth={1.75} />
           </Button>
@@ -275,30 +282,22 @@ function PhotoInput({ id, input, disabled, onFile }: PhotoInputProps) {
 
 type RemovePhotoDialogProps = {
   productName: string;
+  inSheet: boolean;
   error?: string;
   pending: boolean;
   onClose: () => void;
   onRemove: () => void;
 };
-function RemovePhotoDialog({
-  productName,
-  error,
-  pending,
-  onClose,
-  onRemove,
-}: RemovePhotoDialogProps) {
-  return (
-    <SessionDialog
-      title={`Remove photo from ${productName}?`}
-      open
-      closeDisabled={pending}
-      onClose={onClose}
-    >
-      {error ? (
+function RemovePhotoDialog(props: RemovePhotoDialogProps) {
+  const { productName, inSheet, error, pending, onClose, onRemove } = props;
+  const title = `Remove photo from ${productName}?`;
+  const content = (
+    <>
+      {error && (
         <p role="alert" className="mb-4 text-danger">
           {error}
         </p>
-      ) : null}
+      )}
       <div className="flex justify-end gap-2">
         <Button variant="secondary" disabled={pending} onClick={onClose}>
           Cancel
@@ -307,6 +306,17 @@ function RemovePhotoDialog({
           Remove photo
         </Button>
       </div>
+    </>
+  );
+  if (inSheet)
+    return (
+      <SheetDialog title={title} open pending={pending} onOpenChange={onClose}>
+        {content}
+      </SheetDialog>
+    );
+  return (
+    <SessionDialog title={title} open closeDisabled={pending} onClose={onClose}>
+      {content}
     </SessionDialog>
   );
 }

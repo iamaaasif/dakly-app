@@ -20,15 +20,8 @@ export type FormFieldProps = {
   children: (control: FieldControlProps) => ReactNode;
 };
 
-export function FormField({
-  name,
-  label,
-  action,
-  hint,
-  optional,
-  hideLabel,
-  children,
-}: FormFieldProps) {
+export function FormField(props: FormFieldProps) {
+  const { name, label, action, hint, optional, hideLabel, children } = props;
   const { errors } = useFormState({ name });
   // get() reads nested names such as "address.district".
   const field = get(errors, name);

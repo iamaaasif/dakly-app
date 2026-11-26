@@ -1,5 +1,4 @@
 'use client';
-
 import { useSearchParams } from 'next/navigation';
 import { useRef, useState, type ClipboardEvent } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -34,8 +33,16 @@ function typedValue(field: EditableField, value: string): string | number {
   return field === 'lowStockThreshold' ? value.replace(/\D/g, '') : value;
 }
 
-function toggleKey(keys: string[], key: string, include: boolean) {
-  return include ? [...new Set([...keys, key])] : keys.filter((value) => value !== key);
+function useKeySet() {
+  const [keys, setKeys] = useState<Set<string>>(new Set());
+  const set = (key: string, on: boolean) =>
+    setKeys((current) => {
+      const next = new Set(current);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  return { keys, set, replace: (next: string[]) => setKeys(new Set(next)) };
 }
 
 function useVariantEdits() {
@@ -107,12 +114,12 @@ function useVariantGrouping(options: GridOption[]) {
 }
 
 function useTableRows(options: GridOption[], variants: GridVariant[], position: number) {
-  const [selected, setSelected] = useState<string[]>([]);
-  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const selected = useKeySet();
+  const collapsed = useKeySet();
   const groups = groupVariants(options, variants, position);
   const key = (label: string) => JSON.stringify([options[position]?.name, label]);
-  const isCollapsed = (label: string) => collapsed.includes(key(label));
-  const chosen = variants.flatMap((row, index) => (selected.includes(rowKey(row)) ? [index] : []));
+  const isCollapsed = (label: string) => collapsed.keys.has(key(label));
+  const chosen = variants.flatMap((row, index) => (selected.keys.has(rowKey(row)) ? [index] : []));
   const visible = groups.flatMap(({ label, rows }) =>
     isCollapsed(label) ? [] : rows.map(({ index }) => index),
   );
@@ -120,12 +127,11 @@ function useTableRows(options: GridOption[], variants: GridVariant[], position: 
     groups,
     chosen,
     visible,
-    selected,
+    selected: selected.keys,
     isCollapsed,
-    onToggle: (label: string) =>
-      setCollapsed(toggleKey(collapsed, key(label), !isCollapsed(label))),
-    onSelect: (row: string, checked: boolean) => setSelected(toggleKey(selected, row, checked)),
-    onSelectAll: (checked: boolean) => setSelected(checked ? variants.map(rowKey) : []),
+    onToggle: (label: string) => collapsed.set(key(label), !isCollapsed(label)),
+    onSelect: selected.set,
+    onSelectAll: (checked: boolean) => selected.replace(checked ? variants.map(rowKey) : []),
   };
 }
 
@@ -168,39 +174,29 @@ export function ProductVariantTable({ product, readOnly }: ProductVariantTablePr
       )}
       {!readOnly && (
         <p className="text-xs text-text-muted">
-          A blank price uses the product price. Stock edits go to the stock history with one reason
-          asked on save.
+          A blank price uses the product price. Paste price, cost, stock and code from a
+          spreadsheet. Saving stock changes asks for a reason.
         </p>
       )}
     </div>
   );
 }
 
-function GroupingControl({
-  options,
-  position,
-  select,
-}: {
-  options: GridOption[];
-  position: number;
-  select: (name: string) => void;
-}) {
+function GroupingControl(props: ReturnType<typeof useVariantGrouping> & { options: GridOption[] }) {
+  const { options, position, select } = props;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <h3 className="text-sm font-semibold text-text">Variants</h3>
-      <Label className="flex items-center gap-2">
-        Show by
-        <select
-          className="min-h-10 max-w-40 rounded-md border border-input-border bg-surface px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          value={options[position]?.name ?? ''}
-          onChange={(event) => select(event.target.value)}
-        >
-          {options.map(({ name }) => (
-            <option key={name}>{name}</option>
-          ))}
-        </select>
-      </Label>
-    </div>
+    <Label className="flex items-center justify-between gap-2">
+      Show by
+      <select
+        className="min-h-10 max-w-40 rounded-md border border-input-border bg-surface px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        value={options[position]?.name ?? ''}
+        onChange={(event) => select(event.target.value)}
+      >
+        {options.map(({ name }) => (
+          <option key={name}>{name}</option>
+        ))}
+      </select>
+    </Label>
   );
 }
 
@@ -235,7 +231,7 @@ function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: Varian
       )}
       <div className="@container rounded-lg border border-border">
         <TableHeader
-          checked={allSelected}
+          allSelected={allSelected}
           {...{ readOnly, showStock }}
           onSelectAll={rows.onSelectAll}
         />
@@ -257,17 +253,17 @@ function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: Varian
 }
 
 type TableHeaderProps = {
-  checked: boolean;
+  allSelected: boolean;
   readOnly?: boolean;
   showStock: boolean;
-  onSelectAll: (checked: boolean) => void;
+  onSelectAll: (on: boolean) => void;
 };
 
-function TableHeader({ checked, readOnly, showStock, onSelectAll }: TableHeaderProps) {
+function TableHeader({ allSelected, readOnly, showStock, onSelectAll }: TableHeaderProps) {
   return (
     <div
       className={cn(
-        'grid items-center rounded-t-lg bg-surface-muted px-2 py-2 text-xs font-medium text-text-muted',
+        'hidden items-center rounded-t-lg bg-surface-muted px-2 py-2 text-xs font-medium text-text-muted @lg:grid',
         variantTableColumns,
       )}
     >
@@ -276,20 +272,15 @@ function TableHeader({ checked, readOnly, showStock, onSelectAll }: TableHeaderP
       ) : (
         <Checkbox
           aria-label="Select all variants"
-          checked={checked}
-          onCheckedChange={(next) => onSelectAll(next === true)}
+          checked={allSelected}
+          onCheckedChange={(value) => onSelectAll(value === true)}
         />
       )}
-      <span>
-        <span className="sr-only @lg:not-sr-only">Image</span>
-      </span>
+      <span>Image</span>
       <span>Variant</span>
-      <span className="hidden @lg:block">Price</span>
-      <span className="hidden @lg:block">Cost</span>
-      <span className="hidden @lg:block">{showStock ? 'Available' : 'Stock'}</span>
-      <span>
-        <span className="sr-only">{readOnly ? 'View' : 'Edit'}</span>
-      </span>
+      <span>Price</span>
+      <span>Cost</span>
+      <span>{showStock ? 'Available' : 'Stock'}</span>
     </div>
   );
 }

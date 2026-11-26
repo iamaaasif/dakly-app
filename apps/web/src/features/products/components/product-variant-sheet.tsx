@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react';
+import { useContext } from 'react';
 
 import type { ProductResponse, ProductVariantResponse } from '@dakly/contracts/products';
 import { FormField } from '@dakly/ui/form-field';
@@ -13,6 +13,7 @@ import {
   type GridVariant,
 } from '../product-variant-grid';
 import { ProductPhotos } from './product-photos';
+import { SessionInteraction } from '@/components/session-interaction';
 
 const fieldLabels: Record<EditableField, string> = {
   priceOverridePoisha: 'Price',
@@ -28,6 +29,7 @@ type VariantEditorFieldProps = {
   field: EditableField;
   label: string;
   placeholder?: string;
+  reserved?: number;
   readOnly?: boolean;
   inline?: boolean;
   onChange: (field: EditableField, value: string) => void;
@@ -36,21 +38,22 @@ type VariantEditorFieldProps = {
 export function VariantEditorField(props: VariantEditorFieldProps) {
   const { index, variant, field, label, placeholder, readOnly, inline, onChange } = props;
   const name = `variants.${index}.${field}`;
+  const fieldLabel = `${fieldLabels[field]} for ${label}`;
   const numeric = field === 'initialStock' || field === 'lowStockThreshold';
   const inputMode = numeric ? 'numeric' : 'decimal';
+  const hint = props.reserved ? `Includes reserved stock (${props.reserved}).` : undefined;
   return (
-    <FormField name={name} label={`${fieldLabels[field]} for ${label}`} hideLabel={inline}>
+    <FormField name={name} label={fieldLabel} hideLabel={inline} hint={hint}>
       {(control) => (
         <Input
           {...control}
-          autoComplete="off"
           inputMode={field === 'sku' ? undefined : inputMode}
           placeholder={placeholder}
           readOnly={readOnly}
           value={String(variant[field] ?? '')}
-          data-grid-row={index}
-          data-grid-field={field}
-          onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(field, event.target.value)}
+          data-grid-row={inline ? index : undefined}
+          data-grid-field={inline ? field : undefined}
+          onChange={(event) => onChange(field, event.target.value)}
           className={inline ? 'px-1.5 py-1 text-sm' : undefined}
         />
       )}
@@ -72,6 +75,7 @@ type ProductVariantSheetProps = Pick<
 };
 
 export function ProductVariantSheet(props: ProductVariantSheetProps) {
+  if (useContext(SessionInteraction)) return null;
   const { index, options, variant, product, saved, productPrice, showStock, readOnly } = props;
   const label = variantLabel(variant, options);
   const input = { index, variant, label, readOnly, onChange: props.onChange };
@@ -82,9 +86,7 @@ export function ProductVariantSheet(props: ProductVariantSheetProps) {
       title={label}
       onClose={props.onClose}
       restoreFocusTo={props.restoreFocusTo}
-      description={
-        readOnly ? undefined : 'Price, cost, stock and code changes are saved with the product.'
-      }
+      description={readOnly ? undefined : 'Changes are saved with the product.'}
     >
       <div className="space-y-4">
         <VariantEditorField {...input} field="priceOverridePoisha" placeholder={productPrice} />
@@ -96,7 +98,7 @@ export function ProductVariantSheet(props: ProductVariantSheetProps) {
         )}
         {showStock ? (
           <>
-            <VariantEditorField {...input} field="initialStock" />
+            <VariantEditorField {...input} field="initialStock" reserved={saved?.reserved} />
             <VariantEditorField {...input} field="lowStockThreshold" placeholder="Shop setting" />
           </>
         ) : (

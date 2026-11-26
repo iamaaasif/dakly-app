@@ -202,6 +202,47 @@ describe('Variants card', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   });
 
+  it('Escape closes the photo confirmation before the variant sheet', async () => {
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+    show({
+      ...saved,
+      options: [{ name: 'Size', values: ['M'] }],
+      variants: [
+        {
+          ...saved.variants[0]!,
+          title: 'M',
+          optionValues: { Size: 'M' },
+          photos: [{ id: saved.id, url: 'https://images.example.test/variant' }],
+          reserved: 2,
+          available: 10,
+        },
+      ],
+    });
+
+    const sheet = await editVariant('M');
+    const stock = sheet.getByLabelText<HTMLInputElement>('Stock for M');
+    expect(stock.value).toBe('12');
+    expect(document.getElementById(stock.getAttribute('aria-describedby')!)?.textContent).toBe(
+      'Includes reserved stock (2).',
+    );
+    const remove = sheet.getByRole('button', { name: 'Remove photo 1' });
+    await userEvent.click(remove);
+    expect(
+      screen.getByRole('dialog', { name: 'Remove photo from Cotton T-shirt M?' }),
+    ).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Remove photo/ })).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'M' })).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(remove));
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'M' })).toBeNull());
+  });
+
   it('sets a price on the chosen rows and keeps removed rows out until asked', async () => {
     show(saved);
     await userEvent.click(screen.getByRole('button', { name: '+ Other option' }));

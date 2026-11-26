@@ -1,4 +1,4 @@
-import { Camera, ChevronDown, CircleAlert, Eye, Pencil } from 'lucide-react';
+import { Camera, ChevronDown, Eye, Pencil } from 'lucide-react';
 import Image from 'next/image';
 import { useFormState } from 'react-hook-form';
 
@@ -34,7 +34,7 @@ type VariantGroupRowsProps = {
   productPrice: string;
   showStock: boolean;
   readOnly?: boolean;
-  selected: string[];
+  selected: ReadonlySet<string>;
   collapsed: boolean;
   onToggle: () => void;
   onSelect: (key: string, checked: boolean) => void;
@@ -62,7 +62,7 @@ export function VariantGroupRows(props: VariantGroupRowsProps) {
                 saved={savedById.get(variant.id ?? '')}
                 productPrice={productPrice}
                 showStock={showStock}
-                selected={selected.includes(key)}
+                selected={selected.has(key)}
                 readOnly={readOnly}
                 onSelect={(checked) => props.onSelect(key, checked)}
                 onEdit={(button) => props.onEdit(key, button)}
@@ -242,25 +242,20 @@ function VariantPhoto({
       className="size-8 rounded-sm object-cover"
     />
   ) : (
-    <span className="grid size-8 place-items-center rounded-sm border border-dashed border-border-strong text-text-muted">
-      <Camera aria-hidden="true" size={16} />
-    </span>
+    <Camera
+      aria-hidden="true"
+      className="size-8 rounded-sm border border-dashed border-border-strong p-1.5 text-text-muted"
+    />
   );
 }
 
-function RowSummary({
-  index,
-  label,
-  stock,
-  price,
-  onEdit,
-}: {
-  index: number;
-  label: string;
-  stock: string;
-  price: string;
-  onEdit: (button: HTMLButtonElement) => void;
-}) {
+function RowSummary(
+  props: Pick<VariantTableRowProps, 'index' | 'label' | 'onEdit'> & {
+    stock: string;
+    price: string;
+  },
+) {
+  const { index, label, stock, price, onEdit } = props;
   const { errors } = useFormState<ProductFormValues>({ name: `variants.${index}` });
   const paid = takaInput.safeParse(price);
   const summary = `${paid.success ? formatMoney(paid.data) : 'No price'} · ${stock}`;
@@ -276,11 +271,7 @@ function RowSummary({
         <span className="max-w-[65%] truncate text-xs text-text-muted">{summary}</span>
       </button>
       <span className="hidden text-sm font-medium wrap-anywhere @lg:block">{label}</span>
-      {errors.variants?.[index] && (
-        <span className="flex items-center gap-1 text-xs text-danger">
-          <CircleAlert aria-hidden="true" size={14} /> Check fields
-        </span>
-      )}
+      {errors.variants?.[index] && <p className="text-xs text-danger">Check fields</p>}
     </div>
   );
 }
