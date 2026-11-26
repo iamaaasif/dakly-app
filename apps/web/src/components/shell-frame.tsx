@@ -65,7 +65,7 @@ export function ShellFrame({
         <div
           id="page-content"
           tabIndex={-1}
-          className="mx-auto max-w-7xl"
+          className="mx-auto max-w-7xl has-[[data-full-width]]:max-w-none"
           key={`${data.contextTag}:${generation}`}
         >
           {needsStore ? <StoreRequired hasMemberships={data.hasMemberships} /> : children}

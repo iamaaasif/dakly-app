@@ -11,7 +11,7 @@ import { Input } from '@dakly/ui/input';
 import { useOrderCatalogue } from '@/lib/order-entry/order-catalogue';
 
 const selectClass =
-  'w-full rounded-md border border-input-border bg-surface px-2 text-sm aria-invalid:border-danger';
+  'min-h-10 w-full rounded-md border border-input-border bg-surface px-2 text-sm aria-invalid:border-danger';
 
 type Variant = OrderCatalogueProduct['variants'][number];
 

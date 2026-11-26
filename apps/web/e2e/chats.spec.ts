@@ -149,7 +149,8 @@ test('lists chats by tab and channel and shows the tab counts', async ({
       ).status(),
     ).toBe(204);
 
-    await page.setViewportSize({ width: 1440, height: 900 });
+    // The folder column starts open only at 1,536px and wider.
+    await page.setViewportSize({ width: 1600, height: 900 });
     await page.goto('/chats');
     await expect(page.getByRole('link', { name: /^All\s*4$/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /^Needs you\s*1$/ })).toBeVisible();
@@ -321,7 +322,7 @@ async function capture(page: Page, screen: string) {
   if (!evidence) return;
   await mkdir(evidence, { recursive: true });
   for (const [width, height] of [
-    [1440, 900],
+    [1600, 900],
     [360, 800],
   ] as const) {
     await page.setViewportSize({ width, height });
@@ -330,5 +331,5 @@ async function capture(page: Page, screen: string) {
       .toBe(true);
     await page.screenshot({ path: resolve(evidence, `${screen}-${width}.png`) });
   }
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize({ width: 1600, height: 900 });
 }
