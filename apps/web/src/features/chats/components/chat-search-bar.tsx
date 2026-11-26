@@ -1,5 +1,5 @@
 'use client';
-import { ArrowUpDown, ListFilter, MessageSquare, Search } from 'lucide-react';
+import { ArrowUpDown, MessageSquare, Plus, Search } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
@@ -41,7 +41,7 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
       <Input
         type="search"
         aria-label="Search chats"
-        placeholder="Search name or phone"
+        placeholder="Search name or phone…"
         maxLength={120}
         value={words}
         onChange={(event) => setWords(event.target.value)}
@@ -50,6 +50,9 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
     </div>
   );
 }
+
+// Toolbar pickers match the compact secondary buttons beside them.
+const toolbarSelect = 'min-h-9 w-auto px-2.5 py-1 text-sm';
 
 type ChatToolbarProps = { query: ChatScreenQuery; foldersOpen: boolean; channel: ReactNode };
 
@@ -64,9 +67,11 @@ export function ChatToolbar({ query, foldersOpen, channel }: ChatToolbarProps) {
           router.replace(chatsHref({ ...query, sort: sort as ChatScreenQuery['sort'] }))
         }
       >
-        <SelectTrigger aria-label="Sort chats" className="w-auto">
+        <SelectTrigger aria-label="Sort chats" className={toolbarSelect}>
           <ArrowUpDown aria-hidden="true" size={16} />
-          <SelectValue />
+          <span>
+            Sort: <SelectValue />
+          </span>
         </SelectTrigger>
         <SelectContent>
           {chatSorts.map((sort) => (
@@ -80,7 +85,7 @@ export function ChatToolbar({ query, foldersOpen, channel }: ChatToolbarProps) {
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="secondary" size="sm">
-            <ListFilter aria-hidden="true" size={16} />
+            <Plus aria-hidden="true" size={16} />
             Filter
           </Button>
         </PopoverTrigger>
@@ -117,7 +122,10 @@ function ChatFolderSelect({
         )
       }
     >
-      <SelectTrigger aria-label="Chat folder" className={cn('w-auto', foldersOpen && 'lg:hidden')}>
+      <SelectTrigger
+        aria-label="Chat folder"
+        className={cn(toolbarSelect, foldersOpen && 'lg:hidden')}
+      >
         <MessageSquare aria-hidden="true" size={16} />
         <SelectValue />
       </SelectTrigger>

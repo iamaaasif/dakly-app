@@ -28,7 +28,7 @@ export function ChatChannelFilter({ query }: { query: ChatScreenQuery }) {
     <Popover>
       <PopoverTrigger asChild>
         <Button aria-label="Channels" variant="secondary" size="sm">
-          {query.channel ? chatChannelLabels[query.channel] : 'All channels'}
+          {query.channel ? chatChannelLabels[query.channel] : 'All Channels'}
           <ChevronDown aria-hidden="true" size={16} />
         </Button>
       </PopoverTrigger>
