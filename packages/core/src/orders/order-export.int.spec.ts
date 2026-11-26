@@ -181,6 +181,27 @@ describe('order export over Fastify and Postgres', () => {
     expect((await readSheet(masked.rawPayload))[1]?.[5]).toBe('01712-XXX678');
   });
 
+  it('exports the delivered quantities and discounts that match a part delivery total', async () => {
+    await access(true, true);
+    const updated = await sql(
+      `update orders set stage='partially_delivered', delivered_items_subtotal_poisha=12475,
+         delivered_order_discount_poisha=555, cod_amount_poisha=13240
+       where store_id=$1 and number=103 returning id`,
+      [fixture.a],
+    );
+    await sql(
+      `update order_items set delivered_quantity=1, delivered_line_discount_poisha=50
+       where store_id=$1 and order_id=$2`,
+      [fixture.a, updated.rows[0].id],
+    );
+    const response = await download('format=csv&stage=delivered&search=%23103');
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['x-row-count']).toBe('1');
+    expect(response.body.split('\r\n')[1]).toContain(
+      '"1","125.25","0.50","63.50","5.55","50.30","132.40"',
+    );
+  });
+
   it('never includes order lines from another shop', async () => {
     await access(true, true);
     const response = await download('format=csv&search=%23108');

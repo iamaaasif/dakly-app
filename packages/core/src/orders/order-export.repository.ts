@@ -26,10 +26,13 @@ export class OrderExportRepository {
           productName: orderItems.productName,
           variantTitle: orderItems.variantTitle,
           quantity: orderItems.quantity,
+          deliveredQuantity: orderItems.deliveredQuantity,
           unitPricePoisha: orderItems.unitPricePoisha,
           lineDiscountPoisha: orderItems.lineDiscountPoisha,
+          deliveredLineDiscountPoisha: orderItems.deliveredLineDiscountPoisha,
           deliveryChargePoisha: orders.deliveryChargePoisha,
           orderDiscountPoisha: orders.orderDiscountPoisha,
+          deliveredOrderDiscountPoisha: orders.deliveredOrderDiscountPoisha,
           advancePaidPoisha: orders.advancePaidPoisha,
           codAmountPoisha: orders.codAmountPoisha,
         })

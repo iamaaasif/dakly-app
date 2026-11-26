@@ -272,7 +272,7 @@ An order has two state fields: `stage` for fulfilment and `paymentStatus` for mo
 
 `paymentStatus`: `cod_pending`, `advance_requested`, `advance_paid`, `paid`, `cod_collected`, `refund_due`, `refunded`.
 
-The transition table lives in `packages/contracts/src/order-stages.ts` for the API and web app. The staff API supports confirming, holding, moving back to To confirm, and cancelling. ORD-9 adds dispatch and delivery actions. `OrdersService.changeStage` rejects disallowed transitions with `ORDER_STAGE_NOT_ALLOWED`. Moving a held order back to To confirm keeps its reservation. Cancellation releases the reservations recorded on the order, even if tracking has since been turned off. The stage change, audit entry (from, to, actor, reason), and event are written in the same transaction.
+The transition table lives in `packages/contracts/src/orders.ts` for the API and web app. The staff API supports confirming, holding, moving back to To confirm, and cancelling. ORD-9 adds dispatch and delivery actions. `OrdersService.changeStage` rejects disallowed transitions with `ORDER_STAGE_NOT_ALLOWED`. Moving a held order back to To confirm keeps its reservation. Cancellation releases the reservations recorded on the order, even if tracking has since been turned off. The stage change, audit entry (from, to, actor, reason), and event are written in the same transaction.
 
 Staff with Orders edit can read the order catalogue. It gives product and variant names, variant prices, and available stock for the current shop. The order detail signals an open self-delivery match to staff who can see the full phone.
 
@@ -384,6 +384,6 @@ Q7 (Inquiry as a stage).
 
 Export in the Orders header downloads a CSV or Excel file for the current stage, search and filters across all pages. Staff need both Orders view and Download customer lists. The recipient phone stays masked unless the staff member can see full phone numbers. The rules for exact phone search are the same as in the pipeline.
 
-The file carries one row per saved order line. The columns are Order number, Order date, Stage, Buyer, Recipient, Phone, District, Product, Variant, Quantity, Unit price, Line discount, Delivery charge, Order discount, Advance and COD to collect. Order dates follow the shop time zone. Amounts come from the saved order and line snapshots, in taka. Each order-level amount is repeated on every line of the order.
+The file carries one row per saved order line. The columns are Order number, Order date, Stage, Buyer, Recipient, Phone, District, Product, Variant, Quantity, Unit price, Line discount, Delivery charge, Order discount, Advance and COD to collect. Order dates follow the shop time zone. Amounts come from the saved order and line snapshots, in taka. Each order-level amount is repeated on every line of the order. For a partial delivery, the file uses saved delivered quantities and discounts, keeping the saved unit prices.
 
 CSV escapes text that could run as a spreadsheet formula, and Excel stores that content as text. A file can hold up to 50,000 order lines. Larger results ask staff to narrow the filters. Each successful export records who downloaded it and the number of rows.
