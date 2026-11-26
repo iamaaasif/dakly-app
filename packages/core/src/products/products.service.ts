@@ -85,7 +85,7 @@ export class ProductsService {
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
       const { variants, expectedVersion, ...details } = input;
-      const current = await this.orderVariantRepository.lockProduct(storeId, id);
+      const [current] = await this.orderVariantRepository.lockProducts(storeId, [id]);
       if (!current) throw productError('PRODUCT_NOT_FOUND');
       requireProductVersion(current.version, expectedVersion);
       if (current.status === 'archived') throw productError('PRODUCT_NOT_FOUND');
@@ -209,6 +209,24 @@ export class ProductsService {
       if (!(await this.repository.archive(storeId, id, this.clock.now())))
         throw productError('PRODUCT_NOT_FOUND');
       await this.publishUpdated(storeId, id);
+    });
+  }
+
+  lockNegotiationTerms(storeId: string, productIds: string[]) {
+    return this.transaction.run(storeId, async () => {
+      const products = await this.orderVariantRepository.lockProducts(storeId, productIds);
+      const visible = products.filter(
+        ({ status, isVisibleInChats }) => status === 'active' && isVisibleInChats,
+      );
+      if (!visible.length) return [];
+      const variants = await this.repository.findVariants(
+        storeId,
+        visible.map(({ id }) => id),
+      );
+      return visible.map((product) => ({
+        ...product,
+        variants: variants.filter(({ productId }) => productId === product.id),
+      }));
     });
   }
 

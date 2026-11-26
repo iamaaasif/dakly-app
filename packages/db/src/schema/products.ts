@@ -164,6 +164,58 @@ export const products = pgTable(
   ],
 );
 
+export const priceOffers = pgTable(
+  'price_offers',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    conversationId: uuid('conversation_id').notNull(),
+    contactId: uuid('contact_id').notNull(),
+    productId: uuid('product_id').notNull(),
+    // The turn remains used even when older chat messages move to an archive.
+    customerMessageId: uuid('customer_message_id').notNull(),
+    offeredPricePoisha: poisha('offered_price_poisha').notNull(),
+    step: text('step', { enum: ['opening', 'final'] }).notNull(),
+    expiresAt: timestamptz('expires_at').notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'price_offers_conversation_store_fk',
+      columns: [table.storeId, table.conversationId],
+      foreignColumns: [conversations.storeId, conversations.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'price_offers_contact_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'price_offers_product_store_fk',
+      columns: [table.storeId, table.productId],
+      foreignColumns: [products.storeId, products.id],
+    }).onDelete('cascade'),
+    uniqueIndex('price_offers_customer_turn_key').on(
+      table.storeId,
+      table.conversationId,
+      table.productId,
+      table.customerMessageId,
+    ),
+    index('price_offers_scope_expiry_idx').on(
+      table.storeId,
+      table.conversationId,
+      table.contactId,
+      table.productId,
+      table.expiresAt,
+    ),
+    index('price_offers_contact_idx').on(table.storeId, table.contactId),
+    index('price_offers_product_idx').on(table.storeId, table.productId),
+    check('price_offers_step', isOneOf(table.step, ['opening', 'final'])),
+    check('price_offers_nonnegative_price', sql`${table.offeredPricePoisha} >= 0`),
+  ],
+);
+
 // An order always points at a variant; a product with no options has one default variant.
 // Available = on_hand - reserved. Changed only by ProductsService.moveStock with a guarded update.
 export const productVariants = pgTable(

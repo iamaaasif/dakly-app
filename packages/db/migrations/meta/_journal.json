@@ -761,8 +761,15 @@
     {
       "idx": 108,
       "version": "7",
-      "when": 1795711006079,
-      "tag": "0108_product_version",
+      "when": 1795680617070,
+      "tag": "0108_price_offers",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1795712678249,
+      "tag": "0109_product_version",
       "breakpoints": true
     }
   ]

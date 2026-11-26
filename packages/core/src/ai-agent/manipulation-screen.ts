@@ -1,4 +1,7 @@
 import type { handoverReasons } from '@dakly/contracts/chats';
+import { toAsciiDigits } from '@dakly/contracts/digits';
+import { takaInput } from '@dakly/contracts/products';
+import { amountPatterns } from '@dakly/contracts/reply-wording';
 
 import type { ConversationEntry } from './chat-memory';
 
@@ -25,9 +28,9 @@ const manipulationPatterns: RegExp[] = [
   /দাম.{0,10}(০|শূন্য|ফ্রি|ফ্রী).{0,10}(কর|করে)/u,
 ];
 
-// A customer asking for a lower price is a request only a person may grant.
+// The discount screen also covers coupons, free items and delivery.
 const discountPatterns: RegExp[] = [
-  /\b(discount|bargain|last price|final price|lowest price|best price|coupon|promo code|cashback)\b/u,
+  /\b(discount|bargain|lower price|last price|final price|lowest price|best price|coupon|promo code|cashback)\b/u,
   /\b\d{1,3}\s*%\s*(off|discount)\b|\b(half|50) ?(price|off)\b|\bfor free\b|\bfree of charge\b/u,
   /\b(chhar|chhaar|dam kom|dam ektu kom|kom koren|kom korun|komer moddhe|kome den|kome dite|price kom|dam komao|free te|freete)\b/u,
   /\bkom (hobe|hoy|rakhen|rakha|korben|korte|den|dile)\b/u,
@@ -35,8 +38,7 @@ const discountPatterns: RegExp[] = [
 ];
 
 export type DiscountScreen = {
-  // On, every discount ask goes to a person. Off, the model holds the price once and a repeat ask
-  // goes to a person.
+  // On, every discount ask goes to a person. Off, the shop can use its saved product offer.
   handOverDiscounts: boolean;
   // Messages earlier in the same chat, before this burst, oldest first.
   earlier: readonly ConversationEntry[];
@@ -56,11 +58,10 @@ export function screenCustomerTexts(
 ): Reason | null {
   const text = normalize(texts.join('\n'));
   if (manipulationPatterns.some((pattern) => pattern.test(text))) return 'other';
-  const latest = normalize(texts.at(-1) ?? '');
-  if (!asksForDiscount(latest) || discountDeclinedPattern.test(latest)) return null;
+  if (!isDiscountRequest(texts.at(-1))) return null;
   if (discounts.handOverDiscounts) return 'discount';
   const firstAsk = discounts.earlier.findIndex(
-    ({ from, text }) => from === 'customer' && asksForDiscount(normalize(text)),
+    ({ from, text }) => from === 'customer' && isDiscountRequest(text),
   );
   if (firstAsk === -1) return null;
   // A repeat ask goes to a person only once the shop has refused after the first ask.
@@ -71,6 +72,47 @@ export function screenCustomerTexts(
 }
 
 const asksForDiscount = (text: string) => discountPatterns.some((pattern) => pattern.test(text));
+
+export function isDiscountRequest(text: string | undefined): boolean {
+  const normalized = normalize(text ?? '');
+  return (
+    !discountDeclinedPattern.test(normalized) &&
+    (asksForDiscount(normalized) || isCounteroffer(normalized))
+  );
+}
+
+const deliveryWords =
+  /\b(?:deliver|delivery|shipping|ship|courier|postage)\b|ডেলিভারি|ডেলিভারী|কুরিয়ার|কুরিয়ার/u;
+
+export function productDiscountRequest(text: string): string | undefined {
+  const normalized = normalize(text);
+  if (!deliveryWords.test(normalized))
+    return isDiscountRequest(normalized) ? normalized : undefined;
+  return normalized
+    .split(/\s+(?:and|with|plus|আর|এবং)\s+|[,;?!]\s+/u)
+    .find((part) => !deliveryWords.test(part) && isDiscountRequest(part));
+}
+
+const counterofferWords =
+  /\b(?:can you do|could you do|can i pay|would you take|would you accept|taka e dite|takay hobe)\b|টাকায় হবে|টাকায় হবে/u;
+const isCounteroffer = (text: string) =>
+  counterofferWords.test(text) && requestedDiscountPoisha(text) !== undefined;
+
+export function quotedPricesPoisha(text: string, patterns = amountPatterns) {
+  const digits = toAsciiDigits(normalize(text));
+  return new Set(
+    patterns.flatMap((pattern) =>
+      [...digits.matchAll(pattern)].map(
+        ([, value]) => takaInput.safeParse(value?.replaceAll(',', '')).data,
+      ),
+    ),
+  );
+}
+
+export function requestedDiscountPoisha(text: string): number | undefined {
+  const amounts = quotedPricesPoisha(text);
+  return amounts.size === 1 ? [...amounts][0] : undefined;
+}
 
 // Zero-width characters and spaced-out letters are the usual ways to slip a phrase past a filter.
 function normalize(text: string) {

@@ -9,28 +9,30 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 export class ProductOrderVariantsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async lockProduct(storeId: string, productId: string) {
-    const [product] = await this.database.forStore(storeId, (tx) =>
+  lockProducts(storeId: string, productIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
       tx
         .select({
+          id: products.id,
           version: products.version,
-          status: products.status,
           pricePoisha: products.pricePoisha,
+          status: products.status,
+          isVisibleInChats: products.isVisibleInChats,
           negotiationEnabled: products.negotiationEnabled,
           negotiationOpeningPoisha: products.negotiationOpeningPoisha,
           negotiationFloorPoisha: products.negotiationFloorPoisha,
         })
         .from(products)
-        .where(and(eq(products.storeId, storeId), eq(products.id, productId)))
+        .where(and(eq(products.storeId, storeId), inArray(products.id, productIds)))
+        .orderBy(products.id)
         .for('no key update'),
     );
-    return product;
   }
 
   lockArchiveVariants(storeId: string, productId: string) {
     return this.database.forStore(storeId, async (tx) => {
       // Product edits already lock the product before changing its variants.
-      const product = await this.lockProduct(storeId, productId);
+      const [product] = await this.lockProducts(storeId, [productId]);
       if (!product) return null;
       if (product.status === 'archived')
         return { version: product.version, status: product.status, variantIds: [] };

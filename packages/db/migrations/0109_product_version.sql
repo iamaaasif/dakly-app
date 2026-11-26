@@ -1,5 +1,4 @@
-ALTER TABLE "products" ADD COLUMN "version" integer DEFAULT 1 NOT NULL;
---> statement-breakpoint
+ALTER TABLE "products" ADD COLUMN "version" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
 CREATE FUNCTION bump_product_version() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
