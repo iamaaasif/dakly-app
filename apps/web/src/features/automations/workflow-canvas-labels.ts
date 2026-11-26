@@ -4,6 +4,7 @@ import { formatMoney } from '@dakly/contracts/money';
 
 import { channelLabels } from './automation-labels';
 import { delayUnit, minutesPerUnit } from './workflow-library';
+import { pluralize } from '@/lib/pluralize';
 
 type Condition = AutomationGraph['workflowFilters'][number];
 type ExitCondition = NonNullable<AutomationGraph['goal']>;
@@ -19,13 +20,9 @@ function words(value: string) {
   return value.replaceAll('_', ' ');
 }
 
-function plural(count: number, unit: string) {
-  return `${count} ${unit}${count === 1 ? '' : 's'}`;
-}
-
 function durationLabel(minutes: number) {
   const unit = delayUnit(minutes);
-  return plural(minutes / minutesPerUnit[unit], unit.slice(0, -1));
+  return pluralize(minutes / minutesPerUnit[unit], unit.slice(0, -1));
 }
 
 // The second part is the amount, which the card shows in bold.
@@ -57,7 +54,7 @@ export function actionDetail(action: ActionStep) {
   if (action.action === 'create_task') return action.title;
   if (action.action === 'notify_team') return action.text;
   if (action.action !== 'give_coupon') return undefined;
-  return `${discountLabel(action.discount)}, valid ${plural(action.validDays, 'day')}`;
+  return `${discountLabel(action.discount)}, valid ${pluralize(action.validDays, 'day')}`;
 }
 
 function discountLabel(discount: Extract<ActionStep, { action: 'give_coupon' }>['discount']) {
@@ -114,11 +111,11 @@ const filterLabels: FilterLabels = {
   lifecycle_stage: (filter) => `Stage: ${words(filter.stage)}`,
   order_total: (filter) => amountFilter('Order total', filter),
   cart_total: (filter) => amountFilter('Cart total', filter),
-  product: (filter) => plural(filter.productIds.length, 'product'),
+  product: (filter) => pluralize(filter.productIds.length, 'product'),
   payment_status: (filter) => `Payment: ${filter.statuses.map(words).join(', ')}`,
-  delivery_district: (filter) => plural(filter.bdAreaIds.length, 'delivery area'),
+  delivery_district: (filter) => pluralize(filter.bdAreaIds.length, 'delivery area'),
   first_order: () => 'First order only',
-  days: (filter) => plural(filter.days, 'day'),
+  days: (filter) => pluralize(filter.days, 'day'),
 };
 
 function triggerFilterLabel(filter: TriggerFilter) {
@@ -128,7 +125,7 @@ function triggerFilterLabel(filter: TriggerFilter) {
 function frequencyLabel(reEntry: AutomationGraph['reEntry']) {
   if (reEntry.rule === 'once') return 'Once ever';
   if (reEntry.rule === 'every_time') return 'Every time';
-  return `Once every ${plural(reEntry.days, 'day')}`;
+  return `Once every ${pluralize(reEntry.days, 'day')}`;
 }
 
 // Marketing sends need consent; order updates go out without it (CAMP-R2).

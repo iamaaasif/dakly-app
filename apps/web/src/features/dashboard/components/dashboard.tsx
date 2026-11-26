@@ -6,7 +6,7 @@ import type { DashboardQuery, DashboardResponse } from '@dakly/contracts/dashboa
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useDashboard } from '../api/dashboard';
-import { DashboardActions } from './dashboard-actions';
+import { DashboardActions, type DashboardSupportLink } from './dashboard-actions';
 import { DashboardOverview, type DashboardActivity } from './dashboard-overview';
 import { formatCalendarDate, localHour } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
@@ -14,10 +14,12 @@ import { useSessionContext } from '@/lib/session-context';
 export function Dashboard({
   period,
   setupCard,
-  activity = {},
+  activity,
+  support,
 }: DashboardQuery & {
   setupCard: ReactNode;
-  activity?: DashboardActivity;
+  activity: DashboardActivity;
+  support: DashboardSupportLink;
 }) {
   const { data: session } = useSessionContext();
   const store = session?.currentStore;
@@ -44,6 +46,7 @@ export function Dashboard({
           activity={activity}
           store={store}
           stoppedBuying={data?.lifecycle?.stopped_buying}
+          support={support}
         />
       </div>
     </main>

@@ -50,6 +50,16 @@ export function webAuthConfig() {
   };
 }
 
+const supportWhatsapp = z.string().regex(/^8801\d{9}$/, 'WEB_SUPPORT_WHATSAPP takes 8801XXXXXXXXX');
+// The number shops use to reach Dakly support; the default is the live support line.
+export function webSupportWhatsapp() {
+  const digits = supportWhatsapp.parse(process.env.WEB_SUPPORT_WHATSAPP || '8801916353441');
+  return {
+    phone: `+880 ${digits.slice(3, 5)} ${digits.slice(5, 9)} ${digits.slice(9)}`,
+    url: `https://wa.me/${digits}`,
+  };
+}
+
 export function webSignupCodeChannel() {
   return signUpCodeChannelSchema.parse(process.env.SIGNUP_CODE_CHANNEL);
 }

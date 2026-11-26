@@ -1,29 +1,31 @@
 import { Check, Megaphone, MessageSquare, ShoppingBag, Sparkles, Truck, Users } from 'lucide-react';
 import Link from 'next/link';
 
-import { formatCount } from '@dakly/contracts/money';
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { cn } from '@dakly/ui/cn';
 
 import type { DashboardActivity } from './dashboard-overview';
+import { pluralize } from '@/lib/pluralize';
 
 type Store = NonNullable<SessionContext['currentStore']>;
-type ActionsProps = { activity: DashboardActivity; store: Store; stoppedBuying?: number };
+export type DashboardSupportLink = { phone: string; url: string };
+type ActionsProps = {
+  activity: DashboardActivity;
+  store: Store;
+  stoppedBuying?: number;
+  support: DashboardSupportLink;
+};
 
-const panel = 'rounded-dashboard-card border border-border bg-surface shadow-xs';
+const panel = 'rounded-lg border border-border bg-surface shadow-xs';
 const actionLink =
   'inline-flex min-h-10 shrink-0 items-center justify-center rounded-control px-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
-
-function plural(count: number, noun: string) {
-  return `${formatCount(count)} ${noun}${count === 1 ? '' : 's'}`;
-}
 
 function dashboardTaskList({ activity, store, stoppedBuying = 0 }: ActionsProps) {
   const { chatsWaiting, ordersToConfirm, ordersToPack } = activity;
   return [
     store.canEditChats && chatsWaiting
       ? {
-          title: `Reply to ${plural(chatsWaiting, 'customer')}`,
+          title: `Reply to ${pluralize(chatsWaiting, 'customer')}`,
           description: 'Waiting in Chats',
           label: 'Open chats',
           href: '/chats?tab=needs-you',
@@ -33,7 +35,7 @@ function dashboardTaskList({ activity, store, stoppedBuying = 0 }: ActionsProps)
       : null,
     store.canEditOrders && ordersToConfirm
       ? {
-          title: `Confirm ${plural(ordersToConfirm, 'order')}`,
+          title: `Confirm ${pluralize(ordersToConfirm, 'order')}`,
           description: 'Orders waiting for confirmation',
           label: 'Review',
           href: '/orders?stage=to_confirm',
@@ -43,7 +45,7 @@ function dashboardTaskList({ activity, store, stoppedBuying = 0 }: ActionsProps)
       : null,
     store.canEditOrders && ordersToPack
       ? {
-          title: `Pack ${plural(ordersToPack, 'order')}`,
+          title: `Pack ${pluralize(ordersToPack, 'order')}`,
           description: 'Confirmed and ready to pack',
           label: 'View',
           href: '/orders?stage=to_pack',
@@ -53,7 +55,7 @@ function dashboardTaskList({ activity, store, stoppedBuying = 0 }: ActionsProps)
       : null,
     store.canEditCampaigns && stoppedBuying > 0
       ? {
-          title: `Win back ${plural(stoppedBuying, 'customer')}`,
+          title: `Win back ${pluralize(stoppedBuying, 'customer')}`,
           description: 'Choose an audience for your offer',
           label: 'Draft offer',
           href: '/campaigns/new',
@@ -80,12 +82,12 @@ function DashboardTasks(props: ActionsProps) {
     <section aria-labelledby="dashboard-tasks" className={cn(panel, '@container/dashboard-tasks')}>
       <div className="flex items-center justify-between gap-2 px-4 pt-5 pb-3 sm:px-5.5">
         <div>
-          <h2 id="dashboard-tasks" className="text-dashboard-section font-bold tracking-tight">
+          <h2 id="dashboard-tasks" className="text-md font-bold tracking-tight">
             Your to-do list
           </h2>
           <p className="text-sm text-text-muted">Orders and customers that need your attention.</p>
         </div>
-        <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-1 text-dashboard-label font-semibold">
+        <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-1 text-xs font-semibold">
           {tasks.length} to do
         </span>
       </div>
@@ -172,7 +174,7 @@ function QuickActions({ store }: { store: Store }) {
       aria-labelledby="dashboard-actions"
       className={cn(panel, 'space-y-3.5 px-4 py-5 sm:px-5.5')}
     >
-      <h2 id="dashboard-actions" className="text-dashboard-section font-bold tracking-tight">
+      <h2 id="dashboard-actions" className="text-md font-bold tracking-tight">
         Quick actions
       </h2>
       <div className="grid grid-cols-2 gap-2.5">
@@ -193,18 +195,18 @@ function QuickActions({ store }: { store: Store }) {
   );
 }
 
-function DashboardSupport() {
+function DashboardSupport({ support }: { support: DashboardSupportLink }) {
   return (
-    <div className="flex flex-wrap items-center gap-3.5 rounded-dashboard-tile bg-surface-muted px-4.5 py-4">
+    <div className="flex flex-wrap items-center gap-3.5 rounded-lg bg-surface-muted px-4.5 py-4">
       <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-surface text-success">
         <MessageSquare size={18} aria-hidden="true" />
       </span>
       <div className="min-w-32 flex-1">
         <p className="font-semibold">Need a hand?</p>
-        <p className="text-dashboard-label text-text-muted">WhatsApp us at +880 9610-325591</p>
+        <p className="text-xs text-text-muted">WhatsApp us at {support.phone}</p>
       </div>
       <a
-        href="https://wa.me/8809610325591"
+        href={support.url}
         target="_blank"
         rel="noopener noreferrer"
         aria-label="Chat with Dakly support on WhatsApp"
@@ -222,7 +224,7 @@ export function DashboardActions(props: ActionsProps) {
       <DashboardTasks {...props} />
       <div className="grid min-w-0 gap-6">
         <QuickActions store={props.store} />
-        <DashboardSupport />
+        <DashboardSupport support={props.support} />
       </div>
     </div>
   );

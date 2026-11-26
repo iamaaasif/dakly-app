@@ -51,10 +51,7 @@ function SalesChange({
   const comparison = `vs previous ${period} days`;
   return (
     <span
-      className={cn(
-        current > last && 'text-dashboard-positive',
-        current < last && 'text-dashboard-attention',
-      )}
+      className={cn(current > last && 'text-success-soft', current < last && 'text-warning-soft')}
     >
       {reportChangeText(current, last)}{' '}
       <span className="sr-only @min-[550px]/dashboard:not-sr-only">{comparison}</span>
@@ -74,7 +71,7 @@ export function DashboardOverview({ data, period, activity, store }: OverviewPro
     <section
       aria-label="Shop overview"
       className={cn(
-        'relative grid items-center gap-6 overflow-hidden rounded-dashboard-hero bg-dashboard-hero p-5.5 text-on-primary @min-[920px]/dashboard:p-8',
+        'relative grid items-center gap-6 overflow-hidden rounded-lg bg-inverse p-5.5 text-on-primary @min-[920px]/dashboard:p-8',
         tiles.length > 0 && '@min-[920px]/dashboard:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]',
       )}
     >
@@ -83,8 +80,8 @@ export function DashboardOverview({ data, period, activity, store }: OverviewPro
         className="pointer-events-none absolute -top-40 -right-30 size-105 rounded-full bg-radial-[circle] from-primary/20 to-transparent to-65%"
       />
       <div className="relative flex min-w-0 flex-col items-start gap-3">
-        <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full bg-on-primary/8 px-3 text-dashboard-label font-semibold text-on-primary/85">
-          <span aria-hidden="true" className="size-1.75 rounded-full bg-dashboard-positive" />
+        <span className="inline-flex min-h-7 items-center gap-1.5 rounded-full bg-on-primary/8 px-3 text-xs font-semibold text-on-primary/85">
+          <span aria-hidden="true" className="size-1.75 rounded-full bg-success-soft" />
           {store.canViewChats ? 'Your AI sales assistant' : 'Shop overview'}
         </span>
         <h2 className="text-lg leading-tight font-bold tracking-tight text-balance @min-[580px]/dashboard:text-xl">
@@ -99,21 +96,18 @@ export function DashboardOverview({ data, period, activity, store }: OverviewPro
   );
 }
 
-const compactPositions = [[], ['single'], ['left', 'right'], ['lead', 'left', 'right']] as const;
-
 function OverviewTiles({ tiles }: { tiles: OverviewTileDetails[] }) {
   if (!tiles.length) return null;
-  const positions = compactPositions[tiles.length];
   return (
     <div
       className={cn(
-        'relative grid grid-cols-2 grid-rows-[auto_auto_1fr] overflow-hidden rounded-dashboard-tile border border-on-primary/10 bg-on-primary/5',
-        '@min-[580px]/dashboard:auto-cols-fr @min-[580px]/dashboard:grid-flow-col @min-[580px]/dashboard:grid-cols-none @min-[580px]/dashboard:gap-x-2.5 @min-[580px]/dashboard:overflow-visible @min-[580px]/dashboard:border-0 @min-[580px]/dashboard:bg-transparent',
-        tiles.length === 3 && '@max-[580px]/dashboard:grid-rows-[auto_auto_auto_1fr]',
+        'relative grid grid-cols-2 gap-2.5 @min-[580px]/dashboard:auto-cols-fr @min-[580px]/dashboard:grid-flow-col @min-[580px]/dashboard:grid-cols-none',
+        // With an odd number of tiles the first one takes the full width on a narrow screen.
+        tiles.length % 2 === 1 && '*:first:col-span-2 @min-[580px]/dashboard:*:first:col-span-1',
       )}
     >
-      {tiles.map((tile, index) => (
-        <OverviewTile key={tile.title} {...tile} compactPosition={positions?.[index]} />
+      {tiles.map((tile) => (
+        <OverviewTile key={tile.title} {...tile} />
       ))}
     </div>
   );
@@ -177,21 +171,11 @@ function waitingLabel(value?: number) {
   return value > 0 ? 'Needs your attention' : 'None need you';
 }
 
-function OverviewTile({
-  title,
-  value,
-  detail,
-  href,
-  count,
-  compactPosition,
-}: OverviewTileDetails & { compactPosition?: 'lead' | 'left' | 'right' | 'single' }) {
-  const lead = compactPosition === 'lead';
+function OverviewTile({ title, value, detail, href, count }: OverviewTileDetails) {
   const content = (
     <>
       <div className="flex flex-wrap items-center justify-between gap-1">
-        <span className="text-dashboard-label leading-tight font-semibold text-on-primary/70">
-          {title}
-        </span>
+        <span className="text-xs leading-tight font-semibold text-on-primary/70">{title}</span>
         {count ? (
           <span
             aria-hidden="true"
@@ -203,25 +187,15 @@ function OverviewTile({
       </div>
       <span
         title={value}
-        className={cn(
-          'text-lg leading-none font-bold tracking-tight break-words tabular-nums @min-[580px]/dashboard:text-dashboard-value',
-          lead &&
-            '@max-[580px]/dashboard:col-start-2 @max-[580px]/dashboard:row-span-2 @max-[580px]/dashboard:row-start-1 @max-[580px]/dashboard:text-right @max-[580px]/dashboard:text-dashboard-value',
-        )}
+        className="text-md leading-none font-bold tracking-tight break-words tabular-nums @min-[580px]/dashboard:text-lg"
       >
         {value}
       </span>
       <span className="text-xs leading-tight font-semibold text-on-primary/70">{detail}</span>
     </>
   );
-  const tileClass = cn(
-    'row-span-3 grid min-w-0 grid-rows-subgrid gap-y-2 p-3.5 text-left @min-[580px]/dashboard:rounded-dashboard-tile @min-[580px]/dashboard:border @min-[580px]/dashboard:border-on-primary/8 @min-[580px]/dashboard:bg-on-primary/5 @min-[580px]/dashboard:p-4',
-    lead &&
-      '@max-[580px]/dashboard:col-span-2 @max-[580px]/dashboard:row-span-1 @max-[580px]/dashboard:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] @max-[580px]/dashboard:grid-rows-[auto_auto] @max-[580px]/dashboard:items-center @max-[580px]/dashboard:gap-x-3 @max-[580px]/dashboard:gap-y-1 @max-[580px]/dashboard:border-b @max-[580px]/dashboard:border-on-primary/10',
-    compactPosition === 'right' &&
-      '@max-[580px]/dashboard:border-l @max-[580px]/dashboard:border-on-primary/10',
-    compactPosition === 'single' && '@max-[580px]/dashboard:col-span-2',
-  );
+  const tileClass =
+    'flex min-w-0 flex-col gap-2 rounded-lg border border-on-primary/10 bg-on-primary/5 p-3.5 text-left @min-[580px]/dashboard:p-4';
   return href ? (
     <Link
       href={href}

@@ -233,13 +233,13 @@ The dashboard is well aimed at a shop owner: money first, then who is buying, wh
 
 ![Dashboard](../design/screenshots/dashboard.webp)
 
-The Dashboard shows a greeting, sales overview, three-step setup guide, to-do list, quick actions, and a WhatsApp support link. Detailed reports are on Analytics. Open Ask Dakly from the header.
+The Dashboard shows a greeting, sales overview, three-step setup guide, to-do list, quick actions, and a WhatsApp support link. The support number comes from `WEB_SUPPORT_WHATSAPP` (default `8801916353441`), read on the server and passed down. Detailed reports are on Analytics. Open Ask Dakly from the header.
 
 ### How it works
 
 The dashboard reads `GET /dashboard`. The API accepts 7, 30 or 90 days and defaults to 30. It uses the same report functions as Analytics. The overview shows whole taka and the sales figure follows Orders access. The order and conversation queues supply the work counts. Lifecycle data supplies the win-back count when available. Available actions follow the current shop permissions. The setup guide reads `GET /setup-checklist` (ACC-13, see [01-account-and-team.md](01-account-and-team.md)).
 
-Columns follow the space inside the dashboard. When space is tight, sales takes a full row above the order and chat counts, and setup cards stack.
+Columns follow the space inside the dashboard. When space is tight, the first overview tile takes a full row when there is an odd number of tiles, and setup cards stack.
 
 Notifications
 

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Dashboard } from './dashboard';
 
+const support = { phone: '+880 19 1635 3441', url: 'https://wa.me/8801916353441' };
+
 const session = vi.hoisted(() => ({
   user: { name: 'Rina Akter' },
   currentStore: {
@@ -42,7 +44,7 @@ afterEach(cleanup);
 
 describe('Dashboard', () => {
   it('puts the shop overview and available shortcuts on the dashboard', () => {
-    render(<Dashboard period={30} setupCard={null} />);
+    render(<Dashboard period={30} setupCard={null} activity={{}} support={support} />);
     expect(screen.getByRole('heading', { name: 'Good morning, Rina' })).toBeTruthy();
     const overview = screen.getByRole('region', { name: 'Shop overview' });
     expect(within(overview).getByText('৳2,100 in sales since yesterday.')).toBeTruthy();
@@ -52,6 +54,12 @@ describe('Dashboard', () => {
     ).toBe('/orders');
     expect(within(shortcuts).queryByRole('link', { name: 'Create campaign' })).toBeNull();
     expect(within(shortcuts).queryByRole('link', { name: 'AI auto social post' })).toBeNull();
+    expect(screen.getByText('WhatsApp us at +880 19 1635 3441')).toBeTruthy();
+    expect(
+      screen
+        .getByRole('link', { name: 'Chat with Dakly support on WhatsApp' })
+        .getAttribute('href'),
+    ).toBe('https://wa.me/8801916353441');
     expect(screen.queryByRole('heading', { name: 'Reports' })).toBeNull();
     expect(screen.queryByRole('navigation', { name: 'Reporting period' })).toBeNull();
   });
@@ -62,6 +70,7 @@ describe('Dashboard', () => {
         period={30}
         setupCard={null}
         activity={{ chatsWaiting: 2, ordersToConfirm: 1, ordersToPack: 3 }}
+        support={support}
       />,
     );
     const tasks = screen.getByRole('region', { name: 'Your to-do list' });
@@ -82,6 +91,7 @@ describe('Dashboard', () => {
           period={30}
           setupCard={null}
           activity={{ chatsWaiting: 2, ordersToConfirm: 1, ordersToPack: 3 }}
+          support={support}
         />,
       );
       const tasks = screen.getByRole('region', { name: 'Your to-do list' });
