@@ -69,6 +69,16 @@ describe('negotiation golden cases', () => {
     }
   });
 
+  it('finds the fixed price for the panjabi in the bargaining case', () => {
+    expect(
+      runFixtureTool('offer_lower_price', '{"productName":"panjabi","variantWords":null}', {
+        suggestAddOns: false,
+        negotiation: null,
+        customerText: 'panjabi 1000 e diben? last price bolen',
+      }),
+    ).toEqual({ kind: 'fixed', pricesTaka: [1200] });
+  });
+
   it('refuses invalid, out-of-scope or unasked fixture offers', () => {
     const golden = cases.find(({ id }) => id === 'negotiation-opening-english')!;
     const context = {
