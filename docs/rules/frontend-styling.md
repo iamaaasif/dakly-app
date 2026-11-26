@@ -12,7 +12,7 @@ Styling is Tailwind CSS v4 with the tokens in [design/theme.md](../design/theme.
 6. Class order is fixed by `prettier-plugin-tailwindcss`. Combine conditional classes with `cn()` from `packages/ui`, never string concatenation.
 7. Variants are defined once with `cva` in the `packages/ui` component. A feature passes `variant="danger"`; it does not restyle the button.
 8. Phone first: write the base classes for 360 px, then add `md:` and `lg:`. Tables become card lists below `md`.
-9. Icons are `lucide-react` at the sizes in the theme. No emoji in the UI.
+9. Icons are `lucide-react` at the sizes in the theme. The WhatsApp, Messenger and Instagram logos, which lucide does not have, come from `components/channel-logo.tsx`. No emoji in the UI.
 10. Dark mode is not in release 1. Do not add `dark:` classes; the tokens make it possible later.
 
 Wrong:

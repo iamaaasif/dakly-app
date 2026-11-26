@@ -1,5 +1,5 @@
 'use client';
-import { ArrowLeft, Facebook, Instagram, MessageCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { type UIEvent, useEffect, useLayoutEffect, useRef } from 'react';
 
@@ -23,6 +23,7 @@ import { ConversationActions } from './conversation-actions';
 import { CustomerPanel } from './customer-panel';
 import { MessageBubble } from './message-bubble';
 import { ResponderBanner } from './responder-banner';
+import { ChannelLogo } from '@/components/channel-logo';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -115,17 +116,20 @@ function ConversationTopBar({
   );
 }
 
+const channelLogoColours = {
+  messenger: 'text-facebook',
+  instagram: 'text-instagram',
+  whatsapp: 'text-whatsapp',
+} as const;
+
 function ConversationHeader({ conversation }: { conversation: ConversationResponse }) {
-  const Icon = { messenger: Facebook, instagram: Instagram, whatsapp: MessageCircle }[
-    conversation.channel
-  ];
   const window = replyWindow(conversation);
   const name = contactDisplayName(conversation);
   return (
     <div className="flex min-w-0 flex-1 basis-48 items-center gap-2.5">
       <span
         aria-hidden="true"
-        className="grid size-10 shrink-0 place-items-center rounded-full border border-border bg-surface-muted text-xs font-semibold text-text-muted"
+        className="grid size-10 shrink-0 place-items-center rounded-full bg-neutral-soft text-xs font-semibold text-text-secondary"
       >
         {initialsOf(name)}
       </span>
@@ -139,7 +143,11 @@ function ConversationHeader({ conversation }: { conversation: ConversationRespon
           )}
         </div>
         <p className="flex items-center gap-1 text-xs text-text-muted">
-          <Icon aria-hidden="true" size={14} />
+          <ChannelLogo
+            channel={conversation.channel}
+            size={14}
+            className={channelLogoColours[conversation.channel]}
+          />
           {channelNames[conversation.channel]}
         </p>
       </div>
