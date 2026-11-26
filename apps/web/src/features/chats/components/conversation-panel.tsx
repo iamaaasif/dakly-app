@@ -1,7 +1,7 @@
 'use client';
-import { ArrowLeft, Facebook, Instagram, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Facebook, Instagram } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { type UIEvent, useEffect, useLayoutEffect, useRef } from 'react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Badge } from '@dakly/ui/badge';
@@ -21,8 +21,10 @@ import { replyWindow } from '../reply-window';
 import { ChatComposer } from './chat-composer';
 import { ConversationActions } from './conversation-actions';
 import { CustomerPanel } from './customer-panel';
+import { InboxIcon } from './inbox-icon';
 import { MessageBubble } from './message-bubble';
 import { ResponderBanner } from './responder-banner';
+import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
 
 const channelNames: Record<ConversationResponse['channel'], string> = {
@@ -47,7 +49,7 @@ export function ConversationPanel({ query, id }: { query: ChatScreenQuery; id: s
       <section
         aria-label="Conversation"
         className={cn(
-          'min-h-0 min-w-0 flex-col border-l border-border',
+          'col-start-1 row-start-2 min-h-0 min-w-0 flex-col border-border bg-inbox-thread lg:col-start-2 lg:border-l',
           query.panel ? 'hidden xl:flex' : 'flex',
         )}
       >
@@ -65,7 +67,7 @@ export function ConversationPanel({ query, id }: { query: ChatScreenQuery; id: s
             {conversation.data ? (
               <ResponderBanner conversation={conversation.data} canEdit={canEdit} query={query} />
             ) : null}
-            <MessageList query={query} id={id} messages={messages} />
+            <MessageList panel={query.panel} messages={messages} />
             {conversation.data ? <ChatComposer conversation={conversation.data} /> : null}
           </>
         )}
@@ -85,7 +87,7 @@ function ConversationTopBar({
   canEdit: boolean;
 }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3">
+    <div className="flex min-h-inbox-thread-header shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2">
       <Link
         href={chatsHref({ ...query, chat: undefined })}
         aria-label="Back to chats"
@@ -95,7 +97,7 @@ function ConversationTopBar({
       </Link>
       {conversation ? <ConversationHeader conversation={conversation} /> : null}
       {conversation && canEdit ? (
-        <div className="ml-auto">
+        <div className="order-last ml-auto min-w-0 basis-full xl:order-none xl:basis-auto">
           <ConversationActions conversation={conversation} />
         </div>
       ) : null}
@@ -103,7 +105,7 @@ function ConversationTopBar({
         href={chatsHref({ ...query, panel: 'customer' })}
         className={buttonVariants({
           variant: 'secondary',
-          className: 'shrink-0 xl:hidden',
+          className: 'min-h-9 shrink-0 border-border-strong px-2.5 py-1 text-sm xl:hidden',
         })}
       >
         Customer
@@ -113,36 +115,47 @@ function ConversationTopBar({
 }
 
 function ConversationHeader({ conversation }: { conversation: ConversationResponse }) {
-  const Icon = { messenger: Facebook, instagram: Instagram, whatsapp: MessageCircle }[
-    conversation.channel
-  ];
+  const Icon = conversation.channel === 'messenger' ? Facebook : Instagram;
   const window = replyWindow(conversation);
+  const name = contactDisplayName(conversation);
   return (
-    <div className="min-w-0">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="truncate text-lg font-bold">{contactDisplayName(conversation)}</h2>
-        {conversation.channel !== 'whatsapp' ? (
-          <Badge variant={window.state === 'open' ? 'warning' : 'neutral'}>
-            {window.state === 'open' ? window.label : 'Window over'}
-          </Badge>
-        ) : null}
+    <div className="flex min-w-0 flex-1 items-center gap-2.5">
+      <span
+        aria-hidden="true"
+        className="grid size-10 shrink-0 place-items-center rounded-full border border-inbox-avatar-border bg-inbox-avatar text-xs font-semibold text-inbox-avatar-text"
+      >
+        {initialsOf(name)}
+      </span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2">
+          <h2 className="truncate text-base font-semibold">{name}</h2>
+          {conversation.channel === 'whatsapp' ? null : (
+            <Badge variant={window.state === 'open' ? 'warning' : 'neutral'}>
+              {window.state === 'open' ? window.label : 'Window over'}
+            </Badge>
+          )}
+        </div>
+        <p className="flex items-center gap-1 text-inbox-detail text-text-muted">
+          {conversation.channel === 'whatsapp' ? (
+            <InboxIcon name="whatsapp" />
+          ) : (
+            <Icon aria-hidden="true" size={14} />
+          )}
+          {channelNames[conversation.channel]}
+        </p>
       </div>
-      <p className="flex items-center gap-1 text-text-muted">
-        <Icon aria-hidden="true" size={14} />
-        {channelNames[conversation.channel]}
-      </p>
     </div>
   );
 }
 
 function MessageList({
+  panel,
   messages,
 }: {
-  query: ChatScreenQuery;
-  id: string;
+  panel: ChatScreenQuery['panel'];
   messages: ReturnType<typeof useConversationMessages>;
 }) {
-  if (messages.error)
+  if (messages.isError && !messages.data)
     return (
       <div className="flex-1 p-3">
         <QueryError
@@ -152,7 +165,7 @@ function MessageList({
         />
       </div>
     );
-  if (messages.isPending)
+  if (!messages.data)
     return (
       <div aria-busy="true" className="flex-1 space-y-3 p-3">
         <p className="sr-only">Loading messages</p>
@@ -161,29 +174,85 @@ function MessageList({
         <Skeleton className="h-10 w-3/5" />
       </div>
     );
-  // The API sends the newest first; the thread reads oldest first.
-  const items = messages.data.pages.flatMap((page) => page.items).toReversed();
+
+  return <MessageHistory panel={panel} messages={messages} />;
+}
+
+function MessageHistory({
+  panel,
+  messages,
+}: {
+  panel: ChatScreenQuery['panel'];
+  messages: ReturnType<typeof useConversationMessages>;
+}) {
+  const { viewport, onScroll, loadEarlier } = useMessageScroll(messages, panel);
+  const items = messages.data?.pages.flatMap((page) => page.items).toReversed() ?? [];
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col justify-end overflow-y-auto p-3">
+    <div
+      ref={viewport}
+      role="region"
+      aria-label="Message history"
+      tabIndex={0}
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-4 [overflow-anchor:none] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus"
+      onScroll={onScroll}
+    >
       {messages.hasNextPage ? (
         <Button
           variant="secondary"
-          className="mb-3 self-center"
+          className="mb-3 shrink-0 self-center"
           disabled={messages.isFetchingNextPage}
-          onClick={() => void messages.fetchNextPage()}
+          onClick={loadEarlier}
         >
-          Show earlier messages
+          {messages.isFetchNextPageError ? 'Retry earlier messages' : 'Show earlier messages'}
         </Button>
       ) : null}
       {items.length ? (
-        <ul className="space-y-3">
+        <ul className="mt-auto space-y-4">
           {items.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}
         </ul>
       ) : (
-        <p className="text-center text-text-muted">No messages yet.</p>
+        <p className="mt-auto text-center text-text-muted">No messages yet.</p>
       )}
     </div>
   );
+}
+
+function useMessageScroll(
+  messages: ReturnType<typeof useConversationMessages>,
+  panel: ChatScreenQuery['panel'],
+) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  const anchor = useRef<{ top: number; height: number; pageCount: number } | null>(null);
+  const pageCount = messages.data?.pages.length ?? 0;
+
+  useLayoutEffect(() => {
+    const view = viewport.current;
+    if (!view || !view.clientHeight) return;
+    const previous = anchor.current;
+    if (previous && pageCount > previous.pageCount) {
+      view.scrollTop = previous.top + view.scrollHeight - previous.height;
+      anchor.current = null;
+    } else if (!previous && pinned.current) {
+      view.scrollTop = view.scrollHeight;
+    }
+  }, [messages.data, pageCount, panel]);
+
+  function onScroll(event: UIEvent<HTMLDivElement>) {
+    const { scrollHeight, clientHeight, scrollTop } = event.currentTarget;
+    pinned.current = scrollHeight - clientHeight - scrollTop < 48;
+  }
+
+  function loadEarlier() {
+    const view = viewport.current;
+    if (view) anchor.current = { top: view.scrollTop, height: view.scrollHeight, pageCount };
+    void messages.fetchNextPage().then((result) => {
+      if (result.isError) anchor.current = null;
+    });
+  }
+
+  return { viewport, onScroll, loadEarlier };
 }

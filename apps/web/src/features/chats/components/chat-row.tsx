@@ -8,6 +8,7 @@ import { cn } from '@dakly/ui/cn';
 
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { contactDisplayName } from '../contact-name';
+import { InboxIcon } from './inbox-icon';
 import { formatDate, formatTime } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
@@ -25,7 +26,8 @@ type ChatRowProps = {
   selection?: { selected: boolean; onToggle: () => void };
 };
 
-const rowClasses = 'flex gap-3 border-l-4 border-transparent p-3 hover:bg-surface-muted';
+const rowClasses =
+  'flex gap-3 border-l-2 border-transparent px-3 py-2.5 min-[1800px]:min-h-[95px] hover:bg-inbox-thread';
 
 export function ChatRow({ conversation, query, selection }: ChatRowProps) {
   const name = contactDisplayName(conversation);
@@ -50,7 +52,7 @@ export function ChatRow({ conversation, query, selection }: ChatRowProps) {
         aria-current={query.chat === conversation.id ? 'true' : undefined}
         className={cn(
           rowClasses,
-          'aria-[current=true]:border-action aria-[current=true]:bg-primary-soft',
+          'aria-[current=true]:border-primary aria-[current=true]:bg-inbox-selected',
         )}
       >
         {content}
@@ -75,14 +77,16 @@ function ChatRowContent({
           {conversation.lastMessageAt ? (
             <time
               dateTime={conversation.lastMessageAt}
-              className="shrink-0 text-sm text-text-muted"
+              className="shrink-0 text-inbox-detail text-text-muted"
             >
               <LastActivity value={conversation.lastMessageAt} />
             </time>
           ) : null}
         </div>
         <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-text-muted">{conversation.lastMessagePreview ?? ''}</p>
+          <p className="truncate text-sm text-text-muted">
+            {conversation.lastMessagePreview ?? ''}
+          </p>
           <UnreadCount count={conversation.unreadCount} />
         </div>
         <ChatRowBadges conversation={conversation} />
@@ -95,15 +99,25 @@ function Avatar({ name, channel }: { name: string; channel: ConversationResponse
   const { icon: Icon, label } = channelIcons[channel];
   return (
     <div className="relative shrink-0">
-      <span className="flex size-10 items-center justify-center rounded-full bg-surface-muted text-sm font-semibold text-text-muted">
+      <span className="flex size-10 items-center justify-center rounded-full border border-inbox-avatar-border bg-inbox-avatar text-xs font-semibold text-inbox-avatar-text">
         {initialsOf(name)}
       </span>
-      <Icon
-        aria-label={label}
-        role="img"
-        size={14}
-        className="absolute -right-1 -bottom-1 rounded-full bg-surface text-info"
-      />
+      {channel === 'whatsapp' ? (
+        <span
+          aria-label={label}
+          role="img"
+          className="absolute -right-1 -bottom-1 rounded-full bg-surface"
+        >
+          <InboxIcon name="whatsapp" />
+        </span>
+      ) : (
+        <Icon
+          aria-label={label}
+          role="img"
+          size={14}
+          className="absolute -right-1 -bottom-1 rounded-full bg-surface text-info"
+        />
+      )}
     </div>
   );
 }
@@ -111,7 +125,7 @@ function Avatar({ name, channel }: { name: string; channel: ConversationResponse
 function UnreadCount({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-on-primary">
+    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-inverse text-xs font-semibold text-on-primary">
       <span className="sr-only">Unread: </span>
       {count}
     </span>
@@ -121,11 +135,11 @@ function UnreadCount({ count }: { count: number }) {
 function ChatRowBadges({ conversation }: { conversation: ConversationResponse }) {
   const { data: session } = useSessionContext();
   return (
-    <div className="mt-1 flex gap-1">
-      <Badge variant={conversation.responder === 'ai' ? 'ai' : 'neutral'}>
+    <div className="mt-1 flex flex-wrap gap-1">
+      <Badge className={conversation.responder === 'ai' ? 'bg-inverse text-on-primary' : undefined}>
         {responderLabel(conversation, session?.user.id)}
       </Badge>
-      {conversation.status === 'needs_you' ? <Badge variant="warning">Needs you</Badge> : null}
+      {conversation.status === 'needs_you' ? <Badge variant="danger">Needs you</Badge> : null}
     </div>
   );
 }

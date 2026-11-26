@@ -12,6 +12,7 @@ import {
 } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 
+import { InboxIcon } from './inbox-icon';
 import { MakeOrderFields } from './make-order-fields';
 import { useCreateOrder } from '@/lib/order-entry/create-order';
 
@@ -62,7 +63,7 @@ export function MakeOrderForm({ conversation, contactPhone }: MakeOrderFormProps
     <FormProvider {...form}>
       <form
         aria-label="Make an order"
-        className="space-y-3 border-t border-border p-3"
+        className="space-y-3 border-t border-border p-4"
         onSubmit={(event) => {
           if (!create.mustRetry) return void form.handleSubmit(save)(event);
           event.preventDefault();
@@ -111,8 +112,9 @@ function MakeOrderFooter({ placed, create, busy, onConfirm }: MakeOrderFooterPro
             : create.error.message}
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
-        <Button type="submit" loading={create.isPending}>
+      <div className="flex flex-col gap-2">
+        <Button type="submit" loading={create.isPending} className="w-full rounded-control">
+          <InboxIcon name="order" />
           {create.mustRetry ? 'Retry save' : 'Create order'}
         </Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={onConfirm}>

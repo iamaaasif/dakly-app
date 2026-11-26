@@ -6,39 +6,39 @@ import { cn } from '@dakly/ui/cn';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 
-import { useConversationCounts, useConversations } from '../api/conversations';
+import { useConversations } from '../api/conversations';
 import { conversationFilters, type ChatScreenQuery } from '../chat-filters';
 import { ChatBulkBar } from './chat-bulk-bar';
-import { ChatChannelFilter } from './chat-channel-filter';
 import { ChatRow } from './chat-row';
 import { ChatSearchBar } from './chat-search-bar';
-import { ChatTabs } from './chat-tabs';
 import { useSessionContext } from '@/lib/session-context';
 
 export function ChatList({ query }: { query: ChatScreenQuery }) {
-  const counts = useConversationCounts();
   const canEdit = Boolean(useSessionContext().data?.currentStore?.canEditChats);
   // Picking chats is screen state: it is not worth a link and it ends when the person leaves.
   const [selected, setSelected] = useState<string[] | null>(null);
   return (
     <section
       aria-label="Chat list"
-      className={cn('min-h-0 min-w-0 flex-col', query.chat ? 'hidden lg:flex' : 'flex')}
+      className={cn(
+        'col-start-1 row-start-2 min-h-0 min-w-0 flex-col',
+        query.chat ? 'hidden lg:flex' : 'flex',
+      )}
     >
-      <ChatTabs query={query} counts={counts.data} />
-      <ChatSearchBar query={query} />
-      {selected ? <ChatBulkBar selected={selected} onDone={() => setSelected(null)} /> : null}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border p-3">
-        <div className="min-w-0 flex-1">
-          <ChatChannelFilter query={query} />
-        </div>
+      <div className="flex min-h-inbox-search-row shrink-0 items-center gap-2 border-b border-border px-3.5 py-3">
+        <ChatSearchBar query={query} />
         {canEdit && !selected ? (
-          <Button variant="secondary" onClick={() => setSelected([])}>
+          <Button
+            variant="secondary"
+            className="min-h-9 shrink-0 border-border-strong px-2.5 py-1 text-sm"
+            onClick={() => setSelected([])}
+          >
             Select
           </Button>
         ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {selected ? <ChatBulkBar selected={selected} onDone={() => setSelected(null)} /> : null}
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-color:var(--color-inbox-scroll-thumb)_var(--color-inbox-scroll-track)] [scrollbar-width:thin]">
         <ChatRows query={query} selected={selected} onSelect={setSelected} />
       </div>
     </section>

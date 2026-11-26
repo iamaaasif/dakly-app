@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -223,6 +223,29 @@ describe('Bulk select', () => {
 });
 
 describe('Chat list', () => {
+  it('collapses and reopens the Inbox folders', async () => {
+    respond(() => ok([sadia]));
+    show();
+    const toggle = screen.getByRole('button', { name: 'Collapse inbox folders' });
+    expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+    await userEvent.click(toggle);
+    expect(
+      screen.getByRole('button', { name: 'Expand inbox folders' }).getAttribute('aria-expanded'),
+    ).toBe('false');
+    expect(screen.queryByRole('navigation', { name: 'Chat tabs' })).toBeNull();
+    const toolbar = screen.getByRole('group', { name: 'Inbox controls' });
+    expect(within(toolbar).getByRole('heading', { name: 'Inbox' })).toBeTruthy();
+    expect(document.activeElement).toBe(
+      within(toolbar).getByRole('button', { name: 'Expand inbox folders' }),
+    );
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Expand inbox folders' }));
+    expect(
+      screen.getByRole('button', { name: 'Collapse inbox folders' }).getAttribute('aria-expanded'),
+    ).toBe('true');
+    expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+  });
+
   it('shows each chat with its name, last message and unread count, and the tab counts', async () => {
     respond(() => ok([sadia]));
     show();
@@ -249,6 +272,7 @@ describe('Chat list', () => {
     connectionKinds = ['facebook_page', 'whatsapp'];
     respond(() => ok([]));
     show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Channels' }));
     expect(await screen.findByRole('link', { name: 'Messenger' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'WhatsApp' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Comments' })).toBeTruthy();
@@ -259,6 +283,7 @@ describe('Chat list', () => {
     connectionsForbidden = true;
     respond(() => ok([]));
     show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Channels' }));
     expect(await screen.findByRole('link', { name: 'Instagram' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'WhatsApp' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Comments' })).toBeTruthy();
@@ -272,7 +297,7 @@ describe('Chat list', () => {
     await waitFor(() =>
       expect(paths.some((path) => path.startsWith('/api/channel-connections'))).toBe(true),
     );
-    expect(screen.queryByRole('navigation', { name: 'Channel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Channels' })).toBeNull();
   });
 
   it('offers a retry when the list fails', async () => {
@@ -306,10 +331,15 @@ describe('Conversation', () => {
   const posts: { path: string; body: unknown }[] = [];
   const saved: (typeof inbound)[] = [];
 
-  function respondToThread(windowExpiresAt: string | null) {
+  function respondToThread(windowExpiresAt: string | null, failures = 0) {
     vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
       if (init?.method === 'POST') {
         posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) });
+        if (posts.length <= failures)
+          return Response.json(
+            { error: { code: 'CHAT_SEND_FAILED', message: 'Could not send reply' } },
+            { ...verified, status: 503 },
+          );
         saved.push({
           ...inbound,
           id: 'm2',
@@ -357,6 +387,51 @@ describe('Conversation', () => {
     await waitFor(() => expect(posts).toHaveLength(1));
     expect(posts[0]!.path).toBe(`/api/conversations/${chatId}/replies`);
     expect(posts[0]!.body).toMatchObject({ body: 'Ji, 1300 taka' });
+  });
+
+  it('keeps private note drafts out of replies and restores each draft when switching tabs', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText('Write a reply'), 'Thanks for your message');
+    await user.click(screen.getByRole('tab', { name: 'Internal note' }));
+    const note = screen.getByLabelText<HTMLTextAreaElement>('Write an internal note');
+    expect(note.value).toBe('');
+    await user.type(note, 'Private customer follow-up');
+    await user.click(screen.getByRole('tab', { name: 'Reply' }));
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Write a reply').value).toBe(
+      'Thanks for your message',
+    );
+    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(posts[0]?.body).toMatchObject({ body: 'Thanks for your message' }));
+    await user.click(screen.getByRole('tab', { name: 'Internal note' }));
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Write an internal note').value).toBe(
+      'Private customer follow-up',
+    );
+  });
+
+  it('restores a failed reply and reuses its key only when the same text is retried', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString(), 2);
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const user = userEvent.setup();
+    const input = await screen.findByLabelText<HTMLTextAreaElement>('Write a reply');
+    await user.type(input, 'First reply');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+    await waitFor(() => expect(input.value).toBe('First reply'));
+    expect(await screen.findByText('Could not send reply')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(input.value).toBe('First reply'));
+    expect(posts).toHaveLength(2);
+    expect(posts[1]?.body).toEqual(posts[0]?.body);
+
+    await user.clear(input);
+    await user.type(input, 'Edited reply');
+    await user.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(posts).toHaveLength(3));
+    expect(posts[2]?.body).toMatchObject({ body: 'Edited reply' });
+    expect((posts[2]?.body as { operationKey: string }).operationKey).not.toBe(
+      (posts[0]?.body as { operationKey: string }).operationKey,
+    );
   });
 
   it('fills the box from a saved reply the staff member picks', async () => {

@@ -48,7 +48,6 @@ function repliesToday(count: number) {
   return `${formatCount(count)} ${count === 1 ? 'reply' : 'replies'} today`;
 }
 
-// The same height as the AI agent button beside it, with body-size text.
 function Pill({
   variant,
   icon: Icon,
@@ -59,8 +58,8 @@ function Pill({
   children: ReactNode;
 }) {
   return (
-    <Badge variant={variant} className="min-h-10 gap-2 rounded-full px-3 py-2 text-base">
-      <Icon aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0" />
+    <Badge variant={variant} className="gap-1.5 rounded-md px-2 py-1 text-xs">
+      <Icon aria-hidden="true" size={14} strokeWidth={1.75} className="shrink-0" />
       <span>{children}</span>
     </Badge>
   );

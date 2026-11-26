@@ -31,6 +31,7 @@ export function ShellFrame({
 }: ShellFrameProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const inbox = pathname === '/chats';
   const needsStore = !data.currentStore && pathname !== '/security' && pathname !== '/setup';
   return (
     <div className="flex min-h-dvh">
@@ -43,7 +44,7 @@ export function ShellFrame({
       <aside
         className={cn(
           'sticky top-0 hidden h-dvh shrink-0 border-r border-border bg-surface md:block',
-          collapsed ? 'w-16' : 'w-62',
+          collapsed ? ['w-16', inbox && 'w-16.5'] : 'w-62',
         )}
       >
         <ShellNavigation
@@ -53,10 +54,15 @@ export function ShellFrame({
           onCollapse={() => setCollapsed(!collapsed)}
         />
       </aside>
-      <div className="min-w-0 flex-1">
-        <header className="flex min-h-16 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2 md:gap-3 md:px-8">
+      <div className={cn('min-w-0 flex-1', inbox && 'flex h-dvh flex-col max-md:min-h-[36rem]')}>
+        <header
+          className={cn(
+            'flex min-h-16 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-4 py-2 md:gap-3 md:px-8',
+            inbox && 'md:min-h-inbox-thread-header md:px-5',
+          )}
+        >
           <MobileNavigation session={data} blocked={blocked} onSignOut={onSignOut} />
-          <StoreSwitcher session={data} onSwitch={onSwitch} />
+          <StoreSwitcher session={data} onSwitch={onSwitch} compact={inbox} />
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {actions}
             <AccountMenu user={data.user} onSignOut={onSignOut} />
@@ -65,7 +71,7 @@ export function ShellFrame({
         <div
           id="page-content"
           tabIndex={-1}
-          className="mx-auto max-w-7xl"
+          className={inbox ? 'flex min-h-0 flex-1 flex-col' : 'mx-auto max-w-7xl'}
           key={`${data.contextTag}:${generation}`}
         >
           {needsStore ? <StoreRequired hasMemberships={data.hasMemberships} /> : children}

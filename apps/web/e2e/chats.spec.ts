@@ -149,6 +149,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
       ).status(),
     ).toBe(204);
 
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/chats');
     await expect(page.getByRole('link', { name: /^All\s*4$/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /^Needs you\s*1$/ })).toBeVisible();
@@ -171,6 +172,7 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await page.getByRole('link', { name: /^All\s*4$/ }).click();
     // Wait for the tab to clear, or the Instagram link is clicked with the old tab still in it.
     await expect(page).not.toHaveURL(/tab=/);
+    await page.getByRole('button', { name: 'Channels' }).click();
     await page
       .getByRole('navigation', { name: 'Channel' })
       .getByRole('link', { name: 'Instagram' })
@@ -178,14 +180,53 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page).toHaveURL(/channel=instagram/);
     await expect(page.getByText('Rumana Akter')).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeHidden();
-    await page.getByRole('link', { name: 'All', exact: true }).click();
+    await page.getByRole('button', { name: 'Channels' }).click();
+    await page
+      .getByRole('navigation', { name: 'Channel' })
+      .getByRole('link', { name: 'All', exact: true })
+      .click();
 
     await page.getByRole('link', { name: /Sadia Islam/ }).click();
     await expect(page).toHaveURL(/chat=/);
-    await expect(page.getByText('Kurti ta M size ache?')).toBeVisible();
-    await expect(page.getByText('Ji, M size ache. Dam ৳1,200.')).toBeVisible();
+    const chat = page.getByRole('region', { name: 'Conversation', exact: true });
+    const selectedChat = page.getByRole('link', { name: /Sadia Islam/ });
+    await expect(chat).toHaveCSS('background-color', 'rgb(250, 248, 247)');
+    await expect(selectedChat).toHaveCSS('background-color', 'rgb(255, 243, 233)');
+    await expect(selectedChat).toHaveCSS('border-left-color', 'rgb(250, 97, 0)');
+    await expect(chat.getByText('Kurti ta M size ache?')).toHaveCSS(
+      'background-color',
+      'rgb(255, 255, 255)',
+    );
+    await expect(chat.getByText('Ji, M size ache. Dam ৳1,200.')).toHaveCSS(
+      'background-color',
+      'rgb(255, 243, 233)',
+    );
     await expect(page.getByLabel('Write a reply')).toBeVisible();
+    const inboxToggle = page.getByRole('button', { name: /^(Collapse|Expand) inbox folders$/ });
+    const chatList = page.getByRole('region', { name: 'Chat list' });
+    const replyBox = page.getByLabel('Write a reply');
+    await replyBox.fill('Unsent reply');
+    const expandedLeft = await chatList.evaluate((element) => element.getBoundingClientRect().left);
+    await inboxToggle.click();
+    await expect(inboxToggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByRole('navigation', { name: 'Chat tabs' })).toBeHidden();
+    const controls = page.getByRole('group', { name: 'Inbox controls' });
+    await expect(controls.getByRole('heading', { name: 'Inbox' })).toBeVisible();
+    await expect(controls.getByRole('button', { name: 'Expand inbox folders' })).toBeFocused();
+    const workspaceLeft = await page
+      .getByRole('main')
+      .evaluate((element) => element.getBoundingClientRect().left);
+    expect(workspaceLeft).toBeLessThan(expandedLeft);
+    await expect
+      .poll(() => chatList.evaluate((element) => element.getBoundingClientRect().left))
+      .toBe(workspaceLeft);
+    await expect(replyBox).toHaveValue('Unsent reply');
+    await inboxToggle.click();
+    await expect(inboxToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('navigation', { name: 'Chat tabs' })).toBeVisible();
+    await replyBox.clear();
     await capture(page, 'thread');
+    await expectFigmaInboxLayout(page);
     await expect(page.getByText('Dakly AI is handling this chat')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Take over' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Done' })).toBeVisible();
@@ -220,6 +261,52 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await expect(page.getByRole('option', { name: 'L · sold out' })).toBeDisabled();
     await page.getByLabel('Size').selectOption({ label: 'M · only 3 left' });
     await capture(page, 'customer-panel');
+
+    const conversationPanel = page.getByRole('region', { name: 'Conversation' });
+    const customer = page.getByRole('complementary', { name: 'Customer' });
+    await expect
+      .poll(() =>
+        page.locator('main img[src^="/chats/inbox/"]').evaluateAll((images) =>
+          images.every((image) => {
+            const bounds = image.getBoundingClientRect();
+            return (
+              bounds.width === 0 || (image instanceof HTMLImageElement && image.naturalWidth > 0)
+            );
+          }),
+        ),
+      )
+      .toBe(true);
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect(conversationPanel).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Chat list' })).toBeHidden();
+    await conversationPanel.getByRole('link', { name: 'Customer' }).click();
+    await expect(customer.getByRole('form', { name: 'Make an order' })).toBeVisible();
+    await expect(conversationPanel).toBeHidden();
+    await customer.getByRole('link', { name: 'Back to chat' }).click();
+    await expect(conversationPanel).toBeVisible();
+
+    await database.pool.query(
+      `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body, status,
+         sender_identity_id, created_at)
+       select gen_random_uuid(), $1, $2, 'in', 'customer', 'text', 'Earlier message ' || age, 'received', $3,
+              now() - make_interval(hours => 3, mins => age)
+       from generate_series(1, 60) as age`,
+      [storeId, firstConversationId, senderIdentityId],
+    );
+    await page.reload();
+    const history = conversationPanel.getByRole('region', { name: 'Message history' });
+    await expect(history.getByText('Call at 5 pm')).toBeInViewport();
+    await history.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    const firstLoaded = await history.getByRole('listitem').first().textContent();
+    await history.getByRole('button', { name: 'Show earlier messages' }).click();
+    await expect(history.getByText('Earlier message 60', { exact: true })).toBeAttached();
+    await expect(
+      history.getByRole('listitem').filter({ hasText: firstLoaded ?? '' }),
+    ).toBeInViewport();
+
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/chats');
 
     await page.getByRole('searchbox', { name: 'Search chats' }).fill('Habib');
@@ -252,6 +339,52 @@ test('lists chats by tab and channel and shows the tab counts', async ({
     await database.pool.end();
   }
 });
+
+async function expectFigmaInboxLayout(page: Page) {
+  await page.setViewportSize({ width: 2001, height: 1238 });
+  await page.getByRole('button', { name: 'Collapse navigation' }).click();
+  const workspace = page.getByRole('main');
+  const layout = () =>
+    workspace.evaluate((root) => {
+      function bounds(element: Element | null) {
+        if (!element) return null;
+        const { x, y, width, height } = element.getBoundingClientRect();
+        return { x, y, width, height };
+      }
+      return {
+        folders: bounds(root.querySelector('[aria-label="Chat tabs"]')?.closest('aside') ?? null),
+        controls: bounds(root.querySelector('[aria-label="Inbox controls"]')),
+        list: bounds(root.querySelector('[aria-label="Chat list"]')),
+        thread: bounds(root.querySelector('[aria-label="Conversation"]')),
+        customer: bounds(root.querySelector('[aria-label="Customer"]')),
+      };
+    });
+  await expect.poll(layout).toMatchObject({
+    folders: { x: 66, y: 57, width: 216 },
+    controls: { x: 282, y: 57, height: 55 },
+    list: { x: 282, y: 112, width: 340 },
+    thread: { x: 622, y: 112, width: 1060 },
+    customer: { x: 1682, y: 57, width: 319 },
+  });
+  const evidence = process.env.CHAT5_SCREENSHOT_DIR;
+  if (evidence) {
+    await page.screenshot({ path: resolve(evidence, 'inbox-desktop.png') });
+  }
+  await page.getByRole('button', { name: 'Collapse inbox folders' }).click();
+  await expect.poll(layout).toMatchObject({
+    folders: null,
+    controls: { x: 66, y: 57, height: 55 },
+    list: { x: 66, y: 112, width: 340 },
+    thread: { x: 406, y: 112, width: 1276 },
+    customer: { x: 1682, y: 57, width: 319 },
+  });
+  if (evidence) {
+    await page.screenshot({ path: resolve(evidence, 'inbox-desktop-collapsed.png') });
+  }
+  await page.getByRole('button', { name: 'Expand inbox folders' }).click();
+  await page.getByRole('button', { name: 'Expand navigation' }).click();
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
 
 async function capture(page: Page, screen: string) {
   const evidence = process.env.CHAT5_SCREENSHOT_DIR;

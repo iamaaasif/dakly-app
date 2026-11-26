@@ -18,7 +18,7 @@ export function DeliveryHistory({ contactId }: { contactId: string }) {
   if (!orders.data) return null;
   const { items } = orders.data;
   return (
-    <div className="rounded-lg bg-surface-muted p-3">
+    <div className="rounded-control bg-surface-muted p-3 text-sm">
       <p className="font-semibold">{items.length ? 'Delivery history' : 'New customer'}</p>
       {items.length ? (
         <ul className="mt-1 space-y-1">

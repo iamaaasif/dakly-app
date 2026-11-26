@@ -2,7 +2,9 @@ import Link from 'next/link';
 
 import type { ConversationCountsResponse } from '@dakly/contracts/chats';
 
+import { useConversationCounts } from '../api/conversations';
 import { chatTabLabels, chatTabs, chatsHref, type ChatScreenQuery } from '../chat-filters';
+import { InboxIcon } from './inbox-icon';
 
 const countKeys: Record<(typeof chatTabs)[number], keyof ConversationCountsResponse> = {
   all: 'all',
@@ -13,25 +15,46 @@ const countKeys: Record<(typeof chatTabs)[number], keyof ConversationCountsRespo
   'not-customers': 'notCustomers',
 };
 
-type ChatTabsProps = { query: ChatScreenQuery; counts: ConversationCountsResponse | undefined };
+const folderIcons = {
+  all: 'all',
+  'needs-you': 'mine',
+  'ai-handling': 'ai',
+  'follow-up': 'snoozed',
+  done: 'resolved',
+  'not-customers': 'not-customer',
+} as const;
 
-export function ChatTabs({ query, counts }: ChatTabsProps) {
+export function ChatTabs({ query }: { query: ChatScreenQuery }) {
+  const { data: counts } = useConversationCounts();
   return (
     <nav
       aria-label="Chat tabs"
-      className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2"
+      className="flex shrink-0 gap-1 overflow-x-auto p-2.5 min-[1440px]:flex-col min-[1440px]:overflow-visible"
     >
-      {chatTabs.map((tab) => (
-        <Link
-          key={tab}
-          href={chatsHref({ ...query, tab })}
-          aria-current={query.tab === tab ? 'page' : undefined}
-          className="-mb-px inline-flex min-h-10 shrink-0 items-center gap-1 border-b-2 border-transparent px-2 text-base text-text-muted hover:text-text aria-[current=page]:border-action aria-[current=page]:font-semibold aria-[current=page]:text-text"
-        >
-          {chatTabLabels[tab]}
-          {counts ? <span className="text-sm tabular-nums">{counts[countKeys[tab]]}</span> : null}
-        </Link>
-      ))}
+      {chatTabs.map((tab) => {
+        const icon = folderIcons[tab];
+        return (
+          <Link
+            key={tab}
+            href={chatsHref({
+              ...query,
+              tab,
+              channel: query.channel === 'comments' ? undefined : query.channel,
+              chat: undefined,
+              panel: undefined,
+              post: undefined,
+            })}
+            aria-current={query.tab === tab ? 'page' : undefined}
+            className="flex min-h-10 min-w-0 shrink-0 items-center gap-2 rounded-control border border-transparent px-2.5 text-sm text-text-muted hover:bg-surface hover:text-text aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-text aria-[current=page]:shadow-inbox-folder"
+          >
+            <InboxIcon name={icon} />
+            <span className="flex-1 truncate">{chatTabLabels[tab]}</span>
+            {counts ? (
+              <span className="font-normal tabular-nums">{counts[countKeys[tab]]}</span>
+            ) : null}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

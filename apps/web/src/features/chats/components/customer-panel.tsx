@@ -28,7 +28,7 @@ export function CustomerPanel({
     <aside
       aria-label="Customer"
       className={cn(
-        'min-h-0 min-w-0 flex-col overflow-y-auto border-l border-border',
+        'col-start-1 row-start-2 min-h-0 min-w-0 flex-col overflow-y-auto border-border bg-surface lg:col-start-2 lg:border-l xl:col-start-3 xl:row-span-2 xl:row-start-1',
         query.panel ? 'flex' : 'hidden xl:flex',
       )}
     >
@@ -39,13 +39,13 @@ export function CustomerPanel({
         <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.75} />
         Back to chat
       </Link>
-      <div className="space-y-3 p-3">
+      <div className="space-y-3 p-4">
         {contact.data ? <CustomerStatus kind={contact.data.kind} /> : null}
         <CustomerIdentity conversation={conversation} phone={contact.data?.phone} />
         <DeliveryHistory contactId={conversation.contactId} />
       </div>
       <Tabs defaultValue="order">
-        <TabsList className="px-3">
+        <TabsList className="border-t border-border px-4">
           <TabsTrigger value="order">Order</TabsTrigger>
           <TabsTrigger value="media" disabled>
             Media
@@ -77,12 +77,14 @@ function CustomerIdentity({
   const name = contactDisplayName(conversation);
   return (
     <div className="flex items-center gap-3">
-      <span className="flex size-10 items-center justify-center rounded-full bg-surface-muted text-sm font-semibold text-text-muted">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-inbox-avatar-border bg-inbox-avatar text-sm font-semibold text-inbox-avatar-text">
         {initialsOf(name)}
       </span>
       <div className="min-w-0">
         <p className="truncate font-semibold">{name}</p>
-        {phone === undefined ? null : <p className="text-text-muted">{phone ?? 'No phone yet'}</p>}
+        {phone === undefined ? null : (
+          <p className="truncate text-sm text-text-muted">{phone ?? 'No phone yet'}</p>
+        )}
       </div>
       {session?.currentStore?.canViewCustomers ? (
         <Link

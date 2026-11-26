@@ -58,13 +58,13 @@ export function useSendReply(id: string) {
   const client = useQueryClient();
   const messagesKey = chatsKeys.messages(contextTag, id);
   // One key per attempt: a retry after a lost answer reuses it, so the customer gets one message.
-  const key = useRef<string | undefined>(undefined);
+  const attempt = useRef<{ body: string; key: string } | undefined>(undefined);
   return useMutation({
     mutationFn: (body: string) => {
-      key.current ??= crypto.randomUUID();
+      if (attempt.current?.body !== body) attempt.current = { body, key: crypto.randomUUID() };
       return request<{ messageId: string }>(`/conversations/${id}/replies`, {
         method: 'POST',
-        body: { body, operationKey: key.current },
+        body: { body, operationKey: attempt.current.key },
       });
     },
     onMutate: async (body) => {
@@ -72,7 +72,7 @@ export function useSendReply(id: string) {
       const before = client.getQueryData<InfiniteData<MessagePage>>(messagesKey);
       const now = new Date().toISOString();
       const pending: ConversationMessageResponse = {
-        id: `pending-${key.current ?? crypto.randomUUID()}`,
+        id: `pending-${attempt.current?.key ?? crypto.randomUUID()}`,
         kind: 'text',
         direction: 'out',
         body,
@@ -95,12 +95,12 @@ export function useSendReply(id: string) {
       return { before };
     },
     onSuccess: () => {
-      key.current = undefined;
+      attempt.current = undefined;
     },
     onError: (error, _body, context) => {
       if (context?.before) client.setQueryData(messagesKey, context.before);
       if (error instanceof ApiError && error.status !== undefined && error.status < 500)
-        key.current = undefined;
+        attempt.current = undefined;
     },
     onSettled: () => client.invalidateQueries({ queryKey: messagesKey }),
   });

@@ -11,7 +11,7 @@ import { Input } from '@dakly/ui/input';
 import { useOrderCatalogue } from '@/lib/order-entry/order-catalogue';
 
 const selectClass =
-  'min-h-10 w-full rounded-md border border-input-border bg-surface px-2 aria-invalid:border-danger';
+  'min-h-inbox-field w-full rounded-md border border-input-border bg-surface px-2 text-sm aria-invalid:border-danger';
 
 type Variant = OrderCatalogueProduct['variants'][number];
 
@@ -77,7 +77,7 @@ function SizeAndQuantity({
 }) {
   const { register, setValue, watch } = useFormContext<CreateConversationOrderValues>();
   return (
-    <div className="grid grid-cols-[1fr_5rem] gap-2">
+    <div className="grid grid-cols-[minmax(0,1fr)_4rem] gap-2">
       <FormField name="items.0.variantId" label="Size">
         {(props) => (
           <select
@@ -108,6 +108,7 @@ function SizeAndQuantity({
           <Input
             {...props}
             type="number"
+            className="min-h-inbox-field text-sm"
             min={1}
             {...register('items.0.quantity', { valueAsNumber: true })}
           />

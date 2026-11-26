@@ -1,32 +1,41 @@
 'use client';
-import { List } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useSavedReplies } from '../api/saved-replies';
+import { InboxIcon } from './inbox-icon';
 
 // Staff choose a saved reply by hand; the AI never picks one (D43).
-export function SavedRepliesPicker({ onPick }: { onPick: (body: string) => void }) {
+export function SavedRepliesPicker({
+  onPick,
+  disabled,
+}: {
+  onPick: (body: string) => void;
+  disabled?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="relative">
-      <Button
-        variant="secondary"
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <List aria-hidden="true" size={16} strokeWidth={1.75} />
-        Saved replies
-      </Button>
-      {open ? (
-        <div
-          role="menu"
-          aria-label="Saved replies"
-          className="absolute bottom-full left-0 z-10 mb-2 max-h-64 w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-overlay"
+    <Popover open={open && !disabled} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="secondary"
+          type="button"
+          disabled={disabled}
+          className="min-h-9 gap-1.5 rounded-control border-transparent px-2.5 py-1 text-sm"
         >
+          <InboxIcon name="saved-replies" />
+          Saved replies
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="start"
+        className="inbox-theme max-h-64 max-w-[calc(100vw-2rem)] overflow-y-auto p-1"
+      >
+        <div role="menu" aria-label="Saved replies">
           <SavedReplyList
             onPick={(body) => {
               onPick(body);
@@ -34,8 +43,8 @@ export function SavedRepliesPicker({ onPick }: { onPick: (body: string) => void 
             }}
           />
         </div>
-      ) : null}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

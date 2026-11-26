@@ -1,13 +1,14 @@
 'use client';
-import { Send } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Button } from '@dakly/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 import { Textarea } from '@dakly/ui/textarea';
 
 import { useAddNote, useSendReply } from '../api/conversation-thread';
 import { replyWindow } from '../reply-window';
+import { InboxIcon } from './inbox-icon';
 import { SavedRepliesPicker } from './saved-replies-picker';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -18,7 +19,8 @@ const modeLabels: Record<Mode, string> = { reply: 'Reply', note: 'Internal note'
 export function ChatComposer({ conversation }: { conversation: ConversationResponse }) {
   const { data: session } = useSessionContext();
   const [mode, setMode] = useState<Mode>('reply');
-  const [text, setText] = useState('');
+  const [drafts, setDrafts] = useState({ reply: '', note: '' });
+  const text = drafts[mode];
   const sendReply = useSendReply(conversation.id);
   const addNote = useAddNote(conversation.id);
   const window = replyWindow(conversation);
@@ -31,30 +33,39 @@ export function ChatComposer({ conversation }: { conversation: ConversationRespo
         You can read this chat. Replying needs Edit Chats access.
       </p>
     );
+  function send() {
+    const body = text.trim();
+    if (!body || blocked || sending.isPending) return;
+    setDrafts((previous) => ({ ...previous, [mode]: '' }));
+    sending.mutate(body, {
+      onError: () => setDrafts((previous) => ({ ...previous, [mode]: body })),
+    });
+  }
+
   return (
-    <div className="shrink-0 space-y-2 border-t border-border p-3">
-      <ModeTabs mode={mode} onChange={setMode} />
-      <ComposerHint mode={mode} windowLabel={window.state === 'open' ? null : window.label} />
-      {mode === 'reply' ? <SavedRepliesPicker onPick={setText} /> : null}
-      <WriteBox
-        mode={mode}
-        text={text}
-        disabled={blocked}
-        pending={sending.isPending}
-        onChange={setText}
-        onSend={() => {
-          // The box clears at once, like a chat app; a failed send puts the words back.
-          const body = text.trim();
-          setText('');
-          sending.mutate(body, { onError: () => setText(body) });
-        }}
-      />
-      {sending.error ? (
-        <p role="alert" className="text-danger">
-          {sending.error.message}
-        </p>
-      ) : null}
-    </div>
+    <Tabs
+      value={mode}
+      onValueChange={(value) => setMode(value === 'note' ? 'note' : 'reply')}
+      className="shrink-0 space-y-2 border-t border-border bg-surface px-3 pt-2 pb-3"
+    >
+      <ModeTabs />
+      <TabsContent value={mode} className="space-y-2 pt-0">
+        <ComposerHint mode={mode} windowLabel={window.state === 'open' ? null : window.label} />
+        <WriteBox
+          mode={mode}
+          text={text}
+          disabled={blocked}
+          pending={sending.isPending}
+          onChange={(value) => setDrafts((previous) => ({ ...previous, [mode]: value }))}
+          onSend={send}
+        />
+        {sending.error ? (
+          <p role="alert" className="text-sm text-danger">
+            {sending.error.message}
+          </p>
+        ) : null}
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -70,26 +81,22 @@ function ComposerHint({ mode, windowLabel }: { mode: Mode; windowLabel: string |
   ) : null;
 }
 
-function ModeTabs({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => void }) {
+function ModeTabs() {
   return (
-    <div
-      role="tablist"
+    <TabsList
       aria-label="Message type"
-      className="inline-flex rounded-lg bg-surface-muted p-1"
+      className="inline-flex gap-0.5 rounded-control border-0 bg-surface-muted p-0.5"
     >
       {(['reply', 'note'] as const).map((value) => (
-        <button
+        <TabsTrigger
           key={value}
-          type="button"
-          role="tab"
-          aria-selected={mode === value}
-          className="min-h-8 rounded-md px-3 text-base text-text-muted aria-selected:bg-surface aria-selected:font-semibold aria-selected:text-text"
-          onClick={() => onChange(value)}
+          value={value}
+          className="mb-0 min-h-10 rounded-control border-0 px-3 text-sm data-[state=active]:bg-surface data-[state=active]:font-semibold md:min-h-8"
         >
           {modeLabels[value]}
-        </button>
+        </TabsTrigger>
       ))}
-    </div>
+    </TabsList>
   );
 }
 
@@ -105,24 +112,40 @@ type WriteBoxProps = {
 function WriteBox({ mode, text, disabled, pending, onChange, onSend }: WriteBoxProps) {
   const reply = mode === 'reply';
   return (
-    <div className="flex items-end gap-2">
+    <div className="rounded-control border border-border-strong bg-surface focus-within:border-focus">
       <Textarea
         aria-label={reply ? 'Write a reply' : 'Write an internal note'}
         placeholder={reply ? 'Write a reply' : 'Write a note for your team'}
         maxLength={reply ? 2000 : 4000}
         value={text}
         disabled={disabled}
+        readOnly={pending}
+        onKeyDown={(event) => {
+          if (
+            event.key !== 'Enter' ||
+            !(event.metaKey || event.ctrlKey) ||
+            event.nativeEvent.isComposing
+          )
+            return;
+          event.preventDefault();
+          onSend();
+        }}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-16"
+        className="block h-inbox-composer-input max-h-32 min-h-16 resize-y rounded-b-none border-0 bg-transparent text-sm focus-visible:outline-none"
       />
-      <Button
-        type="button"
-        aria-label={reply ? 'Send reply' : 'Save note'}
-        disabled={disabled || !text.trim() || pending}
-        onClick={onSend}
-      >
-        <Send aria-hidden="true" size={16} strokeWidth={1.75} />
-      </Button>
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border px-2 py-2">
+        {reply ? <SavedRepliesPicker disabled={disabled || pending} onPick={onChange} /> : null}
+        <Button
+          type="button"
+          aria-label={reply ? 'Send reply' : 'Save note'}
+          disabled={disabled || !text.trim() || pending}
+          className="ml-auto min-h-10 gap-1.5 rounded-md px-3 py-1 text-sm md:min-h-8"
+          onClick={onSend}
+        >
+          <InboxIcon name="send" />
+          {reply ? 'Send' : 'Save note'}
+        </Button>
+      </div>
     </div>
   );
 }
