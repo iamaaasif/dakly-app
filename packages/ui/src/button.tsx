@@ -13,8 +13,10 @@ export const buttonVariants = cva(
         danger: 'bg-danger text-on-primary hover:bg-danger-hover',
         link: 'px-0 text-action hover:underline',
       },
+      // The compact button of dense toolbars such as the Inbox header.
+      size: { md: '', sm: 'min-h-9 px-2.5 py-1 text-sm' },
     },
-    defaultVariants: { variant: 'primary' },
+    defaultVariants: { variant: 'primary', size: 'md' },
   },
 );
 
@@ -24,6 +26,7 @@ export type ButtonProps = ComponentProps<'button'> &
 export function Button({
   className,
   variant,
+  size,
   loading = false,
   disabled,
   children,
@@ -34,7 +37,7 @@ export function Button({
     <button
       {...props}
       type={type}
-      className={cn(buttonVariants({ variant }), className)}
+      className={cn(buttonVariants({ variant, size }), className)}
       disabled={disabled || loading}
       aria-busy={loading || props['aria-busy']}
     >

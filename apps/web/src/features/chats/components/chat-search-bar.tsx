@@ -1,7 +1,6 @@
 'use client';
-import { Filter, Search } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { ArrowUpDown, ListFilter, MessageSquare, Search } from 'lucide-react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
 import { Input } from '@dakly/ui/input';
@@ -9,14 +8,22 @@ import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@dakly/ui
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { useConversationAssignees, useConversationLabels } from '../api/conversations';
-import { chatSortLabels, chatSorts, chatsHref, type ChatScreenQuery } from '../chat-filters';
+import {
+  chatSortLabels,
+  chatSorts,
+  chatTabLabels,
+  chatTabs,
+  chatsHref,
+  type ChatScreenQuery,
+} from '../chat-filters';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useUrlRouter } from '@/lib/use-url-query';
 
 const anyone = 'anyone';
 const anyLabel = 'any-label';
 
 export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const [words, setWords] = useState(query.q ?? '');
   const settled = useDebouncedValue(words.trim(), 300);
 
@@ -26,60 +33,97 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
   }, [settled, query, router]);
 
   return (
-    <div className="shrink-0 space-y-2 border-b border-border p-3">
-      <div className="relative">
-        <Search
-          aria-hidden="true"
-          size={16}
-          strokeWidth={1.75}
-          className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-text-muted"
-        />
-        <Input
-          type="search"
-          aria-label="Search chats"
-          placeholder="Search name or phone"
-          maxLength={120}
-          value={words}
-          onChange={(event) => setWords(event.target.value)}
-          className="pl-9"
-        />
-      </div>
-      <div className="flex gap-2">
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="secondary">
-              <Filter aria-hidden="true" size={16} strokeWidth={1.75} className="shrink-0" />
-              Filter
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent aria-label="Filter chats">
-            <ChatFilterPanel query={query} />
-          </PopoverContent>
-        </Popover>
-        <Select
-          value={query.sort}
-          onValueChange={(sort) =>
-            router.replace(chatsHref({ ...query, sort: sort as ChatScreenQuery['sort'] }))
-          }
-        >
-          <SelectTrigger aria-label="Sort chats">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {chatSorts.map((sort) => (
-              <SelectItem key={sort} value={sort}>
-                {chatSortLabels[sort]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="relative min-w-0 flex-1">
+      <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
+        <Search aria-hidden="true" size={16} />
+      </span>
+      <Input
+        type="search"
+        aria-label="Search chats"
+        placeholder="Search name or phone"
+        maxLength={120}
+        value={words}
+        onChange={(event) => setWords(event.target.value)}
+        className="bg-surface-muted pl-9"
+      />
     </div>
   );
 }
 
+export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channel: ReactNode }) {
+  const router = useUrlRouter();
+  return (
+    <>
+      <ChatFolderSelect query={query} />
+      <Select
+        value={query.sort}
+        onValueChange={(sort) =>
+          router.replace(chatsHref({ ...query, sort: sort as ChatScreenQuery['sort'] }))
+        }
+      >
+        <SelectTrigger aria-label="Sort chats" className="w-auto">
+          <ArrowUpDown aria-hidden="true" size={16} />
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {chatSorts.map((sort) => (
+            <SelectItem key={sort} value={sort}>
+              {chatSortLabels[sort]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {channel}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button variant="secondary" size="sm">
+            <ListFilter aria-hidden="true" size={16} />
+            Filter
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent aria-label="Filter chats">
+          <ChatFilterPanel query={query} />
+        </PopoverContent>
+      </Popover>
+    </>
+  );
+}
+
+function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
+  const router = useUrlRouter();
+  return (
+    <Select
+      value={query.tab}
+      onValueChange={(tab) =>
+        router.push(
+          chatsHref({
+            ...query,
+            tab: tab as ChatScreenQuery['tab'],
+            channel: query.channel === 'comments' ? undefined : query.channel,
+            chat: undefined,
+            panel: undefined,
+            post: undefined,
+          }),
+        )
+      }
+    >
+      <SelectTrigger aria-label="Chat folder" className="hidden w-auto xl:flex">
+        <MessageSquare aria-hidden="true" size={16} />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {chatTabs.map((tab) => (
+          <SelectItem key={tab} value={tab}>
+            {tab === 'all' ? 'All chats' : chatTabLabels[tab]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const assignees = useConversationAssignees();
   return (
     <div className="space-y-3">
@@ -129,7 +173,7 @@ function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
 }
 
 function LabelFilter({ query }: { query: ChatScreenQuery }) {
-  const router = useRouter();
+  const router = useUrlRouter();
   const labels = useConversationLabels();
   return (
     <div className="space-y-1">

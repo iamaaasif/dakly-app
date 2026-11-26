@@ -9,7 +9,6 @@ import { Skeleton } from '@dakly/ui/skeleton';
 import { useComments } from '../api/comments';
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { groupCommentsByPost, type CommentPost } from '../comment-posts';
-import { ChatChannelFilter } from './chat-channel-filter';
 import { CommentCard } from './comment-card';
 import { formatRelativeTime } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
@@ -25,18 +24,15 @@ export function CommentsView({ query }: { query: ChatScreenQuery }) {
     <>
       <section
         aria-label="Posts with comments"
-        className={`min-h-0 min-w-0 flex-col ${query.post ? 'hidden lg:flex' : 'flex'}`}
+        className={`col-start-1 row-start-2 min-h-0 min-w-0 flex-col ${query.post ? 'hidden lg:flex' : 'flex'}`}
       >
-        <div className="shrink-0 border-b border-border p-3">
-          <ChatChannelFilter query={query} />
-        </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <PostRows query={query} posts={posts} comments={comments} />
         </div>
       </section>
       <section
         aria-label="Comments on the post"
-        className={`min-h-0 min-w-0 flex-col border-l border-border ${query.post ? 'flex' : 'hidden lg:flex'}`}
+        className={`col-start-1 row-start-2 min-h-0 min-w-0 flex-col border-border lg:col-start-2 lg:border-l ${query.post ? 'flex' : 'hidden lg:flex'}`}
       >
         {open ? (
           <PostThread query={query} post={open} />
@@ -44,6 +40,7 @@ export function CommentsView({ query }: { query: ChatScreenQuery }) {
           <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-text-muted">
             <MessageSquare aria-hidden="true" size={28} strokeWidth={1.5} />
             <p>Choose a post to read its comments.</p>
+            {query.post ? <BackToPosts query={query} /> : null}
           </div>
         )}
       </section>
@@ -141,19 +138,25 @@ function PostRow({ query, post }: { query: ChatScreenQuery; post: CommentPost })
   );
 }
 
+function BackToPosts({ query }: { query: ChatScreenQuery }) {
+  return (
+    <Link
+      href={chatsHref({ ...query, post: undefined })}
+      className="inline-flex items-center gap-1 text-action hover:underline lg:hidden"
+    >
+      <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.75} />
+      All posts
+    </Link>
+  );
+}
+
 function PostThread({ query, post }: { query: ChatScreenQuery; post: CommentPost }) {
   const { data: session } = useSessionContext();
   const canEdit = session?.currentStore?.canEditChats ?? false;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="shrink-0 space-y-2 border-b border-border p-4">
-        <Link
-          href={chatsHref({ ...query, post: undefined })}
-          className="inline-flex items-center gap-1 text-action hover:underline lg:hidden"
-        >
-          <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.75} />
-          All posts
-        </Link>
+        <BackToPosts query={query} />
         <div>
           <p className="text-sm text-text-muted">
             Your {postNames[post.channel]}

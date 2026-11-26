@@ -1,4 +1,8 @@
+import { ChevronDown } from 'lucide-react';
 import Link from 'next/link';
+
+import { Button } from '@dakly/ui/button';
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 
 import { useChatChannels } from '../api/chat-channels';
 import {
@@ -21,17 +25,28 @@ export function ChatChannelFilter({ query }: { query: ChatScreenQuery }) {
   // One channel means nothing to choose between.
   if (channels.length < 2) return null;
   return (
-    <nav aria-label="Channel" className="flex gap-2 overflow-x-auto">
-      {[undefined, ...channels].map((channel) => (
-        <Link
-          key={channel ?? 'all'}
-          href={chatsHref({ ...query, channel, post: undefined })}
-          aria-current={query.channel === channel ? 'page' : undefined}
-          className="inline-flex min-h-8 shrink-0 items-center rounded-full border border-border px-3 text-base hover:bg-surface-muted aria-[current=page]:border-inverse aria-[current=page]:bg-inverse aria-[current=page]:font-semibold aria-[current=page]:text-on-primary"
-        >
-          {channel ? chatChannelLabels[channel] : 'All'}
-        </Link>
-      ))}
-    </nav>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button aria-label="Channels" variant="secondary" size="sm">
+          {query.channel ? chatChannelLabels[query.channel] : 'All channels'}
+          <ChevronDown aria-hidden="true" size={16} />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-44 p-1">
+        <nav aria-label="Channel" className="grid gap-0.5">
+          {[undefined, ...channels].map((channel) => (
+            <PopoverClose asChild key={channel ?? 'all'}>
+              <Link
+                href={chatsHref({ ...query, channel, post: undefined })}
+                aria-current={query.channel === channel ? 'page' : undefined}
+                className="rounded-md px-3 py-2 text-sm hover:bg-surface-muted aria-[current=page]:bg-primary-soft aria-[current=page]:font-semibold"
+              >
+                {channel ? chatChannelLabels[channel] : 'All'}
+              </Link>
+            </PopoverClose>
+          ))}
+        </nav>
+      </PopoverContent>
+    </Popover>
   );
 }

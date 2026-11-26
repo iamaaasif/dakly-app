@@ -30,19 +30,23 @@ const statusLabels: Record<ConversationMessageResponse['status'], string> = {
 function bubbleStyle({ kind, direction }: ConversationMessageResponse) {
   if (kind === 'note') return 'border border-warning bg-warning-soft text-text';
   return direction === 'out'
-    ? 'bg-primary text-on-primary'
+    ? 'border border-border bg-primary-soft text-text'
     : 'border border-border bg-surface text-text';
 }
 
 export function MessageBubble({ message }: { message: ConversationMessageResponse }) {
   if (message.kind === 'system')
-    return <li className="text-center text-sm text-text-muted">{message.body}</li>;
+    return (
+      <li className="mx-auto w-fit max-w-full rounded-full bg-surface-muted px-3 py-1 text-center text-xs text-text-muted">
+        {message.body}
+      </li>
+    );
   const outgoing = message.direction === 'out';
   return (
     <li className={cn('flex flex-col gap-1', outgoing ? 'items-end' : 'items-start')}>
       <div
         className={cn(
-          'max-w-[85%] rounded-lg px-4 py-2 text-base break-words whitespace-pre-wrap',
+          'max-w-[85%] rounded-lg px-3 py-1.5 text-base break-words whitespace-pre-wrap',
           bubbleStyle(message),
         )}
       >
@@ -62,8 +66,8 @@ export function MessageBubble({ message }: { message: ConversationMessageRespons
 function MessageMeta({ message }: { message: ConversationMessageResponse }) {
   const delivery = message.direction === 'out' && message.kind !== 'note';
   return (
-    <div className="flex items-center gap-2 text-sm text-text-muted">
-      {message.authorType === 'ai' ? <Badge variant="ai">AI</Badge> : null}
+    <div className="flex items-center gap-2 px-1 text-xs text-text-muted">
+      {message.authorType === 'ai' ? <Badge variant="inverse">AI</Badge> : null}
       <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
       {delivery ? <span>{statusLabels[message.status]}</span> : null}
       {message.body ? <CopyMessageButton body={message.body} /> : null}
@@ -73,7 +77,6 @@ function MessageMeta({ message }: { message: ConversationMessageResponse }) {
 
 function CopyMessageButton({ body }: { body: string }) {
   const [copied, setCopied] = useState(false);
-  const Icon = copied ? Check : Copy;
   return (
     <button
       type="button"
@@ -86,7 +89,7 @@ function CopyMessageButton({ body }: { body: string }) {
         });
       }}
     >
-      <Icon aria-hidden="true" size={14} strokeWidth={1.75} />
+      {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={14} />}
     </button>
   );
 }

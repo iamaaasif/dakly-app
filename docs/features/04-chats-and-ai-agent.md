@@ -21,6 +21,10 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 - D7: chats AI replies and drafts orders without approval, within its settings.
 - D37: storing messages, sending, receipts and the 24-hour window are core messaging (`messaging/`, CHAT-1 and CHAT-2), so campaigns and automations work without this extension. The Chats extension is the inbox, assignment, notes, saved replies, comments and the AI agent.
 
+## Inbox layout
+
+The Inbox fills the workspace with the folder list, conversation list, thread, and customer and order panel side by side. Collapsing the folders moves the Inbox title and toggle into the toolbar. On narrower screens the folders sit above the list, and on phones opening a chat or the customer panel takes the place of the list. Sort, channel and filters are in the toolbar; Saved replies and Send share the composer footer. Reply and Internal note keep separate drafts. Opening a conversation shows the latest messages, and loading earlier ones keeps the current messages in view.
+
 ## Product requirements
 
 ### What it is for

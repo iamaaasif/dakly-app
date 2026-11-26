@@ -19,8 +19,8 @@ export function LabelMenu({ conversation }: { conversation: ConversationResponse
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="secondary">
-          <Tag aria-hidden="true" size={16} strokeWidth={1.75} />
+        <Button variant="secondary" size="sm">
+          <Tag aria-hidden="true" size={16} />
           Label
           {conversation.labels.length ? ` (${conversation.labels.length})` : ''}
         </Button>
