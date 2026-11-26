@@ -35,6 +35,8 @@ it('shows the shop, delivery and payment details on the label', () => {
   ]) {
     expect(screen.getByText(content)).toBeTruthy();
   }
+  const barcode = screen.getByRole('img', { name: 'Order 1054 barcode' });
+  expect(barcode.querySelectorAll('g rect').length).toBeGreaterThan(1);
 });
 
 it('shows Paid when no COD is due', () => {

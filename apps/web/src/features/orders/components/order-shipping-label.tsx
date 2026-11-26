@@ -1,3 +1,6 @@
+import JsBarcode from 'jsbarcode';
+import { useLayoutEffect, useRef } from 'react';
+
 import { formatMoney } from '@dakly/contracts/money';
 import type { OrderShippingLabels } from '@dakly/contracts/order-shipping-labels';
 import { cn } from '@dakly/ui/cn';
@@ -10,6 +13,20 @@ type OrderShippingLabelProps = {
 };
 
 export function OrderShippingLabel({ store, label }: OrderShippingLabelProps) {
+  const barcode = useRef<SVGSVGElement>(null);
+  useLayoutEffect(() => {
+    if (barcode.current)
+      JsBarcode(barcode.current, String(label.number), {
+        format: 'CODE128',
+        displayValue: false,
+        lineColor: 'currentColor',
+        background: 'transparent',
+        height: 42,
+        margin: 0,
+        marginLeft: 20,
+        marginRight: 20,
+      });
+  }, [label.number]);
   const textLength =
     store.name.length +
     label.recipientName.length +
@@ -42,7 +59,13 @@ export function OrderShippingLabel({ store, label }: OrderShippingLabelProps) {
             </p>
           </div>
         </div>
-        <div className="grid min-h-[16mm] place-items-center rounded-md border border-border px-2 py-3">
+        <div className="grid place-items-center gap-1 rounded-md border border-border px-2 py-3">
+          <svg
+            ref={barcode}
+            role="img"
+            aria-label={`Order ${label.number} barcode`}
+            className="h-auto max-w-full text-text"
+          />
           <h2 className="text-base font-semibold">Order #{label.number}</h2>
         </div>
       </footer>

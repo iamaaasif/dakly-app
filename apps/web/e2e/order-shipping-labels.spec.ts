@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 
 import { expect, test } from '@playwright/test';
 
@@ -23,6 +25,9 @@ test('keeps selected orders across stages and prints one page per label', async 
     window.print = () => {
       document.documentElement.dataset.printedLabels = String(
         document.querySelectorAll('.shipping-label').length,
+      );
+      document.documentElement.dataset.printedBarcodes = String(
+        document.querySelectorAll('.shipping-label svg:has(g rect)').length,
       );
     };
   });
@@ -60,17 +65,28 @@ test('keeps selected orders across stages and prints one page per label', async 
       page.getByRole('link', { name: /Print shipping labels/ }).click(),
     ]);
     await expect(preview.locator('html')).toHaveAttribute('data-printed-labels', '2');
+    await expect(preview.locator('html')).toHaveAttribute('data-printed-barcodes', '2');
     const labels = preview.getByRole('article');
     await expect(labels.nth(0)).toContainText('৳354');
     await expect(labels.nth(0)).toContainText('House 14, Block C, Mirpur');
     await expect(labels.nth(1)).toContainText('Paid');
-    await preview.setViewportSize({ width: 360, height: 800 });
+    const evidence = resolve(process.cwd(), '../../docs/design/evidence/ord-10-labels');
+    await mkdir(evidence, { recursive: true });
+    for (const [width, height] of [
+      [1440, 900],
+      [360, 800],
+    ] as const) {
+      await preview.setViewportSize({ width, height });
+      await preview.screenshot({ path: resolve(evidence, `labels-${width}x${height}.png`) });
+    }
     await expect
       .poll(() => preview.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(360);
 
     await preview.emulateMedia({ media: 'print' });
     await expect(preview.getByRole('button', { name: 'Print shipping labels' })).toBeHidden();
+    await preview.setViewportSize({ width: 378, height: 567 });
+    await preview.screenshot({ path: resolve(evidence, 'labels-print.png') });
     const pdf = await preview.pdf({ preferCSSPageSize: true });
     const pages = [...pdf.toString('latin1').matchAll(/\/MediaBox \[0 0 ([\d.]+) ([\d.]+)\]/g)];
     expect(pages).toHaveLength(2);
