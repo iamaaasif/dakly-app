@@ -83,10 +83,17 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await expect(dialog).toHaveCount(0);
     await expect(trigger).toBeFocused();
   }
+  const catalogue = page.getByRole('region', { name: 'Product catalogue' });
+  const emptyHeading = catalogue.getByRole('heading', { name: 'No products yet' });
+  const emptyAddProduct = catalogue.getByRole('button', { name: 'Add product', exact: true });
   try {
     expect((await request('/me/active-store', { storeId: fixture.storeIds[0] })).status()).toBe(
       204,
     );
+    await page.goto('/products');
+    await expect(emptyHeading).toBeVisible();
+    await capture('empty', redesignEvidence, { target: emptyAddProduct });
+
     const categoryIds: Record<string, string> = {};
     for (const name of ['Men', 'Accessories'])
       categoryIds[name] = (await (await request('/products/categories', { name })).json()).id;
@@ -247,11 +254,8 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await expect(page.getByRole('button', { name: /Adjust stock/ })).toHaveCount(0);
 
     await page.goto('/products');
-    const empty = page.getByRole('region', { name: 'Product catalogue' });
-    await expect(empty.getByRole('heading', { name: 'No products yet' })).toBeVisible();
-    await capture('empty', redesignEvidence, {
-      target: empty.getByRole('button', { name: 'Add product', exact: true }),
-    });
+    await expect(emptyHeading).toBeVisible();
+    await expect(emptyAddProduct).toHaveCount(0);
   } finally {
     try {
       await request('/me/active-store', { storeId: fixture.storeIds[0] });
