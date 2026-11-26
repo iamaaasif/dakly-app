@@ -27,16 +27,12 @@ export function ChatChannelFilter({ query }: { query: ChatScreenQuery }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          aria-label="Channels"
-          variant="secondary"
-          className="min-h-10 rounded-md border-border-strong px-2.5 py-1 text-sm min-[1800px]:min-w-[126px] md:min-h-inbox-control"
-        >
+        <Button aria-label="Channels" variant="secondary" size="sm">
           {query.channel ? chatChannelLabels[query.channel] : 'All channels'}
           <ChevronDown aria-hidden="true" size={15} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="inbox-theme w-44 p-1">
+      <PopoverContent align="start" className="w-44 p-1">
         <nav aria-label="Channel" className="grid gap-0.5">
           {[undefined, ...channels].map((channel) => (
             <PopoverClose asChild key={channel ?? 'all'}>

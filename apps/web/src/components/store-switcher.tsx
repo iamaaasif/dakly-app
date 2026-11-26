@@ -8,38 +8,25 @@ import { storeSwitcherKeys } from './store-switcher-keys';
 import { apiRequest } from '@/lib/api-client';
 import { initialsOf } from '@/lib/initials';
 
-type StoreSwitcherProps = {
-  session: SessionContext;
-  onSwitch: (storeId: string) => Promise<void>;
-  compact?: boolean;
-};
-export function StoreSwitcher({ session, onSwitch, compact }: StoreSwitcherProps) {
+type StoreSwitcherProps = { session: SessionContext; onSwitch: (storeId: string) => Promise<void> };
+export function StoreSwitcher({ session, onSwitch }: StoreSwitcherProps) {
   const { shops, options } = useStoreOptions(session);
   const current = session.currentStore;
   if (!session.hasMemberships) return <p className="text-text-muted">No shop yet</p>;
   return (
     <div className="order-last w-full min-w-0 basis-full space-y-2 md:order-none md:w-auto md:max-w-xs md:basis-auto">
-      <div
-        data-compact={compact || undefined}
-        className="group relative flex min-h-12 items-center gap-3 rounded-lg border border-input-border bg-surface px-2 py-1 has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-focus md:data-compact:min-h-10 md:data-compact:min-w-41 md:data-compact:gap-2 md:data-compact:rounded-control md:data-compact:border-border-strong md:data-compact:py-0.5"
-      >
+      <div className="relative flex min-h-12 items-center gap-3 rounded-lg border border-input-border bg-surface px-2 py-1 has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-focus">
         <span
           aria-hidden="true"
-          className="grid size-8 shrink-0 place-items-center rounded-md bg-inverse text-xs font-semibold text-on-primary md:group-data-compact:size-7"
+          className="grid size-8 shrink-0 place-items-center rounded-md bg-inverse text-xs font-semibold text-on-primary"
         >
           {current ? initialsOf(current.name) : ''}
         </span>
-        <div className="min-w-0 flex-1 md:group-data-compact:flex md:group-data-compact:flex-col">
-          <label
-            htmlFor="active-shop"
-            className="block text-xs text-text-muted md:group-data-compact:order-last md:group-data-compact:text-inbox-detail"
-          >
+        <div className="min-w-0 flex-1">
+          <label htmlFor="active-shop" className="block text-xs text-text-muted">
             Current shop
           </label>
-          <p
-            aria-hidden="true"
-            className="font-semibold break-words md:group-data-compact:text-sm md:group-data-compact:leading-tight"
-          >
+          <p aria-hidden="true" className="font-semibold break-words">
             {current?.name ?? 'Choose a shop'}
           </p>
         </div>
@@ -60,14 +47,6 @@ export function StoreSwitcher({ session, onSwitch, compact }: StoreSwitcherProps
           ))}
         </select>
       </div>
-      <ShopListStatus shops={shops} />
-    </div>
-  );
-}
-
-function ShopListStatus({ shops }: { shops: ReturnType<typeof useStoreOptions>['shops'] }) {
-  return (
-    <>
       {shops.isPending ? <p role="status">Loading shops…</p> : null}
       {shops.error ? (
         <p role="alert">
@@ -86,7 +65,7 @@ function ShopListStatus({ shops }: { shops: ReturnType<typeof useStoreOptions>['
           Load more shops
         </Button>
       ) : null}
-    </>
+    </div>
   );
 }
 

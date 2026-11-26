@@ -11,7 +11,7 @@ import { Input } from '@dakly/ui/input';
 import { useOrderCatalogue } from '@/lib/order-entry/order-catalogue';
 
 const selectClass =
-  'min-h-inbox-field w-full rounded-md border border-input-border bg-surface px-2 text-sm aria-invalid:border-danger';
+  'w-full rounded-md border border-input-border bg-surface px-2 text-sm aria-invalid:border-danger';
 
 type Variant = OrderCatalogueProduct['variants'][number];
 
@@ -108,7 +108,7 @@ function SizeAndQuantity({
           <Input
             {...props}
             type="number"
-            className="min-h-inbox-field text-sm"
+            className="text-sm"
             min={1}
             {...register('items.0.quantity', { valueAsNumber: true })}
           />

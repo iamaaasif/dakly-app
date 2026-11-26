@@ -30,7 +30,7 @@ export function MakeOrderFields() {
         {(props) => (
           <Input
             {...props}
-            className="min-h-inbox-field text-sm"
+            className="text-sm"
             placeholder="Customer name"
             {...register('recipient.name')}
           />
@@ -41,7 +41,7 @@ export function MakeOrderFields() {
           <Input
             {...props}
             type="tel"
-            className="min-h-inbox-field text-sm"
+            className="text-sm"
             autoComplete="tel-national"
             placeholder="01712-345678"
             {...register('recipient.phone')}
@@ -52,7 +52,7 @@ export function MakeOrderFields() {
         {(props) => (
           <Input
             {...props}
-            className="min-h-inbox-field text-sm"
+            className="text-sm"
             placeholder="House, road, area"
             {...register('recipient.address')}
           />
@@ -64,7 +64,7 @@ export function MakeOrderFields() {
         }
       />
       <PaidInAdvance chargePoisha={chargePoisha} />
-      <dl className="space-y-1 rounded-control bg-surface-muted p-3 text-sm">
+      <dl className="space-y-1 rounded-md bg-surface-muted p-3 text-sm">
         <Row label="Product" value={formatMoney(subtotal)} />
         <Row
           label="Delivery"

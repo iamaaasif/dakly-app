@@ -1,10 +1,10 @@
+import { Bot, CircleCheck, Clock, Inbox, UserRound, UserX } from 'lucide-react';
 import Link from 'next/link';
 
 import type { ConversationCountsResponse } from '@dakly/contracts/chats';
 
 import { useConversationCounts } from '../api/conversations';
 import { chatTabLabels, chatTabs, chatsHref, type ChatScreenQuery } from '../chat-filters';
-import { InboxIcon } from './inbox-icon';
 
 const countKeys: Record<(typeof chatTabs)[number], keyof ConversationCountsResponse> = {
   all: 'all',
@@ -16,12 +16,12 @@ const countKeys: Record<(typeof chatTabs)[number], keyof ConversationCountsRespo
 };
 
 const folderIcons = {
-  all: 'all',
-  'needs-you': 'mine',
-  'ai-handling': 'ai',
-  'follow-up': 'snoozed',
-  done: 'resolved',
-  'not-customers': 'not-customer',
+  all: Inbox,
+  'needs-you': UserRound,
+  'ai-handling': Bot,
+  'follow-up': Clock,
+  done: CircleCheck,
+  'not-customers': UserX,
 } as const;
 
 export function ChatTabs({ query }: { query: ChatScreenQuery }) {
@@ -32,7 +32,7 @@ export function ChatTabs({ query }: { query: ChatScreenQuery }) {
       className="flex shrink-0 gap-1 overflow-x-auto p-2.5 min-[1440px]:flex-col min-[1440px]:overflow-visible"
     >
       {chatTabs.map((tab) => {
-        const icon = folderIcons[tab];
+        const Icon = folderIcons[tab];
         return (
           <Link
             key={tab}
@@ -45,9 +45,9 @@ export function ChatTabs({ query }: { query: ChatScreenQuery }) {
               post: undefined,
             })}
             aria-current={query.tab === tab ? 'page' : undefined}
-            className="flex min-h-10 min-w-0 shrink-0 items-center gap-2 rounded-control border border-transparent px-2.5 text-sm text-text-muted hover:bg-surface hover:text-text aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-text aria-[current=page]:shadow-inbox-folder"
+            className="flex min-h-10 min-w-0 shrink-0 items-center gap-2 rounded-md border border-transparent px-2.5 text-sm text-text-muted hover:bg-surface hover:text-text aria-[current=page]:border-border aria-[current=page]:bg-surface aria-[current=page]:font-semibold aria-[current=page]:text-text"
           >
-            <InboxIcon name={icon} />
+            <Icon aria-hidden="true" size={16} />
             <span className="flex-1 truncate">{chatTabLabels[tab]}</span>
             {counts ? (
               <span className="font-normal tabular-nums">{counts[countKeys[tab]]}</span>

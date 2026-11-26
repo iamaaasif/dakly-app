@@ -1,4 +1,5 @@
 'use client';
+import { MessageSquareText } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
@@ -6,7 +7,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useSavedReplies } from '../api/saved-replies';
-import { InboxIcon } from './inbox-icon';
 
 // Staff choose a saved reply by hand; the AI never picks one (D43).
 export function SavedRepliesPicker({
@@ -20,20 +20,15 @@ export function SavedRepliesPicker({
   return (
     <Popover open={open && !disabled} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="secondary"
-          type="button"
-          disabled={disabled}
-          className="min-h-9 gap-1.5 rounded-control border-transparent px-2.5 py-1 text-sm"
-        >
-          <InboxIcon name="saved-replies" />
+        <Button variant="secondary" type="button" disabled={disabled} size="sm">
+          <MessageSquareText aria-hidden="true" size={16} />
           Saved replies
         </Button>
       </PopoverTrigger>
       <PopoverContent
         side="top"
         align="start"
-        className="inbox-theme max-h-64 max-w-[calc(100vw-2rem)] overflow-y-auto p-1"
+        className="max-h-64 max-w-[calc(100vw-2rem)] overflow-y-auto p-1"
       >
         <div role="menu" aria-label="Saved replies">
           <SavedReplyList

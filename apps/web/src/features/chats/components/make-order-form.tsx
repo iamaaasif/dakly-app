@@ -1,5 +1,6 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { FormProvider, useForm, type UseFormReturn } from 'react-hook-form';
@@ -12,7 +13,6 @@ import {
 } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 
-import { InboxIcon } from './inbox-icon';
 import { MakeOrderFields } from './make-order-fields';
 import { useCreateOrder } from '@/lib/order-entry/create-order';
 
@@ -113,8 +113,8 @@ function MakeOrderFooter({ placed, create, busy, onConfirm }: MakeOrderFooterPro
         </p>
       ) : null}
       <div className="flex flex-col gap-2">
-        <Button type="submit" loading={create.isPending} className="w-full rounded-control">
-          <InboxIcon name="order" />
+        <Button type="submit" loading={create.isPending} className="w-full rounded-md">
+          <ShoppingBag aria-hidden="true" size={16} />
           {create.mustRetry ? 'Retry save' : 'Create order'}
         </Button>
         <Button type="button" variant="secondary" disabled={busy} onClick={onConfirm}>

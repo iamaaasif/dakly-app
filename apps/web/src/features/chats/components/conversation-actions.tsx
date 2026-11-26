@@ -1,5 +1,5 @@
 'use client';
-import { RotateCcw } from 'lucide-react';
+import { Bell, Check, RotateCcw, UserPlus } from 'lucide-react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Button } from '@dakly/ui/button';
@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 import { useUpdateConversation } from '../api/conversation-actions';
 import { useConversationAssignees } from '../api/conversations';
-import { InboxIcon } from './inbox-icon';
 import { LabelMenu } from './label-menu';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -24,7 +23,7 @@ export function ConversationActions({ conversation }: { conversation: Conversati
       {status === 'later' || done ? (
         <Button
           variant="secondary"
-          className="min-h-10 rounded-md border-border-strong px-2.5 py-1 text-sm md:min-h-inbox-control"
+          size="sm"
           loading={update.isPending}
           onClick={() => update.mutate({ status: 'open' })}
         >
@@ -34,22 +33,22 @@ export function ConversationActions({ conversation }: { conversation: Conversati
       ) : (
         <Button
           variant="secondary"
-          className="min-h-10 rounded-md border-border-strong px-2.5 py-1 text-sm md:min-h-inbox-control"
+          size="sm"
           loading={update.isPending}
           onClick={() => update.mutate({ status: 'later' })}
         >
-          <InboxIcon name="remind" />
-          <span className="max-[480px]:sr-only">Remind me</span>
+          <Bell aria-hidden="true" size={16} />
+          Remind me
         </Button>
       )}
       {done ? null : (
         <Button
           variant="secondary"
-          className="min-h-10 rounded-md border-border-strong px-2.5 py-1 text-sm md:min-h-inbox-control"
+          size="sm"
           loading={update.isPending}
           onClick={() => update.mutate({ status: 'done' })}
         >
-          <InboxIcon name="done" />
+          <Check aria-hidden="true" size={16} />
           Done
         </Button>
       )}
@@ -72,14 +71,11 @@ function AssigneePicker({ conversation }: { conversation: ConversationResponse }
       value={conversation.assigneeUserId ?? nobody}
       onValueChange={(value) => update.mutate({ assigneeUserId: value === nobody ? null : value })}
     >
-      <SelectTrigger
-        aria-label="Assigned to"
-        className="min-h-10 w-auto max-w-28 rounded-md border-border-strong px-2.5 py-1 text-sm sm:max-w-40 md:min-h-inbox-control"
-      >
-        <InboxIcon name="assign" />
+      <SelectTrigger aria-label="Assigned to" className="w-auto max-w-28 sm:max-w-40">
+        <UserPlus aria-hidden="true" size={16} />
         <SelectValue />
       </SelectTrigger>
-      <SelectContent className="inbox-theme">
+      <SelectContent>
         <SelectItem value={nobody}>Nobody</SelectItem>
         {assignees.data?.map((assignee) => (
           <SelectItem key={assignee.userId} value={assignee.userId}>

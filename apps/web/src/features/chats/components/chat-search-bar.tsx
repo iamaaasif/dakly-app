@@ -1,4 +1,5 @@
 'use client';
+import { ArrowUpDown, ListFilter, MessageSquare, Search } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
@@ -15,7 +16,6 @@ import {
   chatsHref,
   type ChatScreenQuery,
 } from '../chat-filters';
-import { InboxIcon } from './inbox-icon';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useUrlRouter } from '@/lib/use-url-query';
 
@@ -35,7 +35,7 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
   return (
     <div className="relative min-w-0 flex-1">
       <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2">
-        <InboxIcon name="search" />
+        <Search aria-hidden="true" size={16} />
       </span>
       <Input
         type="search"
@@ -44,7 +44,7 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
         maxLength={120}
         value={words}
         onChange={(event) => setWords(event.target.value)}
-        className="min-h-10 rounded-control border-border-strong bg-inbox-thread py-1 pl-9 text-sm"
+        className="bg-surface-muted pl-9"
       />
     </div>
   );
@@ -61,14 +61,11 @@ export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channe
           router.replace(chatsHref({ ...query, sort: sort as ChatScreenQuery['sort'] }))
         }
       >
-        <SelectTrigger
-          aria-label="Sort chats"
-          className="min-h-10 w-auto rounded-md border-border-strong px-2.5 py-1 text-sm min-[1800px]:w-[201px] md:min-h-inbox-control"
-        >
-          <InboxIcon name="sort" />
+        <SelectTrigger aria-label="Sort chats" className="w-auto">
+          <ArrowUpDown aria-hidden="true" size={16} />
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="inbox-theme">
+        <SelectContent>
           {chatSorts.map((sort) => (
             <SelectItem key={sort} value={sort}>
               {chatSortLabels[sort]}
@@ -79,15 +76,12 @@ export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channe
       {channel}
       <Popover>
         <PopoverTrigger asChild>
-          <Button
-            variant="secondary"
-            className="min-h-10 rounded-md border-border-strong px-2.5 py-1 text-sm md:min-h-inbox-control"
-          >
-            <InboxIcon name="filter" />
+          <Button variant="secondary" size="sm">
+            <ListFilter aria-hidden="true" size={16} />
             Filter
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="inbox-theme" aria-label="Filter chats">
+        <PopoverContent aria-label="Filter chats">
           <ChatFilterPanel query={query} />
         </PopoverContent>
       </Popover>
@@ -113,14 +107,11 @@ function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
         )
       }
     >
-      <SelectTrigger
-        aria-label="Chat folder"
-        className="hidden min-h-10 w-auto rounded-md border-border-strong px-2.5 py-1 text-sm min-[1440px]:flex min-[1800px]:w-40 md:min-h-inbox-control"
-      >
-        <InboxIcon name="chat" />
+      <SelectTrigger aria-label="Chat folder" className="hidden w-auto min-[1440px]:flex">
+        <MessageSquare aria-hidden="true" size={16} />
         <SelectValue />
       </SelectTrigger>
-      <SelectContent className="inbox-theme">
+      <SelectContent>
         {chatTabs.map((tab) => (
           <SelectItem key={tab} value={tab}>
             {tab === 'all' ? 'All chats' : chatTabLabels[tab]}
@@ -151,7 +142,7 @@ function ChatFilterPanel({ query }: { query: ChatScreenQuery }) {
           <SelectTrigger aria-labelledby="chat-assignee-label">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="inbox-theme">
+          <SelectContent>
             <SelectItem value={anyone}>Anyone</SelectItem>
             {assignees.data?.map((assignee) => (
               <SelectItem key={assignee.userId} value={assignee.userId}>
@@ -198,7 +189,7 @@ function LabelFilter({ query }: { query: ChatScreenQuery }) {
         <SelectTrigger aria-labelledby="chat-label-label">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="inbox-theme">
+        <SelectContent>
           <SelectItem value={anyLabel}>Any label</SelectItem>
           {labels.data?.map((label) => (
             <SelectItem key={label} value={label}>

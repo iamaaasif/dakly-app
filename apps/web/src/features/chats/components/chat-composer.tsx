@@ -1,4 +1,5 @@
 'use client';
+import { Send } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
@@ -8,7 +9,6 @@ import { Textarea } from '@dakly/ui/textarea';
 
 import { useAddNote, useSendReply } from '../api/conversation-thread';
 import { replyWindow } from '../reply-window';
-import { InboxIcon } from './inbox-icon';
 import { SavedRepliesPicker } from './saved-replies-picker';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -85,13 +85,13 @@ function ModeTabs() {
   return (
     <TabsList
       aria-label="Message type"
-      className="inline-flex gap-0.5 rounded-control border-0 bg-surface-muted p-0.5"
+      className="inline-flex gap-0.5 rounded-md border-0 bg-surface-muted p-0.5"
     >
       {(['reply', 'note'] as const).map((value) => (
         <TabsTrigger
           key={value}
           value={value}
-          className="mb-0 min-h-10 rounded-control border-0 px-3 text-sm data-[state=active]:bg-surface data-[state=active]:font-semibold md:min-h-8"
+          className="mb-0 min-h-10 rounded-md border-0 px-3 text-sm data-[state=active]:bg-surface data-[state=active]:font-semibold md:min-h-8"
         >
           {modeLabels[value]}
         </TabsTrigger>
@@ -112,7 +112,7 @@ type WriteBoxProps = {
 function WriteBox({ mode, text, disabled, pending, onChange, onSend }: WriteBoxProps) {
   const reply = mode === 'reply';
   return (
-    <div className="rounded-control border border-border-strong bg-surface focus-within:border-focus">
+    <div className="rounded-md border border-border-strong bg-surface focus-within:border-focus">
       <Textarea
         aria-label={reply ? 'Write a reply' : 'Write an internal note'}
         placeholder={reply ? 'Write a reply' : 'Write a note for your team'}
@@ -131,7 +131,7 @@ function WriteBox({ mode, text, disabled, pending, onChange, onSend }: WriteBoxP
           onSend();
         }}
         onChange={(event) => onChange(event.target.value)}
-        className="block h-inbox-composer-input max-h-32 min-h-16 resize-y rounded-b-none border-0 bg-transparent text-sm focus-visible:outline-none"
+        className="block max-h-32 min-h-16 resize-y rounded-b-none border-0 bg-transparent text-sm focus-visible:outline-none"
       />
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 border-t border-border px-2 py-2">
         {reply ? <SavedRepliesPicker disabled={disabled || pending} onPick={onChange} /> : null}
@@ -139,10 +139,11 @@ function WriteBox({ mode, text, disabled, pending, onChange, onSend }: WriteBoxP
           type="button"
           aria-label={reply ? 'Send reply' : 'Save note'}
           disabled={disabled || !text.trim() || pending}
-          className="ml-auto min-h-10 gap-1.5 rounded-md px-3 py-1 text-sm md:min-h-8"
+          size="sm"
+          className="ml-auto"
           onClick={onSend}
         >
-          <InboxIcon name="send" />
+          <Send aria-hidden="true" size={16} />
           {reply ? 'Send' : 'Save note'}
         </Button>
       </div>

@@ -8,7 +8,6 @@ import { cn } from '@dakly/ui/cn';
 
 import { chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { contactDisplayName } from '../contact-name';
-import { InboxIcon } from './inbox-icon';
 import { formatDate, formatTime } from '@/lib/format-date';
 import { initialsOf } from '@/lib/initials';
 import { useSessionContext } from '@/lib/session-context';
@@ -26,8 +25,7 @@ type ChatRowProps = {
   selection?: { selected: boolean; onToggle: () => void };
 };
 
-const rowClasses =
-  'flex gap-3 border-l-2 border-transparent px-3 py-2.5 min-[1800px]:min-h-[95px] hover:bg-inbox-thread';
+const rowClasses = 'flex gap-3 border-l-2 border-transparent px-3 py-2.5 hover:bg-surface-muted';
 
 export function ChatRow({ conversation, query, selection }: ChatRowProps) {
   const name = contactDisplayName(conversation);
@@ -52,7 +50,7 @@ export function ChatRow({ conversation, query, selection }: ChatRowProps) {
         aria-current={query.chat === conversation.id ? 'true' : undefined}
         className={cn(
           rowClasses,
-          'aria-[current=true]:border-primary aria-[current=true]:bg-inbox-selected',
+          'aria-[current=true]:border-primary aria-[current=true]:bg-primary-soft',
         )}
       >
         {content}
@@ -77,7 +75,7 @@ function ChatRowContent({
           {conversation.lastMessageAt ? (
             <time
               dateTime={conversation.lastMessageAt}
-              className="shrink-0 text-inbox-detail text-text-muted"
+              className="shrink-0 text-xs text-text-muted"
             >
               <LastActivity value={conversation.lastMessageAt} />
             </time>
@@ -99,25 +97,15 @@ function Avatar({ name, channel }: { name: string; channel: ConversationResponse
   const { icon: Icon, label } = channelIcons[channel];
   return (
     <div className="relative shrink-0">
-      <span className="flex size-10 items-center justify-center rounded-full border border-inbox-avatar-border bg-inbox-avatar text-xs font-semibold text-inbox-avatar-text">
+      <span className="border-inbox-avatar-border bg-inbox-avatar text-inbox-avatar-text flex size-10 items-center justify-center rounded-full border text-xs font-semibold">
         {initialsOf(name)}
       </span>
-      {channel === 'whatsapp' ? (
-        <span
-          aria-label={label}
-          role="img"
-          className="absolute -right-1 -bottom-1 rounded-full bg-surface"
-        >
-          <InboxIcon name="whatsapp" />
-        </span>
-      ) : (
-        <Icon
-          aria-label={label}
-          role="img"
-          size={14}
-          className="absolute -right-1 -bottom-1 rounded-full bg-surface text-info"
-        />
-      )}
+      <Icon
+        aria-label={label}
+        role="img"
+        size={14}
+        className="absolute -right-1 -bottom-1 rounded-full bg-surface text-info"
+      />
     </div>
   );
 }

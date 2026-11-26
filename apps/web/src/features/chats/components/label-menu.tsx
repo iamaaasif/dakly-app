@@ -1,4 +1,5 @@
 'use client';
+import { Tag } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
@@ -9,7 +10,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 
 import { useChangeLabel } from '../api/conversation-actions';
 import { useConversationLabels } from '../api/conversations';
-import { InboxIcon } from './inbox-icon';
 
 // Labels are the customer's tags, so a label put here shows on the customer profile too.
 export function LabelMenu({ conversation }: { conversation: ConversationResponse }) {
@@ -19,16 +19,13 @@ export function LabelMenu({ conversation }: { conversation: ConversationResponse
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant="secondary"
-          className="min-h-10 rounded-md border-border-strong px-2.5 py-1 text-sm md:min-h-inbox-control"
-        >
-          <InboxIcon name="label" />
+        <Button variant="secondary" size="sm">
+          <Tag aria-hidden="true" size={16} />
           Label
           {conversation.labels.length ? ` (${conversation.labels.length})` : ''}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="inbox-theme" aria-label="Labels">
+      <PopoverContent aria-label="Labels">
         <div className="space-y-3">
           <ul className="max-h-48 space-y-1 overflow-y-auto">
             {options.map((label) => (

@@ -77,7 +77,7 @@ function CustomerIdentity({
   const name = contactDisplayName(conversation);
   return (
     <div className="flex items-center gap-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full border border-inbox-avatar-border bg-inbox-avatar text-sm font-semibold text-inbox-avatar-text">
+      <span className="border-inbox-avatar-border bg-inbox-avatar text-inbox-avatar-text flex size-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold">
         {initialsOf(name)}
       </span>
       <div className="min-w-0">

@@ -1,8 +1,6 @@
-import { Clock } from 'lucide-react';
+import { Clock, UserCheck } from 'lucide-react';
 
 import type { ContactKind } from '@dakly/contracts/contacts';
-
-import { InboxIcon } from './inbox-icon';
 
 const statuses: Record<ContactKind, { title: string; text: string }> = {
   chat_only: {
@@ -21,12 +19,12 @@ export function CustomerStatus({ kind }: { kind: ContactKind }) {
     <div
       className={
         saved
-          ? 'flex gap-2 rounded-control bg-success-soft p-3 text-success'
-          : 'flex gap-2 rounded-control bg-surface-muted p-3'
+          ? 'flex gap-2 rounded-md bg-success-soft p-3 text-success'
+          : 'flex gap-2 rounded-md bg-surface-muted p-3'
       }
     >
       {saved ? (
-        <InboxIcon name="lead" />
+        <UserCheck aria-hidden="true" size={16} />
       ) : (
         <Clock aria-hidden="true" size={16} className="shrink-0" />
       )}

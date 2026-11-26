@@ -1,11 +1,10 @@
-import { Check, StickyNote } from 'lucide-react';
+import { Check, Copy, StickyNote } from 'lucide-react';
 import { useState } from 'react';
 
 import type { ConversationMessageResponse } from '@dakly/contracts/chats';
 import { Badge } from '@dakly/ui/badge';
 import { cn } from '@dakly/ui/cn';
 
-import { InboxIcon } from './inbox-icon';
 import { formatTime } from '@/lib/format-date';
 
 const kindLabels: Partial<Record<ConversationMessageResponse['kind'], string>> = {
@@ -29,9 +28,9 @@ const statusLabels: Record<ConversationMessageResponse['status'], string> = {
 };
 
 function bubbleStyle({ kind, direction }: ConversationMessageResponse) {
-  if (kind === 'note') return 'border border-inbox-note-border bg-warning-soft text-text';
+  if (kind === 'note') return 'border border-warning bg-warning-soft text-text';
   return direction === 'out'
-    ? 'border border-inbox-reply-border bg-inbox-selected text-text'
+    ? 'border border-border bg-primary-soft text-text'
     : 'border border-border bg-surface text-text';
 }
 
@@ -47,7 +46,7 @@ export function MessageBubble({ message }: { message: ConversationMessageRespons
     <li className={cn('flex flex-col gap-1', outgoing ? 'items-end' : 'items-start')}>
       <div
         className={cn(
-          'max-w-[85%] rounded-inbox-bubble px-3 py-1.5 text-base break-words whitespace-pre-wrap',
+          'max-w-[85%] rounded-lg px-3 py-1.5 text-base break-words whitespace-pre-wrap',
           bubbleStyle(message),
         )}
       >
@@ -92,7 +91,7 @@ function CopyMessageButton({ body }: { body: string }) {
         });
       }}
     >
-      {copied ? <Check aria-hidden="true" size={14} /> : <InboxIcon name="copy" />}
+      {copied ? <Check aria-hidden="true" size={14} /> : <Copy aria-hidden="true" size={16} />}
     </button>
   );
 }

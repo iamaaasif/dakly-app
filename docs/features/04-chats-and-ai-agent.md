@@ -23,7 +23,7 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 
 ## Inbox layout
 
-The Inbox fills the workspace. Wide screens show the folder navigation, conversation list, thread, and customer and order panel. At the 2,001 × 1,238 Figma viewport with the app navigation collapsed, the folder navigation is 216 px wide, the conversation list is 340 px, and the customer and order panel is 319 px. The thread takes the remaining width. Collapsing the folders moves the Inbox title and toggle into the toolbar and gives their column to the chat workspace. The folder navigation moves above the list on narrower screens. On phones, opening a chat or the customer panel takes the place of the list. Sort, channel, and filters are in the Inbox toolbar. Saved replies and Send share the composer footer. Reply and Internal note keep separate drafts. Opening a conversation shows the latest messages. Loading earlier messages keeps the current messages in view.
+The Inbox fills the workspace with the folder list, conversation list, thread, and customer and order panel side by side. Collapsing the folders moves the Inbox title and toggle into the toolbar. On narrower screens the folders sit above the list, and on phones opening a chat or the customer panel takes the place of the list. Sort, channel and filters are in the toolbar; Saved replies and Send share the composer footer. Reply and Internal note keep separate drafts. Opening a conversation shows the latest messages, and loading earlier ones keeps the current messages in view.
 
 ## Product requirements
 
