@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "handover_summary" text;

@@ -33,7 +33,7 @@ import {
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV15 } from './prompts/chat-reply.v15';
+import { chatReplyV16 } from './prompts/chat-reply.v16';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import { promptWith } from './reply-prompt-version';
 import {
@@ -176,7 +176,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV15, inChat, ad),
+        prompt: promptWith(chatReplyV16, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentToolsFor(input.rules),

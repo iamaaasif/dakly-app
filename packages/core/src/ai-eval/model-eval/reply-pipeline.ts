@@ -14,7 +14,7 @@ import {
 } from '../../ai-agent/chat-memory';
 import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
 import { handoverReason } from '../../ai-agent/handover-reason';
-import { chatReplyV15 } from '../../ai-agent/prompts/chat-reply.v15';
+import { chatReplyV16 } from '../../ai-agent/prompts/chat-reply.v16';
 import { chatReplyV9 } from '../../ai-agent/prompts/chat-reply.v9';
 import { classifyChat } from '../../ai-agent/prompts/classify-chat.v4';
 import {
@@ -336,7 +336,7 @@ async function composeOnce(
       history ? `reply:${model}:${history}` : `reply:${model}`,
       {
         model,
-        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV15.instructions,
+        instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV16.instructions,
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentToolsFor(evalShopRules(golden)),

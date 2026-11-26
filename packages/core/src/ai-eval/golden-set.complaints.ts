@@ -60,6 +60,39 @@ export const complaintGoldenCases: GoldenCase[] = [
     ...askedDetails,
   },
   {
+    id: 'complaint-no-repeat-name-banglish',
+    language: 'banglish',
+    question: 'order 1042 ekhono ashe nai, amar nam Karim, phone 01712345678',
+    expectedHandover: 'complaint',
+    acceptedHandover: 'angry',
+    allowedAmountsTaka: [],
+    earlier: [
+      { from: 'customer', text: 'amar order kothay?' },
+      { from: 'shop', text: 'দুঃখিত, আপনার অর্ডার নম্বর বা ফোন নম্বর ও নামটা দেবেন?' },
+    ],
+  },
+  {
+    id: 'complaint-refuses-details-bn',
+    language: 'bangla',
+    question: 'আমি কোনো নম্বর বা নাম দেব না, এখনি মানুষের সাথে কথা বলব',
+    expectedHandover: 'asked_for_person',
+    acceptedHandover: 'complaint',
+    allowedAmountsTaka: [],
+    earlier: [
+      { from: 'customer', text: 'আমার ডেলিভারি আসেনি' },
+      { from: 'shop', text: 'দুঃখিত, অর্ডার নম্বর আর ফোন নম্বরটা দেবেন?' },
+    ],
+  },
+  {
+    id: 'complaint-damaged-photo-mixed',
+    language: 'mixed',
+    question: 'কুর্তিটা torn এসেছে, ক্ষতি হয়েছে',
+    expectedHandover: null,
+    acceptedHandover: 'complaint',
+    allowedAmountsTaka: [],
+    mentionsAnyOf: detailWords,
+  },
+  {
     id: 'policy-exchange-banglish',
     language: 'banglish',
     question: 'exchange policy ki?',
@@ -123,6 +156,12 @@ export const complaintRecordedOutcomes: Record<string, EvalOutcome> = {
   },
   'complaint-details-banglish': { kind: 'handover', reason: 'complaint' },
   'complaint-details-bn': { kind: 'handover', reason: 'complaint' },
+  'complaint-no-repeat-name-banglish': { kind: 'handover', reason: 'complaint' },
+  'complaint-refuses-details-bn': { kind: 'handover', reason: 'asked_for_person' },
+  'complaint-damaged-photo-mixed': {
+    kind: 'reply',
+    text: 'দুঃখিত, ছেঁড়া পণ্য পাওয়ায় আমরা লজ্জিত। অর্ডার নম্বর বা ফোন নম্বর আর একটা ছবি দেবেন?',
+  },
   'policy-exchange-banglish': {
     kind: 'reply',
     text: '৭ দিনের মধ্যে ট্যাগসহ পণ্য বদল করা যায়। কোন পণ্যটি দেখতে চান?',

@@ -219,7 +219,14 @@ export class InboxService {
       const after = await this.repository.update(
         storeId,
         id,
-        { responder, aiResumesAt, handoverReason: null, handedOverAt: null },
+        {
+          responder,
+          aiResumesAt,
+          handoverReason: null,
+          handedOverAt: null,
+          // The summary stays while people handle the chat and goes when the AI takes it back.
+          ...(responder === 'ai' ? { handoverSummary: null } : {}),
+        },
         { now },
       );
       if (!after) throw messagingError('CONVERSATION_NOT_FOUND');
@@ -243,7 +250,13 @@ export class InboxService {
         storeId,
         id,
         canReturn
-          ? { responder: 'ai', aiResumesAt: null, handoverReason: null, handedOverAt: null }
+          ? {
+              responder: 'ai',
+              aiResumesAt: null,
+              handoverReason: null,
+              handoverSummary: null,
+              handedOverAt: null,
+            }
           : { aiResumesAt: null },
         { now, bumpVersion: false },
       );
@@ -269,8 +282,15 @@ export class InboxService {
   async handOver(
     storeId: string,
     id: string,
-    reason: (typeof handoverReasons)[number],
-    returnAfterMinutes: number | null,
+    {
+      reason,
+      returnAfterMinutes,
+      summary,
+    }: {
+      reason: (typeof handoverReasons)[number];
+      returnAfterMinutes: number | null;
+      summary: string;
+    },
   ) {
     return this.transaction.run(storeId, async () => {
       const before = await this.repository.find(storeId, id, 'no key update');
@@ -287,6 +307,7 @@ export class InboxService {
           status: 'needs_you',
           responder: 'human',
           handoverReason: reason,
+          handoverSummary: summary,
           handedOverAt: now,
           aiResumesAt,
         },

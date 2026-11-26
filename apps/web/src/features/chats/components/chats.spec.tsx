@@ -28,6 +28,7 @@ const sadia: ConversationResponse = {
   responder: 'ai',
   assigneeUserId: null,
   handoverReason: null,
+  handoverSummary: null,
   handedOverAt: null,
   aiResumesAt: null,
   lastMessageAt: '2026-11-19T04:03:00.000000Z',
@@ -562,6 +563,19 @@ describe('Conversation actions', () => {
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.path).toBe(`/api/conversations/${chatId}/return-to-ai`);
     expect(await screen.findByText('Dakly AI is handling this chat again.')).toBeTruthy();
+  });
+
+  it('shows the hand-over summary while people handle the chat, and not while the AI does', async () => {
+    const summary = 'Karim, 01712345678, order 1042 not delivered. Checked: shipped by Pathao.';
+    respondToActions({ responder: 'human', handoverReason: 'complaint', handoverSummary: summary });
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    expect(await screen.findByText('Your team is handling this chat')).toBeTruthy();
+    expect(screen.getByText(summary)).toBeTruthy();
+    cleanup();
+    respondToActions({ responder: 'ai', handoverSummary: null });
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    expect(await screen.findByText('Dakly AI is handling this chat')).toBeTruthy();
+    expect(screen.queryByText(/Handover summary/)).toBeNull();
   });
 
   it('marks a chat done, and offers Reopen once it is', async () => {
