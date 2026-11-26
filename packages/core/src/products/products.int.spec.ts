@@ -14,7 +14,7 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
-import type { TeamService } from '../team/team.service';
+import { TeamService } from '../team/team.service';
 import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
@@ -25,6 +25,13 @@ import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
 
 const actor = { kind: 'system' } as const;
+const productEditor: StoreAccess = {
+  role: 'owner',
+  areas: { products: 'edit' },
+  seeFullPhone: true,
+  exportLists: true,
+  refund: true,
+};
 const instant = new Date('2026-11-17T08:00:00Z');
 
 describe('ProductsService with Postgres', () => {
@@ -72,7 +79,8 @@ describe('ProductsService with Postgres', () => {
     brands,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
-  const controller = new ProductsController(service, {} as TeamService);
+  const team = new TeamService({} as ConstructorParameters<typeof TeamService>[0]);
+  const controller = new ProductsController(service, team);
   beforeAll(() => f.setup());
   afterAll(async () => {
     for (const table of [
@@ -131,18 +139,15 @@ describe('ProductsService with Postgres', () => {
       ...settings,
     });
     const product = await service.create(f.a, input, actor);
-    const owner: StoreAccess = {
-      role: 'owner',
-      areas: { products: 'edit' },
-      seeFullPhone: true,
-      exportLists: true,
-      refund: true,
+    const viewer = {
+      ...productEditor,
+      role: 'custom' as const,
+      areas: { products: 'view' as const },
     };
-    const viewer = { ...owner, role: 'custom' as const, areas: { products: 'view' as const } };
 
-    expect(await controller.getById(f.a, owner, product.id)).toMatchObject(settings);
+    expect(await controller.getById(f.a, productEditor, product.id)).toMatchObject(settings);
     expect(
-      (await controller.list(f.a, owner, { limit: 1, search: input.name })).items[0],
+      (await controller.list(f.a, productEditor, { limit: 1, search: input.name })).items[0],
     ).toMatchObject(settings);
     const publicViews = [
       await controller.getById(f.a, viewer, product.id),
@@ -198,7 +203,7 @@ describe('ProductsService with Postgres', () => {
     await expect(
       service.edit(f.a, product.id, { negotiationEnabled: true }, actor),
     ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_VARIANT_PRICE' });
-    expect(await controller.getById(f.a, builtInRoleAccess.owner, product.id)).toMatchObject({
+    expect(await controller.getById(f.a, productEditor, product.id)).toMatchObject({
       negotiationEnabled: false,
       negotiationOpeningPoisha: 170000,
       negotiationFloorPoisha: 140000,
