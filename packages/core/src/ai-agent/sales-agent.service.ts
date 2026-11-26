@@ -34,7 +34,7 @@ import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
 import { quotedOfferSources, type OfferQuote } from './offer-lower-price';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV16 } from './prompts/chat-reply.v16';
+import { chatReplyV17 } from './prompts/chat-reply.v17';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import { promptWith } from './reply-prompt-version';
 import { salesAgentToolsFor } from './sales-agent-tool-definitions';
@@ -64,6 +64,7 @@ export type ComposedReply =
       cards: ProductCard[];
       toolResults: object[];
       toolNames: string[];
+      offerQuotes: OfferQuote[];
       earlierCustomerTexts: string[];
       sources: { tool: string; refs: string[] }[];
     }
@@ -130,6 +131,7 @@ export class SalesAgentService {
         phone: shop.phone,
         linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
         earlierCustomerTexts: composed.earlierCustomerTexts,
+        offerQuotes: composed.offerQuotes,
       },
       input.customerTexts,
     );
@@ -172,7 +174,7 @@ export class SalesAgentService {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
         purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV16, inChat, ad),
+        prompt: promptWith(chatReplyV17, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
         tools: salesAgentToolsFor(
@@ -185,7 +187,8 @@ export class SalesAgentService {
         return attempt.code === 'AI_STORE_BUSY'
           ? { kind: 'busy' }
           : { kind: 'handover', reason: 'ai_unavailable' };
-      if (attempt.kind === 'output')
+      if (attempt.kind === 'output') {
+        const offerQuotes = results.flatMap(({ quote }) => (quote ? [quote] : []));
         return {
           kind: 'reply',
           text: attempt.output.reply,
@@ -193,12 +196,14 @@ export class SalesAgentService {
           cards: await this.cards(storeId, results),
           toolResults: results.map(({ result }) => result),
           toolNames: results.map(({ tool }) => tool),
+          offerQuotes,
           earlierCustomerTexts: customerLines(history),
           sources: withShownProducts(
-            sourcesOf(results, attempt.output.reply),
+            sourcesOf(results, attempt.output.reply, offerQuotes),
             shownProductIds(results, attempt.output.reply),
           ),
         };
+      }
       const outcome = await this.answerToolCalls(scoped, attempt.toolCalls, results);
       if ('handover' in outcome)
         return { kind: 'handover', reason: outcome.handover, summary: outcome.summary };
@@ -430,11 +435,11 @@ function customerLines(history: readonly HistoryMessage[] | undefined) {
   );
 }
 
-function sourcesOf(results: ToolResult[], reply: string) {
+function sourcesOf(results: ToolResult[], reply: string, offerQuotes: OfferQuote[]) {
   return results
     .map(({ tool, result }) => ({ tool, refs: refsIn(result) }))
     .filter((s) => s.refs.length)
-    .concat(quotedOfferSources(results, reply));
+    .concat(quotedOfferSources(offerQuotes, reply));
 }
 
 function refsIn(value: unknown): string[] {
