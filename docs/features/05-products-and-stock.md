@@ -159,9 +159,9 @@ Built for the variants grid (part 2, API): saving a product with fewer variants 
 - On a phone each variant is one line (name, price, stock) that opens to edit its fields, the bulk bar stays, and the Save bar sticks to the bottom.
 - A readiness line shows what the AI still lacks (photo, price, description).
 
-### Redesign of the full page (planned)
+### Price negotiation (PROD-18, planned)
 
-A new design for the add and edit page and the list is planned as PROD-17, with AI price negotiation as PROD-18 ([D50](../product/decisions.md)). The plan, the design images and every correction to them are in [product-page-redesign.md](../plans/product-page-redesign.md).
+The next Price card work adds AI price negotiation under [D50](../product/decisions.md). See the [negotiation plan](../plans/product-page-redesign.md).
 
 ### Catalogue tools beside the full page (planned)
 
