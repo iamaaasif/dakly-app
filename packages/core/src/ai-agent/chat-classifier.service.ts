@@ -6,7 +6,7 @@ import type { handoverReasons } from '@dakly/contracts/chats';
 import { AiService } from '../ai/ai.service';
 import { classifierInput, type ConversationEntry } from './chat-memory';
 import { type HandoverCheckRules, handoverReason } from './handover-reason';
-import { classifyChat } from './prompts/classify-chat.v3';
+import { classifyChat } from './prompts/classify-chat.v4';
 
 type Reason = (typeof handoverReasons)[number];
 

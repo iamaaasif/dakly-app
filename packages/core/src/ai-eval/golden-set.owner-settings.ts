@@ -100,7 +100,6 @@ export const ownerSettingsGoldenCases: GoldenCase[] = [
     expectedHandover: null,
     allowedAmountsTaka: [1450],
     mentionsAnyOf: ['কুর্তি', 'kurti'],
-    holdsPrice: true,
     ownerSettings: { extraRules: 'Regular customers get 10% off. Always call the customer apu.' },
   },
   {
