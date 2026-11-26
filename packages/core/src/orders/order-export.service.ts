@@ -71,7 +71,8 @@ export class OrderExportService {
       columns,
       ...lines.map((line) => orderExportCells(line, calendarDay, access.seeFullPhone)),
     ];
-    const body = format === 'csv' ? spreadsheetCsv(rows) : await spreadsheetXlsx(rows);
+    const body =
+      format === 'csv' ? Buffer.from(spreadsheetCsv(rows), 'utf8') : await spreadsheetXlsx(rows);
     await this.transaction.run(storeId, () =>
       this.audit.record(storeId, {
         actor,
