@@ -177,15 +177,16 @@ export class ProductImportService {
     context: ImportContext,
   ): Promise<void> {
     // A blank or repeated price leaves an existing price override as it is.
-    await this.repository.updateVariantPrices(
-      storeId,
-      match.id,
-      {
-        ...(priceOverridePoisha === null ? {} : { priceOverridePoisha }),
-        ...(costPoisha === null ? {} : { costPoisha }),
-      },
-      this.clock.now(),
-    );
+    if (priceOverridePoisha !== null || costPoisha !== null)
+      await this.repository.updateVariantPrices(
+        storeId,
+        match.id,
+        {
+          ...(priceOverridePoisha === null ? {} : { priceOverridePoisha }),
+          ...(costPoisha === null ? {} : { costPoisha }),
+        },
+        this.clock.now(),
+      );
     await this.setOnHand(storeId, match.id, onHand, context);
   }
 
