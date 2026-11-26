@@ -1,5 +1,5 @@
 import { describeAlternatives, describePhotoMatch } from '../../ai-agent/product-match-results';
-import { addOnsRule } from '../../ai-agent/sales-agent-tools.service';
+import { addOnsRule, isProductSoldOut } from '../../ai-agent/sales-agent-tools.service';
 import { pickAddOns } from '../../product-search/product-add-ons';
 import { pickAlternatives } from '../../product-search/product-alternatives';
 import { decidePhotoMatch } from '../../product-search/product-photo-match';
@@ -94,14 +94,28 @@ function cardText(found: EvalProduct, only?: EvalProduct['variants'][number]) {
   return [found.name, ...lines].join('\n');
 }
 
+// Mirrors the real tool: a sold-out product in the results brings the alternatives for it, once each.
+function searchProducts({ query }: Args, onlyProductIds?: readonly string[]) {
+  const found = searchEvalProducts(String(query ?? ''), SEARCH_LIMIT, onlyProductIds);
+  const foundIds = new Set(found.map(({ productId }) => productId));
+  const alternatives = new Map<string, object>();
+  for (const product of found) {
+    const soldOut = evalChatProducts.find(({ id }) => id === product.productId);
+    if (!soldOut || !isProductSoldOut(soldOut)) continue;
+    for (const alternative of pickAlternatives(soldOut, evalChatProducts, ALTERNATIVE_LIMIT))
+      if (!foundIds.has(alternative.id) && !alternatives.has(alternative.id))
+        alternatives.set(alternative.id, presentEvalProduct(alternative));
+  }
+  return {
+    products: found.map(productResult),
+    ...(alternatives.size ? { alternatives: [...alternatives.values()] } : {}),
+  };
+}
+
 // Answers the way the real tools do for a shop with this catalog, minus orders and knowledge.
 type Handler = (args: Args, onlyProductIds?: readonly string[]) => object;
 const handlers: Record<string, Handler> = {
-  search_products: ({ query }, onlyProductIds) => ({
-    products: searchEvalProducts(String(query ?? ''), SEARCH_LIMIT, onlyProductIds).map(
-      productResult,
-    ),
-  }),
+  search_products: searchProducts,
   get_product: (args, onlyProductIds) =>
     onlyProductIds && !onlyProductIds.includes(String(args.productId))
       ? { error: 'NOT_AN_AD_PRODUCT' }
