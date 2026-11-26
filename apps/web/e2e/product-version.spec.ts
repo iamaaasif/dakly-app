@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 
 import type { ProductResponse } from '@dakly/contracts/products';
 import { createDatabase } from '@dakly/db/client';
@@ -123,12 +123,27 @@ test('keeps a stale edit and reloads the latest saved product', async ({
     const hidden = (await statusSaved.json()) as ProductResponse;
     await expect(page.getByRole('combobox', { name: 'Status' })).toHaveText('Hidden');
     await expect(name).toHaveValue('Saved after Status');
+    const unavailable = async (route: Route) => {
+      if (route.request().method() === 'GET') await route.fulfill({ status: 503 });
+      else await route.continue();
+    };
+    await page.route(`**${path}`, unavailable);
     const save = productPatch(page, path);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     const saved = await save;
     expect(saved.status()).toBe(200);
     expect(saved.request().postDataJSON()).toMatchObject({ expectedVersion: hidden.version });
     expect(await saved.json()).toMatchObject({ name: 'Saved after Status', status: 'hidden' });
+
+    const retryReload = page.getByRole('alert').getByRole('button', { name: 'Reload' });
+    await expect(retryReload).toBeVisible({ timeout: 20000 });
+    await expect(name).toHaveValue('Saved after Status');
+    const repeat = productPatch(page, path);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    expect((await repeat).status()).toBe(409);
+    await page.unroute(`**${path}`, unavailable);
+    await message.getByRole('button', { name: 'Reload' }).click();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
   } finally {
     const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
     try {

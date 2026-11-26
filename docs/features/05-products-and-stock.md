@@ -161,7 +161,7 @@ Built for the variants grid (part 2, API): saving a product with fewer variants 
 
 ### Saving a product changed by someone else (PROD-19)
 
-The form and Status send the version the editor loaded. Each successful save gives the editor the version to send next. If the product changed in the meantime, the page keeps the typed values and says “This product changed since you opened it.” Reload fetches the saved product and resets the form. The API returns `PRODUCT_CHANGED` with status 409 when the optional `expectedVersion` on `PATCH /products/:productId` differs from the saved version. Product updates, archive, bulk edits and their undo, and imports that update the product advance its version. Photo changes, standalone stock movements, and background search indexing leave the version unchanged.
+The form and Status send the version the editor loaded. A successful Status change gives the editor the version to send next. A form save reloads both the version and the stock values. If the product changed in the meantime, the page keeps the typed values and says “This product changed since you opened it.” Reload fetches the saved product and resets the form. The API returns `PRODUCT_CHANGED` with status 409 when the optional `expectedVersion` on `PATCH /products/:productId` differs from the saved version. Product updates, archive, bulk edits and their undo, and imports that update the product or variant pricing advance the version. Photo changes, standalone stock movements, and background search indexing leave the version unchanged.
 
 ### Price negotiation settings (PROD-18)
 

@@ -128,8 +128,8 @@ function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedP
       expectedVersion={loaded.version}
       statusConflict={statusConflict ? statusError : undefined}
       onReload={onReload}
-      onSaved={(saved, failedStock) => {
-        setLoaded({ version: saved.version, stock: stockKey(saved) });
+      onSaved={(_saved, failedStock) => {
+        // A fresh read replaces both the version and the stock baseline for the next save.
         if (!failedStock.length) void onReload();
       }}
       page={{
@@ -137,7 +137,9 @@ function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedP
         backHref: '/products',
         photos: <ProductPhotos product={product} />,
         readOnly,
-        notice: <ProductPageNotice readOnly={readOnly} reloadError={reloadError} />,
+        notice: (
+          <ProductPageNotice readOnly={readOnly} reloadError={reloadError} onReload={onReload} />
+        ),
         status: (
           <>
             {readOnly ? null : (
@@ -168,13 +170,10 @@ function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedP
 function ProductPageNotice({
   readOnly,
   reloadError,
-}: Pick<LoadedProductPageProps, 'readOnly' | 'reloadError'>) {
+  onReload,
+}: Pick<LoadedProductPageProps, 'readOnly' | 'reloadError' | 'onReload'>) {
   if (reloadError)
-    return (
-      <p role="alert" className="text-danger">
-        {reloadError.message}
-      </p>
-    );
+    return <QueryError message={reloadError.message} onRetry={onReload} retryLabel="Reload" />;
   return readOnly ? (
     <p role="status" className="text-sm text-text-muted">
       You can view products but not edit them.
