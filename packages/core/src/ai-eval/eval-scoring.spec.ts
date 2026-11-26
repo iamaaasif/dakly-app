@@ -88,10 +88,14 @@ describe('Banglish product names in negotiation replies', () => {
     });
   });
 
-  it('keeps a size as a whole term even in a Banglish negotiation case', () => {
+  it.each([
+    ['M', 'Medium size nai, 650 taka.'],
+    ['XL', 'XLta size nai, 650 taka.'],
+    ['confirm', 'Confirmer jonno opekkha korun. Total ৳650.'],
+  ])('requires a whole word for %s even in a Banglish negotiation case', (term, text) => {
     const golden = banglaGoldenCases.find(({ id }) => id === 'oos-size-banglish')!;
-    const report = scoreEval([{ ...golden, negotiation: null }], {
-      [golden.id]: { kind: 'reply', text: 'Medium size nai, 650 taka.' },
+    const report = scoreEval([{ ...golden, negotiation: null, mentionsAnyOf: [term] }], {
+      [golden.id]: { kind: 'reply', text },
     });
     expect(report.missedProductCaseIds).toEqual([golden.id]);
     expect(report.negotiationFailureCaseIds).toEqual([golden.id]);

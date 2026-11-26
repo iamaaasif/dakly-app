@@ -7,6 +7,7 @@ import {
 } from '@dakly/contracts/reply-wording';
 
 import type { EvalOutcome, GoldenCase } from './golden-case';
+import { evalProducts } from './model-eval/eval-catalog';
 
 // Rules from docs/rules/ai-and-llm.md: no wrong price, and at least 90% correct hand-overs.
 export const MIN_HANDOVER_ACCURACY = 0.9;
@@ -15,6 +16,9 @@ export const MIN_HANDOVER_ACCURACY = 0.9;
 export const MIN_PRODUCT_RECALL = 0.9;
 
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
+const productNames = new Set(
+  evalProducts.flatMap(({ name, aliases }) => [name, ...aliases].map((word) => word.toLowerCase())),
+);
 
 export type EvalReport = {
   total: number;
@@ -202,14 +206,14 @@ function hasWrongPrice(reply: string, golden: GoldenCase) {
 // Latin terms use word boundaries, so "M" does not match "Medium". For Banglish negotiations
 // a product name can take a case ending. Bangla product names can match with a suffix.
 function mentionsAny(reply: string, terms: readonly string[], banglish = false) {
-  return terms.some((term) =>
-    /^[\x20-\x7e]+$/.test(term)
-      ? new RegExp(
-          `(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(term)}${banglish && term.length > 1 ? '(?:er|r|ta|ti|te)?' : ''}(?![\\p{L}\\p{M}\\p{N}])`,
-          'iu',
-        ).test(reply)
-      : reply.includes(term),
-  );
+  return terms.some((term) => {
+    if (!/^[\x20-\x7e]+$/.test(term)) return reply.includes(term);
+    const ending = banglish && productNames.has(term.toLowerCase()) ? '(?:er|r|ta|ti|te)?' : '';
+    return new RegExp(
+      `(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(term)}${ending}(?![\\p{L}\\p{M}\\p{N}])`,
+      'iu',
+    ).test(reply);
+  });
 }
 
 function escapeRegExp(text: string) {
