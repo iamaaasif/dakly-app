@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AiAgentSettingsService } from '../ai-agent/ai-agent-settings.service';
-import type { ProductsService } from '../products/products.service';
 import type { StoreTransaction } from '../platform/database/store-transaction';
+import type { ProductsService } from '../products/products.service';
 import type { PriceOffersRepository } from './price-offers.repository';
 import { PriceOffersService } from './price-offers.service';
 
@@ -37,10 +37,12 @@ function fixture() {
     } as AiAgentSettingsService,
     { now: () => state.now },
     {
-      lockNegotiationTerms: async () => ({
-        ...state.product,
-        variants: [{ priceOverridePoisha: state.override }],
-      }),
+      lockNegotiationTerms: async () => [
+        {
+          ...state.product,
+          variants: [{ priceOverridePoisha: state.override }],
+        },
+      ],
     } as ProductsService,
   );
   return {

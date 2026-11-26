@@ -24,6 +24,9 @@ it('records only a quoted offer in the outbound sources and keeps its reference 
   expect(quotedOfferSources([quote!], 'It’s ৳1,100.50, with ৳60 delivery.')).toEqual([
     { tool: 'price_offer', refs: ['ask:product'] },
   ]);
+  expect(quotedOfferSources([quote!], 'I can do it at 1100.50, no less.')).toEqual([
+    { tool: 'price_offer', refs: ['ask:product'] },
+  ]);
   expect(quotedOfferSources([quote!], '৳১,১০০.৫০ এ দিতে পারব, এর নিচে না।')).toEqual([
     { tool: 'price_offer', refs: ['ask:product'] },
   ]);

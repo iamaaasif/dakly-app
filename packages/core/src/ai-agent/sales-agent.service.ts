@@ -37,12 +37,8 @@ import { customerConfirms } from './order-confirmation';
 import { chatReplyV17 } from './prompts/chat-reply.v17';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
 import { promptWith } from './reply-prompt-version';
-import {
-  type ToolScope,
-  isOutOfStock,
-  SalesAgentToolsService,
-  salesAgentToolsFor,
-} from './sales-agent-tools.service';
+import { salesAgentToolsFor } from './sales-agent-tool-definitions';
+import { type ToolScope, isOutOfStock, SalesAgentToolsService } from './sales-agent-tools.service';
 import { type CompactDeliveryZone, shopBlock } from './shop-block';
 import { refuseToolCall, type ShopRules, shopRulesBlock, toolHandover } from './shop-rules';
 

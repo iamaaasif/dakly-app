@@ -107,10 +107,10 @@ const counterofferWords =
 const isCounteroffer = (text: string) =>
   counterofferWords.test(text) && requestedDiscountPoisha(text) !== undefined;
 
-export function quotedPricesPoisha(text: string) {
+export function quotedPricesPoisha(text: string, patterns = amountPatterns) {
   const digits = toAsciiDigits(normalize(text));
   return new Set(
-    amountPatterns.flatMap((pattern) =>
+    patterns.flatMap((pattern) =>
       [...digits.matchAll(pattern)].map(
         ([, value]) => takaInput.safeParse(value?.replaceAll(',', '')).data,
       ),

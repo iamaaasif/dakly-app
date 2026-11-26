@@ -8,8 +8,8 @@ import type { InboxService } from '../messaging/inbox.service';
 import type { Clock } from '../platform/clock';
 import type { ProductsService } from '../products/products.service';
 import type { StoresService } from '../stores/stores.service';
+import { salesAgentToolsFor } from './sales-agent-tool-definitions';
 import type { SalesAgentToolsService } from './sales-agent-tools.service';
-import { salesAgentToolsFor } from './sales-agent-tools.service';
 import { SalesAgentService } from './sales-agent.service';
 import { defaultShopRules } from './shop-rules';
 

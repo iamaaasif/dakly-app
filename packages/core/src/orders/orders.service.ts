@@ -29,7 +29,7 @@ import { applyOrderFulfilment } from './order-fulfilment';
 import { orderItemSnapshots } from './order-item-snapshots';
 import { toOrderListItem } from './order-list-item';
 import { orderParcelWeightGrams } from './order-parcel-weight';
-import { applyPriceOffers, recordPriceOffer } from './order-price-offers';
+import { draftItemSnapshots, recordPriceOffer } from './order-price-offers';
 import { moveOrderReservations } from './order-reservations';
 import { orderRiskFields } from './order-risk';
 import {
@@ -97,7 +97,7 @@ export class OrdersService {
       if (existing) return this.getById(storeId, existing.id, access);
 
       const id = newId();
-      const { buyer, recipient } = input;
+      const { buyer, recipient, deliveryChargePoisha } = input;
       const contact = await this.contacts.resolveOrderBuyer(
         storeId,
         {
@@ -107,20 +107,13 @@ export class OrdersService {
         },
         actor,
       );
-      const delivery = await this.quoteDelivery(
+      const delivery = await this.quoteDelivery(storeId, recipient.areaId, deliveryChargePoisha);
+      const items = await draftItemSnapshots(
         storeId,
-        recipient.areaId,
-        input.deliveryChargePoisha,
+        input.items,
+        { conversationId: placed.offerConversationId, contactId: contact.id },
+        { products: this.products, offers: this.priceOffers, clock: this.clock },
       );
-      const offers = placed.offerConversationId
-        ? await this.priceOffers.forOrder(
-            storeId,
-            { conversationId: placed.offerConversationId, contactId: contact.id },
-            input.items.map(({ variantId }) => variantId),
-          )
-        : [];
-      const items = await orderItemSnapshots(storeId, this.products, input.items);
-      applyPriceOffers(items, offers);
       const totals = orderTotals(items, {
         ...input,
         deliveryChargePoisha: delivery.deliveryChargePoisha,

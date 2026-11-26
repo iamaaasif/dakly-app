@@ -8,8 +8,7 @@ import {
   offerWords,
 } from '@dakly/contracts/reply-wording';
 
-import { quotedPricesPoisha } from './manipulation-screen';
-import { quotedOfferRefs, type OfferQuote } from './offer-lower-price';
+import { offerPricesInReply, quotedOfferRefs, type OfferQuote } from './offer-lower-price';
 
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
@@ -115,7 +114,7 @@ function negotiationAmountIsWrong(
     results.flatMap((result) => (result.kind === 'offered' ? [result.priceTaka] : [])),
   );
   if (offered.size) {
-    const quoted = quotedPricesPoisha(text);
+    const quoted = offerPricesInReply(text);
     if (
       ![...offered].some((price) => quoted.has(Math.round(price * 100))) ||
       [...quotedOfferRefs(offerQuotes, text).values()].includes(null)

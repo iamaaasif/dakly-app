@@ -1,4 +1,5 @@
 import { offerLowerPriceTool } from '@dakly/contracts/ai-agent-tools';
+import { amountPatterns, bareOfferPattern } from '@dakly/contracts/reply-wording';
 
 import type { PriceOffersService } from '../price-offers/price-offers.service';
 import type { ProductSearchService } from '../product-search/product-search.service';
@@ -41,8 +42,12 @@ export async function offerLowerPrice(
   };
 }
 
+export function offerPricesInReply(reply: string) {
+  return quotedPricesPoisha(reply, [...amountPatterns, bareOfferPattern]);
+}
+
 export function quotedOfferRefs(quotes: readonly OfferQuote[], reply: string) {
-  const prices = quotedPricesPoisha(reply);
+  const prices = offerPricesInReply(reply);
   const quoted = new Map<number, string | null>();
   for (const quote of quotes) {
     if (!prices.has(quote.pricePoisha)) continue;

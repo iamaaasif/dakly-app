@@ -71,6 +71,6 @@ export const amountPatterns = [
 
 // On a negotiation turn these phrases can carry an amount without a currency word.
 export const bareOfferPattern = new RegExp(
-  String.raw`\b(?:can (?:do|offer|give|take)|would take)\s+(?:(?:just|only)\s+)?${number}`,
+  String.raw`\b(?:can (?:do|offer|give|take)|would take)\s+(?:it at\s+)?(?:(?:just|only)\s+)?${number}`,
   'giu',
 );

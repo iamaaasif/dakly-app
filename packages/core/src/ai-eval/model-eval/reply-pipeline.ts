@@ -23,7 +23,7 @@ import {
   factCheckFailedBlock,
   type FactCheckFailure,
 } from '../../ai-agent/reply-fact-check';
-import { salesAgentToolsFor } from '../../ai-agent/sales-agent-tools.service';
+import { salesAgentToolsFor } from '../../ai-agent/sales-agent-tool-definitions';
 import { shopBlock } from '../../ai-agent/shop-block';
 import {
   defaultShopRules,
