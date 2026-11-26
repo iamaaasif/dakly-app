@@ -123,27 +123,54 @@ function hasWrongPriceReply({ golden, outcome }: Scored) {
   );
 }
 
-// Saying a size or product is sold out is right and is not an offer. A clause counts as an offer
-// when it names the term without an out-of-stock phrase, or says the term is there.
 function offersOutOfStock({ golden, outcome }: Scored) {
-  if (outcome.kind !== 'reply') return false;
-  return outcome.text
-    .split(clauseBreak)
-    .some(
-      (clause) =>
-        mentionsAny(clause, golden.neverOffer ?? []) &&
-        !restockNotice.test(clause) &&
-        (!outOfStockPhrase.test(clause) || inStockPhrase.test(clause)),
-    );
+  if (outcome.kind !== 'reply' || !golden.neverOffer?.length) return false;
+  const terms = golden.neverOffer.map(termPattern);
+  return outcome.text.split(clauseBreak).some((clause) => {
+    if (clarificationQuestion.test(clause.trim()) && !inStockPhrase.test(clause)) return false;
+    return terms.some((term) => offersTerm(clause, term, golden.mentionsAnyOf ?? []));
+  });
 }
 
-const clauseBreak = /[।.!?,;—–\n]|\s(?:তবে|কিন্তু|but|kintu|tobe)\s/iu;
+function offersTerm(clause: string, term: RegExp, expectedTerms: readonly string[]) {
+  const mentions = [...clause.matchAll(term)];
+  const stockPhrases = [...clause.matchAll(stockWording)];
+  return mentions.some((mention, index) => {
+    const nextMention = mentions[index + 1]?.index ?? clause.length;
+    const following = stockPhrases.filter(
+      (phrase) =>
+        phrase.index + phrase[0].length > mention.index + mention[0].length &&
+        phrase.index < nextMention,
+    );
+    if (following.length === 0) {
+      const preceding = stockPhrases.findLast((phrase) => phrase.index < mention.index);
+      return !preceding || preceding.groups?.inStock !== undefined;
+    }
+    return following.some((wording, wordingIndex) => {
+      if (wording.groups?.inStock === undefined) return false;
+      const earlierWording = following[wordingIndex - 1];
+      if (!earlierWording) return true;
+      // In "XL নেই M ও L আছে", the two stock phrases describe different sizes.
+      const subject = clause.slice(earlierWording.index + earlierWording[0].length, wording.index);
+      return !sizeLabel.test(subject) && !mentionsAny(subject, expectedTerms);
+    });
+  });
+}
+
+const sizeLabel = /(?<![\p{L}\p{M}\p{N}])(?:XS|S|M|L|X+L)(?![\p{L}\p{M}\p{N}])/iu;
+const clauseBreak = /[।.!,;—–\n]|(?<=\?)|\s(?:তবে|কিন্তু|but|kintu|tobe)\s/iu;
+const clarificationQuestion =
+  /^(?:(?:apni\s+)?kon\s+[\p{L}\p{M}\s-]+\s+kotha\s+bolchen|(?:আপনি\s+)?কোন\s+[\p{L}\p{M}\s-]+\s+কথা\s+বলছেন|which\s+[\p{L}\p{M}\s-]+\s+do\s+you\s+mean)\s*\?$/iu;
 const outOfStockPhrase =
-  /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\bnei\b|\bnai\b|out of stock|sold out|not available|unavailable/iu;
-// Promising to tell the customer when the item is back is not an offer to sell it now.
+  /নেই|নাই|স্টক\s*(?:এ\s*)?শেষ|শেষ হয়ে|\b(?:nei|nai|out of stock|sold out|unavailable|not (?:currently )?(?:in stock|available))\b/iu;
 const restockNotice =
-  /আবার\s*স্টকে\s*(?:এলে|আসলে)|stock\s*-?\s*e\s*(?:ashle|aile|ele)|(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে)|\b(?:when|once|if)\b[^.]*\bback in stock/iu;
-const inStockPhrase = /আছে|\bache\b|\bin stock\b|(?<!not |un)available/iu;
+  /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|\b(?:stock\s*-?\s*e|restock)\s*(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
+const recalledPreference = /মনে\s+আছে|\bmone\s+ache\b/iu;
+const inStockPhrase = /আছে|\b(?:ache|in stock|available)\b/iu;
+const stockWording = new RegExp(
+  `${outOfStockPhrase.source}|${restockNotice.source}|${recalledPreference.source}|(?<inStock>${inStockPhrase.source})`,
+  'giu',
+);
 
 function hasWrongPhoto({ golden, outcome }: Scored) {
   return (
@@ -177,17 +204,17 @@ function hasWrongPrice(reply: string, allowed: readonly number[], question: stri
   return hasWrongAmount(amounts, (value) => allowed.includes(value), customerNumbers);
 }
 
+function mentionsAny(reply: string, terms: readonly string[]) {
+  return terms.some((term) => termPattern(term).test(reply));
+}
+
 // A Latin term must be a whole word, so the size "M" is not found in "Medium". A Bangla term may
 // carry a suffix ("কুর্তির", "কুর্তিটা"), so it matches as text.
-function mentionsAny(reply: string, terms: readonly string[]) {
-  return terms.some((term) =>
-    /^[\x20-\x7e]+$/.test(term)
-      ? new RegExp(
-          `(?<![\\p{L}\\p{M}\\p{N}])${escapeRegExp(term)}(?![\\p{L}\\p{M}\\p{N}])`,
-          'iu',
-        ).test(reply)
-      : reply.includes(term),
-  );
+function termPattern(term: string) {
+  const literal = escapeRegExp(term);
+  return /^[\x20-\x7e]+$/.test(term)
+    ? new RegExp(`(?<![\\p{L}\\p{M}\\p{N}])${literal}(?![\\p{L}\\p{M}\\p{N}])`, 'giu')
+    : new RegExp(literal, 'gu');
 }
 
 function escapeRegExp(text: string) {

@@ -9,6 +9,7 @@ import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from './golden-set.bargaining';
 import { chatMemoryGoldenCases, chatMemoryRecordedOutcomes } from './golden-set.chat-memory';
 import { complaintGoldenCases, complaintRecordedOutcomes } from './golden-set.complaints';
+import { longChatGoldenCases } from './golden-set.long-chats';
 import { memoryGoldenCases } from './golden-set.memory';
 import {
   activeGoldenCases,
@@ -312,6 +313,46 @@ describe('ad context set', () => {
       'ad-unlinked-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।' },
     });
     expect(report.passed).toBe(false);
+  });
+});
+
+describe('out-of-stock offers', () => {
+  const cases = [...longChatGoldenCases, ...adContextGoldenCases, ...banglaGoldenCases];
+  const score = (id: string, text: string) =>
+    scoreEval([cases.find((candidate) => candidate.id === id)!], { [id]: { kind: 'reply', text } });
+
+  it.each([
+    [
+      'long-chat-size-banglish',
+      'Polo shirt-er XL size ekhon stock-e nei m o l ache, protiti 650 taka. XL restock hole janabo?',
+    ],
+    [
+      'long-chat-spam-between-bn',
+      'পোলো শার্টের XL সাইজ এখন স্টকে নেই M ও L আছে, প্রতিটি ৳৬৫০। XL নতুন স্টকে এলে জানাবো?',
+    ],
+    [
+      'long-chat-spam-between-bn',
+      'আপনার XL সাইজটা মনে আছে। পোলো শার্টের XL এখন স্টকে নেই। M ও L আছে।',
+    ],
+    ['long-chat-size-banglish', 'Polo XL is not in stock. M and L are available.'],
+    ['long-chat-size-banglish', 'Polo XL is sold out. I can tell you when XL is back in stock.'],
+    ['ad-pick-no-match-banglish', 'Kon saree-tar kotha bolchen? Ei ad-e kurti o lal panjabi ache.'],
+    ['oos-product-bn', 'লোফার নেই ক্যানভাস আছে।'],
+  ])('passes %s when the reply does not offer the excluded item: %s', (id, text) => {
+    expect(score(id, text)).toMatchObject({ outOfStockOfferCaseIds: [], passed: true });
+  });
+
+  it.each([
+    ['long-chat-size-banglish', 'Polo XL and L are available, 650 taka.'],
+    ['long-chat-size-banglish', 'Polo XL, 650 taka.'],
+    ['long-chat-spam-between-bn', 'পোলো শার্টের XL নেই বলেছিলাম, এখন XL আছে।'],
+    ['long-chat-spam-between-bn', 'পোলো শার্টের XL নেই বলেছিলাম এখন আছে।'],
+    ['long-chat-spam-between-bn', 'মনে আছে আপনার জন্য পোলো XL সাইজটা আছে।'],
+    ['long-chat-size-banglish', 'Polo XL ache. XL stock e ashle janabo?'],
+    ['ad-pick-no-match-banglish', 'Kon saree-tar kotha bolchen? Saree-taw ache.'],
+    ['ad-pick-no-match-banglish', 'Kon saree niben?'],
+  ])('fails %s when the reply offers the excluded item: %s', (id, text) => {
+    expect(score(id, text)).toMatchObject({ outOfStockOfferCaseIds: [id], passed: false });
   });
 });
 
