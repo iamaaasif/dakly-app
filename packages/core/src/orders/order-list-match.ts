@@ -1,9 +1,15 @@
-import type { OrderListQuery } from '@dakly/contracts/orders';
+import type { OrderListQuery, OrderStage } from '@dakly/contracts/orders';
 import { bdMobileSchema } from '@dakly/contracts/phone';
 
 import { HOUR_MS } from '../platform/time';
-import type { OrderMatch } from './orders.repository';
 import { stagesForOrderTab } from './order-stage';
+
+export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
+  stages?: OrderStage[];
+  timeZone: string | null;
+  phone?: string;
+  overdueBefore: Date;
+};
 
 export function orderListMatch(
   { stage, ...filters }: Omit<OrderListQuery, 'cursor' | 'limit'>,

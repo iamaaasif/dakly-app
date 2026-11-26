@@ -78,17 +78,6 @@ export const discountCodeKinds = ['percent', 'amount', 'free_delivery'] as const
 export const discountCodeSourceTypes = ['manual', 'campaign', 'automation'] as const;
 
 export type OrderStage = (typeof orderStages)[number];
-export const orderStageLabels: Record<OrderStage, string> = {
-  to_confirm: 'To confirm',
-  on_hold: 'On hold',
-  to_pack: 'To pack',
-  with_courier: 'With courier',
-  delivered: 'Delivered',
-  partially_delivered: 'Partly delivered',
-  returned: 'Returned',
-  cancelled: 'Cancelled',
-};
-
 export const orderStageTransitions: Record<OrderStage, readonly OrderStage[]> = {
   to_confirm: ['to_pack', 'on_hold', 'cancelled'],
   on_hold: ['to_confirm', 'to_pack', 'cancelled'],
@@ -117,47 +106,33 @@ export const orderTabs = [
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 export type OrderParcelHistory = { parcels: number; returned: number };
 
-const orderFiltersSchema = z.strictObject({
-  stage: z.enum(orderStages).optional(),
-  source: z.enum(orderSources).optional(),
-  courier: z.enum(couriers).optional(),
-  createdFrom: calendarDate.optional(),
-  createdThrough: calendarDate.optional(),
-  alert: z.enum(['waiting', 'risk', 'cod']).optional(),
-  search: searchText.max(120).optional(),
-  // One customer's orders, for the chat's customer panel.
-  buyerContactId: z.uuid().optional(),
-});
-
-function orderDatesInSequence({
-  createdFrom,
-  createdThrough,
-}: z.infer<typeof orderFiltersSchema>): boolean {
-  return !createdFrom || !createdThrough || createdFrom <= createdThrough;
-}
-
-const reversedOrderDates = {
-  path: ['createdThrough'],
-  message: 'End date must be on or after the start date',
-};
-
-export const orderListQuerySchema = orderFiltersSchema
-  .extend({
-    cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
-    limit: z.coerce.number<string>().int().min(1).max(100).default(50),
+export const orderFiltersSchema = z
+  .strictObject({
+    stage: z.enum(orderStages).optional(),
+    source: z.enum(orderSources).optional(),
+    courier: z.enum(couriers).optional(),
+    createdFrom: calendarDate.optional(),
+    createdThrough: calendarDate.optional(),
+    alert: z.enum(['waiting', 'risk', 'cod']).optional(),
+    search: searchText.max(120).optional(),
+    // One customer's orders, for the chat's customer panel.
+    buyerContactId: z.uuid().optional(),
   })
-  .refine(orderDatesInSequence, reversedOrderDates);
+  .refine(
+    ({ createdFrom, createdThrough }) =>
+      !createdFrom || !createdThrough || createdFrom <= createdThrough,
+    { path: ['createdThrough'], message: 'End date must be on or after the start date' },
+  );
+
+export const orderListQuerySchema = orderFiltersSchema.safeExtend({
+  cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
+  limit: z.coerce.number<string>().int().min(1).max(100).default(50),
+});
 
 export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
 export const orderScreenQuerySchema = orderListQuerySchema.safeExtend({
   selected: z.uuid().optional(),
 });
-
-export const orderExportQuerySchema = orderFiltersSchema
-  .extend({ format: z.enum(['csv', 'xlsx']) })
-  .refine(orderDatesInSequence, reversedOrderDates);
-
-export type OrderExportQuery = z.infer<typeof orderExportQuerySchema>;
 
 export type OrderSummary = {
   id: string;

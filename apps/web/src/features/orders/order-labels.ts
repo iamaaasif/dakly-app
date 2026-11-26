@@ -5,7 +5,7 @@ import type {
   OrderSummary,
 } from '@dakly/contracts/orders';
 
-export { orderStageLabels } from '@dakly/contracts/orders';
+export { orderStageLabels } from '@dakly/contracts/order-stage-labels';
 
 type OrderSource = OrderSummary['source'];
 

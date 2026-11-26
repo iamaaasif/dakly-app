@@ -1,7 +1,7 @@
 import { Controller, Get, Inject, Query, Res, StreamableFile } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 
-import { orderExportQuerySchema, type OrderExportQuery } from '@dakly/contracts/orders';
+import { orderExportQuerySchema, type OrderExportQuery } from '@dakly/contracts/order-export';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';

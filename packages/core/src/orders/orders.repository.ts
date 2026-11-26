@@ -20,6 +20,7 @@ import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import type { OrderMatch } from './order-list-match';
 
 const summaryColumns = {
   id: orders.id,
@@ -356,13 +357,6 @@ const itemPreview = sql<string | null>`(
     order by item.id limit 2
   ) lines
 )`;
-
-export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
-  stages?: OrderStage[];
-  timeZone: string | null;
-  phone?: string;
-  overdueBefore: Date;
-};
 
 export function orderMatchingConditions(tx: Transaction, storeId: string, filter: OrderMatch) {
   return and(

@@ -4,7 +4,8 @@ import { and, desc, eq } from 'drizzle-orm';
 import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { orderMatchingConditions, type OrderMatch } from './orders.repository';
+import type { OrderMatch } from './order-list-match';
+import { orderMatchingConditions } from './orders.repository';
 
 export type OrderExportRow = Awaited<ReturnType<OrderExportRepository['listLines']>>[number];
 
