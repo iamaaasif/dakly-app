@@ -21,6 +21,9 @@ import { OrderCatalogueController } from './order-catalogue.controller';
 import { OrderConfirmationController } from './order-confirmation.controller';
 import { OrderConfirmationRepository } from './order-confirmation.repository';
 import { OrderConfirmationService } from './order-confirmation.service';
+import { OrderInvoiceController } from './order-invoice.controller';
+import { OrderInvoiceRepository } from './order-invoice.repository';
+import { OrderInvoiceService } from './order-invoice.service';
 import { BOT_CHECK_DRIVER, createBotCheckDriver } from './order-link-provider';
 import { OrderLinkController } from './order-link.controller';
 import { OrderLinkService } from './order-link.service';
@@ -48,6 +51,7 @@ import { OrdersService } from './orders.service';
     OrdersController,
     OrderProductArchiveController,
     OrderCatalogueController,
+    OrderInvoiceController,
     OrderConfirmationController,
     OrderLinkController,
   ],
@@ -61,6 +65,8 @@ import { OrdersService } from './orders.service';
     OrdersRepository,
     OrderStageCountsService,
     OrdersService,
+    OrderInvoiceRepository,
+    OrderInvoiceService,
     OrderAdvancesService,
     OrderReportingRepository,
     OrderReportingService,

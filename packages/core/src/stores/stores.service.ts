@@ -72,6 +72,12 @@ export class StoresService {
     return toSettingsResponse(store);
   }
 
+  async contactDetails(storeId: string) {
+    const store = await this.repository.contactDetails(storeId);
+    if (!store) throw storeError('STORE_NOT_FOUND');
+    return store;
+  }
+
   findPublicBySlug(slug: string) {
     return this.maintenance.findPublicBySlug(slug);
   }
