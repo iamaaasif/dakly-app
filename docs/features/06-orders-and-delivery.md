@@ -271,8 +271,7 @@ subtotal, with the original unit prices. It leaves out lines with zero delivered
 units. Staff without full-phone access see a masked recipient number.
 
 The print page at `/orders/[orderId]/print` loads its data in the browser through
-`GET /orders/:orderId/invoice`. Bulk shipping labels and order export remain
-part of ORD-10. [Desktop, phone and print evidence](../design/evidence/ord-10-invoice/).
+`GET /orders/:orderId/invoice`. [Desktop, phone and print evidence](../design/evidence/ord-10-invoice/).
 
 ### How it works
 
