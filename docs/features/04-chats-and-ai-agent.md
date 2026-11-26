@@ -23,7 +23,7 @@ The product requirements below are the PRD text from 12 November 2026. Where a l
 
 ## Inbox layout
 
-The Inbox fills the full width of the workspace with the folder list, conversation list, thread, and customer and order panel side by side. The folder column starts open at 1,536px and wider and collapsed below that, where the folder picker in the toolbar takes its place; collapsing it moves the Inbox title and toggle into the toolbar. Below 1,280px the customer panel opens from the Customer button, and on phones opening a chat or the customer panel takes the place of the list. Sort, channel and filters are in the toolbar; Saved replies and Send share the composer footer. Reply and Internal note keep separate drafts. Opening a conversation shows the latest messages, and loading earlier ones keeps the current messages in view.
+The Inbox fills the full width and height of the workspace, with the main navigation shown as an icon rail and only the columns scrolling, with the folder list, conversation list, thread, and customer and order panel side by side. The folder column starts open at 1,536px and wider and collapsed below that, where the folder picker in the toolbar takes its place; collapsing it moves the Inbox title and toggle into the toolbar. Below 1,280px the customer panel opens from the Customer button, and on phones opening a chat or the customer panel takes the place of the list. Sort, channel and filters are in the toolbar; Saved replies and Send share the composer footer. Reply and Internal note keep separate drafts. Opening a conversation shows the latest messages, and loading earlier ones keeps the current messages in view.
 
 ## Product requirements
 
