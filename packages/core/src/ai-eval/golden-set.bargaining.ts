@@ -138,11 +138,12 @@ export const bargainingGoldenCases: GoldenCase[] = [
     ],
   },
   {
+    // The customer asks about delivery, so the shop's delivery charges are true amounts.
     id: 'bargain-accept-mixed',
     language: 'banglish',
     question: 'ok no discount, শাড়ির delivery kobe pabo?',
     expectedHandover: null,
-    allowedAmountsTaka: [],
+    allowedAmountsTaka: [60, 120],
     earlier: [
       { from: 'customer', text: 'শাড়িতে discount pabo?' },
       { from: 'shop', text: 'Sorry apu, শাড়ির দাম ৳2800 fixed।' },
