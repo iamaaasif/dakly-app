@@ -6,70 +6,37 @@ import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
-import { withSuggestions } from '../product-variant-grid';
 import { ProductOptionEditor, useGridOptions } from './product-option-editor';
-import { ProductSuggestOptions } from './product-suggest-options';
 import { ProductTrackStock } from './product-track-stock';
 import { ProductVariantTable } from './product-variant-table';
 import { ProductWarnAtField } from './product-warn-at-field';
 
-type ProductVariantsCardProps = { product?: ProductResponse; readOnly?: boolean };
+type ProductVariantsCardProps = {
+  product?: ProductResponse;
+  readOnly?: boolean;
+  onOptionDraftChange: (editing: boolean) => void;
+};
 
-export function ProductVariantsCard({ product, readOnly }: ProductVariantsCardProps) {
+export function ProductVariantsCard({
+  product,
+  readOnly,
+  onOptionDraftChange,
+}: ProductVariantsCardProps) {
   const form = useFormContext<ProductFormValues>();
-  const { options, setOptions } = useGridOptions();
+  const { options } = useGridOptions();
   const errors = form.formState.errors.variants;
   const error = errors?.message ?? errors?.root?.message;
-  const addOption = () => setOptions([...options, { name: '', values: [] }]);
-  const hasOptions = options.length > 0;
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-text">Variants</h2>
-      <div className="flex flex-wrap items-center gap-2">
-        {hasOptions ? null : <AddOptionsButton onClick={addOption} />}
-        <ProductSuggestOptions
-          product={product}
-          onAdd={(suggested) => setOptions(withSuggestions(options, suggested))}
-        />
-      </div>
-      {hasOptions ? (
-        <OptionsAndGrid product={product} readOnly={readOnly} onAddOption={addOption} />
-      ) : (
-        <p className="text-sm text-text-muted">
-          This product has no sizes or colours. Adding the first option turns this stock and code
-          into the first grid row. Nothing is lost.
-        </p>
-      )}
+      <h2 className="text-base font-semibold text-text">Variations</h2>
+      <ProductOptionEditor product={product} onDraftChange={onOptionDraftChange} />
+      {options.length ? <ProductVariantTable product={product} readOnly={readOnly} /> : null}
       {error ? (
         <p role="alert" className="text-danger">
           {error}
         </p>
       ) : null}
     </div>
-  );
-}
-
-type OptionsAndGridProps = ProductVariantsCardProps & { onAddOption: () => void };
-
-function OptionsAndGrid({ product, readOnly, onAddOption }: OptionsAndGridProps) {
-  const { options } = useGridOptions();
-  return (
-    <>
-      <ProductOptionEditor onAddOption={onAddOption} />
-      {options.some((option) => option.values.length) ? (
-        <ProductVariantTable product={product} readOnly={readOnly} />
-      ) : (
-        <p className="text-sm text-text-muted">Type a value above and the grid builds itself.</p>
-      )}
-    </>
-  );
-}
-
-function AddOptionsButton({ onClick }: { onClick: () => void }) {
-  return (
-    <Button type="button" variant="secondary" className="h-8 px-2.5 text-xs" onClick={onClick}>
-      Add options
-    </Button>
   );
 }
 

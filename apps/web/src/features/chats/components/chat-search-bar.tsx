@@ -3,6 +3,7 @@ import { ArrowUpDown, ListFilter, MessageSquare, Search } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
@@ -50,11 +51,13 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
   );
 }
 
-export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channel: ReactNode }) {
+type ChatToolbarProps = { query: ChatScreenQuery; foldersOpen: boolean; channel: ReactNode };
+
+export function ChatToolbar({ query, foldersOpen, channel }: ChatToolbarProps) {
   const router = useUrlRouter();
   return (
     <>
-      <ChatFolderSelect query={query} />
+      <ChatFolderSelect query={query} foldersOpen={foldersOpen} />
       <Select
         value={query.sort}
         onValueChange={(sort) =>
@@ -89,7 +92,14 @@ export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channe
   );
 }
 
-function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
+// The folder column replaces this picker when it is open; phones always pick the folder here.
+function ChatFolderSelect({
+  query,
+  foldersOpen,
+}: {
+  query: ChatScreenQuery;
+  foldersOpen: boolean;
+}) {
   const router = useUrlRouter();
   return (
     <Select
@@ -107,7 +117,7 @@ function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
         )
       }
     >
-      <SelectTrigger aria-label="Chat folder" className="hidden w-auto xl:flex">
+      <SelectTrigger aria-label="Chat folder" className={cn('w-auto', foldersOpen && 'lg:hidden')}>
         <MessageSquare aria-hidden="true" size={16} />
         <SelectValue />
       </SelectTrigger>

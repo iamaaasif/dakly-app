@@ -40,6 +40,7 @@ type ProductFormPageLayoutProps = {
   product?: ProductResponse;
   actions: ReactNode;
   serverError: ReactNode;
+  onOptionDraftChange: (editing: boolean) => void;
 };
 
 export function ProductFormPageLayout({
@@ -47,6 +48,7 @@ export function ProductFormPageLayout({
   product,
   actions,
   serverError,
+  onOptionDraftChange,
 }: ProductFormPageLayoutProps) {
   const productId = product?.id;
   return (
@@ -87,7 +89,11 @@ export function ProductFormPageLayout({
             <ProductInventory />
           </FieldCard>
           <Card>
-            <ProductVariantsCard product={product} readOnly={page.readOnly} />
+            <ProductVariantsCard
+              product={product}
+              readOnly={page.readOnly}
+              onOptionDraftChange={onOptionDraftChange}
+            />
           </Card>
           {serverError}
         </div>
