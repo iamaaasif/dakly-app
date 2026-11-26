@@ -2,7 +2,7 @@ import type { OrderListQuery } from '@dakly/contracts/orders';
 import { bdMobileSchema } from '@dakly/contracts/phone';
 
 import { HOUR_MS } from '../platform/time';
-import type { OrderMatch } from './order-filters.repository';
+import type { OrderMatch } from './orders.repository';
 import { stagesForOrderTab } from './order-stage';
 
 export function orderListMatch(

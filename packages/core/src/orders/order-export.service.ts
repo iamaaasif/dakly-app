@@ -2,8 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import { poishaToTakaText } from '@dakly/contracts/money';
-import { orderStageLabels } from '@dakly/contracts/order-stages';
-import type { OrderExportQuery } from '@dakly/contracts/orders';
+import { orderStageLabels, type OrderExportQuery } from '@dakly/contracts/orders';
 import { maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
 

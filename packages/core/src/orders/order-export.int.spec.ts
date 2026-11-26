@@ -201,7 +201,7 @@ describe('order export over Fastify and Postgres', () => {
       [fixture.a],
     );
     const response = await download('format=csv&search=%23106');
-    expect(response.statusCode).toBe(422);
+    expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe('ORDER_EXPORT_TOO_LARGE');
   });
 });
