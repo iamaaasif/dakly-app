@@ -61,9 +61,7 @@ it('refuses a quote that has the same amount for two different products', async 
     checkReplyFacts(
       reply,
       results.map(({ result }) => result),
-      { phone: null, linkBaseUrl: 'https://dkl.example' },
-      [],
-      quotes,
+      { phone: null, linkBaseUrl: 'https://dkl.example', offerQuotes: quotes },
     ),
   ).toEqual({
     isSafe: false,

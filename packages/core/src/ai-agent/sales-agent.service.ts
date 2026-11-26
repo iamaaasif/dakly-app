@@ -131,9 +131,9 @@ export class SalesAgentService {
         phone: shop.phone,
         linkBaseUrl: loadEnv().SHORT_LINK_BASE_URL,
         earlierCustomerTexts: composed.earlierCustomerTexts,
+        offerQuotes: composed.offerQuotes,
       },
       input.customerTexts,
-      composed.offerQuotes,
     );
     return !checked.isSafe && checked.failure;
   }

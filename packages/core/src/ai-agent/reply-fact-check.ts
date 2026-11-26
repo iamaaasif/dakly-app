@@ -42,6 +42,7 @@ type Shop = {
   phone: string | null;
   linkBaseUrl: string;
   earlierCustomerTexts?: readonly string[];
+  offerQuotes?: readonly OfferQuote[];
 };
 
 // Tells the model why its last reply was not sent, so the one retry can fix it.
@@ -65,7 +66,6 @@ export function checkReplyFacts(
   toolResults: readonly unknown[],
   shop: Shop,
   customerTexts: readonly string[] = [],
-  offerQuotes: readonly OfferQuote[] = [],
 ): { isSafe: true } | { isSafe: false; failure: FactCheckFailure } {
   const text = toAsciiDigits(reply);
   if (!text.trim()) return { isSafe: false, failure: 'empty' };
@@ -80,15 +80,13 @@ export function checkReplyFacts(
   const wording = wordingFailure(text, toolResults);
   if (wording) return { isSafe: false, failure: wording };
   const known = numbersIn(toolResults);
-  const amounts = claimedAmounts(text);
-  const negotiation = toolResults.filter(isNegotiationResult);
-  if (negotiation.length) amounts.push(...claimedAmounts(text, [bareOfferPattern]));
-  const customerNumbers = numbersIn(customerTexts);
-  const invalidPrice = negotiationAmountIsWrong(text, negotiation, amounts, offerQuotes, {
-    toolResults,
-    customerNumbers,
-  });
-  if (invalidPrice ?? hasWrongAmount(amounts, (value) => known.has(value), customerNumbers))
+  if (
+    hasIncorrectAmount(text, toolResults, {
+      known,
+      customerNumbers: numbersIn(customerTexts),
+      offerQuotes: shop.offerQuotes ?? [],
+    })
+  )
     return { isSafe: false, failure: 'amount' };
   if (claimedNumbers(text, stockPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'stock' };
@@ -112,17 +110,44 @@ function isNegotiationResult(value: unknown): value is NegotiationResult {
   return value.kind === 'offered' && 'priceTaka' in value && typeof value.priceTaka === 'number';
 }
 
+function hasIncorrectAmount(
+  text: string,
+  toolResults: readonly unknown[],
+  {
+    known,
+    customerNumbers,
+    offerQuotes,
+  }: {
+    known: ReadonlySet<number>;
+    customerNumbers: ReadonlySet<number>;
+    offerQuotes: readonly OfferQuote[];
+  },
+) {
+  const amounts = claimedAmounts(text);
+  const results = toolResults.filter(isNegotiationResult);
+  if (!results.length) return hasWrongAmount(amounts, (value) => known.has(value), customerNumbers);
+  amounts.push(...claimedAmounts(text, [bareOfferPattern]));
+  return negotiationAmountIsWrong(text, amounts, results, {
+    toolResults,
+    customerNumbers,
+    offerQuotes,
+  });
+}
+
 function negotiationAmountIsWrong(
   text: string,
-  results: readonly NegotiationResult[],
   amounts: readonly (ClaimedAmount & { at: number })[],
-  offerQuotes: readonly OfferQuote[],
+  results: readonly NegotiationResult[],
   {
     toolResults,
     customerNumbers,
-  }: { toolResults: readonly unknown[]; customerNumbers: ReadonlySet<number> },
+    offerQuotes,
+  }: {
+    toolResults: readonly unknown[];
+    customerNumbers: ReadonlySet<number>;
+    offerQuotes: readonly OfferQuote[];
+  },
 ) {
-  if (!results.length) return undefined;
   const offered = new Set(
     results.flatMap((result) => (result.kind === 'offered' ? [result.priceTaka] : [])),
   );
