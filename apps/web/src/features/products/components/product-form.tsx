@@ -1,7 +1,7 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react-hook-form';
 
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
@@ -82,7 +82,6 @@ export function ProductForm({ product, initial, assistantDraft, onSaved, page }:
   });
   const { dirtyFields, errors, isDirty } = form.formState;
   useDraftCategory(form, assistantDraft);
-  useConfirmLeave(Boolean(page) && isDirty);
   const { onSubmit, dialog, isPending } = useSubmitProduct(form, {
     product,
     dirtyFields,
@@ -91,7 +90,7 @@ export function ProductForm({ product, initial, assistantDraft, onSaved, page }:
   const actions = (
     <ProductFormActions
       isPending={isPending}
-      canSave={!product || isDirty}
+      canSave={(!product || isDirty) && !errors.weightGrams}
       product={product}
       cancelHref={page?.backHref}
     />
@@ -140,36 +139,6 @@ function ProductFormFields({
       {children}
     </>
   );
-}
-
-function useConfirmLeave(isDirty: boolean) {
-  useEffect(() => {
-    if (!isDirty) return;
-    const confirmClose = (event: BeforeUnloadEvent) => event.preventDefault();
-    window.addEventListener('beforeunload', confirmClose);
-    document.addEventListener('click', confirmProductNavigation, true);
-    return () => {
-      window.removeEventListener('beforeunload', confirmClose);
-      document.removeEventListener('click', confirmProductNavigation, true);
-    };
-  }, [isDirty]);
-}
-
-function confirmProductNavigation(event: MouseEvent) {
-  if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey)
-    return;
-  const link =
-    event.target instanceof Element
-      ? event.target.closest<HTMLAnchorElement>(
-          'a[href^="/"]:not([href^="//"]):not([target="_blank"]):not([download])',
-        )
-      : null;
-  if (
-    link &&
-    link.pathname !== window.location.pathname &&
-    !window.confirm('Leave without saving your changes?')
-  )
-    event.preventDefault();
 }
 
 type SubmitProductArgs = {

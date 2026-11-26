@@ -65,10 +65,6 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
     await page.getByLabel('Product cost ৳', { exact: true }).fill('260');
     await expect(page.getByText('35%')).toBeVisible();
     await capture('new');
-    page.once('dialog', (prompt) => prompt.dismiss());
-    await page.getByRole('link', { name: 'Cancel', exact: true }).click();
-    await expect(page).toHaveURL(/\/products\/new$/);
-    await expect(page.getByLabel('Product name', { exact: true })).toHaveValue(name);
 
     const created = page.waitForResponse(
       (response) =>
