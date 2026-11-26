@@ -11,9 +11,11 @@ test('keeps selected orders across stages and prints one page per label', async 
 }) => {
   const fixture = JSON.parse(process.env.BROWSER_FIXTURE!) as { token: string; storeIds: string[] };
   const storeId = fixture.storeIds[0]!;
-  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const codOrderId = randomUUID();
   const paidOrderId = randomUUID();
+  await page.goto(`/orders/shipping-labels/print?orderIds=${codOrderId}`);
+  await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
+  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);

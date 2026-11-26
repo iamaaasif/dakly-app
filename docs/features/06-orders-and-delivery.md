@@ -282,9 +282,9 @@ print dialog after the labels load.
 Each label gets one 100 × 150 mm portrait page. It shows the shop name and phone,
 the saved recipient name, phone, address and district, the item count and the
 order number. The item count uses saved delivered quantities where available.
-The label shows the saved COD amount when money is due and Paid when the amount
-is zero or the order is already paid or recorded as COD collected. Staff with
-Orders view can see their shop phone. The recipient phone uses the same masking
+The label shows the saved COD amount when money is due. It shows Paid for a zero
+amount, a paid or COD-collected order, or a returned or cancelled order. Staff
+with Orders view can see their shop phone. The recipient phone uses the same masking
 as the order drawer.
 
 The print page at `/orders/shipping-labels/print` loads through

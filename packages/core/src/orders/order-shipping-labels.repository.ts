@@ -21,6 +21,7 @@ export class OrderShippingLabelsRepository {
           recipientDistrict: orders.recipientDistrict,
           codAmountPoisha: orders.codAmountPoisha,
           paymentStatus: orders.paymentStatus,
+          stage: orders.stage,
           itemCount:
             sql<number>`coalesce(sum(coalesce(${orderItems.deliveredQuantity}, ${orderItems.quantity})), 0)`.mapWith(
               Number,

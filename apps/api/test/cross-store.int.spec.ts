@@ -429,6 +429,8 @@ fixture('GET /orders/shipping-labels', async () => {
   const { a, b } = await pair();
   const cod = await order(a);
   const paid = await order(a, 1002);
+  const returned = await order(a, 1003);
+  const cancelled = await order(a, 1004);
   const foreign = await order(b);
   const url = (...ids: string[]) => `/orders/shipping-labels?orderIds=${ids.join(',')}`;
   const variantId = await orderVariant(a);
@@ -439,6 +441,14 @@ fixture('GET /orders/shipping-labels', async () => {
   await f.admin.pool.query(
     "update orders set payment_status='cod_collected', cod_collected_poisha=9000 where id=$1",
     [paid],
+  );
+  await f.admin.pool.query(
+    "update orders set stage='returned', payment_status='refund_due', cod_collected_poisha=9000 where id=$1",
+    [returned],
+  );
+  await f.admin.pool.query(
+    "update orders set stage='cancelled', cancel_reason='customer_cancelled' where id=$1",
+    [cancelled],
   );
   await f.admin.pool.query(
     `insert into order_items (id, store_id, order_id, variant_id, product_name, variant_title,
@@ -455,7 +465,7 @@ fixture('GET /orders/shipping-labels', async () => {
     a.membership,
     readOnlyRole.json().id,
   ]);
-  const restricted = await f.request(a.member, 'GET', url(paid, cod));
+  const restricted = await f.request(a.member, 'GET', url(paid, cod, returned, cancelled));
   expect(restricted.statusCode, restricted.body).toBe(200);
   expect(restricted.headers['cache-control']).toBe('no-store');
   expect(restricted.json()).toMatchObject({
@@ -472,6 +482,8 @@ fixture('GET /orders/shipping-labels', async () => {
         itemCount: 2,
         codDuePoisha: 9000,
       },
+      { id: returned, number: 1003, codDuePoisha: 0 },
+      { id: cancelled, number: 1004, codDuePoisha: 0 },
     ],
   });
   expect((await success(a, 'GET', url(cod), 200)).json().labels[0].recipientPhone).toBe(

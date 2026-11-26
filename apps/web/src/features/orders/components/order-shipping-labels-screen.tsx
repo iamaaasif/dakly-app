@@ -1,3 +1,5 @@
+'use client';
+
 import { Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useRef, type RefObject } from 'react';
