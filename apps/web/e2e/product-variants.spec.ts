@@ -155,8 +155,10 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await moveSize.press('ArrowUp');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    await expect
+      .poll(async () => (await loadProduct()).options.map(({ name }) => name))
+      .toEqual(['Size', 'Color']);
     const reordered = await loadProduct();
-    expect(reordered.options.map(({ name }) => name)).toEqual(['Size', 'Color']);
     for (const original of first.variants)
       expect(reordered.variants.find(({ id }) => id === original.id)).toMatchObject({
         optionValues: original.optionValues,
