@@ -130,7 +130,7 @@ describe('Product form on a full page', () => {
     for (const title of [
       'Basics',
       'Price',
-      'Variants',
+      'Variations',
       'Inventory',
       'Organisation',
       'Delivery',

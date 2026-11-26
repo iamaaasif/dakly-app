@@ -18,9 +18,9 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     storeIds: [string, string];
   };
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
-  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-11-variants');
+  const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-17-2');
   // CI keeps only e2e-artifacts, so each screenshot is also written there.
-  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-11-variants');
+  const ciCopy = resolve(process.cwd(), 'e2e-artifacts/prod-17-2');
   const name = 'Cotton T-shirt variants fixture';
   let productId: string | undefined;
   await mkdir(evidence, { recursive: true });
@@ -28,25 +28,13 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
   ]);
-  // The page scrolls inside the app shell, so a full-page shot repeats the sticky bar and the
-  // sidebar. A viewport as tall as the content shows the page once, from top to bottom.
-  async function capture(screen: string, onPhone?: () => Promise<void>) {
+  async function capture(screen: string, prepare: (width: number) => Promise<void>) {
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
-      if (width === 360) await onPhone?.();
-      await page.evaluate(() => {
-        for (const element of document.querySelectorAll('*')) element.scrollTop = 0;
-      });
-      const contentHeight = await page.evaluate(() =>
-        Math.max(
-          ...[...document.querySelectorAll('*')].map((element) => element.scrollHeight),
-          innerHeight,
-        ),
-      );
-      await page.setViewportSize({ width, height: Math.min(contentHeight, 4000) });
+      await prepare(width);
       await page.mouse.move(width - 1, 0);
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
@@ -56,12 +44,20 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     }
     await page.setViewportSize({ width: 1440, height: 900 });
   }
-  async function addValues(option: string, values: string[]) {
-    const box = page.getByLabel(`Add a value to ${option}`, { exact: true });
-    for (const value of values) {
-      await box.fill(value);
-      await box.press('Enter');
-    }
+  async function openValues(option: string) {
+    await page.getByRole('button', { name: `+ ${option}`, exact: true }).click();
+    await page.getByRole('button', { name: `Add values to ${option}` }).click();
+    return page.getByRole('dialog', { name: `Add values to ${option}` });
+  }
+  async function capturePicker(option: string) {
+    const name = `Add values to ${option}`;
+    const trigger = page.getByRole('button', { name });
+    await capture(`${option.toLowerCase()}-values`, async () => {
+      await page.keyboard.press('Escape');
+      await trigger.scrollIntoViewIfNeeded();
+      await trigger.click();
+      await expect(page.getByRole('dialog', { name })).toBeInViewport({ ratio: 0.9 });
+    });
   }
   async function loadProduct() {
     const response = await context.request.get(`/api/products/${productId}`);
@@ -84,19 +80,46 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByLabel('Available stock', { exact: true }).fill('12');
     await page.getByLabel('Product code').fill('UT-TS-01');
     await expect(page.getByText('Profit')).toBeVisible();
-    await capture('no-options');
+    await capture('no-options', () =>
+      page.getByRole('heading', { name: 'Variations' }).scrollIntoViewIfNeeded(),
+    );
 
     await page.getByRole('button', { name: /Suggest options/ }).click();
     await expect(page.getByRole('button', { name: 'Add all' })).toBeVisible();
-    await capture('suggest-options');
+    await capture('suggest-options', () =>
+      page.getByRole('button', { name: 'Add all' }).scrollIntoViewIfNeeded(),
+    );
     await page.getByRole('button', { name: 'Dismiss' }).click();
 
-    await page.getByRole('button', { name: 'Add options', exact: true }).click();
-    await page.getByLabel('Option 1 name').fill('Colour');
-    await addValues('Colour', ['Black', 'White']);
-    await page.getByRole('button', { name: /Add option \(max 3\)/ }).click();
-    await page.getByLabel('Option 2 name').fill('Size');
-    await addValues('Size', ['S', 'M', 'L']);
+    const colors = await openValues('Color');
+    await colors.getByRole('checkbox', { name: 'Black', exact: true }).check();
+    await colors.getByRole('checkbox', { name: 'White', exact: true }).check();
+    await capturePicker('Color');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+
+    await page.getByRole('button', { name: 'Edit Color' }).click();
+    await capture('edit-color', () => page.getByLabel('Option name').scrollIntoViewIfNeeded());
+    await page.getByRole('button', { name: 'Cancel option changes' }).click();
+
+    const sizes = await openValues('Size');
+    for (const size of ['S', 'M', 'L'])
+      await sizes.getByRole('checkbox', { name: size, exact: true }).check();
+    await capturePicker('Size');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+
+    const materials = await openValues('Material');
+    await materials.getByRole('checkbox', { name: 'Select all' }).check();
+    await expect(materials.getByRole('checkbox', { name: 'Cotton', exact: true })).toBeChecked();
+    await capturePicker('Material');
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Cancel option changes' }).click();
+
+    const moveSize = page.getByRole('button', { name: 'Move Size' });
+    await moveSize.dragTo(page.getByRole('button', { name: 'Move Color' }));
+    await expect(page.getByLabel('Stock for S / Black')).toHaveValue('12');
+    await moveSize.press('ArrowDown');
     await expect(page.getByLabel('Stock for Black / S')).toHaveValue('12');
     await expect(page.getByLabel('Code for Black / S')).toHaveValue('UT-TS-01');
     const stocks: [string, string][] = [
@@ -109,7 +132,8 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByLabel('Select Black / S').click();
     await page.getByLabel('Select Black / M').click();
     await expect(page.getByText('2 selected')).toBeVisible();
-    await capture('grid', async () => {
+    await capture('grid', async (width) => {
+      if (width !== 360) return;
       await expect(page.getByRole('button', { name: 'Black / L summary' })).toContainText('৳');
       await page.getByRole('button', { name: 'Black / L summary' }).click();
     });
@@ -128,10 +152,26 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     expect(first.variants).toHaveLength(6);
     expect(first.variants.find(({ title }) => title === 'Black / M')?.onHand).toBe(20);
 
+    await moveSize.press('ArrowUp');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    const reordered = await loadProduct();
+    expect(reordered.options.map(({ name }) => name)).toEqual(['Size', 'Color']);
+    for (const original of first.variants)
+      expect(reordered.variants.find(({ id }) => id === original.id)).toMatchObject({
+        optionValues: original.optionValues,
+        onHand: original.onHand,
+        pricePoisha: original.pricePoisha,
+        costPoisha: original.costPoisha,
+        sku: original.sku,
+      });
+    await moveSize.press('ArrowDown');
     await page.getByLabel('Stock for Black / S').fill('9');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Why did the stock change?' })).toBeVisible();
-    await capture('stock-reason');
+    await capture('stock-reason', () =>
+      page.getByRole('heading', { name: 'Why did the stock change?' }).scrollIntoViewIfNeeded(),
+    );
     await page.getByLabel('Reason').fill('Counted the shelf');
     await page.getByRole('button', { name: 'Save with this reason' }).click();
     await expect(page.getByRole('heading', { name: 'Why did the stock change?' })).toBeHidden();
