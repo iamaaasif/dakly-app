@@ -30,6 +30,10 @@ export async function offerLowerPrice(
     chat.requestedPricePoisha,
   );
   // Offer references belong to the outbound message, outside the model's tool result.
+  if (result.kind === 'fixed') {
+    const pricesTaka = [...new Set(product.variants.map(({ pricePoisha }) => pricePoisha / 100))];
+    return { result: { kind: 'fixed', pricesTaka } };
+  }
   if (result.kind !== 'offered') return { result };
   const { kind, pricePoisha, isFinal } = result;
   return {
@@ -38,22 +42,30 @@ export async function offerLowerPrice(
   };
 }
 
-export function offerPricesInReply(reply: string) {
+function offerPricesInReply(reply: string) {
   return quotedPricesPoisha(reply, [...amountPatterns, bareOfferPattern]);
 }
 
-export function quotedOfferSources(results: readonly { quote?: OfferQuote }[], reply: string) {
-  const prices = offerPricesInReply(reply);
+export function quotedOfferRefs(
+  quotes: readonly OfferQuote[],
+  prices: ReadonlySet<number | undefined>,
+) {
   const quoted = new Map<number, string | null>();
-  for (const { quote } of results) {
-    if (!quote || !prices.has(quote.pricePoisha)) continue;
+  for (const quote of quotes) {
+    if (!prices.has(quote.pricePoisha)) continue;
     const previous = quoted.get(quote.pricePoisha);
     quoted.set(
       quote.pricePoisha,
       previous === undefined || previous === quote.ref ? quote.ref : null,
     );
   }
-  const refs = [...quoted.values()].filter((ref) => ref !== null);
+  return quoted;
+}
+
+export function quotedOfferSources(quotes: readonly OfferQuote[], reply: string) {
+  const refs = [...quotedOfferRefs(quotes, offerPricesInReply(reply)).values()].filter(
+    (ref) => ref !== null,
+  );
   return refs.length ? [{ tool: 'price_offer', refs }] : [];
 }
 

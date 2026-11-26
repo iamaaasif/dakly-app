@@ -171,13 +171,12 @@ The product API returns both amounts only to members with Edit Products. Chat ca
 
 A bulk edit or import that changes the price can leave these settings out of range. The AI then does not negotiate on that product until the owner fixes them on the product page.
 
-For an eligible product, the sales agent can record an opening offer and then a final offer in a conversation. Each offer lasts 24 hours. `customer_message_id` keeps retries of one customer turn from advancing the offer. An offer can advance the negotiation or reduce a draft price once its quote appears in a sent reply. A draft from the same conversation shows **AI price offer** in order history when it uses the offer. The shop's discount hand-over switch takes priority.
+When the shop's discount hand-over rule is off, the AI can quote an opening offer and then a last price in the same chat. A sent offer lasts 24 hours. A new draft order in that chat applies the offer as a line discount and records **AI price offer** in its history. Retries of one customer message keep the same offer. See [Chats and AI agent](04-chats-and-ai-agent.md#guardrails-against-manipulation).
 
 #### Not built
 
 - Bulk editing the negotiation settings.
 - Importing the negotiation settings.
-- The reply prompt changes and model checks for negotiating in chat. See [step 7](../plans/product-page-redesign.md#prs).
 
 ### Catalogue tools beside the full page (planned)
 

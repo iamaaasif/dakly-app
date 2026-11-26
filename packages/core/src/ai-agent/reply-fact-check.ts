@@ -1,11 +1,14 @@
 import {
   amountPatterns,
   bareOfferPattern,
+  type ClaimedAmount,
   hasWrongAmount,
   leaksInstructions,
   numberPattern,
   offerWords,
 } from '@dakly/contracts/reply-wording';
+
+import { quotedOfferRefs, type OfferQuote } from './offer-lower-price';
 
 const MAX_REPLY_LENGTH = 600;
 const banglaDigits = '০১২৩৪৫৬৭৮৯';
@@ -17,6 +20,14 @@ const stockPatterns = [
     'giu',
   ),
   new RegExp(String.raw`(?:stock|available|স্টক|মজুদ)[^\d\n]{0,12}${number}`, 'giu'),
+];
+const deliveryWord = String.raw`(?:\b(?:delivery|shipping|courier)\b|ডেলিভারি|ডেলিভারী|কুরিয়ার|কুরিয়ার)`;
+const deliveryChargePatterns = [
+  new RegExp(
+    String.raw`${deliveryWord}(?:\s+(?:charge|fee|cost|চার্জ|খরচ))?\s*(?:(?:is|হলো|হল)\s*)?[:=]?\s*৳?\s*${number}`,
+    'giu',
+  ),
+  new RegExp(String.raw`${number}\s*(?:(?:tk|taka|টাকা)\s+)?(?:for\s+)?${deliveryWord}`, 'giu'),
 ];
 const phonePattern = /(?:\+?880|0)1[3-9](?:[\s-]?\d){8}/g;
 const linkPattern =
@@ -31,6 +42,7 @@ type Shop = {
   phone: string | null;
   linkBaseUrl: string;
   earlierCustomerTexts?: readonly string[];
+  offerQuotes?: readonly OfferQuote[];
 };
 
 // Tells the model why its last reply was not sent, so the one retry can fix it.
@@ -69,16 +81,104 @@ export function checkReplyFacts(
   if (wording) return { isSafe: false, failure: wording };
   const known = numbersIn(toolResults);
   if (
-    hasWrongAmount(
-      claimedAmounts(text, toolResults),
-      (value) => known.has(value),
-      numbersIn(customerTexts),
-    )
+    hasIncorrectAmount(text, toolResults, {
+      known,
+      customerNumbers: numbersIn(customerTexts),
+      offerQuotes: shop.offerQuotes ?? [],
+    })
   )
     return { isSafe: false, failure: 'amount' };
   if (claimedNumbers(text, stockPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'stock' };
   return { isSafe: true };
+}
+
+type NegotiationResult =
+  | { kind: 'offered'; priceTaka: number }
+  | { kind: 'fixed'; pricesTaka: number[] }
+  | { kind: 'final' };
+
+function isNegotiationResult(value: unknown): value is NegotiationResult {
+  if (!value || typeof value !== 'object' || !('kind' in value)) return false;
+  if (value.kind === 'final') return true;
+  if (value.kind === 'fixed')
+    return (
+      'pricesTaka' in value &&
+      Array.isArray(value.pricesTaka) &&
+      value.pricesTaka.every((price) => typeof price === 'number')
+    );
+  return value.kind === 'offered' && 'priceTaka' in value && typeof value.priceTaka === 'number';
+}
+
+function hasIncorrectAmount(
+  text: string,
+  toolResults: readonly unknown[],
+  {
+    known,
+    customerNumbers,
+    offerQuotes,
+  }: {
+    known: ReadonlySet<number>;
+    customerNumbers: ReadonlySet<number>;
+    offerQuotes: readonly OfferQuote[];
+  },
+) {
+  const amounts = claimedAmounts(text);
+  const results = toolResults.filter(isNegotiationResult);
+  if (!results.length) return hasWrongAmount(amounts, (value) => known.has(value), customerNumbers);
+  amounts.push(...claimedAmounts(text, [bareOfferPattern]));
+  return negotiationAmountIsWrong(text, amounts, results, {
+    toolResults,
+    customerNumbers,
+    offerQuotes,
+  });
+}
+
+function negotiationAmountIsWrong(
+  text: string,
+  amounts: readonly (ClaimedAmount & { at: number })[],
+  results: readonly NegotiationResult[],
+  {
+    toolResults,
+    customerNumbers,
+    offerQuotes,
+  }: {
+    toolResults: readonly unknown[];
+    customerNumbers: ReadonlySet<number>;
+    offerQuotes: readonly OfferQuote[];
+  },
+) {
+  const offered = new Set(
+    results.flatMap((result) => (result.kind === 'offered' ? [result.priceTaka] : [])),
+  );
+  if (offered.size) {
+    const delivery = claimedAmounts(text, deliveryChargePatterns);
+    const deliveryPositions = new Set(delivery.map(({ at }) => at));
+    const prices = amounts.filter(({ at }) => !deliveryPositions.has(at));
+    const quoted = new Set(prices.map(({ value }) => Math.round(value * 100)));
+    const charges = new Set(toolResults.flatMap(deliveryChargesIn));
+    return (
+      !prices.some(({ value }) => offered.has(value)) ||
+      [...quotedOfferRefs(offerQuotes, quoted).values()].includes(null) ||
+      delivery.some(({ value }) => !charges.has(value)) ||
+      hasWrongAmount(prices, (value) => offered.has(value), customerNumbers)
+    );
+  }
+  if (results.some(({ kind }) => kind === 'final')) return amounts.length > 0;
+  const prices = new Set(
+    results.flatMap((result) => (result.kind === 'fixed' ? result.pricesTaka : [])),
+  );
+  return amounts.some(({ value }) => !prices.has(value));
+}
+
+function deliveryChargesIn(value: unknown): number[] {
+  if (Array.isArray(value)) return value.flatMap(deliveryChargesIn);
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, item]) =>
+    (key === 'chargeTaka' || key === 'deliveryChargeTaka') && typeof item === 'number'
+      ? [item]
+      : deliveryChargesIn(item),
+  );
 }
 
 function contactFailure(text: string, shop: Shop, customerTexts: readonly string[]) {
@@ -100,15 +200,11 @@ function wordingFailure(text: string, toolResults: readonly unknown[]) {
   return offerWords(text).some((word) => !policyText.includes(word)) ? 'offer' : undefined;
 }
 
-function claimedAmounts(text: string, toolResults: readonly unknown[]) {
-  const offer = toolResults.some(
-    (result) =>
-      result && typeof result === 'object' && 'kind' in result && result.kind === 'offered',
-  );
-  const patterns = offer ? [...amountPatterns, bareOfferPattern] : amountPatterns;
+function claimedAmounts(text: string, patterns = amountPatterns) {
   return patterns.flatMap((pattern) =>
     [...text.matchAll(pattern)].map((match) => ({
       value: parseNumber(match[1]!),
+      at: match.index + match[0].lastIndexOf(match[1]!),
       around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),
     })),
   );

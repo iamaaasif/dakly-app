@@ -9,6 +9,7 @@ import { banglaGoldenCases, banglaRecordedOutcomes } from './golden-set.bangla';
 import { bargainingGoldenCases, unclearGoldenCases } from './golden-set.bargaining';
 import { chatMemoryGoldenCases, chatMemoryRecordedOutcomes } from './golden-set.chat-memory';
 import { complaintGoldenCases, complaintRecordedOutcomes } from './golden-set.complaints';
+import { longChatGoldenCases } from './golden-set.long-chats';
 import { memoryGoldenCases } from './golden-set.memory';
 import {
   activeGoldenCases,
@@ -72,6 +73,33 @@ describe('scoreEval', () => {
 
   it('throws when a case has no outcome', () => {
     expect(() => scoreEval(sampleGoldenCases, {})).toThrow('No outcome for golden case');
+  });
+});
+
+describe('Banglish product names in negotiation replies', () => {
+  it.each([
+    ['bargain-dam-kom-mixed', 'Apu, kurtir dam fixed ৳1450'],
+    ['bargain-budget-banglish', 'Panjabir dam fixed, ৳1200'],
+  ])('accepts the product name with a case ending in %s', (id, text) => {
+    const golden = bargainingGoldenCases.find((candidate) => candidate.id === id)!;
+    expect(scoreEval([golden], { [id]: { kind: 'reply', text } })).toMatchObject({
+      missedProductCaseIds: [],
+      negotiationFailureCaseIds: [],
+      passed: true,
+    });
+  });
+
+  it.each([
+    ['M', 'Medium size nai, 650 taka.'],
+    ['XL', 'XLta size nai, 650 taka.'],
+    ['confirm', 'Confirmer jonno opekkha korun. Total ৳650.'],
+  ])('requires a whole word for %s even in a Banglish negotiation case', (term, text) => {
+    const golden = banglaGoldenCases.find(({ id }) => id === 'oos-size-banglish')!;
+    const report = scoreEval([{ ...golden, negotiation: null, mentionsAnyOf: [term] }], {
+      [golden.id]: { kind: 'reply', text },
+    });
+    expect(report.missedProductCaseIds).toEqual([golden.id]);
+    expect(report.negotiationFailureCaseIds).toEqual([golden.id]);
   });
 });
 
@@ -312,6 +340,119 @@ describe('ad context set', () => {
       'ad-unlinked-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।' },
     });
     expect(report.passed).toBe(false);
+  });
+});
+
+describe('out-of-stock offers', () => {
+  const cases = [
+    ...longChatGoldenCases,
+    ...adContextGoldenCases,
+    ...banglaGoldenCases,
+    ...chatMemoryGoldenCases,
+  ];
+  const score = (id: string, text: string) =>
+    scoreEval([cases.find((candidate) => candidate.id === id)!], { [id]: { kind: 'reply', text } });
+
+  it.each([
+    [
+      'long-chat-size-banglish',
+      'Polo shirt-er XL size ekhon stock-e nei m o l ache, protiti 650 taka. XL restock hole janabo?',
+    ],
+    [
+      'long-chat-size-banglish',
+      'Bhai, polo shirt-er apnar XL size ekhon stock-e nei. M o L ache, tobe ekhon similar kono product stock-e nei. XL-er notun stock ele janabo?',
+    ],
+    [
+      'long-chat-spam-between-bn',
+      'পোলো শার্টের XL সাইজ এখন স্টকে নেই M ও L আছে, প্রতিটি ৳৬৫০। XL নতুন স্টকে এলে জানাবো?',
+    ],
+    [
+      'long-chat-spam-between-bn',
+      'আপনার XL সাইজটা মনে আছে। পোলো শার্টের XL এখন স্টকে নেই। M ও L আছে।',
+    ],
+    ['long-chat-spam-between-bn', 'পোলো XL এখন স্টকে নেই। XL রিস্টক হলে জানাবো?'],
+    [
+      'long-chat-spam-between-bn',
+      'আপনার সাইজটা মনে আছে, আপনার মাপ XL। পোলো XL এখন স্টকে নেই। M ও L আছে।',
+    ],
+    ['long-chat-spam-between-bn', 'পোলো XL নেই এটার বদলে M আছে।'],
+    ['long-chat-size-banglish', 'Polo XL is not in stock. M and L are available.'],
+    [
+      'chat-memory-other-channel-stock-banglish',
+      'Polo XL ekhon stock-e nei. M o L size ache, dam ৳650',
+    ],
+    [
+      'chat-memory-other-channel-stock-banglish',
+      'Polo XL ekhon stock-e nei M o L size ache, dam ৳650',
+    ],
+    [
+      'chat-memory-other-channel-stock-banglish',
+      'Polo shirt-er XL size ekhon stock-e nei. M o L size ache, dam ৳650. XL size-er notun stock ele janabo?',
+    ],
+    ['long-chat-size-banglish', 'Available now: Polo M (XL sold out).'],
+    ['long-chat-size-banglish', 'Polo XL (sold out).'],
+    ['long-chat-size-banglish', 'Polo XL is sold out and I have M in stock.'],
+    ['long-chat-size-banglish', 'Polo XL is sold out and M is 650 taka.'],
+    ['long-chat-size-banglish', 'Polo XL is sold out. I can tell you when XL is back in stock.'],
+    ['long-chat-size-banglish', 'Polo XL sold out. XL restock hole janabo and I can ship M today.'],
+    ['long-chat-size-banglish', 'Stock available for Polo M while XL is sold out.'],
+    ['ad-pick-no-match-banglish', 'Kon saree-tar kotha bolchen? Ei ad-e kurti o lal panjabi ache.'],
+    ['oos-product-bn', 'লোফার নেই ক্যানভাস আছে।'],
+    ['ad-sold-out-price-bn', 'লোফারের দাম ৳১৮০০ এবং এখন স্টকে নেই। ক্যানভাস আছে।'],
+  ])('passes %s when the reply does not offer the excluded item: %s', (id, text) => {
+    expect(score(id, text)).toMatchObject({ outOfStockOfferCaseIds: [], passed: true });
+  });
+
+  it.each([
+    ['XL', 'XXL'],
+    ['M', 'Medium'],
+  ])('accepts %s being excluded while the reply offers %s', (excluded, alternative) => {
+    const golden = {
+      ...cases.find(({ id }) => id === 'long-chat-size-banglish')!,
+      neverOffer: [excluded],
+    };
+    const outcomes = {
+      [golden.id]: { kind: 'reply' as const, text: `Polo ${alternative} size ache, dam ৳650.` },
+    };
+    expect(scoreEval([golden], outcomes)).toMatchObject({
+      outOfStockOfferCaseIds: [],
+      passed: true,
+    });
+  });
+
+  it.each([
+    ['long-chat-size-banglish', 'Polo XL and L are available, 650 taka.'],
+    [
+      'chat-memory-other-channel-stock-banglish',
+      'Polo XL ekhon stock-e ache. M o L size ache, dam ৳650',
+    ],
+    ['long-chat-size-banglish', 'Polo XL, 650 taka.'],
+    ['long-chat-size-banglish', 'Polo XL is 650 taka (M restock hole janabo).'],
+    ['long-chat-size-banglish', 'Polo XL is 650 taka M restock hole janabo.'],
+    [
+      'long-chat-size-banglish',
+      'Polo XL sold out. XL restock hole janabo and I can ship it today.',
+    ],
+    ['long-chat-size-banglish', 'Available now: Polo XL (M sold out).'],
+    ['long-chat-size-banglish', 'Currently available is Polo XL (M sold out).'],
+    ['long-chat-size-banglish', 'Stock available for Polo XL while M is sold out.'],
+    ['long-chat-size-banglish', 'The only size available is Polo XL now that M is sold out.'],
+    ['long-chat-size-banglish', 'Stock available for Polo XL and M is sold out.'],
+    ['long-chat-spam-between-bn', 'পোলো XL নেই বলেছিলাম এখন M এর সাথে এটাও আছে।'],
+    ['long-chat-spam-between-bn', 'স্টকে আছে পোলো XL মনে আছে তো?'],
+    ['long-chat-size-banglish', 'Polo XL was sold out and now I have it alongside M in stock.'],
+    ['long-chat-size-banglish', 'Polo XL was sold out and now both it and M are available.'],
+    ['long-chat-size-banglish', 'Polo XL was sold out and now it and M are available.'],
+    ['long-chat-spam-between-bn', 'পোলো XL নেই বলেছিলাম M আছে এবং এটাও আছে।'],
+    ['long-chat-spam-between-bn', 'পোলো XL নেই। আপনার মাপ XL স্টকে আছে।'],
+    ['long-chat-spam-between-bn', 'পোলো শার্টের XL নেই বলেছিলাম, এখন XL আছে।'],
+    ['long-chat-spam-between-bn', 'পোলো শার্টের XL নেই বলেছিলাম এখন আছে।'],
+    ['long-chat-spam-between-bn', 'মনে আছে আপনার জন্য পোলো XL সাইজটা আছে।'],
+    ['long-chat-size-banglish', 'Polo XL ache. XL stock e ashle janabo?'],
+    ['ad-pick-no-match-banglish', 'Kon saree-tar kotha bolchen? Saree-taw ache.'],
+    ['ad-pick-no-match-banglish', 'Kon saree niben?'],
+  ])('fails %s when the reply offers the excluded item: %s', (id, text) => {
+    expect(score(id, text)).toMatchObject({ outOfStockOfferCaseIds: [id], passed: false });
   });
 });
 
