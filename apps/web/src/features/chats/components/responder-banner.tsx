@@ -36,7 +36,6 @@ export function ResponderBanner({
 const aiLook = {
   icon: Sparkles,
   title: 'Dakly AI is handling this chat',
-  border: 'border-border',
   bar: 'bg-success-soft',
   button: 'Take over',
   buttonIcon: null,
@@ -46,7 +45,6 @@ const aiLook = {
 const teamLook = {
   icon: Users,
   title: 'Your team is handling this chat',
-  border: 'border-warning',
   bar: 'bg-warning-soft text-warning',
   button: 'Back to AI',
   buttonIcon: <Sparkles aria-hidden="true" size={16} strokeWidth={1.75} />,
@@ -70,7 +68,7 @@ function HandlingBanner({
   const Icon = look.icon;
   const title = ai ? look.title : handlerTitle(conversation.assigneeUserId);
   return (
-    <div className={cn('shrink-0 border-b', look.border)}>
+    <div className="shrink-0 border-b border-border">
       <div className={cn('flex items-center gap-2 px-3 py-1.5 text-sm', look.bar)}>
         <Icon aria-hidden="true" size={16} strokeWidth={1.75} />
         <p className="min-w-0 flex-1">
