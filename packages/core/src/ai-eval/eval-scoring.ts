@@ -154,7 +154,11 @@ function offersTerm(clause: string, term: RegExp, expectedTerms: readonly string
     const preceding = stockPhrases.findLast((phrase) => phrase.index < mention.index);
     const first = following[0];
     if (!first) return !preceding || preceding.groups?.inStock !== undefined;
-    if (offersBeforeStockPhrase(clause, endOfMention, first, preceding)) return true;
+    if (
+      offersBeforeStockPhrase({ clause, endOfMention, following: first, preceding, expectedTerms })
+    ) {
+      return true;
+    }
     return following.some((wording, wordingIndex) => {
       if (wording.groups?.inStock === undefined) return false;
       const earlierWording = following[wordingIndex - 1];
@@ -166,18 +170,26 @@ function offersTerm(clause: string, term: RegExp, expectedTerms: readonly string
   });
 }
 
-function offersBeforeStockPhrase(
-  clause: string,
-  endOfMention: number,
-  following: RegExpExecArray,
-  preceding: RegExpExecArray | undefined,
-) {
+function offersBeforeStockPhrase({
+  clause,
+  endOfMention,
+  following,
+  preceding,
+  expectedTerms,
+}: {
+  clause: string;
+  endOfMention: number;
+  following: RegExpExecArray;
+  preceding: RegExpExecArray | undefined;
+  expectedTerms: readonly string[];
+}) {
   const beforeStockPhrase = clause.slice(endOfMention, following.index);
+  if (following.groups?.unavailable === undefined && quotesPrice(beforeStockPhrase)) return true;
+  if (preceding?.groups?.inStock === undefined) return false;
+  const opening = clause.slice(0, preceding.index).trim();
   return (
-    quotesPrice(beforeStockPhrase) ||
-    (following.groups?.recalled !== undefined &&
-      preceding?.groups?.inStock !== undefined &&
-      clause.slice(0, preceding.index).trim() === '')
+    /^(?:stock|currently|now)?$/iu.test(opening) &&
+    (following.groups?.recalled !== undefined || namesAlternative(beforeStockPhrase, expectedTerms))
   );
 }
 
@@ -209,11 +221,12 @@ const outOfStockPhrase =
 const restockNotice =
   /(?:stock|স্টক)\s*-?\s*(?:এ|ে)?\s*(?:এলে|আসলে|ফিরলে)|রিস্টক\s+হলে|\b(?:stock\s*-?\s*e|restock)\s*(?:ashle|aile|ele|hole)\b|\b(?:when|once|if)\b[^.]*?\bback in stock/iu;
 const recalledPreference = /মনে\s+আছে|\bmone\s+ache\b/iu;
-const inStockPhrase = /(?:স্টকে\s+)?আছে|\b(?:ache|in stock|available)\b/iu;
+const inStockPhrase =
+  /(?:স্টকে\s+)?আছে|\b(?:ache|in stock|available|(?:can|will)\s+(?:ship|send|deliver)\s+it\s+(?:today|now|right away))\b/iu;
 const sameItemReference =
-  /\b(?:(?:have|offer)\s+(?:it|this one|that one)|both\s+it\s+and)\b|(?<![\p{L}\p{M}])(?:এটা|ওটা|সেটা)(?:ও|ই)?(?:\s+(?:এখন|স্টকে))*\s*$/iu;
+  /\b(?:(?:have|offer)\s+(?:it|this one|that one)|it\s+and)\b|(?<![\p{L}\p{M}])(?:এটা|ওটা|সেটা)(?:ও|ই)?(?:\s+(?:এখন|স্টকে))*\s*$/iu;
 const stockWording = new RegExp(
-  `${outOfStockPhrase.source}|${restockNotice.source}|(?<recalled>${recalledPreference.source})|(?<inStock>${inStockPhrase.source})`,
+  `(?<unavailable>${outOfStockPhrase.source})|${restockNotice.source}|(?<recalled>${recalledPreference.source})|(?<inStock>${inStockPhrase.source})`,
   'giu',
 );
 

@@ -346,8 +346,11 @@ describe('out-of-stock offers', () => {
     ['long-chat-size-banglish', 'Polo XL is sold out and I have M in stock.'],
     ['long-chat-size-banglish', 'Polo XL is sold out and M is 650 taka.'],
     ['long-chat-size-banglish', 'Polo XL is sold out. I can tell you when XL is back in stock.'],
+    ['long-chat-size-banglish', 'Polo XL sold out. XL restock hole janabo and I can ship M today.'],
+    ['long-chat-size-banglish', 'Stock available for Polo M while XL is sold out.'],
     ['ad-pick-no-match-banglish', 'Kon saree-tar kotha bolchen? Ei ad-e kurti o lal panjabi ache.'],
     ['oos-product-bn', 'লোফার নেই ক্যানভাস আছে।'],
+    ['ad-sold-out-price-bn', 'লোফারের দাম ৳১৮০০ এবং এখন স্টকে নেই। ক্যানভাস আছে।'],
   ])('passes %s when the reply does not offer the excluded item: %s', (id, text) => {
     expect(score(id, text)).toMatchObject({ outOfStockOfferCaseIds: [], passed: true });
   });
@@ -357,12 +360,19 @@ describe('out-of-stock offers', () => {
     ['long-chat-size-banglish', 'Polo XL, 650 taka.'],
     ['long-chat-size-banglish', 'Polo XL is 650 taka (M restock hole janabo).'],
     ['long-chat-size-banglish', 'Polo XL is 650 taka M restock hole janabo.'],
+    [
+      'long-chat-size-banglish',
+      'Polo XL sold out. XL restock hole janabo and I can ship it today.',
+    ],
     ['long-chat-size-banglish', 'Available now: Polo XL (M sold out).'],
     ['long-chat-size-banglish', 'Currently available is Polo XL (M sold out).'],
+    ['long-chat-size-banglish', 'Stock available for Polo XL while M is sold out.'],
+    ['long-chat-size-banglish', 'Stock available for Polo XL and M is sold out.'],
     ['long-chat-spam-between-bn', 'পোলো XL নেই বলেছিলাম এখন M এর সাথে এটাও আছে।'],
     ['long-chat-spam-between-bn', 'স্টকে আছে পোলো XL মনে আছে তো?'],
     ['long-chat-size-banglish', 'Polo XL was sold out and now I have it alongside M in stock.'],
     ['long-chat-size-banglish', 'Polo XL was sold out and now both it and M are available.'],
+    ['long-chat-size-banglish', 'Polo XL was sold out and now it and M are available.'],
     ['long-chat-spam-between-bn', 'পোলো XL নেই বলেছিলাম M আছে এবং এটাও আছে।'],
     ['long-chat-spam-between-bn', 'পোলো XL নেই। আপনার মাপ XL স্টকে আছে।'],
     ['long-chat-spam-between-bn', 'পোলো শার্টের XL নেই বলেছিলাম, এখন XL আছে।'],
