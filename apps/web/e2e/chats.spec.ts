@@ -170,7 +170,7 @@ test('lists chats by folder, state and channel and shows the folder counts', asy
 
     await page.getByRole('link', { name: /^Snoozed/ }).click();
     await expect(page).toHaveURL(/state=snoozed/);
-    await expect(page.getByText('Habib Rahman')).toBeVisible();
+    await expect(page.getByText('Habib Rahman', { exact: true })).toBeVisible();
     await expect(page.getByText('Sadia Islam')).toBeHidden();
 
     await page.getByRole('link', { name: /^All conversations/ }).click();
