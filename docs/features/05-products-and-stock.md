@@ -159,9 +159,21 @@ Built for the variants grid (part 2, API): saving a product with fewer variants 
 - On a phone, tap a variant's name, price and stock row to open its sheet. The bulk bar stays on the page, and the Save bar sticks to the bottom. Members with view permission can change the grouping and open a read-only sheet.
 - A readiness line shows what the AI still lacks (photo, price, description).
 
-### Price negotiation (PROD-18, planned)
+### Price negotiation settings (PROD-18)
 
-The next Price card work adds AI price negotiation under [D50](../product/decisions.md). See the [negotiation plan](../plans/product-page-redesign.md).
+Members with Edit Products can switch on **Let the AI negotiate** in the Price card. The **Opening offer** must be below the selling price, and the **Lowest price** can equal the opening offer. A lowest price below a variant's cost shows a warning and can still be saved. Products whose variants all inherit the selling price can use these settings. The switch is off for existing and new products by default.
+
+The product API returns both amounts only to members with Edit Products. Chat cards, order links and catalogue exports exclude the amounts.
+
+A bulk edit or import that changes the price can leave these settings out of range. The AI then does not negotiate on that product until the owner fixes them on the product page.
+
+For an eligible product, the sales agent can record an opening offer and then a final offer in a conversation. Each offer lasts 24 hours. `customer_message_id` keeps retries of one customer turn from advancing the offer. An offer can advance the negotiation or reduce a draft price once its quote appears in a sent reply. A draft from the same conversation shows **AI price offer** in order history when it uses the offer. The shop's discount hand-over switch takes priority.
+
+#### Not built
+
+- Bulk editing the negotiation settings.
+- Importing the negotiation settings.
+- The reply prompt changes and model checks for negotiating in chat. See [step 7](../plans/product-page-redesign.md#prs).
 
 ### Catalogue tools beside the full page (planned)
 

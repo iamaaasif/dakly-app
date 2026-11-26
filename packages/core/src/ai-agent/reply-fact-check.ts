@@ -1,5 +1,6 @@
 import {
   amountPatterns,
+  bareOfferPattern,
   hasWrongAmount,
   leaksInstructions,
   numberPattern,
@@ -67,7 +68,13 @@ export function checkReplyFacts(
   const wording = wordingFailure(text, toolResults);
   if (wording) return { isSafe: false, failure: wording };
   const known = numbersIn(toolResults);
-  if (hasWrongAmount(claimedAmounts(text), (value) => known.has(value), numbersIn(customerTexts)))
+  if (
+    hasWrongAmount(
+      claimedAmounts(text, toolResults),
+      (value) => known.has(value),
+      numbersIn(customerTexts),
+    )
+  )
     return { isSafe: false, failure: 'amount' };
   if (claimedNumbers(text, stockPatterns).some((value) => !known.has(value)))
     return { isSafe: false, failure: 'stock' };
@@ -93,8 +100,13 @@ function wordingFailure(text: string, toolResults: readonly unknown[]) {
   return offerWords(text).some((word) => !policyText.includes(word)) ? 'offer' : undefined;
 }
 
-function claimedAmounts(text: string) {
-  return amountPatterns.flatMap((pattern) =>
+function claimedAmounts(text: string, toolResults: readonly unknown[]) {
+  const offer = toolResults.some(
+    (result) =>
+      result && typeof result === 'object' && 'kind' in result && result.kind === 'offered',
+  );
+  const patterns = offer ? [...amountPatterns, bareOfferPattern] : amountPatterns;
+  return patterns.flatMap((pattern) =>
     [...text.matchAll(pattern)].map((match) => ({
       value: parseNumber(match[1]!),
       around: text.slice(Math.max(0, match.index - 15), match.index + match[0].length + 15),

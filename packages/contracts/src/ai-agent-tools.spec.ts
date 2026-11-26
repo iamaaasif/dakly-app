@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { salesAgentTools } from './ai-agent-tools';
+import { offerLowerPriceTool, salesAgentTools } from './ai-agent-tools';
 
 const banglaLetters = /[ঀ-৿]/u;
 const forbiddenArguments = ['storeId', 'contactId', 'conversationId', 'price', 'amount'];
@@ -27,6 +27,7 @@ describe('sales agent tools', () => {
       'search_products',
       'browse_products',
       'get_product',
+      'offer_lower_price',
       'get_delivery_charge',
       'get_my_orders',
       'get_order_status',
@@ -60,6 +61,14 @@ describe('sales agent tools', () => {
   it('reject arguments the model was not given', () => {
     for (const tool of salesAgentTools)
       expect(tool.input.safeParse({ storeId: crypto.randomUUID() }).success, tool.name).toBe(false);
+  });
+
+  it('takes a product name and variant words without accepting a counteroffer', () => {
+    const input = { productName: 'Panjabi', variantWords: 'Large' };
+    expect(offerLowerPriceTool.input.safeParse(input).success).toBe(true);
+    expect(
+      offerLowerPriceTool.input.safeParse({ ...input, requestedPricePoisha: 10000 }).success,
+    ).toBe(false);
   });
 
   it('take an order only with a valid own mobile number and bounded quantities', () => {

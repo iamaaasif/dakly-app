@@ -9,6 +9,7 @@ type ProductInputFieldProps = {
   label: string;
   placeholder?: string;
   optional?: boolean;
+  hint?: string;
   autoFocus?: boolean;
   deps?: FieldPath<ProductFormValues>;
 };
@@ -23,12 +24,13 @@ export function ProductInputField({
   label,
   placeholder,
   optional,
+  hint,
   autoFocus,
   deps,
 }: ProductInputFieldProps) {
   const { register } = useFormContext<ProductFormValues>();
   return (
-    <FormField name={name} label={label} optional={optional}>
+    <FormField name={name} label={label} hint={hint} optional={optional}>
       {(control) => (
         <Input
           {...control}
