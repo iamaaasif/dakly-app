@@ -22,7 +22,7 @@ import {
   factCheckFailedBlock,
   type FactCheckFailure,
 } from '../../ai-agent/reply-fact-check';
-import { salesAgentLlmTools } from '../../ai-agent/sales-agent-tools.service';
+import { salesAgentToolsFor } from '../../ai-agent/sales-agent-tools.service';
 import {
   defaultShopRules,
   refuseToolCall,
@@ -336,7 +336,7 @@ async function composeOnce(
         instructions: history === 'last20' ? chatReplyV9.instructions : chatReplyV14.instructions,
         input: context + transcript,
         output: chatReplyOutputSchema,
-        tools: salesAgentLlmTools,
+        tools: salesAgentToolsFor(evalShopRules(golden)),
         timeoutMs: TIMEOUT_MS,
       },
     ).catch((error: unknown) => {
