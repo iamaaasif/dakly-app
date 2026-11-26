@@ -289,7 +289,7 @@ export class InboxService {
     }: {
       reason: (typeof handoverReasons)[number];
       returnAfterMinutes: number | null;
-      summary?: string;
+      summary: string;
     },
   ) {
     return this.transaction.run(storeId, async () => {
@@ -307,7 +307,7 @@ export class InboxService {
           status: 'needs_you',
           responder: 'human',
           handoverReason: reason,
-          handoverSummary: summary ?? null,
+          handoverSummary: summary,
           handedOverAt: now,
           aiResumesAt,
         },
