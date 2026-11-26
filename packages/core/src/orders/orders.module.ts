@@ -6,6 +6,7 @@ import { DeliveryModule } from '../delivery/delivery.module';
 import { CacheModule } from '../platform/cache/cache.module';
 import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
+import { PriceOffersModule } from '../price-offers/price-offers.module';
 import { ProductsModule } from '../products/products.module';
 import { StoresModule } from '../stores/stores.module';
 import { BuyerOrdersRepository } from './buyer-orders.repository';
@@ -44,6 +45,7 @@ import { OrdersService } from './orders.service';
     ContactsModule,
     DeliveryModule,
     OutboxModule,
+    PriceOffersModule,
     ProductsModule,
     StoresModule,
   ],

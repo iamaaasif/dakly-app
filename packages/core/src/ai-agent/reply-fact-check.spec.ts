@@ -265,3 +265,12 @@ describe('checkReplyFacts', () => {
     expect(check('অ'.repeat(600))).toEqual({ isSafe: true });
   });
 });
+
+it('checks a bare amount named as a price after the offer tool returns', () => {
+  const offered = [...results, { kind: 'offered', priceTaka: 1100.5 }];
+  expect(check('I can do it at 1100.50, no less.', offered)).toEqual({ isSafe: true });
+  expect(check('I can do it at 999.50, no less.', offered)).toEqual({
+    isSafe: false,
+    failure: 'amount',
+  });
+});
