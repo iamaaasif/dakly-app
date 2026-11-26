@@ -14,6 +14,7 @@ import {
   getProductTool,
   handOverTool,
   joinRestockListTool,
+  offerLowerPriceTool,
   salesAgentTools,
   searchKnowledgeTool,
   searchProductsTool,
@@ -28,24 +29,17 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { BuyerOrdersService } from '../orders/buyer-orders.service';
 import { ChatOrdersService } from '../orders/chat-orders.service';
 import { AppError } from '../platform/errors/app-error';
+import { PriceOffersService } from '../price-offers/price-offers.service';
 import { ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 import { RestockRequestsService } from '../products/restock-requests.service';
+import { offerLowerPrice } from './offer-lower-price';
 import { describeAlternatives, describePhotoMatch } from './product-match-results';
 import type { CompactDeliveryZone } from './shop-block';
 import type { ShopRules } from './shop-rules';
+import type { ToolScope } from './tool-scope';
 
-// The agent job supplies both ids. No tool argument can name another store or customer.
-export type ToolScope = {
-  storeId: string;
-  contactId: string;
-  // A practice question has no chat, so it can read but cannot take an order.
-  chat?: { conversationId: string; channel: 'messenger' | 'instagram' };
-  // Set while the chat is answered from an ad: search and product reads stay inside these products.
-  adProductIds?: readonly string[];
-  // The owner's Suggest add-ons switch; confirming an order then returns what goes with it.
-  suggestAddOns?: boolean;
-};
+export type { ToolScope };
 type Handler = (scope: ToolScope, raw: unknown) => Promise<object>;
 
 const SEARCH_PRODUCT_LIMIT = 3;
@@ -72,9 +66,10 @@ export const salesAgentLlmTools: readonly LlmTool[] = salesAgentTools.map((tool)
 
 export function salesAgentToolsFor(
   rules: Pick<ShopRules, 'showProducts' | 'takeOrders'>,
+  canOffer = false,
 ): readonly LlmTool[] {
-  if (rules.showProducts && rules.takeOrders) return salesAgentLlmTools;
   return salesAgentLlmTools.filter((tool) => {
+    if (!canOffer && tool.name === offerLowerPriceTool.name) return false;
     if (!rules.showProducts && tool.name === sendProductCardTool.name) return false;
     if (
       !rules.takeOrders &&
@@ -91,6 +86,8 @@ export class SalesAgentToolsService {
     [searchProductsTool.name]: (scope, raw) => this.searchProducts(scope, raw),
     [browseProductsTool.name]: (scope, raw) => this.browseProducts(scope, raw),
     [getProductTool.name]: (scope, raw) => this.getProduct(scope, raw),
+    [offerLowerPriceTool.name]: (scope, raw) =>
+      offerLowerPrice(this.priceOffers, this.productSearch, scope, raw),
     [getDeliveryChargeTool.name]: (scope, raw) => this.getDeliveryCharge(scope, raw),
     [searchKnowledgeTool.name]: (scope, raw) => this.searchKnowledge(scope, raw),
     [getMyOrdersTool.name]: (scope, raw) => this.getMyOrders(scope, raw),
@@ -113,6 +110,7 @@ export class SalesAgentToolsService {
     @Inject(ChatOrdersService) private readonly chatOrders: ChatOrdersService,
     @Inject(ContactMatchSuggestionsService)
     private readonly phoneMatches: ContactMatchSuggestionsService,
+    @Inject(PriceOffersService) private readonly priceOffers: PriceOffersService,
   ) {}
 
   // The result goes back to the model, so a failure the model can act on is a result, not a throw.
@@ -316,7 +314,7 @@ export class SalesAgentToolsService {
       storeId,
       {
         contactId,
-        items: items.map((item) => ({ ...item, lineDiscountPoisha: 0 })),
+        items,
         recipient: {
           name: input.recipientName,
           phone: input.phone,
@@ -327,7 +325,11 @@ export class SalesAgentToolsService {
         orderDiscountPoisha: 0,
         advancePaidPoisha: 0,
       },
-      { channel: chat.channel, idempotencyKey: draftKey(chat.conversationId, input, areaId) },
+      {
+        channel: chat.channel,
+        conversationId: chat.conversationId,
+        idempotencyKey: draftKey(chat.conversationId, input, areaId),
+      },
     );
     return {
       orderNumber: order.number,
@@ -336,7 +338,8 @@ export class SalesAgentToolsService {
         product: item.productName,
         variant: item.variantTitle,
         quantity: item.quantity,
-        unitPriceTaka: taka(item.unitPricePoisha),
+        unitPriceTaka: taka(item.unitPricePoisha - item.lineDiscountPoisha / item.quantity),
+        ...(item.lineDiscountPoisha > 0 ? { lineDiscountTaka: taka(item.lineDiscountPoisha) } : {}),
       })),
       deliveryTo: `${order.recipientAddress}, ${order.recipientDistrict}`,
       deliveryChargeTaka: taka(order.deliveryChargePoisha),
@@ -404,7 +407,6 @@ function draftKey(
   const details = [...items, input.phone, input.address, areaId].join('|');
   return `ai-order:${conversationId}:${createHash('sha256').update(details).digest('hex').slice(0, 32)}`;
 }
-
 function productResult(product: ChatProduct) {
   return {
     productId: product.id,

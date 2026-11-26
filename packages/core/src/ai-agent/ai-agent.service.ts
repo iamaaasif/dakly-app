@@ -32,7 +32,7 @@ import { type ConversationEntry, conversationEntries } from './chat-memory';
 import { declineReply, holdingReply } from './decline-reply';
 import type { HandoverCheckRules } from './handover-reason';
 import { screenCustomerTexts } from './manipulation-screen';
-import { burstText, isFlood, isSameTurn } from './reply-burst';
+import { burstText, isFlood, isSameTurn, replyToolChat } from './reply-burst';
 import { outageRetryDelay, retryAt } from './reply-retry';
 import {
   type ComposedReply,
@@ -156,7 +156,7 @@ export class AiAgentService {
     const compose = {
       storeId,
       contactId: turn.contactId,
-      chat: { conversationId, channel: candidate.target.channel },
+      chat: replyToolChat(conversationId, candidate.target.channel, burst),
       customerTexts: burst.texts,
       rules: candidate.rules,
     };

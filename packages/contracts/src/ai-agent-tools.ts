@@ -63,6 +63,18 @@ export const getProductTool = {
   },
 } satisfies AiToolDefinition;
 
+export const offerLowerPriceTool = {
+  name: 'offer_lower_price',
+  description:
+    'After the customer asks for a lower price, get the shop’s next offer on the product or a result that the price stays fixed or final. Give the product name and any size or colour the customer named. Use null when they named neither.',
+  aliases: ['দাম কম', 'dam kom', 'lower price'],
+  input: z.strictObject({
+    productName: z.string().trim().min(1).max(200),
+    variantWords: z.string().trim().min(1).max(100).nullable(),
+  }),
+  units: { priceTaka: 'taka, converted from poisha' },
+} satisfies AiToolDefinition;
+
 export const getDeliveryChargeTool = {
   name: 'get_delivery_charge',
   description:
@@ -152,6 +164,7 @@ export const draftOrderTool = {
   units: {
     quantity: 'count of pieces, 1 to 20 per variant',
     unitPriceTaka: 'taka, converted from poisha',
+    lineDiscountTaka: 'taka for the whole line, converted from poisha',
     deliveryChargeTaka: 'taka, converted from poisha',
     totalTaka: 'taka including delivery, converted from poisha',
   },
@@ -223,6 +236,7 @@ export const salesAgentTools = [
   searchProductsTool,
   browseProductsTool,
   getProductTool,
+  offerLowerPriceTool,
   getDeliveryChargeTool,
   searchKnowledgeTool,
   getMyOrdersTool,

@@ -4,13 +4,16 @@ import { randomUUID } from 'node:crypto';
 import { BullModule } from '@nestjs/bullmq';
 import { type INestApplicationContext, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 
 import { createDatabase } from '@dakly/db/client';
 
+import { OrdersService } from '../orders/orders.service';
 import { ClockModule } from '../platform/clock.module';
 import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
+import { TenantDatabase } from '../platform/database/tenant-database';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { AiAgentModule } from './ai-agent.module';
 import { SalesAgentToolsService, salesAgentLlmTools } from './sales-agent-tools.service';
@@ -45,7 +48,10 @@ afterAll(async () => {
     for (const table of [
       'contact_match_suggestions',
       'restock_requests',
+      'price_offers',
+      'messages',
       'conversations',
+      'contact_identities',
       'channel_connections',
       'stock_movements',
       'outbox_events',
@@ -197,6 +203,7 @@ it('lists every tool for the model with its words and its non-obvious units in t
     'search_products',
     'browse_products',
     'get_product',
+    'offer_lower_price',
     'get_delivery_charge',
     'search_knowledge',
     'get_my_orders',
@@ -558,6 +565,149 @@ async function variantOf(storeId: string, productId: string) {
   );
   return variant!.id;
 }
+
+async function askForDiscount(storeId: string, buyer: string, conversationId: string) {
+  const identity = randomUUID();
+  const message = randomUUID();
+  await admin.pool.query(
+    `insert into contact_identities (id, store_id, contact_id, channel_connection_id, channel, external_id)
+     select $1::uuid, $2, $3, channel_connection_id, 'messenger', $1::text from conversations where id = $4`,
+    [identity, storeId, buyer, conversationId],
+  );
+  await admin.pool.query(
+    `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body, status, sender_identity_id)
+     values ($1, $2, $3, 'in', 'customer', 'text', 'discount?', 'received', $4)`,
+    [message, storeId, conversationId, identity],
+  );
+  return message;
+}
+
+it('offers one price per customer ask and discounts only the draft in that conversation', async () => {
+  const { storeId, variantId } = await orderShop();
+  const buyer = await contact(storeId);
+  const conversationId = await conversation(storeId, buyer);
+  const otherConversation = await conversation(storeId, buyer);
+  const changed = await admin.pool.query<{ id: string }>(
+    `update products set negotiation_enabled=true, negotiation_opening_poisha=110000, negotiation_floor_poisha=95000
+     where store_id=$1 returning id`,
+    [storeId],
+  );
+  const chat = { conversationId, channel: 'messenger' as const };
+  const scope = { storeId, contactId: buyer, chat, adProductIds: [changed.rows[0]!.id] };
+  const turn = () => askForDiscount(storeId, buyer, conversationId);
+  const offer = (discountAskMessageId: string) =>
+    tools.run(
+      { ...scope, chat: { ...chat, discountAskMessageId } },
+      'offer_lower_price',
+      '{"productName":"পাঞ্জাবি","variantWords":null}',
+    );
+  const outgoing = (messageId: string, status: 'queued' | 'sent') =>
+    admin.pool.query(
+      `insert into messages (id, store_id, conversation_id, direction, author_type, kind, body, status, sent_at, ai_sources)
+     values (gen_random_uuid(), $1, $2, 'out', 'ai', 'text', 'Quote', $3, case when $3='sent' then now() end, $4)`,
+      [
+        storeId,
+        conversationId,
+        status,
+        JSON.stringify([{ tool: 'price_offer', refs: [`${messageId}:${scope.adProductIds[0]}`] }]),
+      ],
+    );
+  expect(
+    await tools.run(scope, 'offer_lower_price', '{"productName":"পাঞ্জাবি","variantWords":null}'),
+  ).toEqual({
+    error: 'NOT_A_DISCOUNT_ASK',
+  });
+
+  const first = await turn();
+  const opening = { kind: 'offered', priceTaka: 1100, isFinal: false };
+  const calls = () => offer(first);
+  expect(await Promise.all([calls(), calls()])).toEqual([opening, opening]);
+  await outgoing(first, 'queued');
+  const singleItem = JSON.stringify(draft(variantId, { items: [{ variantId, quantity: 1 }] }));
+  expect(await tools.run(scope, 'draft_order', singleItem)).toMatchObject({ totalTaka: 1260 });
+  const delivered = await turn();
+  expect(await offer(delivered)).toEqual(opening);
+  await outgoing(delivered, 'sent');
+  const final = await turn();
+  expect(await offer(final)).toEqual({ kind: 'offered', priceTaka: 950, isFinal: true });
+  await outgoing(final, 'sent');
+  expect(await offer(await turn())).toEqual({ kind: 'final' });
+  expect(await calls()).toEqual(opening);
+
+  const orderArgs = JSON.stringify(draft(variantId));
+  const drafted = await tools.run(scope, 'draft_order', orderArgs);
+  expect(drafted).toMatchObject({
+    items: [{ unitPriceTaka: 950, lineDiscountTaka: 500, quantity: 2 }],
+    totalTaka: 1960,
+  });
+  expect(await tools.run(scope, 'draft_order', orderArgs)).toEqual(drafted);
+  const orders = await admin.pool.query<{ id: string }>(
+    'select id from orders where store_id=$1 and number=$2',
+    [storeId, (drafted as { orderNumber: number }).orderNumber],
+  );
+  const detail = await app
+    .get(OrdersService)
+    .getById(storeId, orders.rows[0]!.id, { seeFullPhone: false });
+  expect(detail).toMatchObject({
+    items: [{ lineDiscountPoisha: 50000 }],
+    timeline: [{ reason: 'AI price offer' }],
+  });
+
+  const other = await tools.run(
+    { ...scope, chat: { ...chat, conversationId: otherConversation } },
+    'draft_order',
+    orderArgs,
+  );
+  expect(other).toMatchObject({ totalTaka: 2460 });
+
+  await admin.pool.query('update product_variants set price_override_poisha = 130000 where id=$1', [
+    variantId,
+  ]);
+  expect(await offer(await turn())).toEqual({ kind: 'fixed' });
+  await admin.pool.query('update product_variants set price_override_poisha = null where id=$1', [
+    variantId,
+  ]);
+  await admin.pool.query(
+    "update price_offers set expires_at = now() - interval '1 second' where store_id=$1",
+    [storeId],
+  );
+  expect(
+    await tools.run(
+      scope,
+      'draft_order',
+      JSON.stringify(
+        draft(variantId, { items: [{ variantId, quantity: 1 }], address: 'আরেকটি ঠিকানা' }),
+      ),
+    ),
+  ).toMatchObject({ totalTaka: 1260 });
+  expect(await calls()).toEqual({ kind: 'fixed' });
+  expect(await offer(await turn())).toEqual(opening);
+});
+
+it('enforces store isolation on price offers with app-role RLS', async () => {
+  const storeId = await shop();
+  const otherStoreId = await shop();
+  const buyer = await contact(storeId);
+  const conversationId = await conversation(storeId, buyer);
+  const productId = await product(storeId, { name: 'Isolation scarf' });
+  const customerMessageId = await askForDiscount(storeId, buyer, conversationId);
+  const client = createDatabase(process.env.DATABASE_URL!);
+  const tenant = new TenantDatabase(client.db);
+  const insert = sql`insert into price_offers (id,store_id,conversation_id,contact_id,product_id,customer_message_id,offered_price_poisha,step,expires_at)
+    values (gen_random_uuid(),${storeId},${conversationId},${buyer},${productId},${customerMessageId},100,'opening',now())`;
+  try {
+    await expect(tenant.forStore(otherStoreId, (tx) => tx.execute(insert))).rejects.toMatchObject({
+      cause: { code: '42501' },
+    });
+    await tenant.forStore(storeId, (tx) => tx.execute(insert));
+    const visible = (scope: string) =>
+      tenant.forStore(scope, (tx) => tx.execute(sql`select store_id from price_offers`));
+    expect((await visible(storeId)).rows).toEqual([{ store_id: storeId }]);
+    expect((await visible(otherStoreId)).rows).toEqual([]);
+  } finally {
+    await client.pool.end();
+  }
+});
 
 it('offers in-stock products of the same category for a sold-out one, never another shop or category', async () => {
   const storeId = await shop();

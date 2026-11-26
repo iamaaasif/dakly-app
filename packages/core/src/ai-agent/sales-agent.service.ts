@@ -32,6 +32,7 @@ import {
 } from './chat-memory';
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
+import { quotedOfferSources } from './offer-lower-price';
 import { customerConfirms } from './order-confirmation';
 import { chatReplyV17 } from './prompts/chat-reply.v17';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
@@ -42,8 +43,8 @@ import {
   SalesAgentToolsService,
   salesAgentToolsFor,
 } from './sales-agent-tools.service';
-import { type CompactDeliveryZone, shopBlock, summaryOf } from './shop-block';
-import { refuseToolCall, type ShopRules, shopRulesBlock } from './shop-rules';
+import { type CompactDeliveryZone, shopBlock } from './shop-block';
+import { refuseToolCall, type ShopRules, shopRulesBlock, toolHandover } from './shop-rules';
 
 const MAX_ROUNDS = 4;
 const REPLY_BUDGET_MS = 20_000;
@@ -52,7 +53,6 @@ const HISTORY_LENGTH = 20;
 const REPLY_HISTORY_LENGTH = 300;
 const PHOTO_QUERY_LENGTH = 1000;
 const CARD_TOOL = 'send_product_card';
-const HAND_OVER_TOOL = 'hand_over';
 const DRAFT_TOOL = 'draft_order';
 const CONFIRM_TOOL = 'confirm_order';
 const SOURCE_KEYS = ['productId', 'itemId', 'orderNumber'];
@@ -179,7 +179,10 @@ export class SalesAgentService {
         prompt: promptWith(chatReplyV17, inChat, ad),
         input: context + transcript,
         output: chatReplyOutputSchema,
-        tools: salesAgentToolsFor(input.rules),
+        tools: salesAgentToolsFor(
+          input.rules,
+          Boolean(input.chat?.discountAskMessageId && !input.rules.handover.discounts),
+        ),
         signal,
       });
       if (attempt.kind === 'failure')
@@ -196,7 +199,7 @@ export class SalesAgentService {
           toolNames: results.map(({ tool }) => tool),
           earlierCustomerTexts: customerLines(history),
           sources: withShownProducts(
-            sourcesOf(results),
+            sourcesOf(results, attempt.output.reply),
             shownProductIds(results, attempt.output.reply),
           ),
         };
@@ -285,8 +288,8 @@ export class SalesAgentService {
               call.name,
               call.argumentsJson,
             ));
-      if (call.name === HAND_OVER_TOOL && 'reason' in result)
-        return { handover: result.reason as Reason, summary: summaryOf(result) };
+      const handover = toolHandover(call.name, result);
+      if (handover) return handover;
       results.push({ tool: call.name, result });
       answered.push({ name: call.name, result });
     }
@@ -431,10 +434,11 @@ function customerLines(history: readonly HistoryMessage[] | undefined) {
   );
 }
 
-function sourcesOf(results: ToolResult[]) {
+function sourcesOf(results: ToolResult[], reply: string) {
   return results
     .map(({ tool, result }) => ({ tool, refs: refsIn(result) }))
-    .filter((s) => s.refs.length);
+    .filter((s) => s.refs.length)
+    .concat(quotedOfferSources(results, reply));
 }
 
 function refsIn(value: unknown): string[] {
