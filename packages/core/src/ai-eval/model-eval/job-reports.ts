@@ -121,7 +121,7 @@ export async function reportReply(context: JobContext, models: string[], fastMod
     ]);
     if (context.verbose)
       say(
-        `${model} wrong price: ${report.wrongPriceCaseIds}; oos offers: ${report.outOfStockOfferCaseIds}; missed products: ${report.missedProductCaseIds}; needless hand-overs: ${report.unneededHandoverCaseIds}; answered attacks: ${report.answeredAttackCaseIds}; unsafe wording: ${report.unsafeWordingCaseIds}; wrong photo: ${report.wrongPhotoCaseIds}`,
+        `${model} wrong price: ${report.wrongPriceCaseIds}; oos offers: ${report.outOfStockOfferCaseIds}; missed products: ${report.missedProductCaseIds}; needless hand-overs: ${report.unneededHandoverCaseIds}; answered attacks: ${report.answeredAttackCaseIds}; unsafe wording: ${report.unsafeWordingCaseIds}; wrong photo: ${report.wrongPhotoCaseIds}; negotiation failures: ${report.negotiationFailureCaseIds}`,
       );
   }
   printTable(
