@@ -177,7 +177,10 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     await page.getByRole('button', { name: 'Create', exact: true }).click();
     productId = ((await (await created).json()) as ProductResponse).id;
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
-    const initialHash = await waitForProductIndex(database, fixture.storeIds[0], productId);
+    const initialHash = await waitForProductIndex(database, {
+      storeId: fixture.storeIds[0],
+      id: productId,
+    });
     await page.reload();
     await expectStock('Black / S', '12');
     const details = page.getByRole('dialog', { name: 'Black / S', exact: true });
@@ -215,7 +218,11 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
         .getByRole('button', { name: 'Save', exact: true })
         .and(page.locator(':disabled:not([aria-busy="true"])')),
     ).toBeVisible();
-    await waitForProductIndex(database, fixture.storeIds[0], productId, initialHash);
+    await waitForProductIndex(
+      database,
+      { storeId: fixture.storeIds[0], id: productId },
+      initialHash,
+    );
     await page.reload();
     await expectStock('S / Black', '12', 'UT-TS-01');
     await moveSize.press('ArrowDown');

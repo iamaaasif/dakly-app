@@ -112,11 +112,7 @@ type LoadedProductPageProps = {
 function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedProductPageProps) {
   const router = useRouter();
   const stock = stockKey(product);
-  const [loaded, setLoaded] = useState<{
-    version: number;
-    stock: string;
-    pendingVersions: number[];
-  }>({
+  const [loaded, setLoaded] = useState<LoadedProductVersion>({
     version: product.version,
     stock,
     pendingVersions: [],
@@ -126,21 +122,7 @@ function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedP
   const acceptVersion = (saved: ProductResponse) =>
     setLoaded({ version: saved.version, stock: stockKey(saved), pendingVersions: [] });
   const acceptLocalVersion = (version: number) =>
-    setLoaded((previous) => {
-      if (version <= previous.version) return previous;
-      // A gap may be a change from another editor. Wait for our own responses to fill it.
-      const versions = [...previous.pendingVersions, version].sort((a, b) => a - b);
-      let current = previous.version;
-      for (const received of versions) {
-        if (received > current + 1) break;
-        current = received;
-      }
-      return {
-        ...previous,
-        version: current,
-        pendingVersions: versions.filter((n) => n > current),
-      };
-    });
+    setLoaded((previous) => acceptWrittenVersion(previous, version));
   return (
     <ProductForm
       key={loaded.stock}
@@ -178,6 +160,20 @@ function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedP
       }}
     />
   );
+}
+
+type LoadedProductVersion = { version: number; stock: string; pendingVersions: number[] };
+
+function acceptWrittenVersion(previous: LoadedProductVersion, version: number) {
+  if (version <= previous.version) return previous;
+  // A gap may be a change from another editor. Wait for our own responses to fill it.
+  const versions = [...previous.pendingVersions, version].sort((a, b) => a - b);
+  let current = previous.version;
+  for (const received of versions) {
+    if (received > current + 1) break;
+    current = received;
+  }
+  return { ...previous, version: current, pendingVersions: versions.filter((n) => n > current) };
 }
 
 function ProductPageNotice({

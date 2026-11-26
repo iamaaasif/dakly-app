@@ -83,7 +83,7 @@ test('adds a product on a full page and keeps Save in the top bar', async ({
       compareAtPricePoisha: 60000,
     });
     await expect(page).toHaveURL(new RegExp(`/products/${productId}$`));
-    await waitForProductIndex(database, fixture.storeIds[0], productId);
+    await waitForProductIndex(database, { storeId: fixture.storeIds[0], id: productId });
     await page.reload();
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Media', exact: true })).toBeVisible();
