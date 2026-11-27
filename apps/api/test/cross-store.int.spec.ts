@@ -276,6 +276,8 @@ fixture('GET /orders/catalogue', async () => {
         id: own.id,
         name: 'Panjabi',
         isStockTracked: true,
+        stockStatus: 'in_stock',
+        allowOrdersWhenOutOfStock: false,
         variants: [
           {
             id: own.variants[0].id,
