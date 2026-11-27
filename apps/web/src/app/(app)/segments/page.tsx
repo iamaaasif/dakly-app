@@ -1,17 +1,13 @@
-import { z } from 'zod';
+import Link from 'next/link';
 
 import { SegmentsScreen } from '@/features/segments/components/segments-screen';
+import { parseSegmentsView } from '@/features/segments/segments-view';
 import { requireSession } from '@/lib/require-session';
-
-const segmentsPageSchema = z.object({
-  cursor: z.uuid().optional(),
-  edit: z.union([z.literal('new'), z.uuid()]).optional(),
-});
 
 export default async function SegmentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ cursor?: string; edit?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const session = await requireSession();
   if (!session.currentStore)
@@ -20,18 +16,12 @@ export default async function SegmentsPage({
         Choose a shop to see its segments.
       </p>
     );
-  const parsed = segmentsPageSchema.safeParse(await searchParams);
-  if (!parsed.success)
+  const view = parseSegmentsView(await searchParams);
+  if (!view)
     return (
       <p role="alert" className="p-6">
-        This segments page address is invalid. <a href="/segments">Open the segment list</a>.
+        This segments page address is invalid. <Link href="/segments">Open the segment list</Link>.
       </p>
     );
-  return (
-    <SegmentsScreen
-      cursor={parsed.data.cursor}
-      edit={parsed.data.edit}
-      canEdit={session.currentStore.canEditSegments}
-    />
-  );
+  return <SegmentsScreen view={view} canEdit={session.currentStore.canEditSegments} />;
 }

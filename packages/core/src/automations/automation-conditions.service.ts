@@ -5,6 +5,7 @@ import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { usesConfirmLink } from '@dakly/contracts/automations/text';
 
 import { ContactsService } from '../contacts/contacts.service';
+import { MessagingService } from '../messaging/messaging.service';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { SegmentsService } from '../segments/segments.service';
 import { SendPolicyService } from '../sending/send-policy.service';
@@ -12,6 +13,8 @@ import { AutomationRunsRepository } from './automation-runs.repository';
 import {
   type Condition,
   hasHappened,
+  isChatChannel,
+  MESSENGER_WINDOW_MS,
   type PathChoice,
   type RunFacts,
   type SendStep,
@@ -23,6 +26,7 @@ export class AutomationConditionsService {
   constructor(
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
+    @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(OrderReportingService) private readonly orders: OrderReportingService,
     @Inject(AutomationRunsRepository) private readonly repository: AutomationRunsRepository,
@@ -93,11 +97,16 @@ export class AutomationConditionsService {
       // Reachable means the contact has an address and an open window on the channel; consent is
       // the send step's own check.
       case 'reachable': {
+        const { channel } = condition;
+        const route = isChatChannel(channel)
+          ? await this.messaging.latestChatRoute(storeId, contactId, channel)
+          : undefined;
         const request = {
           contactId,
-          channel: condition.channel,
+          channel,
           category: 'transactional',
           at,
+          windowClosesAt: route && new Date(route.lastInboundAt.getTime() + MESSENGER_WINDOW_MS),
         } as const;
         return (await this.sendPolicy.check(storeId, request)).action === 'send';
       }
