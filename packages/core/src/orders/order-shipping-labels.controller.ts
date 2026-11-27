@@ -1,4 +1,5 @@
 import { Controller, Get, Header, Inject, Query } from '@nestjs/common';
+import type { z } from 'zod';
 
 import {
   shippingLabelQuerySchema,
@@ -23,7 +24,8 @@ export class OrderShippingLabelsController {
   @Header('Cache-Control', 'no-store')
   read(
     @CurrentStore() storeId: string,
-    @Query(new ZodValidationPipe(shippingLabelQuerySchema)) query: { orderIds: string[] },
+    @Query(new ZodValidationPipe(shippingLabelQuerySchema))
+    query: z.output<typeof shippingLabelQuerySchema>,
     @CurrentAccess() access: StoreAccess,
   ): Promise<OrderShippingLabels> {
     return this.service.read(storeId, query.orderIds, access.seeFullPhone);

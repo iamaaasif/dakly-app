@@ -12,6 +12,9 @@ type OrderShippingLabelProps = {
   label: OrderShippingLabels['labels'][number];
 };
 
+// Compact spacing leaves room for long names and addresses on a single print page.
+const longLabelTextLength = 270;
+
 export function OrderShippingLabel({ store, label }: OrderShippingLabelProps) {
   const barcode = useRef<SVGSVGElement>(null);
   useLayoutEffect(() => {
@@ -36,7 +39,7 @@ export function OrderShippingLabel({ store, label }: OrderShippingLabelProps) {
     <article
       className={cn(
         'shipping-label mx-auto flex min-h-[136mm] w-full max-w-[100mm] flex-col gap-4 rounded-lg border border-border bg-surface p-5 wrap-anywhere print:m-0 print:h-[149mm] print:min-h-0 print:max-w-none print:rounded-none print:border-0 print:p-[6mm]',
-        textLength > 270 && 'shipping-label-long-address',
+        textLength > longLabelTextLength && 'shipping-label-long-address',
       )}
     >
       <header className="border-b border-border pb-4">
