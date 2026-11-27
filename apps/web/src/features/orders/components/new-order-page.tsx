@@ -1,8 +1,10 @@
 'use client';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 import { FormProvider } from 'react-hook-form';
 
+import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
 
 import { useNewOrder } from '../use-new-order';
@@ -85,14 +87,28 @@ function MainColumn({ state }: { state: ReturnType<typeof useNewOrder> }) {
 }
 
 function SaveError({ create }: { create: ReturnType<typeof useNewOrder>['create'] }) {
-  if (!create.error) return null;
+  const ref = useRef<HTMLParagraphElement>(null);
+  const { error } = create;
+  useEffect(() => {
+    if (!error) return;
+    ref.current?.scrollIntoView({ block: 'center' });
+    ref.current?.focus({ preventScroll: true });
+  }, [error]);
+  if (!error) return null;
   return (
-    <p role="alert" className="text-danger">
+    <p ref={ref} tabIndex={-1} role="alert" className="text-danger">
       {create.mustRetry
         ? 'Could not confirm the save. Retry with the same order details.'
-        : create.error.message}
+        : saveErrorMessage(error)}
     </p>
   );
+}
+
+// The server wording for this code is about removing a default zone, which is wrong while saving an order.
+function saveErrorMessage(error: Error) {
+  if (error instanceof ApiError && error.code === 'DELIVERY_DEFAULT_REQUIRED')
+    return 'This shop has no delivery zones yet. Set them up in the Delivery charge section, or type a delivery charge.';
+  return error.message;
 }
 
 type NewOrderHeaderProps = {

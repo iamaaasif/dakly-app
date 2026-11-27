@@ -22,6 +22,7 @@ import type { StoreAccess } from '@dakly/contracts/team';
 import { AuditService } from '../audit/audit.service';
 import { UsersService } from '../auth/users.service';
 import { BillingService } from '../billing/billing.service';
+import { DeliveryService } from '../delivery/delivery.service';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -58,6 +59,7 @@ export class StoresService {
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(DeliveryService) private readonly delivery: DeliveryService,
   ) {}
 
   async nextOrderNumber(storeId: string): Promise<number> {
@@ -292,6 +294,9 @@ export class StoresService {
       });
       return { storeId, isCreated: true };
     });
+    // Without zones the first order is blocked, so a new shop starts with the documented defaults.
+    if (result.isCreated)
+      await this.delivery.initializeDefaults(result.storeId, { kind: 'user', userId });
     // A retry may return another tenant; leave the new-store scope before reading it.
     await this.sessions.setActiveStore(userId, sessionId, result.storeId);
     const store = await this.repository.find(result.storeId);

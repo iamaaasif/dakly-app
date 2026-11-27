@@ -17,6 +17,7 @@ import { memberships, roles } from '@dakly/db/schema/team';
 
 import { AuditService } from '../audit/audit.service';
 import { BillingService } from '../billing/billing.service';
+import { DeliveryService } from '../delivery/delivery.service';
 import { DatabaseModule } from '../platform/database/database.module';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { AppErrorFilter } from '../platform/errors/app-error.filter';
@@ -125,6 +126,25 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     ]);
 
     expect(numbers.sort((a, b) => a - b)).toEqual([1001, 1002]);
+  });
+
+  it('gives a new shop the default delivery zones once', async () => {
+    const owner = await account();
+    const response = await post(owner.cookies[0]!);
+    expect(response.statusCode).toBe(201);
+    const storeId: string = response.json().id;
+    storeIds.push(storeId);
+    await post(owner.cookies[0]!);
+
+    const zones = await app.get(DeliveryService).listZones(storeId, { limit: 10 });
+
+    expect(
+      zones.items.map(({ name, chargePoisha, isDefault }) => [name, chargePoisha, isDefault]),
+    ).toEqual([
+      ['Inside Dhaka', 6000, false],
+      ['Dhaka suburbs', 10000, false],
+      ['Outside Dhaka', 12000, true],
+    ]);
   });
 
   it('saves the website and what the business offers on a free first shop', async () => {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AuditService } from '../audit/audit.service';
 import type { UsersService } from '../auth/users.service';
 import type { BillingService } from '../billing/billing.service';
+import type { DeliveryService } from '../delivery/delivery.service';
 import type { Clock } from '../platform/clock';
 import type { StoreTransaction } from '../platform/database/store-transaction';
 import type { OutboxService } from '../platform/outbox/outbox.service';
@@ -28,6 +29,7 @@ function serviceWith(sending: unknown) {
     unused as SessionsService,
     unused as AuditService,
     unused as OutboxService,
+    unused as DeliveryService,
   );
 }
 

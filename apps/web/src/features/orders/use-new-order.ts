@@ -29,6 +29,15 @@ function useOrderMoney(form: Form, lines: OrderLine[]) {
   return { quote, totals, deliveryPoisha, discountPoisha, advancePoisha };
 }
 
+// The first problem can be below the fold, so bring it into view and put the cursor there.
+function focusFirstError(root: HTMLElement | null) {
+  requestAnimationFrame(() => {
+    const target = root?.querySelector<HTMLElement>('[aria-invalid="true"], [data-form-error]');
+    target?.scrollIntoView({ block: 'center' });
+    target?.focus({ preventScroll: true });
+  });
+}
+
 function useSubmitOrder(form: Form) {
   const router = useRouter();
   const showToast = useToast();
@@ -47,7 +56,7 @@ function useSubmitOrder(form: Form) {
   }
   function submit() {
     if (create.mustRetry && create.variables) return save(create.variables);
-    void form.handleSubmit(save)();
+    void form.handleSubmit(save, () => focusFirstError(document.querySelector('form')))();
   }
   function onKeyDown(event: KeyboardEvent<HTMLFormElement>) {
     if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey)) return;
