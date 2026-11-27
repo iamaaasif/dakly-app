@@ -64,6 +64,7 @@ function useVariantEdits() {
     setVariants,
     setWhere,
     showStock: form.watch('isStockTracked') !== false,
+    negotiationEnabled: form.watch('negotiationEnabled') === true,
     productPrice: String(sellPrice || regularPrice || ''),
   };
 }
@@ -206,19 +207,31 @@ type VariantTableGroupsProps = {
 };
 
 function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: VariantTableGroupsProps) {
-  const { options, variants, showStock, productPrice, setWhere, setVariants } = edits;
+  const { options, variants, showStock, productPrice, negotiationEnabled } = edits;
+  const { setWhere, setVariants } = edits;
   const { chosen, selected } = rows;
-  const shared = { options, savedById, productPrice, showStock, readOnly, selected, onEdit };
+  const everyRow = variants.map((_, index) => index);
+  const shared = {
+    options,
+    savedById,
+    productPrice,
+    showStock,
+    negotiationEnabled,
+    readOnly,
+    selected,
+    onEdit,
+  };
   const allSelected = chosen.length === variants.length && variants.length > 0;
   return (
     <>
       {!readOnly && (
         <ProductVariantBulkBar
           selectedCount={chosen.length}
+          totalCount={variants.length}
           showStock={showStock}
           missingCount={missingCombinations(options, variants)}
           removeBlocked={allSelected}
-          onSet={(field, value) => setWhere(chosen, field, value)}
+          onSet={(field, value) => setWhere(chosen.length ? chosen : everyRow, field, value)}
           onRemove={() => {
             setVariants(variants.filter((_, index) => !chosen.includes(index)));
             rows.onSelectAll(false);
@@ -227,7 +240,7 @@ function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: Varian
         />
       )}
       <div className="@container rounded-lg border border-border">
-        <TableHeader {...{ allSelected, readOnly, showStock }} onSelectAll={rows.onSelectAll} />
+        <TableHeader {...{ allSelected, readOnly }} onSelectAll={rows.onSelectAll} />
         {rows.groups.map((group) => (
           <VariantGroupRows
             key={group.label}
@@ -248,11 +261,10 @@ function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: Varian
 type TableHeaderProps = {
   allSelected: boolean;
   readOnly?: boolean;
-  showStock: boolean;
   onSelectAll: (on: boolean) => void;
 };
 
-function TableHeader({ allSelected, readOnly, showStock, onSelectAll }: TableHeaderProps) {
+function TableHeader({ allSelected, readOnly, onSelectAll }: TableHeaderProps) {
   return (
     <div
       className={cn(
@@ -269,10 +281,10 @@ function TableHeader({ allSelected, readOnly, showStock, onSelectAll }: TableHea
           onCheckedChange={(value) => onSelectAll(value === true)}
         />
       )}
-      <span className="col-span-2">Variant</span>
+      <span className="col-span-2">Variants</span>
       <span>Price</span>
       <span>Cost</span>
-      <span>{showStock ? 'Available' : 'Stock'}</span>
+      <span>Availability</span>
     </div>
   );
 }

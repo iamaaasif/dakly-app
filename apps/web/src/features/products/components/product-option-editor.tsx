@@ -211,14 +211,11 @@ function SavedOptions({ options, canRemove, onEdit, onRemove, onMove }: SavedOpt
   const [dragging, setDragging] = useState<number | null>(null);
   if (!options.length) return null;
   return (
-    <ul
-      aria-label="Product options"
-      className="divide-y divide-border rounded-lg border border-border"
-    >
+    <ul aria-label="Product options" className="space-y-3">
       {options.map((option, index) => (
         <li
           key={option.name}
-          className="flex items-start gap-2 p-2"
+          className="flex items-start gap-2 rounded-lg border border-border bg-surface p-3 transition-shadow motion-reduce:transition-none"
           onDragOver={(event) => {
             if (dragging !== null) event.preventDefault();
           }}
@@ -243,7 +240,9 @@ function SavedOptions({ options, canRemove, onEdit, onRemove, onMove }: SavedOpt
           />
           <div className="min-w-0 flex-1 space-y-1">
             <p className="text-sm font-medium break-words">{option.name}</p>
-            <OptionChips option={option} />
+            <div className="flex flex-wrap gap-1.5">
+              <OptionChips option={option} />
+            </div>
           </div>
           <OptionRowActions
             option={option.name}

@@ -175,8 +175,12 @@ describe('Variants card', () => {
     const black = await screen.findByRole('region', { name: 'Black variants' });
     await waitFor(() => expect(within(black).getAllByRole('listitem')).toHaveLength(2));
     await userEvent.click(within(black).getByRole('button', { name: /^Black2 variants/ }));
-    expect(within(black).queryAllByRole('listitem')).toHaveLength(0);
-    expect(screen.getByRole('region', { name: 'White variants' })).toBeTruthy();
+    expect(within(black).getAllByRole('listitem')[0]!.closest('[inert]')).toBeTruthy();
+    expect(
+      within(screen.getByRole('region', { name: 'White variants' }))
+        .getAllByRole('listitem')[0]!
+        .closest('[inert]'),
+    ).toBeNull();
   });
 
   it('uses the selected option in the URL to group rows and apply a group price', async () => {
@@ -292,6 +296,45 @@ describe('Variants card', () => {
     expect(screen.queryByLabelText('Price for S')).toBeNull();
     await userEvent.click(addMissing);
     expect(await screen.findByLabelText('Price for S')).toBeTruthy();
+  });
+
+  it('adds chips with Enter or a comma and removes the last one with Backspace', async () => {
+    show(saved);
+    await userEvent.click(screen.getByRole('button', { name: '+ Other option' }));
+    await userEvent.type(screen.getByLabelText('Option name'), 'Material');
+    const box = screen.getByLabelText('Type a value for Material');
+    await userEvent.type(box, 'Silk{Enter}Cotton,Wool,');
+    await userEvent.paste('Linen, Hemp');
+    await userEvent.type(box, '{Enter}');
+    expect(screen.getByText('Hemp')).toBeTruthy();
+    expect(screen.getByText('Linen')).toBeTruthy();
+    expect(screen.getByText('Wool')).toBeTruthy();
+    await userEvent.type(box, '{Backspace}');
+    expect(screen.queryByText('Hemp')).toBeNull();
+    expect(screen.getByText('Cotton')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(await screen.findByLabelText('Price for Silk')).toBeTruthy();
+  });
+
+  it('applies a price to every variant when none are selected', async () => {
+    show(saved);
+    await choosePresets('Size', 'S', 'M');
+    await userEvent.click(await screen.findByText('Set price', { selector: 'button' }));
+    await userEvent.type(await screen.findByLabelText('Set price'), '1500{Enter}');
+    await waitFor(() => {
+      expect(screen.getByLabelText<HTMLInputElement>('Price for S').value).toBe('1500');
+      expect(screen.getByLabelText<HTMLInputElement>('Price for M').value).toBe('1500');
+    });
+  });
+
+  it('warns when a variant price is below its cost', async () => {
+    show(saved);
+    await choosePresets('Size', 'S', 'M');
+    const cost = await screen.findByLabelText('Cost for S');
+    await userEvent.clear(cost);
+    await userEvent.type(cost, '900');
+    await userEvent.type(screen.getByLabelText('Price for S'), '800');
+    expect((await screen.findByRole('status')).textContent).toBe('Price is below cost.');
   });
 
   it('fills the grid from a spreadsheet paste', async () => {
