@@ -136,7 +136,8 @@ The web app has two customer screens.
   `GET /contacts/counts` and no `hasOrdered`. Header "All contacts" with the counts line and an Add
   contact button. Tabs All, New, Returning, VIP, Inactive, High-value and At-risk with counts, and
   Any source and All tags selects, are in the address (`type`, `source`, `tag`). The tag select
-  offers the tags on the rows on screen, because the API has no list of every tag yet. Import,
+  offers every tag the shop uses, from `GET /contacts/tags` (`customers.view`, live contacts of the
+  store, each tag once, sorted). Import,
   Export and the Columns menu sit beside them. The table is the Customers table without Orders,
   Spent and Last purchase, with the same cards on a phone. Add contact opens the chooser (Add
   manually, Add by voice as Coming soon, Import from Excel or CSV, Scan your khata). The Add contact
