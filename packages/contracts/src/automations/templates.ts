@@ -327,11 +327,7 @@ export const automationTemplates = {
           kind: 'action',
           action: {
             action: 'reply_to_comment',
-            lines: [
-              'আপনাকে ইনবক্সে জানাচ্ছি',
-              'Inbox e janacchi',
-              'We will message you',
-            ],
+            lines: ['আপনাকে ইনবক্সে জানাচ্ছি', 'Inbox e janacchi', 'We will message you'],
           },
           next: 'end',
         },
