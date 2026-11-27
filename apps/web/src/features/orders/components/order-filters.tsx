@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { SlidersHorizontal } from 'lucide-react';
-import { useState, useTransition, type ReactNode } from 'react';
+import { useRef, useState, useTransition, type ReactNode } from 'react';
 import { Controller, FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -25,11 +25,12 @@ export type OrderFiltersProps = { query: OrdersNavigationQuery };
 // Source and search sit in the toolbar. What is left, courier, dates and cancelled orders, is here.
 export function OrderFilters({ query }: OrderFiltersProps) {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   const applied = hasOrderFilters(query);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="secondary" className="relative gap-2">
+        <Button ref={trigger} variant="secondary" className="relative gap-2">
           <SlidersHorizontal aria-hidden="true" size={16} strokeWidth={1.75} />
           Filters
           {applied ? (
@@ -40,7 +41,15 @@ export function OrderFilters({ query }: OrderFiltersProps) {
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-4">
+      <PopoverContent
+        align="end"
+        className="w-80 p-4"
+        onCloseAutoFocus={(event) => {
+          // The form unmounts while a list refresh is in flight; put focus back on the trigger by hand.
+          event.preventDefault();
+          trigger.current?.focus();
+        }}
+      >
         <FilterForm query={query} applied={applied} closeFilters={() => setOpen(false)} />
       </PopoverContent>
     </Popover>
