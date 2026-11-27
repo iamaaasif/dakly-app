@@ -1,4 +1,4 @@
-import type { PostResponse } from '@dakly/contracts/social';
+import type { CreatePostInput, PostResponse } from '@dakly/contracts/social';
 
 import type { SocialRepository } from './social.repository';
 
@@ -28,4 +28,13 @@ export function photosOf(post: Post, urls: Map<string, string>): Photo[] {
     const url = urls.get(id);
     return url ? [{ id, url }] : [];
   });
+}
+
+export function copyOf(source: PostResponse): CreatePostInput {
+  const { kind, caption, mediaFileIds, linkUrl, firstComment, isAiWritten } = source;
+  const targets = source.targets.map(({ channelConnectionId, captionOverride }) => ({
+    channelConnectionId,
+    captionOverride,
+  }));
+  return { kind, caption, mediaFileIds, linkUrl, firstComment, isAiWritten, targets };
 }

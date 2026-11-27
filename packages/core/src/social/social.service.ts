@@ -25,7 +25,7 @@ import { StoresService } from '../stores/stores.service';
 import { TeamService } from '../team/team.service';
 import { nextPostingSlot, recommendedPostingSlots } from './next-posting-slot';
 import { validateInstagramPhotos, validateInstagramPost } from './post-content';
-import { photosOf, response } from './post-response';
+import { copyOf, photosOf, response } from './post-response';
 import { socialError } from './social.errors';
 import { SocialRepository } from './social.repository';
 
@@ -162,17 +162,7 @@ export class SocialService {
     access: StoreAccess,
   ): Promise<PostResponse> {
     const source = await this.getPost(storeId, postId, actor, access);
-    const { kind, caption, mediaFileIds, linkUrl, firstComment, isAiWritten } = source;
-    const targets = source.targets.map(({ channelConnectionId, captionOverride }) => ({
-      channelConnectionId,
-      captionOverride,
-    }));
-    return this.createDraft(
-      storeId,
-      { kind, caption, mediaFileIds, linkUrl, firstComment, isAiWritten, targets },
-      randomUUID(),
-      actor,
-    );
+    return this.createDraft(storeId, copyOf(source), randomUUID(), actor);
   }
 
   editDraft(
