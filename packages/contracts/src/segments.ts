@@ -71,7 +71,10 @@ export const changeSegmentSchema = createSegmentSchema
   .partial()
   .refine((input) => input.name !== undefined || input.rules !== undefined, 'Nothing to change');
 export const segmentPreviewSchema = z.strictObject({ rules: segmentRulesSchema });
+export const segmentStatuses = ['all', 'active', 'archived'] as const;
 export const segmentListQuerySchema = z.strictObject({
+  status: z.enum(segmentStatuses).default('all'),
+  search: z.string().trim().min(1).max(80).optional(),
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
@@ -85,8 +88,12 @@ export type SegmentResponse = {
   id: string;
   name: string;
   rules: SegmentRules;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
-export type SegmentListResponse = { items: SegmentResponse[]; nextCursor: string | null };
+// The list adds each segment's live size so the table can show "24 contacts".
+export type SegmentListItem = SegmentResponse & { contactCount: number };
+export type SegmentListResponse = { items: SegmentListItem[]; nextCursor: string | null };
+export type SegmentTabCountsResponse = { all: number; active: number; archived: number };
 export type SegmentCountResponse = { count: number };
