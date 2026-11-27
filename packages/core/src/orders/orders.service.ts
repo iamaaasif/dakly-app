@@ -26,7 +26,7 @@ import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
-import { orderItemSnapshots } from './order-item-snapshots';
+import { editedItemSnapshots } from './order-item-snapshots';
 import { toOrderListItem } from './order-list-item';
 import { orderListMatch } from './order-list-match';
 import { orderParcelWeightGrams } from './order-parcel-weight';
@@ -169,15 +169,7 @@ export class OrdersService {
       requireEditableOrder(order, expectedUpdatedAt);
       const delivery = await this.editedDelivery(storeId, input, order);
       const previous = await this.repository.items(storeId, orderId);
-      const items = input.items
-        ? await orderItemSnapshots({
-            storeId,
-            products: this.products,
-            items: input.items,
-            previous,
-            isManualOrder: order.source === 'manual',
-          })
-        : previous;
+      const items = await editedItemSnapshots(storeId, this.products, { order, input, previous });
       const totals = editedOrderTotals(items, order, input, delivery.deliveryChargePoisha);
       const now = this.clock.now();
       const possibleDuplicateOfOrderId = await this.repository.findDuplicate(storeId, {

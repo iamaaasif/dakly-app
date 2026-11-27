@@ -1,4 +1,4 @@
-import type { CreateOrderInput } from '@dakly/contracts/orders';
+import type { CreateOrderInput, EditOrderInput } from '@dakly/contracts/orders';
 
 import type { ProductsService } from '../products/products.service';
 import { orderError } from './orders.errors';
@@ -27,6 +27,20 @@ export async function orderItemSnapshots({
   const variants = await products.orderVariants(storeId, newIds, [...byId.keys()]);
   for (const variant of variants) byId.set(variant.variantId, newLine(variant, isManualOrder));
   return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
+}
+
+export function editedItemSnapshots(
+  storeId: string,
+  products: ProductsService,
+  {
+    order,
+    input,
+    previous,
+  }: { order: { source: string }; input: EditOrderInput; previous: OrderItemWrite[] },
+): Promise<OrderItemWrite[]> {
+  if (!input.items) return Promise.resolve(previous);
+  const isManualOrder = order.source === 'manual';
+  return orderItemSnapshots({ storeId, products, items: input.items, previous, isManualOrder });
 }
 
 function newLine({ stockStatus, ...line }: OrderVariant, isManualOrder: boolean): OrderItemWrite {
