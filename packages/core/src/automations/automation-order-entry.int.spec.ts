@@ -10,6 +10,7 @@ import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { createDatabase } from '@dakly/db/client';
 
 import { ContactsModule } from '../contacts/contacts.module';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { OrdersModule } from '../orders/orders.module';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -119,6 +120,7 @@ describe('order triggers (Postgres)', () => {
         AutomationEntryService,
         AutomationEntryRepository,
         { provide: Clock, useValue: { now: () => eventAt } },
+        { provide: ConversationIntentService, useValue: {} },
       ],
     })(TestModule);
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });

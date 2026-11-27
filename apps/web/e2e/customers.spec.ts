@@ -57,7 +57,9 @@ test('adds a contact, lists it as a customer after an order and opens the profil
     await table.getByRole('link', { name }).click();
 
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
-    await expect(page.getByText(`${phone.slice(0, 5)}-${phone.slice(5)}`)).toBeVisible();
+    await expect(
+      page.locator('main header').getByText(`${phone.slice(0, 5)}-${phone.slice(5)}`),
+    ).toBeVisible();
     await expect(page.getByText('No chat channels yet.', { exact: false })).toBeVisible();
   } finally {
     // The shell test counts every contact in these stores, so this one leaves no row behind.
