@@ -7,7 +7,11 @@ import { uploadProductPhotoFile } from './upload-product-photo';
 import { productsKeys } from '@/lib/product-query-keys';
 import { useStoreRequest } from '@/lib/store-request';
 
-type QuickAddInput = { product: CreateProductInput; stock: number; photo: File | null };
+type QuickAddInput = {
+  product: Omit<CreateProductInput, 'imageFileIds'>;
+  stock: number;
+  photo: File | null;
+};
 export type QuickAddResult = { product: ProductResponse; failed: ('stock' | 'photo')[] };
 
 // The product is saved first; stock and photo need its ids, and a failure in either keeps the product.

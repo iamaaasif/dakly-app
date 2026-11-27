@@ -86,6 +86,7 @@ describe('ProductsService with Postgres', () => {
     brands,
     sales,
     tags,
+    { attach: async () => undefined } as never,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
   const team = new TeamService({} as ConstructorParameters<typeof TeamService>[0]);

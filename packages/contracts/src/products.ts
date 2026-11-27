@@ -39,37 +39,49 @@ const variantSchema = z.strictObject({
 const editVariantSchema = variantSchema.extend({ id: z.uuid().optional() });
 
 export const MAX_WEIGHT_GRAMS = 100_000;
+export const MAX_PRODUCT_PHOTOS = 10;
+const photoIds = z
+  .array(z.uuid())
+  .max(MAX_PRODUCT_PHOTOS)
+  .refine((ids) => new Set(ids).size === ids.length, 'Repeated photo');
 const weightGrams = z
   .number()
   .int('Enter a whole number of grams')
   .min(1, 'Enter a weight above zero')
   .max(MAX_WEIGHT_GRAMS, 'Use 100 kg or less');
 
+// The editor keeps photos out of its form: it uploads them on their own and sends the ids on create.
+const createProductFields = {
+  name: z.string().trim().min(1, 'Enter a product name').max(200, 'Use 200 characters or fewer'),
+  description: z
+    .string()
+    .trim()
+    .max(10000, 'Use 10,000 characters or fewer')
+    .nullable()
+    .default(null),
+  categoryId: z.uuid().nullable().default(null),
+  brandId: z.uuid().nullable().default(null),
+  ...productEditorFields,
+  weightGrams: weightGrams.nullable().default(null),
+  aliases: z.array(text).max(100).default([]),
+  pricePoisha: money.default(0),
+  compareAtPricePoisha: money.nullable().default(null),
+  negotiationEnabled: z.boolean().default(false),
+  negotiationOpeningPoisha: money.nullable().default(null),
+  negotiationFloorPoisha: money.nullable().default(null),
+  options: z.array(productOptionSchema).max(3).default([]),
+  variants: z.array(variantSchema).max(100).default([]),
+  isStockTracked: z.boolean().default(true),
+  isVisibleInChats: z.boolean().default(true),
+  isVisibleInOrderLink: z.boolean().default(true),
+  status: z.enum(['active', 'hidden']).default('active'),
+};
+
 export const createProductSchema = z
   .strictObject({
-    name: z.string().trim().min(1, 'Enter a product name').max(200, 'Use 200 characters or fewer'),
-    description: z
-      .string()
-      .trim()
-      .max(10000, 'Use 10,000 characters or fewer')
-      .nullable()
-      .default(null),
-    categoryId: z.uuid().nullable().default(null),
-    brandId: z.uuid().nullable().default(null),
-    ...productEditorFields,
-    weightGrams: weightGrams.nullable().default(null),
-    aliases: z.array(text).max(100).default([]),
-    pricePoisha: money.default(0),
-    compareAtPricePoisha: money.nullable().default(null),
-    negotiationEnabled: z.boolean().default(false),
-    negotiationOpeningPoisha: money.nullable().default(null),
-    negotiationFloorPoisha: money.nullable().default(null),
-    options: z.array(productOptionSchema).max(3).default([]),
-    variants: z.array(variantSchema).max(100).default([]),
-    isStockTracked: z.boolean().default(true),
-    isVisibleInChats: z.boolean().default(true),
-    isVisibleInOrderLink: z.boolean().default(true),
-    status: z.enum(['active', 'hidden']).default('active'),
+    ...createProductFields,
+    // Photos uploaded before the product existed; the first one is the cover.
+    imageFileIds: photoIds.default([]),
   })
   .superRefine(validateVariants);
 
@@ -176,15 +188,13 @@ const optionalWeightInput = z.union(
 
 export const productFormSchema = z
   .strictObject({
-    ...createProductSchema.shape,
-    description: optionalTextInput
-      .pipe(createProductSchema.shape.description.unwrap())
-      .default(null),
+    ...createProductFields,
+    description: optionalTextInput.pipe(createProductFields.description.unwrap()).default(null),
     ...productEditorFormFields,
     aliases: z
       .array(z.string())
       .transform((values) => values.filter((value) => value.trim()))
-      .pipe(createProductSchema.shape.aliases.unwrap())
+      .pipe(createProductFields.aliases.unwrap())
       .default([]),
     pricePoisha: z
       .union([z.literal('').transform(() => 0), takaInput], { error: takaMessage })
@@ -377,7 +387,6 @@ export const stockAdjustmentSchema = z.strictObject({
   reason: z.string().trim().min(1, 'Enter a reason').max(500, 'Use 500 characters or fewer'),
 });
 export type StockAdjustmentInput = z.infer<typeof stockAdjustmentSchema>;
-export const MAX_PRODUCT_PHOTOS = 10;
 export const productPhotoUploadSchema = z.strictObject({
   contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
   sizeBytes: z
@@ -388,10 +397,7 @@ export const productPhotoUploadSchema = z.strictObject({
 });
 export const confirmProductPhotoSchema = productPhotoUploadSchema.extend({ fileId: z.uuid() });
 export const reorderProductPhotosSchema = z.strictObject({
-  fileIds: z
-    .array(z.uuid())
-    .max(MAX_PRODUCT_PHOTOS)
-    .refine((ids) => new Set(ids).size === ids.length, 'Repeated photo'),
+  fileIds: photoIds,
 });
 export type ProductPhotoUploadInput = z.infer<typeof productPhotoUploadSchema>;
 export type ConfirmProductPhotoInput = z.infer<typeof confirmProductPhotoSchema>;

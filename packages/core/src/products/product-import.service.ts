@@ -107,6 +107,7 @@ export class ProductImportService {
       storeId,
       {
         ...details,
+        imageFileIds: [],
         categoryId:
           category === null ? null : (await this.categories.resolvePath(storeId, category)).id,
         brandId: brand === null ? null : await this.brands.resolveName(storeId, brand),
