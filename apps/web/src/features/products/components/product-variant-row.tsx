@@ -1,11 +1,12 @@
 import { Camera, ChevronDown, Eye, Pencil } from 'lucide-react';
 import Image from 'next/image';
-import { useFormState } from 'react-hook-form';
+import { useFormState, useWatch } from 'react-hook-form';
 
 import { formatMoney } from '@dakly/contracts/money';
 import {
   takaInput,
   type ProductFormValues,
+  type ProductPhotoResponse,
   type ProductVariantResponse,
 } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
@@ -33,6 +34,7 @@ type VariantGroupRowsProps = {
   group: VariantGroup;
   options: GridOption[];
   savedById: Map<string, ProductVariantResponse>;
+  photos: ProductPhotoResponse[];
   productPrice: string;
   showStock: boolean;
   negotiationEnabled: boolean;
@@ -70,6 +72,7 @@ export function VariantGroupRows(props: VariantGroupRowsProps) {
                   variant={variant}
                   label={variantLabel(variant, options)}
                   saved={savedById.get(variant.id ?? '')}
+                  photos={props.photos}
                   productPrice={productPrice}
                   showStock={showStock}
                   negotiationEnabled={props.negotiationEnabled}
@@ -173,6 +176,7 @@ type VariantTableRowProps = {
   variant: GridVariant;
   label: string;
   saved?: ProductVariantResponse;
+  photos: ProductPhotoResponse[];
   productPrice: string;
   showStock: boolean;
   negotiationEnabled: boolean;
@@ -185,6 +189,9 @@ type VariantTableRowProps = {
 
 function VariantTableRow(props: VariantTableRowProps) {
   const { index, variant, label, saved, productPrice, showStock, readOnly, selected } = props;
+  const picked = useWatch<ProductFormValues>({ name: `variants.${index}.imageFileId` });
+  const image =
+    picked === undefined ? saved?.photos[0] : props.photos.find(({ id }) => id === picked);
   const fields = { index, variant, label, readOnly, onChange: props.onChange };
   const pieces = availableStock(variant, saved?.reserved);
   const stock = showStock ? `${pieces} pcs` : 'Always available';
@@ -206,7 +213,7 @@ function VariantTableRow(props: VariantTableRowProps) {
           onCheckedChange={(value) => props.onSelect(value === true)}
         />
       )}
-      <VariantPhoto image={saved?.photos[0]} label={label} />
+      <VariantPhoto image={image} label={label} />
       <RowSummary
         {...{ index, label, stock, notice }}
         price={variant.priceOverridePoisha || productPrice}
@@ -253,13 +260,7 @@ function AvailabilityCell({ showStock, pieces }: { showStock: boolean; pieces: n
   );
 }
 
-function VariantPhoto({
-  image,
-  label,
-}: {
-  image?: ProductVariantResponse['photos'][number];
-  label: string;
-}) {
+function VariantPhoto({ image, label }: { image?: ProductPhotoResponse; label: string }) {
   return image ? (
     <Image
       src={image.url}

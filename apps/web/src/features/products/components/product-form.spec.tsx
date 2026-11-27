@@ -113,6 +113,9 @@ function show(
   client.setQueryData(sessionContextKey, session);
   client.setQueryData(productsKeys.categories(session.contextTag), { items: [] });
   client.setQueryData(productsKeys.brands(session.contextTag), { items: [] });
+  client.setQueryData(productsKeys.collections(session.contextTag), {
+    items: [{ id: 'c1', name: 'Eid 2026', productCount: 3 }],
+  });
   client.setQueryData(productsKeys.tags(session.contextTag), {
     items: [
       { id: 't1', name: 'women', productCount: 9 },
@@ -273,7 +276,7 @@ describe('Product form on a full page', () => {
     expect(screen.getByText('৳1,650')).toBeTruthy();
   });
 
-  it('saves the short description, barcode, tags and a bulleted description', async () => {
+  it('saves the short description, barcode, tags, collections and a bulleted description', async () => {
     let submitted: unknown;
     vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
       submitted = JSON.parse(String(init.body));
@@ -290,6 +293,10 @@ describe('Product form on a full page', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add tags' }));
     await userEvent.click(await screen.findByRole('checkbox', { name: 'women' }));
     await userEvent.type(screen.getByLabelText('Search or add tags'), 'eid{Enter}');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: 'Add collections' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Eid 2026' }));
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({
@@ -297,6 +304,7 @@ describe('Product form on a full page', () => {
       shortDescription: 'Eid special',
       barcode: '8901234567890',
       tags: ['women', 'eid'],
+      collections: ['Eid 2026'],
     });
   });
 

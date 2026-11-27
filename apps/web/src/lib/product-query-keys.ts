@@ -2,6 +2,8 @@ export const productsKeys = {
   all: ['products'] as const,
   categories: (contextTag: string | undefined) => ['products', contextTag, 'categories'] as const,
   brands: (contextTag: string | undefined) => ['products', contextTag, 'brands'] as const,
+  collections: (contextTag: string | undefined) =>
+    ['products', contextTag, 'collections'] as const,
   tags: (contextTag: string | undefined) => ['products', contextTag, 'tags'] as const,
   detail: (contextTag: string | undefined, productId: string) =>
     ['products', contextTag, 'detail', productId] as const,
