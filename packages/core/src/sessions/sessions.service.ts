@@ -65,10 +65,12 @@ export class SessionsService {
   private storeFlags(access: StoreAccess, extensions: string[]) {
     const can = (extension: string, area: PermissionArea, level: 'view' | 'edit') =>
       extensions.includes(extension) && this.team.canAccess(access, area, level);
+    const canViewOrders = can('sales', 'orders', 'view');
     return {
       canViewProducts: can('sales', 'products', 'view'),
       canEditProducts: can('sales', 'products', 'edit'),
-      canViewOrders: can('sales', 'orders', 'view'),
+      canViewOrders,
+      canExportOrders: canViewOrders && access.exportLists,
       canEditOrders: can('sales', 'orders', 'edit'),
       canViewDueBook: can('physical_shop', 'dueBook', 'view'),
       canEditDueBook: can('physical_shop', 'dueBook', 'edit'),
