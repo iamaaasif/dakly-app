@@ -19,3 +19,9 @@ export function parseOrdersScreen(raw: RawQuery) {
     labelOrderIds,
   };
 }
+
+// Search or a filter narrows the list, so the tab's total no longer describes it.
+export function isNarrowedOrderList(query: OrderListQuery): boolean {
+  const { search, source, courier, createdFrom, createdThrough } = query;
+  return Boolean(search || source || courier || createdFrom || createdThrough);
+}
