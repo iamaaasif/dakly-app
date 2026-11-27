@@ -113,6 +113,8 @@ export class ProductImportService {
         status: details.status ?? 'active',
         shortDescription: null,
         barcode: null,
+        tags: [],
+        collectionIds: [],
         aliases: [],
         weightGrams: null,
         compareAtPricePoisha: null,

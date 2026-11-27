@@ -799,6 +799,13 @@
       "when": 1795784940129,
       "tag": "0115_product_editor_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1795785542255,
+      "tag": "0116_product_tags_collections",
+      "breakpoints": true
     }
   ]
 }

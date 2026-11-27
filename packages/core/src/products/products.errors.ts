@@ -22,6 +22,11 @@ const PRODUCT_ERRORS = {
     message: 'Photo tagging is not available right now',
   },
   PRODUCT_CHANGED: { status: 409, message: 'This product changed since you opened it.' },
+  PRODUCT_COLLECTION_NAME_TAKEN: {
+    status: 409,
+    message: 'You already have a collection with this name',
+  },
+  PRODUCT_COLLECTION_NOT_FOUND: { status: 404, message: 'Collection not found' },
   PRODUCT_NOT_FOUND: { status: 404, message: 'Product not found' },
   PRODUCT_VARIANT_NOT_FOUND: { status: 404, message: 'Product variant not found' },
   PRODUCT_NEGOTIATION_VARIANT_PRICE: {

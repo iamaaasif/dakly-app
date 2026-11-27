@@ -52,6 +52,8 @@ const product: ProductResponse = {
   allowOrdersWhenOutOfStock: false,
   shortDescription: null,
   barcode: null,
+  tags: [],
+  collections: [],
   isVisibleInChats: true,
   isVisibleInOrderLink: true,
   status: 'active',
