@@ -4,6 +4,7 @@ import { Badge } from '@dakly/ui/badge';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { channelLabels, customerPhone, profileSourceLabels } from '../customer-labels';
+import { ConsentForm } from './consent-form';
 import { DeleteCustomerAction } from './customer-actions';
 import { formatDateWithYear } from '@/lib/format-date';
 
@@ -49,6 +50,16 @@ export function ProfileOverview({ summary, detail, canEdit }: ProfileOverviewPro
         )}
       </div>
       <ChatChannels detail={detail} />
+      {canEdit ? (
+        <details>
+          <summary className="cursor-pointer text-sm font-medium text-action hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus">
+            Record how the customer answered
+          </summary>
+          <div className="pt-3">
+            <ConsentForm contactId={summary.id} />
+          </div>
+        </details>
+      ) : null}
       {canEdit && detail ? <DeleteCustomerAction customer={detail} /> : null}
     </div>
   );

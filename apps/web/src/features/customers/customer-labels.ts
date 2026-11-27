@@ -31,10 +31,6 @@ export function customerPhone(customer: Pick<ContactResponse, 'phone'>) {
 export const profileTabs = [
   { value: 'overview', label: 'Overview' },
   { value: 'orders', label: 'Orders' },
-  { value: 'activity', label: 'Activity timeline' },
-  { value: 'campaigns', label: 'Campaign history' },
-  { value: 'notes', label: 'Notes' },
-  { value: 'marketing', label: 'Marketing preferences' },
 ] as const;
 export type ProfileTab = (typeof profileTabs)[number]['value'];
 
@@ -98,13 +94,4 @@ export const profileSourceLabels = {
   pos: 'Shop counter',
   pos_csv: 'POS CSV',
   khata_import: 'Khata import',
-} as const;
-
-export const campaignResultLabels = {
-  tapped: 'Read · clicked',
-  read: 'Read',
-  delivered: 'Delivered',
-  sent: 'Sent',
-  failed: 'Failed',
-  skipped: 'Skipped',
 } as const;
