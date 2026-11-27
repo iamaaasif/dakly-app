@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createProductSchema, type ProductResponse } from '@dakly/contracts/products';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
+import { clearProductDraft } from '../use-product-draft';
 import { ProductForm } from './product-form';
 import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
@@ -279,7 +280,7 @@ describe('Product form on a full page', () => {
 
   it('brings back a new product that was typed before a reload', async () => {
     window.sessionStorage.setItem(
-      'dakly:new-product-draft',
+      'dakly:new-product-draft:shop',
       JSON.stringify({ name: 'Linen shirt', pricePoisha: '950' }),
     );
     show(undefined, page);
@@ -288,6 +289,28 @@ describe('Product form on a full page', () => {
     );
     expect(screen.getByText('Restored what you had typed before.')).toBeTruthy();
     window.sessionStorage.clear();
+  });
+
+  it('does not bring back a draft typed in another shop', async () => {
+    window.sessionStorage.setItem(
+      'dakly:new-product-draft:other-shop',
+      JSON.stringify({ name: 'Other shop shirt', pricePoisha: '950' }),
+    );
+    show(undefined, page);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByLabelText<HTMLInputElement>('Title').value).toBe('');
+    expect(screen.queryByText('Restored what you had typed before.')).toBeNull();
+  });
+
+  it('writes nothing after the draft is cleared while a write was waiting', async () => {
+    vi.useFakeTimers();
+    const clear = clearProductDraft;
+    show(undefined, page);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Linen shirt' } });
+    clear('shop');
+    await vi.advanceTimersByTimeAsync(1000);
+    vi.useRealTimers();
+    expect(window.sessionStorage.getItem('dakly:new-product-draft:shop')).toBeNull();
   });
 
   it('clears the old price when an edit removes the sell price', async () => {

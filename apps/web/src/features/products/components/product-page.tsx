@@ -58,6 +58,7 @@ type NewProductFormProps = Omit<NewProductPageProps, 'duplicateId'> & {
 function NewProductForm({ initial, assistantDraft, duplicateSource }: NewProductFormProps) {
   const router = useRouter();
   const staged = useStagedPhotos();
+  const storeId = useSessionContext().data?.currentStore?.storeId;
   return (
     <ProductForm
       initial={initial}
@@ -65,7 +66,7 @@ function NewProductForm({ initial, assistantDraft, duplicateSource }: NewProduct
       assistantDraft={assistantDraft}
       duplicateSource={duplicateSource}
       onSaved={(product) => {
-        clearProductDraft();
+        if (storeId) clearProductDraft(storeId);
         router.replace(`/products/${product.id}`);
       }}
       page={{

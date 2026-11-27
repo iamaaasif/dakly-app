@@ -8,6 +8,7 @@ import { Button } from '@dakly/ui/button';
 import { useLeaveGuard } from '../use-leave-guard';
 import { clearProductDraft, readProductDraft, useProductDraft } from '../use-product-draft';
 import { SessionDialog } from '@/components/session-dialog';
+import { useSessionContext } from '@/lib/session-context';
 
 type ProductFormSafetyProps = {
   formRef: RefObject<HTMLFormElement | null>;
@@ -20,16 +21,18 @@ type ProductFormSafetyProps = {
 export function ProductFormSafety({ formRef, canRestoreDraft, readOnly }: ProductFormSafetyProps) {
   const form = useFormContext<ProductFormValues>();
   const [restored, setRestored] = useState(false);
-  useProductDraft(form.watch, canRestoreDraft && !readOnly);
+  const { data: session } = useSessionContext();
+  const storeId = session?.currentStore?.storeId;
+  useProductDraft(form.watch, canRestoreDraft && !readOnly ? storeId : undefined);
   const tried = useRef(false);
   useEffect(() => {
-    if (tried.current) return;
+    if (tried.current || !storeId) return;
     tried.current = true;
-    const draft = canRestoreDraft ? readProductDraft() : null;
+    const draft = canRestoreDraft ? readProductDraft(storeId) : null;
     if (!draft) return;
     form.reset({ ...form.getValues(), ...draft });
     setRestored(true);
-  }, [canRestoreDraft, form]);
+  }, [canRestoreDraft, form, storeId]);
   const guard = useLeaveGuard((form.formState.isDirty || restored) && !readOnly);
   useSaveShortcuts(formRef);
   return (
@@ -41,7 +44,7 @@ export function ProductFormSafety({ formRef, canRestoreDraft, readOnly }: Produc
             type="button"
             variant="secondary"
             onClick={() => {
-              clearProductDraft();
+              if (storeId) clearProductDraft(storeId);
               window.location.reload();
             }}
           >
@@ -60,7 +63,7 @@ export function ProductFormSafety({ formRef, canRestoreDraft, readOnly }: Produc
               type="button"
               variant="danger"
               onClick={() => {
-                clearProductDraft();
+                if (storeId) clearProductDraft(storeId);
                 guard.discard();
               }}
             >

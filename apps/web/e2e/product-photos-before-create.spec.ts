@@ -53,13 +53,8 @@ test('adds photos before the product exists, reorders them and attaches them on 
 
     await page.goto('/products/new');
     await expect(page.getByRole('heading', { name: 'Media', exact: true })).toBeVisible();
-<<<<<<< HEAD
     await page.getByLabel('Title', { exact: true }).fill('Photo first scarf');
     await page.getByLabel('Regular price', { exact: true }).fill('900');
-=======
-    await page.getByLabel('Product name', { exact: true }).fill('Photo first scarf');
-    await page.getByLabel('Regular price ৳', { exact: true }).fill('900');
->>>>>>> origin/main
     await capture(page, evidence, 'media-empty');
 
     // One at a time, so the order the server confirms them in is the tile order.
@@ -101,7 +96,6 @@ test('adds photos before the product exists, reorders them and attaches them on 
     await page.getByRole('button', { name: 'Photo 2 options' }).click();
     await page.getByRole('menuitem', { name: 'Make cover' }).click();
 
-<<<<<<< HEAD
     await page.getByLabel('Sell price', { exact: true }).fill('800');
     await page.getByLabel('Product cost', { exact: true }).fill('520');
     await page.getByRole('checkbox', { name: 'Eligible AI negotiation' }).click();
@@ -117,19 +111,13 @@ test('adds photos before the product exists, reorders them and attaches them on 
     await page.getByRole('button', { name: 'Keep editing' }).click();
     await expect(page).toHaveURL(/\/products\/new$/);
 
-=======
->>>>>>> origin/main
     const created = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/products') &&
         response.request().method() === 'POST' &&
         response.status() === 201,
     );
-<<<<<<< HEAD
     await page.keyboard.press('Control+s');
-=======
-    await page.getByRole('button', { name: 'Create', exact: true }).click();
->>>>>>> origin/main
     const saved = (await (await created).json()) as ProductResponse;
     productId = saved.id;
     expect(saved.photos.map((photo) => photo.id)).toEqual([
@@ -156,10 +144,7 @@ async function deleteProduct(
 ) {
   const { productId, fileIds } = created;
   for (const statement of [
-<<<<<<< HEAD
     'delete from stock_movements where store_id=$1 and variant_id in (select id from product_variants where store_id=$1 and product_id=$2)',
-=======
->>>>>>> origin/main
     "delete from outbox_events where store_id=$1 and payload->>'productId'=$2",
     'delete from product_variants where store_id=$1 and product_id=$2',
     'delete from products where store_id=$1 and id=$2',
@@ -172,16 +157,10 @@ async function deleteProduct(
 }
 
 async function capture(page: Page, directories: string[], screen: string) {
-<<<<<<< HEAD
   // Tall enough to show the whole page without scrolling, since the page scrolls inside its frame.
   for (const [width, height] of [
     [1440, 2300],
     [360, 4600],
-=======
-  for (const [width, height] of [
-    [1440, 900],
-    [360, 800],
->>>>>>> origin/main
   ] as const) {
     await page.setViewportSize({ width, height });
     await page.mouse.move(width - 1, height - 1);
@@ -189,10 +168,6 @@ async function capture(page: Page, directories: string[], screen: string) {
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
       .toBe(true);
     for (const directory of directories)
-<<<<<<< HEAD
       await page.screenshot({ path: resolve(directory, `${screen}-${width}.png`) });
-=======
-      await page.screenshot({ path: resolve(directory, `${screen}-${width}.png`), fullPage: true });
->>>>>>> origin/main
   }
 }
