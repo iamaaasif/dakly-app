@@ -4,8 +4,8 @@ import type { OrderCustomerBadge } from '@dakly/contracts/orders';
 import { contactStats } from '@dakly/db/schema/contacts';
 import { orders } from '@dakly/db/schema/orders';
 
-// Two branches, not one CASE inside the subquery, so each can use its own index. Reads the outer "orders" row, so it only works inside a select from orders. A buyer with no
-// contact is matched by phone, as return risk does.
+// Reads the outer "orders" row, so it only works inside a select from orders. A buyer with no
+// contact is matched by phone. Two branches, not one CASE, so each can use its own index.
 export const customerBadge = sql<OrderCustomerBadge>`(
   case
     when exists (
