@@ -258,19 +258,8 @@ describe('Variants card', () => {
   });
 
   it('sets a price on the chosen rows and keeps removed rows out until asked', async () => {
-    const sizes = ['S', 'M', 'L'];
-    show({
-      ...saved,
-      options: [{ name: 'Size', values: sizes }],
-      variants: sizes.map((size, index) => ({
-        ...saved.variants[0]!,
-        id: `019c01ea-cf15-7d31-a7f5-d73d66007ae${index}`,
-        title: size,
-        optionValues: { Size: size },
-        sku: null,
-        isDefault: false,
-      })),
-    });
+    show(saved);
+    await choosePresets('Size', 'S', 'M', 'L');
     await userEvent.click(await screen.findByLabelText('Select S'));
     await userEvent.click(screen.getByLabelText('Select M'));
     await userEvent.click(await screen.findByText('Set price', { selector: 'button' }));
