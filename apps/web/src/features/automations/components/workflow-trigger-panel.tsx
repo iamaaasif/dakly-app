@@ -1,17 +1,24 @@
+import { useState } from 'react';
+
+import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { commentIntents } from '@dakly/contracts/comments';
 import { Button } from '@dakly/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 import { Sheet } from '@dakly/ui/sheet';
+
 
 import {
   chatIntentLabels,
   commentIntentLabels,
   messageIntentChoices,
 } from '../automation-filter-labels';
-import { channelLabels, triggerEntryLabels } from '../automation-labels';
+import { channelLabels, triggerEntryLabels, triggerTitles } from '../automation-labels';
+import { changeTrigger, pickableTriggers, type TriggerChange } from '../workflow-trigger-change';
 import { findFilter, setFilter, toggleValue } from '../workflow-trigger-filters';
 import { ChoiceChips, KeywordChips } from './workflow-filter-chips';
 import { PostPicker, ProductPicker } from './workflow-filter-pickers';
+import { SessionDialog } from '@/components/session-dialog';
 
 type Props = {
   graph: AutomationGraph;
@@ -128,6 +135,79 @@ function hasTriggerForm(graph: AutomationGraph) {
   return graph.trigger.key === 'comment_on_post' || graph.trigger.key === 'message_received';
 }
 
+function plural(count: number, one: string, many: string) {
+  return count === 1 ? one : many;
+}
+
+function ChangeWarning({ change }: { change: TriggerChange }) {
+  const order = change.orderDetailSteps.length;
+  const replies = change.replySteps.length;
+  return (
+    <div className="space-y-2">
+      {order > 0 && (
+        <p>
+          {order} {plural(order, 'message uses', 'messages use')} order details, which only an order
+          trigger has.
+        </p>
+      )}
+      {replies > 0 && (
+        <p>
+          {replies} comment {plural(replies, 'reply', 'replies')} only work after a comment on a
+          post.
+        </p>
+      )}
+      <p className="text-sm text-text-muted">These steps are removed if you change the trigger.</p>
+    </div>
+  );
+}
+
+function TriggerChoice({ graph, onChange }: FormProps) {
+  const [pending, setPending] = useState<{ key: TriggerKey; change: TriggerChange }>();
+  const current = graph.trigger.key;
+  const keys = pickableTriggers.includes(current)
+    ? pickableTriggers
+    : [current, ...pickableTriggers];
+  function choose(key: TriggerKey) {
+    const change = changeTrigger(graph, key);
+    if (change.orderDetailSteps.length || change.replySteps.length) setPending({ key, change });
+    else onChange(change.graph);
+  }
+  return (
+    <div className="space-y-1.5">
+      <Select value={current} onValueChange={(key) => choose(key as TriggerKey)}>
+        <SelectTrigger aria-label="Trigger">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {keys.map((key) => (
+            <SelectItem key={key} value={key}>
+              {triggerTitles[key]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {pending && (
+        <SessionDialog
+          open
+          title={`Change trigger to ${triggerTitles[pending.key]}?`}
+          onClose={() => setPending(undefined)}
+        >
+          <ChangeWarning change={pending.change} />
+          <Button
+            className="mt-4"
+            onClick={() => {
+              onChange(pending.change.graph);
+              setPending(undefined);
+            }}
+          >
+            Change trigger
+          </Button>
+        </SessionDialog>
+      )}
+    </div>
+  );
+}
+
 export function WorkflowTriggerPanel({ graph, onChange, onClose }: Props) {
   return (
     <Sheet
@@ -139,6 +219,7 @@ export function WorkflowTriggerPanel({ graph, onChange, onClose }: Props) {
       footer={<Button onClick={onClose}>Done</Button>}
     >
       <div className="space-y-5">
+        <TriggerChoice graph={graph} onChange={onChange} />
         {graph.trigger.key === 'comment_on_post' && (
           <CommentFilters graph={graph} onChange={onChange} />
         )}
