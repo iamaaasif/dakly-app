@@ -140,8 +140,11 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
 
     const zones = await app.get(DeliveryService).listZones(storeId, { limit: 10 });
 
+    // The list order is not part of this rule, so compare by charge.
     expect(
-      zones.items.map(({ name, chargePoisha, isDefault }) => [name, chargePoisha, isDefault]),
+      zones.items
+        .map(({ name, chargePoisha, isDefault }) => [name, chargePoisha, isDefault] as const)
+        .sort((a, b) => a[1] - b[1]),
     ).toEqual([
       ['Inside Dhaka', 6000, false],
       ['Dhaka suburbs', 10000, false],
