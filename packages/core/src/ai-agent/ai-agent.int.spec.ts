@@ -27,7 +27,7 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
-import { SocialService } from '../social/social.service';
+import { PublishedPostsService } from '../social/published-posts.service';
 import { AiAgentModule } from './ai-agent.module';
 import { AiAgentService } from './ai-agent.service';
 import { ReplyToFacebookCommentJob } from './jobs/reply-to-facebook-comment.job';
@@ -1020,9 +1020,9 @@ it.each(['catalogue photo', 'caption', 'conflicting post', 'conflicting hidden p
       "insert into post_targets (id,store_id,post_id,channel_connection_id,external_post_id,status,published_at) values (gen_random_uuid(),$1,$2,$3,$4,'published',now())",
       [storeId, postId, connectionId, postId],
     );
-    const social = app.get(SocialService);
+    const social = app.get(PublishedPostsService);
     await expect(
-      social.publishedPostContent(randomUUID(), {
+      social.content(randomUUID(), {
         channelConnectionId: connectionId,
         externalPostId: postId,
       }),
@@ -1110,7 +1110,7 @@ async function pricedFacebookPost({ storeId, connectionId }: Shop) {
     "insert into post_targets (id,store_id,post_id,channel_connection_id,external_post_id,status,published_at) values (gen_random_uuid(),$1,$2,$3,$4,'published',now())",
     [storeId, postId, connectionId, postId],
   );
-  await app.get(SocialService).publishedPostContent(storeId, {
+  await app.get(PublishedPostsService).content(storeId, {
     channelConnectionId: connectionId,
     externalPostId: postId,
   });

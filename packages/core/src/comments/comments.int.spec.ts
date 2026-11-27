@@ -266,6 +266,8 @@ it('keeps comments closed while Chats is off', async () => {
   });
 });
 
+const stillAllowed = async () => true;
+
 it('automatically replies once even when the comment job is delivered twice', async () => {
   const storeId = await shop();
   const comment = await stored(storeId, 'c-auto');
@@ -274,6 +276,7 @@ it('automatically replies once even when the comment job is delivered twice', as
   const reply = {
     privateBody: 'Blue Kurti costs ৳1,200.',
     publicBody: 'I sent the price in Messenger.',
+    stillAllowed,
   };
   await Promise.all([
     comments.replyAutomatically(storeId, comment.id, reply),
@@ -298,6 +301,7 @@ it.each(['unavailable', 'invalid_response'] as const)(
     const reply = {
       privateBody: 'Blue Kurti costs ৳1,200.',
       publicBody: 'I sent the price in Messenger.',
+      stillAllowed,
     };
     await expect(comments.replyAutomatically(storeId, comment.id, reply)).rejects.toMatchObject({
       code: 'COMMENT_UNCONFIRMED',
@@ -319,11 +323,15 @@ it('retries a refused public reply without sending the confirmed private reply a
   const reply = {
     privateBody: 'Blue Kurti costs ৳1,200.',
     publicBody: 'I sent the price in Messenger.',
+    stillAllowed,
   };
   await expect(comments.replyAutomatically(storeId, comment.id, reply)).rejects.toMatchObject({
     code: 'COMMENT_REJECTED',
   });
-  await comments.replyAutomatically(storeId, comment.id, { publicBody: reply.publicBody });
+  await comments.replyAutomatically(storeId, comment.id, {
+    publicBody: reply.publicBody,
+    stillAllowed,
+  });
   expect(sendPrivate).toHaveBeenCalledTimes(1);
   const { items } = await comments.list(storeId, { limit: 50 });
   expect(items).toMatchObject([{ status: 'replied', publicReplied: true }]);

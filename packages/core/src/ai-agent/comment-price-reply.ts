@@ -12,6 +12,12 @@ type PriceProduct = Pick<ChatProduct, 'name' | 'isStockTracked'> & {
   variants: Pick<ChatProduct['variants'][number], 'pricePoisha' | 'available'>[];
 };
 
+export type CommentLanguage = Language;
+
+export function replyLanguageFor(detected: Language, setting: 'match_customer' | 'bn' | 'en') {
+  return { match_customer: detected, bn: 'bangla', en: 'english' }[setting] as Language;
+}
+
 export function priceQuestion(text: string): Language | undefined {
   const normalized = text
     .normalize('NFKC')

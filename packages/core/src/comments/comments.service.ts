@@ -1,12 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type {
-  CommentListQuery,
-  CommentReplyInput,
-  CommentResponse,
-} from '@dakly/contracts/comments';
-import { privateReplyWindowDays } from '@dakly/contracts/comments';
+import type { CommentListQuery, CommentReplyInput } from '@dakly/contracts/comments';
 import { MetaRequestError } from '@dakly/providers/channel/channel-driver';
 
 import { AuditService } from '../audit/audit.service';
@@ -18,9 +13,10 @@ import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { OutboxService } from '../platform/outbox/outbox.service';
-import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
+import { canReplyPrivately, channelOf, privateReplyClosesAt, toResponse } from './comment-rows';
 import { commentError } from './comments.errors';
 import { CommentsRepository, type CommentRow } from './comments.repository';
 
@@ -40,35 +36,20 @@ export type ReceiveCommentInput = {
 type ReceiveOutcome =
   'stored' | 'duplicate' | 'unknown_account' | 'stale_delivery' | 'invalid_timestamp';
 
-function channelOf(kind: CommentRow['kind']) {
-  return kind === 'instagram' ? 'instagram' : 'messenger';
-}
+type AutomaticReply = {
+  privateBody?: string;
+  publicBody: string;
+  stillAllowed: () => Promise<boolean>;
+};
 
-function privateReplyClosesAt(row: CommentRow) {
-  return new Date(new Date(row.commentedAt).getTime() + privateReplyWindowDays * DAY_MS);
-}
-
-function canReplyPrivately(row: CommentRow, now: Date) {
-  return !row.privateRepliedAt && now < privateReplyClosesAt(row);
-}
-
-function toResponse(row: CommentRow, now: Date): CommentResponse {
-  return {
-    id: row.id,
-    channel: channelOf(row.kind),
-    externalPostId: row.externalPostId,
-    postCaption: row.postCaption,
-    authorName: row.authorName,
-    body: row.body,
-    classification: row.classification,
-    status: row.status,
-    isReply: row.parentExternalCommentId !== null,
-    publicReplied: row.publicReplyExternalId !== null,
-    privateRepliedAt: row.privateRepliedAt?.toISOString() ?? null,
-    canReplyPrivately: canReplyPrivately(row, now),
-    commentedAt: row.commentedAt,
-  };
-}
+// Another reply already won, or the private window closed: the comment is settled, not failed.
+const automaticReplySkips = [
+  'COMMENT_ALREADY_REPLIED',
+  'COMMENT_PRIVATE_REPLY_USED',
+  'COMMENT_PRIVATE_REPLY_EXPIRED',
+  'COMMENT_PRIVATE_REPLY_BLOCKED',
+  'CHANNEL_NOT_CONNECTED',
+];
 
 function isDefiniteRejection(error: unknown) {
   return error instanceof MetaRequestError && ['rejected', 'auth_error'].includes(error.code);
@@ -204,38 +185,36 @@ export class CommentsService {
   async replyAutomatically(
     storeId: string,
     id: string,
-    {
-      privateBody,
-      publicBody,
-      stillAllowed,
-    }: { privateBody?: string; publicBody: string; stillAllowed: () => Promise<boolean> },
+    { privateBody, publicBody, stillAllowed }: AutomaticReply,
   ) {
     await this.requireChats(storeId);
     const pending = await this.pendingFacebookReply(storeId, id);
     if (!pending || pending.claimedByAutomation || (!pending.privateSent && !privateBody)) return;
-    const actor = { kind: 'system' } as const;
     try {
-      // The caller's switches are read again right before each send, not trusted from when the job started.
-      if (!pending.privateSent && privateBody) {
-        if (!(await stillAllowed())) return;
-        await this.sendPrivateReply(storeId, actor, id, privateBody);
-      }
-      if (!(await stillAllowed())) return;
-      await this.sendPublicReply(storeId, actor, id, publicBody);
+      await this.dispatchAutomatically(storeId, id, pending, {
+        privateBody,
+        publicBody,
+        stillAllowed,
+      });
     } catch (error) {
-      if (
-        error instanceof AppError &&
-        [
-          'COMMENT_ALREADY_REPLIED',
-          'COMMENT_PRIVATE_REPLY_USED',
-          'COMMENT_PRIVATE_REPLY_EXPIRED',
-          'COMMENT_PRIVATE_REPLY_BLOCKED',
-          'CHANNEL_NOT_CONNECTED',
-        ].includes(error.code)
-      )
-        return;
-      throw error;
+      if (!(error instanceof AppError && automaticReplySkips.includes(error.code))) throw error;
     }
+  }
+
+  private async dispatchAutomatically(
+    storeId: string,
+    id: string,
+    pending: { privateSent: boolean },
+    { privateBody, publicBody, stillAllowed }: AutomaticReply,
+  ) {
+    const actor = { kind: 'system' } as const;
+    // The caller's switches are read again right before each send, not trusted from when the job started.
+    if (!pending.privateSent && privateBody) {
+      if (!(await stillAllowed())) return;
+      await this.sendPrivateReply(storeId, actor, id, privateBody);
+    }
+    if (!(await stillAllowed())) return;
+    await this.sendPublicReply(storeId, actor, id, publicBody);
   }
 
   private async sendPublicReply(

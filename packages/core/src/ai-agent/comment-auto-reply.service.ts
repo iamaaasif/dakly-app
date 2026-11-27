@@ -7,12 +7,14 @@ import { KillSwitchesService } from '../kill-switches/kill-switches.service';
 import { ProductSearchService } from '../product-search/product-search.service';
 import { ProductSearchSourceService } from '../products/product-search-source.service';
 import { ProductsService } from '../products/products.service';
-import { SocialService } from '../social/social.service';
+import { PublishedPostsService } from '../social/published-posts.service';
 import { StoresService } from '../stores/stores.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import {
   commentPriceReply,
+  type CommentLanguage,
   priceQuestion,
+  replyLanguageFor,
   publicPriceAcknowledgement,
 } from './comment-price-reply';
 
@@ -25,7 +27,7 @@ export class CommentAutoReplyService {
     @Inject(ProductSearchSourceService) private readonly source: ProductSearchSourceService,
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(ProductSearchService) private readonly search: ProductSearchService,
-    @Inject(SocialService) private readonly social: SocialService,
+    @Inject(PublishedPostsService) private readonly posts: PublishedPostsService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(BillingService) private readonly billing: BillingService,
     @Inject(KillSwitchesService) private readonly switches: KillSwitchesService,
@@ -37,20 +39,24 @@ export class CommentAutoReplyService {
     if (!comment?.body || comment.claimedByAutomation) return;
     const language = priceQuestion(comment.body);
     if (!language) return;
-    const settings = await this.settings.enabled(storeId);
     const stillAllowed = () => this.mayAnswer(storeId, comment.channelConnectionId);
-    if (!settings?.answerComments || !(await stillAllowed())) return;
-    const replyLanguage = { match_customer: language, bn: 'bangla', en: 'english' } as const;
-    const spoken = replyLanguage[settings.rules.replyLanguage];
-    if (comment.privateSent)
-      return this.comments.replyAutomatically(storeId, commentId, {
-        publicBody: publicPriceAcknowledgement[spoken],
-        stillAllowed,
-      });
+    if (!(await stillAllowed())) return;
+    const settings = await this.settings.enabled(storeId);
+    const spoken = replyLanguageFor(language, settings?.rules.replyLanguage ?? 'match_customer');
+    const reply = comment.privateSent
+      ? { publicBody: publicPriceAcknowledgement[spoken] }
+      : await this.priceReply(storeId, comment, spoken);
+    if (reply)
+      await this.comments.replyAutomatically(storeId, commentId, { ...reply, stillAllowed });
+  }
+
+  private async priceReply(
+    storeId: string,
+    comment: { channelConnectionId: string; externalPostId: string },
+    spoken: CommentLanguage,
+  ) {
     const product = await this.productForPost(storeId, comment);
-    if (!product) return;
-    const reply = commentPriceReply(spoken, product);
-    if (reply) await this.comments.replyAutomatically(storeId, commentId, { ...reply, stillAllowed });
+    return product && commentPriceReply(spoken, product);
   }
 
   private async mayAnswer(storeId: string, connectionId: string) {
@@ -70,7 +76,7 @@ export class CommentAutoReplyService {
     storeId: string,
     target: { channelConnectionId: string; externalPostId: string },
   ) {
-    const post = await this.social.publishedPostContent(storeId, target);
+    const post = await this.posts.content(storeId, target);
     if (!post) return;
     // Products hidden after publication still count when deciding what the post shows.
     const photos = await this.source.postProductsByPhotos(storeId, post.mediaFileIds);
