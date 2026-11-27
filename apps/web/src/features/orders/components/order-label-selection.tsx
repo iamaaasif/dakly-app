@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { maxOrderShippingLabels } from '@dakly/contracts/order-shipping-labels';
 import { Button, buttonVariants } from '@dakly/ui/button';
 
+import { useSessionContext } from '@/lib/session-context';
+
 export function OrderLabelSelection({
   orderIds,
   onClear,
@@ -11,8 +13,9 @@ export function OrderLabelSelection({
   orderIds: string[];
   onClear: () => void;
 }) {
+  const { data } = useSessionContext();
   const count = orderIds.length;
-  if (count === 0) return null;
+  if (!data?.currentStore?.canPrintShippingLabels || count === 0) return null;
   const search = new URLSearchParams({ orderIds: orderIds.join(',') });
   return (
     <section

@@ -64,6 +64,7 @@ describe('navigationGroups', () => {
         canViewOrders: permissions.canViewOrders ?? false,
         canEditOrders: false,
         canExportOrders: false,
+        canPrintShippingLabels: false,
         canViewDueBook: permissions.canViewDueBook ?? false,
         canEditDueBook: false,
         canViewCampaigns: permissions.canViewCampaigns ?? false,

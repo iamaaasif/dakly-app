@@ -71,6 +71,7 @@ export class SessionsService {
       canEditProducts: can('sales', 'products', 'edit'),
       canViewOrders,
       canExportOrders: canViewOrders && access.exportLists,
+      canPrintShippingLabels: canViewOrders && access.seeFullPhone,
       canEditOrders: can('sales', 'orders', 'edit'),
       canViewDueBook: can('physical_shop', 'dueBook', 'view'),
       canEditDueBook: can('physical_shop', 'dueBook', 'edit'),

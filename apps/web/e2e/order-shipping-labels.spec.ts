@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -101,6 +101,77 @@ test('keeps selected orders across stages and prints one page per label', async 
     await database.pool.query('delete from orders where id=any($1::uuid[])', [
       [codOrderId, paidOrderId],
     ]);
+    await database.pool.end();
+  }
+});
+
+test('hides shipping label actions without access to full phone numbers', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const { storeIds } = JSON.parse(process.env.BROWSER_FIXTURE!) as { storeIds: [string, string] };
+  const storeId = storeIds[1];
+  const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const orderId = randomUUID();
+  const sessionId = randomUUID();
+  const token = randomBytes(32).toString('base64url');
+  let membershipId: string | undefined;
+  try {
+    const role = await database.pool.query<{ id: string; user_id: string }>(
+      "select id,user_id from memberships where store_id=$1 and built_in_role='marketer'",
+      [storeId],
+    );
+    expect(role.rowCount).toBe(1);
+    const member = role.rows[0]!;
+    membershipId = member.id;
+    await database.pool.query("update memberships set built_in_role='support_agent' where id=$1", [
+      membershipId,
+    ]);
+    await database.pool.query(
+      "insert into sessions(id,user_id,active_store_id,token_hash,expires_at) values($1,$2,$3,$4,now()+interval '1 hour')",
+      [sessionId, member.user_id, storeId, createHash('sha256').update(token).digest()],
+    );
+    await database.pool.query(
+      `insert into orders(id,store_id,number,source,created_by_type,stage,recipient_name,
+         recipient_phone,recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha)
+       values($1,$2,1058,'manual','user','to_confirm','Amina Rahman',
+         '01801000030','Mirpur','Dhaka',35400,35400)`,
+      [orderId, storeId],
+    );
+    await context.addCookies([
+      { name: 'dakly_session', value: token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
+    ]);
+
+    await page.goto(`/orders?labelOrderIds=${orderId}`);
+    await expect(page.getByText('Amina Rahman')).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: /shipping labels/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Print shipping labels/ })).toHaveCount(0);
+
+    const accessMessage = page.getByText('You need full phone access to print labels');
+    await page.goto('/orders/shipping-labels/print');
+    await expect(accessMessage).toBeVisible();
+    await page.goto(`/orders/shipping-labels/print?orderIds=${orderId}#print`);
+    await expect(accessMessage).toBeVisible();
+    await expect(page.getByRole('article')).toHaveCount(0);
+    const evidence = resolve(process.cwd(), 'e2e-artifacts/ord-10-labels-full-phone');
+    await mkdir(evidence, { recursive: true });
+    for (const [width, height] of [
+      [1440, 900],
+      [360, 800],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await page.screenshot({ path: resolve(evidence, `access-${width}x${height}.png`) });
+    }
+    await page.emulateMedia({ media: 'print' });
+    await page.screenshot({ path: resolve(evidence, 'access-print.png') });
+  } finally {
+    await database.pool.query('delete from orders where id=$1', [orderId]);
+    await database.pool.query('delete from sessions where id=$1', [sessionId]);
+    if (membershipId)
+      await database.pool.query("update memberships set built_in_role='marketer' where id=$1", [
+        membershipId,
+      ]);
     await database.pool.end();
   }
 });

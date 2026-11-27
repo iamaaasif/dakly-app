@@ -1,6 +1,9 @@
 import Link from 'next/link';
 
-import { shippingLabelQuerySchema } from '@dakly/contracts/order-shipping-labels';
+import {
+  shippingLabelQuerySchema,
+  shippingLabelsPhoneRequired,
+} from '@dakly/contracts/order-shipping-labels';
 
 import { OrderShippingLabelsScreen } from '@/features/orders/components/order-shipping-labels-screen';
 import { requireSession } from '@/lib/require-session';
@@ -17,6 +20,8 @@ export default async function OrderShippingLabelsPage({
         You do not have Orders access in this shop.
       </p>
     );
+  if (!session.currentStore.canPrintShippingLabels)
+    return <p className="p-6">{shippingLabelsPhoneRequired}</p>;
 
   const batch = shippingLabelQuerySchema.safeParse(await searchParams);
   if (batch.success) return <OrderShippingLabelsScreen orderIds={batch.data.orderIds} />;

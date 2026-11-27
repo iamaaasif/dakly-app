@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { OrderDetail } from './orders';
 
 export const maxOrderShippingLabels = 100;
+export const shippingLabelsPhoneRequired = 'You need full phone access to print labels';
 
 export const shippingLabelOrderIdsSchema = z
   .string()
