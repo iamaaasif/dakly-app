@@ -113,25 +113,25 @@ with `400 CONSENT_CONTACTS_TOO_MANY`.
 
 The web app has two customer screens.
 
-- All customers (`/customers`) lists the store's contacts, 50 a page, with First page and
-  Next page links. Tabs filter by kind (All, Customer, Lead, Chat only, Not a customer). A
-  search box takes a name or a mobile number and a tag box takes one tag. The kind, search,
-  tag and page live in the URL. A name search under 3 letters shows the API's message on the
-  search field. Rows link to the profile and become cards on a phone. The Columns button, after
-  Search customers, opens a menu of Phone, WhatsApp, Email, Location, Source, Tags and Consent,
-  each a checkbox that stays open while the owner changes several. Customer and Type always
-  show. Phone and WhatsApp are on until the owner changes them; the rest start off, as in the
-  design. The choice is the `columns` value in the address (a comma list; absent means the
-  defaults, empty means none) so it survives a reload and a shared link, and it carries through
-  the tabs, search and paging. WhatsApp shows the WhatsApp number, or the phone when none is
-  set. Location is the district. Consent shows a green tag for each channel the customer
-  agreed to; a customer who agreed to none shows "None". An empty cell says what is missing
-  (No email, No location, No tags). The design also strikes through channels the customer has
-  not agreed to; the screen lists only the agreed ones. Orders, Spent and Last purchase come
-  in CUS-17 part 2, read from `contact_stats`. Members with Edit
-  Customers press Add customers and choose Add manually or Import from an Excel or CSV file. The manual
-  form shows a phone the store already has as an error on the phone field. Scan your khata opens `/customers/khata-scan` (KHT-3, feature 13). Add by voice, Connect your store and Connect your POS are not offered until their tasks ship
-  (CUS-10, release 2 and the store and POS connectors).
+- All customers (`/customers`) lists only the contacts with at least one non-cancelled order (the
+  screen always asks for `hasOrdered`), 50 a page, with First page and Next page links and a
+  footer saying how many of the total are shown. The header counts customers, those who bought
+  more than once and those who can receive marketing messages. Tabs filter by type (All, New,
+  Returning, VIP, Inactive, High-value, At-risk), each with its count. One search box takes a name,
+  email, area or mobile number and runs on Enter. Source, Spending, Time and Sort selects sit
+  beside it, with Export and the Columns button at the end. Everything lives in the URL
+  (`type`, `source`, `minSpendPoisha`, `maxSpendPoisha`, `lastPurchase`, `sort`, `search`,
+  `cursor`, `columns`); sort defaults to last purchase. A name search under 3 letters shows the
+  API's message on the search field. Rows link to the profile, carry a checkbox (the footer
+  counts the rows picked) and become cards on a phone. Customer, Type, Orders, Spent and Last
+  purchase always show; the Columns menu turns Phone, WhatsApp, Email, Location, Source, Tags and
+  Consent on or off, all but Consent on by default, as in the design. The choice is the `columns`
+  value in the address (a comma list; absent means the defaults, empty means none). WhatsApp shows
+  the WhatsApp number, or the phone when none is set. Location is the district. Type is one
+  pill: VIP, else High-value, else the lifecycle stage. An empty cell says what is missing (No
+  email, No location, No tags). There is no Add button here, because a customer comes from an
+  order. The Contacts page (DSN-21) lists everyone and owns Add contact and Import. Scan your
+  khata opens `/customers/khata-scan` (KHT-3, feature 13).
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
@@ -491,7 +491,7 @@ The orders, timeline and campaigns routes take `limit` (up to 50) and the `curso
 
 ### States and edge cases
 
-- Empty store: list shows the Add customers chooser inline.
+- No customer yet: the page shows "You don't have any customer yet" with no tabs or filters.
 - Customer without phone (Instagram-only): shows "No phone yet" and only Instagram as a channel.
 - Import file with Bangla digits (০১৭১২…): converted to Latin digits.
 - Import file with 2 phones in one cell: first is phone, second becomes WhatsApp number if it differs.
