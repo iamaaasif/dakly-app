@@ -127,7 +127,7 @@ function LoadedProductPage({ product, readOnly, onReload, reloadError }: LoadedP
       product={product}
       expectedVersion={loaded.version}
       statusConflict={statusConflict ? statusError : undefined}
-      onReload={onReload}
+      onReload={reloadError ? undefined : onReload}
       onSaved={(_saved, failedStock) => {
         // A fresh read replaces both the version and the stock baseline for the next save.
         if (!failedStock.length) void onReload();
@@ -172,6 +172,12 @@ function ProductPageNotice({
   reloadError,
   onReload,
 }: Pick<LoadedProductPageProps, 'readOnly' | 'reloadError' | 'onReload'>) {
+  if (reloadError instanceof ApiError && reloadError.code === 'PRODUCT_NOT_FOUND')
+    return (
+      <p role="alert" className="text-danger">
+        {reloadError.message}
+      </p>
+    );
   if (reloadError)
     return <QueryError message={reloadError.message} onRetry={onReload} retryLabel="Reload" />;
   return readOnly ? (

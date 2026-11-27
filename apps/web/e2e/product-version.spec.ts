@@ -141,9 +141,22 @@ test('keeps a stale edit and reloads the latest saved product', async ({
     const repeat = productPatch(page, path);
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     expect((await repeat).status()).toBe(409);
+    await expect(message).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reload', exact: true })).toHaveCount(1);
     await page.unroute(`**${path}`, unavailable);
-    await message.getByRole('button', { name: 'Reload' }).click();
+    await retryReload.click();
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+
+    await name.fill('Unsaved before archive');
+    expect((await context.request.delete(path, { headers })).status()).toBe(204);
+    const archived = productPatch(page, path);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    expect((await archived).status()).toBe(409);
+    await message.getByRole('button', { name: 'Reload' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Product not found' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reload', exact: true })).toHaveCount(0);
+    await expect(name).toHaveValue('Unsaved before archive');
+    await expect(page.getByRole('link', { name: 'Back to products' })).toBeVisible();
   } finally {
     const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
     try {

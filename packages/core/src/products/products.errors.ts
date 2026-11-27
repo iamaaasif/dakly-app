@@ -70,3 +70,13 @@ const PRODUCT_ERRORS = {
 export function productError(code: keyof typeof PRODUCT_ERRORS): AppError {
   return new AppError(code, PRODUCT_ERRORS[code]);
 }
+
+export function assertProductVersion<T extends { version: number; status: string }>(
+  product: T | null | undefined,
+  expectedVersion?: number,
+): asserts product is T {
+  if (!product) throw productError('PRODUCT_NOT_FOUND');
+  if (expectedVersion !== undefined && expectedVersion !== product.version)
+    throw productError('PRODUCT_CHANGED');
+  if (product.status === 'archived') throw productError('PRODUCT_NOT_FOUND');
+}

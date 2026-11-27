@@ -18,6 +18,7 @@ import {
   photoSnapshot,
   type CatalogueVariant,
   type PhotoRef,
+  type Product,
   type Variant,
   variantSnapshot,
 } from './product-snapshots.repository';
@@ -80,16 +81,7 @@ type PhotoWrite = ConfirmProductPhotoInput & {
 };
 
 type ProductDetails = Omit<CreateProductInput, 'variants'>;
-export type Product = ProductDetails & {
-  id: string;
-  version: number;
-  category: string | null;
-  brand: string | null;
-  imageFileIds: string[];
-  createdAt: Date;
-  updatedAt: Date;
-};
-export type { CatalogueVariant, Variant };
+export type { CatalogueVariant, Product, Variant };
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
   position: number;
