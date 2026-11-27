@@ -58,10 +58,16 @@ export function StoreSwitcher({ session, onSwitch }: StoreSwitcherProps) {
 }
 
 function ShopListStatus({ shops }: { shops: ReturnType<typeof useStoreOptions>['shops'] }) {
-  if (!shops.isPending && !shops.error && !shops.hasNextPage) return null;
+  // The current shop already shows, so a pending list needs no visible note on every page load.
+  if (shops.isPending)
+    return (
+      <p role="status" className="sr-only">
+        Loading shops…
+      </p>
+    );
+  if (!shops.error && !shops.hasNextPage) return null;
   return (
     <div className="shadow-md absolute top-full left-0 z-40 mt-1 space-y-2 rounded-lg border border-border bg-surface p-2 text-sm">
-      {shops.isPending ? <p role="status">Loading shops…</p> : null}
       {shops.error ? (
         <p role="alert">
           Could not load shops.{' '}
