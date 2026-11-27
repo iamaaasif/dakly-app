@@ -2,6 +2,7 @@ import { orderStageLabels } from '@dakly/contracts/order-stage-labels';
 import type {
   cancelReasons,
   onHoldReasons,
+  OrderCustomerBadge,
   OrderDetail,
   OrderSummary,
 } from '@dakly/contracts/orders';
@@ -64,4 +65,10 @@ export const courierLabels: Record<NonNullable<OrderDetail['courier']>, string> 
   redx: 'RedX',
   own_delivery: 'Own delivery',
   other: 'Other',
+};
+
+export const orderCustomerBadgeLabels: Record<OrderCustomerBadge, string> = {
+  new: 'New',
+  repeat: 'Repeat',
+  vip: 'VIP',
 };

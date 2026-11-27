@@ -163,8 +163,12 @@ export type OrderSummary = {
   returnReason: string | null;
 };
 
+// One badge a row: a best customer, someone who ordered before, or a first order.
+export type OrderCustomerBadge = 'vip' | 'repeat' | 'new';
+
 export type OrderListItem = OrderSummary & {
   itemPreview: string | null;
+  customerBadge: OrderCustomerBadge;
   isWaitingForConfirmation: boolean;
 };
 export type OrderAlerts = {

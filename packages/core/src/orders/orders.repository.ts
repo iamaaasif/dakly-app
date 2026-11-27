@@ -22,6 +22,7 @@ import { orderItems, orders } from '@dakly/db/schema/orders';
 
 import type { Transaction } from '../platform/database/scoped-transactions';
 import { TenantDatabase } from '../platform/database/tenant-database';
+import { customerBadge } from './order-customer-badge.repository';
 import { itemPreview } from './order-item-preview.repository';
 
 const summaryColumns = {
@@ -120,7 +121,7 @@ export class OrdersRepository {
     const afterCursor = oldest ? gt(orders.number, cursor ?? 0) : lt(orders.number, cursor ?? 0);
     return this.database.forStore(storeId, (tx) =>
       tx
-        .select({ ...summaryColumns, itemPreview })
+        .select({ ...summaryColumns, itemPreview, customerBadge })
         .from(orders)
         .where(and(orderMatchingConditions(tx, storeId, filter), cursor ? afterCursor : undefined))
         .orderBy(oldest ? asc(orders.number) : desc(orders.number))

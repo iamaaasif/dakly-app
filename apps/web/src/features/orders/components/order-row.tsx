@@ -15,7 +15,7 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 
 import { isFinishedOrder } from '../order-actions';
-import { orderSourceLabels, orderStageLabels } from '../order-labels';
+import { orderCustomerBadgeLabels, orderSourceLabels, orderStageLabels } from '../order-labels';
 import { OrderRiskBadge } from './order-risk-badge';
 import { OrderRowAction } from './order-row-action';
 import { OrderRowParcel } from './order-row-parcel';
@@ -107,11 +107,23 @@ function SourceTile({ source }: { source: OrderSummary['source'] }) {
   );
 }
 
+const customerBadgeVariants = {
+  new: 'info',
+  repeat: 'neutral',
+  vip: 'success',
+} as const;
+
 type OrderRowBadgesProps = { order: OrderListItem };
 
 function OrderRowBadges({ order }: OrderRowBadgesProps) {
   return (
     <>
+      <Badge
+        variant={customerBadgeVariants[order.customerBadge]}
+        className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+      >
+        {orderCustomerBadgeLabels[order.customerBadge]}
+      </Badge>
       {isFinishedOrder(order.stage) ? null : <OrderRiskBadge risk={order.returnRisk} />}
       {(order.stage === 'on_hold' || order.stage === 'partially_delivered') && (
         <Badge variant="neutral" className="rounded-full px-2.5 py-0.5 text-xs font-medium">
