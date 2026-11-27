@@ -1,11 +1,16 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { Megaphone, Plus } from 'lucide-react';
 import Link from 'next/link';
 
-import { campaignListQuerySchema, type CampaignListQuery } from '@dakly/contracts/campaigns';
+import {
+  campaignListQuerySchema,
+  type CampaignListQuery,
+  type CampaignListResponse,
+} from '@dakly/contracts/campaigns';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
+import { EmptyState } from '@dakly/ui/empty-state';
 import { Skeleton } from '@dakly/ui/skeleton';
 
 import { campaignListHref, useCampaigns } from '../api/campaigns';
@@ -22,6 +27,8 @@ export function CampaignsScreen(initial: { query: CampaignListQuery }) {
   });
   const { data: session } = useSessionContext();
   const campaigns = useCampaigns(query);
+  const canEdit = session?.currentStore?.canEditCampaigns === true;
+  const noCampaignsAtAll = hasNoCampaigns(query, campaigns.data);
   return (
     <main className="space-y-6 p-6 md:p-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -29,18 +36,50 @@ export function CampaignsScreen(initial: { query: CampaignListQuery }) {
           <h1 className="text-xl font-bold">Campaigns</h1>
           <p className="mt-2 text-text-muted">Messages you send to a group of customers.</p>
         </div>
-        {session?.currentStore?.canEditCampaigns && (
-          <Link
-            href="/campaigns/new"
-            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-          >
-            <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Create campaign
-          </Link>
-        )}
+        {canEdit && !noCampaignsAtAll && <CreateCampaignLink />}
       </header>
-      <CampaignFilters key={session?.contextTag} query={query} />
-      <CampaignListState query={query} campaigns={campaigns} />
+      {noCampaignsAtAll ? (
+        <NoCampaigns canEdit={canEdit} />
+      ) : (
+        <>
+          <CampaignFilters key={session?.contextTag} query={query} />
+          <CampaignListState query={query} campaigns={campaigns} />
+        </>
+      )}
     </main>
+  );
+}
+
+function NoCampaigns({ canEdit }: { canEdit: boolean }) {
+  return (
+    <div className="rounded-lg border border-border bg-surface">
+      <EmptyState
+        icon={Megaphone}
+        title="You have not sent a campaign yet"
+        description="Send an offer or a reminder to a group of customers who agreed to hear from you."
+        action={canEdit ? <CreateCampaignLink /> : undefined}
+        className="py-24"
+      />
+    </div>
+  );
+}
+
+function hasNoCampaigns(query: CampaignListQuery, data: CampaignListResponse | undefined) {
+  return data?.items.length === 0 && !query.cursor && !hasFilters(query);
+}
+
+function hasFilters({ search, status, channel, createdFrom, createdThrough }: CampaignListQuery) {
+  return [search, status, channel, createdFrom, createdThrough].some(Boolean);
+}
+
+function CreateCampaignLink() {
+  return (
+    <Link
+      href="/campaigns/new"
+      className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+    >
+      <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Create campaign
+    </Link>
   );
 }
 
@@ -77,11 +116,28 @@ function CampaignListState({
       {items.length ? (
         <CampaignTable campaigns={items} />
       ) : (
-        <p role="status" className="rounded-lg border border-border bg-surface p-4">
-          {query.cursor
-            ? 'This page has no campaigns. Return to the first page to see current results.'
-            : 'No campaigns match these filters.'}
-        </p>
+        <div role="status" className="rounded-lg border border-border bg-surface">
+          <EmptyState
+            icon={Megaphone}
+            title={query.cursor ? 'This page has no campaigns' : 'No campaigns match'}
+            description={
+              query.cursor
+                ? 'Return to the first page to see current results.'
+                : 'Try another name or clear the filters.'
+            }
+            action={
+              query.cursor ? undefined : (
+                <UrlLink
+                  href={campaignListHref({ limit: query.limit })}
+                  className="inline-flex min-h-10 items-center text-action underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                >
+                  Clear filters
+                </UrlLink>
+              )
+            }
+            className="py-16"
+          />
+        </div>
       )}
       {(query.cursor || nextCursor) && <CampaignPages query={query} nextCursor={nextCursor} />}
     </section>
