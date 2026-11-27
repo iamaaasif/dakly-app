@@ -60,7 +60,7 @@ describe('WorkflowCanvasGraph', () => {
     expect(steps.getByText('Once every 7 days')).toBeTruthy();
     expect(steps.getByText('Places an order')).toBeTruthy();
     expect(steps.getByText('1 hour')).toBeTruthy();
-    expect(steps.getByText('SMS / WhatsApp')).toBeTruthy();
+    expect(steps.getByText('Send message')).toBeTruthy();
     expect(steps.getByText(/your cart is waiting/)).toBeTruthy();
     expect(steps.getByText('Conditional split')).toBeTruthy();
     expect(steps.getByText('Give a coupon')).toBeTruthy();
