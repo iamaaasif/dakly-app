@@ -1,13 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 
 import type { ContactSource } from '@dakly/contracts/contacts';
-import { contacts } from '@dakly/db/schema/contacts';
+import { contacts, contactStats } from '@dakly/db/schema/contacts';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 import {
   cursorCondition,
   matchingConditions,
+  statsConditions,
   type MatchFilter,
 } from './contact-filters.repository';
 import type { Contact } from './contacts.repository';
@@ -42,7 +43,17 @@ export class ContactExportRepository {
           source: contacts.source,
         })
         .from(contacts)
-        .where(and(...matchingConditions(storeId, filter), cursorCondition(storeId, filter.cursor)))
+        .leftJoin(
+          contactStats,
+          and(eq(contactStats.storeId, contacts.storeId), eq(contactStats.contactId, contacts.id)),
+        )
+        .where(
+          and(
+            ...matchingConditions(storeId, filter),
+            ...statsConditions(filter),
+            cursorCondition(storeId, filter.cursor),
+          ),
+        )
         .orderBy(desc(contacts.createdAt), desc(contacts.id))
         .limit(limit),
     );
