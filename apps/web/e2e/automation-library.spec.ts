@@ -48,7 +48,7 @@ test('filters the template library and copies a ready workflow into a draft', as
     }
     await page
       .getByRole('region', { name: 'Type' })
-      .getByRole('button', { name: 'Welcome 1' })
+      .getByRole('button', { name: 'Welcome 2' })
       .click();
     await expect(page).toHaveURL(/type=welcome/);
     await expect(
@@ -58,7 +58,7 @@ test('filters the template library and copies a ready workflow into a draft', as
     ).toBeVisible();
     await page
       .getByRole('region', { name: 'Goal' })
-      .getByRole('button', { name: 'Convert subscribers 1' })
+      .getByRole('button', { name: 'Convert subscribers 2' })
       .click();
     await page
       .getByRole('region', { name: 'Channel' })
