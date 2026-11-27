@@ -264,7 +264,7 @@ test('filters the active shop’s pipeline by alert, search and stage', async ({
     await applyFilters.focus();
     await applyFilters.press('Enter');
     await expect(page).toHaveURL(/courier=pathao/);
-    await expect(page.getByRole('button', { name: 'Filters', exact: true })).toBeFocused();
+    await expect(applyFilters).toBeFocused();
     await expect(page.getByRole('link', { name: 'Nusrat Jahan' })).toHaveCount(1);
     await capture('filters');
     await database.pool.query(
