@@ -13,6 +13,7 @@ export function orderListMatch(
   return {
     ...filters,
     stages: listedStages(stage, filters.paymentStatus),
+    withoutAdvanceRequest: stage === 'to_confirm',
     phone: seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined,
     overdueBefore: new Date(now.getTime() - 12 * HOUR_MS),
     timeZone,

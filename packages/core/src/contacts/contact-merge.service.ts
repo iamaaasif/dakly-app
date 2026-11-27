@@ -41,6 +41,8 @@ const movedRowsSchema = z.object({
   orders: z.array(z.string()),
   tasks: z.array(z.string()),
   comments: z.array(z.string()),
+  // Merges recorded before notes moved have no list.
+  notes: z.array(z.string()).default([]),
 });
 
 @Injectable()

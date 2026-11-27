@@ -16,7 +16,13 @@ export async function draftItemSnapshots(
     products,
     offers,
     clock,
-  }: { products: ProductsService; offers: PriceOffersService; clock: Clock },
+    isManualOrder,
+  }: {
+    products: ProductsService;
+    offers: PriceOffersService;
+    clock: Clock;
+    isManualOrder: boolean;
+  },
 ) {
   const rows = party.conversationId
     ? await offers.forOrder(
@@ -25,7 +31,7 @@ export async function draftItemSnapshots(
         input.map(({ variantId }) => variantId),
       )
     : [];
-  const items = await orderItemSnapshots(storeId, products, input);
+  const items = await orderItemSnapshots({ storeId, products, items: input, isManualOrder });
   applyPriceOffers(items, rows, clock.now());
   return items;
 }

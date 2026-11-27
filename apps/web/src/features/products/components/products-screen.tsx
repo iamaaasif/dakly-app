@@ -1,15 +1,14 @@
 'use client';
-import Link from 'next/link';
 import { useState } from 'react';
 
 import type { ProductListQuery, ProductListResponse } from '@dakly/contracts/products';
 import { Button } from '@dakly/ui/button';
+import { PageHeader } from '@dakly/ui/page-header';
 
 import { productsSearch, useProducts } from '../api/products';
 import { parseProductsScreen } from '../products-url';
 import { useBulkSelection } from '../use-bulk-selection';
 import { ChangeStockDialog } from './change-stock-dialog';
-import { ExportProductsButtons } from './export-products-buttons';
 import { ImportProductsDialog } from './import-products-dialog';
 import { ProductBulkPanel } from './product-bulk-panel';
 import { ProductBulkSection } from './product-bulk-section';
@@ -39,18 +38,18 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   const canEdit = Boolean(session?.currentStore?.canEditProducts);
   const bulk = useBulkSelection(canEdit);
   const editActions = canEdit
-    ? { onAddProduct: () => setQuickAdding(true), onAdjust, onChangeStock: setChangingStockOf }
+    ? {
+        onAddProduct: () => setQuickAdding(true),
+        onImport: () => router.push(`${listHref}&import=1`),
+        onAdjust,
+        onChangeStock: setChangingStockOf,
+      }
     : {};
   return (
     <StorePage permission="canViewProducts">
-      <main className="space-y-6 p-6 md:p-8">
-        <ProductsHeader
-          query={query}
-          listHref={listHref}
-          importing={importing}
-          onAddProduct={editActions.onAddProduct}
-        />
-        <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
+      <main className="space-y-5 p-4 md:p-8">
+        <ProductsHeader onAddProduct={editActions.onAddProduct} />
+        <section aria-label="Product catalogue">
           <ProductResults
             query={query}
             products={products}
@@ -61,6 +60,10 @@ export function ProductsScreen(initial: ProductsScreenProps) {
             <ProductBulkSection bulk={bulk} />
           </ProductResults>
         </section>
+        <ImportDialog
+          open={Boolean(importing && canEdit)}
+          onClose={() => router.replace(listHref)}
+        />
         {quickAdding && canEdit ? <QuickAddModal onClose={() => setQuickAdding(false)} /> : null}
         {changingStock ? (
           <ChangeStockDialog
@@ -78,48 +81,24 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   );
 }
 
-type ProductsHeaderProps = {
-  onAddProduct?: () => void;
-  query: ProductListQuery;
-  listHref: string;
-  importing?: '1';
-};
-
-function ProductsHeader({ onAddProduct, query, listHref, importing }: ProductsHeaderProps) {
-  const router = useUrlRouter();
+function ProductsHeader({ onAddProduct }: { onAddProduct?: () => void }) {
   return (
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-text">Products</h1>
-        <p className="mt-1 text-sm text-text-muted">
-          What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take orders
-          and fill your order link.
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/products/lists"
-          className="inline-flex min-h-10 items-center rounded-md border border-input-border bg-surface px-4 text-base font-medium text-text hover:bg-surface-muted"
-        >
-          Categories and brands
-        </Link>
-        <ExportProductsButtons query={query} />
-        {onAddProduct ? (
-          <>
-            <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
-              Import from Excel or CSV
-            </Button>
-            <Button onClick={onAddProduct}>
-              <span aria-hidden="true">+ </span>Add product
-            </Button>
-          </>
-        ) : null}
-      </div>
-      {importing && onAddProduct ? (
-        <ImportProductsDialog onClose={() => router.replace(listHref)} />
-      ) : null}
-    </header>
+    <PageHeader
+      title="Products"
+      description="What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take orders, sell in the shop and fill your order link."
+      actions={
+        onAddProduct ? (
+          <Button onClick={onAddProduct} className="gap-1.5">
+            <span aria-hidden="true">+</span> Add product
+          </Button>
+        ) : null
+      }
+    />
   );
+}
+
+function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return open ? <ImportProductsDialog onClose={onClose} /> : null;
 }
 
 // A change Ask Dakly AI prepared opens here as the bulk edit review, over the list.

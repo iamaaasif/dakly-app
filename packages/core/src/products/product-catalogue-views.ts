@@ -73,6 +73,7 @@ export function orderCatalogueProduct(
     id: product.id,
     name: product.name,
     isStockTracked: product.isStockTracked,
+    stockStatus: product.stockStatus,
     variants: product.variants.map((variant) => orderCatalogueVariant(product, variant, storage)),
   };
 }
@@ -102,9 +103,9 @@ export function productResponse(
   if (!product.imageFileIds.length) readiness.push('needs_photo');
   if (product.status === 'hidden') readiness.push('hidden');
   if (
-    product.isStockTracked &&
-    variants.length &&
-    variants.every((variant) => variant.available <= 0)
+    product.isStockTracked
+      ? variants.length && variants.every((variant) => variant.available <= 0)
+      : product.stockStatus === 'out_of_stock'
   )
     readiness.push('out_of_stock');
   else if (
