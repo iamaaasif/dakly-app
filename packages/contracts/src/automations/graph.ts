@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { campaignChannels } from '../campaigns';
+import { chatIntents } from '../chats';
 import { consentChannels, consentSources, lifecycleStages } from '../contacts';
 import { orderPaymentStatuses } from '../orders';
 import {
@@ -50,6 +51,11 @@ const triggerFilterSchema = z.discriminatedUnion('field', [
   z.strictObject({
     field: z.literal('channel'),
     channels: z.array(z.enum(consentChannels)).min(1),
+  }),
+  z.strictObject({ field: z.literal('intent'), intents: z.array(z.enum(chatIntents)).min(1) }),
+  z.strictObject({
+    field: z.literal('keywords'),
+    keywords: z.array(z.string().trim().min(1).max(50)).min(1).max(20),
   }),
   z.strictObject({
     field: z.literal('consent_source'),

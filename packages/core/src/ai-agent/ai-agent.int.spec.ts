@@ -17,6 +17,7 @@ import type { LlmResult } from '@dakly/providers/llm/llm-driver';
 
 import { AiService } from '../ai/ai.service';
 import { KillSwitchesService } from '../kill-switches/kill-switches.service';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
@@ -191,6 +192,28 @@ function script(output: ChatClassification, duringCall?: () => Promise<void>, ca
   return inputs;
 }
 
+async function intentEvents({ storeId }: Shop) {
+  const { rows } = await admin.pool.query<{
+    payload: {
+      intent: string | null;
+      channel: string;
+      conversationId: string;
+      messageIds: string[];
+    };
+  }>("select payload from outbox_events where store_id = $1 and type = 'message.burst_received'", [
+    storeId,
+  ]);
+  return Promise.all(
+    rows.map(async ({ payload }) => ({
+      intent: payload.intent,
+      channel: payload.channel,
+      text: await app
+        .get(ConversationIntentService)
+        .burstText(storeId, payload.conversationId, payload.messageIds),
+    })),
+  );
+}
+
 async function intentTags({ storeId }: Shop) {
   const { rows } = await admin.pool.query<{ intent_tag: string | null }>(
     'select intent_tag from conversations where store_id = $1',
@@ -304,6 +327,16 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     usage: [],
   });
   expect(await intentTags(active)).toEqual(['greeting']);
+  // The second run finds the chat with a person and announces the same burst without an intent;
+  // automations keep the first entry for a burst.
+  const announced = {
+    channel: 'messenger',
+    text: 'bhai, order ta\nekjon manush er sathe kotha bolbo',
+  };
+  expect(await intentEvents(active)).toEqual([
+    { ...announced, intent: 'greeting' },
+    { ...announced, intent: null },
+  ]);
 });
 
 it('hands over an exhausted allowance without calling the model or spending a unit', async () => {
@@ -405,6 +438,23 @@ it('stops before classifying when AI is off, the window closes, consent is withd
   for (const store of [off, active, expired]) {
     expect(await observe(store)).toMatchObject({ replies: [], notices: [], runs: [], usage: [] });
   }
+});
+
+it('announces a burst with no intent when AI replies are off, once for the whole burst', async () => {
+  const off = await shop(1, false);
+  const first = await receive(off, 'dam koto?');
+  await agent.schedule(off.storeId, first.conversation_id, first.id);
+  expect((await queue.getJob(`ai-reply-${first.id}`))?.delay).toBe(3000);
+  const latest = await receive(off, 'এই শার্টের দাম কত');
+  await agent.schedule(off.storeId, latest.conversation_id, latest.id);
+  await agent.reply(off.storeId, first.conversation_id, first.id);
+  expect(await intentEvents(off)).toEqual([]);
+  await agent.reply(off.storeId, latest.conversation_id, latest.id);
+  expect(await intentEvents(off)).toEqual([
+    { intent: null, channel: 'messenger', text: 'dam koto?\nএই শার্টের দাম কত' },
+  ]);
+  expect(await intentTags(off)).toEqual([null]);
+  expect(await observe(off)).toMatchObject({ replies: [], notices: [], runs: [], usage: [] });
 });
 
 it('answers after a routine classification', async () => {

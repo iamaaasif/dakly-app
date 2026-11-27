@@ -6,10 +6,13 @@ import { ContactsModule } from '../contacts/contacts.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
+import { OutboxModule } from '../platform/outbox/outbox.module';
 import { ProductsModule } from '../products/products.module';
 import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
+import { ConversationIntentRepository } from './conversation-intent.repository';
+import { ConversationIntentService } from './conversation-intent.service';
 import { ConversationOrdersService } from './conversation-orders.service';
 import { ConversationReplyService } from './conversation-reply.service';
 import { InboxShownProductsRepository } from './inbox-shown-products.repository';
@@ -30,6 +33,7 @@ import { OrderTabCountsService } from './order-tab-counts.service';
     FileStorageModule,
     MessagingModule,
     OrdersModule,
+    OutboxModule,
     ProductsModule,
     SendingModule,
     StoresModule,
@@ -38,6 +42,8 @@ import { OrderTabCountsService } from './order-tab-counts.service';
   ],
   controllers: [InboxController, OrderInquiriesController],
   providers: [
+    ConversationIntentRepository,
+    ConversationIntentService,
     InboxRepository,
     InboxShownProductsRepository,
     InboxService,
@@ -47,6 +53,6 @@ import { OrderTabCountsService } from './order-tab-counts.service';
     OrderInquiriesService,
     OrderTabCountsService,
   ],
-  exports: [ConversationReplyService, InboxRepository, InboxService],
+  exports: [ConversationIntentService, ConversationReplyService, InboxRepository, InboxService],
 })
 export class InboxModule {}
