@@ -95,6 +95,16 @@ describe('StoreSwitcher', () => {
     expect(requested).toBe(stores[0]!.storeId);
     expect(chooser.value).toBe(stores[1]!.storeId);
   });
+  it('keeps the loading note out of sight while the list loads', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise(() => {})),
+    );
+    renderPicker();
+    const note = screen.getByRole('status');
+    expect(note.textContent).toBe('Loading shops…');
+    expect(note.className).toContain('sr-only');
+  });
   it('shows an empty membership state without making a list request', () => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
