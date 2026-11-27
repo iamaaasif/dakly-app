@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0109_snapshot.json`: **111 tables, 1459 columns, 442 explicit indexes and 344 foreign keys**.
+Built from `packages/db/migrations/meta/0110_snapshot.json`: **111 tables, 1460 columns, 442 explicit indexes and 344 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -720,6 +720,7 @@ erDiagram
         uuid assignee_user_id FK "NULL; uuid"
         text handover_reason "NULL; text"
         text handover_summary "NULL; text"
+        text suggested_reply "NULL; text"
         timestamp_with_time_zone handed_over_at "NULL; timestamp with time zone"
         timestamp_with_time_zone ai_resumes_at "NULL; timestamp with time zone"
         text intent_tag "NULL; text"

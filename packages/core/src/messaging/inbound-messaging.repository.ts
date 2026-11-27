@@ -158,6 +158,8 @@ export class InboundMessagingRepository {
           windowExpiresAt: sql`greatest(${conversations.windowExpiresAt}, ${expiry.toISOString()}::timestamptz)`,
           lastMessagePreview: sql`case when ${conversations.lastMessageAt} > ${sentAt}::timestamptz then ${conversations.lastMessagePreview} else ${preview} end`,
           unreadCount: sql`${conversations.unreadCount} + 1`,
+          // A draft written before this message no longer answers the customer.
+          suggestedReply: null,
           ...(referral && newerReferral(referral, sentAt)),
           updatedAt: now,
         })

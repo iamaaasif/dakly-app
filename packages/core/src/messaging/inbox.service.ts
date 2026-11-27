@@ -330,6 +330,16 @@ export class InboxService {
     );
   }
 
+  saveSuggestedReply(storeId: string, id: string, text: string, burstAt: Date) {
+    return this.repository.saveSuggestedReply(storeId, id, text, burstAt);
+  }
+
+  // The burst the AI handed to people, read the way the reply job read it.
+  async handedOverTurn(storeId: string, id: string) {
+    const turn = await this.repository.aiReplyTurn(storeId, id, false, 'human');
+    return turn?.windowExpiresAt && turn.windowExpiresAt > this.clock.now() ? turn : undefined;
+  }
+
   // A staff reply puts the chat with people and restarts the return timer, unless staff took over
   // until they hand back, or a longer take-over timer is already running.
   async restartReturnAfterStaffReply(storeId: string, messageId: string, minutes: number) {

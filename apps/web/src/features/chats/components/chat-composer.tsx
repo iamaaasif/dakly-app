@@ -12,6 +12,7 @@ import { chatChannelLabels } from '../chat-filters';
 import { contactDisplayName } from '../contact-name';
 import { replyWindow } from '../reply-window';
 import { SavedRepliesPicker } from './saved-replies-picker';
+import { SuggestedReply } from './suggested-reply-card';
 import { useSessionContext } from '@/lib/session-context';
 
 type Mode = 'reply' | 'note';
@@ -20,6 +21,16 @@ const modeLabels: Record<Mode, string> = { reply: 'Reply', note: 'Internal note'
 
 export function ChatComposer({ conversation }: { conversation: ConversationResponse }) {
   const { data: session } = useSessionContext();
+  if (!session?.currentStore?.canEditChats)
+    return (
+      <p className="border-t border-border p-3 text-text-muted">
+        You can read this chat. Replying needs Edit Chats access.
+      </p>
+    );
+  return <EditableComposer conversation={conversation} />;
+}
+
+function EditableComposer({ conversation }: { conversation: ConversationResponse }) {
   const [mode, setMode] = useState<Mode>('reply');
   const [drafts, setDrafts] = useState({ reply: '', note: '' });
   const text = drafts[mode];
@@ -27,14 +38,9 @@ export function ChatComposer({ conversation }: { conversation: ConversationRespo
   const addNote = useAddNote(conversation.id);
   const window = replyWindow(conversation);
   const sending = mode === 'reply' ? sendReply : addNote;
-  const blocked = mode === 'reply' && (window.state === 'closed' || window.state === 'unsupported');
+  const replyOpen = window.state !== 'closed' && window.state !== 'unsupported';
+  const blocked = mode === 'reply' && !replyOpen;
 
-  if (!session?.currentStore?.canEditChats)
-    return (
-      <p className="border-t border-border p-3 text-text-muted">
-        You can read this chat. Replying needs Edit Chats access.
-      </p>
-    );
   function send() {
     const body = text.trim();
     if (!body || blocked || sending.isPending) return;
@@ -45,30 +51,42 @@ export function ChatComposer({ conversation }: { conversation: ConversationRespo
   }
 
   return (
-    <Tabs
-      value={mode}
-      onValueChange={(value) => setMode(value === 'note' ? 'note' : 'reply')}
-      className="shrink-0 space-y-2 border-t border-border bg-surface px-3 pt-2 pb-3"
-    >
-      <ModeTabs />
-      <TabsContent value={mode} className="space-y-2 pt-0">
-        <ComposerHint mode={mode} windowLabel={window.state === 'open' ? null : window.label} />
-        <WriteBox
-          replyPlaceholder={`Write a reply to ${contactDisplayName(conversation)} via ${chatChannelLabels[conversation.channel]}…`}
-          mode={mode}
-          text={text}
-          disabled={blocked}
-          pending={sending.isPending}
-          onChange={(value) => setDrafts((previous) => ({ ...previous, [mode]: value }))}
-          onSend={send}
+    <>
+      {replyOpen ? (
+        <SuggestedReply
+          conversation={conversation}
+          sendReply={sendReply}
+          onEdit={(body) => {
+            setMode('reply');
+            setDrafts((previous) => ({ ...previous, reply: body }));
+          }}
         />
-        {sending.error ? (
-          <p role="alert" className="text-sm text-danger">
-            {sending.error.message}
-          </p>
-        ) : null}
-      </TabsContent>
-    </Tabs>
+      ) : null}
+      <Tabs
+        value={mode}
+        onValueChange={(value) => setMode(value === 'note' ? 'note' : 'reply')}
+        className="shrink-0 space-y-2 border-t border-border bg-surface px-3 pt-2 pb-3"
+      >
+        <ModeTabs />
+        <TabsContent value={mode} className="space-y-2 pt-0">
+          <ComposerHint mode={mode} windowLabel={window.state === 'open' ? null : window.label} />
+          <WriteBox
+            replyPlaceholder={`Write a reply to ${contactDisplayName(conversation)} via ${chatChannelLabels[conversation.channel]}…`}
+            mode={mode}
+            text={text}
+            disabled={blocked}
+            pending={sending.isPending}
+            onChange={(value) => setDrafts((previous) => ({ ...previous, [mode]: value }))}
+            onSend={send}
+          />
+          {sending.error ? (
+            <p role="alert" className="text-sm text-danger">
+              {sending.error.message}
+            </p>
+          ) : null}
+        </TabsContent>
+      </Tabs>
+    </>
   );
 }
 

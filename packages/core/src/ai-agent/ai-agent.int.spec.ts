@@ -27,6 +27,7 @@ import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { AiAgentModule } from './ai-agent.module';
 import { AiAgentService } from './ai-agent.service';
+import { SuggestedReplyService } from './suggested-reply.service';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeIds: string[] = [];
@@ -965,4 +966,60 @@ it("returns the chat to the AI 30 minutes after a person's last reply, without c
     await staffReply(permanent, third.conversation_id, third.sender_identity_id),
   );
   expect(await conversationTimer(permanent)).toEqual({ responder: 'human', minutes: null });
+});
+
+function scriptReplies(...replies: string[]) {
+  const driver = new FakeLlmDriver(
+    replies.map((reply) => ({
+      kind: 'output' as const,
+      output: { reply },
+      usage: { inputTokens: 5, cachedInputTokens: 0, outputTokens: 5 },
+      responseId: 'fake-suggestion',
+      model: 'gpt-6-luna',
+    })),
+  );
+  vi.spyOn(FakeLlmDriver.prototype, 'respond').mockImplementation((request) =>
+    fakeRespond.call(driver, request),
+  );
+}
+
+async function suggestedReply({ storeId }: Shop) {
+  const { rows } = await admin.pool.query<{ suggested_reply: string | null }>(
+    'select suggested_reply from conversations where store_id = $1',
+    [storeId],
+  );
+  return rows[0]?.suggested_reply;
+}
+
+it('leaves the team a draft after a hand-over until the customer or a person writes', async () => {
+  const active = await shop();
+  const first = await receive(active, 'ekjon manush er sathe kotha bolbo');
+  script({ ...classification, asksForPerson: true });
+  await agent.reply(active.storeId, first.conversation_id, first.id);
+  const suggestions = app.get(SuggestedReplyService);
+  await suggestions.draft(active.storeId, first.conversation_id, 'ai_unavailable');
+  expect(await suggestedReply(active)).toBeNull();
+
+  // The holding line the hand-over sent is automatic, so the draft still answers the customer.
+  scriptReplies('Ji, amader team er ekjon achen. Kivabe help korte pari?');
+  await suggestions.draft(active.storeId, first.conversation_id, 'asked_for_person');
+  expect(await suggestedReply(active)).toBe(
+    'Ji, amader team er ekjon achen. Kivabe help korte pari?',
+  );
+  const { rows: runs } = await admin.pool.query(
+    "select prompt_version from ai_runs where store_id = $1 and purpose = 'suggest_reply'",
+    [active.storeId],
+  );
+  expect(runs).toEqual([{ prompt_version: 'suggest-reply.v1' }]);
+
+  await receive(active, 'hello?');
+  expect(await suggestedReply(active)).toBeNull();
+  scriptReplies('Ji bolun, ami achi.', 'Late draft');
+  await suggestions.draft(active.storeId, first.conversation_id, 'asked_for_person');
+  expect(await suggestedReply(active)).toBe('Ji bolun, ami achi.');
+  await staffReply(active, first.conversation_id, first.sender_identity_id);
+  expect(await suggestedReply(active)).toBeNull();
+  // A draft that finishes after a person answered is not saved.
+  await suggestions.draft(active.storeId, first.conversation_id, 'asked_for_person');
+  expect(await suggestedReply(active)).toBeNull();
 });

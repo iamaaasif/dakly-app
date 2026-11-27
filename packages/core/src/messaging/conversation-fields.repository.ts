@@ -39,6 +39,7 @@ export const conversationFields = {
       and (${messages.direction} = 'in' or ${messages.status} in ('sent', 'delivered', 'read'))
     order by ${messages.createdAt} desc limit 1)`,
   intentTag: conversations.intentTag,
+  suggestedReply: conversations.suggestedReply,
   windowExpiresAt: conversations.windowExpiresAt,
   unreadCount: conversations.unreadCount,
 };

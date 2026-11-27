@@ -29,6 +29,7 @@ import {
   reportOptionsFromPhoto,
   reportOptionsFromTitle,
   reportReply,
+  reportSuggest,
   reportTranscribe,
   reportVision,
   type JobContext,
@@ -44,6 +45,7 @@ const jobs = [
   'transcribe',
   'embed',
   'memory',
+  'suggest',
   'longchat',
 ] as const;
 type Job = (typeof jobs)[number];
@@ -58,6 +60,7 @@ const defaultModels: Record<Job, string[]> = {
   transcribe: ['gpt-4o-mini-transcribe', 'gpt-4o-transcribe', 'gpt-transcribe'],
   embed: ['text-embedding-3-small', 'text-embedding-3-large'],
   memory: chatModels,
+  suggest: ['gpt-6.1-terra', 'gpt-6-luna'],
   longchat: ['gpt-6-luna', 'gpt-6.1-terra'],
 };
 // The reply job takes its hand-over decisions from one fast model, so every reply model is
@@ -125,6 +128,7 @@ async function main() {
     transcribe: () => reportTranscribe(context, modelsFor('transcribe')),
     embed: () => reportEmbed(context, modelsFor('embed')),
     memory: () => reportMemory(context, modelsFor('memory')),
+    suggest: () => reportSuggest(context, modelsFor('suggest')),
     longchat: () =>
       reportLongChats(
         { ...context, cases: longChatGoldenCases },

@@ -27,17 +27,15 @@ import {
   PRODUCTS_IN_CHAT_TOOL,
   productsInChat,
   recentlyShownProductIds,
-  SHOWN_PRODUCTS_SOURCE,
   shownProductIds,
 } from './chat-memory';
 import { conversationBlocks, windowConversation } from './conversation-window';
 import { shorten } from './message-shortening';
-import { quotedOfferSources, type OfferQuote } from './offer-lower-price';
+import type { OfferQuote } from './offer-lower-price';
 import { customerConfirms } from './order-confirmation';
-import { chatReplyV17 } from './prompts/chat-reply.v17';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
-import { promptWith } from './reply-prompt-version';
-import { salesAgentToolsFor } from './sales-agent-tool-definitions';
+import { replyMode } from './reply-mode';
+import { customerLines, sourcesOf, withShownProducts } from './reply-sources';
 import { type ToolScope, isOutOfStock, SalesAgentToolsService } from './sales-agent-tools.service';
 import { type CompactDeliveryZone, shopBlock } from './shop-block';
 import { refuseToolCall, type ShopRules, shopRulesBlock, toolHandover } from './shop-rules';
@@ -51,7 +49,6 @@ const PHOTO_QUERY_LENGTH = 1000;
 const CARD_TOOL = 'send_product_card';
 const DRAFT_TOOL = 'draft_order';
 const CONFIRM_TOOL = 'confirm_order';
-const SOURCE_KEYS = ['productId', 'itemId', 'orderNumber'];
 
 type Reason = (typeof handoverReasons)[number];
 type ToolResult = { tool: string; result: object; quote?: OfferQuote };
@@ -119,6 +116,20 @@ export class SalesAgentService {
     return { kind: 'handover', reason: 'out_of_scope' };
   }
 
+  // A draft for the person a chat was handed to, written with the read-only tools. A draft that
+  // fails the fact check is dropped; the team still has the chat.
+  async suggestReply(input: ComposeInput, reason: Reason, burstAt: Date): Promise<boolean> {
+    const drafted = await this.composeOnce(input, undefined, undefined, reason);
+    if (drafted.kind !== 'reply' || !input.chat) return false;
+    const failed = await this.factCheckFailure(input, drafted);
+    if (!failed) {
+      const { conversationId } = input.chat;
+      return this.inbox.saveSuggestedReply(input.storeId, conversationId, drafted.text, burstAt);
+    }
+    await this.runs.setOutcome(input.storeId, drafted.aiRunId, 'failed_check', failed);
+    return false;
+  }
+
   private async factCheckFailure(
     input: ComposeInput,
     composed: Extract<ComposedReply, { kind: 'reply' }>,
@@ -159,6 +170,7 @@ export class SalesAgentService {
     input: ComposeInput,
     rejected?: { failure: FactCheckFailure; reply: string },
     prepared?: Promise<PreparedReply>,
+    suggestionFor?: Reason,
   ): Promise<ComposedReply> {
     const { storeId } = input;
     const signal = AbortSignal.timeout(REPLY_BUDGET_MS);
@@ -169,47 +181,53 @@ export class SalesAgentService {
     const candidates = await this.productCandidates(scoped);
     if (candidates) results.push(candidates);
     const context = await this.context({ input, history, inChat, candidates, ad, deliveryZones });
-    let transcript = rejectedBlock(rejected);
+    const mode = replyMode(input, ready, suggestionFor);
+    let transcript = rejectedBlock(rejected) + mode.opening;
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {
         tier: 'reply',
-        purpose: 'chat_reply',
-        prompt: promptWith(chatReplyV17, inChat, ad),
+        purpose: mode.purpose,
+        prompt: mode.prompt,
         input: context + transcript,
         output: chatReplyOutputSchema,
-        tools: salesAgentToolsFor(
-          input.rules,
-          Boolean(input.chat?.discountAskMessageId && !input.rules.handover.discounts),
-        ),
+        tools: mode.tools,
         signal,
       });
       if (attempt.kind === 'failure')
         return attempt.code === 'AI_STORE_BUSY'
           ? { kind: 'busy' }
           : { kind: 'handover', reason: 'ai_unavailable' };
-      if (attempt.kind === 'output') {
-        const offerQuotes = results.flatMap(({ quote }) => (quote ? [quote] : []));
-        return {
-          kind: 'reply',
-          text: attempt.output.reply,
-          aiRunId: attempt.aiRunId,
-          cards: await this.cards(storeId, results),
-          toolResults: results.map(({ result }) => result),
-          toolNames: results.map(({ tool }) => tool),
-          offerQuotes,
-          earlierCustomerTexts: customerLines(history),
-          sources: withShownProducts(
-            sourcesOf(results, attempt.output.reply, offerQuotes),
-            shownProductIds(results, attempt.output.reply),
-          ),
-        };
-      }
-      const outcome = await this.answerToolCalls(scoped, attempt.toolCalls, results);
+      if (attempt.kind === 'output') return this.composedReply(storeId, results, history, attempt);
+      const calls = attempt.toolCalls.filter(({ name }) => mode.allows(name));
+      const outcome = await this.answerToolCalls(scoped, calls, results);
       if ('handover' in outcome)
         return { kind: 'handover', reason: outcome.handover, summary: outcome.summary };
       transcript += `\n<tool_results untrusted="true" round="${round}">${JSON.stringify(outcome.answered)}</tool_results>`;
     }
     return { kind: 'handover', reason: 'out_of_scope' };
+  }
+
+  private async composedReply(
+    storeId: string,
+    results: ToolResult[],
+    history: PreparedReply['history'],
+    attempt: { output: { reply: string }; aiRunId: string },
+  ): Promise<ComposedReply> {
+    const offerQuotes = results.flatMap(({ quote }) => (quote ? [quote] : []));
+    return {
+      kind: 'reply',
+      text: attempt.output.reply,
+      aiRunId: attempt.aiRunId,
+      cards: await this.cards(storeId, results),
+      toolResults: results.map(({ result }) => result),
+      toolNames: results.map(({ tool }) => tool),
+      offerQuotes,
+      earlierCustomerTexts: customerLines(history),
+      sources: withShownProducts(
+        sourcesOf(results, attempt.output.reply, offerQuotes),
+        shownProductIds(results, attempt.output.reply),
+      ),
+    };
   }
 
   // The ad's products and the products shown earlier, in the order the prompt lists them.
@@ -422,30 +440,4 @@ function isUnconfirmed(
 // The retry's first lines tell the model why its last reply was not sent.
 function rejectedBlock(rejected: { failure: FactCheckFailure; reply: string } | undefined) {
   return rejected ? `\n${factCheckFailedBlock(rejected.failure, rejected.reply)}` : '';
-}
-
-// Saved with the reply, so the next turn knows which products "this one" can mean.
-function withShownProducts(sources: { tool: string; refs: string[] }[], shown: string[]) {
-  return shown.length ? [...sources, { tool: SHOWN_PRODUCTS_SOURCE, refs: shown }] : sources;
-}
-
-function customerLines(history: readonly HistoryMessage[] | undefined) {
-  return conversationEntries(history ?? []).flatMap(({ from, text }) =>
-    from === 'customer' ? [text] : [],
-  );
-}
-
-function sourcesOf(results: ToolResult[], reply: string, offerQuotes: OfferQuote[]) {
-  return results
-    .map(({ tool, result }) => ({ tool, refs: refsIn(result) }))
-    .filter((s) => s.refs.length)
-    .concat(quotedOfferSources(offerQuotes, reply));
-}
-
-function refsIn(value: unknown): string[] {
-  if (Array.isArray(value)) return value.flatMap(refsIn);
-  if (!value || typeof value !== 'object') return [];
-  return Object.entries(value).flatMap(([key, item]) =>
-    SOURCE_KEYS.includes(key) ? [String(item)] : refsIn(item),
-  );
 }

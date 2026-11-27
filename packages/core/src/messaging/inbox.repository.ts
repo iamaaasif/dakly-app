@@ -192,7 +192,8 @@ export class InboxRepository {
     return row;
   }
 
-  aiReplyTurn(storeId: string, id: string, lock: boolean) {
+  // The AI's own chats, or the chats it just handed to people, for the draft it leaves them.
+  aiReplyTurn(storeId: string, id: string, lock: boolean, responder: 'ai' | 'human' = 'ai') {
     return this.database.forStore(storeId, async (tx) => {
       const query = tx
         .select({
@@ -207,7 +208,7 @@ export class InboxRepository {
           and(
             eq(conversations.storeId, storeId),
             eq(conversations.id, id),
-            eq(conversations.responder, 'ai'),
+            eq(conversations.responder, responder),
           ),
         );
       const [conversation] = await (lock ? query.for('no key update') : query);
@@ -368,6 +369,30 @@ export class InboxRepository {
         .returning(messageFields),
     );
     return row!;
+  }
+
+  // Saved only while people hold the chat and nobody, the customer included, wrote after the burst
+  // the draft answers.
+  async saveSuggestedReply(storeId: string, id: string, text: string, burstAt: Date) {
+    const answered = sql`exists (select 1 from ${messages} where ${messages.storeId} = ${storeId}
+      and ${messages.conversationId} = ${id} and ${messages.createdAt} > ${burstAt.toISOString()}::timestamptz
+      and (${messages.direction} = 'in' or ${messages.authorType} in ('user', 'ai')))`;
+    const saved = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(conversations)
+        .set({ suggestedReply: text })
+        .where(
+          and(
+            eq(conversations.storeId, storeId),
+            eq(conversations.id, id),
+            eq(conversations.status, 'needs_you'),
+            eq(conversations.responder, 'human'),
+            sql`not ${answered}`,
+          ),
+        )
+        .returning({ id: conversations.id }),
+    );
+    return saved.length > 0;
   }
 
   async update(
