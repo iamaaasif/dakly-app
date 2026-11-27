@@ -30,7 +30,6 @@ export function CustomersScreen(initial: CustomersScreenState) {
   const { query, columns } = useUrlQuery(initial, (raw) => parseCustomersAddress(raw));
   const customers = useCustomers(query);
   const counts = useCustomerCounts();
-  const [selected, setSelected] = useState(0);
 
   const searchError =
     customers.error instanceof ApiError && customers.error.code === 'CONTACT_SEARCH_TOO_SHORT'
@@ -68,11 +67,10 @@ export function CustomersScreen(initial: CustomersScreenState) {
             />
             {searchError ? null : (
               <CustomerResults
+                key={JSON.stringify(query)}
                 customers={customers}
                 query={query}
                 columns={columns}
-                selected={selected}
-                onSelectionChange={setSelected}
               />
             )}
           </>
@@ -86,17 +84,11 @@ type CustomerResultsProps = {
   customers: ReturnType<typeof useCustomers>;
   query: CustomersScreenState['query'];
   columns: CustomersScreenState['columns'];
-  selected: number;
-  onSelectionChange: (count: number) => void;
 };
 
-function CustomerResults({
-  customers,
-  query,
-  columns,
-  selected,
-  onSelectionChange,
-}: CustomerResultsProps) {
+// Keyed by the query so a tab, filter or page change starts with nothing selected.
+function CustomerResults({ customers, query, columns }: CustomerResultsProps) {
+  const [selected, setSelected] = useState(0);
   if (customers.error)
     return (
       <div className="p-4">
@@ -120,7 +112,7 @@ function CustomerResults({
   if (!items.length) return <NoMatches query={query} columns={columns} />;
   return (
     <Refreshing active={customers.isPlaceholderData}>
-      <CustomerList customers={items} columns={columns} onSelectionChange={onSelectionChange} />
+      <CustomerList customers={items} columns={columns} onSelectionChange={setSelected} />
       <CustomerFooter
         shown={items.length}
         total={total}
