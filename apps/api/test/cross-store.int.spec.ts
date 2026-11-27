@@ -722,6 +722,13 @@ fixture('GET /contacts/counts', async () => {
   ] as const)
     expect((await success(shop, 'GET', '/contacts/counts', 200)).json().all).toBe(expected);
 });
+fixture('GET /contacts/tags', async () => {
+  const { a, b } = await pair();
+  await success(a, 'POST', '/contacts', 201, { name: 'own-a', phone: phone(), tags: ['only-a'] });
+  await success(b, 'POST', '/contacts', 201, { name: 'own-b', phone: phone(), tags: ['only-b'] });
+  expect((await success(a, 'GET', '/contacts/tags', 200)).json()).toEqual(['only-a']);
+  expect((await success(b, 'GET', '/contacts/tags', 200)).json()).toEqual(['only-b']);
+});
 fixture('GET /contacts/export', async () => {
   const { a, b } = await pair();
   const phones = { a: phone(), b: phone() };
