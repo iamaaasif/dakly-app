@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { type BrowserContext, expect, type Page, test } from '@playwright/test';
+import { type BrowserContext, expect, type Locator, type Page, test } from '@playwright/test';
 
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { createDatabase } from '@dakly/db/client';
@@ -239,8 +239,11 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await checks.getByRole('button', { name: 'Delete step' }).click();
     await expect(steps.getByText('Tag contact')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Start workflow' })).toBeEnabled();
+    // The canvas no longer scrolls, so a plus button off screen is reached by fitting the flow.
+    await page.getByRole('button', { name: 'Fit to screen' }).click();
     await page.getByRole('button', { name: 'Add a step here' }).first().click();
     await page.getByRole('menuitem', { name: 'Tag contact' }).click();
+    await page.getByRole('button', { name: 'Fit to screen' }).click();
     await page.getByRole('button', { name: /Options for step 1/ }).click();
     await page.getByRole('menuitem', { name: 'Delete step' }).click();
     await expect(steps.getByText('Tag contact')).toHaveCount(0);
@@ -346,6 +349,154 @@ test('blocks Start workflow for a trigger the shop cannot use yet', async ({
     await expect(checks.getByText(/cannot use yet/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start workflow' })).toBeDisabled();
     await captureEvidence(page, evidence, 'readiness');
+  } finally {
+    await db.pool.query('delete from automations where id=$1', [id]);
+    await db.pool.end();
+  }
+});
+
+// The canvas re-centres while the page and its panels finish loading, so measure once it is still.
+async function stableBox(locator: Locator) {
+  let last = await locator.boundingBox();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await locator.page().waitForTimeout(150);
+    const next = await locator.boundingBox();
+    if (last && next && Math.abs(next.x - last.x) < 0.5 && Math.abs(next.y - last.y) < 0.5)
+      return next;
+    last = next;
+  }
+  throw new Error('The canvas did not settle');
+}
+
+test('pans, zooms and fits the canvas like a design tool', async ({ page, context, baseURL }) => {
+  const { headers } = await signIn(context, baseURL!);
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const created = await context.request.post('/api/automations', {
+    headers,
+    data: { name: 'Move around the canvas', templateKey: 'welcome_new_subscriber' },
+  });
+  const { id } = (await created.json()) as { id: string };
+  try {
+    await page.goto(`/automations/${id}/canvas`);
+    const canvas = page.getByRole('region', { name: 'Workflow canvas' });
+    const trigger = page.getByRole('list', { name: 'Workflow steps' }).getByText('Trigger', {
+      exact: true,
+    });
+    await expect(trigger).toBeVisible();
+    const before = await stableBox(trigger);
+    const frame = (await canvas.boundingBox())!;
+
+    // Dragging empty background moves the flow by the drag distance.
+    const startX = frame.x + 40;
+    const startY = frame.y + frame.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 80, startY + 40, { steps: 6 });
+    await page.mouse.up();
+    // The page handles the last moves a moment after the mouse is released, so poll.
+    await expect
+      .poll(async () => {
+        const box = (await trigger.boundingBox())!;
+        return Math.hypot(box.x - before.x - 80, box.y - before.y - 40);
+      })
+      .toBeLessThan(2);
+    const panned = (await trigger.boundingBox())!;
+
+    // Ctrl + wheel zooms around the pointer: the spot under it stays put.
+    const cursorX = panned.x + 20;
+    const cursorY = panned.y + 8;
+    const share = (cursorX - panned.x) / panned.width;
+    await page.mouse.move(cursorX, cursorY);
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -100);
+    await page.keyboard.up('Control');
+    await expect
+      .poll(async () => (await trigger.boundingBox())!.width)
+      .toBeGreaterThan(panned.width);
+    const zoomed = (await trigger.boundingBox())!;
+    expect(Math.abs(cursorX - zoomed.x - share * zoomed.width)).toBeLessThan(2);
+
+    // Fit to screen brings the whole flow back into view.
+    await page.getByRole('button', { name: 'Fit to screen' }).click();
+    const steps = (await page.getByRole('list', { name: 'Workflow steps' }).boundingBox())!;
+    expect(steps.x).toBeGreaterThanOrEqual(frame.x);
+    expect(steps.y).toBeGreaterThanOrEqual(frame.y);
+    expect(steps.x + steps.width).toBeLessThanOrEqual(frame.x + frame.width);
+    expect(steps.y + steps.height).toBeLessThanOrEqual(frame.y + frame.height);
+
+    // A click on a step still opens it, and a palette drop still adds a step at 50% zoom.
+    await page.getByRole('button', { name: 'Edit step 1' }).click();
+    await expect(page).toHaveURL(/step=/);
+    await page.getByRole('button', { name: 'Done' }).click();
+    const zoom = page.getByRole('status').filter({ hasText: '%' });
+    while ((await zoom.innerText()) !== '50%') {
+      await page.getByRole('button', { name: 'Zoom out' }).click();
+      await page.waitForTimeout(50);
+    }
+    const waits = page.getByRole('list', { name: 'Workflow steps' }).getByText('Wait for');
+    const waitsBefore = await waits.count();
+    await page
+      .getByRole('button', { name: 'Delay' })
+      .dragTo(page.getByRole('button', { name: 'Add a step here' }).first());
+    await expect(waits).toHaveCount(waitsBefore + 1);
+  } finally {
+    await db.pool.query('delete from automations where id=$1', [id]);
+    await db.pool.end();
+  }
+});
+
+test('keeps the view after a reload and pans from a step', async ({ page, context, baseURL }) => {
+  const { headers } = await signIn(context, baseURL!);
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const created = await context.request.post('/api/automations', {
+    headers,
+    data: { name: 'Pan from a step', templateKey: 'welcome_new_subscriber' },
+  });
+  const { id } = (await created.json()) as { id: string };
+  try {
+    await page.goto(`/automations/${id}/canvas`);
+    const trigger = page.getByRole('list', { name: 'Workflow steps' }).getByText('Trigger', {
+      exact: true,
+    });
+    const step = page.getByRole('button', { name: 'Edit step 1' });
+    await expect(trigger).toBeVisible();
+
+    // A long drag that starts on a step pans and does not open the step.
+    const start = await stableBox(trigger);
+    const box = (await step.boundingBox())!;
+    await page.mouse.move(box.x + 20, box.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 120, box.y + 10, { steps: 6 });
+    await page.mouse.up();
+    await expect
+      .poll(async () => Math.abs((await trigger.boundingBox())!.x - start.x - 100))
+      .toBeLessThan(2);
+    await expect(page).not.toHaveURL(/step=/);
+
+    // Space + drag pans even while a step has focus, as it does after a panel closes.
+    await step.click();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await step.focus();
+    const before = (await trigger.boundingBox())!;
+    const point = (await step.boundingBox())!;
+    await page.mouse.move(point.x + 20, point.y + 10);
+    await page.keyboard.down('Space');
+    await page.mouse.down();
+    await page.mouse.move(point.x + 20, point.y + 70, { steps: 4 });
+    await page.mouse.up();
+    await page.keyboard.up('Space');
+    await expect
+      .poll(async () => Math.abs((await trigger.boundingBox())!.y - before.y - 60))
+      .toBeLessThan(2);
+
+    // The moved view comes back after a reload.
+    await page.waitForTimeout(400);
+    const moved = (await trigger.boundingBox())!;
+    await page.reload();
+    await expect(trigger).toBeVisible();
+    const restored = (await trigger.boundingBox())!;
+    expect(Math.abs(restored.x - moved.x)).toBeLessThan(2);
+    expect(Math.abs(restored.y - moved.y)).toBeLessThan(2);
   } finally {
     await db.pool.query('delete from automations where id=$1', [id]);
     await db.pool.end();

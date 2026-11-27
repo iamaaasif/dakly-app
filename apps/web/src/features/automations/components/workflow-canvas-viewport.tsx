@@ -1,78 +1,132 @@
-import { Minus, Plus } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { Hand, Minus, Plus } from 'lucide-react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 
+import {
+  type Camera,
+  type CameraEngine,
+  createCameraEngine,
+  fitCamera,
+  keepFlowInView,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  openingCamera,
+} from '../workflow-canvas-camera';
+import { attachCanvasGestures, stepZoom, zoomFromCentre } from '../workflow-canvas-gestures';
 import type { CanvasLayout } from '../workflow-canvas-layout';
 import { WorkflowCanvasGraph } from './workflow-canvas-graph';
 import type { CanvasEditing, StepStats } from './workflow-canvas-nodes';
 
-// Below this the text is too small to read on a phone, so a wide flow scrolls sideways instead.
-const READABLE_ZOOM = 0.7;
-const MIN_ZOOM = 0.3;
-const MAX_ZOOM = 1.5;
-const ZOOM_STEP = 0.1;
-
-function useViewportWidth() {
-  const [width, setWidth] = useState(0);
-  const element = useRef<HTMLDivElement | null>(null);
-  const ref = useCallback((node: HTMLDivElement | null) => {
-    element.current = node;
-    if (!node) return;
-    setWidth(node.clientWidth);
-    const observer = new ResizeObserver(() => setWidth(node.clientWidth));
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  // A flow wider than the screen opens on its middle, where the trigger sits. This waits for the
-  // first measured width, because that is when the opening zoom is applied.
-  const measured = width > 0;
-  useEffect(() => {
-    const node = element.current;
-    if (measured && node) node.scrollLeft = (node.scrollWidth - node.clientWidth) / 2;
-  }, [measured]);
-  return { width, ref };
+function readSavedCamera(key: string): Camera | undefined {
+  try {
+    const saved: unknown = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+    if (typeof saved !== 'object' || saved === null) return undefined;
+    const { x, y, zoom } = saved as Record<string, unknown>;
+    if ([x, y, zoom].every((value) => typeof value === 'number' && Number.isFinite(value)))
+      return { x, y, zoom } as Camera;
+  } catch {
+    // A blocked or empty store only means the canvas opens fitted.
+  }
+  return undefined;
 }
 
-type Props = {
-  graph: AutomationGraph;
-  layout: CanvasLayout;
-  recentEntries?: string;
-  editing?: CanvasEditing;
-  stats?: StepStats;
-  // Sits at the end of the zoom controls.
-  extraControl?: ReactNode;
-};
+function saveCamera(key: string, camera: Camera) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(camera));
+  } catch {
+    // The remembered view is a convenience, so a full or blocked store is not an error.
+  }
+}
+
+// Owns the camera engine and the browser listeners that move it, and shows the zoom as a number.
+function useCanvasCamera(layout: CanvasLayout, storageKey: string) {
+  const region = useRef<HTMLDivElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
+  const engine = useRef<CameraEngine | null>(null);
+  const flow = useRef({ width: layout.width, height: layout.height });
+  flow.current = { width: layout.width, height: layout.height };
+  const [zoom, setZoom] = useState(1);
+  const [spaceHeld, setSpaceHeld] = useState(false);
+
+  useLayoutEffect(() => {
+    const regionNode = region.current;
+    const layerNode = layer.current;
+    if (!regionNode || !layerNode) return;
+    const camera = createCameraEngine({
+      region: regionNode,
+      layer: layerNode,
+      getFlow: () => flow.current,
+      onZoom: (next) => setZoom(Math.round(next * 100) / 100),
+      onRest: (rested) => saveCamera(storageKey, rested),
+    });
+    engine.current = camera;
+    const saved = readSavedCamera(storageKey);
+    // A view saved on a bigger screen could leave the flow off a smaller one.
+    camera.set(
+      saved
+        ? keepFlowInView(saved, camera.view(), flow.current)
+        : openingCamera(camera.view(), flow.current),
+    );
+    // Until the user moves, a resize or rotation re-opens the view at the new size. A restored
+    // view is the user's own, and the observer's first call would otherwise reset it.
+    const observer = new ResizeObserver(() => {
+      if (!saved && !camera.isTouched()) camera.set(openingCamera(camera.view(), flow.current));
+    });
+    observer.observe(regionNode);
+    const detach = attachCanvasGestures({
+      region: regionNode,
+      engine: camera,
+      getFlow: () => flow.current,
+      onSpace: setSpaceHeld,
+    });
+    return () => {
+      observer.disconnect();
+      detach();
+      camera.cancel();
+    };
+  }, [storageKey]);
+
+  return { region, layer, engine, flow, zoom, spaceHeld };
+}
 
 type ZoomProps = {
-  scale: number;
-  onChange: (zoom: number) => void;
+  zoom: number;
+  engine: CameraEngine | null;
   onFit: () => void;
+  handOn: boolean;
+  onHand: () => void;
   extra?: ReactNode;
 };
 
-function ZoomControls({ scale, onChange, onFit, extra }: ZoomProps) {
+function ZoomControls({ zoom, engine, onFit, handOn, onHand, extra }: ZoomProps) {
+  const zoomTo = (direction: 1 | -1) =>
+    engine && zoomFromCentre(engine, stepZoom(engine.goal().zoom, direction));
   return (
-    <div className="absolute bottom-4 left-4 flex items-center overflow-hidden rounded-lg border border-border bg-surface shadow-card">
+    <div
+      data-canvas-controls
+      className="absolute bottom-4 left-4 z-20 flex items-center overflow-hidden rounded-lg border border-border bg-surface shadow-card"
+    >
       <Button
         variant="secondary"
         className="rounded-r-none border-0"
         aria-label="Zoom out"
-        disabled={scale <= MIN_ZOOM}
-        onClick={() => onChange(scale - ZOOM_STEP)}
+        disabled={zoom <= MIN_ZOOM}
+        onClick={() => zoomTo(-1)}
       >
         <Minus size={14} aria-hidden="true" />
       </Button>
       <span role="status" className="w-14 text-center text-sm tabular-nums">
-        {Math.round(scale * 100)}%
+        {Math.round(zoom * 100)}%
       </span>
       <Button
         variant="secondary"
         className="rounded-none border-0"
         aria-label="Zoom in"
-        disabled={scale >= MAX_ZOOM}
-        onClick={() => onChange(scale + ZOOM_STEP)}
+        disabled={zoom >= MAX_ZOOM}
+        onClick={() => zoomTo(1)}
       >
         <Plus size={14} aria-hidden="true" />
       </Button>
@@ -85,45 +139,80 @@ function ZoomControls({ scale, onChange, onFit, extra }: ZoomProps) {
           Fit<span className="max-sm:sr-only"> to screen</span>
         </span>
       </Button>
+      <Button
+        variant="secondary"
+        className={cn('rounded-none border-0 border-l border-border', handOn && 'bg-surface-muted')}
+        aria-label="Hand tool"
+        aria-pressed={handOn}
+        onClick={onHand}
+      >
+        <Hand size={14} aria-hidden="true" />
+      </Button>
       {extra}
     </div>
   );
 }
 
+type Props = {
+  graph: AutomationGraph;
+  layout: CanvasLayout;
+  // Remembers the pan and zoom for this workflow while the tab is open.
+  storageKey: string;
+  recentEntries?: string;
+  editing?: CanvasEditing;
+  stats?: StepStats;
+  // Sits at the end of the zoom controls.
+  extraControl?: ReactNode;
+};
+
 export function WorkflowCanvasViewport({
   graph,
   layout,
+  storageKey,
   recentEntries,
   editing,
   stats,
   extraControl,
 }: Props) {
-  const [zoom, setZoom] = useState<number | null>(null);
-  const viewport = useViewportWidth();
-  const fitted = viewport.width ? Math.min(1, viewport.width / layout.width) : 1;
-  const scale = zoom ?? Math.max(READABLE_ZOOM, fitted);
-  function change(next: number) {
-    setZoom(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(next * 10) / 10)));
-  }
+  const canvas = useCanvasCamera(layout, `dakly.automation-canvas.${storageKey}`);
+  const [handOn, setHandOn] = useState(false);
+  const panning = handOn || canvas.spaceHeld;
+  useEffect(() => {
+    // The page must not zoom when the pointer is over the canvas.
+    const prevent = (event: Event) => event.preventDefault();
+    document.addEventListener('gesturestart', prevent);
+    return () => document.removeEventListener('gesturestart', prevent);
+  }, []);
   return (
     <>
       <div
-        ref={viewport.ref}
-        className="absolute inset-0 overflow-auto bg-[radial-gradient(var(--color-border-strong)_1px,transparent_1px)] bg-size-[16px_16px]"
+        ref={canvas.region}
+        role="region"
+        aria-label="Workflow canvas"
+        tabIndex={0}
+        className="absolute inset-0 cursor-grab touch-none overflow-hidden bg-[radial-gradient(var(--color-border-strong)_1px,transparent_1px)] outline-none select-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-inset data-[panning=true]:cursor-grabbing"
       >
-        <WorkflowCanvasGraph
-          graph={graph}
-          layout={layout}
-          scale={scale}
-          recentEntries={recentEntries}
-          editing={editing}
-          stats={stats}
-        />
+        <div ref={canvas.layer} className="absolute top-0 left-0 origin-top-left">
+          <WorkflowCanvasGraph
+            graph={graph}
+            layout={layout}
+            recentEntries={recentEntries}
+            editing={editing}
+            stats={stats}
+          />
+        </div>
+        {panning && <div aria-hidden="true" className="absolute inset-0 z-10" />}
       </div>
       <ZoomControls
-        scale={scale}
-        onChange={change}
-        onFit={() => setZoom(Math.max(MIN_ZOOM, fitted))}
+        zoom={canvas.zoom}
+        engine={canvas.engine.current}
+        onFit={() =>
+          canvas.engine.current?.animateTo(
+            fitCamera(canvas.engine.current.view(), canvas.flow.current),
+          )
+        }
+        handOn={handOn}
+        onHand={() => setHandOn((on) => !on)}
         extra={extraControl}
       />
     </>
