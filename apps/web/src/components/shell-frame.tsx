@@ -45,7 +45,7 @@ export function ShellFrame({
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
-            'sticky top-0 hidden h-dvh shrink-0 border-r border-border bg-surface md:block',
+            'sticky top-[3.5625rem] hidden h-[calc(100dvh-3.5625rem)] shrink-0 border-r border-border bg-surface md:block',
             collapsed ? 'w-16' : 'w-62',
           )}
         >
@@ -77,7 +77,7 @@ type ShellHeaderProps = Pick<
 >;
 function ShellHeader({ data, blocked, actions, onSwitch, onSignOut }: ShellHeaderProps) {
   return (
-    <header className="relative z-30 flex min-h-[3.5625rem] shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 md:h-[3.5625rem] md:flex-nowrap md:gap-3 md:px-3.5 md:py-0">
+    <header className="relative z-30 md:sticky md:top-0 flex min-h-[3.5625rem] shrink-0 flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 md:h-[3.5625rem] md:flex-nowrap md:gap-3 md:px-3.5 md:py-0">
       <MobileNavigation session={data} blocked={blocked} onSignOut={onSignOut} />
       <ShellLogo />
       <div className="order-last w-full min-w-0 md:order-none md:w-64 md:shrink-0">
