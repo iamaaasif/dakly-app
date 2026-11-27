@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0115_snapshot.json`: **113 tables, 1473 columns, 445 explicit indexes and 348 foreign keys**.
+Built from `packages/db/migrations/meta/0116_snapshot.json`: **114 tables, 1479 columns, 447 explicit indexes and 351 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -397,7 +397,7 @@ erDiagram
 
 ## Channels, customers and chats
 
-Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `customer-insights.ts`, `chats.ts`, `ad-links.ts`, `due-book.ts`.
+Schema files: `areas.ts`, `channels.ts`, `contacts.ts`, `imports.ts`, `contact-memory.ts`, `contact-notes.ts`, `customer-insights.ts`, `chats.ts`, `ad-links.ts`, `due-book.ts`.
 
 ```mermaid
 erDiagram
@@ -453,6 +453,9 @@ erDiagram
     stores ||..o{ contact_memories : "store_id"
     users |o..o{ contact_memories : "edited_by_user_id"
     contacts ||..o| contact_memories : "store_id, contact_id"
+    stores ||..o{ contact_notes : "store_id"
+    users |o..o{ contact_notes : "author_user_id"
+    contacts ||..o{ contact_notes : "store_id, contact_id"
     stores ||..o{ customer_insights : "store_id"
     users |o..o{ customer_insights : "hidden_by_user_id"
     stores ||..o{ conversations : "store_id"
@@ -692,6 +695,14 @@ erDiagram
         integer version "NOT NULL; integer"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
         timestamp_with_time_zone updated_at "NOT NULL; timestamp with time zone"
+    }
+    contact_notes {
+        uuid id PK "NOT NULL; uuid"
+        uuid store_id FK "NOT NULL; uuid"
+        uuid contact_id FK "NOT NULL; uuid"
+        text body "NOT NULL; text"
+        uuid author_user_id FK "NULL; uuid"
+        timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"
     }
     customer_insights {
         uuid id PK "NOT NULL; uuid"
@@ -2282,6 +2293,9 @@ Delete actions below are the snapshot declarations. The SQL migration is authori
 | `contact_memories_store_id_stores_id_fk`                             | `contact_memories(store_id)`                              | `stores(id)`                                | no action |
 | `contact_memories_edited_by_user_id_users_id_fk`                     | `contact_memories(edited_by_user_id)`                     | `users(id)`                                 | no action |
 | `contact_memories_contact_id_store_fk`                               | `contact_memories(store_id, contact_id)`                  | `contacts(store_id, id)`                    | cascade   |
+| `contact_notes_store_id_stores_id_fk`                                | `contact_notes(store_id)`                                 | `stores(id)`                                | no action |
+| `contact_notes_author_user_id_users_id_fk`                           | `contact_notes(author_user_id)`                           | `users(id)`                                 | no action |
+| `contact_notes_contact_id_store_fk`                                  | `contact_notes(store_id, contact_id)`                     | `contacts(store_id, id)`                    | cascade   |
 | `consents_store_id_stores_id_fk`                                     | `consents(store_id)`                                      | `stores(id)`                                | no action |
 | `consents_contact_id_contacts_id_fk`                                 | `consents(contact_id)`                                    | `contacts(id)`                              | cascade   |
 | `consents_captured_by_user_id_users_id_fk`                           | `consents(captured_by_user_id)`                           | `users(id)`                                 | no action |

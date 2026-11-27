@@ -21,6 +21,7 @@ const movedRelations = [
   { key: 'orders', table: 'orders', column: 'buyer_contact_id' },
   { key: 'tasks', table: 'tasks', column: 'contact_id' },
   { key: 'comments', table: 'social_comments', column: 'contact_id' },
+  { key: 'notes', table: 'contact_notes', column: 'contact_id' },
 ] as const;
 
 export type MovedRows = Partial<Record<(typeof movedRelations)[number]['key'], string[]>>;
