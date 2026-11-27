@@ -12,7 +12,7 @@ export function RowActionsMenu({ label, children }: RowActionsMenuProps) {
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={label}
-        className="grid size-8 place-items-center rounded-md text-text-secondary hover:bg-neutral-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-[state=open]:bg-neutral-soft"
+        className="inline-grid size-8 place-items-center rounded-md text-text-secondary hover:bg-neutral-soft focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus data-[state=open]:bg-neutral-soft"
       >
         <EllipsisVertical aria-hidden="true" size={16} />
       </DropdownMenuTrigger>
