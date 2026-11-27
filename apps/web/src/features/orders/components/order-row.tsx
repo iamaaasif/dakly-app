@@ -64,13 +64,16 @@ export function OrderRow({ order, href, canEdit, selection }: OrderRowProps) {
       <div className="col-span-2 min-w-0 md:col-span-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <UrlLink href={href} data-row-link className={rowLinkClass}>
-            {order.recipientName}
+            {order.buyerName ?? order.recipientName}
           </UrlLink>
           <span className="text-xs text-text-muted tabular-nums">
             #{order.number} ·{' '}
             <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
               {formatRelativeTime(order.createdAt)}
             </time>
+            {order.buyerName && order.buyerName !== order.recipientName
+              ? ` · to ${order.recipientName}`
+              : null}
           </span>
           <OrderRowBadges order={order} />
         </div>
