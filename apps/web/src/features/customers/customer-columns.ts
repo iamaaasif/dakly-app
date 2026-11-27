@@ -1,6 +1,6 @@
 import type { ContactSource } from '@dakly/contracts/contacts';
 
-// The columns the Columns picker can turn on or off. Customer and Type always show.
+// The columns the Columns picker can turn on or off. Customer, Type, Orders, Spent and Last purchase always show.
 export const customerColumns = [
   'phone',
   'whatsapp',
@@ -22,7 +22,14 @@ export const customerColumnLabels: Record<CustomerColumn, string> = {
   consent: 'Consent',
 };
 
-export const defaultCustomerColumns: CustomerColumn[] = ['phone', 'whatsapp'];
+export const defaultCustomerColumns: CustomerColumn[] = [
+  'phone',
+  'whatsapp',
+  'email',
+  'location',
+  'source',
+  'tags',
+];
 
 export const contactSourceLabels: Record<ContactSource, string> = {
   messenger: 'Messenger',
