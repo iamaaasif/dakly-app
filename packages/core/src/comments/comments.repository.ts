@@ -114,17 +114,23 @@ export class CommentsRepository {
     return row;
   }
 
-  // The first automation to claim a comment answers it; the AI agent and later automations skip it.
+  // Claiming twice is fine, so a retried run keeps its claim; a comment somebody already answered
+  // cannot be claimed.
   async claimForAutomation(storeId: string, id: string, now: Date): Promise<boolean> {
     const claimed = await this.database.forStore(storeId, (tx) =>
       tx
         .update(socialComments)
-        .set({ automationClaimedAt: now, updatedAt: now })
+        .set({
+          automationClaimedAt: sql`coalesce(${socialComments.automationClaimedAt}, ${now})`,
+          updatedAt: now,
+        })
         .where(
           and(
             eq(socialComments.storeId, storeId),
             eq(socialComments.id, id),
-            isNull(socialComments.automationClaimedAt),
+            eq(socialComments.status, 'new'),
+            isNull(socialComments.privateRepliedAt),
+            isNull(socialComments.publicReplyExternalId),
           ),
         )
         .returning({ id: socialComments.id }),
