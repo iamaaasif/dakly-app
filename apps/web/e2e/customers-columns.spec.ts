@@ -32,7 +32,8 @@ test('shows the columns picked in the Columns menu and keeps them in the address
     );
     await database.pool.query(
       `insert into contact_stats(contact_id,store_id,orders_count,net_spend_poisha,last_order_at,lifecycle_stage)
-       values($2,$1,1,150000,now(),'new')`,
+       values($2,$1,1,150000,now(),'new')
+       on conflict (contact_id) do update set orders_count=1, net_spend_poisha=150000, last_order_at=now(), lifecycle_stage='new'`,
       [fixture.storeIds[0], rows[0]!.id],
     );
     await database.pool.query(
