@@ -26,7 +26,7 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
   return (
     <main
       data-full-width
-      className="flex h-[calc(100dvh-6.5625rem)] min-h-[32rem] bg-surface text-text md:h-[calc(100dvh-3.5625rem)]"
+      className="flex h-[calc(100dvh-3.5625rem)] min-h-[32rem] bg-surface text-text"
     >
       <InboxFolders query={query} folders={folders} />
       <div
