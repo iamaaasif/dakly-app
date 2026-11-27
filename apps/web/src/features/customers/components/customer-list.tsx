@@ -1,10 +1,11 @@
 'use client';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { consentChannels, type ContactListItemResponse } from '@dakly/contracts/contacts';
 import { formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
+import { Checkbox } from '@dakly/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import {
@@ -25,13 +26,18 @@ const trailingColumns = ['source', 'tags', 'consent'] as const;
 type CustomerListProps = {
   customers: ContactListItemResponse[];
   columns: CustomerColumn[];
+  onSelectionChange: (count: number) => void;
 };
 
-export function CustomerList({ customers, columns }: CustomerListProps) {
+export function CustomerList({ customers, columns, onSelectionChange }: CustomerListProps) {
   return (
     <>
       <CustomerMobileList customers={customers} columns={columns} />
-      <CustomerTable customers={customers} columns={columns} />
+      <CustomerTable
+        customers={customers}
+        columns={columns}
+        onSelectionChange={onSelectionChange}
+      />
     </>
   );
 }
@@ -43,12 +49,37 @@ function shownColumns(columns: CustomerColumn[], list: readonly CustomerColumn[]
   return list.filter((column) => columns.includes(column));
 }
 
-function CustomerTable({ customers, columns }: CustomerListProps) {
+function selectAllState(customers: ContactListItemResponse[], selected: ReadonlySet<string>) {
+  if (customers.every((customer) => selected.has(customer.id))) return true;
+  return selected.size ? 'indeterminate' : false;
+}
+
+function CustomerTable({ customers, columns, onSelectionChange }: CustomerListProps) {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const choose = (next: Set<string>) => {
+    setSelected(next);
+    onSelectionChange(next.size);
+  };
+  const toggle = (id: string, on: boolean) => {
+    const next = new Set(selected);
+    if (on) next.add(id);
+    else next.delete(id);
+    choose(next);
+  };
   return (
     <div className="hidden md:block">
       <Table bare className="text-xs">
         <TableHeader>
           <TableRow className="hover:bg-transparent">
+            <TableHead className="w-9 pr-0 pl-3">
+              <Checkbox
+                aria-label="Select all customers on this page"
+                checked={selectAllState(customers, selected)}
+                onCheckedChange={(on) =>
+                  choose(on === true ? new Set(customers.map((each) => each.id)) : new Set())
+                }
+              />
+            </TableHead>
             <TableHead className={headClass}>Customer</TableHead>
             {shownColumns(columns, leadingColumns).map((column) => (
               <TableHead key={column} className={headClass}>
@@ -68,7 +99,13 @@ function CustomerTable({ customers, columns }: CustomerListProps) {
         </TableHeader>
         <TableBody>
           {customers.map((customer) => (
-            <CustomerTableRow key={customer.id} customer={customer} columns={columns} />
+            <CustomerTableRow
+              key={customer.id}
+              customer={customer}
+              columns={columns}
+              selected={selected.has(customer.id)}
+              onToggle={(on) => toggle(customer.id, on)}
+            />
           ))}
         </TableBody>
       </Table>
@@ -76,15 +113,23 @@ function CustomerTable({ customers, columns }: CustomerListProps) {
   );
 }
 
-function CustomerTableRow({
-  customer,
-  columns,
-}: {
+type CustomerTableRowProps = {
   customer: ContactListItemResponse;
   columns: CustomerColumn[];
-}) {
+  selected: boolean;
+  onToggle: (on: boolean) => void;
+};
+
+function CustomerTableRow({ customer, columns, selected, onToggle }: CustomerTableRowProps) {
   return (
-    <TableRow>
+    <TableRow data-state={selected ? 'selected' : undefined}>
+      <TableCell className="pr-0 pl-3">
+        <Checkbox
+          aria-label={`Select ${customer.name ?? 'No name'}`}
+          checked={selected}
+          onCheckedChange={(on) => onToggle(on === true)}
+        />
+      </TableCell>
       <TableCell className="px-1.5">
         <div className="flex items-center gap-2">
           <Avatar name={customer.name} />
@@ -121,7 +166,7 @@ function CustomerTableRow({
   );
 }
 
-function CustomerMobileList({ customers, columns }: CustomerListProps) {
+function CustomerMobileList({ customers, columns }: Omit<CustomerListProps, 'onSelectionChange'>) {
   return (
     <ul className="divide-y divide-border md:hidden">
       {customers.map((customer) => (
@@ -176,7 +221,7 @@ function Avatar({ name }: { name: string | null }) {
   return (
     <span
       aria-hidden="true"
-      className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${tint}`}
+      className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${tint}`}
     >
       {initialsOf(label)}
     </span>
@@ -218,12 +263,14 @@ function Missing({ children }: { children: string }) {
 type ColumnProps = { customer: ContactListItemResponse };
 
 const columnValues: Record<CustomerColumn, (props: ColumnProps) => ReactNode> = {
-  phone: ({ customer }) => <span className="font-mono">{customerPhone(customer)}</span>,
+  phone: ({ customer }) => (
+    <span className="font-mono tracking-tight">{customerPhone(customer)}</span>
+  ),
   // Messages go to the WhatsApp number, or the phone when none is set.
   whatsapp: ({ customer }) => {
     const number = customer.whatsappPhone ?? customer.phone;
     return number ? (
-      <span className="font-mono">{formatPhone(number)}</span>
+      <span className="font-mono tracking-tight">{formatPhone(number)}</span>
     ) : (
       <Missing>No number</Missing>
     );

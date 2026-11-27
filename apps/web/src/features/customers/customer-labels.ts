@@ -1,6 +1,7 @@
 import type {
   ContactKind,
   ContactListItemResponse,
+  ContactListType,
   ContactResponse,
   LifecycleStage,
 } from '@dakly/contracts/contacts';
@@ -27,6 +28,15 @@ export function customerPhone(customer: Pick<ContactResponse, 'phone'>) {
   return customer.phone ? formatPhone(customer.phone) : 'No phone yet';
 }
 
+export const customerTypeLabels: Record<ContactListType, string> = {
+  new: 'New',
+  returning: 'Returning',
+  vip: 'VIP',
+  inactive: 'Inactive',
+  high_value: 'High-value',
+  at_risk: 'At-risk',
+};
+
 const stageLabels: Record<LifecycleStage, string> = {
   none: 'Contact',
   new: 'New',
@@ -45,8 +55,8 @@ type CustomerTypePill = {
 
 // One pill, as in the design: VIP wins over High-value, which wins over the lifecycle stage.
 export function customerTypePill({ lifecycleStage, isHighValue }: CustomerType): CustomerTypePill {
-  if (lifecycleStage === 'best') return { label: 'VIP', variant: 'ai' };
-  if (isHighValue) return { label: 'High-value', variant: 'success' };
+  if (lifecycleStage === 'best') return { label: stageLabels.best, variant: 'ai' };
+  if (isHighValue) return { label: customerTypeLabels.high_value, variant: 'success' };
   const variants: Record<LifecycleStage, CustomerTypePill['variant']> = {
     none: 'neutral',
     new: 'info',
