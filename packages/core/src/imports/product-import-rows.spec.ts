@@ -103,6 +103,15 @@ describe('readProductImportRows', () => {
     ]);
   });
 
+  it('takes a brand from the first accepted row', () => {
+    const { products, errors } = readProductImportRows(
+      'Name,Price,SKU,Brand,Size\nShirt,500,SKU-1,,M\nScarf,450,SKU-1,Wrong,M\nScarf,450,SKU-2,,L\n',
+      { name: 0, price: 1, sku: 2, brand: 3, options: [{ name: 'Size', column: 4 }] },
+    );
+    expect(errors).toMatchObject([{ rowNumber: 3, field: 'sku' }]);
+    expect(products[1]).toMatchObject({ name: 'Scarf', brand: null, variants: [{ sku: 'SKU-2' }] });
+  });
+
   it('refuses an empty file and a column the file does not have', () => {
     expect(() => readProductImportRows(header, mapping)).toThrow(
       expect.objectContaining({ code: 'IMPORT_FILE_EMPTY' }),

@@ -6,6 +6,7 @@ import type { ImportDuplicateMode } from '@dakly/contracts/contacts';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesService } from './product-categories.service';
 import { matchProblem, type PreviewedRow, previewRows } from './product-import-preview';
 import type { ImportProduct, ImportVariant } from './product-import-types';
@@ -40,6 +41,7 @@ export class ProductImportService {
     @Inject(ProductsRepository) private readonly repository: ProductsRepository,
     @Inject(ProductsService) private readonly products: ProductsService,
     @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
+    @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
     @Inject(ProductStockService) private readonly stock: ProductStockService,
     @Inject(StoreTransaction) private readonly transaction: StoreTransaction,
     @Inject(OutboxService) private readonly outbox: OutboxService,
@@ -85,12 +87,20 @@ export class ProductImportService {
         match,
       ]),
     );
-    return previewRows(batch, matches, duplicateMode);
+    const brandNames = await this.brands.matchNames(
+      storeId,
+      batch.flatMap(({ brand }) => brand ?? []),
+    );
+    const resolved = batch.map((product) => ({
+      ...product,
+      brand: product.brand === null ? null : (brandNames.get(product.brand) ?? product.brand),
+    }));
+    return previewRows(resolved, matches, duplicateMode);
   }
 
   private async addProduct(
     storeId: string,
-    { variants, category, ...details }: ImportProduct,
+    { variants, category, brand, ...details }: ImportProduct,
     context: ImportContext,
   ): Promise<ImportedRow[]> {
     const created = await this.products.create(
@@ -99,7 +109,7 @@ export class ProductImportService {
         ...details,
         categoryId:
           category === null ? null : (await this.categories.resolvePath(storeId, category)).id,
-        brandId: null,
+        brandId: brand === null ? null : await this.brands.resolveName(storeId, brand),
         status: details.status ?? 'active',
         aliases: [],
         weightGrams: null,
@@ -193,7 +203,7 @@ export class ProductImportService {
   private async updateProduct(
     storeId: string,
     productId: string,
-    { pricePoisha, category, description, status }: ImportProduct,
+    { pricePoisha, category, brand, description, status }: ImportProduct,
     changesVariantPrices: boolean,
   ): Promise<void> {
     // A blank cell never overwrites what the shop already has.
@@ -202,6 +212,7 @@ export class ProductImportService {
       ...(category === null
         ? {}
         : { categoryId: (await this.categories.resolvePath(storeId, category)).id }),
+      ...(brand === null ? {} : { brandId: await this.brands.resolveName(storeId, brand) }),
       ...(description === null ? {} : { description }),
       ...(status === undefined ? {} : { status }),
     };

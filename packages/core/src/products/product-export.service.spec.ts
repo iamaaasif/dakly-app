@@ -24,6 +24,7 @@ const kurti = {
   id: 'p1',
   name: 'Cotton কুর্তি, premium',
   category: 'Kurti',
+  brand: 'Aarong',
   description: '=SUM(1,1)',
   status: 'hidden',
   isStockTracked: true,
@@ -38,6 +39,7 @@ const scarf = {
   id: 'p2',
   name: 'Scarf',
   category: null,
+  brand: null,
   description: null,
   status: 'active',
   isStockTracked: false,
@@ -69,11 +71,23 @@ describe('product export', () => {
     expect(file.filename).toBe('dakly-products-2026-11-20.xlsx');
     expect(file.rowCount).toBe(3);
     expect(await readSheet(file.body)).toEqual([
-      ['Name', 'Price', 'Category', 'Description', 'Status', 'SKU', 'Cost', 'On hand', 'Size'],
+      [
+        'Name',
+        'Price',
+        'Category',
+        'Brand',
+        'Description',
+        'Status',
+        'SKU',
+        'Cost',
+        'On hand',
+        'Size',
+      ],
       [
         'Cotton কুর্তি, premium',
         '1200.00',
         'Kurti',
+        'Aarong',
         '=SUM(1,1)',
         'hidden',
         'KURTI-M',
@@ -85,6 +99,7 @@ describe('product export', () => {
         'Cotton কুর্তি, premium',
         '1250.50',
         'Kurti',
+        'Aarong',
         '=SUM(1,1)',
         'hidden',
         'KURTI-L',
@@ -92,7 +107,7 @@ describe('product export', () => {
         '0',
         'L',
       ],
-      ['Scarf', '450.00', null, null, 'active', null, null, null, null],
+      ['Scarf', '450.00', null, null, null, 'active', null, null, null, null],
     ]);
   });
 
@@ -100,10 +115,10 @@ describe('product export', () => {
     const file = await service([kurti, scarf]).export('store', { format: 'csv' }, actor);
     expect(file.type).toBe('text/csv; charset=utf-8');
     expect(file.body.toString().split('\r\n')).toEqual([
-      `${String.fromCharCode(0xfeff)}"Name","Price","Category","Description","Status","SKU","Cost","On hand","Size"`,
-      `"Cotton কুর্তি, premium","1200.00","Kurti","'=SUM(1,1)","hidden","KURTI-M","700.00","10","M"`,
-      `"Cotton কুর্তি, premium","1250.50","Kurti","'=SUM(1,1)","hidden","KURTI-L","700.00","0","L"`,
-      '"Scarf","450.00","","","active","","","",""',
+      `${String.fromCharCode(0xfeff)}"Name","Price","Category","Brand","Description","Status","SKU","Cost","On hand","Size"`,
+      `"Cotton কুর্তি, premium","1200.00","Kurti","Aarong","'=SUM(1,1)","hidden","KURTI-M","700.00","10","M"`,
+      `"Cotton কুর্তি, premium","1250.50","Kurti","Aarong","'=SUM(1,1)","hidden","KURTI-L","700.00","0","L"`,
+      '"Scarf","450.00","","","","active","","","",""',
       '',
     ]);
   });

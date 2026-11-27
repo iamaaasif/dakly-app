@@ -9,6 +9,7 @@ const current: SkuMatch['current'] = {
   onHand: 12,
   isStockTracked: true,
   category: 'Clothing',
+  brand: null,
   description: null,
   status: 'active',
 };
@@ -19,10 +20,12 @@ function match(sku: string, productId: string, rest: Partial<SkuMatch> = {}): Sk
 
 function preview(matches: SkuMatch[], products: ImportProduct[], mode: 'update' | 'skip') {
   const repository = { findVariantsBySku: async () => matches };
+  const brands = { matchNames: async () => new Map([['aarong', 'Aarong']]) };
   const service = new ProductImportService(
     repository as never,
     {} as never,
     {} as never,
+    brands as never,
     {} as never,
     {} as never,
     {} as never,
@@ -35,6 +38,7 @@ function product(variants: { sku: string | null; onHand?: number }[], rest = {})
   return {
     name: 'Panjabi',
     category: null,
+    brand: null,
     description: null,
     status: undefined,
     pricePoisha: 225000,
@@ -90,6 +94,18 @@ describe('product import dry run', () => {
     expect(row?.result).toBe('skipped');
     const [blank] = await preview([match('P-M', 'p1')], [product([{ sku: 'P-M' }])], 'update');
     expect(blank?.result).toBe('skipped');
+  });
+
+  it('counts a different brand as a change and leaves the same brand alone', async () => {
+    const saved = match('P-M', 'p1', { current: { ...current, brand: 'Aarong' } });
+    for (const [brand, result] of [
+      ['Nakshi', 'changed'],
+      ['aarong', 'skipped'],
+      [null, 'skipped'],
+    ] as const) {
+      const [row] = await preview([saved], [product([{ sku: 'P-M' }], { brand })], 'update');
+      expect(row?.result).toBe(result);
+    }
   });
 
   it('skips matched rows in skip mode and rejects sizes it cannot match', async () => {

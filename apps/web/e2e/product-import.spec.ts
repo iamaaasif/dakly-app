@@ -8,11 +8,11 @@ import { createDatabase } from '@dakly/db/client';
 test.use({ screenshot: 'off' });
 
 const csv = [
-  'Product Name,Selling Price,SKU,Stock,Size',
-  'Cotton kurti,1200,KURTI-M,12,M',
-  'Silk scarf,450,SCARF-1,20,Free',
-  'Leather belt,900,BELT-1,5,M',
-  'Woven cap,abc,CAP-1,3,M',
+  'Product Name,Selling Price,Brand,SKU,Stock,Size',
+  'Cotton kurti,1200,Nakshi,KURTI-M,12,M',
+  'Silk scarf,450,,SCARF-1,20,Free',
+  'Leather belt,900,,BELT-1,5,M',
+  'Woven cap,abc,,CAP-1,3,M',
 ].join('\r\n');
 const names = ['Cotton kurti', 'Silk scarf', 'Leather belt', 'Woven cap'];
 
@@ -41,6 +41,8 @@ test('imports products from a CSV, sets stock through the ledger and reports the
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
         .toBe(true);
+      if (name === 'dry-run' && width === 360)
+        await page.getByLabel('Brand, row 2').scrollIntoViewIfNeeded();
       await page.screenshot({ path: resolve(evidence, `${name}-${width}x${height}.png`) });
     }
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -73,15 +75,17 @@ test('imports products from a CSV, sets stock through the ledger and reports the
       mimeType: 'text/csv',
       buffer: Buffer.from(csv),
     });
-    await expect(page.getByRole('status')).toContainText('4 rows · 5 columns');
+    await expect(page.getByRole('status')).toContainText('4 rows · 6 columns');
     await capture('upload-detected');
     await page.getByRole('button', { name: 'Continue' }).click();
 
     await expect(page.getByLabel('Product name')).toHaveValue('0');
+    await expect(page.getByLabel('Brand', { exact: true })).toHaveValue('2');
     await expect(page.getByLabel('Option name')).toHaveValue('Size');
     await capture('map');
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByLabel('Product name, row 5')).toHaveValue('Woven cap');
+    await expect(page.getByLabel('Brand, row 2')).toHaveValue('Nakshi');
     await expect(page.getByRole('button', { name: 'Download error report' })).toBeVisible();
     await capture('dry-run');
     await page.getByRole('button', { name: /Confirm and import/ }).click();
@@ -133,6 +137,10 @@ test('imports products from a CSV, sets stock through the ledger and reports the
       await database.pool.query('delete from products where store_id=$1 and id=any($2::uuid[])', [
         storeId,
         ids,
+      ]);
+      await database.pool.query('delete from product_brands where store_id=$1 and name=$2', [
+        storeId,
+        'Nakshi',
       ]);
       await database.pool.query("delete from imports where store_id=$1 and kind='products_csv'", [
         storeId,

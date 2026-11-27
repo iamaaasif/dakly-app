@@ -55,6 +55,22 @@ export class ProductBrandsRepository {
     return rows[0];
   }
 
+  findNames(storeId: string, names: string[]): Promise<{ entered: string; name: string }[]> {
+    const entered = sql<string>`brand_names.entered`;
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ entered, name: productBrands.name })
+        .from(sql`unnest(${sql.param(names)}::text[]) as brand_names(entered)`)
+        .innerJoin(
+          productBrands,
+          and(
+            eq(productBrands.storeId, storeId),
+            sql`lower(${productBrands.name}) = lower(${entered})`,
+          ),
+        ),
+    );
+  }
+
   async hasProducts(storeId: string, id: string): Promise<boolean> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
@@ -68,22 +84,29 @@ export class ProductBrandsRepository {
 
   // Returns false when another brand of the shop already has the name.
   async insert(storeId: string, input: ProductBrand): Promise<boolean> {
-    return this.writeNamed(() =>
-      this.database.forStore(storeId, (tx) =>
-        tx.insert(productBrands).values({ storeId, ...input }),
-      ),
+    const rows = await this.database.forStore(storeId, (tx) =>
+      tx
+        .insert(productBrands)
+        .values({ storeId, ...input })
+        .onConflictDoNothing()
+        .returning({ id: productBrands.id }),
     );
+    return rows.length > 0;
   }
 
-  rename(storeId: string, id: string, name: string): Promise<boolean> {
-    return this.writeNamed(() =>
-      this.database.forStore(storeId, (tx) =>
+  async rename(storeId: string, id: string, name: string): Promise<boolean> {
+    try {
+      await this.database.forStore(storeId, (tx) =>
         tx
           .update(productBrands)
           .set({ name })
           .where(and(eq(productBrands.storeId, storeId), eq(productBrands.id, id))),
-      ),
-    );
+      );
+      return true;
+    } catch (error) {
+      if (isConstraintViolation(error, '23505', 'product_brands_store_name_key')) return false;
+      throw error;
+    }
   }
 
   async delete(storeId: string, id: string): Promise<void> {
@@ -92,15 +115,5 @@ export class ProductBrandsRepository {
         .delete(productBrands)
         .where(and(eq(productBrands.storeId, storeId), eq(productBrands.id, id))),
     );
-  }
-
-  private async writeNamed(write: () => PromiseLike<unknown>): Promise<boolean> {
-    try {
-      await write();
-      return true;
-    } catch (error) {
-      if (isConstraintViolation(error, '23505', 'product_brands_store_name_key')) return false;
-      throw error;
-    }
   }
 }

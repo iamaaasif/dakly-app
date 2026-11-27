@@ -12,6 +12,8 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import type { StoresService } from '../stores/stores.service';
+import { ProductBrandsRepository } from './product-brands.repository';
+import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
 import { ProductImportService, type ImportProduct } from './product-import.service';
@@ -40,6 +42,7 @@ function product(variants: ImportProduct['variants'], name = 'পাঞ্জা
   return {
     name,
     category: null,
+    brand: null,
     description: null,
     status: 'active',
     pricePoisha: 100000,
@@ -60,6 +63,7 @@ describe('ProductImportService with Postgres', () => {
     new ProductCategoriesRepository(tenant),
     transaction,
   );
+  const brands = new ProductBrandsService(new ProductBrandsRepository(tenant), transaction);
   const products = new ProductsService(
     repository,
     new ProductOrderVariantsRepository(tenant),
@@ -71,7 +75,7 @@ describe('ProductImportService with Postgres', () => {
     } as unknown as StoresService,
     {} as FileStorageDriver,
     categories,
-    {} as never,
+    brands,
     {} as never,
   );
   const stock = new ProductStockService(
@@ -84,6 +88,7 @@ describe('ProductImportService with Postgres', () => {
     repository,
     products,
     categories,
+    brands,
     stock,
     transaction,
     outbox,
@@ -104,12 +109,30 @@ describe('ProductImportService with Postgres', () => {
       'product_variants',
       'products',
       'product_categories',
+      'product_brands',
     ])
       await f.connection.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
         [f.a, f.b],
       ]);
     await app.pool.end();
     await f.close();
+  });
+
+  it('previews brand matching the same way the shop list matches it', async () => {
+    const name = 'İpek';
+    const { rows } = await f.connection.pool.query<{ folded: string }>(
+      'select lower($1::text) as folded',
+      [name],
+    );
+    const other = await brands.create(f.b, { name });
+    const item = product([variant('BRAND-PREVIEW')]);
+    await importer.importBatch(f.a, [{ ...item, brand: name }], context);
+    const imported = (await brands.list(f.a)).items.find((brand) => brand.name === name);
+    expect(imported).toMatchObject({ name, productCount: 1 });
+    expect(imported?.id).not.toBe(other.id);
+    expect(
+      await importer.preview(f.a, [{ ...item, brand: rows[0]!.folded }], 'update'),
+    ).toMatchObject([{ result: 'skipped' }]);
   });
 
   async function stored(storeId: string, sku: string) {

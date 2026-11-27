@@ -24,6 +24,7 @@ export type ProductImportVariant = {
 export type ProductImportProduct = {
   name: string;
   category: string | null;
+  brand: string | null;
   description: string | null;
   // Blank means the file did not say, so a new product is shown and an existing one is left as is.
   status: 'active' | 'hidden' | undefined;
@@ -76,6 +77,7 @@ function parseRow(cells: string[], mapping: ProductImportMapping) {
     name: cell(mapping.name),
     price: cell(mapping.price).trim(),
     category: cell(mapping.category),
+    brand: cell(mapping.brand),
     description: cell(mapping.description),
     status: cell(mapping.status),
     sku: cell(mapping.sku),
@@ -110,6 +112,7 @@ function buildProduct(
   const optionNames = Object.keys(rows[0]!.optionValues);
   const variants: ProductImportVariant[] = [];
   const seenCombinations = new Set<string>();
+  let brand: string | null = null;
   for (const { rowNumber, row, optionValues } of rows) {
     const problem =
       optionSetProblem(optionValues, optionNames) ??
@@ -124,6 +127,7 @@ function buildProduct(
       errors.push({ rowNumber, ...problem });
       continue;
     }
+    if (variants.length === 0) brand = row.brand;
     if (row.sku) seenSkus.add(row.sku);
     // A later price that differs from the product's is that size's own price.
     const differs = row.price > 0 && row.price !== first.price;
@@ -139,6 +143,7 @@ function buildProduct(
   return {
     name: first.name,
     category: first.category,
+    brand,
     description: first.description,
     status: first.status,
     pricePoisha: first.price,

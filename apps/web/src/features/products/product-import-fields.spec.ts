@@ -12,12 +12,14 @@ describe('guessProductImportMapping', () => {
         'Stock',
         'Size',
         'Colour',
+        ' Brand ',
       ]),
     ).toEqual({
       name: 0,
       price: 1,
       sku: 2,
       onHand: 3,
+      brand: 6,
       options: [
         { name: 'Size', column: 4 },
         { name: 'Colour', column: 5 },
