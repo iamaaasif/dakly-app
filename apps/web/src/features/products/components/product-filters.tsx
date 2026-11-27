@@ -1,7 +1,8 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Search } from 'lucide-react';
-import { useFormContext, FormProvider, useForm } from 'react-hook-form';
+import { useEffect, useRef } from 'react';
+import { useFormContext, FormProvider, useForm, useWatch, type Control } from 'react-hook-form';
 
 import {
   productListBaseQuerySchema,
@@ -32,6 +33,9 @@ export function ProductFilters({ query }: ProductFiltersProps) {
   });
   const choose = (change: Partial<ProductListQuery>) =>
     router.push(`/products?${productsSearch({ ...query, ...change, cursor: undefined })}`);
+  useSearchAsYouType(form.control, query, (search) =>
+    router.replace(`/products?${productsSearch({ ...query, search, cursor: undefined })}`),
+  );
   return (
     <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-1">
       <FormProvider {...form}>
@@ -75,6 +79,25 @@ export function ProductFilters({ query }: ProductFiltersProps) {
       </Select>
     </div>
   );
+}
+
+const searchDelayMs = 300;
+
+// Typing searches after a short pause. The server needs three letters, so shorter text waits.
+function useSearchAsYouType(
+  control: Control<Pick<ProductListQuery, 'search'>>,
+  query: ProductListQuery,
+  apply: (search: string | undefined) => void,
+) {
+  const typed = useWatch({ control, name: 'search' });
+  const latest = useRef({ query, apply });
+  latest.current = { query, apply };
+  useEffect(() => {
+    const search = typed?.trim() || undefined;
+    if (search === latest.current.query.search || (search && search.length < 3)) return;
+    const timer = setTimeout(() => latest.current.apply(search), searchDelayMs);
+    return () => clearTimeout(timer);
+  }, [typed]);
 }
 
 function SearchField() {

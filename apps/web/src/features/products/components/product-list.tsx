@@ -71,8 +71,6 @@ export function ProductList(props: ProductListProps) {
   );
 }
 
-const headClass = 'text-xs font-semibold tracking-wide text-text-muted uppercase';
-
 function ProductTableHead({
   products,
   columns,
@@ -94,18 +92,16 @@ function ProductTableHead({
             />
           </TableHead>
         ) : null}
-        <TableHead className={headClass}>Product</TableHead>
-        {columns.includes('price') ? <TableHead className={headClass}>Price</TableHead> : null}
-        {columns.includes('stock') ? <TableHead className={headClass}>Stock</TableHead> : null}
+        <TableHead>Product</TableHead>
+        {columns.includes('price') ? <TableHead>Price</TableHead> : null}
+        {columns.includes('stock') ? <TableHead>Stock</TableHead> : null}
         {columns.includes('status') ? (
-          <TableHead className={headClass}>
+          <TableHead>
             <ReadinessFilter readiness={readiness} onReadiness={onReadiness} />
           </TableHead>
         ) : null}
         {onAdjust ? (
-          <TableHead className={cn(headClass, 'pr-4 text-right whitespace-nowrap')}>
-            Actions
-          </TableHead>
+          <TableHead className="pr-4 text-right whitespace-nowrap">Actions</TableHead>
         ) : null}
       </TableRow>
     </TableHeader>
@@ -122,7 +118,7 @@ function ReadinessFilter({
       <DropdownMenuTrigger
         aria-label="Filter products by status"
         className={cn(
-          'inline-flex items-center gap-1.5 rounded-sm uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
+          'inline-flex items-center gap-1.5 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus',
           readiness && 'text-action',
         )}
       >
@@ -323,6 +319,11 @@ function ProductPrice({ product }: ProductPartProps) {
   );
 }
 
+// A product with no options has one default variant, which the design shows as "Stock N".
+function stockChipName(product: ProductListItem, variant: ProductResponse['variants'][number]) {
+  return product.variants.length === 1 && variant.isDefault ? 'Stock' : variant.title;
+}
+
 function stockTone(variant: ProductResponse['variants'][number]) {
   if (variant.available <= 0) return 'bg-danger-soft text-danger';
   const low = variant.lowStockThreshold !== null && variant.available <= variant.lowStockThreshold;
@@ -341,7 +342,7 @@ function ProductStock({
       {product.isStockTracked ? (
         <div className="flex flex-wrap items-center gap-1.5">
           {product.variants.map((variant) => {
-            const label = `${variant.title} ${variant.available}`;
+            const label = `${stockChipName(product, variant)} ${variant.available}`;
             return onAdjust ? (
               <button
                 key={variant.id}

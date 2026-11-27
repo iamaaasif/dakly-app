@@ -200,7 +200,7 @@ describe('Products screen', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByText('৳2,450')).toBeTruthy();
     expect(within(table).getByText('৳2,950').tagName).toBe('DEL');
-    expect(within(table).getByText('Default 3')).toBeTruthy();
+    expect(within(table).getByText('Stock 3')).toBeTruthy();
     expect(within(table).getByText('Active')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'More actions for Cotton Panjabi' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Adjust stock/ })).toBeNull();
@@ -420,21 +420,26 @@ describe('Products screen', () => {
     expect(nextQuery.get('cursor')).toBe(cursor);
     expect(nextQuery.get('search')).toBe('Cotton');
     expect(nextQuery.get('readiness')).toBe('running_low');
-    const search = screen.getByRole('searchbox', { name: 'Search products' });
-    await userEvent.clear(search);
-    await userEvent.type(search, 'ab{enter}');
-    expect(push).toHaveBeenCalledTimes(1);
-    await userEvent.type(search, 'c{enter}');
-    const searchQuery = new URL(push.mock.calls[1]![0], 'http://localhost').searchParams;
-    expect(searchQuery.get('search')).toBe('abc');
-    expect(searchQuery.get('readiness')).toBe('running_low');
-    expect(searchQuery.get('cursor')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Filter products by status' }));
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: 'All products' }));
-    const allQuery = new URL(push.mock.calls[2]![0], 'http://localhost').searchParams;
+    const allQuery = new URL(push.mock.calls[1]![0], 'http://localhost').searchParams;
     expect(allQuery.get('cursor')).toBeNull();
     expect(allQuery.get('search')).toBe('Cotton');
     expect(allQuery.has('readiness')).toBe(false);
+  });
+  it('searches while typing after a pause and keeps the other filters', async () => {
+    stubFetch(async () => response({ items: [product], nextCursor: null, totalCount: 1 }));
+    show({ limit: 50, readiness: 'running_low' });
+    const search = await screen.findByRole('searchbox', { name: 'Search products' });
+    await userEvent.type(search, 'Co');
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(push).not.toHaveBeenCalled();
+    await userEvent.type(search, 'tton');
+    await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+    const searched = new URL(push.mock.calls[0]![0], 'http://localhost').searchParams;
+    expect(searched.get('search')).toBe('Cotton');
+    expect(searched.get('readiness')).toBe('running_low');
+    expect(searched.get('cursor')).toBeNull();
   });
   it('starts on page 1 with Previous off and Next set to the server cursor', async () => {
     const cursor = '019c01ea-cf15-7d31-a7f5-d73d66007ae4';
@@ -555,7 +560,7 @@ describe('Products screen', () => {
     expect(within(dialog).getByText('3 now')).toBeTruthy();
     await userEvent.type(within(dialog).getByLabelText('Default'), '2');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save stock' }));
-    expect(await within(screen.getByRole('table')).findByText('Default 5')).toBeTruthy();
+    expect(await within(screen.getByRole('table')).findByText('Stock 5')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
   it('keeps a rejected restock and its error visible', async () => {
