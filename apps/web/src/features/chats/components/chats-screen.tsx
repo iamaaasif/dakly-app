@@ -6,6 +6,7 @@ import { useCallback, useId, useRef, useState, useSyncExternalStore } from 'reac
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 
+import { useChatChannels } from '../api/chat-channels';
 import { chatScreenQuerySchema, chatsHref, type ChatScreenQuery } from '../chat-filters';
 import { AiAgentDrawer } from './ai-agent-drawer';
 import { ChatChannelFilter } from './chat-channel-filter';
@@ -13,6 +14,7 @@ import { ChatFolders } from './chat-folders';
 import { ChatList } from './chat-list';
 import { ChatToolbar } from './chat-search-bar';
 import { CommentsView } from './comments-view';
+import { ConnectChannelEmpty } from './connect-channel-empty';
 import { ConversationPanel } from './conversation-panel';
 import { useCollapsedShellNavigation } from '@/components/shell-navigation-collapse';
 import { useUrlQuery } from '@/lib/use-url-query';
@@ -22,7 +24,11 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
   const router = useRouter();
   const withoutAgent = { ...query, agent: undefined, feedback: undefined };
   const folders = useInboxFolders();
+  const connections = useChatChannels();
   useCollapsedShellNavigation();
+  // Staff who cannot read the connections get an error here and keep the inbox.
+  if (connections.data && !connections.data.items.some((item) => item.status !== 'disconnected'))
+    return <ConnectChannelEmpty />;
   return (
     <main
       data-full-width
