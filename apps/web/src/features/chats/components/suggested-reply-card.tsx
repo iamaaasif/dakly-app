@@ -28,7 +28,7 @@ export function SuggestedReply({
       pending={sendReply.isPending}
       onSend={() => {
         setUsed(suggestion);
-        sendReply.mutate(suggestion, { onError: () => setUsed(null) });
+        sendReply.mutate({ body: suggestion }, { onError: () => setUsed(null) });
       }}
       onEdit={() => {
         setUsed(suggestion);

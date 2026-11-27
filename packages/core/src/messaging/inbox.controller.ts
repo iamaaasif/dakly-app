@@ -33,6 +33,11 @@ import {
   orderIdempotencyKeySchema,
   type CreateConversationOrderInput,
 } from '@dakly/contracts/orders';
+import {
+  productPhotoUploadSchema,
+  type ProductPhotoUploadInput,
+  type ProductPhotoUploadResponse,
+} from '@dakly/contracts/products';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
@@ -131,6 +136,17 @@ export class InboxController {
     @Body(new ZodValidationPipe(createConversationReplySchema)) input: CreateConversationReplyInput,
   ) {
     return this.replies.reply(storeId, id, userId, input);
+  }
+
+  @Post(':conversationId/photos/upload-url')
+  @RequirePermission('chats.edit')
+  @HttpCode(200)
+  requestPhotoUpload(
+    @CurrentStore() storeId: string,
+    @Param('conversationId', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(productPhotoUploadSchema)) input: ProductPhotoUploadInput,
+  ): Promise<ProductPhotoUploadResponse> {
+    return this.replies.requestPhotoUpload(storeId, id, input);
   }
 
   @Post(':conversationId/orders')

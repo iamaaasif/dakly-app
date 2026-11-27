@@ -148,7 +148,7 @@ export class ChannelDispatchService {
     await this.recordChannelOutcome(
       storeId,
       pending,
-      { ...sent, sentAt: this.clock.now(), preview: pending.body.slice(0, 160) },
+      { ...sent, sentAt: this.clock.now(), preview: pending.body.slice(0, 160) || 'Photo' },
       'attempted',
     );
     return { status: 'sent', ...sent };

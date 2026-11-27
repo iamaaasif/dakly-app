@@ -119,6 +119,31 @@ describe('MetaGraphChannelDriver', () => {
     ]);
   });
 
+  it('sends a photo with no text as one message that carries the key', async () => {
+    const bodies: unknown[] = [];
+    vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {
+      bodies.push(await new Request(url, init).json());
+      return Response.json({ message_id: `m_${bodies.length}` });
+    });
+    await expect(
+      driver.send(pageCredentials, {
+        ...messengerReply,
+        text: '',
+        imageUrl: 'https://cdn.example.test/kurti.jpg',
+      }),
+    ).resolves.toEqual({ externalMessageId: 'm_1' });
+    expect(bodies).toEqual([
+      {
+        recipient: { id: '999' },
+        message: {
+          attachment: { type: 'image', payload: { url: 'https://cdn.example.test/kurti.jpg' } },
+          metadata: messengerReply.operationKey,
+        },
+        messaging_type: 'RESPONSE',
+      },
+    ]);
+  });
+
   it('sends the image before the text on Instagram too', async () => {
     const bodies: { message: unknown }[] = [];
     vi.stubGlobal('fetch', async (url: URL, init: RequestInit) => {

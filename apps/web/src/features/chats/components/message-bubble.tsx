@@ -56,7 +56,7 @@ export function MessageBubble({ message }: { message: ConversationMessageRespons
             Internal note
           </span>
         ) : null}
-        {message.body ?? kindLabels[message.kind] ?? ''}
+        {message.body || kindLabels[message.kind] || ''}
       </div>
       <MessageMeta message={message} />
     </li>

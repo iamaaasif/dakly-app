@@ -83,7 +83,7 @@ export class OutboundMessagingRepository {
             { kind: 'image', status: 'stored', ...input.image, read: 'done' },
           ],
           direction: 'out',
-          kind: 'text',
+          kind: content || !input.image ? 'text' : 'image',
           status: 'queued',
           createdAt: now,
         })
