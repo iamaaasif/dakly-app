@@ -62,11 +62,24 @@ function errorMessage(issue: { path?: PropertyKey[]; code: string }) {
   return issue.path?.includes('buttons') ? 'Enter the button text.' : undefined;
 }
 
+// The segment is set when Send campaign on the customer list opened the builder.
+function newDraftInput(input: DraftInput, startingSegmentId?: string) {
+  const { name, goal, channelConnectionId } = input;
+  return {
+    name,
+    goal,
+    channel: 'messenger',
+    channelConnectionId,
+    ...(startingSegmentId && { includeSegmentIds: [startingSegmentId] }),
+  } as const;
+}
+
 export function useMessengerDraftForm(
   pages: ChannelConnection[],
   campaign?: CampaignResponse,
-  onSaved?: () => void,
+  options: { onSaved?: () => void; startingSegmentId?: string } = {},
 ) {
+  const { onSaved, startingSegmentId } = options;
   const save = useSaveCampaign();
   const router = useRouter();
   const form = useForm<DraftInput, unknown, Draft>({
@@ -78,8 +91,7 @@ export function useMessengerDraftForm(
   const saveThen = (afterSave?: () => void) =>
     form.handleSubmit((input) => {
       if (!campaign) {
-        const { name, goal, channelConnectionId } = input;
-        const created = { name, goal, channel: 'messenger', channelConnectionId } as const;
+        const created = newDraftInput(input, startingSegmentId);
         save.mutate(
           { input: created },
           { onSuccess: (saved) => router.replace(`/campaigns/${saved.id}`) },

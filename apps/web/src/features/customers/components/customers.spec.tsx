@@ -89,6 +89,9 @@ const apiError = (status: number, code: string, message: string) => ({
   body: { error: { code, message } },
 });
 
+// Set by a test that needs Send campaign, which only a member who edits campaigns sees.
+let canEditCampaigns = false;
+
 function show(child: ReactNode, canEdit = true, canExport = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const context: SessionContext = {
@@ -107,7 +110,7 @@ function show(child: ReactNode, canEdit = true, canExport = false) {
       canViewCampaigns: false,
       canViewAnalytics: false,
       canChangeAttributionWindow: false,
-      canEditCampaigns: false,
+      canEditCampaigns,
       canViewSocial: false,
       canEditSocial: false,
       canViewAutomations: false,
@@ -142,6 +145,7 @@ function show(child: ReactNode, canEdit = true, canExport = false) {
 
 beforeEach(() => {
   sent = [];
+  canEditCampaigns = false;
   // jsdom has no modal dialogs.
   HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
     this.open = true;
@@ -516,6 +520,74 @@ describe('All contacts', () => {
         sent.find((request) => request.path === '/api/contacts/bulk-tags/remove')?.body,
       ).toEqual({ contactIds: [contactId], tag: 'eid' }),
     );
+  });
+
+  it('adds the ticked customers to a picked-customer segment and undoes only the added ones', async () => {
+    const picked = {
+      id: 'segment-1',
+      name: 'Eid picks',
+      rules: {
+        match: 'all',
+        conditions: [{ field: 'contact', operator: 'is_any_of', values: [contactId] }],
+      },
+    };
+    const byRules = {
+      id: 'segment-2',
+      name: 'Dhaka',
+      rules: {
+        match: 'all',
+        conditions: [{ field: 'district', operator: 'is_any_of', values: ['Dhaka'] }],
+      },
+    };
+    respond((path) => {
+      if (path.startsWith('/api/contacts/counts')) return { body: counts };
+      if (path.startsWith('/api/segments?'))
+        return { body: { items: [picked, byRules], nextCursor: null } };
+      if (path === '/api/segments/segment-1/customers')
+        return { body: { segment: picked, changedIds: [contactId] } };
+      if (path === '/api/segments/segment-1/customers/remove')
+        return { body: { segment: picked, changedIds: [contactId] } };
+      return { body: { items: [rahimaInList], nextCursor: null, total: 1 } };
+    });
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    await user.click(screen.getByRole('button', { name: 'Add to segment' }));
+    expect(await screen.findByRole('button', { name: 'Eid picks' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Dhaka' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Eid picks' }));
+    expect(await screen.findByText('Added 1 to Eid picks.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() =>
+      expect(
+        sent.find((request) => request.path === '/api/segments/segment-1/customers/remove')?.body,
+      ).toEqual({ contactIds: [contactId] }),
+    );
+  });
+
+  it('saves the ticked customers as a segment and opens the campaign builder with it', async () => {
+    respond((path) => {
+      if (path.startsWith('/api/contacts/counts')) return { body: counts };
+      if (path === '/api/segments/hand-picked') return { body: { id: 'segment-9', name: 'x' } };
+      return { body: { items: [rahimaInList], nextCursor: null, total: 1 } };
+    });
+    canEditCampaigns = true;
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    await user.click(screen.getByRole('button', { name: 'Send campaign' }));
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/campaigns/new?segment=segment-9'));
+    expect(
+      sent.find((request) => request.path === '/api/segments/hand-picked')?.body,
+    ).toMatchObject({ contactIds: [contactId] });
+  });
+
+  it('hides Send campaign from a member who cannot edit campaigns', async () => {
+    respondWithList([rahimaInList]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    expect(screen.queryByRole('button', { name: 'Send campaign' })).toBeNull();
   });
 
   it('opens the profile from anywhere on the row but not from the checkbox', async () => {

@@ -205,8 +205,7 @@ export class ContactsRepository {
 
   // Adding a tag the contact has, or one past the limit, and removing one it lacks change nothing.
   async changeTag(storeId: string, id: string, change: TagChange, maxTags: number) {
-    const changed = await this.changeTagForMany(storeId, [id], change, maxTags);
-    return changed.length > 0;
+    return (await this.changeTagForMany(storeId, [id], change, maxTags)).length > 0;
   }
 
   // One statement appends to each contact's current list, so a tag added since the list loaded is
@@ -407,6 +406,8 @@ function conditionWhere(storeId: string, condition: SegmentCondition): SQL | und
         : not(arrayOverlaps(contacts.tags, condition.values));
     case 'district':
       return listWhere(contacts.district, condition);
+    case 'contact':
+      return listWhere(contacts.id, condition);
     case 'source':
       return listWhere(contacts.source, condition);
     case 'kind':

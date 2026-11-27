@@ -7,8 +7,10 @@ import {
 } from '@dakly/contracts/segments';
 
 export type SegmentField = SegmentCondition['field'];
+// Picked customers are added from the customer list, so the builder does not offer them.
+export type BuilderField = Exclude<SegmentField, 'contact'>;
 
-export const fieldLabels: Record<SegmentField, string> = {
+export const fieldLabels: Record<BuilderField, string> = {
   tag: 'Tag',
   district: 'District',
   source: 'Source',
@@ -45,7 +47,7 @@ export const channelLabels: Record<ConsentChannel, string> = {
   email: 'Email',
 };
 
-export function newCondition(field: SegmentField): SegmentCondition {
+export function newCondition(field: BuilderField): SegmentCondition {
   if (field === 'consent') return { field, channel: 'sms', granted: true };
   if (field === 'source') return { field, operator: 'is_any_of', values: ['messenger'] };
   if (field === 'kind') return { field, operator: 'is_any_of', values: ['customer'] };

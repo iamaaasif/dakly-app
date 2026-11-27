@@ -15,6 +15,11 @@ import {
 import {
   type ChangeSegmentInput,
   changeSegmentSchema,
+  type CreateHandPickedSegmentInput,
+  createHandPickedSegmentSchema,
+  type HandPickedChangeInput,
+  type HandPickedChangeResponse,
+  handPickedChangeSchema,
   type CreateSegmentInput,
   createSegmentSchema,
   type SegmentCountResponse,
@@ -31,11 +36,15 @@ import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { CurrentUser } from '../platform/tenancy/current-user.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
+import { HandPickedSegmentsService } from './hand-picked-segments.service';
 import { SegmentsService } from './segments.service';
 
 @Controller('segments')
 export class SegmentsController {
-  constructor(@Inject(SegmentsService) private readonly segments: SegmentsService) {}
+  constructor(
+    @Inject(SegmentsService) private readonly segments: SegmentsService,
+    @Inject(HandPickedSegmentsService) private readonly handPicked: HandPickedSegmentsService,
+  ) {}
 
   @Get()
   @RequirePermission('segments.view')
@@ -62,6 +71,17 @@ export class SegmentsController {
     return this.segments.create(storeId, input, { kind: 'user', userId });
   }
 
+  // A segment of the customers ticked on the list.
+  @Post('hand-picked')
+  @RequirePermission('segments.edit')
+  createHandPicked(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Body(new ZodValidationPipe(createHandPickedSegmentSchema)) input: CreateHandPickedSegmentInput,
+  ): Promise<SegmentResponse> {
+    return this.handPicked.createFrom(storeId, input, { kind: 'user', userId });
+  }
+
   @Post('preview')
   @HttpCode(200)
   @RequirePermission('segments.view')
@@ -81,6 +101,31 @@ export class SegmentsController {
     @Body(new ZodValidationPipe(changeSegmentSchema)) input: ChangeSegmentInput,
   ): Promise<SegmentResponse> {
     return this.segments.change(storeId, segmentId, input, { kind: 'user', userId });
+  }
+
+  @Post(':segmentId/customers')
+  @HttpCode(200)
+  @RequirePermission('segments.edit')
+  addCustomers(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('segmentId', ParseUUIDPipe) segmentId: string,
+    @Body(new ZodValidationPipe(handPickedChangeSchema)) input: HandPickedChangeInput,
+  ): Promise<HandPickedChangeResponse> {
+    return this.handPicked.add(storeId, segmentId, input.contactIds, { kind: 'user', userId });
+  }
+
+  // Undo of Add to segment, sent with only the customers that were added.
+  @Post(':segmentId/customers/remove')
+  @HttpCode(200)
+  @RequirePermission('segments.edit')
+  removeCustomers(
+    @CurrentStore() storeId: string,
+    @CurrentUser() userId: string,
+    @Param('segmentId', ParseUUIDPipe) segmentId: string,
+    @Body(new ZodValidationPipe(handPickedChangeSchema)) input: HandPickedChangeInput,
+  ): Promise<HandPickedChangeResponse> {
+    return this.handPicked.remove(storeId, segmentId, input.contactIds, { kind: 'user', userId });
   }
 
   @Post(':segmentId/archive')

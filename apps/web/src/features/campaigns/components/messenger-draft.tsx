@@ -23,14 +23,16 @@ import { useMessengerDraftForm, type DraftInput } from './use-messenger-draft-fo
 export function MessengerDraft({
   pages,
   campaign,
+  startingSegmentId,
   onBack,
 }: {
   pages: ChannelConnection[];
   campaign?: CampaignResponse;
+  startingSegmentId?: string;
   onBack?: () => void;
 }) {
   const { afterSave, approving, closeApproval } = useAfterSave();
-  const draft = useMessengerDraftForm(pages, campaign, afterSave);
+  const draft = useMessengerDraftForm(pages, campaign, { onSaved: afterSave, startingSegmentId });
   return (
     <FormProvider {...draft.form}>
       {campaign ? (

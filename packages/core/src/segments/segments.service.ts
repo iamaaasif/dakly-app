@@ -177,7 +177,7 @@ export class SegmentsService {
   }
 }
 
-function toSegmentResponse(segment: Segment): SegmentResponse {
+export function toSegmentResponse(segment: Segment): SegmentResponse {
   return {
     ...segment,
     archivedAt: segment.archivedAt?.toISOString() ?? null,

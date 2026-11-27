@@ -3,6 +3,7 @@ import { Trash2 } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
 import { consentChannels } from '@dakly/contracts/contacts';
+import { formatCount } from '@dakly/contracts/money';
 import type { CreateSegmentInput } from '@dakly/contracts/segments';
 import { cn } from '@dakly/ui/cn';
 import { FormField } from '@dakly/ui/form-field';
@@ -14,6 +15,7 @@ import {
   fieldLabels,
   kindLabels,
   newCondition,
+  type BuilderField,
   type SegmentField,
   sourceLabels,
 } from '../segment-labels';
@@ -30,7 +32,7 @@ type ConditionFieldsProps = {
   onRemove?: () => void;
 };
 
-const fields = Object.entries(fieldLabels) as [SegmentField, string][];
+const fields = Object.entries(fieldLabels) as [BuilderField, string][];
 const operators = [
   ['is_any_of', 'is'],
   ['is_none_of', 'is not'],
@@ -48,6 +50,7 @@ const consentOptions = [
 export function ConditionFields({ path, label, joiner, onRemove }: ConditionFieldsProps) {
   const { control, setValue } = useFormContext<CreateSegmentInput>();
   const field = useWatch({ control, name: `${path}.field` });
+  const pickedCount = useWatch({ control, name: `${path}.values` })?.length ?? 0;
   const handleFieldChange = (next: string) => {
     const chosen = fields.find(([value]) => value === next);
     if (chosen) setValue(path, newCondition(chosen[0]), { shouldDirty: true });
@@ -67,23 +70,29 @@ export function ConditionFields({ path, label, joiner, onRemove }: ConditionFiel
       >
         {joiner}
       </span>
-      <FormField name={`${path}.field`} label="Field" hideLabel>
-        {(controlProps) => (
-          <Select value={field} onValueChange={handleFieldChange}>
-            <SelectTrigger {...controlProps}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {fields.map(([value, text]) => (
-                <SelectItem key={value} value={value}>
-                  {text}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </FormField>
-      <ConditionValueFields path={path} field={field} />
+      {field === 'contact' ? (
+        <p className="py-2 text-sm text-text-secondary sm:col-span-3">
+          {formatCount(pickedCount)} customers picked on the list
+        </p>
+      ) : (
+        <FormField name={`${path}.field`} label="Field" hideLabel>
+          {(controlProps) => (
+            <Select value={field} onValueChange={handleFieldChange}>
+              <SelectTrigger {...controlProps}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {fields.map(([value, text]) => (
+                  <SelectItem key={value} value={value}>
+                    {text}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </FormField>
+      )}
+      {field === 'contact' ? null : <ConditionValueFields path={path} field={field} />}
       <button
         type="button"
         disabled={!onRemove}
