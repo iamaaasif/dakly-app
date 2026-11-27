@@ -85,7 +85,7 @@ function WorkflowHeader({ canEdit }: { canEdit: boolean }) {
         </p>
       </div>
       {canEdit && (
-        <Link href="/automations/new" className={buttonVariants()}>
+        <Link href="/automations/new" data-shortcut="new" className={buttonVariants()}>
           <Plus size={16} aria-hidden="true" /> Create workflow
         </Link>
       )}

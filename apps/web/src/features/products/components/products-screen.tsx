@@ -88,7 +88,7 @@ function ProductsHeader({ onAddProduct }: { onAddProduct?: () => void }) {
       description="What you sell, with prices, sizes and stock. Dakly uses it to answer chats, take orders, sell in the shop and fill your order link."
       actions={
         onAddProduct ? (
-          <Button onClick={onAddProduct} className="gap-1.5">
+          <Button onClick={onAddProduct} className="gap-1.5" data-shortcut="new">
             <span aria-hidden="true">+</span> Add product
           </Button>
         ) : null

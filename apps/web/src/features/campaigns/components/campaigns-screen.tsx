@@ -32,6 +32,7 @@ export function CampaignsScreen(initial: { query: CampaignListQuery }) {
         {session?.currentStore?.canEditCampaigns && (
           <Link
             href="/campaigns/new"
+            data-shortcut="new"
             className="inline-flex min-h-10 items-center gap-2 rounded-md bg-action px-4 py-2 font-medium text-on-primary hover:bg-action-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           >
             <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Create campaign
