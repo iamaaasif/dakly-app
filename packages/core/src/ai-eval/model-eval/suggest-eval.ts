@@ -4,9 +4,9 @@ import { LlmError, type LlmDriver } from '@dakly/providers/llm/llm-driver';
 
 import type { ConversationEntry } from '../../ai-agent/chat-memory';
 import { conversationBlocks, windowConversation } from '../../ai-agent/conversation-window';
-import { suggestReplyV1 } from '../../ai-agent/prompts/suggest-reply.v1';
+import { suggestReplyV2 } from '../../ai-agent/prompts/suggest-reply.v2';
 import { checkReplyFacts } from '../../ai-agent/reply-fact-check';
-import { suggestionTools } from '../../ai-agent/reply-mode';
+import { suggestionOpening, suggestionTools } from '../../ai-agent/reply-mode';
 import { shopBlock } from '../../ai-agent/shop-block';
 import { defaultShopRules, shopRulesBlock } from '../../ai-agent/shop-rules';
 import { deliveryPolicyPassage, deliveryZones, evalShop } from './eval-catalog';
@@ -23,7 +23,8 @@ const BANGLA = /[\u0980-\u09F2\u09F4-\u09FF]/u;
 
 export type SuggestCase = {
   id: string;
-  reason: (typeof handoverReasons)[number];
+  // null is Write with AI: a person asked for a draft without a hand-over.
+  reason: (typeof handoverReasons)[number] | null;
   earlier?: ConversationEntry[];
   question: string;
   script: 'bangla' | 'latin';
@@ -92,6 +93,22 @@ export const suggestCases: SuggestCase[] = [
     mentionsAnyOf: ['team', 'check', 'confirm', 'price'],
     forbid: ['we can give you 20', 'yes, 20%', 'i can offer'],
   },
+  {
+    id: 'asked-exchange-banglish',
+    reason: null,
+    question: 'apu dress ta fit hoy nai, onno size e change korte parbo?',
+    script: 'latin',
+    mentionsAnyOf: ['size', 'change', 'exchange', 'bodl'],
+    forbid: ['refund debo', 'taka ferot'],
+  },
+  {
+    id: 'asked-delivery-bangla',
+    reason: null,
+    question: 'ঢাকার বাইরে ডেলিভারি চার্জ কত?',
+    script: 'bangla',
+    mentionsAnyOf: ['১২০', '120', 'চার্জ'],
+    forbid: ['ফ্রি ডেলিভারি'],
+  },
 ];
 
 // The fixture shop answers like the real tools, with its exchange policy in the knowledge.
@@ -110,16 +127,17 @@ function suggestContext(golden: SuggestCase) {
     ...(golden.earlier ?? []),
     { from: 'customer', text: golden.question },
   ];
-  return [
-    shopBlock(
-      { address: null, ...evalShop },
-      deliveryZones.map(({ name, chargeTaka }) => ({ name, chargeTaka })),
-    ),
-    shopRulesBlock(defaultShopRules),
-    ...conversationBlocks(windowConversation(conversation, [golden.question])),
-    '<product_candidates>{"products":[]}</product_candidates>',
-    `<handover_reason>${golden.reason}</handover_reason>`,
-  ].join('\n');
+  return (
+    [
+      shopBlock(
+        { address: null, ...evalShop },
+        deliveryZones.map(({ name, chargeTaka }) => ({ name, chargeTaka })),
+      ),
+      shopRulesBlock(defaultShopRules),
+      ...conversationBlocks(windowConversation(conversation, [golden.question])),
+      '<product_candidates>{"products":[]}</product_candidates>',
+    ].join('\n') + suggestionOpening(golden)
+  );
 }
 
 export function scoreSuggestion(golden: SuggestCase, draft: string, toolResults: object[]) {
@@ -145,7 +163,7 @@ async function draftFor(driver: LlmDriver, meter: EvalMeter, model: string, gold
   for (let round = 1; round <= MAX_ROUNDS; round += 1) {
     const result = await meteredRespond(driver, meter, `suggest:${model}`, {
       model,
-      instructions: suggestReplyV1.instructions,
+      instructions: suggestReplyV2.instructions,
       input: suggestContext(golden) + transcript,
       output: chatReplyOutputSchema,
       tools: suggestionTools,

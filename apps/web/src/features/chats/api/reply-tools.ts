@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 
+import type { WriteConversationReplyInput, WrittenConversationReply } from '@dakly/contracts/chats';
 import type { OrderLinkUrlResponse } from '@dakly/contracts/orders';
 import type { ProductListResponse } from '@dakly/contracts/products';
 import { ApiError } from '@dakly/ui/api-client';
@@ -51,5 +52,16 @@ export function useOrderLink() {
   return useMutation({
     mutationFn: (productId: string) =>
       request<OrderLinkUrlResponse>(`/order-links/${productId}`).then(({ url }) => url),
+  });
+}
+
+export function useReplyDraft(id: string) {
+  const { request } = useStoreRequest();
+  return useMutation({
+    mutationFn: (input: WriteConversationReplyInput) =>
+      request<WrittenConversationReply>(`/conversations/${id}/reply-drafts`, {
+        method: 'POST',
+        body: input,
+      }).then(({ text }) => text),
   });
 }

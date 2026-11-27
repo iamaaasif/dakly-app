@@ -465,6 +465,14 @@ describe('Conversation', () => {
       return Response.json({ fileId: photoId, uploadUrl: 'https://storage.test/up' }, verified);
   }
 
+  // AI rewrite answers with the typed reply polished; Write with AI with a fresh answer.
+  function replyDraft(path: string, init?: RequestInit) {
+    if (!path.endsWith('/reply-drafts')) return undefined;
+    const input = JSON.parse(String(init?.body)) as { mode: string; text?: string };
+    const text = input.mode === 'rewrite' ? `Ji apu, ${input.text}.` : 'Ji apu, M ar L size ache.';
+    return Response.json({ text }, verified);
+  }
+
   // Records what the screen sent and answers like the API, failing the first `failures` sends.
   function savePost(path: string, body: string, failures: number) {
     posts.push({ path, body: JSON.parse(body) });
@@ -490,7 +498,7 @@ describe('Conversation', () => {
     change: Partial<ConversationResponse> = {},
   ) {
     vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
-      const fixed = photoUpload(path, init) ?? sidebarResponse(path);
+      const fixed = photoUpload(path, init) ?? replyDraft(path, init) ?? sidebarResponse(path);
       if (fixed) return fixed;
       if (init?.method === 'POST') return savePost(path, String(init.body ?? '{}'), failures);
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
@@ -649,6 +657,20 @@ describe('Conversation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add emoji' }));
     await userEvent.click(screen.getByRole('menuitem', { name: '🙏' }));
     expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe('🙏');
+  });
+
+  it('polishes the typed reply with AI rewrite and drafts one with Write with AI', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const box = (await screen.findByLabelText('Write a reply')) as HTMLTextAreaElement;
+    const rewrite = screen.getByRole('button', { name: 'AI rewrite' });
+    expect((rewrite as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.type(box, 'size ase');
+    await userEvent.click(rewrite);
+    await waitFor(() => expect(box.value).toBe('Ji apu, size ase.'));
+    await userEvent.click(screen.getByRole('button', { name: 'Write with AI' }));
+    await waitFor(() => expect(box.value).toBe('Ji apu, M ar L size ache.'));
+    expect(posts).toEqual([]);
   });
 
   it('saves an internal note and keeps the reply box off when the window is closed', async () => {

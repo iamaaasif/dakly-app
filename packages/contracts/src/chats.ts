@@ -238,6 +238,11 @@ export const sendConversationProductSchema = z.strictObject({
   productId: z.uuid(),
   operationKey: z.uuid(),
 });
+// Write with AI drafts a reply to the customer's latest messages; AI rewrite polishes what is typed.
+export const writeConversationReplySchema = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('write') }),
+  z.strictObject({ mode: z.literal('rewrite'), text: z.string().trim().min(1).max(2000) }),
+]);
 export const takeOverConversationSchema = z
   .strictObject({ returnAfterMinutes: z.literal([30, 60, 360]).optional() })
   .default({});
@@ -249,6 +254,8 @@ export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
 export type CreateConversationNoteInput = z.infer<typeof createConversationNoteSchema>;
 export type CreateConversationReplyInput = z.infer<typeof createConversationReplySchema>;
 export type SendConversationProductInput = z.infer<typeof sendConversationProductSchema>;
+export type WriteConversationReplyInput = z.infer<typeof writeConversationReplySchema>;
+export type WrittenConversationReply = { text: string };
 export type TakeOverConversationInput = z.infer<typeof takeOverConversationSchema>;
 
 // What the Chats header shows for the shop's day so far. The order figures are null for members who
