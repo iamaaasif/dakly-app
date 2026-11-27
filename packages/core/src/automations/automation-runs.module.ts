@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 
 import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
+import { InboxModule } from '../messaging/inbox.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
@@ -37,6 +38,7 @@ import { AnswerAutomationConfirmationTap } from './jobs/answer-automation-confir
     ContactsModule,
     ErrorReportingModule,
     OutboxModule,
+    InboxModule,
     LinksModule,
     MessagingModule,
     OrdersModule,

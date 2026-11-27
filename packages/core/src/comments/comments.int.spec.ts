@@ -42,7 +42,7 @@ beforeAll(async () => {
 });
 
 async function clean() {
-  for (const table of ['audit_log', 'social_comments', 'channel_connections'])
+  for (const table of ['audit_log', 'outbox_events', 'social_comments', 'channel_connections'])
     await admin.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [fixtures]);
 }
 
@@ -145,6 +145,11 @@ it('stores a comment once and keeps it out of other shops', async () => {
     }),
   ]);
   expect((await comments.list(otherStore, { limit: 50 })).items).toEqual([]);
+  const { rows } = await admin.pool.query(
+    "select payload from outbox_events where store_id = $1 and type = 'comment.received'",
+    [storeId],
+  );
+  expect(rows).toEqual([{ payload: { commentId: items[0]?.id } }]);
   await expect(
     comments.replyPublicly(otherStore, staff, items[0]!.id, { body: 'Inbox e dilam' }),
   ).rejects.toMatchObject({ code: 'COMMENT_NOT_FOUND' });
@@ -259,4 +264,75 @@ it('keeps comments closed while Chats is off', async () => {
   await expect(comments.list(storeId, { limit: 10 })).rejects.toMatchObject({
     code: 'CHATS_DISABLED',
   });
+});
+
+const stillAllowed = async () => true;
+
+it('automatically replies once even when the comment job is delivered twice', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-auto');
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  const sendPublic = vi.spyOn(connections, 'replyToMetaComment');
+  const reply = {
+    privateBody: 'Blue Kurti costs ৳1,200.',
+    publicBody: 'I sent the price in Messenger.',
+    stillAllowed,
+  };
+  await Promise.all([
+    comments.replyAutomatically(storeId, comment.id, reply),
+    comments.replyAutomatically(storeId, comment.id, reply),
+  ]);
+  const { items } = await comments.list(storeId, { limit: 50 });
+  expect(items).toMatchObject([
+    { status: 'replied', publicReplied: true, canReplyPrivately: false },
+  ]);
+  expect(sendPrivate.mock.calls.map(([, payload]) => payload.text)).toEqual([reply.privateBody]);
+  expect(sendPublic.mock.calls.map(([, payload]) => payload.text)).toEqual([reply.publicBody]);
+});
+
+it.each(['unavailable', 'invalid_response'] as const)(
+  'leaves the public reply available when the private send is unconfirmed (%s)',
+  async (errorCode) => {
+    const storeId = await shop();
+    const comment = await stored(storeId, 'c-auto-private-unconfirmed');
+    vi.spyOn(connections, 'sendMetaPrivateReply').mockRejectedValueOnce(
+      new MetaRequestError(errorCode),
+    );
+    const reply = {
+      privateBody: 'Blue Kurti costs ৳1,200.',
+      publicBody: 'I sent the price in Messenger.',
+      stillAllowed,
+    };
+    await expect(comments.replyAutomatically(storeId, comment.id, reply)).rejects.toMatchObject({
+      code: 'COMMENT_UNCONFIRMED',
+    });
+    await comments.replyAutomatically(storeId, comment.id, reply);
+    const { items } = await comments.list(storeId, { limit: 50 });
+    expect(items).toMatchObject([
+      { status: 'new', publicReplied: false, canReplyPrivately: false },
+    ]);
+  },
+);
+
+it('retries a refused public reply without sending the confirmed private reply again', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-auto-public-refused');
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  const sendPublic = vi.spyOn(connections, 'replyToMetaComment');
+  sendPublic.mockRejectedValueOnce(new MetaRequestError('rejected'));
+  const reply = {
+    privateBody: 'Blue Kurti costs ৳1,200.',
+    publicBody: 'I sent the price in Messenger.',
+    stillAllowed,
+  };
+  await expect(comments.replyAutomatically(storeId, comment.id, reply)).rejects.toMatchObject({
+    code: 'COMMENT_REJECTED',
+  });
+  await comments.replyAutomatically(storeId, comment.id, {
+    publicBody: reply.publicBody,
+    stillAllowed,
+  });
+  expect(sendPrivate).toHaveBeenCalledTimes(1);
+  const { items } = await comments.list(storeId, { limit: 50 });
+  expect(items).toMatchObject([{ status: 'replied', publicReplied: true }]);
 });

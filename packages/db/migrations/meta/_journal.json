@@ -827,6 +827,13 @@
       "when": 1795793982346,
       "tag": "0117_segment_archived_at",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1795800117079,
+      "tag": "0118_comment_author_and_automation_claim",
+      "breakpoints": true
     }
   ]
 }

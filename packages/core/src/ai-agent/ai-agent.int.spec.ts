@@ -16,7 +16,10 @@ import { FakeLlmDriver } from '@dakly/providers/llm/fake-llm-driver';
 import type { LlmResult } from '@dakly/providers/llm/llm-driver';
 
 import { AiService } from '../ai/ai.service';
+import { ChannelConnectionsService } from '../channels/channel-connections.service';
+import { CommentsService } from '../comments/comments.service';
 import { KillSwitchesService } from '../kill-switches/kill-switches.service';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
@@ -25,8 +28,10 @@ import { DatabaseModule } from '../platform/database/database.module';
 import { QUEUES } from '../platform/queue/queues';
 import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { PublishedPostsService } from '../social/published-posts.service';
 import { AiAgentModule } from './ai-agent.module';
 import { AiAgentService } from './ai-agent.service';
+import { ReplyToFacebookCommentJob } from './jobs/reply-to-facebook-comment.job';
 import { ProductCardRepliesService } from './product-card-replies.service';
 import { ReplyDraftsService } from './reply-drafts.service';
 import { ReplyToolsModule } from './reply-tools.module';
@@ -68,6 +73,9 @@ afterAll(async () => {
     await queue?.obliterate();
     await app?.close();
     for (const table of [
+      'social_comments',
+      'post_targets',
+      'posts',
       'product_variants',
       'products',
       'delivery_zones',
@@ -191,6 +199,28 @@ function script(output: ChatClassification, duringCall?: () => Promise<void>, ca
   return inputs;
 }
 
+async function intentEvents({ storeId }: Shop) {
+  const { rows } = await admin.pool.query<{
+    payload: {
+      intent: string | null;
+      channel: string;
+      conversationId: string;
+      messageIds: string[];
+    };
+  }>("select payload from outbox_events where store_id = $1 and type = 'message.burst_received'", [
+    storeId,
+  ]);
+  return Promise.all(
+    rows.map(async ({ payload }) => ({
+      intent: payload.intent,
+      channel: payload.channel,
+      text: await app
+        .get(ConversationIntentService)
+        .burstText(storeId, payload.conversationId, payload.messageIds),
+    })),
+  );
+}
+
 async function intentTags({ storeId }: Shop) {
   const { rows } = await admin.pool.query<{ intent_tag: string | null }>(
     'select intent_tag from conversations where store_id = $1',
@@ -304,6 +334,16 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     usage: [],
   });
   expect(await intentTags(active)).toEqual(['greeting']);
+  // The second run finds the chat with a person and announces the same burst without an intent;
+  // automations keep the first entry for a burst.
+  const announced = {
+    channel: 'messenger',
+    text: 'bhai, order ta\nekjon manush er sathe kotha bolbo',
+  };
+  expect(await intentEvents(active)).toEqual([
+    { ...announced, intent: 'greeting' },
+    { ...announced, intent: null },
+  ]);
 });
 
 it('hands over an exhausted allowance without calling the model or spending a unit', async () => {
@@ -405,6 +445,23 @@ it('stops before classifying when AI is off, the window closes, consent is withd
   for (const store of [off, active, expired]) {
     expect(await observe(store)).toMatchObject({ replies: [], notices: [], runs: [], usage: [] });
   }
+});
+
+it('announces a burst with no intent when AI replies are off, once for the whole burst', async () => {
+  const off = await shop(1, false);
+  const first = await receive(off, 'dam koto?');
+  await agent.schedule(off.storeId, first.conversation_id, first.id);
+  expect((await queue.getJob(`ai-reply-${first.id}`))?.delay).toBe(3000);
+  const latest = await receive(off, 'এই শার্টের দাম কত');
+  await agent.schedule(off.storeId, latest.conversation_id, latest.id);
+  await agent.reply(off.storeId, first.conversation_id, first.id);
+  expect(await intentEvents(off)).toEqual([]);
+  await agent.reply(off.storeId, latest.conversation_id, latest.id);
+  expect(await intentEvents(off)).toEqual([
+    { intent: null, channel: 'messenger', text: 'dam koto?\nএই শার্টের দাম কত' },
+  ]);
+  expect(await intentTags(off)).toEqual([null]);
+  expect(await observe(off)).toMatchObject({ replies: [], notices: [], runs: [], usage: [] });
 });
 
 it('answers after a routine classification', async () => {
@@ -970,6 +1027,266 @@ it("returns the chat to the AI 30 minutes after a person's last reply, without c
     await staffReply(permanent, third.conversation_id, third.sender_identity_id),
   );
   expect(await conversationTimer(permanent)).toEqual({ responder: 'human', minutes: null });
+});
+
+it.each(['catalogue photo', 'caption', 'conflicting post', 'conflicting hidden photo'] as const)(
+  'handles a Facebook price comment using %s and respects the comment switch',
+  async (match) => {
+    const { storeId, connectionId } = await shop();
+    const productId = randomUUID();
+    const postId = randomUUID();
+    const photoId = randomUUID();
+    const conflicting = match === 'conflicting post' || match === 'conflicting hidden photo';
+    await admin.pool.query(
+      "insert into products (id, store_id, name, price_poisha, image_file_ids, is_visible_in_chats) values ($1,$2,'Blue Kurti',120000,$3,$4)",
+      [productId, storeId, [photoId], match !== 'conflicting hidden photo'],
+    );
+    await admin.pool.query(
+      "insert into product_variants (id, store_id, product_id, title, on_hand, is_default) values (gen_random_uuid(),$1,$2,'Default',3,true)",
+      [storeId, productId],
+    );
+    if (conflicting) {
+      const secondProductId = randomUUID();
+      await admin.pool.query(
+        "insert into products (id,store_id,name,price_poisha) values ($1,$2,'Red Saree',250000)",
+        [secondProductId, storeId],
+      );
+      await admin.pool.query(
+        "insert into product_variants (id,store_id,product_id,title,on_hand,is_default) values (gen_random_uuid(),$1,$2,'Default',3,true)",
+        [storeId, secondProductId],
+      );
+    }
+    const caption = {
+      'catalogue photo': 'New arrival',
+      caption: 'New arrival: Blue Kurti',
+      'conflicting post': 'New arrival: Red Saree',
+      'conflicting hidden photo': 'New arrival: Red Saree',
+    }[match];
+    await admin.pool.query(
+      'insert into posts (id,store_id,caption,media_file_ids) values ($1,$2,$3,$4)',
+      [postId, storeId, caption, match === 'caption' ? [] : [photoId]],
+    );
+    await admin.pool.query(
+      "insert into post_targets (id,store_id,post_id,channel_connection_id,external_post_id,status,published_at) values (gen_random_uuid(),$1,$2,$3,$4,'published',now())",
+      [storeId, postId, connectionId, postId],
+    );
+    const social = app.get(PublishedPostsService);
+    await expect(
+      social.content(randomUUID(), {
+        channelConnectionId: connectionId,
+        externalPostId: postId,
+      }),
+    ).resolves.toBeUndefined();
+    const comments = app.get(CommentsService);
+    const connections = app.get(ChannelConnectionsService);
+    vi.spyOn(connections, 'prepareMetaSend').mockResolvedValue({
+      storeId,
+      connectionId,
+      channel: 'messenger',
+      ciphertext: Buffer.alloc(0),
+      keyVersion: 1,
+      externalAccountId: connectionId,
+    });
+    const privateReply = vi.spyOn(connections, 'sendMetaPrivateReply').mockResolvedValue({
+      externalMessageId: 'private-reply',
+      recipientExternalId: 'commenter',
+    });
+    const publicReply = vi.spyOn(connections, 'replyToMetaComment').mockResolvedValue({
+      externalReplyId: 'public-reply',
+    });
+    const job = app.get(ReplyToFacebookCommentJob);
+
+    async function receivePriceComment() {
+      const now = new Date();
+      await comments.receive(storeId, {
+        kind: 'facebook_page',
+        externalAccountId: connectionId,
+        externalPostId: postId,
+        externalCommentId: randomUUID(),
+        authorExternalId: 'commenter',
+        authorName: null,
+        parentExternalCommentId: null,
+        text: 'Price koto?',
+        commentedAt: now,
+        receivedAt: now,
+      });
+      const { rows } = await admin.pool.query(
+        "select id, type, payload, occurred_at from outbox_events where store_id=$1 and type='comment.received' order by occurred_at desc,id desc limit 1",
+        [storeId],
+      );
+      const { occurred_at, ...event } = rows[0];
+      return { ...event, storeId, occurredAt: occurred_at.toISOString() };
+    }
+
+    const event = await receivePriceComment();
+    await job.handle(event);
+    await job.handle(event);
+    await admin.pool.query('update ai_agent_settings set abilities = $2 where store_id=$1', [
+      storeId,
+      { answerComments: false },
+    ]);
+    await job.handle(await receivePriceComment());
+    expect(privateReply.mock.calls.map(([, input]) => input.text)).toEqual(
+      conflicting ? [] : ['Blue Kurti er dam ৳1,200.'],
+    );
+    expect(publicReply.mock.calls.map(([, input]) => input.text)).toEqual(
+      conflicting ? [] : ['Messenger e dam janiyechi.'],
+    );
+    const { items } = await comments.list(storeId, { limit: 50 });
+    expect(items.map(({ status }) => status).sort()).toEqual([
+      'new',
+      conflicting ? 'new' : 'replied',
+    ]);
+  },
+);
+
+async function pricedFacebookPost({ storeId, connectionId }: Shop) {
+  const productId = randomUUID();
+  const postId = randomUUID();
+  const photoId = randomUUID();
+  await admin.pool.query(
+    "insert into products (id, store_id, name, price_poisha, image_file_ids) values ($1,$2,'Blue Kurti',120000,$3)",
+    [productId, storeId, [photoId]],
+  );
+  await admin.pool.query(
+    "insert into product_variants (id, store_id, product_id, title, on_hand, is_default) values (gen_random_uuid(),$1,$2,'Default',3,true)",
+    [storeId, productId],
+  );
+  await admin.pool.query(
+    "insert into posts (id,store_id,caption,media_file_ids) values ($1,$2,'New arrival',$3)",
+    [postId, storeId, [photoId]],
+  );
+  await admin.pool.query(
+    "insert into post_targets (id,store_id,post_id,channel_connection_id,external_post_id,status,published_at) values (gen_random_uuid(),$1,$2,$3,$4,'published',now())",
+    [storeId, postId, connectionId, postId],
+  );
+  await app.get(PublishedPostsService).content(storeId, {
+    channelConnectionId: connectionId,
+    externalPostId: postId,
+  });
+  return postId;
+}
+
+function facebookCommentSends(shop: Shop) {
+  const connections = app.get(ChannelConnectionsService);
+  vi.spyOn(connections, 'prepareMetaSend').mockResolvedValue({
+    storeId: shop.storeId,
+    connectionId: shop.connectionId,
+    channel: 'messenger',
+    ciphertext: Buffer.alloc(0),
+    keyVersion: 1,
+    externalAccountId: shop.connectionId,
+  });
+  const privateReply = vi.spyOn(connections, 'sendMetaPrivateReply').mockResolvedValue({
+    externalMessageId: 'private-reply',
+    recipientExternalId: 'commenter',
+  });
+  const publicReply = vi.spyOn(connections, 'replyToMetaComment').mockResolvedValue({
+    externalReplyId: 'public-reply',
+  });
+  return { privateReply, publicReply };
+}
+
+async function receiveFacebookComment(shop: Shop, postId: string, text: string) {
+  const now = new Date();
+  await app.get(CommentsService).receive(shop.storeId, {
+    kind: 'facebook_page',
+    externalAccountId: shop.connectionId,
+    externalPostId: postId,
+    externalCommentId: randomUUID(),
+    authorExternalId: 'commenter',
+    authorName: null,
+    parentExternalCommentId: null,
+    text,
+    commentedAt: now,
+    receivedAt: now,
+  });
+  const { rows } = await admin.pool.query(
+    "select id, type, payload, occurred_at from outbox_events where store_id=$1 and type='comment.received' order by occurred_at desc,id desc limit 1",
+    [shop.storeId],
+  );
+  const { occurred_at, ...event } = rows[0];
+  return { ...event, storeId: shop.storeId, occurredAt: occurred_at.toISOString() };
+}
+
+it.each([
+  ['দাম কত?', 'বাংলা', 'Blue Kurti এর দাম ৳1,200।', 'মেসেঞ্জারে দাম জানিয়েছি।'],
+  ['price koto?', 'Banglish', 'Blue Kurti er dam ৳1,200.', 'Messenger e dam janiyechi.'],
+  ['Koto DAM??', 'Banglish', 'Blue Kurti er dam ৳1,200.', 'Messenger e dam janiyechi.'],
+  ['price please', 'English', 'Blue Kurti costs ৳1,200.', 'I sent the price in Messenger.'],
+])(
+  "answers the price comment %s in the customer's own language (%s)",
+  async (text, _name, privateText, publicText) => {
+    const active = await shop();
+    const postId = await pricedFacebookPost(active);
+    const { privateReply, publicReply } = facebookCommentSends(active);
+    await app
+      .get(ReplyToFacebookCommentJob)
+      .handle(await receiveFacebookComment(active, postId, text));
+    expect(privateReply.mock.calls.map(([, input]) => input.text)).toEqual([privateText]);
+    expect(publicReply.mock.calls.map(([, input]) => input.text)).toEqual([publicText]);
+  },
+);
+
+it.each([
+  'dam koto ar delivery charge koto?',
+  'ei kurti ta ki 20% discount e dewa jabe? দাম কত',
+  'size ache?',
+  'inbox',
+  'Price koto, ar stock ache to?',
+])('leaves the comment %s to staff', async (text) => {
+  const active = await shop();
+  const postId = await pricedFacebookPost(active);
+  const { privateReply, publicReply } = facebookCommentSends(active);
+  await app
+    .get(ReplyToFacebookCommentJob)
+    .handle(await receiveFacebookComment(active, postId, text));
+  expect(privateReply).not.toHaveBeenCalled();
+  expect(publicReply).not.toHaveBeenCalled();
+});
+
+it('stays quiet on a comment an automation has claimed', async () => {
+  const active = await shop();
+  const postId = await pricedFacebookPost(active);
+  const { privateReply, publicReply } = facebookCommentSends(active);
+  const event = await receiveFacebookComment(active, postId, 'Price koto?');
+  await admin.pool.query(
+    'update social_comments set automation_claimed_at = now() where store_id = $1',
+    [active.storeId],
+  );
+  await app.get(ReplyToFacebookCommentJob).handle(event);
+  expect(privateReply).not.toHaveBeenCalled();
+  expect(publicReply).not.toHaveBeenCalled();
+});
+
+it('looks the commenter up again at send time, so a later opt-out stops the private price', async () => {
+  const active = await shop();
+  const postId = await pricedFacebookPost(active);
+  const { privateReply, publicReply } = facebookCommentSends(active);
+  const event = await receiveFacebookComment(active, postId, 'Price koto?');
+  // The commenter had no contact when the comment arrived; they message the shop and opt out afterwards.
+  await receive(active, 'STOP', 'commenter');
+  await app.get(ReplyToFacebookCommentJob).handle(event);
+  expect(privateReply).not.toHaveBeenCalled();
+  expect(publicReply).not.toHaveBeenCalled();
+});
+
+it('does not post the public reply when a switch is turned off after the private price went out', async () => {
+  const active = await shop();
+  const postId = await pricedFacebookPost(active);
+  const { privateReply, publicReply } = facebookCommentSends(active);
+  privateReply.mockImplementationOnce(async () => {
+    await admin.pool.query('update ai_agent_settings set abilities = $2 where store_id = $1', [
+      active.storeId,
+      { answerComments: false },
+    ]);
+    return { externalMessageId: 'private-reply', recipientExternalId: 'commenter' };
+  });
+  await app
+    .get(ReplyToFacebookCommentJob)
+    .handle(await receiveFacebookComment(active, postId, 'Price koto?'));
+  expect(privateReply).toHaveBeenCalledTimes(1);
+  expect(publicReply).not.toHaveBeenCalled();
 });
 
 function scriptReplies(...replies: string[]) {

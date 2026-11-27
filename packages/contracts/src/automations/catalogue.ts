@@ -19,6 +19,8 @@ type AvailableBefore = 'channels' | 'orders' | null;
 
 export const triggerFilterFields = [
   'channel',
+  'intent',
+  'keywords',
   'consent_source',
   'tag',
   'segment',
@@ -51,6 +53,7 @@ export const triggerKeys = [
   'link_tapped',
   'birthday',
   'chat_started',
+  'message_received',
   'comment_on_post',
   'lead_captured',
   'back_in_stock',
@@ -106,6 +109,13 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
   chat_started: {
     source: { event: 'conversation.started' },
     filters: { channel: 'optional' },
+    needs: 'channels',
+    availableBefore: 'orders',
+  },
+  // Fires once per burst of customer messages, after the chat classifier reads it.
+  message_received: {
+    source: { event: 'message.burst_received' },
+    filters: { channel: 'optional', intent: 'optional', keywords: 'optional' },
     needs: 'channels',
     availableBefore: 'orders',
   },
@@ -231,11 +241,14 @@ export const orderTriggerKeys: readonly TriggerKey[] = [
   'order_returned',
 ];
 
+// Started by a subscriber on a chat event instead of an order event.
+const chatTriggerKeys: readonly TriggerKey[] = ['message_received'];
+
 export function isTriggerAvailable(key: TriggerKey): boolean {
   const trigger = automationTriggers[key];
   const readyBeforeChannels =
     trigger.availableBefore === 'channels' && !('plannedEvent' in trigger.source);
-  return readyBeforeChannels || orderTriggerKeys.includes(key);
+  return readyBeforeChannels || orderTriggerKeys.includes(key) || chatTriggerKeys.includes(key);
 }
 
 // SMS and Messenger send (CAMP-7), Instagram DM (AUTO-5); WhatsApp comes with Q2.

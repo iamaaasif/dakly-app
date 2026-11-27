@@ -13,6 +13,7 @@ import { ConsentService } from '../consents/consent.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { KillSwitchesService } from '../kill-switches/kill-switches.service';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -41,6 +42,7 @@ import {
   SalesAgentService,
 } from './sales-agent.service';
 import type { ShopRules } from './shop-rules';
+import { DEFAULT_DEBOUNCE_SECONDS, UnreadBurstService } from './unread-burst.service';
 
 export const REPLY_TO_CUSTOMER = 'reply-to-customer';
 // Past this a stuck copy or reading no longer holds the reply back.
@@ -72,6 +74,8 @@ export class AiAgentService {
     @Inject(AiRunsService) private readonly runs: AiRunsService,
     @Inject(SalesAgentService) private readonly sales: SalesAgentService,
     @Inject(InboxService) private readonly inbox: InboxService,
+    @Inject(ConversationIntentService) private readonly intents: ConversationIntentService,
+    @Inject(UnreadBurstService) private readonly unread: UnreadBurstService,
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
@@ -91,8 +95,8 @@ export class AiAgentService {
 
   async schedule(storeId: string, conversationId: string, messageId: string) {
     const settings = await this.enabledSettings(storeId);
-    if (!settings) return;
-    const turn = await this.inbox.aiReplyTurn(storeId, conversationId);
+    // The job runs even when the AI will not answer, so the burst still reaches automations.
+    const turn = await this.inbox.latestTurn(storeId, conversationId);
     const arrival = turn?.inbound.find(({ id }) => id === messageId);
     if (!turn || arrival?.createdAt.getTime() !== turn.latest.createdAt.getTime()) return;
     const dedupeId = `${storeId}-${conversationId}`;
@@ -101,7 +105,7 @@ export class AiAgentService {
       { storeId, conversationId, messageId: turn.latest.id },
       {
         jobId: `ai-reply-${messageId}`,
-        delay: settings.debounceSeconds * 1000,
+        delay: (settings?.debounceSeconds ?? DEFAULT_DEBOUNCE_SECONDS) * 1000,
         deduplication: { id: dedupeId, replace: true, keepLastIfActive: true },
         attempts: 3,
         backoff: { type: 'exponential', delay: MINUTE_MS },
@@ -140,12 +144,15 @@ export class AiAgentService {
 
   async reply(storeId: string, conversationId: string, messageId: string) {
     const candidate = await this.eligibleTurn(storeId, conversationId);
-    if (!candidate) return;
+    if (!candidate) return this.unread.announce(storeId, conversationId, messageId);
     const { turn, debounceSeconds } = candidate;
     // A later event may have arrived while an older subscriber was adding its job.
     if (turn.latest.id !== messageId) return this.schedule(storeId, conversationId, turn.latest.id);
     const stopped = await this.stoppedReason(storeId, turn);
-    if (stopped) return this.handOver(storeId, conversationId, candidate, { reason: stopped });
+    if (stopped) {
+      await this.unread.announce(storeId, conversationId, messageId);
+      return this.handOver(storeId, conversationId, candidate, { reason: stopped });
+    }
     const burst = burstText(turn, debounceSeconds * 1000, this.clock.now());
     // A photo or voice note is read in the background; answering first would ignore what it says.
     if (burst.awaitingMedia) return retryAt(this.clock.now(), MEDIA_WAIT_MS);
@@ -157,7 +164,7 @@ export class AiAgentService {
       customerTexts: burst.texts,
       rules: candidate.rules,
     };
-    const { reason, prepared } = await this.checkHandOver(compose, earlier, burst.screenTexts);
+    const { reason, prepared } = await this.checkHandOver(compose, earlier, burst);
     if (reason === 'busy') return retryAt(this.clock.now());
     if (reason)
       return this.stop(storeId, conversationId, candidate, { reason, texts: burst.texts });
@@ -173,10 +180,10 @@ export class AiAgentService {
   private async checkHandOver(
     compose: ComposeInput,
     earlier: ConversationEntry[],
-    screenTexts: string[],
+    burst: Pick<ReturnType<typeof burstText>, 'screenTexts' | 'messageIds'>,
   ) {
     const { storeId, rules } = compose;
-    const screened = screenCustomerTexts(screenTexts, {
+    const screened = screenCustomerTexts(burst.screenTexts, {
       handOverDiscounts: rules.handover.discounts,
       earlier,
     });
@@ -185,8 +192,14 @@ export class AiAgentService {
     const classified: Classified = screened
       ? { reason: screened }
       : await this.classifyWithAllowance(compose, earlier);
-    if (classified.intent && compose.chat)
-      await this.inbox.setIntentTag(storeId, compose.chat.conversationId, classified.intent);
+    // A busy model retries the whole reply, so its burst is announced once it has been read.
+    if (classified.reason !== 'busy' && compose.chat)
+      await this.intents.record(storeId, compose.chat.conversationId, {
+        contactId: compose.contactId,
+        channel: compose.chat.channel,
+        intent: classified.intent ?? null,
+        messageIds: burst.messageIds,
+      });
     return { reason: classified.reason, prepared };
   }
 
