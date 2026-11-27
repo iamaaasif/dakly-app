@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { chatChannels } from './channels';
 import type { ContactKind } from './contacts';
+import { confirmProductPhotoSchema } from './products';
 import { searchText } from './search-text';
 
 export const conversationStatuses = ['open', 'needs_you', 'later', 'done'] as const;
@@ -220,11 +221,18 @@ export const changeConversationLabelSchema = z.strictObject({
   change: z.enum(['add', 'remove']),
 });
 export const createConversationNoteSchema = z.strictObject({ body: searchText.max(4000) });
-export const createConversationReplySchema = z.strictObject({
-  body: searchText.max(2000),
-  // One per send press, so a retried request does not send the reply twice.
-  operationKey: z.uuid(),
-});
+// A photo a person attaches is uploaded first, then named here by the file id it was given.
+export const createConversationReplySchema = z
+  .strictObject({
+    body: z.string().trim().max(2000),
+    // One per send press, so a retried request does not send the reply twice.
+    operationKey: z.uuid(),
+    photo: confirmProductPhotoSchema.optional(),
+  })
+  .refine(({ body, photo }) => body || photo, {
+    path: ['body'],
+    message: 'Write a reply or attach a photo',
+  });
 // A person sends a product from the reply box as the same card the AI sends.
 export const sendConversationProductSchema = z.strictObject({
   productId: z.uuid(),

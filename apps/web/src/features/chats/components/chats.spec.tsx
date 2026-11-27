@@ -447,6 +447,7 @@ describe('Conversation', () => {
     isVisibleInChats: true,
     isVisibleInOrderLink: true,
   };
+  const photoId = '0190a0b1-0000-7000-8000-000000000001';
   const hiddenKurti = { ...kurti, id: 'p2', name: 'Old Kurti', status: 'hidden' };
   // What the reply box tools read, by path prefix.
   const referenceData = {
@@ -457,31 +458,41 @@ describe('Conversation', () => {
     },
   };
 
+  // The browser asks the API for an upload link, then puts the photo straight into storage.
+  function photoUpload(path: string, init?: RequestInit) {
+    if (init?.method === 'PUT') return new Response(null, { status: 200 });
+    if (path.endsWith('/photos/upload-url'))
+      return Response.json({ fileId: photoId, uploadUrl: 'https://storage.test/up' }, verified);
+  }
+
+  // Records what the screen sent and answers like the API, failing the first `failures` sends.
+  function savePost(path: string, body: string, failures: number) {
+    posts.push({ path, body: JSON.parse(body) });
+    if (posts.length <= failures)
+      return Response.json(
+        { error: { code: 'CHAT_SEND_FAILED', message: 'Could not send reply' } },
+        { ...verified, status: 503 },
+      );
+    saved.push({
+      ...inbound,
+      id: 'm2',
+      direction: 'out',
+      authorType: 'user',
+      status: 'sent',
+      body: (JSON.parse(body) as { body: string }).body,
+    });
+    return Response.json({ messageId: 'sent' }, verified);
+  }
+
   function respondToThread(
     windowExpiresAt: string | null,
     failures = 0,
     change: Partial<ConversationResponse> = {},
   ) {
     vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
-      if (init?.method === 'POST') {
-        posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) });
-        if (posts.length <= failures)
-          return Response.json(
-            { error: { code: 'CHAT_SEND_FAILED', message: 'Could not send reply' } },
-            { ...verified, status: 503 },
-          );
-        saved.push({
-          ...inbound,
-          id: 'm2',
-          direction: 'out',
-          authorType: 'user',
-          status: 'sent',
-          body: (JSON.parse(String(init.body ?? '{}')) as { body: string }).body,
-        });
-        return Response.json({ messageId: 'sent' }, verified);
-      }
-      const sidebar = sidebarResponse(path);
-      if (sidebar) return sidebar;
+      const fixed = photoUpload(path, init) ?? sidebarResponse(path);
+      if (fixed) return fixed;
+      if (init?.method === 'POST') return savePost(path, String(init.body ?? '{}'), failures);
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
         return Response.json({ items: [...saved, inbound], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
@@ -616,6 +627,28 @@ describe('Conversation', () => {
         'Order korte link e jan\nhttps://dakly.shop/o/wowapps/p1',
       ),
     );
+  });
+
+  it('sends an attached photo on its own and adds an emoji to the reply', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const photo = new File([new Uint8Array(1200)], 'kurti.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(await screen.findByLabelText('Photo to attach'), photo);
+    expect(await screen.findByText('kurti.jpg')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({
+      path: `/api/conversations/${chatId}/replies`,
+      body: {
+        body: '',
+        photo: { fileId: photoId, contentType: 'image/jpeg', sizeBytes: 1200 },
+      },
+    });
+    expect(screen.queryByText('kurti.jpg')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add emoji' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: '🙏' }));
+    expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe('🙏');
   });
 
   it('saves an internal note and keeps the reply box off when the window is closed', async () => {

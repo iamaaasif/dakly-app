@@ -9,11 +9,11 @@ import {
   type MetaAuthorizationDriver,
   type MetaPage,
   type MetaTokenHealthDriver,
-  type OutboundCard,
   type OutboundMessage,
   type ProfileDriver,
 } from '../channel-driver';
 import { failedMediaResult, isMetaMediaUrl, mediaType, readCapped } from './meta-media';
+import { cardContent, imageContent, messageContent, messageKey } from './meta-message-content';
 
 const graph = 'https://graph.facebook.com/v27.0/';
 const login = 'https://www.facebook.com/v27.0/dialog/oauth';
@@ -87,42 +87,6 @@ function sendResponseError(code: number, subcode?: number): MetaRequestError {
 
 function permissionDenied(code: number): boolean {
   return code === 10 || (code >= 200 && code <= 299);
-}
-
-function cardContent(message: OutboundMessage, card: OutboundCard) {
-  const elements = card.elements.map(({ title, subtitle, imageUrl, buttons }) => ({
-    title,
-    subtitle,
-    ...(imageUrl ? { image_url: imageUrl } : {}),
-    buttons: buttons.map((button) =>
-      button.type === 'link'
-        ? { type: 'web_url', title: button.title, url: button.url }
-        : { type: 'postback', title: button.title, payload: button.payload },
-    ),
-  }));
-  return {
-    attachment: { type: 'template', payload: { template_type: 'generic', elements } },
-    // Instagram does not take the operation reference.
-    ...(message.channel === 'messenger' ? { metadata: message.operationKey } : {}),
-  };
-}
-
-function messageContent(message: OutboundMessage) {
-  if (message.channel === 'instagram') return { text: message.text };
-  const metadata = message.operationKey;
-  if (!message.buttons?.length) return { text: message.text, metadata };
-  const buttons = message.buttons.map(({ title, payload }) => ({
-    type: 'postback',
-    title,
-    payload,
-  }));
-  return {
-    attachment: {
-      type: 'template',
-      payload: { template_type: 'button', text: message.text, buttons },
-    },
-    metadata,
-  };
 }
 
 type MetaApp = {
@@ -244,19 +208,29 @@ export class MetaGraphChannelDriver
         if (!(error instanceof MetaRequestError) || error.code !== 'rejected') throw error;
       }
     }
-    let imageRejected = false;
-    if (message.imageUrl) {
-      try {
-        await this.post(credentials, message, {
-          attachment: { type: 'image', payload: { url: message.imageUrl } },
-        });
-      } catch (error) {
-        if (!(error instanceof MetaRequestError) || error.code !== 'rejected') throw error;
-        imageRejected = true;
-      }
-    }
+    const { imageUrl } = message;
+    // A photo sent on its own carries the operation key itself, and a refusal is the send's failure.
+    if (imageUrl && !message.text)
+      return this.post(credentials, message, imageContent(imageUrl, messageKey(message)));
+    const imageRejected = imageUrl
+      ? await this.isImageRejected(credentials, message, imageUrl)
+      : false;
     const sent = await this.post(credentials, message, messageContent(message));
     return imageRejected ? { ...sent, imageRejected: true as const } : sent;
+  }
+
+  private async isImageRejected(
+    credentials: ChannelCredentials,
+    message: OutboundMessage,
+    imageUrl: string,
+  ) {
+    try {
+      await this.post(credentials, message, imageContent(imageUrl));
+      return false;
+    } catch (error) {
+      if (!(error instanceof MetaRequestError) || error.code !== 'rejected') throw error;
+      return true;
+    }
   }
 
   private async post(

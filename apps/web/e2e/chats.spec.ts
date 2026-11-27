@@ -239,7 +239,7 @@ test('lists chats by folder, state and channel and shows the folder counts', asy
     await expect(page.getByText('Dakly AI is handling this chat')).toBeVisible();
     await page.getByRole('button', { name: /^Label/ }).click();
     await page.getByLabel('New label').fill('VIP');
-    await page.getByRole('button', { name: 'Add' }).click();
+    await page.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(page.getByRole('checkbox', { name: 'VIP' })).toBeChecked();
     await capture(page, 'labels');
     await page.keyboard.press('Escape');
