@@ -1,8 +1,11 @@
 import { z } from 'zod';
 
-import { type AutomationGraph, automationGraphSchema } from './automations/graph';
+import {
+  type AutomationChannel,
+  type AutomationGraph,
+  automationGraphSchema,
+} from './automations/graph';
 import { automationTemplates, type TemplateKey } from './automations/templates';
-import type { CampaignChannel } from './campaigns';
 
 export const automationStatuses = ['draft', 'active', 'paused', 'archived'] as const;
 // Manual is the Pause button; balance is a short SMS balance, which a top-up ends on its own.
@@ -97,7 +100,7 @@ export type AutomationDetailResponse = AutomationResponse & {
 export type AutomationListItem = AutomationResponse & {
   trigger: AutomationGraph['trigger']['key'];
   stepCount: number;
-  channels: CampaignChannel[];
+  channels: AutomationChannel[];
   enteredLast30Days: number;
   attributedRevenuePoisha: string;
 };

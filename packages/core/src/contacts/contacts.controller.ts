@@ -40,6 +40,7 @@ import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { ContactErasureService } from './contact-erasure.service';
 import { ContactExportService } from './contact-export.service';
 import { ContactListService } from './contact-list.service';
+import { ContactTagsService } from './contact-tags.service';
 import { ContactsService } from './contacts.service';
 
 @Controller('contacts')
@@ -48,6 +49,7 @@ export class ContactsController {
     @Inject(ContactsService) private readonly contactsService: ContactsService,
     @Inject(ContactListService) private readonly listService: ContactListService,
     @Inject(ContactExportService) private readonly exports: ContactExportService,
+    @Inject(ContactTagsService) private readonly tags: ContactTagsService,
     @Inject(ContactErasureService) private readonly erasureService: ContactErasureService,
   ) {}
 
@@ -73,7 +75,7 @@ export class ContactsController {
     return this.listService.list(storeId, query, access, { kind: 'user', userId });
   }
 
-  // Declared before `:contactId`, which would otherwise take "counts" or "export" for an id.
+  // Declared before `:contactId`, which would otherwise take "counts" "export" or "tags" for an id.
   @Get('counts')
   @RequirePermission('customers.view')
   counts(
@@ -81,6 +83,13 @@ export class ContactsController {
     @Query(new ZodValidationPipe(contactCountsQuerySchema)) query: ContactCountsQuery,
   ): Promise<ContactCountsResponse> {
     return this.listService.counts(storeId, query.hasOrdered);
+  }
+
+  // Every tag on the shop's live contacts, for the Contacts tag filter.
+  @Get('tags')
+  @RequirePermission('customers.view')
+  tagsInUse(@CurrentStore() storeId: string): Promise<string[]> {
+    return this.tags.inUse(storeId);
   }
 
   @Get('export')

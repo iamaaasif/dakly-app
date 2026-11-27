@@ -1,3 +1,4 @@
+import { orderStageLabels } from '@dakly/contracts/order-stage-labels';
 import type {
   cancelReasons,
   onHoldReasons,
@@ -5,7 +6,23 @@ import type {
   OrderSummary,
 } from '@dakly/contracts/orders';
 
-export { orderStageLabels } from '@dakly/contracts/order-stage-labels';
+import type { OrderTab } from './orders-url';
+
+export { orderStageLabels };
+
+export const orderTabLabels: Record<OrderTab, string> = {
+  inquiries: 'Inquiries',
+  to_confirm: orderStageLabels.to_confirm,
+  to_pack: orderStageLabels.to_pack,
+  with_courier: orderStageLabels.with_courier,
+  delivered: orderStageLabels.delivered,
+  pending: 'Pending',
+  on_hold: orderStageLabels.on_hold,
+  returned: orderStageLabels.returned,
+};
+
+// The order the tabs are shown in.
+export const orderTabSequence = Object.keys(orderTabLabels) as OrderTab[];
 
 type OrderSource = OrderSummary['source'];
 
