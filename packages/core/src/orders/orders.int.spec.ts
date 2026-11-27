@@ -352,6 +352,27 @@ describe('OrdersService', () => {
     expect(pending.items.map(({ id }) => id)).toEqual([held, waiting]);
   });
 
+  it('keeps orders waiting for an advance out of the To confirm count and list', async () => {
+    const before = await service.list(fixture.a, { stage: 'to_confirm', limit: 20 });
+    const plain = await order(fixture.a, 1310, 'to_confirm');
+    const waiting = await order(fixture.a, 1311, 'to_confirm');
+    const held = await order(fixture.a, 1312, 'on_hold');
+    await fixture.connection.pool.query(
+      "update orders set payment_status = 'advance_requested' where id = any($1::uuid[])",
+      [[waiting, held]],
+    );
+    const toConfirm = await service.list(fixture.a, { stage: 'to_confirm', limit: 20 });
+    expect(toConfirm.items.map(({ id }) => id)).toContain(plain);
+    expect(toConfirm.items.map(({ id }) => id)).not.toContain(waiting);
+    expect(toConfirm.counts.to_confirm).toBe(before.counts.to_confirm + 1);
+    expect(toConfirm.counts.on_hold).toBe(before.counts.on_hold + 1);
+    const pending = await service.list(fixture.a, {
+      paymentStatus: 'advance_requested',
+      limit: 20,
+    });
+    expect(pending.items.map(({ id }) => id)).toEqual(expect.arrayContaining([waiting, held]));
+  });
+
   it('finds open order items only in the verified store on an owner connection', async () => {
     const id = await order(fixture.a, 1200, 'to_confirm');
     const variantId = await trackedItem(id, 0);
