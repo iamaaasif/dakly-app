@@ -24,7 +24,12 @@ import type {
   ContactSource,
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
-import type { SegmentCondition, SegmentInnerGroup, SegmentRules } from '@dakly/contracts/segments';
+import {
+  type reachableChannels,
+  type SegmentCondition,
+  type SegmentInnerGroup,
+  type SegmentRules,
+} from '@dakly/contracts/segments';
 import { contactConsentCurrent } from '@dakly/db/schema/consents';
 import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
@@ -309,6 +314,25 @@ export class ContactsRepository {
       tx.select({ count: count() }).from(contacts).where(matching(storeId, rules)),
     );
     return row!.count;
+  }
+
+  async countReachable(
+    storeId: string,
+    rules: SegmentRules,
+  ): Promise<Record<(typeof reachableChannels)[number], number>> {
+    const reachableCount = (channel: ConsentChannel) =>
+      sql<number>`count(*) filter (where ${exists(granted(storeId, channel))})`.mapWith(Number);
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          whatsapp: reachableCount('whatsapp'),
+          sms: reachableCount('sms'),
+          messenger: reachableCount('messenger'),
+        })
+        .from(contacts)
+        .where(matching(storeId, rules)),
+    );
+    return row!;
   }
 
   async isMatching(storeId: string, id: string, rules: SegmentRules): Promise<boolean> {

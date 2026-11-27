@@ -360,6 +360,10 @@ export class ContactsService {
     return this.contactsRepository.countMatching(storeId, rules);
   }
 
+  countReachable(storeId: string, rules: SegmentRules) {
+    return this.contactsRepository.countReachable(storeId, rules);
+  }
+
   isMatching(storeId: string, contactId: string, rules: SegmentRules): Promise<boolean> {
     return this.contactsRepository.isMatching(storeId, contactId, rules);
   }
