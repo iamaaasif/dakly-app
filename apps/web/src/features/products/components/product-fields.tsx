@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Controller, useController, useFormContext } from 'react-hook-form';
 
-import type { ProductFormValues } from '@dakly/contracts/products';
+import { takaInput, type ProductFormValues } from '@dakly/contracts/products';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
@@ -12,6 +12,7 @@ import { ProductDescriptionField } from './product-description-field';
 import { ProductInputField } from './product-input-field';
 import { ProductLinesField } from './product-lines-field';
 import { ProductBrandField, ProductCategoryField } from './product-list-fields';
+import { ProductMoneyField } from './product-money-field';
 import { ProductTrackStock } from './product-track-stock';
 
 const extraFlags = [
@@ -44,7 +45,7 @@ export function ProductNameFields({ productId, onPage }: ProductFieldsProps) {
     <>
       <ProductInputField
         name="name"
-        label={onPage ? 'Product name' : 'Name'}
+        label={onPage ? 'Title' : 'Name'}
         placeholder="e.g. Cotton Panjabi"
         autoFocus={!productId}
       />
@@ -68,30 +69,48 @@ export function ProductNameFields({ productId, onPage }: ProductFieldsProps) {
 
 export function ProductPriceFields({ productId, onPage }: ProductFieldsProps) {
   const { simple, showSkuAndCost } = useShowSkuAndCost(productId);
+  const MoneyField = onPage ? ProductMoneyField : ProductInputField;
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <ProductInputField
+        <MoneyField
           name="pricePoisha"
-          label={onPage ? 'Regular price ৳' : 'Selling price ৳'}
+          label={onPage ? 'Regular price' : 'Selling price ৳'}
           deps={onPage ? 'compareAtPricePoisha' : undefined}
         />
-        <ProductInputField
+        <MoneyField
           name="compareAtPricePoisha"
-          label={onPage ? 'Sell price ৳' : 'Old price ৳'}
+          label={onPage ? 'Sell price' : 'Old price ৳'}
           optional
         />
         {showSkuAndCost ? (
-          <ProductInputField
+          <MoneyField
             name="variants.0.costPoisha"
-            label={onPage ? 'Product cost ৳' : 'Your cost ৳'}
+            label={onPage ? 'Product cost' : 'Your cost ৳'}
             optional
           />
         ) : null}
       </div>
+      {onPage ? <SellAboveRegular /> : null}
       {simple ? <PlainProfit onPage={onPage} /> : null}
       {simple ? <DefaultOverride /> : null}
     </>
+  );
+}
+
+// Shown while typing, before the form is submitted, so the mistake is caught at once.
+function SellAboveRegular() {
+  const form = useFormContext<ProductFormValues>();
+  const [regular, sell] = form.watch(['pricePoisha', 'compareAtPricePoisha']);
+  const error = form.formState.errors.compareAtPricePoisha;
+  const regularTaka = takaInput.safeParse(regular);
+  const sellTaka = takaInput.safeParse(sell);
+  if (error || !regularTaka.success || !sellTaka.success || sellTaka.data < regularTaka.data)
+    return null;
+  return (
+    <p role="alert" className="text-sm text-danger">
+      Enter a sell price below the regular price.
+    </p>
   );
 }
 
@@ -129,7 +148,7 @@ export function ProductDeliveryFields() {
     <>
       <div className="flex items-end gap-2">
         <div className="min-w-0 flex-1">
-          <FormField name="weightGrams" label="Parcel weight" optional>
+          <FormField name="weightGrams" label="Product weight" optional>
             {(control) => (
               <Input
                 {...control}
@@ -225,7 +244,7 @@ function PlainProfit({ onPage }: Pick<ProductFieldsProps, 'onPage'>) {
   const profit = profitPercent(paidPrice, cost);
   return profit === null ? null : (
     <p className="text-sm text-text">
-      Profit: <span className="font-medium">{profit}%</span>
+      Profit <span className="font-medium">{profit}%</span> on the price
     </p>
   );
 }

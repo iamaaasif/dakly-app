@@ -88,11 +88,11 @@ test('builds a variants grid, saves it and writes one stock reason', async ({
     expect(activated.status()).toBe(204);
 
     await page.goto('/products/new');
-    await page.getByLabel('Product name', { exact: true }).fill(name);
-    await page.getByLabel('Regular price ৳', { exact: true }).fill('1200');
-    await page.getByLabel('Product cost ৳', { exact: true }).fill('650');
+    await page.getByLabel('Title', { exact: true }).fill(name);
+    await page.getByLabel('Regular price', { exact: true }).fill('1200');
+    await page.getByLabel('Product cost', { exact: true }).fill('650');
     await page.getByLabel('Available stock', { exact: true }).fill('12');
-    await page.getByLabel('Product code').fill('UT-TS-01');
+    await page.getByLabel('SKU (stock keeping unit)').fill('UT-TS-01');
     await expect(page.getByText('Profit')).toBeVisible();
     await capture(2, 'no-options', () =>
       page.getByRole('heading', { name: 'Variations' }).scrollIntoViewIfNeeded(),
