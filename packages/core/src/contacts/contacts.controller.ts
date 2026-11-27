@@ -127,6 +127,7 @@ export class ContactsController {
 
   // A hand-picked group is up to 100 ids, which is too long for a query string.
   @Post('export-selected')
+  @HttpCode(200)
   @RequirePermission('customers.view')
   async exportSelected(
     @CurrentStore() storeId: string,
