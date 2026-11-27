@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { commentClassifications, commentStatuses } from './chats';
 import { searchText } from './search-text';
 
+// What a comment asks for, read from its words; one comment can hold several.
+export const commentIntents = ['price', 'order', 'question'] as const;
+export type CommentIntent = (typeof commentIntents)[number];
+
 // Meta accepts one private reply per comment, and only within 7 days of the comment.
 export const privateReplyWindowDays = 7;
 

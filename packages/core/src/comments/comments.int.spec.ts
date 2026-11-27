@@ -354,3 +354,32 @@ it('retries a refused public reply without sending the confirmed private reply a
   const { items } = await comments.list(storeId, { limit: 50 });
   expect(items).toMatchObject([{ status: 'replied', publicReplied: true }]);
 });
+
+it('offers only top-level comments that await an answer', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-claim', { text: 'দাম কত' });
+  expect(await comments.triggerFacts(storeId, comment.id)).toMatchObject({
+    text: 'দাম কত',
+    channel: 'messenger',
+    authorExternalId: 'author-1',
+  });
+  await comments.replyPublicly(storeId, staff, comment.id, { body: 'Inbox e dilam' });
+  // Staff answered, so the comment no longer starts anything.
+  expect(await comments.triggerFacts(storeId, comment.id)).toBeUndefined();
+  const reply = await stored(storeId, 'c-nested', { parentExternalCommentId: 'c-claim' });
+  expect(await comments.triggerFacts(storeId, reply.id)).toBeUndefined();
+});
+
+it('sends nothing for the AI when an automation claims the comment after the AI checked it', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-race', { text: 'দাম কত' });
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  await comments.replyAutomatically(storeId, comment.id, {
+    privateBody: 'Blue Kurti costs ৳1,200.',
+    publicBody: 'I sent the price in Messenger.',
+    // The AI's check passes, then the automation claims before the send.
+    stillAllowed: async () => comments.claimForAutomation(storeId, comment.id),
+  });
+  expect(sendPrivate).not.toHaveBeenCalled();
+  expect((await comments.list(storeId, { limit: 50 })).items[0]).toMatchObject({ status: 'new' });
+});

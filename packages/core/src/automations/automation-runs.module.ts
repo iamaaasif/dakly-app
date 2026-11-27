@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
+import { CommentsModule } from '../comments/comments.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { InboxModule } from '../messaging/inbox.module';
@@ -35,6 +36,7 @@ import { AnswerAutomationConfirmationTap } from './jobs/answer-automation-confir
     AutomationsModule,
     BullModule.registerQueue({ name: QUEUES.bulk }),
     ClockModule,
+    CommentsModule,
     ContactsModule,
     ErrorReportingModule,
     OutboxModule,

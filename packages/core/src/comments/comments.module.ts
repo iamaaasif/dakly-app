@@ -6,8 +6,12 @@ import { ConsentsModule } from '../consents/consents.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { ClockModule } from '../platform/clock.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
+import { ProductSearchModule } from '../product-search/product-search.module';
+import { ProductsModule } from '../products/products.module';
 import { SendingModule } from '../sending/sending.module';
+import { SocialModule } from '../social/social.module';
 import { StoresModule } from '../stores/stores.module';
+import { CommentPostProductsService } from './comment-post-products.service';
 import { CommentsController } from './comments.controller';
 import { CommentsRepository } from './comments.repository';
 import { CommentsService } from './comments.service';
@@ -20,11 +24,14 @@ import { CommentsService } from './comments.service';
     ContactsModule,
     MetaAuthorizationModule,
     OutboxModule,
+    ProductSearchModule,
+    ProductsModule,
     SendingModule,
+    SocialModule,
     StoresModule,
   ],
   controllers: [CommentsController],
-  providers: [CommentsRepository, CommentsService],
-  exports: [CommentsService],
+  providers: [CommentPostProductsService, CommentsRepository, CommentsService],
+  exports: [CommentPostProductsService, CommentsService],
 })
 export class CommentsModule {}

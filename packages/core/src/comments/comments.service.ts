@@ -36,6 +36,11 @@ export type ReceiveCommentInput = {
 type ReceiveOutcome =
   'stored' | 'duplicate' | 'unknown_account' | 'stale_delivery' | 'invalid_timestamp';
 
+// Who sends decides which claims apply: the AI agent yields to an automation that claimed the
+// comment, an automation answers its own claim, and staff always may.
+type ReplyBy = { actor: AuditEntry['actor']; scope: 'staff' | 'ai' | 'automation' };
+const staffBy = (userId: string): ReplyBy => ({ actor: { kind: 'user', userId }, scope: 'staff' });
+
 type AutomaticReply = {
   privateBody?: string;
   publicBody: string;
@@ -108,7 +113,7 @@ export class CommentsService {
         this.clock.now(),
       );
       if (!id) return 'duplicate';
-      if (input.kind === 'facebook_page' && !input.parentExternalCommentId) {
+      if (!input.parentExternalCommentId) {
         await this.outbox.publish({
           type: 'comment.received',
           storeId,
@@ -118,6 +123,38 @@ export class CommentsService {
       }
       return 'stored';
     });
+  }
+
+  // Replies to comments, answered or hidden comments and comments with no words never start one.
+  async triggerFacts(storeId: string, id: string) {
+    const row = await this.repository.find(storeId, id);
+    if (!row?.body || !row.authorExternalId || row.parentExternalCommentId !== null) return;
+    if (row.status !== 'new' || row.classification === 'spam') return;
+    return {
+      commentId: row.id,
+      channel: channelOf(row.kind),
+      channelConnectionId: row.channelConnectionId,
+      externalPostId: row.externalPostId,
+      authorExternalId: row.authorExternalId,
+      text: row.body,
+      classification: row.classification,
+    };
+  }
+
+  // Whether the commenter can be messaged at all, checked before an automation claims the comment
+  // so a comment nobody can answer is left to the AI agent.
+  async canAnswerAutomatically(storeId: string, id: string): Promise<boolean> {
+    const row = await this.repository.find(storeId, id);
+    if (!row) return false;
+    const contactId = await this.currentContactId(storeId, row);
+    if (!contactId) return true;
+    const { decision } = await this.sendPolicy.checkForSend(storeId, {
+      contactId,
+      channel: channelOf(row.kind),
+      category: 'staff_reply',
+      windowClosesAt: privateReplyClosesAt(row),
+    });
+    return decision.action === 'send' && (await this.mayReplyAutomatically(storeId, contactId));
   }
 
   async list(storeId: string, query: CommentListQuery) {
@@ -134,13 +171,13 @@ export class CommentsService {
 
   async replyPublicly(storeId: string, userId: string, id: string, input: CommentReplyInput) {
     await this.requireChats(storeId);
-    await this.sendPublicReply(storeId, { kind: 'user', userId }, id, input.body);
+    await this.sendPublicReply(storeId, staffBy(userId), id, input.body);
     return this.respond(storeId, id);
   }
 
   async replyPrivately(storeId: string, userId: string, id: string, input: CommentReplyInput) {
     await this.requireChats(storeId);
-    await this.sendPrivateReply(storeId, { kind: 'user', userId }, id, input.body);
+    await this.sendPrivateReply(storeId, staffBy(userId), id, input.body);
     return this.respond(storeId, id);
   }
 
@@ -214,22 +251,17 @@ export class CommentsService {
     pending: { privateSent: boolean },
     { privateBody, publicBody, stillAllowed }: AutomaticReply,
   ) {
-    const actor = { kind: 'system' } as const;
+    const by: ReplyBy = { actor: { kind: 'system' }, scope: 'ai' };
     // The caller's switches are read again right before each send, not trusted from when the job started.
     if (!pending.privateSent && privateBody) {
       if (!(await stillAllowed())) return;
-      await this.sendPrivateReply(storeId, actor, id, privateBody);
+      await this.sendPrivateReply(storeId, by, id, privateBody);
     }
     if (!(await stillAllowed())) return;
-    await this.sendPublicReply(storeId, actor, id, publicBody);
+    await this.sendPublicReply(storeId, by, id, publicBody);
   }
 
-  private async sendPublicReply(
-    storeId: string,
-    actor: AuditEntry['actor'],
-    id: string,
-    body: string,
-  ) {
+  private async sendPublicReply(storeId: string, by: ReplyBy, id: string, body: string) {
     const row = await this.require(storeId, id);
     if (row.publicReplyExternalId) throw commentError('COMMENT_ALREADY_REPLIED');
     const channel = channelOf(row.kind);
@@ -238,14 +270,7 @@ export class CommentsService {
       row.channelConnectionId,
       channel,
     );
-    if (
-      !(await this.repository.claimPublicReply(
-        storeId,
-        id,
-        this.clock.now(),
-        actor.kind === 'system',
-      ))
-    )
+    if (!(await this.repository.claimPublicReply(storeId, id, this.clock.now(), by.scope)))
       throw commentError('COMMENT_ALREADY_REPLIED');
     let externalReplyId: string;
     try {
@@ -267,7 +292,7 @@ export class CommentsService {
         { publicReplyExternalId: externalReplyId },
         this.clock.now(),
       );
-      await this.record(storeId, actor, {
+      await this.record(storeId, by.actor, {
         action: 'comment.replied_publicly',
         id,
         state: 'replied',
@@ -275,12 +300,7 @@ export class CommentsService {
     });
   }
 
-  private async sendPrivateReply(
-    storeId: string,
-    actor: AuditEntry['actor'],
-    id: string,
-    body: string,
-  ) {
+  private async sendPrivateReply(storeId: string, by: ReplyBy, id: string, body: string) {
     const row = await this.require(storeId, id);
     const now = this.clock.now();
     if (row.privateRepliedAt) throw commentError('COMMENT_PRIVATE_REPLY_USED');
@@ -291,7 +311,7 @@ export class CommentsService {
       row.channelConnectionId,
       channel,
     );
-    await this.claimPrivateReply(storeId, row, actor.kind === 'system');
+    await this.claimPrivateReply(storeId, row, by.scope);
     try {
       await this.connections.sendMetaPrivateReply(prepared, {
         channel,
@@ -306,7 +326,7 @@ export class CommentsService {
     }
     await this.transaction.run(storeId, async () => {
       await this.repository.markReplied(storeId, id, {}, this.clock.now());
-      await this.record(storeId, actor, {
+      await this.record(storeId, by.actor, {
         action: 'comment.replied_privately',
         id,
         state: 'replied',
@@ -314,7 +334,7 @@ export class CommentsService {
     });
   }
 
-  private claimPrivateReply(storeId: string, row: CommentRow, onlyUnanswered: boolean) {
+  private claimPrivateReply(storeId: string, row: CommentRow, scope: ReplyBy['scope']) {
     return this.transaction.runLocked(storeId, async () => {
       const windowClosesAt = privateReplyClosesAt(row);
       const contactId = await this.currentContactId(storeId, row);
@@ -327,13 +347,13 @@ export class CommentsService {
         });
         if (
           decision.action !== 'send' ||
-          (onlyUnanswered && !(await this.mayReplyAutomatically(storeId, contactId)))
+          (scope !== 'staff' && !(await this.mayReplyAutomatically(storeId, contactId)))
         )
           throw commentError('COMMENT_PRIVATE_REPLY_BLOCKED');
       }
       const now = this.clock.now();
       if (now >= windowClosesAt) throw commentError('COMMENT_PRIVATE_REPLY_EXPIRED');
-      if (!(await this.repository.claimPrivateReply(storeId, row.id, now, onlyUnanswered)))
+      if (!(await this.repository.claimPrivateReply(storeId, row.id, now, scope)))
         throw commentError('COMMENT_PRIVATE_REPLY_USED');
     });
   }
