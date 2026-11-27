@@ -355,3 +355,30 @@ it('checks a bare amount named as a price after the offer tool returns', () => {
     failure: 'amount',
   });
 });
+
+describe('checkReplyFacts numbers inside ids', () => {
+  // Ids are random, so a digit run in one must never make an invented price look known.
+  const withIds = [
+    {
+      products: [
+        {
+          productId: '3f2a999b-0998-4c1d-8e5f-a1b2c3d4e5f6',
+          name: 'কটন পাঞ্জাবি',
+          variants: [{ variantId: 'b4d7500a-1234-4abc-9def-0123456789ab', priceTaka: 1200 }],
+        },
+      ],
+    },
+  ];
+
+  it('rejects a price that only appears as a digit run inside an id', () => {
+    for (const price of ['999', '998', '500', '1234'])
+      expect(check(`দাম ৳${price} only`, withIds), price).toEqual({
+        isSafe: false,
+        failure: 'amount',
+      });
+  });
+
+  it('still accepts the price the tool returned', () => {
+    expect(check('পাঞ্জাবির দাম ৳1,200।', withIds)).toEqual({ isSafe: true });
+  });
+});
