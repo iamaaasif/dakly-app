@@ -710,6 +710,17 @@ fixture('GET /contacts', async () => {
     expect(ids).not.toContain(foreign);
   }
 });
+fixture('GET /contacts/counts', async () => {
+  const { a, b } = await pair();
+  await contact(a);
+  await contact(a);
+  await contact(b);
+  for (const [shop, expected] of [
+    [a, 2],
+    [b, 1],
+  ] as const)
+    expect((await success(shop, 'GET', '/contacts/counts', 200)).json().all).toBe(expected);
+});
 fixture('GET /contacts/export', async () => {
   const { a, b } = await pair();
   const phones = { a: phone(), b: phone() };

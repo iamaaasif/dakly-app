@@ -50,6 +50,30 @@ export const lifecycleStages = [
   'regulars',
   'bought_once',
 ] as const;
+// The customer list tabs. Each one maps to lifecycle stages, except high value, which is the top 10%
+// of customers by net spend whatever their stage.
+export const contactListTypes = [
+  'new',
+  'returning',
+  'vip',
+  'inactive',
+  'high_value',
+  'at_risk',
+] as const;
+export const contactListSorts = [
+  'newest',
+  'last_purchase',
+  'highest_spend',
+  'most_orders',
+  'name',
+] as const;
+export const lastPurchaseWindows = [
+  '7_days',
+  '30_days',
+  '90_days',
+  'over_90_days',
+  'never',
+] as const;
 export const returnRiskLevels = ['new_customer', 'good', 'some_returns', 'high'] as const;
 export const importKinds = ['customers_csv', 'pos_csv', 'products_csv'] as const;
 export const importStatuses = [
@@ -95,13 +119,23 @@ export const customerInsightSources = ['all', 'shopify', 'facebook', 'store'] as
 
 const contactName = z.string().trim().min(1).max(120);
 
+export const MAX_CONTACT_TAGS = 50;
+const contactTags = z.array(z.string().trim().min(1).max(50)).max(MAX_CONTACT_TAGS);
+
+// Everything past name and phone is what the Add contact form can fill in. `age` is stored as a
+// birth year, and `notes` becomes the first note on the profile.
 export const createContactSchema = z.object({
   name: contactName,
   phone: bdMobileSchema,
+  whatsappPhone: bdMobileSchema.optional(),
+  email: z.email().max(254).optional(),
+  gender: z.enum(genders).optional(),
+  age: z.int().min(1).max(120).optional(),
+  address: z.string().trim().min(1).max(500).optional(),
+  district: z.string().trim().min(1).max(100).optional(),
+  tags: contactTags.optional(),
+  notes: z.string().trim().min(1).max(2000).optional(),
 });
-
-export const MAX_CONTACT_TAGS = 50;
-const contactTags = z.array(z.string().trim().min(1).max(50)).max(MAX_CONTACT_TAGS);
 
 export const updateContactSchema = z
   .strictObject({
@@ -116,12 +150,22 @@ export const contactListQuerySchema = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   kind: z.enum(contactKinds).optional(),
   tag: z.string().trim().min(1).max(50).optional(),
-  // A name, a full phone number, or the start of a number for members who see full phones.
+  // A name, an email, an area, a full phone number, or the start of a number for members who see full phones.
   search: z.string().trim().min(1).max(120).optional(),
+  type: z.enum(contactListTypes).optional(),
+  source: z.enum(contactSources).optional(),
+  minSpendPoisha: z.coerce.number().int().min(0).optional(),
+  maxSpendPoisha: z.coerce.number().int().min(0).optional(),
+  lastPurchase: z.enum(lastPurchaseWindows).optional(),
+  sort: z.enum(contactListSorts).default('newest'),
 });
 
-// The export takes the list's filters and everything they match, so it has no cursor or limit.
-export const contactExportQuerySchema = contactListQuerySchema.omit({ cursor: true, limit: true });
+// The export takes the list's filters and everything they match, so it has no cursor, limit or sort.
+export const contactExportQuerySchema = contactListQuerySchema.omit({
+  cursor: true,
+  limit: true,
+  sort: true,
+});
 
 export const matchSuggestionListQuerySchema = z.strictObject({ contactId: z.uuid() });
 
@@ -233,6 +277,8 @@ export type ImportConsentEvidence = z.infer<typeof importConsentEvidenceSchema>;
 export type ImportKind = (typeof importKinds)[number];
 export type ImportStatus = (typeof importStatuses)[number];
 export type ImportDuplicateMode = (typeof importDuplicateModes)[number];
+export type LifecycleStage = (typeof lifecycleStages)[number];
+export type ContactListType = (typeof contactListTypes)[number];
 export type ContactKind = (typeof contactKinds)[number];
 export type ContactSource = (typeof contactSources)[number];
 
@@ -255,6 +301,13 @@ export type ContactListItemResponse = ContactResponse & {
   source: ContactSource;
   // Channels the customer agreed to receive marketing on, in `consentChannels` order.
   consentedChannels: ConsentChannel[];
+  // From contact_stats; a contact with no orders has zero and a null date.
+  ordersCount: number;
+  netSpendPoisha: number;
+  lastOrderAt: string | null;
+  lifecycleStage: LifecycleStage;
+  // In the top 10% of customers by net spend, which the Type column shows beside the stage.
+  isHighValue: boolean;
 };
 
 export type ImportUploadResponse = { importId: string; uploadUrl: string };
@@ -291,7 +344,26 @@ export type ContactIdentityResponse = {
 };
 
 export type ContactDetailResponse = ContactResponse & { identities: ContactIdentityResponse[] };
-export type ContactListResponse = { items: ContactListItemResponse[]; nextCursor: string | null };
+// `total` counts everything the filters match, not just this page.
+export type ContactListResponse = {
+  items: ContactListItemResponse[];
+  nextCursor: string | null;
+  total: number;
+};
+
+// The tab counts and the page subtitle. Only deleted contacts are left out, whatever the filters.
+export type ContactCountsResponse = {
+  all: number;
+  new: number;
+  returning: number;
+  vip: number;
+  inactive: number;
+  highValue: number;
+  atRisk: number;
+  boughtMoreThanOnce: number;
+  // Agreed to receive marketing on at least one channel.
+  canReceiveMarketing: number;
+};
 
 export type ConsentChannel = (typeof consentChannels)[number];
 export type ConsentStatus = (typeof consentStatuses)[number];
