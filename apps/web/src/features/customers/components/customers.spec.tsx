@@ -185,14 +185,43 @@ describe('All customers', () => {
     expect(await screen.findByText('Loading customers')).toBeTruthy();
   });
 
-  it('asks only for people who ordered', async () => {
+  it('asks only for people who ordered and says how many there are', async () => {
     respondWithList([rahimaInList]);
     show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
-    await screen.findByRole('table');
+    expect(
+      await screen.findByText(
+        '2,486 customers · 1,124 bought more than once · 2,203 can receive marketing messages',
+      ),
+    ).toBeTruthy();
     expect(sent.find((request) => request.path.startsWith('/api/contacts?'))?.path).toBe(
       '/api/contacts?limit=50&sort=last_purchase&hasOrdered=true',
     );
+    expect(sent.some((request) => request.path === '/api/contacts/counts?hasOrdered=true')).toBe(
+      true,
+    );
     expect(screen.queryByRole('button', { name: /Add/ })).toBeNull();
+  });
+
+  it('shows the type tabs with their counts', async () => {
+    respondWithList([rahimaInList]);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
+    const tabs = within(await screen.findByRole('tablist', { name: 'Customer types' }));
+    expect(await tabs.findByRole('tab', { name: /^All\s*2,486$/ })).toBeTruthy();
+    expect(tabs.getByRole('tab', { name: /^High-value\s*158$/ })).toBeTruthy();
+    expect(tabs.getByRole('tab', { name: /^At-risk\s*96$/ })).toBeTruthy();
+  });
+
+  it('puts a tab choice in the address and starts from the first page', async () => {
+    respondWithList([rahimaInList]);
+    show(
+      <CustomersScreen
+        query={{ ...ordered, cursor: contactId }}
+        columns={defaultCustomerColumns}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('tab', { name: /^VIP/ }));
+    expect(push).toHaveBeenCalledWith('/customers?type=vip');
   });
 
   it('says the store has no customers yet, without tabs or filters', async () => {
@@ -202,12 +231,13 @@ describe('All customers', () => {
     expect(screen.queryByRole('tablist')).toBeNull();
   });
 
-  it('says no customer matches a search', async () => {
+  it('says no customer matches the filters and offers to clear them', async () => {
     respondWithList([]);
-    show(
-      <CustomersScreen query={{ ...ordered, search: 'zzz' }} columns={defaultCustomerColumns} />,
-    );
+    show(<CustomersScreen query={{ ...ordered, type: 'vip' }} columns={defaultCustomerColumns} />);
     expect(await screen.findByText('No customers match')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Clear filters' }).getAttribute('href')).toBe(
+      '/customers',
+    );
   });
 
   it('offers a retry when the list fails', async () => {
@@ -293,18 +323,24 @@ describe('All customers', () => {
     expect(table.getByText('None')).toBeTruthy();
   });
 
+  it('counts the rows picked in the footer', async () => {
+    respondWithList([rahimaInList]);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    expect(screen.getByText('Showing 1 of 1 customers · 1 selected')).toBeTruthy();
+  });
+
   it('puts a column choice in the address and keeps the filters', async () => {
     respondWithList([rahimaInList]);
-    show(
-      <CustomersScreen query={{ ...ordered, search: 'zzz' }} columns={defaultCustomerColumns} />,
-    );
+    show(<CustomersScreen query={{ ...ordered, type: 'vip' }} columns={defaultCustomerColumns} />);
     await screen.findByRole('table');
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Columns' }));
     await user.click(screen.getByRole('menuitemcheckbox', { name: 'Email' }));
     // The screen is not re-rendered by the mocked router, so this starts from the defaults again.
     expect(replace).toHaveBeenCalledWith(
-      '/customers?search=zzz&columns=phone%2Cwhatsapp%2Clocation%2Csource%2Ctags',
+      '/customers?type=vip&columns=phone%2Cwhatsapp%2Clocation%2Csource%2Ctags',
     );
   });
 
@@ -323,13 +359,28 @@ describe('All customers', () => {
     respondWithList([rahimaInList]);
     show(
       <CustomersScreen
-        query={{ ...ordered, cursor: contactId }}
+        query={{ ...ordered, type: 'vip', cursor: contactId }}
         columns={defaultCustomerColumns}
       />,
     );
     const user = userEvent.setup();
     await user.type(await screen.findByRole('searchbox', { name: 'Search' }), '01712345678{Enter}');
-    expect(push).toHaveBeenCalledWith('/customers?search=01712345678');
+    expect(push).toHaveBeenCalledWith('/customers?type=vip&search=01712345678');
+  });
+
+  it('puts a source, spending, time and sort choice in the address', async () => {
+    respondWithList([rahimaInList]);
+    show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);
+    const user = userEvent.setup();
+    // jsdom has no pointer capture or scrolling, which the menu asks for.
+    window.HTMLElement.prototype.hasPointerCapture = () => false;
+    window.HTMLElement.prototype.scrollIntoView = () => undefined;
+    await user.click(await screen.findByRole('combobox', { name: 'Spending' }));
+    await user.click(await screen.findByRole('option', { name: '৳1,000 to ৳10,000' }));
+    expect(push).toHaveBeenLastCalledWith('/customers?minSpendPoisha=100000&maxSpendPoisha=999999');
+    await user.click(screen.getByRole('combobox', { name: 'Sort' }));
+    await user.click(await screen.findByRole('option', { name: 'Highest spend' }));
+    expect(push).toHaveBeenLastCalledWith('/customers?sort=highest_spend');
   });
 });
 
@@ -373,6 +424,14 @@ describe('All contacts', () => {
     ).toBeTruthy();
     expect(screen.getByRole('tab', { name: /^VIP\s*42$/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /^At-risk\s*96$/ })).toBeTruthy();
+  });
+
+  it('selects rows and counts them in the footer', async () => {
+    respondWithList([rahimaInList]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    expect(screen.getByText(/1 selected/)).toBeTruthy();
   });
 
   it('says there are no contacts yet and offers to add one', async () => {
@@ -838,7 +897,10 @@ describe('Import customers', () => {
       Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => undefined }),
     );
     show(
-      <CustomersScreen query={{ ...ordered, search: 'rah' }} columns={defaultCustomerColumns} />,
+      <CustomersScreen
+        query={{ ...ordered, type: 'vip', source: 'shopify' }}
+        columns={defaultCustomerColumns}
+      />,
       true,
       true,
     );
@@ -847,9 +909,9 @@ describe('Import customers', () => {
     expect(
       await screen.findByText(`Exporting ${said} to Excel. Check your downloads in a moment.`),
     ).toBeTruthy();
-    expect(urls.some((url) => url === '/api/contacts/export?search=rah&hasOrdered=true')).toBe(
-      true,
-    );
+    expect(
+      urls.some((url) => url === '/api/contacts/export?type=vip&source=shopify&hasOrdered=true'),
+    ).toBe(true);
   });
 
   it('offers no Export button without the Download customer lists switch', async () => {

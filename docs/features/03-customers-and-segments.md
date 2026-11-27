@@ -143,8 +143,8 @@ The web app has two customer screens.
   form has Full name, Mobile number, WhatsApp number with Same as mobile number (ticked, so the
   WhatsApp number is left out), Email, Gender, Age, Address, Area, City, Segments (tags) and Notes.
   The Area is added to the end of the address, because a contact keeps one address line. A new
-  contact has no orders, so it shows here and not on Customers. Row checkboxes follow the
-  Customers screen (DSN-12).
+  contact has no orders, so it shows here and not on Customers. Row checkboxes and the selected
+  count work as on the Customers screen.
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
