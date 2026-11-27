@@ -98,7 +98,8 @@ test('manages categories and brands, filters by them and bulk edits them', async
 
     await page.goto('/products');
     await expect(page.getByRole('table', { name: 'Products' })).toBeVisible();
-    await page.getByLabel('Category').selectOption({ label: 'Men' });
+    await page.getByRole('combobox', { name: 'Category' }).click();
+    await page.getByRole('option', { name: 'Men', exact: true }).click();
     await expect(page.getByRole('table', { name: 'Products' }).getByRole('row')).toHaveCount(2);
     await capture('filters');
 
