@@ -27,6 +27,8 @@ import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { AiAgentModule } from './ai-agent.module';
 import { AiAgentService } from './ai-agent.service';
+import { ProductCardRepliesModule } from './product-card-replies.module';
+import { ProductCardRepliesService } from './product-card-replies.service';
 import { SuggestedReplyService } from './suggested-reply.service';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
@@ -40,6 +42,7 @@ Module({
   imports: [
     DatabaseModule,
     AiAgentModule,
+    ProductCardRepliesModule,
     BullModule.forRoot({
       connection: toRedisConnection(loadEnv().REDIS_URL),
       prefix: `agent-int-${randomUUID()}`,
@@ -1022,4 +1025,23 @@ it('leaves the team a draft after a hand-over until the customer or a person wri
   // A draft that finishes after a person answered is not saved.
   await suggestions.draft(active.storeId, first.conversation_id, 'asked_for_person');
   expect(await suggestedReply(active)).toBeNull();
+});
+
+it('sends the card a person picks once per press, as the AI would, and never an unknown product', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'panjabi ache?');
+  const cards = app.get(ProductCardRepliesService);
+  const press = { productId: active.productId, operationKey: randomUUID() };
+  const first = await cards.send(active.storeId, message.conversation_id, active.owner, press);
+  const again = await cards.send(active.storeId, message.conversation_id, active.owner, press);
+  expect(again.messageId).toBe(first.messageId);
+  expect(await sent(active)).toMatchObject([
+    { body: 'কটন পাঞ্জাবি\nDefault: ৳1,200', author_type: 'user' },
+  ]);
+  await expect(
+    cards.send(active.storeId, message.conversation_id, active.owner, {
+      productId: randomUUID(),
+      operationKey: randomUUID(),
+    }),
+  ).rejects.toMatchObject({ code: 'PRODUCT_NOT_FOUND' });
 });

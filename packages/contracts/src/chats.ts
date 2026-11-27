@@ -225,6 +225,11 @@ export const createConversationReplySchema = z.strictObject({
   // One per send press, so a retried request does not send the reply twice.
   operationKey: z.uuid(),
 });
+// A person sends a product from the reply box as the same card the AI sends.
+export const sendConversationProductSchema = z.strictObject({
+  productId: z.uuid(),
+  operationKey: z.uuid(),
+});
 export const takeOverConversationSchema = z
   .strictObject({ returnAfterMinutes: z.literal([30, 60, 360]).optional() })
   .default({});
@@ -235,6 +240,7 @@ export type ChangeConversationLabelInput = z.infer<typeof changeConversationLabe
 export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
 export type CreateConversationNoteInput = z.infer<typeof createConversationNoteSchema>;
 export type CreateConversationReplyInput = z.infer<typeof createConversationReplySchema>;
+export type SendConversationProductInput = z.infer<typeof sendConversationProductSchema>;
 export type TakeOverConversationInput = z.infer<typeof takeOverConversationSchema>;
 
 // What the Chats header shows for the shop's day so far. The order figures are null for members who

@@ -10,6 +10,7 @@ import { StoresService } from '../stores/stores.service';
 import { InboxRepository } from './inbox.repository';
 import { messagingError } from './messaging.errors';
 import { MessagingService } from './messaging.service';
+import type { OutgoingChannelMessage } from './outgoing-channel-message';
 
 @Injectable()
 export class ConversationReplyService {
@@ -22,11 +23,21 @@ export class ConversationReplyService {
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
-  async reply(
+  reply(
     storeId: string,
     conversationId: string,
     userId: string,
     { body, operationKey }: CreateConversationReplyInput,
+  ) {
+    return this.send(storeId, conversationId, userId, { content: body, operationKey });
+  }
+
+  // A person's message to the customer: typed text, or a product card with its photo.
+  async send(
+    storeId: string,
+    conversationId: string,
+    userId: string,
+    message: Pick<OutgoingChannelMessage, 'content' | 'operationKey' | 'image' | 'card'>,
   ) {
     const { extensions } = await this.stores.settings(storeId);
     if (!extensions.includes('chats')) throw messagingError('CHATS_DISABLED');
@@ -55,8 +66,8 @@ export class ConversationReplyService {
       connectionId,
       identityId: identity.id,
       category: 'staff_reply',
-      content: body,
-      operationKey: `staff-reply:${conversationId}:${operationKey}`,
+      ...message,
+      operationKey: `staff-reply:${conversationId}:${message.operationKey}`,
       actor: { kind: 'user', userId },
     });
   }

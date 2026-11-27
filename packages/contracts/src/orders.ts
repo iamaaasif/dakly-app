@@ -404,6 +404,8 @@ export const placeOrderLinkOrderSchema = z.strictObject({
 });
 export type PlaceOrderLinkOrderInput = z.infer<typeof placeOrderLinkOrderSchema>;
 export type PlacedOrderLinkOrder = { orderNumber: number; totalPoisha: number };
+// The public page where a customer orders one product themselves.
+export type OrderLinkUrlResponse = { url: string };
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
 export const editOrderSchema = z

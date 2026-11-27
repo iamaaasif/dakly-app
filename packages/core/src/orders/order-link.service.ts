@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type {
   OrderCatalogueProduct,
+  OrderLinkUrlResponse,
   PlaceOrderLinkOrderInput,
   PlacedOrderLinkOrder,
 } from '@dakly/contracts/orders';
@@ -9,6 +10,7 @@ import type { BotCheckDriver } from '@dakly/providers/bot-check/bot-check-driver
 
 import { DeliveryService } from '../delivery/delivery.service';
 import { RateLimiter } from '../platform/cache/rate-limiter';
+import { loadEnv } from '../platform/config/env';
 import { hashToken } from '../platform/crypto/token-hash';
 import { AppError } from '../platform/errors/app-error';
 import { DAY_MS, HOUR_MS } from '../platform/time';
@@ -55,6 +57,14 @@ export class OrderLinkService {
       districts,
       botCheckSiteKey: this.botCheck?.siteKey ?? null,
     };
+  }
+
+  // What a person pastes in a chat. A product the page would not show gets no link.
+  async urlFor(storeId: string, productId: string): Promise<OrderLinkUrlResponse> {
+    const { slug } = await this.stores.settings(storeId);
+    if (!slug) throw orderError('ORDER_LINK_NOT_FOUND');
+    await this.offered(storeId, productId);
+    return { url: `${loadEnv().SHORT_LINK_BASE_URL}/o/${slug}/${productId}` };
   }
 
   async place(

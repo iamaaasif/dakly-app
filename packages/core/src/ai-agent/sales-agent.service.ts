@@ -130,6 +130,19 @@ export class SalesAgentService {
     return false;
   }
 
+  // The same card the AI sends, for a person to send from the reply box.
+  async productCard(storeId: string, productId: string): Promise<ProductCard> {
+    const result = await this.tools.productCard(storeId, {
+      productId,
+      variantId: null,
+      photoId: null,
+      withoutPhoto: null,
+    });
+    // With no size or photo asked for, a product the chat may show always gives a card.
+    const [card] = await this.cards(storeId, [{ tool: CARD_TOOL, result }]);
+    return card!;
+  }
+
   private async factCheckFailure(
     input: ComposeInput,
     composed: Extract<ComposedReply, { kind: 'reply' }>,

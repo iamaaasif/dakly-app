@@ -10,6 +10,7 @@ import type { PlaceOrderLinkOrderInput } from '@dakly/contracts/orders';
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { DeliveryService } from '../delivery/delivery.service';
+import { loadEnv } from '../platform/config/env';
 import { DatabaseModule } from '../platform/database/database.module';
 import { OrderLinkService } from './order-link.service';
 import { OrdersModule } from './orders.module';
@@ -98,6 +99,19 @@ describe('public order link (Postgres)', () => {
       [slugB, mine.productId],
     ] as const)
       await expect(service.view(slug, productId, ip())).rejects.toMatchObject({
+        code: 'ORDER_LINK_NOT_FOUND',
+      });
+  });
+
+  it('gives staff the link of a product the page shows, and none for a hidden or other shop product', async () => {
+    const { productId } = await product();
+    expect(await service.urlFor(f.a, productId)).toEqual({
+      url: `${loadEnv().SHORT_LINK_BASE_URL}/o/${slugA}/${productId}`,
+    });
+    const hidden = await product(f.a, { visible: false });
+    const theirs = await product(f.b);
+    for (const id of [hidden.productId, theirs.productId])
+      await expect(service.urlFor(f.a, id)).rejects.toMatchObject({
         code: 'ORDER_LINK_NOT_FOUND',
       });
   });

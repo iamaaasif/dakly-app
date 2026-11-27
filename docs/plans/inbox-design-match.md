@@ -24,7 +24,7 @@ These need no backend and are in the Inbox now: the icon rail and the fixed page
 | System line "Dakly AI called your team · Exchange request"                          | No system messages are written                                  | CHAT-11 |
 | Reply arrow under a customer message                                                | Copy only                                                       | CHAT-11 |
 | Suggested reply card (reason, the AI's draft, Send, Edit)                           | Built in CHAT-12                                                | CHAT-12 |
-| Composer: emoji, attach, AI rewrite, Send product, Write with AI, Order link        | Saved replies only                                              | CHAT-13 |
+| Composer: emoji, attach, AI rewrite, Send product, Write with AI, Order link        | Saved replies, Send product, Order link                         | CHAT-13 |
 | Ask customer for missing details                                                    | Not built                                                       | CHAT-14 |
 | Header more menu (three dots)                                                       | Not built                                                       | CHAT-14 |
 | Shop switcher shows the plan ("Growth plan")                                        | Shows "Current shop"; the session has no plan name              | CHAT-14 |
@@ -45,7 +45,7 @@ CHAT-9 is Done (#619). Build order for the rest, one PR each: CHAT-10, CHAT-12, 
 
 ### CHAT-13 Composer tools
 
-- Emoji picker (web only), attach a photo or file (outbound media through file storage and the channel driver), Send product (the product card AI-19 sends), Order link (the existing order link service), AI rewrite and Write with AI through `AiService`. Split into two PRs: send product and order link first, then the AI tools and attachments.
+- Send product and Order link are built in part 1. Part 2: emoji picker (web only), attach a photo or file (outbound media through file storage and the channel driver), AI rewrite and Write with AI through `AiService`.
 
 ### CHAT-14 Missing details, more menu, plan name
 
