@@ -1,24 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { SlidersHorizontal } from 'lucide-react';
-import { useId, useRef, useState, useTransition, type ReactNode } from 'react';
+import { useState, useTransition, type ReactNode } from 'react';
 import { Controller, FormProvider, useForm, useFormContext } from 'react-hook-form';
 import { z } from 'zod';
 
-import {
-  couriers,
-  orderListQuerySchema,
-  orderSources,
-  type OrderListQuery,
-} from '@dakly/contracts/orders';
+import { couriers, orderListQuerySchema, type OrderListQuery } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
 import { Checkbox } from '@dakly/ui/checkbox';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 
 import { ordersSearch } from '../api/orders';
-import { courierLabels, orderSourceLabels } from '../order-labels';
+import { courierLabels } from '../order-labels';
 import type { OrdersNavigationQuery } from '../orders-url';
-import { OrderSearch } from './order-search';
 import { useUrlRouter } from '@/lib/use-url-query';
 
 const filterFormSchema = orderListQuerySchema.safeExtend({ onlyCancelled: z.boolean() });
@@ -27,47 +22,33 @@ type FilterFormInput = z.output<typeof filterFormSchema>;
 
 export type OrderFiltersProps = { query: OrdersNavigationQuery };
 
+// Source and search sit in the toolbar. What is left, courier, dates and cancelled orders, is here.
 export function OrderFilters({ query }: OrderFiltersProps) {
-  const trigger = useRef<HTMLButtonElement>(null);
-  const panelId = useId();
+  const [open, setOpen] = useState(false);
   const applied = hasOrderFilters(query);
-  const [panel, setPanel] = useState({ applied, expanded: applied });
-  if (panel.applied !== applied) setPanel({ applied, expanded: applied });
-  const { expanded } = panel;
-
-  function closeFilters() {
-    setPanel({ applied, expanded: false });
-    trigger.current?.focus();
-  }
-
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-end gap-2">
-        <OrderSearch query={query} />
-        <Button
-          ref={trigger}
-          variant="secondary"
-          aria-expanded={expanded}
-          aria-controls={panelId}
-          onClick={() => setPanel({ applied, expanded: !expanded })}
-        >
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="secondary" className="relative gap-2">
           <SlidersHorizontal aria-hidden="true" size={16} strokeWidth={1.75} />
           Filters
+          {applied ? (
+            <span
+              aria-hidden="true"
+              className="absolute -top-1 -right-1 size-2.5 rounded-full bg-primary ring-2 ring-surface"
+            />
+          ) : null}
         </Button>
-      </div>
-      <div
-        hidden={!expanded}
-        id={panelId}
-        className="rounded-lg border border-border bg-surface p-3"
-      >
-        <FilterForm query={query} applied={applied} closeFilters={closeFilters} />
-      </div>
-    </div>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-4">
+        <FilterForm query={query} applied={applied} closeFilters={() => setOpen(false)} />
+      </PopoverContent>
+    </Popover>
   );
 }
 
-function hasOrderFilters({ source, courier, createdFrom, createdThrough, stage }: OrderListQuery) {
-  return Boolean(source || courier || createdFrom || createdThrough || stage === 'cancelled');
+function hasOrderFilters({ courier, createdFrom, createdThrough, stage }: OrderListQuery) {
+  return Boolean(courier || createdFrom || createdThrough || stage === 'cancelled');
 }
 
 type FilterFormProps = {
@@ -79,7 +60,7 @@ type FilterFormProps = {
 function FilterForm({ query, applied, closeFilters }: FilterFormProps) {
   const router = useUrlRouter();
   const [pending, startTransition] = useTransition();
-  const { source, courier, createdFrom, createdThrough, ...other } = query;
+  const { courier, createdFrom, createdThrough, ...other } = query;
   const onlyCancelled = query.stage === 'cancelled';
   const base = {
     ...other,
@@ -88,25 +69,22 @@ function FilterForm({ query, applied, closeFilters }: FilterFormProps) {
   };
   const form = useForm<FilterFormValues, undefined, FilterFormInput>({
     resolver: zodResolver(filterFormSchema),
-    values: { source, courier, createdFrom, createdThrough, onlyCancelled },
+    values: { courier, createdFrom, createdThrough, onlyCancelled },
   });
   const navigate = (next: OrdersNavigationQuery) => {
     if (applied && !hasOrderFilters(next)) closeFilters();
     startTransition(() => router.push(`/orders?${ordersSearch(next)}`));
   };
-  const submit = form.handleSubmit(
-    ({ source, courier, createdFrom, createdThrough, onlyCancelled }) => {
-      if (pending) return;
-      navigate({
-        ...base,
-        source,
-        courier,
-        createdFrom,
-        createdThrough,
-        ...(onlyCancelled && { stage: 'cancelled', alert: undefined }),
-      });
-    },
-  );
+  const submit = form.handleSubmit(({ courier, createdFrom, createdThrough, onlyCancelled }) => {
+    if (pending) return;
+    navigate({
+      ...base,
+      courier,
+      createdFrom,
+      createdThrough,
+      ...(onlyCancelled && { stage: 'cancelled', alert: undefined }),
+    });
+  });
 
   return (
     <FormProvider {...form}>
@@ -140,14 +118,7 @@ function FilterForm({ query, applied, closeFilters }: FilterFormProps) {
 function FilterFields() {
   const { control, register } = useFormContext<FilterFormValues>();
   return (
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-      <OrderFilterSelect name="source" label="Source">
-        {orderSources.map((value) => (
-          <option key={value} value={value}>
-            {orderSourceLabels[value]}
-          </option>
-        ))}
-      </OrderFilterSelect>
+    <div className="grid gap-3">
       <OrderFilterSelect name="courier" label="Courier">
         {couriers.map((value) => (
           <option key={value} value={value}>
@@ -177,7 +148,7 @@ function FilterFields() {
         control={control}
         name="onlyCancelled"
         render={({ field }) => (
-          <div className="flex min-h-10 items-center gap-3 pl-2 sm:col-span-2 xl:col-span-4">
+          <div className="flex min-h-10 items-center gap-3">
             <Checkbox
               id={field.name}
               checked={field.value}
