@@ -40,14 +40,18 @@ export class SuggestedReplyService {
     const turn = settings && (await this.inbox.handedOverTurn(storeId, conversationId));
     if (!settings || !turn || turn.channel === 'whatsapp') return;
     const burst = burstText(turn, settings.debounceSeconds * 1000, this.clock.now());
-    const compose = {
-      storeId,
-      contactId: turn.contactId,
-      chat: replyToolChat(conversationId, turn.channel, burst),
-      customerTexts: burst.texts,
-      rules: settings.rules,
-    };
-    if (await this.sales.suggestReply(compose, reason, turn.latest.createdAt))
+    const drafted = await this.sales.draftReply(
+      {
+        storeId,
+        contactId: turn.contactId,
+        chat: replyToolChat(conversationId, turn.channel, burst),
+        customerTexts: burst.texts,
+        rules: settings.rules,
+      },
+      { reason },
+    );
+    const at = turn.latest.createdAt;
+    if (drafted && (await this.inbox.saveSuggestedReply(storeId, conversationId, drafted.text, at)))
       await this.stream.announceInbox(storeId, conversationId);
   }
 }

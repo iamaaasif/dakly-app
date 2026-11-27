@@ -1,0 +1,4 @@
+ALTER TABLE "ai_runs" DROP CONSTRAINT "ai_runs_purpose";--> statement-breakpoint
+ALTER TABLE "usage_events" DROP CONSTRAINT "usage_events_unit";--> statement-breakpoint
+ALTER TABLE "ai_runs" ADD CONSTRAINT "ai_runs_purpose" CHECK ("purpose" in ('chat_reply', 'suggest_reply', 'rewrite_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan'));--> statement-breakpoint
+ALTER TABLE "usage_events" ADD CONSTRAINT "usage_events_unit" CHECK ("usage_events"."unit" in ('ai_conversation', 'ai_content', 'ai_ask', 'ai_scan', 'ai_reply_draft'));

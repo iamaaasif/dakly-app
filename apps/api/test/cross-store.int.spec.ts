@@ -4985,6 +4985,18 @@ fixture('POST /conversations/:conversationId/products', async () => {
   ).toBe(0);
 });
 
+fixture('POST /conversations/:conversationId/reply-drafts', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/reply-drafts`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  await hidden(b, 'POST', url, foreign, () => ({ mode: 'write' }));
+  await success(b, 'POST', url(own), 400, { mode: 'rewrite', text: '  ' });
+  // The seeded chat has no customer message, so there is nothing to answer yet.
+  await success(b, 'POST', url(own), 409, { mode: 'write' });
+});
+
 fixture('GET /order-links/:productId', async () => {
   const { a, b } = await pair();
   const url = (id: string) => `/order-links/${id}`;

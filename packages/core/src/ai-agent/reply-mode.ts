@@ -1,7 +1,7 @@
 import type { handoverReasons } from '@dakly/contracts/chats';
 
 import { chatReplyV17 } from './prompts/chat-reply.v17';
-import { suggestReplyV1 } from './prompts/suggest-reply.v1';
+import { suggestReplyV2 } from './prompts/suggest-reply.v2';
 import { promptWith } from './reply-prompt-version';
 import { salesAgentLlmTools, salesAgentToolsFor } from './sales-agent-tool-definitions';
 import type { ToolScope } from './sales-agent-tools.service';
@@ -22,19 +22,28 @@ const SUGGESTION_TOOLS = new Set([
 ]);
 export const suggestionTools = salesAgentLlmTools.filter(({ name }) => SUGGESTION_TOOLS.has(name));
 
+// A draft is written for the reason the AI handed the chat over, or with none when a person asked.
+export type Suggestion = { reason: Reason | null };
+
+export function suggestionOpening({ reason }: Suggestion) {
+  return reason
+    ? `\n<handover_reason>${reason}</handover_reason>`
+    : '\n<draft_request>A team member asked for a reply to send.</draft_request>';
+}
+
 // A reply to send uses every tool the shop allows; a suggestion for the team only reads and is told
 // why the chat was handed over.
 export function replyMode(
   input: Pick<ToolScope, 'chat'> & { rules: ShopRules },
   { inChat, ad }: { inChat: object | undefined; ad: object | undefined },
-  suggestionFor: Reason | undefined,
+  suggestion: Suggestion | undefined,
 ) {
-  if (suggestionFor)
+  if (suggestion)
     return {
       purpose: 'suggest_reply' as const,
-      prompt: suggestReplyV1,
+      prompt: suggestReplyV2,
       tools: suggestionTools,
-      opening: `\n<handover_reason>${suggestionFor}</handover_reason>`,
+      opening: suggestionOpening(suggestion),
       allows: (name: string) => SUGGESTION_TOOLS.has(name),
     };
   const canOffer = Boolean(input.chat?.discountAskMessageId && !input.rules.handover.discounts);

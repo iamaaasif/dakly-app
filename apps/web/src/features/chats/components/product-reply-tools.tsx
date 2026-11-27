@@ -27,46 +27,56 @@ const tools = {
   },
 } as const;
 
-type ProductReplyToolsProps = {
-  conversationId: string;
-  disabled: boolean;
-  onOrderLink: (url: string) => void;
-};
-
 // Picking a product needs the product list, so members without product access see neither tool.
-export function ProductReplyTools({
+function useCanPickProducts() {
+  const { data: session } = useSessionContext();
+  return Boolean(session?.currentStore?.canViewProducts);
+}
+
+export function SendProductTool({
   conversationId,
   disabled,
-  onOrderLink,
-}: ProductReplyToolsProps) {
-  const { data: session } = useSessionContext();
+}: {
+  conversationId: string;
+  disabled: boolean;
+}) {
   const sendProduct = useSendProduct(conversationId);
-  const orderLink = useOrderLink();
-  if (!session?.currentStore?.canViewProducts) return null;
+  if (!useCanPickProducts()) return null;
   return (
-    <>
-      <ProductTool
-        tool="product"
-        disabled={disabled}
-        pending={sendProduct.isPending}
-        error={sendProduct.error?.message}
-        onPick={(productId, close) => sendProduct.mutate(productId, { onSuccess: close })}
-      />
-      <ProductTool
-        tool="link"
-        disabled={disabled}
-        pending={orderLink.isPending}
-        error={orderLink.error?.message}
-        onPick={(productId, close) =>
-          orderLink.mutate(productId, {
-            onSuccess: (url) => {
-              onOrderLink(url);
-              close();
-            },
-          })
-        }
-      />
-    </>
+    <ProductTool
+      tool="product"
+      disabled={disabled}
+      pending={sendProduct.isPending}
+      error={sendProduct.error?.message}
+      onPick={(productId, close) => sendProduct.mutate(productId, { onSuccess: close })}
+    />
+  );
+}
+
+export function OrderLinkTool({
+  disabled,
+  onOrderLink,
+}: {
+  disabled: boolean;
+  onOrderLink: (url: string) => void;
+}) {
+  const orderLink = useOrderLink();
+  if (!useCanPickProducts()) return null;
+  return (
+    <ProductTool
+      tool="link"
+      disabled={disabled}
+      pending={orderLink.isPending}
+      error={orderLink.error?.message}
+      onPick={(productId, close) =>
+        orderLink.mutate(productId, {
+          onSuccess: (url) => {
+            onOrderLink(url);
+            close();
+          },
+        })
+      }
+    />
   );
 }
 

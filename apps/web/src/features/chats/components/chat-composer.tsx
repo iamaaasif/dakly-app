@@ -14,9 +14,10 @@ import {
   type ComposerMode,
   useComposerDrafts,
 } from '../hooks/use-composer-drafts';
+import { AiWritingTool } from './ai-writing-tool';
 import { AttachedPhotoChip, AttachPhotoButton } from './attach-photo';
 import { EmojiPicker } from './emoji-picker';
-import { ProductReplyTools } from './product-reply-tools';
+import { OrderLinkTool, SendProductTool } from './product-reply-tools';
 import { SavedRepliesPicker } from './saved-replies-picker';
 import { SuggestedReply } from './suggested-reply-card';
 import { useSessionContext } from '@/lib/session-context';
@@ -76,6 +77,7 @@ function EditableComposer({ conversation }: { conversation: ConversationResponse
             tools={
               <ReplyTools
                 conversationId={conversation.id}
+                reply={composer.text}
                 disabled={busy}
                 changeReply={(change) => changeDraft('reply', change)}
                 onAttach={composer.setPhoto}
@@ -91,20 +93,30 @@ function EditableComposer({ conversation }: { conversation: ConversationResponse
 
 type ReplyToolsProps = {
   conversationId: string;
+  reply: string;
   disabled: boolean;
   changeReply: (change: (draft: string) => string) => void;
   onAttach: (photo: AttachedPhoto) => void;
 };
 
-// In the order of the design: emoji, attach, saved replies, then the product tools.
-function ReplyTools({ conversationId, disabled, changeReply, onAttach }: ReplyToolsProps) {
+// In the order of the design: emoji, attach, AI rewrite, saved replies, send product, Write with AI,
+// then order link.
+function ReplyTools({ conversationId, reply, disabled, changeReply, onAttach }: ReplyToolsProps) {
+  const writing = {
+    conversationId,
+    text: reply,
+    disabled,
+    onWritten: (text: string) => changeReply(() => text),
+  };
   return (
     <>
       <EmojiPicker disabled={disabled} onPick={(item) => changeReply((draft) => draft + item)} />
       <AttachPhotoButton conversationId={conversationId} disabled={disabled} onAttach={onAttach} />
+      <AiWritingTool mode="rewrite" {...writing} />
       <SavedRepliesPicker disabled={disabled} onPick={(body) => changeReply(() => body)} />
-      <ProductReplyTools
-        conversationId={conversationId}
+      <SendProductTool conversationId={conversationId} disabled={disabled} />
+      <AiWritingTool mode="write" {...writing} />
+      <OrderLinkTool
         disabled={disabled}
         onOrderLink={(url) => changeReply((draft) => withLink(draft, url))}
       />

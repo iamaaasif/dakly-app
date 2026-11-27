@@ -193,7 +193,12 @@ export class InboxRepository {
   }
 
   // The AI's own chats, or the chats it just handed to people, for the draft it leaves them.
-  aiReplyTurn(storeId: string, id: string, lock: boolean, responder: 'ai' | 'human' = 'ai') {
+  aiReplyTurn(
+    storeId: string,
+    id: string,
+    lock: boolean,
+    responder: 'ai' | 'human' | 'any' = 'ai',
+  ) {
     return this.database.forStore(storeId, async (tx) => {
       const query = tx
         .select({
@@ -208,7 +213,7 @@ export class InboxRepository {
           and(
             eq(conversations.storeId, storeId),
             eq(conversations.id, id),
-            eq(conversations.responder, responder),
+            responder === 'any' ? undefined : eq(conversations.responder, responder),
           ),
         );
       const [conversation] = await (lock ? query.for('no key update') : query);

@@ -335,6 +335,11 @@ export class InboxService {
   }
 
   // The burst the AI handed to people, read the way the reply job read it.
+  // The customer's latest messages, whoever answers the chat, for a draft a person asked for.
+  latestTurn(storeId: string, id: string) {
+    return this.repository.aiReplyTurn(storeId, id, false, 'any');
+  }
+
   async handedOverTurn(storeId: string, id: string) {
     const turn = await this.repository.aiReplyTurn(storeId, id, false, 'human');
     return turn?.windowExpiresAt && turn.windowExpiresAt > this.clock.now() ? turn : undefined;

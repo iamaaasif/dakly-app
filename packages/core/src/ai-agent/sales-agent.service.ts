@@ -34,7 +34,7 @@ import { shorten } from './message-shortening';
 import type { OfferQuote } from './offer-lower-price';
 import { customerConfirms } from './order-confirmation';
 import { checkReplyFacts, factCheckFailedBlock, type FactCheckFailure } from './reply-fact-check';
-import { replyMode } from './reply-mode';
+import { replyMode, type Suggestion } from './reply-mode';
 import { customerLines, sourcesOf, withShownProducts } from './reply-sources';
 import { type ToolScope, isOutOfStock, SalesAgentToolsService } from './sales-agent-tools.service';
 import { type CompactDeliveryZone, shopBlock } from './shop-block';
@@ -116,18 +116,15 @@ export class SalesAgentService {
     return { kind: 'handover', reason: 'out_of_scope' };
   }
 
-  // A draft for the person a chat was handed to, written with the read-only tools. A draft that
-  // fails the fact check is dropped; the team still has the chat.
-  async suggestReply(input: ComposeInput, reason: Reason, burstAt: Date): Promise<boolean> {
-    const drafted = await this.composeOnce(input, undefined, undefined, reason);
-    if (drafted.kind !== 'reply' || !input.chat) return false;
+  // A reply a person reads first, written with the read-only tools. One failing the fact check is
+  // dropped; the team still has the chat.
+  async draftReply(input: ComposeInput, suggestion: Suggestion) {
+    const drafted = await this.composeOnce(input, undefined, undefined, suggestion);
+    if (drafted.kind !== 'reply') return undefined;
     const failed = await this.factCheckFailure(input, drafted);
-    if (!failed) {
-      const { conversationId } = input.chat;
-      return this.inbox.saveSuggestedReply(input.storeId, conversationId, drafted.text, burstAt);
-    }
+    if (!failed) return { text: drafted.text, aiRunId: drafted.aiRunId };
     await this.runs.setOutcome(input.storeId, drafted.aiRunId, 'failed_check', failed);
-    return false;
+    return undefined;
   }
 
   // The same card the AI sends, for a person to send from the reply box.
@@ -183,7 +180,7 @@ export class SalesAgentService {
     input: ComposeInput,
     rejected?: { failure: FactCheckFailure; reply: string },
     prepared?: Promise<PreparedReply>,
-    suggestionFor?: Reason,
+    suggestion?: Suggestion,
   ): Promise<ComposedReply> {
     const { storeId } = input;
     const signal = AbortSignal.timeout(REPLY_BUDGET_MS);
@@ -194,7 +191,7 @@ export class SalesAgentService {
     const candidates = await this.productCandidates(scoped);
     if (candidates) results.push(candidates);
     const context = await this.context({ input, history, inChat, candidates, ad, deliveryZones });
-    const mode = replyMode(input, ready, suggestionFor);
+    const mode = replyMode(input, ready, suggestion);
     let transcript = rejectedBlock(rejected) + mode.opening;
     for (let round = 1; round <= MAX_ROUNDS; round += 1) {
       const attempt = await this.ai.run(storeId, {

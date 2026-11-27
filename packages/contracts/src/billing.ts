@@ -34,7 +34,13 @@ export const walletEntryKinds = [
   'expiry',
 ] as const;
 // Plan allowances consumed through UsageService.consume.
-export const usageUnits = ['ai_conversation', 'ai_content', 'ai_ask', 'ai_scan'] as const;
+export const usageUnits = [
+  'ai_conversation',
+  'ai_content',
+  'ai_ask',
+  'ai_scan',
+  'ai_reply_draft',
+] as const;
 export type UsageUnit = (typeof usageUnits)[number];
 export const usageSources = ['allowance', 'top_up'] as const;
 // A plan is the base subscription; an add-on (Chats AI tiers) is bought on top of one.

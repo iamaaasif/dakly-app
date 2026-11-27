@@ -24,7 +24,7 @@ These need no backend and are in the Inbox now: the icon rail and the fixed page
 | System line "Dakly AI called your team · Exchange request"                          | No system messages are written                                  | CHAT-11 |
 | Reply arrow under a customer message                                                | Copy only                                                       | CHAT-11 |
 | Suggested reply card (reason, the AI's draft, Send, Edit)                           | Built in CHAT-12                                                | CHAT-12 |
-| Composer: emoji, attach, AI rewrite, Send product, Write with AI, Order link        | All but AI rewrite and Write with AI                            | CHAT-13 |
+| Composer: emoji, attach, AI rewrite, Send product, Write with AI, Order link        | Built                                                           | CHAT-13 |
 | Ask customer for missing details                                                    | Not built                                                       | CHAT-14 |
 | Header more menu (three dots)                                                       | Not built                                                       | CHAT-14 |
 | Shop switcher shows the plan ("Growth plan")                                        | Shows "Current shop"; the session has no plan name              | CHAT-14 |
@@ -36,7 +36,7 @@ These need no backend and are in the Inbox now: the icon rail and the fixed page
 
 ## 3. Tasks
 
-CHAT-9 is Done (#619). Build order for the rest, one PR each: CHAT-10, CHAT-12, CHAT-13 part 1, CHAT-13 part 2. CHAT-11 and CHAT-14 follow.
+CHAT-9 is Done (#619). Build order for the rest, one PR each: CHAT-10, CHAT-12, CHAT-13 parts 1 to 3. CHAT-11 and CHAT-14 follow.
 
 ### CHAT-11 System lines
 
@@ -45,7 +45,7 @@ CHAT-9 is Done (#619). Build order for the rest, one PR each: CHAT-10, CHAT-12, 
 
 ### CHAT-13 Composer tools
 
-- Built: Send product and Order link (part 1), emoji and attach photo (part 2). Part 3: AI rewrite and Write with AI through `AiService`, after Asif picks how they are paid for. Later: attach a file other than a photo, outgoing photos drawn in the thread, and a sweep for photos uploaded but never sent.
+- Built: Send product and Order link (part 1), emoji and attach photo (part 2), AI rewrite and Write with AI (part 3). Later: attach a file other than a photo, outgoing photos drawn in the thread, and a sweep for photos uploaded but never sent.
 
 ### CHAT-14 Missing details, more menu, plan name
 
