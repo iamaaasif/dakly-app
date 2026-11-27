@@ -200,7 +200,7 @@ describe('Products screen', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByText('৳2,450')).toBeTruthy();
     expect(within(table).getByText('৳2,950').tagName).toBe('DEL');
-    expect(within(table).getByText('Default 3')).toBeTruthy();
+    expect(within(table).getByText('Stock 3')).toBeTruthy();
     expect(within(table).getByText('Active')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'More actions for Cotton Panjabi' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Adjust stock/ })).toBeNull();
@@ -543,7 +543,7 @@ describe('Products screen', () => {
     expect(within(dialog).getByText('3 now')).toBeTruthy();
     await userEvent.type(within(dialog).getByLabelText('Default'), '2');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save stock' }));
-    expect(await within(screen.getByRole('table')).findByText('Default 5')).toBeTruthy();
+    expect(await within(screen.getByRole('table')).findByText('Stock 5')).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
   });
   it('keeps a rejected restock and its error visible', async () => {
