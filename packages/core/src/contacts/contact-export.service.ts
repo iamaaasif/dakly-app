@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
-import type { ContactExportQuery } from '@dakly/contracts/contacts';
+import type { BulkExportInput, ContactExportQuery } from '@dakly/contracts/contacts';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
@@ -50,7 +50,17 @@ export class ContactExportService {
     const match = searchFilter(search, access.seeFullPhone);
     if (match.phone) await this.phoneAccess.checkLimit(storeId, 'lookup', false, actor);
 
-    const rows = await this.readAll(storeId, { ...filter, ...match });
+    return this.build(storeId, { ...filter, ...match }, access, actor);
+  }
+
+  // Export selected: the same file as the list's export, for the customers ticked on the list.
+  exportSelected(storeId: string, input: BulkExportInput, access: Access, actor: Actor) {
+    if (!access.exportLists) throw contactError('CONTACT_EXPORT_NOT_ALLOWED');
+    return this.build(storeId, { ids: input.contactIds }, access, actor);
+  }
+
+  private async build(storeId: string, filter: MatchFilter, access: Access, actor: Actor) {
+    const rows = await this.readAll(storeId, filter);
     const shown = columns.filter((column) => !column.phone || access.seeFullPhone);
     const body = await spreadsheetXlsx([
       shown.map(({ header }) => header),

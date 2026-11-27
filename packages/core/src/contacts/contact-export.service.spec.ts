@@ -45,6 +45,31 @@ function service(contacts: ExportedContact[], recorded: unknown[] = []) {
   );
 }
 
+describe('export selected', () => {
+  it('asks for only the ticked customers and records their count', async () => {
+    const recorded: unknown[] = [];
+    const file = await service([rahima], recorded).exportSelected(
+      'store',
+      { contactIds: ['1'] },
+      allowed,
+      actor,
+    );
+    expect(file.rowCount).toBe(1);
+    expect(recorded).toMatchObject([{ action: 'contacts.exported', after: { state: '1_rows' } }]);
+  });
+
+  it('refuses a member who cannot download customer lists', () => {
+    expect(() =>
+      service([rahima]).exportSelected(
+        'store',
+        { contactIds: ['1'] },
+        { exportLists: false, seeFullPhone: true },
+        actor,
+      ),
+    ).toThrow('You cannot download customer lists');
+  });
+});
+
 describe('customer export', () => {
   it('writes the customers as an Excel file that keeps text as text', async () => {
     const file = await service([rahima]).export('store', {}, allowed, actor);

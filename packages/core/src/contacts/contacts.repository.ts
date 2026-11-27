@@ -205,6 +205,18 @@ export class ContactsRepository {
 
   // Adding a tag the contact has, or one past the limit, and removing one it lacks change nothing.
   async changeTag(storeId: string, id: string, change: TagChange, maxTags: number) {
+    const changed = await this.changeTagForMany(storeId, [id], change, maxTags);
+    return changed.length > 0;
+  }
+
+  // One statement appends to each contact's current list, so a tag added since the list loaded is
+  // kept. Returns the ids that changed.
+  changeTagForMany(
+    storeId: string,
+    ids: string[],
+    change: TagChange,
+    maxTags: number,
+  ): Promise<string[]> {
     const { tag } = change;
     const adding = change.change === 'add';
     const changesTags = adding
@@ -213,21 +225,21 @@ export class ContactsRepository {
     const tags = adding
       ? sql`array_append(${contacts.tags}, ${tag})`
       : sql`array_remove(${contacts.tags}, ${tag})`;
-    const [changed] = await this.database.forStore(storeId, (tx) =>
-      tx
+    return this.database.forStore(storeId, async (tx) => {
+      const changed = await tx
         .update(contacts)
         .set({ tags })
         .where(
           and(
             eq(contacts.storeId, storeId),
-            eq(contacts.id, id),
+            inArray(contacts.id, ids),
             isNull(contacts.deletedAt),
             changesTags,
           ),
         )
-        .returning({ id: contacts.id }),
-    );
-    return Boolean(changed);
+        .returning({ id: contacts.id });
+      return changed.map((row) => row.id);
+    });
   }
 
   birthdayContactIds(

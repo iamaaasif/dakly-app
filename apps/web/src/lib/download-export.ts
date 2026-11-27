@@ -3,16 +3,33 @@ import { ApiError, apiFetch } from '@dakly/ui/api-client';
 // Fetches an export the API builds for the screen's filters and hands it to the browser as a
 // download. Returns how many rows the file holds.
 export async function downloadExport(
-  { path, fallbackName, contextTag }: { path: string; fallbackName: string; contextTag?: string },
+  {
+    path,
+    fallbackName,
+    contextTag,
+    selected,
+  }: {
+    path: string;
+    fallbackName: string;
+    contextTag?: string;
+    // A hand-picked group is posted, because its ids are too long for the address.
+    selected?: unknown;
+  },
   query: Record<string, string | number | boolean | undefined>,
 ): Promise<number> {
   if (!contextTag) throw new ApiError('STORE_REQUIRED', 'Choose a shop to continue.');
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query))
     if (value !== undefined && value !== '') params.set(key, String(value));
-  const response = await apiFetch(`/api/${path}/export?${params.toString()}`, {
-    context: { header: 'X-Session-Context', tag: contextTag },
-  });
+  const response = await apiFetch(
+    selected === undefined
+      ? `/api/${path}/export?${params.toString()}`
+      : `/api/${path}/export-selected`,
+    {
+      body: selected,
+      context: { header: 'X-Session-Context', tag: contextTag },
+    },
+  );
   const name = /filename="([^"]+)"/.exec(response.headers.get('content-disposition') ?? '')?.[1];
   const link = document.createElement('a');
   link.href = URL.createObjectURL(await response.blob());
