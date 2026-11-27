@@ -1,9 +1,10 @@
 'use client';
-import { Send } from 'lucide-react';
-import type { KeyboardEvent, ReactNode } from 'react';
+import { Plus, Send, X } from 'lucide-react';
+import { type KeyboardEvent, type ReactNode, useId, useState } from 'react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@dakly/ui/tabs';
 import { Textarea } from '@dakly/ui/textarea';
 
@@ -193,6 +194,37 @@ const boxCopy = {
   },
 };
 
+// Phones keep the tools behind one button so the text box gets the room; wide screens show them all.
+function ExtrasTools({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        aria-label={open ? 'Hide extras' : 'Show extras'}
+        aria-expanded={open}
+        aria-controls={id}
+        className="mr-auto md:hidden"
+        onClick={() => setOpen(!open)}
+      >
+        {open ? <X aria-hidden="true" size={16} /> : <Plus aria-hidden="true" size={16} />}
+      </Button>
+      <div
+        id={id}
+        className={cn(
+          'min-w-0 basis-full flex-wrap items-center gap-2 md:contents',
+          open ? 'order-last flex' : 'hidden',
+        )}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
+
 type WriteBoxProps = {
   replyPlaceholder: string;
   mode: ComposerMode;
@@ -235,7 +267,7 @@ function WriteBox({
       />
       {reply ? attachment : null}
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 px-2 pb-2">
-        {reply ? tools : null}
+        {reply ? <ExtrasTools>{tools}</ExtrasTools> : null}
         <Button
           type="button"
           aria-label={copy.sendLabel}
