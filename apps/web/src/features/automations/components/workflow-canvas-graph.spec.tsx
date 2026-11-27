@@ -92,10 +92,4 @@ describe('WorkflowCanvasGraph', () => {
     expect(steps.getByText(/^1,300 entries/)).toBeTruthy();
     expect(steps.getAllByText(/^0 entries/).length).toBeGreaterThan(0);
   });
-
-  it('scales the drawing without changing its content', () => {
-    const layout = layoutWorkflow(graph);
-    const { container } = render(<WorkflowCanvasGraph graph={graph} layout={layout} scale={0.5} />);
-    expect((container.firstChild as HTMLElement).style.width).toBe(`${layout.width / 2}px`);
-  });
 });

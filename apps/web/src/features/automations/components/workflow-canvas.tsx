@@ -187,6 +187,7 @@ function CanvasMain({ workflow, graph, layout, editing }: ViewportProps) {
       <WorkflowCanvasViewport
         graph={graph}
         layout={layout}
+        storageKey={workflow.id}
         recentEntries={recentEntries}
         editing={editing}
         stats={stats}

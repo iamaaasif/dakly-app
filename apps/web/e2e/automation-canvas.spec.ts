@@ -351,3 +351,73 @@ test('blocks Start workflow for a trigger the shop cannot use yet', async ({
     await db.pool.end();
   }
 });
+
+test('pans, zooms and fits the canvas like a design tool', async ({ page, context, baseURL }) => {
+  const { headers } = await signIn(context, baseURL!);
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const created = await context.request.post('/api/automations', {
+    headers,
+    data: { name: 'Move around the canvas', templateKey: 'welcome_new_subscriber' },
+  });
+  const { id } = (await created.json()) as { id: string };
+  try {
+    await page.goto(`/automations/${id}/canvas`);
+    const canvas = page.getByRole('region', { name: 'Workflow canvas' });
+    const trigger = page.getByRole('list', { name: 'Workflow steps' }).getByText('Trigger', {
+      exact: true,
+    });
+    await expect(trigger).toBeVisible();
+    const frame = (await canvas.boundingBox())!;
+
+    // Dragging empty background moves the flow by the drag distance.
+    const before = (await trigger.boundingBox())!;
+    const startX = frame.x + 40;
+    const startY = frame.y + frame.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX + 80, startY + 40, { steps: 6 });
+    await page.mouse.up();
+    const panned = (await trigger.boundingBox())!;
+    expect(Math.abs(panned.x - before.x - 80)).toBeLessThan(2);
+    expect(Math.abs(panned.y - before.y - 40)).toBeLessThan(2);
+
+    // Ctrl + wheel zooms around the pointer: the spot under it stays put.
+    const cursorX = panned.x + 20;
+    const cursorY = panned.y + 8;
+    const share = (cursorX - panned.x) / panned.width;
+    await page.mouse.move(cursorX, cursorY);
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -100);
+    await page.keyboard.up('Control');
+    const zoomed = (await trigger.boundingBox())!;
+    expect(zoomed.width).toBeGreaterThan(panned.width);
+    expect(Math.abs(cursorX - zoomed.x - share * zoomed.width)).toBeLessThan(2);
+
+    // Fit to screen brings the whole flow back into view.
+    await page.getByRole('button', { name: 'Fit to screen' }).click();
+    const steps = (await page.getByRole('list', { name: 'Workflow steps' }).boundingBox())!;
+    expect(steps.x).toBeGreaterThanOrEqual(frame.x);
+    expect(steps.y).toBeGreaterThanOrEqual(frame.y);
+    expect(steps.x + steps.width).toBeLessThanOrEqual(frame.x + frame.width);
+    expect(steps.y + steps.height).toBeLessThanOrEqual(frame.y + frame.height);
+
+    // A click on a step still opens it, and a palette drop still adds a step at 50% zoom.
+    await page.getByRole('button', { name: 'Edit step 1' }).click();
+    await expect(page).toHaveURL(/step=/);
+    await page.getByRole('button', { name: 'Done' }).click();
+    const zoom = page.getByRole('status').filter({ hasText: '%' });
+    while ((await zoom.innerText()) !== '50%') {
+      await page.getByRole('button', { name: 'Zoom out' }).click();
+      await page.waitForTimeout(50);
+    }
+    const waits = page.getByRole('list', { name: 'Workflow steps' }).getByText('Wait for');
+    const waitsBefore = await waits.count();
+    await page
+      .getByRole('button', { name: 'Delay' })
+      .dragTo(page.getByRole('button', { name: 'Add a step here' }).first());
+    await expect(waits).toHaveCount(waitsBefore + 1);
+  } finally {
+    await db.pool.query('delete from automations where id=$1', [id]);
+    await db.pool.end();
+  }
+});

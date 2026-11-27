@@ -58,40 +58,33 @@ function EdgeLines({ layout }: { layout: CanvasLayout }) {
 export function WorkflowCanvasGraph({
   graph,
   layout,
-  scale = 1,
   recentEntries,
   editing,
   stats,
 }: {
   graph: AutomationGraph;
   layout: CanvasLayout;
-  scale?: number;
   recentEntries?: string;
   editing?: CanvasEditing;
   stats?: StepStats;
 }) {
   return (
-    <div className="mx-auto" style={{ width: layout.width * scale, height: layout.height * scale }}>
-      <div
-        className="relative origin-top-left"
-        style={{ width: layout.width, height: layout.height, transform: `scale(${scale})` }}
-      >
-        <EdgeLines layout={layout} />
-        <ol aria-label="Workflow steps">
-          {layout.nodes.map((node) => (
-            <CanvasNodeItem
-              key={node.key}
-              node={node}
-              graph={graph}
-              layout={layout}
-              recentEntries={recentEntries}
-              editing={editing}
-              stats={stats}
-            />
-          ))}
-        </ol>
-        {editing && <EdgeAddButtons layout={layout} editing={editing} />}
-      </div>
+    <div className="relative" style={{ width: layout.width, height: layout.height }}>
+      <EdgeLines layout={layout} />
+      <ol aria-label="Workflow steps">
+        {layout.nodes.map((node) => (
+          <CanvasNodeItem
+            key={node.key}
+            node={node}
+            graph={graph}
+            layout={layout}
+            recentEntries={recentEntries}
+            editing={editing}
+            stats={stats}
+          />
+        ))}
+      </ol>
+      {editing && <EdgeAddButtons layout={layout} editing={editing} />}
     </div>
   );
 }
