@@ -1,10 +1,13 @@
+import type { OrderTabCounts } from '@dakly/contracts/order-inquiries';
 import { maxOrderShippingLabels } from '@dakly/contracts/order-shipping-labels';
-import type { OrderStage } from '@dakly/contracts/orders';
 import { TableCard } from '@dakly/ui/table';
+import { TabsContent } from '@dakly/ui/tabs';
 
 import { ordersSearch, type useOrders } from '../api/orders';
-import type { OrdersNavigationQuery } from '../orders-url';
+import { currentOrderTab, type OrdersNavigationQuery } from '../orders-url';
+import { OrderInquiries } from './order-inquiries';
 import { OrderLabelSelection } from './order-label-selection';
+import { noTabValue } from './order-tabs';
 import { OrdersList } from './orders-list';
 import { OrdersToolbar } from './orders-toolbar';
 import { useUrlRouter } from '@/lib/use-url-query';
@@ -12,13 +15,14 @@ import { useUrlRouter } from '@/lib/use-url-query';
 type OrdersResultsProps = {
   query: OrdersNavigationQuery;
   orders: ReturnType<typeof useOrders>;
-  counts?: Record<OrderStage, number>;
+  counts?: OrderTabCounts;
   selected?: string;
 };
 
-// The shipping label bar, then one card with the toolbar and the rows.
+// The panel of the current tab: the shipping label bar, then one card with the toolbar and rows.
 export function OrdersResults({ query, orders, counts, selected }: OrdersResultsProps) {
   const router = useUrlRouter();
+  const current = currentOrderTab(query);
   const selectedIds = query.labelOrderIds ?? [];
 
   function changeLabelSelection(ids: string[]) {
@@ -31,22 +35,34 @@ export function OrdersResults({ query, orders, counts, selected }: OrdersResults
   }
 
   return (
-    <div className="space-y-3">
+    <TabsContent value={current ?? noTabValue} className="space-y-3 pt-3">
       <OrderLabelSelection orderIds={selectedIds} onClear={() => changeLabelSelection([])} />
-      {/* A new stage or filter starts its own page trail, so the card is keyed by them. */}
+      {/* A new tab or filter starts its own page trail, so the card is keyed by them. */}
       <TableCard key={cardKey(query)}>
         <OrdersToolbar query={query} />
-        <OrdersList
-          orders={orders}
-          query={query}
-          total={query.stage ? counts?.[query.stage] : undefined}
-          onToggleLabel={toggleLabel}
-        />
+        {query.tab === 'inquiries' ? (
+          <OrderInquiries query={query} total={counts?.inquiries} />
+        ) : (
+          <OrdersList
+            orders={orders}
+            query={query}
+            total={current ? counts?.[current] : undefined}
+            onToggleLabel={toggleLabel}
+          />
+        )}
       </TableCard>
-    </div>
+    </TabsContent>
   );
 }
 
-function cardKey({ stage, alert, source, courier, search }: OrdersNavigationQuery) {
-  return [stage, alert, source, courier, search].join('|');
+function cardKey({
+  stage,
+  paymentStatus,
+  alert,
+  tab,
+  source,
+  courier,
+  search,
+}: OrdersNavigationQuery) {
+  return [stage, paymentStatus, alert, tab, source, courier, search].join('|');
 }

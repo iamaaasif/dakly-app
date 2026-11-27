@@ -19,25 +19,29 @@ export function OrdersToolbar({ query }: OrdersToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border p-3 sm:p-4">
       <OrderSearchField search={query.search} onSearch={go} />
-      <>
-        <Select
-          value={query.source ?? allSources}
-          onValueChange={(value) => go({ source: orderSources.find((source) => source === value) })}
-        >
-          <SelectTrigger aria-label="Source" className="w-auto min-w-36 bg-surface">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={allSources}>All sources</SelectItem>
-            {orderSources.map((source) => (
-              <SelectItem key={source} value={source}>
-                {orderSourceLabels[source]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <OrderFilters query={query} />
-      </>
+      {query.tab === 'inquiries' ? null : (
+        <>
+          <Select
+            value={query.source ?? allSources}
+            onValueChange={(value) =>
+              go({ source: orderSources.find((source) => source === value) })
+            }
+          >
+            <SelectTrigger aria-label="Source" className="w-auto min-w-36 bg-surface">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={allSources}>All sources</SelectItem>
+              {orderSources.map((source) => (
+                <SelectItem key={source} value={source}>
+                  {orderSourceLabels[source]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <OrderFilters query={query} />
+        </>
+      )}
     </div>
   );
 }

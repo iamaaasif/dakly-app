@@ -2,38 +2,38 @@
 
 import { useRef, useState, type RefObject } from 'react';
 
-import {
-  orderTabs,
-  type OrderAlerts as Alerts,
-  type OrderListQuery,
-  type OrderStage,
-} from '@dakly/contracts/orders';
-import { Badge } from '@dakly/ui/badge';
+import type { OrderAlerts, OrderListQuery } from '@dakly/contracts/orders';
 import { Button } from '@dakly/ui/button';
-import { cn } from '@dakly/ui/cn';
 
+import { useOrderTabCounts } from '../api/order-tabs';
 import { ordersSearch, useOrders } from '../api/orders';
-import { orderStageLabels } from '../order-labels';
-import { parseOrdersScreen, type OrdersNavigationQuery } from '../orders-url';
-import { OrderAlerts } from './order-alerts';
+import { parseOrdersScreen } from '../orders-url';
+import { OrderAlertStrip } from './order-alert-strip';
 import { OrderDetailSheet } from './order-detail-sheet';
 import { NewOrderDialog } from './order-editor-dialog';
 import { OrderExportMenu } from './order-export-menu';
+import { OrderTabs } from './order-tabs';
 import { OrdersResults } from './orders-results';
 import { StorePage } from '@/components/store-page';
-import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
 import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 
-type OrdersScreenProps = { query: OrderListQuery; selected?: string; labelOrderIds?: string[] };
+type OrdersScreenProps = {
+  query: OrderListQuery;
+  selected?: string;
+  labelOrderIds?: string[];
+  tab?: 'inquiries';
+};
 
 export function OrdersScreen(initial: OrdersScreenProps) {
-  const { query, selected, labelOrderIds = [] } = useUrlQuery(initial, parseOrdersScreen);
-  const orders = useOrders(query);
+  const { query, selected, labelOrderIds = [], tab } = useUrlQuery(initial, parseOrdersScreen);
+  // Inquiries are chats. The order list still runs, one row deep, because the alerts ride on it.
+  const orders = useOrders(tab === 'inquiries' ? { limit: 1 } : query);
   const alerts = useRememberedAlerts(orders.data?.alerts);
+  const counts = useOrderTabCounts().data;
   const router = useUrlRouter();
   const heading = useRef<HTMLHeadingElement>(null);
-  const navigationQuery = { ...query, labelOrderIds };
+  const navigationQuery = { ...query, labelOrderIds, tab };
 
   return (
     <StorePage permission="canViewOrders">
@@ -45,14 +45,15 @@ export function OrdersScreen(initial: OrdersScreenProps) {
             router.replace(`/orders?${ordersSearch({ ...navigationQuery, selected: id })}`)
           }
         />
-        {alerts ? <OrderAlerts alerts={alerts} labelOrderIds={labelOrderIds} /> : null}
-        <OrderStageNav query={navigationQuery} counts={orders.data?.counts} />
-        <OrdersResults
-          query={navigationQuery}
-          orders={orders}
-          counts={orders.data?.counts}
-          selected={selected}
-        />
+        <OrderAlertStrip alerts={alerts} query={navigationQuery} />
+        <OrderTabs query={navigationQuery} counts={counts}>
+          <OrdersResults
+            query={navigationQuery}
+            orders={orders}
+            counts={counts}
+            selected={selected}
+          />
+        </OrderTabs>
         <p className="text-xs text-text-muted">Return risk is based on your past orders.</p>
         {selected ? (
           <OrderDetailSheet
@@ -70,7 +71,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
 }
 
 // The alerts come with each list, so another tab's loading list must not make the row blink away.
-function useRememberedAlerts(latest: Alerts | undefined) {
+function useRememberedAlerts(latest: OrderAlerts | undefined) {
   const [alerts, setAlerts] = useState(latest);
   if (latest && latest !== alerts) setAlerts(latest);
   return alerts;
@@ -88,7 +89,7 @@ function OrdersHeader({ heading, query, onSaved }: OrdersHeaderProps) {
   const store = data?.currentStore;
   const canCreate = store?.canEditOrders;
   return (
-    <header className="flex flex-wrap items-start justify-between gap-4">
+    <header className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1
           ref={heading}
@@ -129,44 +130,5 @@ function orderRowFocus(heading: HTMLHeadingElement | null, orderId: string | und
     heading
       ?.closest('main')
       ?.querySelector<HTMLAnchorElement>(`[data-order-row-action="${orderId}"]`) ?? heading
-  );
-}
-
-type OrderStageNavProps = {
-  query: OrdersNavigationQuery;
-  counts?: Record<OrderStage, number>;
-};
-
-function OrderStageNav({ query, counts }: OrderStageNavProps) {
-  return (
-    <nav
-      aria-label="Order stages"
-      className="flex overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-    >
-      {orderTabs.map((stage) => {
-        const isCurrent = stage === query.stage;
-        return (
-          <UrlLink
-            key={stage}
-            href={`/orders?${ordersSearch({ ...query, stage, alert: undefined, cursor: undefined })}`}
-            aria-current={isCurrent ? 'page' : undefined}
-            className="flex min-h-11 shrink-0 items-center gap-1 border-b-2 border-transparent px-2 text-sm whitespace-nowrap hover:bg-surface-muted aria-[current=page]:border-action aria-[current=page]:font-semibold aria-[current=page]:text-text sm:min-h-12 sm:gap-2 sm:px-3 sm:text-base"
-          >
-            {orderStageLabels[stage]}
-            {counts ? (
-              <Badge
-                variant="neutral"
-                className={cn(
-                  'ml-1 rounded-full px-2 py-0.5 text-xs tabular-nums',
-                  isCurrent && 'bg-primary font-semibold text-on-primary',
-                )}
-              >
-                {counts[stage]}
-              </Badge>
-            ) : null}
-          </UrlLink>
-        );
-      })}
-    </nav>
   );
 }
