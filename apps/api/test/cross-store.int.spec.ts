@@ -1077,6 +1077,23 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('products', foreignId)).toEqual(before);
   });
+fixture('POST /products/:productId/duplicate', async () => {
+  const { a, b } = await pair(),
+    foreignId = await product(a),
+    own = await product(b);
+  const before = await f.row('products', foreignId);
+  const copy = (await success(b, 'POST', `/products/${own}/duplicate`, 201, {})).json();
+  expect(copy).toMatchObject({ status: 'hidden' });
+  expect(copy.id).not.toBe(own);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/duplicate`,
+    foreignId,
+    () => ({}),
+  );
+  expect(await f.row('products', foreignId)).toEqual(before);
+});
 fixture('POST /products/bulk-edits', async () => {
   const { a, b } = await pair(),
     foreignId = await product(a),
