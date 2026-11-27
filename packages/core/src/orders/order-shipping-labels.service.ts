@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type { OrderShippingLabels } from '@dakly/contracts/order-shipping-labels';
-import { maskPhone } from '@dakly/contracts/phone';
 
 import { StoresService } from '../stores/stores.service';
 import { OrderShippingLabelsRepository } from './order-shipping-labels.repository';
@@ -20,25 +19,17 @@ export class OrderShippingLabelsService {
     orderIds: string[],
     seeFullPhone: boolean,
   ): Promise<OrderShippingLabels> {
+    if (!seeFullPhone) throw orderError('ORDER_SHIPPING_LABELS_PHONE_REQUIRED');
     const rows = await this.repository.find(storeId, orderIds);
     const byId = new Map(rows.map((row) => [row.id, row]));
     const labels = orderIds.map((id) => {
       const row = byId.get(id);
       if (!row) throw orderError('ORDER_NOT_FOUND');
-      const {
-        recipientPhone,
-        stage,
-        paymentStatus,
-        codAmountPoisha,
-        codCollectedPoisha,
-        ...label
-      } = row;
+      const { stage, paymentStatus, codAmountPoisha, codCollectedPoisha, ...label } = row;
       const skipCodCollection =
         stage === 'returned' || stage === 'cancelled' || paymentStatus === 'paid';
       return {
         ...label,
-        recipientPhone:
-          seeFullPhone || !recipientPhone ? recipientPhone : maskPhone(recipientPhone),
         codDuePoisha: skipCodCollection
           ? 0
           : Math.max(0, codAmountPoisha - (codCollectedPoisha ?? 0)),

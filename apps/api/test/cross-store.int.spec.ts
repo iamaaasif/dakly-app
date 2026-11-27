@@ -495,9 +495,21 @@ fixture('GET /orders/shipping-labels', async () => {
     readOnlyRole.json().id,
   ]);
   const restricted = await f.request(a.member, 'GET', url(paid, cod, returned, cancelled));
-  expect(restricted.statusCode, restricted.body).toBe(200);
-  expect(restricted.headers['cache-control']).toBe('no-store');
-  expect(restricted.json()).toMatchObject({
+  expect(restricted.statusCode, restricted.body).toBe(403);
+  expect(restricted.json()).toEqual({
+    error: {
+      code: 'ORDER_SHIPPING_LABELS_PHONE_REQUIRED',
+      message: 'You need full phone access to print labels',
+    },
+  });
+
+  await f.admin.pool.query('update roles set can_see_full_phone=true where id=$1', [
+    readOnlyRole.json().id,
+  ]);
+  const eligible = await f.request(a.member, 'GET', url(paid, cod, returned, cancelled));
+  expect(eligible.statusCode, eligible.body).toBe(200);
+  expect(eligible.headers['cache-control']).toBe('no-store');
+  expect(eligible.json()).toMatchObject({
     store: { name: 'Mirpur Shop', phone: '01701000015' },
     labels: [
       { id: paid, number: 1002, itemCount: 3, codDuePoisha: 0 },
@@ -505,7 +517,7 @@ fixture('GET /orders/shipping-labels', async () => {
         id: cod,
         number: 1001,
         recipientName: 'রিনা',
-        recipientPhone: `${a.owner.phone.slice(0, 5)}-XXX${a.owner.phone.slice(-3)}`,
+        recipientPhone: a.owner.phone,
         recipientAddress: 'ধানমন্ডি',
         recipientDistrict: 'Dhaka',
         itemCount: 2,

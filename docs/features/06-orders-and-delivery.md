@@ -275,24 +275,25 @@ The print page at `/orders/[orderId]/print` loads its data in the browser throug
 
 ### Print shipping labels (ORD-10)
 
-Staff with Orders view can select up to 100 orders using the checkboxes next to
-the order rows. The address keeps the selection when staff change the stage,
-filters or page. The selected count and Clear selection are shown above the list.
-Print shipping labels opens the batch preview in a new tab and starts the browser
-print dialog after the labels load.
+Staff with Orders view and See full phone numbers can select up to 100 orders
+using the checkboxes next to the order rows. The address keeps the selection when
+staff change the stage, filters or page. The selected count and Clear selection
+are shown above the list. Print shipping labels opens the batch preview in a new
+tab and starts the browser print dialog after the labels load.
 
 Each label gets one 100 × 150 mm portrait page. It shows the shop name and phone,
 the saved recipient name, phone, address and district, the item count and the
 order number as a Code 128 barcode with the number printed below it. The item
 count uses saved delivered quantities where available.
 The label shows the saved COD amount less any recorded collection. It shows Paid
-when nothing is due, including for returned or cancelled orders. Staff
-with Orders view can see their shop phone. The recipient phone uses the same masking
-as the order drawer.
+when nothing is due, including for returned or cancelled orders. The courier
+needs the full recipient phone to call about delivery.
 
 The print page at `/orders/shipping-labels/print` loads through
-`GET /orders/shipping-labels`. If any selected order can no longer be read in the
-current shop, return to Orders and revise the selection before printing.
+`GET /orders/shipping-labels`. Staff without full phone access who open the print
+page see “You need full phone access to print labels”. If any selected order can
+no longer be read in the current shop, return to Orders and revise the selection
+before printing.
 
 ### How it works
 

@@ -4,20 +4,28 @@ import { Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useRef } from 'react';
 
+import { shippingLabelsPhoneRequired } from '@dakly/contracts/order-shipping-labels';
 import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { useOrderShippingLabels } from '../api/get-order-shipping-labels';
 import { OrderPrintSession, usePrintWhenReady } from './order-print';
 import { OrderShippingLabel } from './order-shipping-label';
+import { useSessionContext } from '@/lib/session-context';
 
 const loadingMessage = 'Loading shipping labels…';
 type LabelBatchProps = { orderIds: string[] };
 
 export function OrderShippingLabelsScreen({ orderIds }: LabelBatchProps) {
+  const { data } = useSessionContext();
+  const store = data?.currentStore;
   return (
     <OrderPrintSession loadingMessage={loadingMessage}>
-      <VerifiedShippingLabels orderIds={orderIds} />
+      {store?.canViewOrders && !store.canPrintShippingLabels ? (
+        <p className="p-6">{shippingLabelsPhoneRequired}</p>
+      ) : (
+        <VerifiedShippingLabels orderIds={orderIds} />
+      )}
     </OrderPrintSession>
   );
 }

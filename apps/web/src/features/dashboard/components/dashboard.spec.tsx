@@ -15,6 +15,7 @@ const session = vi.hoisted(() => ({
     canEditChats: true,
     canEditOrders: true,
     canExportOrders: false,
+    canPrintShippingLabels: false,
     canCreateCustomer: true,
     canEditCampaigns: false,
     canEditSocial: false,

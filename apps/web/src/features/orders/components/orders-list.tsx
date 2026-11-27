@@ -17,7 +17,7 @@ type OrdersListProps = {
 
 export function OrdersList({ page, query, onToggleLabel }: OrdersListProps) {
   const { data } = useSessionContext();
-  const canEdit = data?.currentStore?.canEditOrders;
+  const store = data?.currentStore;
   const selectedIds = new Set(query.labelOrderIds);
   const atLimit = selectedIds.size >= maxOrderShippingLabels;
   const pageHref = (cursor?: number) => `/orders?${ordersSearch({ ...query, cursor })}`;
@@ -36,12 +36,16 @@ export function OrdersList({ page, query, onToggleLabel }: OrdersListProps) {
             key={order.id}
             order={order}
             href={`/orders?${ordersSearch({ ...query, selected: order.id })}`}
-            canEdit={canEdit ?? false}
-            selection={{
-              checked: selectedIds.has(order.id),
-              disabled: atLimit && !selectedIds.has(order.id),
-              onToggle: () => onToggleLabel(order.id),
-            }}
+            canEdit={store?.canEditOrders ?? false}
+            selection={
+              store?.canPrintShippingLabels
+                ? {
+                    checked: selectedIds.has(order.id),
+                    disabled: atLimit && !selectedIds.has(order.id),
+                    onToggle: () => onToggleLabel(order.id),
+                  }
+                : undefined
+            }
           />
         ))}
       </ul>
