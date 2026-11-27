@@ -39,6 +39,7 @@ const order: OrderListItem = {
   returnReason: null,
   itemPreview: 'Casual shirt (M) × 1',
   isWaitingForConfirmation: false,
+  customerBadge: 'new',
 };
 
 function renderRow(row: OrderListItem, canEdit: boolean) {
@@ -61,6 +62,15 @@ describe('order row', () => {
     renderRow({ ...order, buyerName: 'Nusrat Jahan' }, false);
     expect(screen.getByRole('link', { name: 'Nusrat Jahan' })).toBeTruthy();
     expect(screen.getByText(/to Tanvir Hasan/)).toBeTruthy();
+  });
+
+  it.each([
+    ['new', 'New'],
+    ['repeat', 'Repeat'],
+    ['vip', 'VIP'],
+  ] as const)('shows the %s customer badge', (customerBadge, label) => {
+    renderRow({ ...order, customerBadge }, false);
+    expect(screen.getByText(label)).toBeTruthy();
   });
 
   it('falls back to the recipient when no buyer is known and adds no "to" line', () => {
