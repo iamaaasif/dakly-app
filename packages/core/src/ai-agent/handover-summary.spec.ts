@@ -43,4 +43,19 @@ describe('formatHandoverSummary', () => {
       formatHandoverSummary({ reason: 'asked_for_person', latestText: 'অর্ডার করতে চাই' }),
     ).toBe('Reason: asked_for_person | Issue: অর্ডার করতে চাই');
   });
+
+  it('says the AI could not reply and keeps the customer words as they were written', () => {
+    const issues = [
+      'পাঞ্জাবির দাম কত? ডেলিভারি কবে পাবো',
+      'panjabir dam koto? delivery kobe pabo',
+      'আমার নাম করিম, panjabi ta ki ache? order 1042 korte chai',
+    ];
+    for (const issue of issues)
+      expect(formatHandoverSummary({ reason: 'ai_unavailable', latestText: issue })).toContain(
+        `(the AI could not reply)`,
+      );
+    expect(formatHandoverSummary({ reason: 'ai_unavailable', latestText: issues[2] })).toBe(
+      'Reason: ai_unavailable (the AI could not reply) | Customer: করিম | Order: #1042 | Issue: আমার নাম করিম, panjabi ta ki ache? order 1042 korte chai',
+    );
+  });
 });

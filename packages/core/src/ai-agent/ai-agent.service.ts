@@ -24,7 +24,6 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { QUEUES } from '../platform/queue/queues';
 import { MINUTE_MS } from '../platform/time';
 import { StoresService } from '../stores/stores.service';
-import { UsageService } from '../usage/usage.service';
 import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import { cardMessages } from './card-messages';
 import { CardTapRepliesService } from './card-tap-replies.service';
@@ -33,6 +32,7 @@ import { type ConversationEntry, conversationEntries } from './chat-memory';
 import { declineReply, holdingReply } from './decline-reply';
 import { formatHandoverSummary } from './handover-summary';
 import { screenCustomerTexts } from './manipulation-screen';
+import { ReplyAllowanceService } from './reply-allowance.service';
 import { burstText, isFlood, isSameTurn, replyToolChat } from './reply-burst';
 import { outageRetryDelay, retryAt } from './reply-retry';
 import {
@@ -82,7 +82,7 @@ export class AiAgentService {
     @Inject(BillingService) private readonly billing: BillingService,
     @Inject(ChannelConnectionsService) private readonly channels: ChannelConnectionsService,
     @Inject(ConsentService) private readonly consent: ConsentService,
-    @Inject(UsageService) private readonly usage: UsageService,
+    @Inject(ReplyAllowanceService) private readonly allowance: ReplyAllowanceService,
     @Inject(CardTapRepliesService) private readonly tapReplies: CardTapRepliesService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
@@ -209,7 +209,7 @@ export class AiAgentService {
     { storeId, contactId, customerTexts, rules }: ComposeInput,
     earlier: ConversationEntry[],
   ): Promise<Classified> {
-    if (!(await this.hasAllowanceRoom(storeId, contactId))) return { reason: 'allowance_used' };
+    if (!(await this.allowance.hasRoom(storeId, contactId))) return { reason: 'allowance_used' };
     return this.classifier.classify(storeId, customerTexts, earlier, {
       ...rules.handover,
       takesOrders: rules.takeOrders,
@@ -226,15 +226,6 @@ export class AiAgentService {
     );
     const before = history.filter(({ id }) => !burstIds.includes(id));
     return conversationEntries(before).slice(-CLASSIFY_HISTORY_LENGTH);
-  }
-
-  // A window that already holds a unit finishes even when the allowance is used up.
-  private async hasAllowanceRoom(storeId: string, contactId: string) {
-    const reference = await this.windowReference(storeId, contactId);
-    return (
-      (await this.usage.isConsumed(storeId, 'ai_conversation', reference)) ||
-      (await this.usage.hasAllowance(storeId, 'ai_conversation', 1))
-    );
   }
 
   private async eligibleTurn(
@@ -321,14 +312,15 @@ export class AiAgentService {
     });
   }
 
+  // After the last failed attempt, a hand-over for an outage is not held back to try again.
   private async handOver(
     storeId: string,
     conversationId: string,
     before: EligibleTurn,
-    { reason, summary }: { reason: Reason; summary?: string },
+    { reason, summary, isFinal }: { reason: Reason; summary?: string; isFinal?: boolean },
   ) {
     const retryIn = outageRetryDelay(reason, before.turn.latest.createdAt, this.clock.now());
-    if (retryIn) return retryAt(this.clock.now(), retryIn);
+    if (retryIn && !isFinal) return retryAt(this.clock.now(), retryIn);
     await this.transaction.runLocked(storeId, async () => {
       const current = await this.lockCurrent(storeId, conversationId, before);
       if (!current) return;
@@ -360,6 +352,19 @@ export class AiAgentService {
         title: 'A conversation needs your reply',
         body,
       });
+    });
+  }
+
+  // The reply job ran out of attempts: the customer gets only the holding line and the team is
+  // alerted. Nothing happens when the AI already answered or the customer has written again.
+  async handOverAfterFailure(storeId: string, conversationId: string, messageId: string) {
+    const candidate = await this.eligibleTurn(storeId, conversationId);
+    if (candidate?.turn.latest.id !== messageId) return;
+    const [newest] = await this.inbox.replyHistory(storeId, conversationId, 1);
+    if (newest?.direction === 'out') return;
+    await this.handOver(storeId, conversationId, candidate, {
+      reason: 'ai_unavailable',
+      isFinal: true,
     });
   }
 
@@ -412,11 +417,7 @@ export class AiAgentService {
           await send(content, key, { image, card });
         await send(text, 'reply', { aiSources: sources });
         // After queuing, so the window starts at the earliest saved AI reply.
-        await this.usage.consume(storeId, {
-          unit: 'ai_conversation',
-          quantity: 1,
-          reference: await this.windowReference(storeId, current.target.contactId),
-        });
+        await this.allowance.spend(storeId, current.target.contactId);
         isSaved = true;
       });
     } catch (error) {
@@ -427,12 +428,6 @@ export class AiAgentService {
       if (error.code !== 'MESSAGE_OPERATION_CONFLICT') throw error;
     }
     if (isSaved) await this.runs.setOutcome(storeId, aiRunId, 'sent');
-  }
-
-  // One unit covers every AI reply to a contact in the 24 hours after the first.
-  private async windowReference(storeId: string, contactId: string) {
-    const start = (await this.inbox.firstAiReplyInDay(storeId, contactId)) ?? this.clock.now();
-    return `ai-window:${contactId}:${start.toISOString()}`;
   }
 
   // Returns the turn only when nothing changed since the model started.
