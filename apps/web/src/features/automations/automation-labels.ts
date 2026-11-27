@@ -1,11 +1,12 @@
 import type { AutomationStatus } from '@dakly/contracts/automations';
 import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
-import type { CampaignChannel } from '@dakly/contracts/campaigns';
+import type { AutomationChannel } from '@dakly/contracts/automations/graph';
 
-export const channelLabels: Record<CampaignChannel, string> = {
+export const channelLabels: Record<AutomationChannel, string> = {
   sms: 'SMS',
   whatsapp: 'WhatsApp',
   messenger: 'Messenger',
+  instagram: 'Instagram',
 };
 
 export const triggerLabels: Record<TriggerKey, string> = {

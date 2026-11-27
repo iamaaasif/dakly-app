@@ -41,7 +41,7 @@ test('creates a segment with one tag condition and sees its count', async ({
       },
     ]);
     await page.goto('/segments');
-    await page.getByRole('link', { name: 'Create segment' }).click();
+    await page.getByRole('link', { name: 'Add Segment' }).first().click();
     await page.getByLabel('Segment name').fill(`Tagged ${tag}`);
     await page.getByRole('group', { name: 'Group 1, condition 1' }).getByLabel('Value').fill(tag);
     await expect(
@@ -53,12 +53,13 @@ test('creates a segment with one tag condition and sees its count', async ({
     );
     await page.getByRole('button', { name: 'Save segment' }).click();
     await expect(page).toHaveURL(`${baseURL}/segments`);
-    await expect(page.getByRole('heading', { name: `Tagged ${tag}`, exact: true })).toBeVisible();
-    await expect(page.getByText(`Tag is ${tag}`)).toBeVisible();
-    await expect(page.getByText('1 customer matches')).toBeVisible();
-    await page.getByRole('button', { name: `Delete Tagged ${tag}` }).click();
+    const name = `Tagged ${tag}`;
+    await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: name })).toContainText('1 contact');
+    await page.getByRole('button', { name: `More actions for ${name}` }).click();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete segment' }).click();
-    await expect(page.getByRole('heading', { name: `Tagged ${tag}`, exact: true })).toBeHidden();
+    await expect(page.getByRole('link', { name, exact: true })).toBeHidden();
   } finally {
     await database.pool.query("delete from segments where store_id=$1 and name like 'Tagged %'", [
       storeId,

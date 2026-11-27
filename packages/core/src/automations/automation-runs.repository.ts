@@ -59,7 +59,7 @@ export type NewRunStep = {
   stepKey: string;
   kind: AutomationStepKind;
   outcome: string;
-  channel?: 'sms' | 'messenger';
+  channel?: 'sms' | 'messenger' | 'instagram';
   category?: Extract<AutomationStep, { kind: 'send' }>['category'];
   optOutUrl?: string | null;
   renderedText?: string | null;
