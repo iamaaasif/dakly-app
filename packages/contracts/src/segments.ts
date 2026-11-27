@@ -96,4 +96,9 @@ export type SegmentResponse = {
 export type SegmentListItem = SegmentResponse & { contactCount: number };
 export type SegmentListResponse = { items: SegmentListItem[]; nextCursor: string | null };
 export type SegmentTabCountsResponse = { all: number; active: number; archived: number };
-export type SegmentCountResponse = { count: number };
+// Reachable counts people who agreed to marketing on that channel, before any send exclusions.
+export const reachableChannels = ['whatsapp', 'sms', 'messenger'] as const;
+export type SegmentCountResponse = {
+  count: number;
+  reachable: Record<(typeof reachableChannels)[number], number>;
+};
