@@ -4,7 +4,7 @@ import { ApiError, apiFetch } from '@dakly/ui/api-client';
 // download. Returns how many rows the file holds.
 export async function downloadExport(
   { path, fallbackName, contextTag }: { path: string; fallbackName: string; contextTag?: string },
-  query: Record<string, string | number | undefined>,
+  query: Record<string, string | number | boolean | undefined>,
 ): Promise<number> {
   if (!contextTag) throw new ApiError('STORE_REQUIRED', 'Choose a shop to continue.');
   const params = new URLSearchParams();

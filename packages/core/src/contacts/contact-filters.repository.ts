@@ -22,6 +22,7 @@ export type MatchFilter = {
   phonePrefix?: string;
   cursor?: string;
   type?: ContactListType;
+  hasOrdered?: boolean;
   minSpendPoisha?: number;
   maxSpendPoisha?: number;
   lastPurchase?: ContactListQuery['lastPurchase'];
@@ -65,6 +66,7 @@ function nameCondition(name: string, matchEmailAndArea: boolean | undefined) {
 export function statsConditions(storeId: string, filter: MatchFilter): (SQL | undefined)[] {
   return [
     filter.type ? typeCondition(filter.type, storeId) : undefined,
+    filter.hasOrdered ? hasOrderedCondition() : undefined,
     filter.minSpendPoisha === undefined
       ? undefined
       : gte(sql`coalesce(${contactStats.netSpendPoisha}, 0)`, filter.minSpendPoisha),
@@ -73,6 +75,11 @@ export function statsConditions(storeId: string, filter: MatchFilter): (SQL | un
       : lte(sql`coalesce(${contactStats.netSpendPoisha}, 0)`, filter.maxSpendPoisha),
     filter.lastPurchase ? lastPurchaseCondition(filter.lastPurchase) : undefined,
   ];
+}
+
+// contact_stats counts only non-cancelled orders, including store sync, POS and khata imports.
+export function hasOrderedCondition() {
+  return sql`(coalesce(${contactStats.ordersCount}, 0) > 0 and not ${contacts.isBlocked} and ${contacts.kind} <> 'not_customer')`;
 }
 
 // Top 10% of customers by net spend, at least one customer, whatever their stage. A customer is

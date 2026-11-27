@@ -14,6 +14,7 @@ export default async function CustomersPage({
     kind?: string;
     tag?: string;
     search?: string;
+    hasOrdered?: string;
     columns?: string;
   }>;
 }) {
@@ -24,8 +25,8 @@ export default async function CustomersPage({
         You do not have Customers access in this shop.
       </p>
     );
-  const { cursor, kind, tag, search, columns } = await searchParams;
-  const parsed = contactListQuerySchema.safeParse({ cursor, kind, tag, search });
+  const { cursor, kind, tag, search, hasOrdered, columns } = await searchParams;
+  const parsed = contactListQuerySchema.safeParse({ cursor, kind, tag, search, hasOrdered });
   if (!parsed.success)
     return (
       <p role="alert" className="p-6">
