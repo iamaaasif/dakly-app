@@ -17,6 +17,7 @@ import type { LlmResult } from '@dakly/providers/llm/llm-driver';
 
 import { AiService } from '../ai/ai.service';
 import { KillSwitchesService } from '../kill-switches/kill-switches.service';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { Clock } from '../platform/clock';
@@ -191,6 +192,24 @@ function script(output: ChatClassification, duringCall?: () => Promise<void>, ca
   return inputs;
 }
 
+async function intentEvents({ storeId }: Shop) {
+  const { rows } = await admin.pool.query<{
+    payload: { intent: string; channel: string; conversationId: string; messageIds: string[] };
+  }>(
+    "select payload from outbox_events where store_id = $1 and type = 'message.intent_classified'",
+    [storeId],
+  );
+  return Promise.all(
+    rows.map(async ({ payload }) => ({
+      intent: payload.intent,
+      channel: payload.channel,
+      text: await app
+        .get(ConversationIntentService)
+        .burstText(storeId, payload.conversationId, payload.messageIds),
+    })),
+  );
+}
+
 async function intentTags({ storeId }: Shop) {
   const { rows } = await admin.pool.query<{ intent_tag: string | null }>(
     'select intent_tag from conversations where store_id = $1',
@@ -304,6 +323,13 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     usage: [],
   });
   expect(await intentTags(active)).toEqual(['greeting']);
+  expect(await intentEvents(active)).toEqual([
+    {
+      intent: 'greeting',
+      channel: 'messenger',
+      text: 'bhai, order ta\nekjon manush er sathe kotha bolbo',
+    },
+  ]);
 });
 
 it('hands over an exhausted allowance without calling the model or spending a unit', async () => {

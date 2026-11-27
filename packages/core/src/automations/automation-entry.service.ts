@@ -8,6 +8,7 @@ import {
   contactBirthdayEventSchema,
   contactTagAddedEventSchema,
 } from '@dakly/contracts/events/contacts';
+import { messageIntentClassifiedEventSchema } from '@dakly/contracts/events/messaging';
 import {
   orderCreatedEventSchema,
   orderStageChangedEventSchema,
@@ -15,6 +16,7 @@ import {
 import type { OrderStage } from '@dakly/contracts/orders';
 
 import { ContactsService } from '../contacts/contacts.service';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -22,10 +24,14 @@ import { AppError } from '../platform/errors/app-error';
 import { DAY_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
+import { matchesAnyKeyword } from './message-keywords';
 
 export const automationConsentEvent = consentChangedEventSchema.extend({ id: z.uuid() });
 export const automationTagEvent = contactTagAddedEventSchema.extend({ id: z.uuid() });
 export const automationBirthdayEvent = contactBirthdayEventSchema.extend({ id: z.uuid() });
+export const automationMessageIntentEvent = messageIntentClassifiedEventSchema.extend({
+  id: z.uuid(),
+});
 export const automationOrderCreatedEvent = orderCreatedEventSchema.extend({ id: z.uuid() });
 export const automationOrderStageEvent = orderStageChangedEventSchema.extend({ id: z.uuid() });
 type OrderEvent =
@@ -37,10 +43,16 @@ type WithFacts<E> = E extends { payload: infer P }
   ? Omit<E, 'payload'> & { payload: P & OrderFacts }
   : never;
 type OrderTriggerEvent = WithFacts<OrderEvent>;
+type MessageIntentEvent = Omit<z.infer<typeof automationMessageIntentEvent>, 'storeId'>;
+// The keyword filter reads the words, which the event leaves out.
+type MessageTriggerEvent = Omit<MessageIntentEvent, 'payload'> & {
+  payload: MessageIntentEvent['payload'] & { text: string };
+};
 type TriggerEvent =
   | Omit<z.infer<typeof automationConsentEvent>, 'storeId'>
   | Omit<z.infer<typeof automationTagEvent>, 'storeId'>
   | Omit<z.infer<typeof automationBirthdayEvent>, 'storeId'>
+  | MessageTriggerEvent
   | OrderTriggerEvent;
 
 const stageTriggers: Partial<Record<OrderStage, TriggerKey>> = {
@@ -58,6 +70,7 @@ export class AutomationEntryService {
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(OrderReportingService) private readonly orders: OrderReportingService,
+    @Inject(ConversationIntentService) private readonly conversations: ConversationIntentService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -66,6 +79,12 @@ export class AutomationEntryService {
     if (!key) return;
     const workflows = await this.repository.activeWorkflows(storeId, key);
     for (const { id } of workflows) await this.start(storeId, id, event);
+  }
+
+  async startMatchingMessage(storeId: string, event: MessageIntentEvent): Promise<void> {
+    const { conversationId, messageIds } = event.payload;
+    const text = await this.conversations.burstText(storeId, conversationId, messageIds);
+    await this.startMatching(storeId, { ...event, payload: { ...event.payload, text } });
   }
 
   async startMatchingOrder(storeId: string, event: OrderEvent): Promise<void> {
@@ -135,6 +154,7 @@ function orderTriggerFor(event: OrderEvent): TriggerKey | undefined {
 function triggerFor(event: TriggerEvent) {
   if (event.type === 'contact.tag_added') return 'tag_added';
   if (event.type === 'contact.birthday') return 'birthday';
+  if (event.type === 'message.intent_classified') return 'message_received';
   if (isOrderEvent(event)) return orderTriggerFor(event);
   if (event.payload.status === 'granted' && event.payload.source !== 'import')
     return 'consent_given';
@@ -143,16 +163,18 @@ function triggerFor(event: TriggerEvent) {
 
 function matchesTrigger(trigger: AutomationGraph['trigger'], event: TriggerEvent): boolean {
   if (trigger.key !== triggerFor(event)) return false;
-  return trigger.filters.every((filter) =>
-    isOrderEvent(event) ? matchesOrderFilter(filter, event) : matchesContactFilter(filter, event),
-  );
+  return trigger.filters.every((filter) => {
+    if (isOrderEvent(event)) return matchesOrderFilter(filter, event);
+    if (event.type === 'message.intent_classified') return matchesMessageFilter(filter, event);
+    return matchesContactFilter(filter, event);
+  });
 }
 
 type TriggerFilter = AutomationGraph['trigger']['filters'][number];
 
 function matchesContactFilter(
   filter: TriggerFilter,
-  event: Exclude<TriggerEvent, OrderTriggerEvent>,
+  event: Exclude<TriggerEvent, OrderTriggerEvent | MessageTriggerEvent>,
 ): boolean {
   switch (filter.field) {
     case 'segment':
@@ -163,6 +185,19 @@ function matchesContactFilter(
       return event.type === 'consent.changed' && filter.channels.includes(event.payload.channel);
     case 'consent_source':
       return event.type === 'consent.changed' && filter.sources.includes(event.payload.source);
+    default:
+      return false;
+  }
+}
+
+function matchesMessageFilter(filter: TriggerFilter, { payload }: MessageTriggerEvent): boolean {
+  switch (filter.field) {
+    case 'channel':
+      return filter.channels.includes(payload.channel);
+    case 'intent':
+      return filter.intents.includes(payload.intent);
+    case 'keywords':
+      return matchesAnyKeyword(payload.text, filter.keywords);
     default:
       return false;
   }

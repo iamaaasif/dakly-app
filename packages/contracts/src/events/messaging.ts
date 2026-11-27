@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { trackedLinkSourceTypes } from '../campaigns';
 import { chatChannels } from '../channels';
-import { handoverReasons } from '../chats';
+import { chatIntents, handoverReasons } from '../chats';
 
 const messagePayloadSchema = z.strictObject({
   messageId: z.uuid(),
@@ -28,6 +28,19 @@ export const messageReceivedEventSchema = z.strictObject({
   storeId: z.uuid(),
   occurredAt: z.iso.datetime(),
   payload: messagePayloadSchema,
+});
+
+// One per customer burst, after the classifier read it. Events carry no message text, so a
+// consumer that needs the words reads the burst's messages by id. The classifier only runs when
+// the AI agent reads the chat.
+export const messageIntentClassifiedEventSchema = z.strictObject({
+  type: z.literal('message.intent_classified'),
+  storeId: z.uuid(),
+  occurredAt: z.iso.datetime(),
+  payload: messagePayloadSchema.omit({ messageId: true }).extend({
+    intent: z.enum(chatIntents),
+    messageIds: z.array(z.uuid()).min(1).max(50),
+  }),
 });
 
 // The payload string is what the shop attached to the button; the consumer decides what it means.

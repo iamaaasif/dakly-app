@@ -13,6 +13,7 @@ import { ConsentService } from '../consents/consent.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { KillSwitchesService } from '../kill-switches/kill-switches.service';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { InboxService } from '../messaging/inbox.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -72,6 +73,7 @@ export class AiAgentService {
     @Inject(AiRunsService) private readonly runs: AiRunsService,
     @Inject(SalesAgentService) private readonly sales: SalesAgentService,
     @Inject(InboxService) private readonly inbox: InboxService,
+    @Inject(ConversationIntentService) private readonly intents: ConversationIntentService,
     @Inject(MessagingService) private readonly messaging: MessagingService,
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(ContactIdentitiesService) private readonly identities: ContactIdentitiesService,
@@ -157,7 +159,7 @@ export class AiAgentService {
       customerTexts: burst.texts,
       rules: candidate.rules,
     };
-    const { reason, prepared } = await this.checkHandOver(compose, earlier, burst.screenTexts);
+    const { reason, prepared } = await this.checkHandOver(compose, earlier, burst);
     if (reason === 'busy') return retryAt(this.clock.now());
     if (reason)
       return this.stop(storeId, conversationId, candidate, { reason, texts: burst.texts });
@@ -173,10 +175,10 @@ export class AiAgentService {
   private async checkHandOver(
     compose: ComposeInput,
     earlier: ConversationEntry[],
-    screenTexts: string[],
+    burst: Pick<ReturnType<typeof burstText>, 'screenTexts' | 'messageIds'>,
   ) {
     const { storeId, rules } = compose;
-    const screened = screenCustomerTexts(screenTexts, {
+    const screened = screenCustomerTexts(burst.screenTexts, {
       handOverDiscounts: rules.handover.discounts,
       earlier,
     });
@@ -186,7 +188,12 @@ export class AiAgentService {
       ? { reason: screened }
       : await this.classifyWithAllowance(compose, earlier);
     if (classified.intent && compose.chat)
-      await this.inbox.setIntentTag(storeId, compose.chat.conversationId, classified.intent);
+      await this.intents.record(storeId, compose.chat.conversationId, {
+        contactId: compose.contactId,
+        channel: compose.chat.channel,
+        intent: classified.intent,
+        messageIds: burst.messageIds,
+      });
     return { reason: classified.reason, prepared };
   }
 

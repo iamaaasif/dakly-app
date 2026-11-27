@@ -211,6 +211,18 @@ const examples: DaklyEvent[] = [
   },
   { type: 'message.received', storeId, occurredAt, payload: message },
   {
+    type: 'message.intent_classified',
+    storeId,
+    occurredAt,
+    payload: {
+      conversationId,
+      contactId,
+      channel: 'messenger',
+      intent: 'price',
+      messageIds: [conversationId],
+    },
+  },
+  {
     type: 'message.postback_received',
     storeId,
     occurredAt,

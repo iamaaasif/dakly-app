@@ -6,10 +6,12 @@ import { NestFactory } from '@nestjs/core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import type { ChatIntent } from '@dakly/contracts/chats';
 import { createDatabase } from '@dakly/db/client';
 
 import { ContactsModule } from '../contacts/contacts.module';
 import { ContactsService } from '../contacts/contacts.service';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { OrdersModule } from '../orders/orders.module';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
@@ -25,6 +27,9 @@ const storeId = randomUUID();
 const contactId = randomUUID();
 const otherStoreId = randomUUID();
 const otherContactId = randomUUID();
+// What the customer wrote in the burst; the real lookup is checked in the AI agent spec.
+let spoken = '';
+const conversationId = randomUUID();
 const firstDay = new Date('2026-11-19T10:00:00.000Z');
 const graph: AutomationGraph = {
   trigger: { key: 'consent_given', filters: [{ field: 'channel', channels: ['sms'] }] },
@@ -86,6 +91,7 @@ describe('AutomationEntryService (Postgres)', () => {
         AutomationEntryService,
         AutomationEntryRepository,
         { provide: Clock, useValue: { now: () => now } },
+        { provide: ConversationIntentService, useValue: { burstText: async () => spoken } },
       ],
     })(TestModule);
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
@@ -229,5 +235,62 @@ describe('AutomationEntryService (Postgres)', () => {
     });
     expect(await runs(id)).toHaveLength(1);
     expect(await runs(excluded)).toEqual([]);
+  });
+  describe('message_received', () => {
+    const messageGraph = (filters: AutomationGraph['trigger']['filters']) =>
+      workflow({ rule: 'every_time' }, { key: 'message_received', filters });
+    // A finished run lets the next message start another, so each message is judged alone.
+    const receive = async (
+      text: string,
+      intent: ChatIntent,
+      channel: 'messenger' | 'instagram',
+    ) => {
+      spoken = text;
+      await entries.startMatchingMessage(storeId, {
+        id: randomUUID(),
+        type: 'message.intent_classified',
+        occurredAt: now.toISOString(),
+        payload: { conversationId, contactId, channel, intent, messageIds: [randomUUID()] },
+      });
+      await admin.pool.query("update automation_runs set status='done' where store_id=$1", [
+        storeId,
+      ]);
+    };
+    const runCount = async (id: string) => (await runs(id)).length;
+
+    it('starts on a price question in Bangla, Banglish or mixed text and skips the rest', async () => {
+      const id = await messageGraph([
+        { field: 'intent', intents: ['price'] },
+        { field: 'keywords', keywords: ['দাম', 'dam', 'price'] },
+      ]);
+      now = new Date(firstDay.getTime() + 60 * DAY_MS);
+      await receive('এই শার্টের দাম কত?', 'price', 'messenger');
+      await receive('dam koto bhai', 'price', 'messenger');
+      await receive('এটার price কত, delivery koto?', 'price', 'instagram');
+      expect(await runCount(id)).toBe(3);
+      await receive('দাম কত?', 'delivery', 'messenger');
+      await receive('Adam bhai ache?', 'price', 'messenger');
+      await receive('😍😍', 'price', 'messenger');
+      expect(await runCount(id)).toBe(3);
+    });
+
+    it('matches Bangla digits in keywords and only the listed channels', async () => {
+      const id = await messageGraph([
+        { field: 'channel', channels: ['instagram'] },
+        { field: 'keywords', keywords: ['size 12'] },
+      ]);
+      now = new Date(firstDay.getTime() + 61 * DAY_MS);
+      await receive('size ১২ আছে?', 'size_or_stock', 'messenger');
+      expect(await runCount(id)).toBe(0);
+      await receive('size ১২ আছে?', 'size_or_stock', 'instagram');
+      expect(await runCount(id)).toBe(1);
+    });
+
+    it('starts on any message when no filter is set', async () => {
+      const id = await messageGraph([]);
+      now = new Date(firstDay.getTime() + 62 * DAY_MS);
+      await receive('hi', 'greeting', 'messenger');
+      expect(await runCount(id)).toBe(1);
+    });
   });
 });
