@@ -77,7 +77,7 @@ describe('ProductImportService with Postgres', () => {
     categories,
     brands,
     {} as never,
-    {} as never,
+    { save: async () => undefined } as never,
     { attach: async () => undefined } as never,
   );
   const stock = new ProductStockService(

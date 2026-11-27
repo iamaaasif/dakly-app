@@ -93,7 +93,7 @@ describe('product media uploaded before the product exists', () => {
     {} as never,
     {} as never,
     { unitsToConfirm: async () => [] } as never,
-    {} as never,
+    { save: async () => undefined } as never,
     media,
   );
   const actor = { kind: 'user', userId: f.userA } as const;
@@ -179,6 +179,25 @@ describe('product media uploaded before the product exists', () => {
     );
     expect(cleared.variants.map((variant) => variant.imageFileId)).toEqual([null, cover]);
     expect((await f.row('files', sizePhoto))!.expires_at).not.toBeNull();
+    expect((await f.row('files', cover))!.expires_at).toBeNull();
+  });
+
+  it('keeps a photo a size still uses when it is removed from the product', async () => {
+    const cover = await uploaded();
+    const item = await service.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Kept size photo',
+        imageFileIds: [cover],
+        options: [{ name: 'Size', values: ['S'] }],
+        variants: [{ optionValues: { Size: 'S' }, imageFileId: cover }],
+      }),
+      actor,
+    );
+    await service.removePhoto(f.a, item.id, cover, actor);
+    const after = await service.getById(f.a, item.id);
+    expect(after.imageFileIds).toEqual([]);
+    expect(after.variants[0]).toMatchObject({ imageFileId: cover });
     expect((await f.row('files', cover))!.expires_at).toBeNull();
   });
 

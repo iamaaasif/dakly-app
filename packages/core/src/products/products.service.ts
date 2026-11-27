@@ -382,7 +382,9 @@ export class ProductsService {
       const imageFileIds = product.imageFileIds.filter((id) => id !== fileId);
       if (!(await this.repository.updatePhotos(storeId, productId, imageFileIds, now)))
         throw productError('PRODUCT_NOT_FOUND');
-      await this.repository.expirePhoto(storeId, fileId, now);
+      // A size may have been given this photo on purpose, so the file stays for it.
+      if (!product.variants.some((variant) => variant.imageFileIds.includes(fileId)))
+        await this.repository.expirePhoto(storeId, fileId, now);
       await this.publishUpdated(storeId, productId);
     });
   }
