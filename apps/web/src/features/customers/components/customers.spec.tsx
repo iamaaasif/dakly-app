@@ -384,6 +384,15 @@ describe('All customers', () => {
   });
 });
 
+// A POST gets `reply`; the list and the counts come from the usual fake API.
+function respondToContactPost(reply: Reply) {
+  respond((path, method) => {
+    if (method === 'POST') return reply;
+    if (path.startsWith('/api/contacts/counts')) return { body: counts };
+    return { body: { items: [rahimaInList], nextCursor: null, total: 1 } };
+  });
+}
+
 describe('All contacts', () => {
   beforeEach(() => {
     // The form's checkbox and selects measure themselves; jsdom has no ResizeObserver.
@@ -439,6 +448,71 @@ describe('All contacts', () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole('tab', { name: /^VIP/ }));
     expect(push).toHaveBeenCalledWith('/contacts?type=vip');
+  });
+
+  it('sends the whole form, keeping the WhatsApp number out when it is the mobile number', async () => {
+    respondToContactPost({ status: 201, body: rahima });
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Add contact' }));
+    await user.click(screen.getByRole('button', { name: /Add manually/ }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Add contact' }));
+    await user.type(dialog.getByLabelText('Full name'), 'Rahim Ahmed');
+    await user.type(dialog.getByLabelText('Mobile number'), '01712345678');
+    await user.type(dialog.getByLabelText('Email (optional)'), 'rahim@example.com');
+    await user.type(dialog.getByLabelText('Age (optional)'), '28');
+    await user.type(dialog.getByLabelText('Address'), 'House 4, Road 2');
+    await user.type(dialog.getByLabelText('Area'), 'Mirpur 10');
+    await user.type(dialog.getByLabelText('Segments (optional)'), 'eid buyer{Enter}');
+    await user.type(dialog.getByLabelText('Notes'), 'Size L');
+    await user.click(dialog.getByRole('button', { name: 'Save contact' }));
+    expect(await screen.findByText('Contact added')).toBeTruthy();
+    expect(sent.find((request) => request.method === 'POST')?.body).toEqual({
+      name: 'Rahim Ahmed',
+      phone: '01712345678',
+      email: 'rahim@example.com',
+      age: 28,
+      address: 'House 4, Road 2, Mirpur 10',
+      district: 'Dhaka',
+      tags: ['eid buyer'],
+      notes: 'Size L',
+    });
+  });
+
+  it('sends a separate WhatsApp number once the box is unticked', async () => {
+    respondWithList([rahimaInList]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Add contact' }));
+    await user.click(screen.getByRole('button', { name: /Add manually/ }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Add contact' }));
+    await user.type(dialog.getByLabelText('Full name'), 'Rahim Ahmed');
+    await user.type(dialog.getByLabelText('Mobile number'), '01712345678');
+    await user.click(dialog.getByRole('checkbox', { name: 'Same as mobile number' }));
+    await user.type(dialog.getByLabelText('WhatsApp number'), '01812345678');
+    await user.click(dialog.getByRole('button', { name: 'Save contact' }));
+    await waitFor(() => expect(sent.some((request) => request.method === 'POST')).toBe(true));
+    expect(sent.find((request) => request.method === 'POST')?.body).toMatchObject({
+      whatsappPhone: '01812345678',
+    });
+  });
+
+  it('asks for a name and a mobile number, and shows a taken number on its field', async () => {
+    respondToContactPost(
+      apiError(409, 'CONTACT_PHONE_TAKEN', 'A contact with this phone number already exists'),
+    );
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Add contact' }));
+    await user.click(screen.getByRole('button', { name: /Add manually/ }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Add contact' }));
+    await user.click(dialog.getByRole('button', { name: 'Save contact' }));
+    expect(await dialog.findByText('Enter a name, up to 120 characters.')).toBeTruthy();
+    expect(sent.some((request) => request.method === 'POST')).toBe(false);
+    await user.type(dialog.getByLabelText('Full name'), 'Rahim Ahmed');
+    await user.type(dialog.getByLabelText('Mobile number'), '01712345678');
+    await user.click(dialog.getByRole('button', { name: 'Save contact' }));
+    expect(await dialog.findByText('A contact with this phone number already exists')).toBeTruthy();
   });
 });
 
@@ -751,7 +825,7 @@ describe('Import customers', () => {
     show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Add contact' }));
-    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
+    await user.click(screen.getByRole('button', { name: /Import from Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), file);
     expect((await screen.findByRole('status')).textContent).toContain('2 rows · 2 columns');
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -789,7 +863,7 @@ describe('Import customers', () => {
     show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Add contact' }));
-    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
+    await user.click(screen.getByRole('button', { name: /Import from Excel or CSV/ }));
     await user.upload(
       screen.getByLabelText('Customer file'),
       new File(['Who,Number\r\nRahima,01712345678\r\n'], 'list.csv', { type: 'text/csv' }),
@@ -852,7 +926,7 @@ describe('Import customers', () => {
     show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup({ applyAccept: false });
     await user.click(await screen.findByRole('button', { name: 'Add contact' }));
-    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
+    await user.click(screen.getByRole('button', { name: /Import from Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.pdf'));
     expect((await screen.findByRole('alert')).textContent).toContain('Only Excel (.xlsx) or CSV');
     expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
@@ -863,7 +937,7 @@ describe('Import customers', () => {
     show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup({ applyAccept: false });
     await user.click(await screen.findByRole('button', { name: 'Add contact' }));
-    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
+    await user.click(screen.getByRole('button', { name: /Import from Excel or CSV/ }));
     await user.upload(screen.getByLabelText('Customer file'), new File(['x'], 'list.xlsx'));
     expect((await screen.findByRole('alert')).textContent).toContain('could not be read');
     expect(sent.some((request) => request.path === '/api/imports')).toBe(false);
@@ -878,7 +952,7 @@ describe('Import customers', () => {
     show(<ContactsScreen query={everyone} columns={defaultCustomerColumns} />);
     const user = userEvent.setup({ applyAccept: false });
     await user.click(await screen.findByRole('button', { name: 'Add contact' }));
-    await user.click(screen.getByRole('button', { name: /Import from an Excel or CSV/ }));
+    await user.click(screen.getByRole('button', { name: /Import from Excel or CSV/ }));
     const bytes = readFileSync('src/lib/fixtures/customers.xlsx');
     await user.upload(screen.getByLabelText('Customer file'), new File([bytes], 'shop-list.xlsx'));
     expect((await screen.findByRole('status')).textContent).toContain('shop-list.xlsx');

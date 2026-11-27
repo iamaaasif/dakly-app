@@ -132,6 +132,19 @@ The web app has two customer screens.
   email, No location, No tags). There is no Add button here, because a customer comes from an
   order. The Contacts page (DSN-21) lists everyone and owns Add contact and Import. Scan your
   khata opens `/customers/khata-scan` (KHT-3, feature 13).
+- The Contacts page (`/contacts`, DSN-21) lists everyone, ordered or not, with `GET /contacts` and
+  `GET /contacts/counts` and no `hasOrdered`. Header "All contacts" with the counts line and an Add
+  contact button. Tabs All, New, Returning, VIP, Inactive, High-value and At-risk with counts, and
+  Any source and All tags selects, are in the address (`type`, `source`, `tag`). The tag select
+  offers the tags on the rows on screen, because the API has no list of every tag yet. Import,
+  Export and the Columns menu sit beside them. The table is the Customers table without Orders,
+  Spent and Last purchase, with the same cards on a phone. Add contact opens the chooser (Add
+  manually, Add by voice as Coming soon, Import from Excel or CSV, Scan your khata). The Add contact
+  form has Full name, Mobile number, WhatsApp number with Same as mobile number (ticked, so the
+  WhatsApp number is left out), Email, Gender, Age, Address, Area, City, Segments (tags) and Notes.
+  The Area is added to the end of the address, because a contact keeps one address line. A new
+  contact has no orders, so it shows here and not on Customers. Row checkboxes and the selected
+  count work as on the Customers screen.
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
