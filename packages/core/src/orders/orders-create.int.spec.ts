@@ -294,6 +294,26 @@ describe('Staff order creation', () => {
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
   });
 
+  it('keeps the order note and the team note, trims them, and clears one with an empty text', async () => {
+    const variantId = await variant(4);
+    const request = editor();
+    const created = await orders.createOrder(
+      f.a,
+      draft(variantId, { note: '  Call before delivery ', teamNote: 'Regular, trust' }),
+      request,
+    );
+    expect(created).toMatchObject({ note: 'Call before delivery', teamNote: 'Regular, trust' });
+    const edited = await orders.editOrder(
+      f.a,
+      created.id,
+      editOrderSchema.parse({ teamNote: '   ' }),
+      request,
+    );
+    expect(edited).toMatchObject({ note: 'Call before delivery', teamNote: null });
+    const plain = await orders.createOrder(f.a, draft(variantId), editor());
+    expect(plain).toMatchObject({ note: null, teamNote: null });
+  });
+
   it('preserves locked items on a delivery edit and refuses a stale draft', async () => {
     const variantId = await variant(4);
     const request = editor();
