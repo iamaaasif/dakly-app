@@ -36,8 +36,10 @@ export function formatHandoverSummary({
   const modelSummary = summary?.trim();
   if (modelSummary) return modelSummary;
   const text = latestText?.trim() ?? '';
-  if (!text) return `Reason: ${reason}`;
-  return [`Reason: ${reason}`, ...extractFields(text), `Issue: ${text.slice(0, ISSUE_LIMIT)}`].join(
-    ' | ',
-  );
+  const head =
+    reason === 'ai_unavailable'
+      ? `Reason: ${reason} (the AI could not reply)`
+      : `Reason: ${reason}`;
+  if (!text) return head;
+  return [head, ...extractFields(text), `Issue: ${text.slice(0, ISSUE_LIMIT)}`].join(' | ');
 }

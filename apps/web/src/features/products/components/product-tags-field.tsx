@@ -8,12 +8,45 @@ import { Input } from '@dakly/ui/input';
 import { Label } from '@dakly/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 
-import { useProductTags } from '../api/get-categories';
+import { useProductCollections, useProductTags } from '../api/get-categories';
 
 const popularCount = 5;
 
+type NameListKind = {
+  name: 'tags' | 'collections';
+  label: string;
+  // Lower case, as it reads inside a sentence: "Add tags", "Other collections".
+  singular: string;
+  plural: string;
+  useItems: () => { data?: { items: { id: string; name: string }[] } };
+};
+
+const tagsKind: NameListKind = {
+  name: 'tags',
+  label: 'Tags',
+  singular: 'tag',
+  plural: 'tags',
+  useItems: useProductTags,
+};
+const collectionsKind: NameListKind = {
+  name: 'collections',
+  label: 'Collections',
+  singular: 'collection',
+  plural: 'collections',
+  useItems: useProductCollections,
+};
+
 export function ProductTagsField() {
-  const { field } = useController<ProductFormValues, 'tags'>({ name: 'tags' });
+  return <NameListField kind={tagsKind} />;
+}
+
+export function ProductCollectionsField() {
+  return <NameListField kind={collectionsKind} />;
+}
+
+// Tags and collections are both lists of names that a product picks from the shop's list or adds.
+function NameListField({ kind }: { kind: NameListKind }) {
+  const { field } = useController<ProductFormValues, 'tags' | 'collections'>({ name: kind.name });
   const selected = field.value ?? [];
   const toggle = (name: string, on: boolean) =>
     field.onChange(
@@ -23,20 +56,20 @@ export function ProductTagsField() {
     );
   return (
     <div className="space-y-2">
-      <Label>Tags</Label>
+      <Label>{kind.label}</Label>
       <Popover>
         <PopoverTrigger asChild>
           <button
             type="button"
-            aria-label="Add tags"
+            aria-label={`Add ${kind.plural}`}
             className="flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-md border border-input-border bg-surface px-2 py-1.5 text-left text-sm text-text-muted hover:border-primary focus-visible:outline-2 focus-visible:outline-focus"
           >
             <Plus aria-hidden="true" size={14} />
-            Add tags
+            Add {kind.plural}
           </button>
         </PopoverTrigger>
-        <PopoverContent aria-label="Tags" className="w-80 space-y-2 p-0">
-          <TagPicker selected={selected} onToggle={toggle} />
+        <PopoverContent aria-label={kind.label} className="w-80 space-y-2 p-0">
+          <TagPicker kind={kind} selected={selected} onToggle={toggle} />
         </PopoverContent>
       </Popover>
       {selected.length ? (
@@ -63,10 +96,14 @@ export function ProductTagsField() {
   );
 }
 
-type TagPickerProps = { selected: string[]; onToggle: (name: string, on: boolean) => void };
+type TagPickerProps = {
+  kind: NameListKind;
+  selected: string[];
+  onToggle: (name: string, on: boolean) => void;
+};
 
-function useTagChoices(selected: string[], search: string) {
-  const { data } = useProductTags();
+function useTagChoices(kind: NameListKind, selected: string[], search: string) {
+  const { data } = kind.useItems();
   const query = search.trim();
   const lower = query.toLocaleLowerCase();
   const all = data?.items ?? [];
@@ -86,10 +123,10 @@ function useTagChoices(selected: string[], search: string) {
   };
 }
 
-function TagPicker({ selected, onToggle }: TagPickerProps) {
+function TagPicker({ kind, selected, onToggle }: TagPickerProps) {
   const [search, setSearch] = useState('');
   const id = useId();
-  const { query, chosen, canAdd, empty, popular, others } = useTagChoices(selected, search);
+  const { query, chosen, canAdd, empty, popular, others } = useTagChoices(kind, selected, search);
   const addTyped = () => {
     onToggle(query, true);
     setSearch('');
@@ -99,8 +136,8 @@ function TagPicker({ selected, onToggle }: TagPickerProps) {
     <>
       <div className="border-b border-border p-2">
         <Input
-          aria-label="Search or add tags"
-          placeholder="Search or add tags"
+          aria-label={`Search or add ${kind.plural}`}
+          placeholder={`Search or add ${kind.plural}`}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
@@ -124,13 +161,15 @@ function TagPicker({ selected, onToggle }: TagPickerProps) {
         <TagGroup id={`${id}-popular`} title="Frequently used" tags={popular} {...group} />
         <TagGroup
           id={`${id}-other`}
-          title={query ? 'Matching tags' : 'Other tags'}
+          title={query ? `Matching ${kind.plural}` : `Other ${kind.plural}`}
           tags={others}
           {...group}
         />
         {!canAdd && empty ? (
           <p className="px-2 py-3 text-sm text-text-muted">
-            {query ? 'No tag matches.' : 'Type a name to add your first tag.'}
+            {query
+              ? `No ${kind.singular} matches.`
+              : `Type a name to add your first ${kind.singular}.`}
           </p>
         ) : null}
       </div>

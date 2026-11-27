@@ -16,7 +16,7 @@ import {
 } from './product-fields';
 import { ProductBrandField, ProductCategoryField } from './product-list-fields';
 import { ProductNegotiationFields } from './product-negotiation-fields';
-import { ProductTagsField } from './product-tags-field';
+import { ProductCollectionsField, ProductTagsField } from './product-tags-field';
 import { ProductInventory, ProductVariantsCard } from './product-variants-card';
 
 export type ProductFormPage = {
@@ -81,6 +81,7 @@ function PageSidebar({ page }: { page: ProductFormPage }) {
         <ProductCategoryField />
         <ProductTagsField />
         <ProductBrandField />
+        <ProductCollectionsField />
       </FieldCard>
       <FieldCard title="Packaging">
         <ProductDeliveryFields />

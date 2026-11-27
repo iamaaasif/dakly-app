@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type {
   ProductBrandListResponse,
+  ProductCollectionListResponse,
   ProductCategoryListResponse,
   ProductCategoryResponse,
   ProductTagListResponse,
@@ -41,6 +42,18 @@ export function useProductTags() {
   return useQuery({
     queryKey: productsKeys.tags(contextTag),
     queryFn: ({ signal }) => request<ProductTagListResponse>('/products/tags', { signal }),
+    enabled: Boolean(contextTag && data?.currentStore?.canViewProducts),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useProductCollections() {
+  const { request, contextTag } = useStoreRequest();
+  const { data } = useSessionContext();
+  return useQuery({
+    queryKey: productsKeys.collections(contextTag),
+    queryFn: ({ signal }) =>
+      request<ProductCollectionListResponse>('/products/collections', { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canViewProducts),
     staleTime: 5 * 60 * 1000,
   });

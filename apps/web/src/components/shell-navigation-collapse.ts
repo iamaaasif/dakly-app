@@ -1,5 +1,5 @@
 'use client';
-import { createContext, useContext, useEffect } from 'react';
+import { createContext, useContext, useLayoutEffect } from 'react';
 
 export const ShellNavigationCollapse = createContext<(collapsed: boolean) => void>(() => {});
 
@@ -7,7 +7,8 @@ export const ShellNavigationCollapse = createContext<(collapsed: boolean) => voi
 // The person can still open it; leaving the screen opens it again.
 export function useCollapsedShellNavigation() {
   const setCollapsed = useContext(ShellNavigationCollapse);
-  useEffect(() => {
+  // Before paint, so the rail never shows the open width first.
+  useLayoutEffect(() => {
     setCollapsed(true);
     return () => setCollapsed(false);
   }, [setCollapsed]);
