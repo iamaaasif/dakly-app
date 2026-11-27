@@ -6,12 +6,23 @@ import { FormProvider } from 'react-hook-form';
 import { Button } from '@dakly/ui/button';
 
 import { useNewOrder } from '../use-new-order';
+import { OrderCustomerCard } from './order-customer-card';
 import { OrderLinesCard } from './order-lines-card';
+import { OrderNoteCard, OrderPaymentCard } from './order-payment-card';
+import { OrderSummaryBar, OrderSummaryCard, rowsOf } from './order-summary-card';
 import { StorePage } from '@/components/store-page';
 
 export function NewOrderPage() {
   const state = useNewOrder();
-  const { form, create } = state;
+  const { form, totals, create } = state;
+  const rows = rowsOf({
+    totals,
+    deliveryPoisha: state.deliveryPoisha,
+    discountPoisha: state.discountPoisha,
+    advancePoisha: state.advancePoisha,
+  });
+  const warning = totals.discountTooLarge ? 'The discount is more than the items cost.' : undefined;
+  const summary = { rows, cashToCollectPoisha: totals.cashToCollectPoisha, warning };
   return (
     <StorePage permission="canViewOrders">
       <FormProvider {...form}>
@@ -33,11 +44,18 @@ export function NewOrderPage() {
             onLeave={state.leave}
           />
           <div className="grid min-w-0 items-start gap-4 px-4 pt-6 pb-32 md:px-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:pb-8">
-            <div className="min-w-0 space-y-4">
-              <MainColumn state={state} />
+            <MainColumn state={state} />
+            <div className="min-w-0 space-y-4 lg:sticky lg:top-20">
+              <div className="hidden lg:block">
+                <OrderSummaryCard {...summary} />
+              </div>
+              <fieldset disabled={state.busy}>
+                <OrderNoteCard />
+              </fieldset>
               <SaveError create={create} />
             </div>
           </div>
+          <OrderSummaryBar {...summary} creating={create.isPending} onCreate={state.submit} />
         </form>
       </FormProvider>
     </StorePage>
@@ -45,7 +63,7 @@ export function NewOrderPage() {
 }
 
 function MainColumn({ state }: { state: ReturnType<typeof useNewOrder> }) {
-  const { order, form } = state;
+  const { order, quote, form } = state;
   return (
     <fieldset disabled={state.busy} className="min-w-0 space-y-4">
       <OrderLinesCard
@@ -55,6 +73,12 @@ function MainColumn({ state }: { state: ReturnType<typeof useNewOrder> }) {
         onAdd={order.add}
         onQuantity={order.setQuantity}
         onRemove={state.removeLine}
+      />
+      <OrderCustomerCard />
+      <OrderPaymentCard
+        quotePoisha={quote.chargePoisha}
+        quoteError={quote.error}
+        onRetryQuote={() => void quote.refetch()}
       />
     </fieldset>
   );
