@@ -90,7 +90,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await expect(trigger).toBeFocused();
   }
   const catalogue = page.getByRole('region', { name: 'Product catalogue' });
-  const emptyHeading = catalogue.getByRole('heading', { name: 'No products yet' });
+  const emptyHeading = catalogue.getByRole('heading', { name: 'No product created yet' });
   const emptyAddProduct = catalogue.getByRole('button', { name: 'Add product', exact: true });
   try {
     expect((await request('/me/active-store', { storeId: fixture.storeIds[0] })).status()).toBe(
@@ -216,7 +216,10 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     );
     await page.setViewportSize({ width: 1440, height: 900 });
     const sort = page.getByRole('combobox', { name: 'Sort products' });
-    await expect(sort).toHaveText('Newest');
+    await expect(sort).toHaveText('Best selling');
+    await sort.click();
+    await page.getByRole('option', { name: 'Newest' }).click();
+    await expect(page).toHaveURL(/sort=newest/);
     await sort.click();
     await page.getByRole('option', { name: 'Best selling' }).click();
     await expect(page).toHaveURL(/sort=best_selling/);
@@ -227,7 +230,8 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await page.reload();
     await expect(sort).toHaveText('Best selling');
 
-    await page.getByRole('link', { name: 'Running low', exact: true }).click();
+    await page.getByRole('button', { name: 'Filter products by status' }).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Running low', exact: true }).click();
     await expect(page).toHaveURL(/readiness=running_low/);
     await expect(page).toHaveURL(/sort=best_selling/);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -236,10 +240,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await page.getByRole('searchbox', { name: 'Search products' }).fill('Cotton');
     await page.getByRole('searchbox', { name: 'Search products' }).press('Enter');
     await expect(page).toHaveURL(/search=Cotton/);
-    await expect(page.getByRole('link', { name: 'Running low', exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
+    await expect(page).toHaveURL(/readiness=running_low/);
     const restockDialog = page.getByRole('dialog', { name: 'Restock Cotton Panjabi' });
     await page.getByRole('button', { name: 'Adjust stock for Cotton Panjabi, XL' }).click();
     await expect(restockDialog.getByText('3 waiting')).toBeVisible();
@@ -281,7 +282,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     );
     await page.evaluate(() => window.dispatchEvent(new Event('dakly-context-changed')));
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page.getByText('No products on this page.')).toBeVisible();
+    await expect(page.getByText('No products on this page')).toBeVisible();
     await expect(page.getByRole('button', { name: /Adjust stock/ })).toHaveCount(0);
 
     await page.goto('/products');
