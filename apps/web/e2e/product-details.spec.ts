@@ -74,6 +74,11 @@ test('adds a short description, tags, a barcode and a bulleted description, then
     );
     await page.keyboard.press('Escape');
     await expect(page.getByRole('button', { name: 'Remove eid' })).toBeVisible();
+    await page.getByRole('button', { name: 'Add collections' }).click();
+    await page.getByLabel('Search or add collections').fill('Eid 2026');
+    await page.getByLabel('Search or add collections').press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Remove Eid 2026' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(page).toHaveURL(/\/products\/[0-9a-f-]{36}$/);
@@ -81,6 +86,7 @@ test('adds a short description, tags, a barcode and a bulleted description, then
     await expect(page.getByLabel('Short description')).toHaveValue('Eid special, ready to ship');
     await expect(page.getByLabel('Barcode')).toHaveValue('8901234567890');
     await expect(page.getByRole('button', { name: 'Remove panjabi' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Remove Eid 2026' })).toBeVisible();
   } finally {
     try {
       const products = await database.pool.query<{ id: string }>(
@@ -107,6 +113,10 @@ test('adds a short description, tags, a barcode and a bulleted description, then
           [storeId, productIds],
         ],
         [
+          'delete from product_collection_links where store_id=$1 and product_id=any($2::uuid[])',
+          [storeId, productIds],
+        ],
+        [
           'delete from product_variants where store_id=$1 and product_id=any($2::uuid[])',
           [storeId, productIds],
         ],
@@ -115,6 +125,7 @@ test('adds a short description, tags, a barcode and a bulleted description, then
           'delete from product_tags where store_id=$1 and lower(name)=any($2::text[])',
           [storeId, ['eid', 'panjabi']],
         ],
+        ['delete from product_collections where store_id=$1 and name=$2', [storeId, 'Eid 2026']],
       ];
       for (const [text, values] of sql) await database.pool.query(text, values);
     } finally {

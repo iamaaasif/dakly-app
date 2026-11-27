@@ -13,6 +13,7 @@ import {
   type GridVariant,
 } from '../product-variant-grid';
 import { ProductPhotos } from './product-photos';
+import { ProductVariantPhotoPick } from './product-variant-photo-pick';
 import { SessionInteraction } from '@/components/session-interaction';
 
 const fieldLabels: Record<EditableField, string> = {
@@ -79,7 +80,6 @@ export function ProductVariantSheet(props: ProductVariantSheetProps) {
   const { index, options, variant, product, saved, productPrice, showStock, readOnly } = props;
   const label = variantLabel(variant, options);
   const input = { index, variant, label, readOnly, onChange: props.onChange };
-  const photoVariant = saved && { ...saved, title: label };
   const profit = profitPercent(variant.priceOverridePoisha || productPrice, variant.costPoisha);
   return (
     <Sheet
@@ -106,12 +106,36 @@ export function ProductVariantSheet(props: ProductVariantSheetProps) {
           <p className="text-sm text-text-muted">Always available</p>
         )}
         <VariantEditorField {...input} field="sku" />
-        {product && photoVariant ? (
-          <ProductPhotos product={product} variant={photoVariant} readOnly={readOnly} />
-        ) : (
-          <p className="text-sm text-text-muted">Save this variant to add photos.</p>
-        )}
+        <VariantPhotos {...{ index, label, product, saved, readOnly }} />
       </div>
     </Sheet>
+  );
+}
+
+type VariantPhotosProps = Pick<
+  ProductVariantSheetProps,
+  'index' | 'product' | 'saved' | 'readOnly'
+> & {
+  label: string;
+};
+
+function VariantPhotos({ index, label, product, saved, readOnly }: VariantPhotosProps) {
+  if (!product) return <p className="text-sm text-text-muted">Save this variant to add photos.</p>;
+  return (
+    <>
+      {readOnly ? null : (
+        <ProductVariantPhotoPick
+          index={index}
+          label={label}
+          photos={product.photos}
+          saved={saved}
+        />
+      )}
+      {saved ? (
+        <ProductPhotos product={product} variant={{ ...saved, title: label }} readOnly={readOnly} />
+      ) : (
+        <p className="text-sm text-text-muted">Save this variant to add photos.</p>
+      )}
+    </>
   );
 }

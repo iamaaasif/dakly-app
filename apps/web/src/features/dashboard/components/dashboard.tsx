@@ -8,6 +8,7 @@ import { QueryError } from '@dakly/ui/query-error';
 import { useDashboard } from '../api/dashboard';
 import { DashboardActions, type DashboardSupportLink } from './dashboard-actions';
 import { DashboardOverview, type DashboardActivity } from './dashboard-overview';
+import { DashboardSkeleton } from './dashboard-skeleton';
 import { formatCalendarDate, localHour } from '@/lib/format-date';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -15,9 +16,12 @@ export function Dashboard({
   period,
   setupCard,
   activity,
+  activityLoading,
   support,
 }: DashboardQuery & {
   setupCard: ReactNode;
+  // True until the counts and the setup checklist have answered, so every part paints together.
+  activityLoading: boolean;
   activity: DashboardActivity;
   support: DashboardSupportLink;
 }) {
@@ -32,22 +36,33 @@ export function Dashboard({
   return (
     <main className="px-3.5 py-5 sm:px-6 sm:py-6">
       <div className="@container/dashboard mx-auto max-w-300 space-y-5">
-        <DashboardGreeting data={data} name={firstName} />
-        {report.error && (
-          <QueryError
-            message={report.error.message}
-            onRetry={() => report.refetch()}
-            retryLabel="Retry dashboard"
-          />
+        {report.isLoading || activityLoading ? (
+          <DashboardSkeleton />
+        ) : (
+          <>
+            <DashboardGreeting data={data} name={firstName} />
+            {report.error && (
+              <QueryError
+                message={report.error.message}
+                onRetry={() => report.refetch()}
+                retryLabel="Retry dashboard"
+              />
+            )}
+            <DashboardOverview
+              data={data}
+              period={reportPeriod}
+              activity={activity}
+              store={store}
+            />
+            {setupCard}
+            <DashboardActions
+              activity={activity}
+              store={store}
+              stoppedBuying={data?.lifecycle?.stopped_buying}
+              support={support}
+            />
+          </>
         )}
-        <DashboardOverview data={data} period={reportPeriod} activity={activity} store={store} />
-        {setupCard}
-        <DashboardActions
-          activity={activity}
-          store={store}
-          stoppedBuying={data?.lifecycle?.stopped_buying}
-          support={support}
-        />
       </div>
     </main>
   );

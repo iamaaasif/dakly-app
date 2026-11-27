@@ -155,6 +155,7 @@ export function ProductVariantTable({ product, readOnly }: ProductVariantTablePr
       <GroupingControl options={options} {...grouping} />
       <VariantTableGroups
         {...{ edits, rows, savedById, readOnly }}
+        photos={product?.photos ?? []}
         onEdit={(key, button) => {
           openButton.current = button;
           setEditing(key);
@@ -202,11 +203,13 @@ type VariantTableGroupsProps = {
   edits: ReturnType<typeof useVariantEdits>;
   rows: ReturnType<typeof useTableRows>;
   savedById: Map<string, ProductResponse['variants'][number]>;
+  photos: ProductResponse['photos'];
   readOnly?: boolean;
   onEdit: (key: string, button: HTMLButtonElement) => void;
 };
 
-function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: VariantTableGroupsProps) {
+function VariantTableGroups(props: VariantTableGroupsProps) {
+  const { edits, rows, savedById, photos, readOnly, onEdit } = props;
   const { options, variants, showStock, productPrice, negotiationEnabled } = edits;
   const { setWhere, setVariants } = edits;
   const { chosen, selected } = rows;
@@ -214,6 +217,7 @@ function VariantTableGroups({ edits, rows, savedById, readOnly, onEdit }: Varian
   const shared = {
     options,
     savedById,
+    photos,
     productPrice,
     showStock,
     negotiationEnabled,
