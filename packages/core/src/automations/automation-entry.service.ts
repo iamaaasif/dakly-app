@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -109,18 +111,9 @@ export class AutomationEntryService {
         if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return;
         throw error;
       }
-      const version = await this.repository.lockPublishedVersion(storeId, automationId);
-      if (!version || new Date(event.occurredAt) < version.publishedAt) return;
-      if (!(await this.matchesTrigger(storeId, version.graph.trigger, event))) return;
-
-      const previous = await this.repository.previousEntry(storeId, automationId, contactId);
+      const version = await this.enteringVersion(storeId, automationId, event);
+      if (!version) return;
       const now = this.clock.now();
-      if (
-        previous &&
-        (previous.active || !canReEnter(version.graph.reEntry, previous.enteredAt, now))
-      )
-        return;
-
       await this.repository.insert(storeId, {
         automationId,
         contactId,
@@ -132,6 +125,48 @@ export class AutomationEntryService {
         wakeAt: now,
       });
     });
+  }
+
+  // The AI agent asks this before it replies. A burst that already started a run counts, so the
+  // answer does not flip once the run exists. Only a workflow whose first step sends a message
+  // answers; one that only tags or waits leaves the reply to the AI.
+  async answersMessage(
+    storeId: string,
+    conversationId: string,
+    burst: Omit<MessageBurstEvent['payload'], 'conversationId'>,
+  ): Promise<boolean> {
+    const messageIds = burst.messageIds.slice(0, 50);
+    const text = await this.conversations.burstText(storeId, conversationId, messageIds);
+    const event = {
+      id: messageIds[0] ?? randomUUID(),
+      type: 'message.burst_received',
+      occurredAt: this.clock.now().toISOString(),
+      payload: { ...burst, conversationId, messageIds, text },
+    } as const;
+    for (const { id } of await this.repository.activeWorkflows(storeId, 'message_received')) {
+      const version = await this.enteringVersion(storeId, id, event);
+      if (version?.graph.steps[version.graph.firstStepKey]?.kind === 'send') return true;
+    }
+    return false;
+  }
+
+  // The published version this event would start a run on, if the contact may enter now.
+  private async enteringVersion(storeId: string, automationId: string, event: TriggerEvent) {
+    const version = await this.repository.lockPublishedVersion(storeId, automationId);
+    if (!version || new Date(event.occurredAt) < version.publishedAt) return;
+    if (!(await this.matchesTrigger(storeId, version.graph.trigger, event))) return;
+    const previous = await this.repository.previousEntry(
+      storeId,
+      automationId,
+      event.payload.contactId,
+    );
+    if (previous?.triggerKey === triggerKeyOf(event)) return version;
+    if (
+      previous &&
+      (previous.active || !canReEnter(version.graph.reEntry, previous.enteredAt, this.clock.now()))
+    )
+      return;
+    return version;
   }
 
   private async matchesTrigger(
