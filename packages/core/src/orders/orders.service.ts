@@ -215,12 +215,12 @@ export class OrdersService {
     query: OrderListQuery,
     seeFullPhone = false,
   ): Promise<OrderListResponse> {
-    const { cursor, limit, ...filters } = query;
+    const { cursor, limit, sort, ...filters } = query;
     const timeZone =
       filters.createdFrom || filters.createdThrough ? await this.stores.timeZone(storeId) : null;
     const match = orderListMatch(filters, { seeFullPhone, timeZone, now: this.clock.now() });
     const { overdueBefore } = match;
-    const rows = await this.repository.list(storeId, match, { cursor, limit });
+    const rows = await this.repository.list(storeId, match, { cursor, limit, sort });
     const page = rows.slice(0, query.limit);
     const outcomes = await this.repository.parcelOutcomes(storeId, [
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),

@@ -1,4 +1,4 @@
-import { orderSources } from '@dakly/contracts/orders';
+import { orderSorts, orderSources } from '@dakly/contracts/orders';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { ordersSearch } from '../api/orders';
@@ -37,6 +37,20 @@ export function OrdersToolbar({ query }: OrdersToolbarProps) {
                   {orderSourceLabels[source]}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={query.sort ?? 'newest'}
+            onValueChange={(value) =>
+              go({ sort: orderSorts.find((sort) => sort === value && sort !== 'newest') })
+            }
+          >
+            <SelectTrigger aria-label="Sort orders" className="w-auto min-w-36 bg-surface">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest first</SelectItem>
+              <SelectItem value="oldest">Oldest first</SelectItem>
             </SelectContent>
           </Select>
           <OrderFilters query={query} />
