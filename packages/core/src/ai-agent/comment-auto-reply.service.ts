@@ -33,22 +33,29 @@ export class CommentAutoReplyService {
 
   async reply(storeId: string, commentId: string) {
     const comment = await this.comments.pendingFacebookReply(storeId, commentId);
-    if (!comment?.body) return;
+    // An automation that matched this comment answers it; the AI stays out.
+    if (!comment?.body || comment.claimedByAutomation) return;
     const language = priceQuestion(comment.body);
     if (!language) return;
     const settings = await this.settings.enabled(storeId);
-    if (!settings?.answerComments || !(await this.canReply(storeId, comment.channelConnectionId)))
-      return;
+    const stillAllowed = () => this.mayAnswer(storeId, comment.channelConnectionId);
+    if (!settings?.answerComments || !(await stillAllowed())) return;
     const replyLanguage = { match_customer: language, bn: 'bangla', en: 'english' } as const;
     const spoken = replyLanguage[settings.rules.replyLanguage];
     if (comment.privateSent)
       return this.comments.replyAutomatically(storeId, commentId, {
         publicBody: publicPriceAcknowledgement[spoken],
+        stillAllowed,
       });
     const product = await this.productForPost(storeId, comment);
     if (!product) return;
     const reply = commentPriceReply(spoken, product);
-    if (reply) await this.comments.replyAutomatically(storeId, commentId, reply);
+    if (reply) await this.comments.replyAutomatically(storeId, commentId, { ...reply, stillAllowed });
+  }
+
+  private async mayAnswer(storeId: string, connectionId: string) {
+    const settings = await this.settings.enabled(storeId);
+    return !!settings?.answerComments && (await this.canReply(storeId, connectionId));
   }
 
   private async canReply(storeId: string, connectionId: string) {

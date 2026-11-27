@@ -1090,6 +1090,155 @@ it.each(['catalogue photo', 'caption', 'conflicting post', 'conflicting hidden p
   },
 );
 
+async function pricedFacebookPost({ storeId, connectionId }: Shop) {
+  const productId = randomUUID();
+  const postId = randomUUID();
+  const photoId = randomUUID();
+  await admin.pool.query(
+    "insert into products (id, store_id, name, price_poisha, image_file_ids) values ($1,$2,'Blue Kurti',120000,$3)",
+    [productId, storeId, [photoId]],
+  );
+  await admin.pool.query(
+    "insert into product_variants (id, store_id, product_id, title, on_hand, is_default) values (gen_random_uuid(),$1,$2,'Default',3,true)",
+    [storeId, productId],
+  );
+  await admin.pool.query(
+    "insert into posts (id,store_id,caption,media_file_ids) values ($1,$2,'New arrival',$3)",
+    [postId, storeId, [photoId]],
+  );
+  await admin.pool.query(
+    "insert into post_targets (id,store_id,post_id,channel_connection_id,external_post_id,status,published_at) values (gen_random_uuid(),$1,$2,$3,$4,'published',now())",
+    [storeId, postId, connectionId, postId],
+  );
+  await app.get(SocialService).publishedPostContent(storeId, {
+    channelConnectionId: connectionId,
+    externalPostId: postId,
+  });
+  return postId;
+}
+
+function facebookCommentSends(shop: Shop) {
+  const connections = app.get(ChannelConnectionsService);
+  vi.spyOn(connections, 'prepareMetaSend').mockResolvedValue({
+    storeId: shop.storeId,
+    connectionId: shop.connectionId,
+    channel: 'messenger',
+    ciphertext: Buffer.alloc(0),
+    keyVersion: 1,
+    externalAccountId: shop.connectionId,
+  });
+  const privateReply = vi.spyOn(connections, 'sendMetaPrivateReply').mockResolvedValue({
+    externalMessageId: 'private-reply',
+    recipientExternalId: 'commenter',
+  });
+  const publicReply = vi.spyOn(connections, 'replyToMetaComment').mockResolvedValue({
+    externalReplyId: 'public-reply',
+  });
+  return { privateReply, publicReply };
+}
+
+async function receiveFacebookComment(shop: Shop, postId: string, text: string) {
+  const now = new Date();
+  await app.get(CommentsService).receive(shop.storeId, {
+    kind: 'facebook_page',
+    externalAccountId: shop.connectionId,
+    externalPostId: postId,
+    externalCommentId: randomUUID(),
+    authorExternalId: 'commenter',
+    authorName: null,
+    parentExternalCommentId: null,
+    text,
+    commentedAt: now,
+    receivedAt: now,
+  });
+  const { rows } = await admin.pool.query(
+    "select id, type, payload, occurred_at from outbox_events where store_id=$1 and type='comment.received' order by occurred_at desc,id desc limit 1",
+    [shop.storeId],
+  );
+  const { occurred_at, ...event } = rows[0];
+  return { ...event, storeId: shop.storeId, occurredAt: occurred_at.toISOString() };
+}
+
+it.each([
+  ['দাম কত?', 'বাংলা', 'Blue Kurti এর দাম ৳1,200।', 'মেসেঞ্জারে দাম জানিয়েছি।'],
+  ['price koto?', 'Banglish', 'Blue Kurti er dam ৳1,200.', 'Messenger e dam janiyechi.'],
+  ['Koto DAM??', 'Banglish', 'Blue Kurti er dam ৳1,200.', 'Messenger e dam janiyechi.'],
+  ['price please', 'English', 'Blue Kurti costs ৳1,200.', 'I sent the price in Messenger.'],
+])(
+  "answers the price comment %s in the customer's own language (%s)",
+  async (text, _name, privateText, publicText) => {
+    const active = await shop();
+    const postId = await pricedFacebookPost(active);
+    const { privateReply, publicReply } = facebookCommentSends(active);
+    await app
+      .get(ReplyToFacebookCommentJob)
+      .handle(await receiveFacebookComment(active, postId, text));
+    expect(privateReply.mock.calls.map(([, input]) => input.text)).toEqual([privateText]);
+    expect(publicReply.mock.calls.map(([, input]) => input.text)).toEqual([publicText]);
+  },
+);
+
+it.each([
+  'dam koto ar delivery charge koto?',
+  'ei kurti ta ki 20% discount e dewa jabe? দাম কত',
+  'size ache?',
+  'inbox',
+  'Price koto, ar stock ache to?',
+])('leaves the comment %s to staff', async (text) => {
+  const active = await shop();
+  const postId = await pricedFacebookPost(active);
+  const { privateReply, publicReply } = facebookCommentSends(active);
+  await app
+    .get(ReplyToFacebookCommentJob)
+    .handle(await receiveFacebookComment(active, postId, text));
+  expect(privateReply).not.toHaveBeenCalled();
+  expect(publicReply).not.toHaveBeenCalled();
+});
+
+it('stays quiet on a comment an automation has claimed', async () => {
+  const active = await shop();
+  const postId = await pricedFacebookPost(active);
+  const { privateReply, publicReply } = facebookCommentSends(active);
+  const event = await receiveFacebookComment(active, postId, 'Price koto?');
+  await admin.pool.query(
+    'update social_comments set automation_claimed_at = now() where store_id = $1',
+    [active.storeId],
+  );
+  await app.get(ReplyToFacebookCommentJob).handle(event);
+  expect(privateReply).not.toHaveBeenCalled();
+  expect(publicReply).not.toHaveBeenCalled();
+});
+
+it('looks the commenter up again at send time, so a later opt-out stops the private price', async () => {
+  const active = await shop();
+  const postId = await pricedFacebookPost(active);
+  const { privateReply, publicReply } = facebookCommentSends(active);
+  const event = await receiveFacebookComment(active, postId, 'Price koto?');
+  // The commenter had no contact when the comment arrived; they message the shop and opt out afterwards.
+  await receive(active, 'STOP', 'commenter');
+  await app.get(ReplyToFacebookCommentJob).handle(event);
+  expect(privateReply).not.toHaveBeenCalled();
+  expect(publicReply).not.toHaveBeenCalled();
+});
+
+it('does not post the public reply when a switch is turned off after the private price went out', async () => {
+  const active = await shop();
+  const postId = await pricedFacebookPost(active);
+  const { privateReply, publicReply } = facebookCommentSends(active);
+  privateReply.mockImplementationOnce(async () => {
+    await admin.pool.query('update ai_agent_settings set abilities = $2 where store_id = $1', [
+      active.storeId,
+      { answerComments: false },
+    ]);
+    return { externalMessageId: 'private-reply', recipientExternalId: 'commenter' };
+  });
+  await app
+    .get(ReplyToFacebookCommentJob)
+    .handle(await receiveFacebookComment(active, postId, 'Price koto?'));
+  expect(privateReply).toHaveBeenCalledTimes(1);
+  expect(publicReply).not.toHaveBeenCalled();
+});
+
 function scriptReplies(...replies: string[]) {
   const driver = new FakeLlmDriver(
     replies.map((reply) => ({

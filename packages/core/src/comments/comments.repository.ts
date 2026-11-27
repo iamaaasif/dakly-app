@@ -17,6 +17,7 @@ export type NewComment = Pick<
   | 'externalCommentId'
   | 'parentExternalCommentId'
   | 'contactId'
+  | 'authorExternalId'
   | 'authorName'
   | 'body'
   | 'commentedAt'
@@ -31,6 +32,8 @@ const fields = {
   externalCommentId: socialComments.externalCommentId,
   parentExternalCommentId: socialComments.parentExternalCommentId,
   contactId: socialComments.contactId,
+  authorExternalId: socialComments.authorExternalId,
+  automationClaimedAt: socialComments.automationClaimedAt,
   postCaption: sql<string | null>`coalesce(${postTargets.captionOverride}, ${posts.caption})`,
   authorName: socialComments.authorName,
   body: socialComments.body,

@@ -119,6 +119,7 @@ export class CommentsService {
           externalCommentId: input.externalCommentId,
           parentExternalCommentId: input.parentExternalCommentId,
           contactId: identity?.contactId,
+          authorExternalId: input.authorExternalId,
           authorName: input.authorName,
           body: input.text,
           commentedAt: input.commentedAt,
@@ -180,6 +181,7 @@ export class CommentsService {
       channelConnectionId,
       externalPostId,
       body,
+      claimedByAutomation: row.automationClaimedAt !== null,
       privateSent: phase === 'public',
     };
   }
@@ -202,15 +204,23 @@ export class CommentsService {
   async replyAutomatically(
     storeId: string,
     id: string,
-    { privateBody, publicBody }: { privateBody?: string; publicBody: string },
+    {
+      privateBody,
+      publicBody,
+      stillAllowed,
+    }: { privateBody?: string; publicBody: string; stillAllowed: () => Promise<boolean> },
   ) {
     await this.requireChats(storeId);
     const pending = await this.pendingFacebookReply(storeId, id);
-    if (!pending || (!pending.privateSent && !privateBody)) return;
+    if (!pending || pending.claimedByAutomation || (!pending.privateSent && !privateBody)) return;
     const actor = { kind: 'system' } as const;
     try {
-      if (!pending.privateSent && privateBody)
+      // The caller's switches are read again right before each send, not trusted from when the job started.
+      if (!pending.privateSent && privateBody) {
+        if (!(await stillAllowed())) return;
         await this.sendPrivateReply(storeId, actor, id, privateBody);
+      }
+      if (!(await stillAllowed())) return;
       await this.sendPublicReply(storeId, actor, id, publicBody);
     } catch (error) {
       if (
@@ -321,16 +331,17 @@ export class CommentsService {
   private claimPrivateReply(storeId: string, row: CommentRow, onlyUnanswered: boolean) {
     return this.transaction.runLocked(storeId, async () => {
       const windowClosesAt = privateReplyClosesAt(row);
-      if (row.contactId) {
+      const contactId = await this.currentContactId(storeId, row);
+      if (contactId) {
         const { decision } = await this.sendPolicy.checkForSend(storeId, {
-          contactId: row.contactId,
+          contactId,
           channel: channelOf(row.kind),
           category: 'staff_reply',
           windowClosesAt,
         });
         if (
           decision.action !== 'send' ||
-          (onlyUnanswered && !(await this.mayReplyAutomatically(storeId, row.contactId)))
+          (onlyUnanswered && !(await this.mayReplyAutomatically(storeId, contactId)))
         )
           throw commentError('COMMENT_PRIVATE_REPLY_BLOCKED');
       }
@@ -339,6 +350,17 @@ export class CommentsService {
       if (!(await this.repository.claimPrivateReply(storeId, row.id, now, onlyUnanswered)))
         throw commentError('COMMENT_PRIVATE_REPLY_USED');
     });
+  }
+
+  // A comment can arrive before its author has a contact, so the contact saved on it may be missing or old.
+  private async currentContactId(storeId: string, row: CommentRow) {
+    if (!row.authorExternalId) return row.contactId;
+    const identity = await this.identities.findActiveChannelIdentity(storeId, {
+      channel: channelOf(row.kind),
+      connectionId: row.channelConnectionId,
+      externalId: row.authorExternalId,
+    });
+    return identity?.contactId ?? row.contactId;
   }
 
   private async mayReplyAutomatically(storeId: string, contactId: string) {
