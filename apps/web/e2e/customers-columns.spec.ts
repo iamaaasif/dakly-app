@@ -31,6 +31,11 @@ test('shows the columns picked in the Columns menu and keeps them in the address
       [fixture.storeIds[0], name, phone],
     );
     await database.pool.query(
+      `insert into contact_stats(contact_id,store_id,orders_count,net_spend_poisha,last_order_at,lifecycle_stage)
+       values($2,$1,1,150000,now(),'new')`,
+      [fixture.storeIds[0], rows[0]!.id],
+    );
+    await database.pool.query(
       `insert into consents(id,store_id,contact_id,channel,status,source)
        values(gen_random_uuid(),$1,$2,'whatsapp','granted','manual'),(gen_random_uuid(),$1,$2,'sms','withdrawn','manual')`,
       [fixture.storeIds[0], rows[0]!.id],
@@ -55,11 +60,11 @@ test('shows the columns picked in the Columns menu and keeps them in the address
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/customers?search=${encodeURIComponent(name)}`);
     await expect(page.getByRole('link', { name })).toBeVisible();
-    await expect(table.locator('th', { hasText: 'Email' })).toHaveCount(0);
+    await expect(table.locator('th', { hasText: 'Email' })).toBeVisible();
+    await expect(table.locator('th', { hasText: 'Consent' })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Columns' }).click();
-    for (const label of ['Email', 'Location', 'Source', 'Tags', 'Consent'])
-      await page.getByRole('menuitemcheckbox', { name: label }).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Consent' }).click();
     await expect(page).toHaveURL(
       /columns=phone%2Cwhatsapp%2Cemail%2Clocation%2Csource%2Ctags%2Cconsent/,
     );
