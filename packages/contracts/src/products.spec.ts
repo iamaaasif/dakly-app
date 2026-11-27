@@ -150,7 +150,6 @@ describe('product contracts', () => {
     });
     expect(createProductSchema.parse({ name: 'Scarf' })).toMatchObject({
       stockStatus: 'in_stock',
-      allowOrdersWhenOutOfStock: false,
     });
   });
 

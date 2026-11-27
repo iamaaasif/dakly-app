@@ -17,33 +17,21 @@ export async function orderItemSnapshots({
   products: ProductsService;
   items: CreateOrderInput['items'];
   previous?: OrderItemWrite[];
-  // Only staff typing an order may sell what is not in stock, and only for products that allow it.
+  // Staff may add an untracked product the owner marked out of stock; no other source may.
   isManualOrder?: boolean;
 }): Promise<OrderItemWrite[]> {
   const byId = new Map(previous.map((item) => [item.variantId, item]));
-  const quantities = new Map(items.map(({ variantId, quantity }) => [variantId, quantity]));
   const newIds = items
     .filter(({ variantId }) => !byId.has(variantId))
     .map(({ variantId }) => variantId);
   const variants = await products.orderVariants(storeId, newIds, [...byId.keys()]);
-  for (const variant of variants)
-    byId.set(
-      variant.variantId,
-      newLine(variant, quantities.get(variant.variantId) ?? 0, isManualOrder),
-    );
+  for (const variant of variants) byId.set(variant.variantId, newLine(variant, isManualOrder));
   return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
 }
 
-function newLine(
-  { stockStatus, allowOrdersWhenOutOfStock, available, ...line }: OrderVariant,
-  quantity: number,
-  isManualOrder: boolean,
-): OrderItemWrite {
+function newLine({ stockStatus, ...line }: OrderVariant, isManualOrder: boolean): OrderItemWrite {
   if (!line.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
-  const mayOversell = isManualOrder && allowOrdersWhenOutOfStock;
-  if (!line.isStockTracked && stockStatus === 'out_of_stock' && !mayOversell)
+  if (!line.isStockTracked && stockStatus === 'out_of_stock' && !isManualOrder)
     throw orderError('ORDER_ITEM_OUT_OF_STOCK');
-  // Nothing is reserved for a line sold without stock, so stock never goes below zero.
-  const soldWithoutStock = mayOversell && quantity > available;
-  return { ...line, isStockTracked: line.isStockTracked && !soldWithoutStock, quantity: 0 };
+  return { ...line, quantity: 0 };
 }

@@ -20,6 +20,7 @@ import {
   photoSnapshot,
   type CatalogueVariant,
   type PhotoRef,
+  tagColumns,
   type Product,
   type Variant,
   variantSnapshot,
@@ -34,6 +35,7 @@ const productColumns = {
   description: products.description,
   shortDescription: products.shortDescription,
   barcode: products.barcode,
+  ...tagColumns,
   categoryId: products.categoryId,
   category: categoryPathSql,
   brandId: products.brandId,
@@ -46,7 +48,6 @@ const productColumns = {
   imageFileIds: products.imageFileIds,
   isStockTracked: products.isStockTracked,
   stockStatus: products.stockStatus,
-  allowOrdersWhenOutOfStock: products.allowOrdersWhenOutOfStock,
   isVisibleInChats: products.isVisibleInChats,
   isVisibleInOrderLink: products.isVisibleInOrderLink,
   status: sql<'active' | 'hidden'>`${products.status}`,
@@ -83,7 +84,7 @@ type PhotoWrite = ConfirmProductPhotoInput & {
   createdAt: Date;
 };
 
-type ProductDetails = Omit<CreateProductInput, 'variants'>;
+type ProductDetails = Omit<CreateProductInput, 'variants' | 'tags'>;
 export type { CatalogueVariant, Product, Variant };
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;

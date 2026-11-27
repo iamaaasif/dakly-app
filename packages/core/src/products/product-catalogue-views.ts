@@ -74,7 +74,6 @@ export function orderCatalogueProduct(
     name: product.name,
     isStockTracked: product.isStockTracked,
     stockStatus: product.stockStatus,
-    allowOrdersWhenOutOfStock: product.allowOrdersWhenOutOfStock,
     variants: product.variants.map((variant) => orderCatalogueVariant(product, variant, storage)),
   };
 }

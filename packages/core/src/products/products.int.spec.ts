@@ -22,6 +22,8 @@ import { ProductCategoriesService } from './product-categories.service';
 import { ProductDuplicateService } from './product-duplicate.service';
 import { ProductListService } from './product-list.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
+import { ProductTagsRepository } from './product-tags.repository';
+import { ProductTagsService } from './product-tags.service';
 import { ProductsController } from './products.controller';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
@@ -47,6 +49,7 @@ describe('ProductsService with Postgres', () => {
     transaction,
   );
   const brands = new ProductBrandsService(new ProductBrandsRepository(tenant), transaction);
+  const tags = new ProductTagsService(new ProductTagsRepository(tenant));
   const stores = {
     settings: async (storeId: string) => ({
       id: storeId,
@@ -82,6 +85,7 @@ describe('ProductsService with Postgres', () => {
     categories,
     brands,
     sales,
+    tags,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
   const team = new TeamService({} as ConstructorParameters<typeof TeamService>[0]);
@@ -92,6 +96,8 @@ describe('ProductsService with Postgres', () => {
   afterAll(async () => {
     for (const table of [
       'outbox_events',
+      'product_tag_links',
+      'product_tags',
       'product_variants',
       'products',
       'product_categories',
@@ -823,7 +829,6 @@ describe('ProductsService with Postgres', () => {
         barcode: '8901234567890',
         isStockTracked: false,
         stockStatus: 'out_of_stock',
-        allowOrdersWhenOutOfStock: true,
         options: [{ name: 'Colour', values: ['Red', 'Blue'], colors: { Red: '#D32F2F' } }],
         variants: [{ optionValues: { Colour: 'Red' } }, { optionValues: { Colour: 'Blue' } }],
       }),
@@ -833,7 +838,6 @@ describe('ProductsService with Postgres', () => {
       shortDescription: 'Soft and light',
       barcode: '8901234567890',
       stockStatus: 'out_of_stock',
-      allowOrdersWhenOutOfStock: true,
       options: [{ colors: { Red: '#D32F2F' } }],
       readiness: expect.arrayContaining(['out_of_stock']),
     });
@@ -841,5 +845,29 @@ describe('ProductsService with Postgres', () => {
       barcode: null,
       shortDescription: 'Soft and light',
     });
+  });
+
+  it('saves tags by name, keeps them on a later edit and lists the most used first', async () => {
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Cap', pricePoisha: 9000, tags: ['Eid', 'eid', 'Gift'] }),
+      actor,
+    );
+    expect(product.tags).toEqual(['Eid', 'Gift']);
+    expect(await service.edit(f.a, product.id, { barcode: '123' }, actor)).toMatchObject({
+      tags: ['Eid', 'Gift'],
+    });
+    const second = await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Scarf', pricePoisha: 9000, tags: ['gift'] }),
+      actor,
+    );
+    expect(second.tags).toEqual(['Gift']);
+    expect((await tags.list(f.a)).items).toMatchObject([
+      { name: 'Gift', productCount: 2 },
+      { name: 'Eid', productCount: 1 },
+    ]);
+    expect((await tags.list(f.b)).items).toEqual([]);
+    expect((await service.edit(f.a, second.id, { tags: [] }, actor)).tags).toEqual([]);
   });
 });

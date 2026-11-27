@@ -115,8 +115,6 @@ export const products = pgTable(
     isStockTracked: boolean('is_stock_tracked').notNull().default(true),
     // Read only when stock is not tracked.
     stockStatus: text('stock_status', { enum: productStockStatuses }).notNull().default('in_stock'),
-    // Staff may put the product on a manual order with no stock; chats and the order link never do.
-    allowOrdersWhenOutOfStock: boolean('allow_orders_when_out_of_stock').notNull().default(false),
     isVisibleInChats: boolean('is_visible_in_chats').notNull().default(true),
     isVisibleInOrderLink: boolean('is_visible_in_order_link').notNull().default(true),
     status: text('status', { enum: productStatuses }).notNull().default('active'),

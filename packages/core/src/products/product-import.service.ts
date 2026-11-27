@@ -113,6 +113,7 @@ export class ProductImportService {
         status: details.status ?? 'active',
         shortDescription: null,
         barcode: null,
+        tags: [],
         aliases: [],
         weightGrams: null,
         compareAtPricePoisha: null,
@@ -121,7 +122,6 @@ export class ProductImportService {
         negotiationFloorPoisha: null,
         isStockTracked: context.tracksStock,
         stockStatus: 'in_stock',
-        allowOrdersWhenOutOfStock: false,
         isVisibleInChats: true,
         isVisibleInOrderLink: true,
         variants: variants.map(({ sku, optionValues, priceOverridePoisha, costPoisha }) => ({

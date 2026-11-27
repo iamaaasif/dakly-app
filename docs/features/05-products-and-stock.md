@@ -233,7 +233,7 @@ The product editor design adds these fields. All of them are optional on create 
 
 - **Short description and barcode.** `shortDescription` (up to 300 characters) and `barcode` (up to 64), both text on the product.
 - **Stock status for untracked products.** `stockStatus` is `in_stock` or `out_of_stock` and is read only when "Track stock" is off. A tracked product follows its available count. The list's Out of stock filter and readiness chip include an untracked product set to out of stock.
-- **Sell when out of stock.** `allowOrdersWhenOutOfStock` lets staff add the product to a manual order with no stock. The line is saved as not stock tracked, so nothing is reserved and stock never goes below zero. Chats, the AI, photo matches and the order link never offer an out-of-stock product, whatever this switch says, and an order from any source other than manual is refused. An untracked product set to out of stock is refused on every order unless the order is manual and the switch is on (`ORDER_ITEM_OUT_OF_STOCK`).
+- **Out of stock is never offered.** Chats, the AI, photo matches and the order link never offer an out-of-stock product. An untracked product set to out of stock is refused on every order that does not come from staff typing it (`ORDER_ITEM_OUT_OF_STOCK`). Selling a tracked item past its stock stays the per-order choice in ORD-R3, not a product setting.
 - **Option value colour.** An option may carry `colors`, a map from a value to a `#RRGGBB` swatch, for example `{ "Red": "#D32F2F" }`. A colour must belong to one of the option's values.
 - **Product-level SKU.** A product with no options uses its one variant's `sku`. Generate is a client helper.
 

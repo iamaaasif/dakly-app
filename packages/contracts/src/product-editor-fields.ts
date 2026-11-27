@@ -33,24 +33,26 @@ export const productEditorFields = {
     .nullable()
     .default(null),
   barcode: z.string().trim().min(1).max(64, 'Use 64 characters or fewer').nullable().default(null),
+  // Tags are created by name when a product first uses them.
+  tags: z
+    .array(z.string().trim().min(1, 'Enter a tag').max(50, 'Use 50 characters or fewer'))
+    .max(30, 'Use 30 tags or fewer')
+    .default([]),
   // Read only when stock is not tracked; a tracked product follows its available count.
   stockStatus: z.enum(productStockStatuses).default('in_stock'),
-  // Lets staff add this product to a manual order with no stock. Chats and the order link
-  // never offer it.
-  allowOrdersWhenOutOfStock: z.boolean().default(false),
 };
 
 // On a change, a field left out keeps its stored value, so none of these may apply a default.
 export const productEditorChanges = {
   shortDescription: productEditorFields.shortDescription.unwrap().optional(),
   barcode: productEditorFields.barcode.unwrap().optional(),
+  tags: productEditorFields.tags.unwrap().optional(),
   stockStatus: productEditorFields.stockStatus.unwrap().optional(),
-  allowOrdersWhenOutOfStock: productEditorFields.allowOrdersWhenOutOfStock.unwrap().optional(),
 };
 
 // What a customer in a chat, the order link or a photo match may be offered. A tracked product
 // follows its available count; an untracked one follows the status the owner set. The
-// allowOrdersWhenOutOfStock switch is deliberately not read here: it is for manual orders only.
+// "Allow even though out of stock" on a manual order is a separate per-order choice (ORD-R3).
 export function isInStock(
   product: Pick<ProductCatalogueHead, 'isStockTracked' | 'stockStatus'>,
   available: number,
@@ -63,7 +65,6 @@ export type ProductCatalogueHead = {
   name: string;
   isStockTracked: boolean;
   stockStatus: ProductStockStatus;
-  allowOrdersWhenOutOfStock: boolean;
 };
 
 export const optionalTextInput = z

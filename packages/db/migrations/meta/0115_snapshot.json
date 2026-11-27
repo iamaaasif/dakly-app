@@ -1,5 +1,5 @@
 {
-  "id": "115c425e-4ccb-4520-bc9f-df43368667d2",
+  "id": "7b92ee69-50c2-4839-ba97-6471260e0e7b",
   "prevId": "ecfcb683-f617-4b78-b616-eee13feb353d",
   "version": "7",
   "dialect": "postgresql",
@@ -21005,6 +21005,211 @@
       },
       "isRLSEnabled": false
     },
+    "public.product_tag_links": {
+      "name": "product_tag_links",
+      "schema": "",
+      "columns": {
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tag_id": {
+          "name": "tag_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "product_tag_links_tag_idx": {
+          "name": "product_tag_links_tag_idx",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "tag_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "product_tag_links_store_id_stores_id_fk": {
+          "name": "product_tag_links_store_id_stores_id_fk",
+          "tableFrom": "product_tag_links",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "product_tag_links_product_store_fk": {
+          "name": "product_tag_links_product_store_fk",
+          "tableFrom": "product_tag_links",
+          "tableTo": "products",
+          "columnsFrom": [
+            "store_id",
+            "product_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "product_tag_links_tag_store_fk": {
+          "name": "product_tag_links_tag_store_fk",
+          "tableFrom": "product_tag_links",
+          "tableTo": "product_tags",
+          "columnsFrom": [
+            "store_id",
+            "tag_id"
+          ],
+          "columnsTo": [
+            "store_id",
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "product_tag_links_product_id_tag_id_pk": {
+          "name": "product_tag_links_product_id_tag_id_pk",
+          "columns": [
+            "product_id",
+            "tag_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.product_tags": {
+      "name": "product_tags",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "store_id": {
+          "name": "store_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "product_tags_store_id_id_key": {
+          "name": "product_tags_store_id_id_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "product_tags_store_name_key": {
+          "name": "product_tags_store_name_key",
+          "columns": [
+            {
+              "expression": "store_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"name\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "product_tags_store_id_stores_id_fk": {
+          "name": "product_tags_store_id_stores_id_fk",
+          "tableFrom": "product_tags",
+          "tableTo": "stores",
+          "columnsFrom": [
+            "store_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "product_tags_name_length": {
+          "name": "product_tags_name_length",
+          "value": "char_length(\"product_tags\".\"name\") between 1 and 50"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.price_offers": {
       "name": "price_offers",
       "schema": "",
@@ -22101,13 +22306,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'in_stock'"
-        },
-        "allow_orders_when_out_of_stock": {
-          "name": "allow_orders_when_out_of_stock",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "is_visible_in_chats": {
           "name": "is_visible_in_chats",
