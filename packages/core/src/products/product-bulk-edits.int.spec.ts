@@ -87,7 +87,7 @@ describe('ProductBulkEditsService', () => {
   }
   async function read(id: string) {
     const { rows } = await f.connection.pool.query(
-      `select p.price_poisha::int as price, (select name from product_categories where id = p.category_id) as category, p.status, v.cost_poisha::int as cost, v.on_hand
+      `select p.price_poisha::int as price, (select name from product_categories where id = p.category_id) as category, p.status, p.version, v.cost_poisha::int as cost, v.on_hand
        from products p join product_variants v on v.product_id = p.id where p.id = $1`,
       [id],
     );
@@ -104,6 +104,7 @@ describe('ProductBulkEditsService', () => {
     expect(result).toMatchObject({ changedProducts: 1, changedValues: 2 });
     expect(await read(id)).toMatchObject({
       price: 125000,
+      version: 2,
       category: 'Clothing',
       cost: 65000,
       on_hand: 45,
@@ -133,10 +134,16 @@ describe('ProductBulkEditsService', () => {
       },
       actor,
     );
+    expect(await read(id)).toMatchObject({ version: 2 });
     await f.connection.pool.query('update products set category_id=$2 where id=$1', [id, ids.tops]);
 
     expect(await service.undo(f.a, edit.id, actor)).toEqual({ restored: 3, skipped: 1 });
-    expect(await read(id)).toMatchObject({ price: 120000, category: 'Tops', on_hand: 40 });
+    expect(await read(id)).toMatchObject({
+      price: 120000,
+      category: 'Tops',
+      on_hand: 40,
+      version: 3,
+    });
     expect(
       (await f.connection.pool.query('select brand_id from products where id=$1', [id])).rows[0],
     ).toEqual({

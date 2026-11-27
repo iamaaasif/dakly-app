@@ -86,10 +86,12 @@ export class ProductsService {
     _actor: Actor,
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
-      const { variants, ...details } = input;
-      await this.assertListsExist(storeId, details);
+      const { variants, expectedVersion, ...details } = input;
       const [current] = await this.orderVariantRepository.lockProducts(storeId, [id]);
       if (!current) throw productError('PRODUCT_NOT_FOUND');
+      requireProductVersion(current.version, expectedVersion);
+      if (current.status === 'archived') throw productError('PRODUCT_NOT_FOUND');
+      await this.assertListsExist(storeId, details);
       const settings = { ...current, ...details };
       const currentVariants =
         variants || settings.negotiationEnabled
@@ -237,10 +239,16 @@ export class ProductsService {
     });
   }
 
-  async lockArchiveVariants(storeId: string, productId: string): Promise<string[]> {
-    const ids = await this.orderVariantRepository.lockArchiveVariants(storeId, productId);
-    if (!ids) throw productError('PRODUCT_NOT_FOUND');
-    return ids;
+  async lockArchiveVariants(
+    storeId: string,
+    productId: string,
+    expectedVersion?: number,
+  ): Promise<string[]> {
+    const product = await this.orderVariantRepository.lockArchiveVariants(storeId, productId);
+    if (!product) throw productError('PRODUCT_NOT_FOUND');
+    requireProductVersion(product.version, expectedVersion);
+    if (product.status === 'archived') throw productError('PRODUCT_NOT_FOUND');
+    return product.variantIds;
   }
 
   orderVariants(storeId: string, variantIds: string[], existingIds: string[]) {
@@ -427,4 +435,9 @@ export class ProductsService {
       payload: { productId },
     });
   }
+}
+
+function requireProductVersion(currentVersion: number, expectedVersion: number | undefined) {
+  if (expectedVersion !== undefined && expectedVersion !== currentVersion)
+    throw productError('PRODUCT_CHANGED');
 }

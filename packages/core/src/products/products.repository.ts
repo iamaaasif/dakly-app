@@ -29,6 +29,7 @@ const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.iden
 
 const productColumns = {
   id: products.id,
+  version: products.version,
   name: products.name,
   description: products.description,
   categoryId: products.categoryId,
@@ -81,6 +82,7 @@ type PhotoWrite = ConfirmProductPhotoInput & {
 type ProductDetails = Omit<CreateProductInput, 'variants'>;
 export type Product = ProductDetails & {
   id: string;
+  version: number;
   category: string | null;
   brand: string | null;
   imageFileIds: string[];
@@ -263,7 +265,7 @@ export class ProductsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ ...input, updatedAt: now })
+        .set({ ...input, updatedAt: now, version: sql`${products.version} + 1` })
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )
@@ -369,7 +371,7 @@ export class ProductsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ status: 'archived', updatedAt: now })
+        .set({ status: 'archived', updatedAt: now, version: sql`${products.version} + 1` })
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )
