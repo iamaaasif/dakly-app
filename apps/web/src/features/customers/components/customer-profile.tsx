@@ -181,7 +181,7 @@ function StatCards({ summary }: { summary: CustomerSummaryResponse }) {
     {
       label: 'Lifetime value',
       value:
-        summary.lifetimeValuePoisha === null
+        summary.lifetimeValuePoisha === null || summary.ordersCount === 0
           ? 'Not enough data yet'
           : formatMoney(summary.lifetimeValuePoisha),
     },

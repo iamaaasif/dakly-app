@@ -520,6 +520,24 @@ describe('Customer profile', () => {
     expect(screen.getByText("Men's T-shirt")).toBeTruthy();
   });
 
+  it('says there is not enough data when the customer has no orders, even if the API sent zero', async () => {
+    respond((path) =>
+      path.endsWith('/summary')
+        ? {
+            body: {
+              ...summary,
+              ordersCount: 0,
+              totalSpendPoisha: 0,
+              averageOrderPoisha: null,
+              lifetimeValuePoisha: 0,
+            },
+          }
+        : { body: detail },
+    );
+    show(<CustomerProfile contactId={contactId} />);
+    expect(await screen.findByText('Not enough data yet')).toBeTruthy();
+  });
+
   it('opens the tab the address names and lists the orders', async () => {
     serveProfile((path) =>
       path.includes('/orders')
@@ -622,11 +640,11 @@ describe('Customer profile', () => {
     it('lists the other contact with the phone as the API sent it, and links to them', async () => {
       serve([suggestion]);
       show(<CustomerProfile contactId={contactId} />);
-      expect(await screen.findByRole('heading', { name: 'Possible same person' })).toBeTruthy();
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       expect(screen.getByRole('link', { name: 'Karim Uddin' }).getAttribute('href')).toBe(
         '/customers/other',
       );
-      expect(screen.getByText(/01712-XXX678 · has the same phone number/)).toBeTruthy();
+      expect(screen.getByText(/01712-XXX678 · shares a phone number/)).toBeTruthy();
       expect(sent.some((call) => call.path.endsWith(`contactId=${contactId}`))).toBe(true);
     });
 
@@ -641,6 +659,7 @@ describe('Customer profile', () => {
         return { body: detail };
       });
       show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
       await waitFor(() =>
         expect(screen.queryByRole('heading', { name: 'Possible same person' })).toBeNull(),
@@ -653,7 +672,7 @@ describe('Customer profile', () => {
     it('offers no Dismiss to a viewer, and shows nothing when there are no matches', async () => {
       serve([suggestion]);
       show(<CustomerProfile contactId={contactId} />, false);
-      expect(await screen.findByRole('heading', { name: 'Possible same person' })).toBeTruthy();
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull();
       cleanup();
       serve([]);
@@ -689,6 +708,7 @@ describe('Customer profile', () => {
         return { body: detail };
       });
       show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Merge' }));
       expect(screen.getByRole('dialog', { name: 'Merge Karim Uddin?' })).toBeTruthy();
       expect(screen.getByText('You can undo the merge for 7 days.')).toBeTruthy();
@@ -715,6 +735,7 @@ describe('Customer profile', () => {
         return { body: detail };
       });
       show(<CustomerProfile contactId={contactId} />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Possible same person' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Merge' }));
       await userEvent.click(screen.getByRole('button', { name: 'Merge customers' }));
       expect((await screen.findByRole('alert')).textContent).toContain('same page');
