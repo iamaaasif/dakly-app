@@ -69,6 +69,28 @@ function FieldCard({ title, children }: { title: string; children: ReactNode }) 
   );
 }
 
+function PageSidebar({ page }: { page: ProductFormPage }) {
+  return (
+    <fieldset
+      disabled={page.readOnly}
+      className="min-w-0 space-y-4 max-lg:order-3 lg:col-start-2 lg:row-span-2 lg:row-start-1"
+    >
+      {page.status}
+      <FieldCard title="Organisation">
+        <ProductCategoryField />
+        <ProductBrandField />
+      </FieldCard>
+      <FieldCard title="Packaging">
+        <ProductDeliveryFields />
+      </FieldCard>
+      <FieldCard title="Where it appears">
+        <ProductVisibilityFields />
+      </FieldCard>
+      {page.preview}
+    </fieldset>
+  );
+}
+
 type ProductFormPageLayoutProps = {
   page: ProductFormPage;
   product?: ProductResponse;
@@ -88,36 +110,24 @@ export function ProductFormPageLayout(props: ProductFormPageLayoutProps) {
         <fieldset disabled={page.readOnly} className="min-w-0 space-y-4">
           {page.notice}
           {conflict ? <ProductSaveError {...saveError} /> : null}
-          <FieldCard title="Basics">
+          <Card className="space-y-4">
             <ProductNameFields productId={productId} onPage />
             <ProductDescriptionFields productId={productId} />
-          </FieldCard>
+          </Card>
         </fieldset>
-        <fieldset
-          disabled={page.readOnly}
-          className="min-w-0 space-y-4 lg:col-start-2 lg:row-span-2 lg:row-start-1"
-        >
-          {page.status}
-          <FieldCard title="Organisation">
-            <ProductCategoryField />
-            <ProductBrandField />
-          </FieldCard>
-          <FieldCard title="Delivery">
-            <ProductDeliveryFields />
-          </FieldCard>
-          <FieldCard title="Where it appears">
-            <ProductVisibilityFields />
-          </FieldCard>
-          {page.preview}
-        </fieldset>
-        <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-start-2">
+        <PageSidebar page={page} />
+        <div className="min-w-0 space-y-4 max-lg:order-2 lg:col-start-1 lg:row-start-2">
           <fieldset disabled={page.readOnly} className="min-w-0 space-y-4">
             <Card className="space-y-3.5">{page.photos}</Card>
             <FieldCard title="Price">
               <ProductPriceFields productId={productId} onPage />
-              {page.readOnly ? null : <ProductNegotiationFields />}
             </FieldCard>
-            <FieldCard title="Inventory">
+            {page.readOnly ? null : (
+              <Card role="group" aria-label="Price negotiation">
+                <ProductNegotiationFields />
+              </Card>
+            )}
+            <FieldCard title="Inventory management">
               <ProductInventory />
             </FieldCard>
           </fieldset>

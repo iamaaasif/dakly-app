@@ -13,6 +13,7 @@ import { sessionContextKey } from '@/lib/session-context';
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 const page = {
@@ -113,10 +114,12 @@ describe('Variants card', () => {
   it('shows plain stock, code and warn-at fields while a product has no options', () => {
     show(saved);
     const card = screen.getByRole('heading', { name: 'Variations' }).parentElement!;
-    const inventory = screen.getByRole('heading', { name: 'Inventory' }).parentElement!;
+    const inventory = screen.getByRole('heading', { name: 'Inventory management' }).parentElement!;
     expect(within(inventory).getByLabelText<HTMLInputElement>('Available stock').value).toBe('12');
-    expect(within(inventory).getByLabelText<HTMLInputElement>('Product code').value).toBe('TS-1');
-    expect(within(inventory).getByLabelText('Low stock warning')).toBeTruthy();
+    expect(
+      within(inventory).getByLabelText<HTMLInputElement>('SKU (stock keeping unit)').value,
+    ).toBe('TS-1');
+    expect(within(inventory).getByLabelText('Low stock threshold')).toBeTruthy();
     expect(within(card).getByRole('button', { name: '+ Other option' })).toBeTruthy();
     expect(within(card).getByRole('button', { name: /Suggest options/ })).toBeTruthy();
     expect(screen.queryByRole('table')).toBeNull();

@@ -1,31 +1,47 @@
+import { randomUUID } from 'node:crypto';
+
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
+import type { CommentIntent } from '@dakly/contracts/comments';
 import {
   consentChangedEventSchema,
   contactBirthdayEventSchema,
   contactTagAddedEventSchema,
 } from '@dakly/contracts/events/contacts';
+import { messageBurstReceivedEventSchema } from '@dakly/contracts/events/messaging';
 import {
   orderCreatedEventSchema,
   orderStageChangedEventSchema,
 } from '@dakly/contracts/events/orders';
+import { commentReceivedEventSchema } from '@dakly/contracts/events/social';
 import type { OrderStage } from '@dakly/contracts/orders';
 
+import { CommentPostProductsService } from '../comments/comment-post-products.service';
+import { CommentsService } from '../comments/comments.service';
 import { ContactsService } from '../contacts/contacts.service';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { DAY_MS } from '../platform/time';
 import { SegmentsService } from '../segments/segments.service';
+import { SendPolicyService } from '../sending/send-policy.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
+import { isChatChannel, MESSENGER_WINDOW_MS, type SendStep } from './automation-step-rules';
+import { commentIntents, hasReadableWords } from './comment-intent';
+import { matchesAnyKeyword } from './message-keywords';
 
 export const automationConsentEvent = consentChangedEventSchema.extend({ id: z.uuid() });
 export const automationTagEvent = contactTagAddedEventSchema.extend({ id: z.uuid() });
 export const automationBirthdayEvent = contactBirthdayEventSchema.extend({ id: z.uuid() });
+export const automationMessageBurstEvent = messageBurstReceivedEventSchema.extend({
+  id: z.uuid(),
+});
+export const automationCommentEvent = commentReceivedEventSchema.extend({ id: z.uuid() });
 export const automationOrderCreatedEvent = orderCreatedEventSchema.extend({ id: z.uuid() });
 export const automationOrderStageEvent = orderStageChangedEventSchema.extend({ id: z.uuid() });
 type OrderEvent =
@@ -37,10 +53,32 @@ type WithFacts<E> = E extends { payload: infer P }
   ? Omit<E, 'payload'> & { payload: P & OrderFacts }
   : never;
 type OrderTriggerEvent = WithFacts<OrderEvent>;
+type MessageBurstEvent = Omit<z.infer<typeof automationMessageBurstEvent>, 'storeId'>;
+// The keyword filter reads the words, which the event leaves out.
+type MessageTriggerEvent = Omit<MessageBurstEvent, 'payload'> & {
+  payload: MessageBurstEvent['payload'] & { text: string };
+};
+// The facts the filters read; the event carries only the comment id.
+type CommentTriggerEvent = {
+  id: string;
+  type: 'comment.received';
+  occurredAt: string;
+  payload: {
+    contactId: string;
+    commentId: string;
+    channelConnectionId: string;
+    externalPostId: string;
+    text: string;
+    intents: CommentIntent[];
+    productIds: string[];
+  };
+};
 type TriggerEvent =
+  | CommentTriggerEvent
   | Omit<z.infer<typeof automationConsentEvent>, 'storeId'>
   | Omit<z.infer<typeof automationTagEvent>, 'storeId'>
   | Omit<z.infer<typeof automationBirthdayEvent>, 'storeId'>
+  | MessageTriggerEvent
   | OrderTriggerEvent;
 
 const stageTriggers: Partial<Record<OrderStage, TriggerKey>> = {
@@ -58,6 +96,10 @@ export class AutomationEntryService {
     @Inject(ContactsService) private readonly contacts: ContactsService,
     @Inject(SegmentsService) private readonly segments: SegmentsService,
     @Inject(OrderReportingService) private readonly orders: OrderReportingService,
+    @Inject(ConversationIntentService) private readonly conversations: ConversationIntentService,
+    @Inject(CommentsService) private readonly comments: CommentsService,
+    @Inject(CommentPostProductsService) private readonly postProducts: CommentPostProductsService,
+    @Inject(SendPolicyService) private readonly sendPolicy: SendPolicyService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
 
@@ -66,6 +108,62 @@ export class AutomationEntryService {
     if (!key) return;
     const workflows = await this.repository.activeWorkflows(storeId, key);
     for (const { id } of workflows) await this.start(storeId, id, event);
+  }
+
+  async startMatchingMessage(storeId: string, event: MessageBurstEvent): Promise<void> {
+    const { conversationId, messageIds } = event.payload;
+    const text = await this.conversations.burstText(storeId, conversationId, messageIds);
+    await this.startMatching(storeId, { ...event, payload: { ...event.payload, text } });
+  }
+
+  // Only the first matching workflow answers a comment, and only a comment that matches gets a
+  // contact, so a store's other commenters stay out of its customer list.
+  async startMatchingComment(
+    storeId: string,
+    event: Omit<z.infer<typeof automationCommentEvent>, 'storeId'>,
+  ): Promise<void> {
+    const workflows = await this.repository.activeWorkflows(storeId, 'comment_on_post');
+    if (!workflows.length) return;
+    const comment = await this.comments.triggerFacts(storeId, event.payload.commentId);
+    if (!comment || !hasReadableWords(comment.text)) return;
+    const { productIds } = await this.postProducts.forPost(storeId, comment);
+    const facts = {
+      commentId: comment.commentId,
+      channelConnectionId: comment.channelConnectionId,
+      externalPostId: comment.externalPostId,
+      text: comment.text,
+      intents: commentIntents(comment.text),
+      productIds,
+    };
+    const probe = { ...event, payload: { ...facts, contactId: event.payload.commentId } };
+    const matching = await this.matchingWorkflows(storeId, workflows, probe);
+    if (!matching.length) return;
+    const { contactId } = await this.contacts.findOrCreateByIdentity(storeId, {
+      connectionId: comment.channelConnectionId,
+      externalId: comment.authorExternalId,
+      channel: comment.channel,
+    });
+    // A workflow that cannot enter this person, or cannot answer them, falls through to the next.
+    for (const id of matching)
+      if (await this.start(storeId, id, { ...event, payload: { ...facts, contactId } })) return;
+  }
+
+  private async matchingWorkflows(
+    storeId: string,
+    workflows: { id: string }[],
+    event: CommentTriggerEvent,
+  ) {
+    const matching: string[] = [];
+    for (const { id } of workflows) {
+      const version = await this.repository.lockPublishedVersion(storeId, id);
+      if (
+        version &&
+        new Date(event.occurredAt) >= version.publishedAt &&
+        matchesTrigger(version.graph.trigger, event)
+      )
+        matching.push(id);
+    }
+    return matching;
   }
 
   async startMatchingOrder(storeId: string, event: OrderEvent): Promise<void> {
@@ -81,38 +179,124 @@ export class AutomationEntryService {
     );
   }
 
-  async start(storeId: string, automationId: string, event: TriggerEvent): Promise<void> {
+  async start(storeId: string, automationId: string, event: TriggerEvent): Promise<boolean> {
     const { contactId } = event.payload;
-    await this.transaction.run(storeId, async () => {
+    return this.transaction.run(storeId, async () => {
       try {
         await this.contacts.lockForConsent(storeId, [contactId]);
       } catch (error) {
-        if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return;
+        if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
         throw error;
       }
-      const version = await this.repository.lockPublishedVersion(storeId, automationId);
-      if (!version || new Date(event.occurredAt) < version.publishedAt) return;
-      if (!(await this.matchesTrigger(storeId, version.graph.trigger, event))) return;
-
-      const previous = await this.repository.previousEntry(storeId, automationId, contactId);
+      const version = await this.enteringVersion(storeId, automationId, event);
+      if (!version) return false;
+      // The claim comes last, so a comment that starts no run stays free for the AI agent.
+      if (event.type === 'comment.received' && !(await this.claimComment(storeId, event)))
+        return false;
       const now = this.clock.now();
-      if (
-        previous &&
-        (previous.active || !canReEnter(version.graph.reEntry, previous.enteredAt, now))
-      )
-        return;
-
       await this.repository.insert(storeId, {
         automationId,
         contactId,
         versionId: version.id,
-        triggerKey: event.id,
+        triggerKey: triggerKeyOf(event),
         triggerOrderId: orderIdOf(event),
+        triggerCommentId: event.type === 'comment.received' ? event.payload.commentId : null,
         currentStepKey: version.graph.firstStepKey,
         enteredAt: now,
         wakeAt: now,
       });
+      return true;
     });
+  }
+
+  private async claimComment(storeId: string, event: CommentTriggerEvent) {
+    const { commentId } = event.payload;
+    return (
+      (await this.comments.canAnswerAutomatically(storeId, commentId)) &&
+      (await this.comments.claimForAutomation(storeId, commentId))
+    );
+  }
+
+  // The AI agent asks this before it replies. A burst that already started a run counts, so the
+  // answer does not flip once the run exists. Only a workflow whose first step sends a message
+  // answers; one that only tags or waits leaves the reply to the AI.
+  async answersMessage(
+    storeId: string,
+    conversationId: string,
+    burst: Omit<MessageBurstEvent['payload'], 'conversationId'>,
+  ): Promise<boolean> {
+    const messageIds = burst.messageIds.slice(0, 50);
+    const text = await this.conversations.burstText(storeId, conversationId, messageIds);
+    const event = {
+      id: messageIds[0] ?? randomUUID(),
+      type: 'message.burst_received',
+      occurredAt: this.clock.now().toISOString(),
+      payload: { ...burst, conversationId, messageIds, text },
+    } as const;
+    for (const { id } of await this.repository.activeWorkflows(storeId, 'message_received')) {
+      const version = await this.enteringVersion(storeId, id, event);
+      const first = version?.graph.steps[version.graph.firstStepKey];
+      if (first?.kind === 'send' && (await this.canReach(storeId, event.payload.contactId, first)))
+        return true;
+    }
+    return false;
+  }
+
+  // A first send the policy will skip (no consent, blocked contact, frequency cap) answers nobody,
+  // so the AI must reply. This only reads; the real send checks again under its locks.
+  private async canReach(storeId: string, contactId: string, step: SendStep) {
+    const at = this.clock.now();
+    for (const channel of step.channels) {
+      const windowClosesAtOf = isChatChannel(channel)
+        ? new Map([[contactId, new Date(at.getTime() + MESSENGER_WINDOW_MS)]])
+        : undefined;
+      const [checked] = await this.sendPolicy.checkAudience(storeId, {
+        contactIds: [contactId],
+        channel,
+        category: step.category,
+        at,
+        windowClosesAtOf,
+      });
+      if (checked?.decision.action !== 'skip') return true;
+    }
+    return false;
+  }
+
+  // The published version this event would start a run on, if the contact may enter now.
+  private async enteringVersion(storeId: string, automationId: string, event: TriggerEvent) {
+    const version = await this.matchingVersion(storeId, automationId, event);
+    if (!version) return;
+    if (event.type === 'comment.received')
+      return (await this.isFirstOnPost(storeId, automationId, event)) ? version : undefined;
+    const previous = await this.repository.previousEntry(
+      storeId,
+      automationId,
+      event.payload.contactId,
+    );
+    if (previous?.triggerKey === triggerKeyOf(event)) return version;
+    if (
+      previous &&
+      (previous.active || !canReEnter(version.graph.reEntry, previous.enteredAt, this.clock.now()))
+    )
+      return;
+    return version;
+  }
+
+  private async matchingVersion(storeId: string, automationId: string, event: TriggerEvent) {
+    const version = await this.repository.lockPublishedVersion(storeId, automationId);
+    if (!version || new Date(event.occurredAt) < version.publishedAt) return;
+    return (await this.matchesTrigger(storeId, version.graph.trigger, event)) ? version : undefined;
+  }
+
+  // A comment's rule is one entry per person per post, so the re-entry setting does not apply.
+  private async isFirstOnPost(storeId: string, automationId: string, event: CommentTriggerEvent) {
+    const { contactId } = event.payload;
+    return !(await this.repository.hasEntryForPost(
+      storeId,
+      automationId,
+      contactId,
+      event.payload,
+    ));
   }
 
   private async matchesTrigger(
@@ -135,6 +319,8 @@ function orderTriggerFor(event: OrderEvent): TriggerKey | undefined {
 function triggerFor(event: TriggerEvent) {
   if (event.type === 'contact.tag_added') return 'tag_added';
   if (event.type === 'contact.birthday') return 'birthday';
+  if (event.type === 'message.burst_received') return 'message_received';
+  if (event.type === 'comment.received') return 'comment_on_post';
   if (isOrderEvent(event)) return orderTriggerFor(event);
   if (event.payload.status === 'granted' && event.payload.source !== 'import')
     return 'consent_given';
@@ -143,16 +329,19 @@ function triggerFor(event: TriggerEvent) {
 
 function matchesTrigger(trigger: AutomationGraph['trigger'], event: TriggerEvent): boolean {
   if (trigger.key !== triggerFor(event)) return false;
-  return trigger.filters.every((filter) =>
-    isOrderEvent(event) ? matchesOrderFilter(filter, event) : matchesContactFilter(filter, event),
-  );
+  return trigger.filters.every((filter) => {
+    if (isOrderEvent(event)) return matchesOrderFilter(filter, event);
+    if (event.type === 'message.burst_received') return matchesMessageFilter(filter, event);
+    if (event.type === 'comment.received') return matchesCommentFilter(filter, event);
+    return matchesContactFilter(filter, event);
+  });
 }
 
 type TriggerFilter = AutomationGraph['trigger']['filters'][number];
 
 function matchesContactFilter(
   filter: TriggerFilter,
-  event: Exclude<TriggerEvent, OrderTriggerEvent>,
+  event: Exclude<TriggerEvent, OrderTriggerEvent | MessageTriggerEvent | CommentTriggerEvent>,
 ): boolean {
   switch (filter.field) {
     case 'segment':
@@ -163,6 +352,34 @@ function matchesContactFilter(
       return event.type === 'consent.changed' && filter.channels.includes(event.payload.channel);
     case 'consent_source':
       return event.type === 'consent.changed' && filter.sources.includes(event.payload.source);
+    default:
+      return false;
+  }
+}
+
+function matchesMessageFilter(filter: TriggerFilter, { payload }: MessageTriggerEvent): boolean {
+  switch (filter.field) {
+    case 'channel':
+      return filter.channels.includes(payload.channel);
+    case 'intent':
+      return payload.intent !== null && filter.intents.includes(payload.intent);
+    case 'keywords':
+      return matchesAnyKeyword(payload.text, filter.keywords);
+    default:
+      return false;
+  }
+}
+
+function matchesCommentFilter(filter: TriggerFilter, { payload }: CommentTriggerEvent): boolean {
+  switch (filter.field) {
+    case 'post':
+      return filter.externalPostIds.includes(payload.externalPostId);
+    case 'product':
+      return payload.productIds.some((id) => filter.productIds.includes(id));
+    case 'keywords':
+      return matchesAnyKeyword(payload.text, filter.keywords);
+    case 'comment_intent':
+      return filter.intents.some((intent) => payload.intents.includes(intent));
     default:
       return false;
   }
@@ -185,6 +402,15 @@ function matchesOrderFilter(filter: TriggerFilter, { payload }: OrderTriggerEven
     default:
       return false;
   }
+}
+
+// A retried reply announces the same burst again; its newest message makes the repeat the same
+// entry.
+function triggerKeyOf(event: TriggerEvent) {
+  if (event.type === 'comment.received') return event.payload.commentId;
+  return event.type === 'message.burst_received'
+    ? (event.payload.messageIds[0] ?? event.id)
+    : event.id;
 }
 
 function orderIdOf(event: TriggerEvent) {

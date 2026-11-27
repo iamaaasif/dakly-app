@@ -1,8 +1,9 @@
 'use client';
+import { RefreshCw } from 'lucide-react';
+import { useRef } from 'react';
 import { useFormContext } from 'react-hook-form';
 
 import type { ProductFormValues, ProductResponse } from '@dakly/contracts/products';
-import { Button } from '@dakly/ui/button';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 
@@ -83,29 +84,43 @@ export function ProductInventory() {
 
 function ProductSkuField() {
   const form = useFormContext<ProductFormValues>();
+  const input = useRef<HTMLInputElement | null>(null);
+  const { ref, ...registered } = form.register('variants.0.sku');
+  function handleGenerate() {
+    const code = crypto.randomUUID().slice(0, 12).replace('-', '').toUpperCase();
+    form.setValue('variants.0.sku', `SKU-${code}`, { shouldDirty: true, shouldValidate: true });
+    // The code is selected so one more key press replaces it.
+    requestAnimationFrame(() => {
+      input.current?.focus();
+      input.current?.select();
+    });
+  }
   return (
     <FormField
       name="variants.0.sku"
-      label="Product code"
+      label="SKU (stock keeping unit)"
       optional
       action={
-        <Button
+        <button
           type="button"
-          variant="secondary"
-          onClick={() => {
-            const code = crypto.randomUUID().slice(0, 12).replace('-', '').toUpperCase();
-            form.setValue('variants.0.sku', `SKU-${code}`, {
-              shouldDirty: true,
-              shouldValidate: true,
-            });
-          }}
+          onClick={handleGenerate}
+          className="inline-flex items-center gap-1 rounded-md px-1 text-sm font-medium text-action hover:text-action-hover focus-visible:outline-2 focus-visible:outline-focus"
         >
+          <RefreshCw aria-hidden="true" size={14} strokeWidth={1.75} />
           Generate
-        </Button>
+        </button>
       }
     >
       {(control) => (
-        <Input {...control} {...form.register('variants.0.sku')} placeholder="e.g. UT-PJ-01" />
+        <Input
+          {...control}
+          {...registered}
+          ref={(element) => {
+            ref(element);
+            input.current = element;
+          }}
+          placeholder="e.g. UT-PJ-01"
+        />
       )}
     </FormField>
   );

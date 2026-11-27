@@ -16,6 +16,7 @@ import {
   parseQuery,
   rankByWords,
 } from './product-search-ranking';
+import { searchWords } from './search-text';
 
 export type { PhotoMatch };
 
@@ -50,6 +51,16 @@ export class ProductSearchService {
       0,
       limit,
     );
+  }
+
+  async productsNamedInCaption(storeId: string, caption: string) {
+    const text = ` ${searchWords(caption).join(' ')} `;
+    const candidates = await this.source.listPostProductNames(storeId, candidateLimit);
+    const matches = candidates.filter(({ name }) => {
+      const words = searchWords(name);
+      return words.length > 0 && text.includes(` ${words.join(' ')} `);
+    });
+    if (candidates.length < candidateLimit) return matches.slice(0, 2).map(({ id }) => id);
   }
 
   // What the shop sells, for a customer who names no product: categories, then products that can

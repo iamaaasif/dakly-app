@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, gt, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, arrayOverlaps, asc, desc, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 
 import type { ProductOption } from '@dakly/contracts/products';
-import { products } from '@dakly/db/schema/products';
+import { products, productVariants } from '@dakly/db/schema/products';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { categoryPathSql } from './product-list-names.repository';
@@ -35,6 +35,42 @@ export class ProductSearchRepository {
         .orderBy(desc(products.id))
         .limit(limit),
     );
+  }
+
+  listPostProductNames(storeId: string, limit: number) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: products.id, name: products.name })
+        .from(products)
+        .where(eq(products.storeId, storeId))
+        .orderBy(desc(products.id))
+        .limit(limit),
+    );
+  }
+
+  findPostProductsByPhotos(storeId: string, fileIds: string[]) {
+    return this.database.forStore(storeId, (tx) => {
+      const matchingVariants = tx
+        .select({ productId: productVariants.productId })
+        .from(productVariants)
+        .where(
+          and(
+            eq(productVariants.storeId, storeId),
+            arrayOverlaps(productVariants.imageFileIds, fileIds),
+          ),
+        );
+      const variantPhoto = inArray(products.id, matchingVariants);
+      return tx
+        .select({ id: products.id, variantPhoto: sql<boolean>`${variantPhoto}` })
+        .from(products)
+        .where(
+          and(
+            eq(products.storeId, storeId),
+            or(arrayOverlaps(products.imageFileIds, fileIds), variantPhoto),
+          ),
+        )
+        .limit(2);
+    });
   }
 
   async nearestForChat(

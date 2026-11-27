@@ -1,0 +1,2 @@
+ALTER TABLE "automation_runs" ADD COLUMN "trigger_comment_id" uuid;--> statement-breakpoint
+ALTER TABLE "automation_runs" ADD CONSTRAINT "automation_runs_trigger_comment_id_social_comments_id_fk" FOREIGN KEY ("trigger_comment_id") REFERENCES "public"."social_comments"("id") ON DELETE set null ON UPDATE no action;

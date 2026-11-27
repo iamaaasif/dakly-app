@@ -45,6 +45,7 @@ import {
   messageAttachmentsRequestedEventSchema,
   messageDeliveredEventSchema,
   messageFailedEventSchema,
+  messageBurstReceivedEventSchema,
   messageOptedOutEventSchema,
   messagePostbackReceivedEventSchema,
   messageReadEventSchema,
@@ -76,6 +77,7 @@ import {
   variantRestockedEventSchema,
 } from './products';
 import {
+  commentReceivedEventSchema,
   postFailedEventSchema,
   postPublishedEventSchema,
   postScheduledEventSchema,
@@ -115,6 +117,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   conversationStartedEventSchema,
   conversationHandedOverEventSchema,
   messageReceivedEventSchema,
+  messageBurstReceivedEventSchema,
   messagePostbackReceivedEventSchema,
   messageAttachmentsRequestedEventSchema,
   messageSendRequestedEventSchema,
@@ -137,6 +140,7 @@ export const daklyEventSchema = z.discriminatedUnion('type', [
   attributionWindowChangedEventSchema,
   attributionRebuildContinuedEventSchema,
   attributionOrdersRebuiltEventSchema,
+  commentReceivedEventSchema,
   postScheduledEventSchema,
   postPublishedEventSchema,
   postFailedEventSchema,

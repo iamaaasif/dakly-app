@@ -162,6 +162,63 @@ describe('Meta webhook intake', () => {
     expect(await job?.getState()).toBe('waiting');
   });
 
+  it('routes a signed Facebook comment into the inbox and queues a single reply event', async () => {
+    const storeId = randomUUID();
+    const pageId = randomUUID();
+    const timestamp = Math.floor(Date.now() / 1000);
+    const commentId = randomUUID();
+    const payload = JSON.stringify({
+      object: 'page',
+      entry: [
+        {
+          id: pageId,
+          time: timestamp,
+          changes: [
+            {
+              field: 'feed',
+              value: {
+                item: 'comment',
+                verb: 'add',
+                from: { id: randomUUID() },
+                created_time: timestamp,
+                post_id: 'test-post',
+                comment_id: commentId,
+                message: 'দাম কত?',
+              },
+            },
+          ],
+        },
+      ],
+    });
+    await admin.pool.query("insert into stores (id, name) values ($1, 'Comment routing test')", [
+      storeId,
+    ]);
+    try {
+      await admin.pool.query(
+        `insert into channel_connections (id, store_id, kind, external_account_id, display_name, connected_at)
+         values ($1, $2, 'facebook_page', $3, 'Comment routing test', $4)`,
+        [randomUUID(), storeId, pageId, new Date((timestamp - 120) * 1000)],
+      );
+      expect((await post(payload)).statusCode).toBe(200);
+      const [received] = await stored(payload);
+      const job = app.get(ProcessWebhookEventJob);
+      await job.handle({ webhookEventId: received?.id }, true);
+      await job.handle({ webhookEventId: received?.id }, true);
+      expect(await stored(payload)).toMatchObject([{ status: 'processed', payload: null }]);
+      const { rows } = await admin.pool.query(
+        `select c.external_comment_id, c.body from social_comments c
+         join outbox_events e on e.store_id=c.store_id and e.payload->>'commentId'=c.id::text
+         where c.store_id=$1 and e.type='comment.received'`,
+        [storeId],
+      );
+      expect(rows).toEqual([{ external_comment_id: commentId, body: 'দাম কত?' }]);
+    } finally {
+      for (const table of ['outbox_events', 'social_comments', 'channel_connections'])
+        await admin.pool.query(`delete from ${table} where store_id=$1`, [storeId]);
+      await admin.pool.query('delete from stores where id=$1', [storeId]);
+    }
+  });
+
   it('keeps exhausted deliveries out of recovery and purges them after seven days', async () => {
     const now = new Date('2000-01-10T09:00:00Z');
     const clock = vi

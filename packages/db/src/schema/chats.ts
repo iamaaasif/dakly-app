@@ -274,9 +274,13 @@ export const socialComments = pgTable(
     externalCommentId: text('external_comment_id').notNull(),
     parentExternalCommentId: text('parent_external_comment_id'),
     contactId: uuid('contact_id').references(() => contacts.id),
+    // Lets a send look the commenter up again; the contact above is only who they were when the comment arrived.
+    authorExternalId: text('author_external_id'),
     authorName: text('author_name'),
     body: text('body'),
     classification: text('classification', { enum: commentClassifications }),
+    // Set by an automation that answers this comment; the AI then stays quiet on it.
+    automationClaimedAt: timestamptz('automation_claimed_at'),
     status: text('status', { enum: commentStatuses }).notNull().default('new'),
     publicReplyExternalId: text('public_reply_external_id'),
     privateRepliedAt: timestamptz('private_replied_at'),

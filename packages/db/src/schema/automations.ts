@@ -26,6 +26,7 @@ import { type AutomationGraph, sendCategories } from '@dakly/contracts/automatio
 import { recipientSkipReasons } from '@dakly/contracts/campaigns';
 
 import { users } from './auth';
+import { socialComments } from './chats';
 import { createdAt, id, isOneOf, poisha, timestamptz, updatedAt } from './columns';
 import { contacts } from './contacts';
 import { orders } from './orders';
@@ -145,6 +146,10 @@ export const automationRuns = pgTable(
     triggerKey: text('trigger_key').notNull(),
     // Set when an order started the run, so its messages can name the order.
     triggerOrderId: uuid('trigger_order_id').references(() => orders.id, { onDelete: 'set null' }),
+    // Set when a comment started the run, so its reply steps answer that comment.
+    triggerCommentId: uuid('trigger_comment_id').references(() => socialComments.id, {
+      onDelete: 'set null',
+    }),
     currentStepKey: text('current_step_key').notNull(),
     status: text('status', { enum: automationRunStatuses }).notNull().default('waiting'),
     exitReason: text('exit_reason', { enum: automationExitReasons }),

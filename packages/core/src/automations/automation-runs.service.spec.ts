@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
 
+import type { CommentAutomationRepliesService } from '../comments/comment-automation-replies.service';
 import type { ContactsService } from '../contacts/contacts.service';
 import type { LinksService, NewTrackedLink } from '../links/links.service';
 import type {
@@ -19,6 +20,7 @@ import type { SegmentsService } from '../segments/segments.service';
 import type { SendDecision, SendPolicyService, SkipReason } from '../sending/send-policy.service';
 import type { StoresService } from '../stores/stores.service';
 import type { WalletService } from '../wallets/wallet.service';
+import { AutomationActionsService } from './automation-actions.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationMessengerSendService } from './automation-messenger-send.service';
 import type {
@@ -429,6 +431,7 @@ describe('AutomationRunsService', () => {
       ),
       conditions,
       automations as unknown as AutomationsService,
+      new AutomationActionsService({} as CommentAutomationRepliesService),
     );
   });
 

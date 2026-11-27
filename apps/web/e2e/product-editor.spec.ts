@@ -69,7 +69,7 @@ test('creates a product on its page, manages photos, edits it and changes stock'
       204,
     );
     await page.goto('/products/new');
-    await page.getByLabel('Product name', { exact: true }).fill(name);
+    await page.getByLabel('Title', { exact: true }).fill(name);
     const createdResponse = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/products') &&
@@ -137,7 +137,7 @@ test('creates a product on its page, manages photos, edits it and changes stock'
     await changeStockOnPage('-1', 'Damaged');
     await expect.poll(async () => (await saved()).variants[0]!.onHand).toBe(2);
 
-    await page.getByLabel('Regular price ৳', { exact: true }).fill('2450.50');
+    await page.getByLabel('Regular price', { exact: true }).fill('2450.50');
     await page.getByLabel('Description', { exact: true }).fill('Cotton fabric with a regular fit.');
     await page.getByLabel('Other names', { exact: true }).fill('স্কার্ফ\nScarf');
     await page.getByRole('button', { name: 'Save', exact: true }).click();

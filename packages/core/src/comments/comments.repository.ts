@@ -17,6 +17,7 @@ export type NewComment = Pick<
   | 'externalCommentId'
   | 'parentExternalCommentId'
   | 'contactId'
+  | 'authorExternalId'
   | 'authorName'
   | 'body'
   | 'commentedAt'
@@ -31,6 +32,8 @@ const fields = {
   externalCommentId: socialComments.externalCommentId,
   parentExternalCommentId: socialComments.parentExternalCommentId,
   contactId: socialComments.contactId,
+  authorExternalId: socialComments.authorExternalId,
+  automationClaimedAt: socialComments.automationClaimedAt,
   postCaption: sql<string | null>`coalesce(${postTargets.captionOverride}, ${posts.caption})`,
   authorName: socialComments.authorName,
   body: socialComments.body,
@@ -111,7 +114,36 @@ export class CommentsRepository {
     return row;
   }
 
-  async claimPrivateReply(storeId: string, id: string, now: Date): Promise<boolean> {
+  // Claiming twice is fine, so a retried run keeps its claim; a comment somebody already answered
+  // cannot be claimed.
+  async claimForAutomation(storeId: string, id: string, now: Date): Promise<boolean> {
+    const claimed = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(socialComments)
+        .set({
+          automationClaimedAt: sql`coalesce(${socialComments.automationClaimedAt}, ${now})`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(socialComments.storeId, storeId),
+            eq(socialComments.id, id),
+            eq(socialComments.status, 'new'),
+            isNull(socialComments.privateRepliedAt),
+            isNull(socialComments.publicReplyExternalId),
+          ),
+        )
+        .returning({ id: socialComments.id }),
+    );
+    return claimed.length > 0;
+  }
+
+  async claimPrivateReply(
+    storeId: string,
+    id: string,
+    now: Date,
+    scope: 'staff' | 'ai' | 'automation',
+  ): Promise<boolean> {
     const claimed = await this.database.forStore(storeId, (tx) =>
       tx
         .update(socialComments)
@@ -121,6 +153,11 @@ export class CommentsRepository {
             eq(socialComments.storeId, storeId),
             eq(socialComments.id, id),
             isNull(socialComments.privateRepliedAt),
+            scope === 'staff'
+              ? undefined
+              : and(eq(socialComments.status, 'new'), isNull(socialComments.publicReplyExternalId)),
+            // The check that let the AI start can be stale, so the claim itself refuses.
+            scope === 'ai' ? isNull(socialComments.automationClaimedAt) : undefined,
           ),
         )
         .returning({ id: socialComments.id }),
@@ -129,7 +166,12 @@ export class CommentsRepository {
   }
 
   // A placeholder id holds the single public reply while Meta answers; markReplied swaps in the real one.
-  async claimPublicReply(storeId: string, id: string, now: Date): Promise<boolean> {
+  async claimPublicReply(
+    storeId: string,
+    id: string,
+    now: Date,
+    scope: 'staff' | 'ai' | 'automation',
+  ): Promise<boolean> {
     const claimed = await this.database.forStore(storeId, (tx) =>
       tx
         .update(socialComments)
@@ -139,6 +181,8 @@ export class CommentsRepository {
             eq(socialComments.storeId, storeId),
             eq(socialComments.id, id),
             isNull(socialComments.publicReplyExternalId),
+            scope === 'staff' ? undefined : eq(socialComments.status, 'replied'),
+            scope === 'ai' ? isNull(socialComments.automationClaimedAt) : undefined,
           ),
         )
         .returning({ id: socialComments.id }),

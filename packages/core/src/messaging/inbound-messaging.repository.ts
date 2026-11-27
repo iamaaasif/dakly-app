@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 
 import type { MessageAttachment, messageAttachmentKinds } from '@dakly/contracts/chats';
 import { conversations, messages } from '@dakly/db/schema/chats';
@@ -207,6 +207,32 @@ export class InboundMessagingRepository {
         .limit(1),
     );
     return row;
+  }
+
+  async hasStaffReplySince(storeId: string, contactId: string, since: Date) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ id: messages.id })
+        .from(messages)
+        .innerJoin(
+          conversations,
+          and(
+            eq(conversations.storeId, messages.storeId),
+            eq(conversations.id, messages.conversationId),
+          ),
+        )
+        .where(
+          and(
+            eq(messages.storeId, storeId),
+            eq(conversations.contactId, contactId),
+            eq(messages.direction, 'out'),
+            eq(messages.authorType, 'user'),
+            gte(messages.createdAt, since),
+          ),
+        )
+        .limit(1),
+    );
+    return row !== undefined;
   }
 
   findLastInbound(storeId: string, connectionId: string, contactIds: string[]) {

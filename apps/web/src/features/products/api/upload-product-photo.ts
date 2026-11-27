@@ -23,7 +23,11 @@ export function useUploadProductPhoto(productId: string, variantId?: string) {
 
 type StoreRequest = ReturnType<typeof useStoreRequest>['request'];
 
-export async function uploadProductPhotoFile(request: StoreRequest, path: string, file: File) {
+export async function uploadProductPhotoFile<Saved = ProductResponse>(
+  request: StoreRequest,
+  path: string,
+  file: File,
+) {
   const parsed = productPhotoUploadSchema.safeParse({
     contentType: file.type,
     sizeBytes: file.size,
@@ -40,7 +44,7 @@ export async function uploadProductPhotoFile(request: StoreRequest, path: string
     headers: { 'Content-Type': parsed.data.contentType },
   }).catch(() => undefined);
   if (!uploaded?.ok) throw new Error('The photo could not upload. Try again.');
-  return request<ProductResponse>(`${path}/confirm`, {
+  return request<Saved>(`${path}/confirm`, {
     method: 'POST',
     body: { ...parsed.data, fileId: issued.fileId },
   });

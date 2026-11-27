@@ -62,7 +62,9 @@ export class AutomationConditionsService {
     const tags = await this.contacts.findTags(storeId, contactId);
     const tappedStepKeys = await this.repository.listTappedStepKeys(storeId, runId);
     const exit = await this.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
-    if (exit || !orderId) return exit;
+    if (exit) return exit;
+    if (await this.staffReplied(facts)) return 'staff_replied';
+    if (!orderId) return undefined;
     if (
       !hasConfirmationButtons(facts.templateKey, step) &&
       !usesConfirmLink(step.message.text) &&
@@ -71,6 +73,14 @@ export class AutomationConditionsService {
       return undefined;
     const order = await this.orders.progress(storeId, orderId);
     return order?.isAwaitingConfirmation ? undefined : 'order_not_awaiting_confirmation';
+  }
+
+  // A person answering the chat wins over a message the automation has not sent yet.
+  private async staffReplied({ graph, storeId, contactId, enteredAt }: RunFacts) {
+    return (
+      graph.trigger.key === 'message_received' &&
+      (await this.messaging.hasStaffReplySince(storeId, contactId, enteredAt))
+    );
   }
 
   async firstHoldingPath(

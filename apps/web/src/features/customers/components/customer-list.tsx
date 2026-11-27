@@ -128,7 +128,7 @@ function CustomerTable({
         </TableBody>
       </Table>
       {chosen.length ? (
-        <CustomerBulkBar selected={chosen} onClear={() => choose(new Set())} />
+        <CustomerBulkBar count={chosen.length} onClear={() => choose(new Set())} />
       ) : null}
     </div>
   );

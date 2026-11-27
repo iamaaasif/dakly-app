@@ -1,3 +1,4 @@
+import { Pencil } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -8,28 +9,43 @@ import { useDeleteCustomer } from '../api/delete-customer';
 import { CustomerEditForm } from './customer-edit-form';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 
-type CustomerActionsProps = { customer: ContactResponse };
+type CustomerActionProps = { customer: ContactResponse };
 
-export function CustomerActions({ customer }: CustomerActionsProps) {
-  const [action, setAction] = useState<'edit' | 'delete' | null>(null);
-  const router = useRouter();
-  const remove = useDeleteCustomer(customer.id);
-  const name = customer.name ?? 'this customer';
+export function EditCustomerAction({ customer }: CustomerActionProps) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button variant="secondary" onClick={() => setAction('edit')}>
-        Edit customer
+    <>
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        <Pencil aria-hidden="true" size={14} /> Edit
       </Button>
-      <Button variant="secondary" onClick={() => setAction('delete')}>
-        Delete customer
-      </Button>
-      {action === 'edit' ? (
-        <Dialog open title={`Edit ${name}`} onClose={() => setAction(null)}>
-          <CustomerEditForm customer={customer} onDone={() => setAction(null)} />
+      {open ? (
+        <Dialog
+          open
+          title={`Edit ${customer.name ?? 'this customer'}`}
+          onClose={() => setOpen(false)}
+        >
+          <CustomerEditForm customer={customer} onDone={() => setOpen(false)} />
         </Dialog>
       ) : null}
-      {action === 'delete' ? (
-        <Dialog open title={`Delete ${name}?`} onClose={() => setAction(null)}>
+    </>
+  );
+}
+
+export function DeleteCustomerAction({ customer }: CustomerActionProps) {
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const remove = useDeleteCustomer(customer.id);
+  return (
+    <>
+      <Button variant="link" className="text-danger" onClick={() => setOpen(true)}>
+        Delete customer
+      </Button>
+      {open ? (
+        <Dialog
+          open
+          title={`Delete ${customer.name ?? 'this customer'}?`}
+          onClose={() => setOpen(false)}
+        >
           <p className="mb-4">
             They leave the customer list and their profile closes. Their phone number can then be
             saved on another customer.
@@ -48,6 +64,6 @@ export function CustomerActions({ customer }: CustomerActionsProps) {
           </Button>
         </Dialog>
       ) : null}
-    </div>
+    </>
   );
 }

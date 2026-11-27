@@ -1,12 +1,11 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
-import { useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode, type RefObject } from 'react';
 import { FormProvider, useForm, type FormState, type UseFormReturn } from 'react-hook-form';
 
 import type { AssistantProductDraft } from '@dakly/contracts/assistant';
 import {
-  createProductSchema,
   productFormSchema,
   productNegotiationIssue,
   productNegotiationIssues,
@@ -21,7 +20,7 @@ import { Button, buttonVariants } from '@dakly/ui/button';
 import { useAdjustStock } from '../api/adjust-stock';
 import { useChangeProduct } from '../api/change-product';
 import { useCreateProduct } from '../api/create-product';
-import { assistantDraftValues } from '../product-assistant-draft';
+import { formValues } from '../product-form-values';
 import { hasStockEdits, stockChanges, writeStockChanges } from '../product-stock-changes';
 import type { QuickAddHandoff } from '../quick-add-handoff';
 import { useDraftCategory } from '../use-draft-category';
@@ -31,10 +30,10 @@ import {
   ProductSaveError,
   type ProductFormPage,
 } from './product-form-layout';
+import { ProductFormSafety } from './product-form-safety';
 import { ProductOptions } from './product-options';
 import { ProductStatusField } from './product-status-field';
 import { StockReasonDialog } from './stock-reason-dialog';
-import { takaInputFromPoisha } from '@/lib/format-money';
 
 // The page enters regular and sell prices in this order. The API stores the price paid first.
 const pageFormSchema = productFormSchema
@@ -75,12 +74,15 @@ type ProductFormProps = {
   expectedVersion?: number;
   statusConflict?: ApiError;
   onReload?: () => void;
+  // Photos uploaded before the product exists; Create attaches them.
+  photos?: { fileIds: string[]; uploading: number; failed: number };
 };
 
 export function ProductForm(props: ProductFormProps) {
   const { product, assistantDraft, duplicateSource, onSaved, page } = props;
   const [editingOption, setEditingOption] = useState(false);
   const [formProduct] = useState(product);
+  const formRef = useRef<HTMLFormElement>(null);
   const form = useForm<ProductFormValues, undefined, ProductFormInput>({
     resolver: zodResolver(page ? pageFormSchema : productFormSchema),
     defaultValues: {
@@ -99,6 +101,7 @@ export function ProductForm(props: ProductFormProps) {
     isDuplicate: Boolean(duplicateSource),
     dirtyFields,
     expectedVersion: props.expectedVersion,
+    photos: props.photos,
     onSaved,
   });
   const actions = (
@@ -107,32 +110,61 @@ export function ProductForm(props: ProductFormProps) {
       editingOption={editingOption}
       isDirty={isDirty}
       invalidWeight={Boolean(errors.weightGrams)}
+      uploading={props.photos?.uploading ?? 0}
       product={product}
       cancelHref={page?.backHref}
     />
   );
   const error = errors.root?.server;
-
   return (
     <FormProvider {...form}>
-      <form className={page ? undefined : 'space-y-3.5'} onSubmit={onSubmit}>
-        {page ? (
-          <ProductFormPageLayout
-            page={page}
-            actions={actions}
-            saveError={{ error: props.statusConflict ?? error, onReload: props.onReload }}
-            product={product}
-            onOptionDraftChange={setEditingOption}
-          />
-        ) : (
-          <ProductFormFields product={product}>
-            <ProductSaveError error={error} />
-            {actions}
-          </ProductFormFields>
-        )}
+      <form ref={formRef} className={page ? undefined : 'space-y-3.5'} onSubmit={onSubmit}>
+        <ProductFormView
+          {...props}
+          formRef={formRef}
+          actions={actions}
+          error={props.statusConflict ?? error}
+          onOptionDraftChange={setEditingOption}
+        />
       </form>
       {dialog}
     </FormProvider>
+  );
+}
+
+type ProductFormViewProps = ProductFormProps & {
+  formRef: RefObject<HTMLFormElement | null>;
+  actions: ReactNode;
+  error: Error | { type?: string | number; message?: string } | undefined;
+  onOptionDraftChange: (editing: boolean) => void;
+};
+
+function ProductFormView(props: ProductFormViewProps) {
+  const { page, product, actions, error, formRef } = props;
+  if (!page)
+    return (
+      <ProductFormFields product={product}>
+        <ProductSaveError error={error} />
+        {actions}
+      </ProductFormFields>
+    );
+  const canRestoreDraft =
+    !product && !props.duplicateSource && !props.assistantDraft && !props.initial?.name;
+  return (
+    <>
+      <ProductFormSafety
+        formRef={formRef}
+        readOnly={page.readOnly}
+        canRestoreDraft={canRestoreDraft}
+      />
+      <ProductFormPageLayout
+        page={page}
+        actions={actions}
+        saveError={{ error, onReload: props.onReload }}
+        product={product}
+        onOptionDraftChange={props.onOptionDraftChange}
+      />
+    </>
   );
 }
 
@@ -158,12 +190,13 @@ type SubmitProductArgs = {
   isDuplicate: boolean;
   dirtyFields: FormState<ProductFormValues>['dirtyFields'];
   expectedVersion?: number;
+  photos?: ProductFormProps['photos'];
   onSaved: ProductFormProps['onSaved'];
 };
 
 function useSubmitProduct(
   form: UseFormReturn<ProductFormValues, undefined, ProductFormInput>,
-  { product, isDuplicate, dirtyFields, expectedVersion, onSaved }: SubmitProductArgs,
+  { product, isDuplicate, dirtyFields, expectedVersion, photos, onSaved }: SubmitProductArgs,
 ) {
   const create = useCreateProduct();
   const change = useChangeProduct(product?.id ?? '');
@@ -201,7 +234,11 @@ function useSubmitProduct(
         .then(writeStock, setError);
       return;
     }
-    create.mutate(input, { onError: setError, onSuccess: writeStock });
+    if (photos?.failed) return failedPhotoError(form);
+    create.mutate(
+      { ...input, imageFileIds: photos?.fileIds },
+      { onError: setError, onSuccess: writeStock },
+    );
   });
   const dialog = askReason ? (
     <StockReasonDialog
@@ -229,11 +266,22 @@ function shareCostAcrossSizes(input: ProductFormInput): ProductFormInput {
   };
 }
 
+function failedPhotoError(form: UseFormReturn<ProductFormValues, undefined, ProductFormInput>) {
+  form.setError('root.server', {
+    message: 'A photo did not upload. Retry or remove it, then create the product.',
+  });
+}
+
+function uploadingLabel(count: number) {
+  return `Uploading ${count} ${count === 1 ? 'photo' : 'photos'}…`;
+}
+
 type ProductFormActionsProps = {
   isPending: boolean;
   editingOption: boolean;
   isDirty: boolean;
   invalidWeight: boolean;
+  uploading: number;
   product?: ProductResponse;
   cancelHref?: string;
 };
@@ -243,9 +291,11 @@ function ProductFormActions({
   editingOption,
   isDirty,
   invalidWeight,
+  uploading,
   product,
   cancelHref,
 }: ProductFormActionsProps) {
+  const saveLabel = product ? 'Save' : 'Create';
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {cancelHref ? (
@@ -256,113 +306,12 @@ function ProductFormActions({
       <Button
         type="submit"
         loading={isPending}
-        disabled={editingOption || invalidWeight || (Boolean(product) && !isDirty)}
+        disabled={editingOption || invalidWeight || uploading > 0 || (Boolean(product) && !isDirty)}
       >
-        {product ? 'Save' : 'Create'}
+        {uploading > 0 ? uploadingLabel(uploading) : saveLabel}
       </Button>
     </div>
   );
-}
-
-function formValues({
-  product,
-  initial,
-  assistantDraft,
-  duplicateSource,
-  page,
-}: Pick<
-  ProductFormProps,
-  'product' | 'initial' | 'assistantDraft' | 'duplicateSource' | 'page'
->): ProductFormValues {
-  if (product) return sourceFormValues(product, Boolean(page), false);
-  if (duplicateSource) return sourceFormValues(duplicateSource, Boolean(page), true);
-  if (assistantDraft) return assistantDraftValues(assistantDraft);
-  return {
-    name: initial?.name ?? '',
-    options: [],
-    pricePoisha: initial?.price ?? '',
-    variants: [
-      {
-        optionValues: {},
-        sku: null,
-        priceOverridePoisha: '',
-        costPoisha: '',
-        lowStockThreshold: '',
-        initialStock: Number(initial?.stock || 0),
-      },
-    ],
-    isStockTracked: true,
-    status: 'hidden',
-  };
-}
-
-function sourceFormValues(
-  source: ProductResponse,
-  onPage: boolean,
-  isDuplicate: boolean,
-): ProductFormValues {
-  return {
-    name: isDuplicate ? copyName(source.name) : source.name,
-    description: source.description,
-    categoryId: source.categoryId,
-    brandId: source.brandId,
-    weightGrams: weightText(source.weightGrams),
-    aliases: source.aliases,
-    options: source.options,
-    ...priceFields(source, onPage),
-    ...(isDuplicate ? {} : negotiationFields(source)),
-    variants: source.variants.map(
-      ({ id, optionValues, sku, priceOverridePoisha, costPoisha, lowStockThreshold, onHand }) => ({
-        id: isDuplicate ? undefined : id,
-        optionValues: Object.fromEntries(
-          source.options.map(({ name }, index) => [index, optionValues[name]!]),
-        ),
-        // Each product code is unique within the shop.
-        sku: isDuplicate ? null : sku,
-        priceOverridePoisha: takaInputFromPoisha(priceOverridePoisha),
-        costPoisha: takaInputFromPoisha(costPoisha),
-        lowStockThreshold: lowStockThreshold === null ? '' : String(lowStockThreshold),
-        initialStock: isDuplicate ? 0 : onHand,
-      }),
-    ),
-    isStockTracked: source.isStockTracked,
-    isVisibleInChats: source.isVisibleInChats,
-    isVisibleInOrderLink: source.isVisibleInOrderLink,
-    status: isDuplicate ? 'hidden' : undefined,
-  };
-}
-
-function copyName(name: string) {
-  const suffix = ' copy';
-  const limit = createProductSchema.shape.name.maxLength;
-  const stem = limit === null ? name : name.slice(0, limit - suffix.length).trimEnd();
-  return `${stem}${suffix}`;
-}
-
-function priceFields(product: ProductResponse, onPage: boolean) {
-  const price = product.pricePoisha;
-  const oldPrice = product.compareAtPricePoisha;
-  if (onPage && oldPrice !== null && oldPrice > price)
-    return {
-      pricePoisha: takaInputFromPoisha(oldPrice),
-      compareAtPricePoisha: takaInputFromPoisha(price),
-    };
-  return {
-    pricePoisha: takaInputFromPoisha(price),
-    compareAtPricePoisha: takaInputFromPoisha(onPage ? null : oldPrice),
-  };
-}
-
-function negotiationFields(product: ProductResponse) {
-  return {
-    negotiationEnabled: product.negotiationEnabled,
-    negotiationOpeningPoisha: takaInputFromPoisha(product.negotiationOpeningPoisha ?? null),
-    negotiationFloorPoisha: takaInputFromPoisha(product.negotiationFloorPoisha ?? null),
-  };
-}
-
-function weightText(grams: number | null) {
-  return grams === null ? '' : String(grams);
 }
 
 function productChanges(

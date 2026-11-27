@@ -19,6 +19,10 @@ type AvailableBefore = 'channels' | 'orders' | null;
 
 export const triggerFilterFields = [
   'channel',
+  'intent',
+  'keywords',
+  'post',
+  'comment_intent',
   'consent_source',
   'tag',
   'segment',
@@ -51,6 +55,7 @@ export const triggerKeys = [
   'link_tapped',
   'birthday',
   'chat_started',
+  'message_received',
   'comment_on_post',
   'lead_captured',
   'back_in_stock',
@@ -109,9 +114,23 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     needs: 'channels',
     availableBefore: 'orders',
   },
+  // Fires once per burst of customer messages, after the chat classifier reads it.
+  message_received: {
+    source: { event: 'message.burst_received' },
+    filters: { channel: 'optional', intent: 'optional', keywords: 'optional' },
+    needs: 'channels',
+    availableBefore: 'orders',
+  },
+  // Top-level comments on any post of a connected Page or Instagram account, one run per person
+  // per post.
   comment_on_post: {
-    source: { plannedEvent: 'comment.received' },
-    filters: {},
+    source: { event: 'comment.received' },
+    filters: {
+      post: 'optional',
+      product: 'optional',
+      keywords: 'optional',
+      comment_intent: 'optional',
+    },
     needs: 'channels',
     availableBefore: 'orders',
   },
@@ -231,11 +250,14 @@ export const orderTriggerKeys: readonly TriggerKey[] = [
   'order_returned',
 ];
 
+// Started by a subscriber on a chat event instead of an order event.
+const chatTriggerKeys: readonly TriggerKey[] = ['message_received', 'comment_on_post'];
+
 export function isTriggerAvailable(key: TriggerKey): boolean {
   const trigger = automationTriggers[key];
   const readyBeforeChannels =
     trigger.availableBefore === 'channels' && !('plannedEvent' in trigger.source);
-  return readyBeforeChannels || orderTriggerKeys.includes(key);
+  return readyBeforeChannels || orderTriggerKeys.includes(key) || chatTriggerKeys.includes(key);
 }
 
 // SMS and Messenger send (CAMP-7), Instagram DM (AUTO-5); WhatsApp comes with Q2.
@@ -252,6 +274,8 @@ export const actionKinds = [
   'notify_team',
   'hand_to_person',
   'give_coupon',
+  'reply_to_comment',
+  'send_private_reply',
 ] as const;
 export type ActionKind = (typeof actionKinds)[number];
 
@@ -266,4 +290,7 @@ export const automationActions: Record<
   hand_to_person: { needs: 'chats_extension', availableBefore: 'orders' },
   // Discount codes live in Orders.
   give_coupon: { needs: 'orders', availableBefore: null },
+  // Only a comment_on_post workflow has a comment to answer.
+  reply_to_comment: { needs: 'chats_extension', availableBefore: 'orders' },
+  send_private_reply: { needs: 'chats_extension', availableBefore: 'orders' },
 };

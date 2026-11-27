@@ -9,11 +9,15 @@ import type { TriggerKey } from '@dakly/contracts/automations/catalogue';
 import type { AutomationGraph } from '@dakly/contracts/automations/graph';
 import { createDatabase } from '@dakly/db/client';
 
+import { CommentPostProductsService } from '../comments/comment-post-products.service';
+import { CommentsService } from '../comments/comments.service';
 import { ContactsModule } from '../contacts/contacts.module';
+import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { OrdersModule } from '../orders/orders.module';
 import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { SegmentsModule } from '../segments/segments.module';
+import { SendingModule } from '../sending/sending.module';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
 
@@ -114,11 +118,14 @@ describe('order triggers (Postgres)', () => {
     );
     class TestModule {}
     Module({
-      imports: [DatabaseModule, ContactsModule, OrdersModule, SegmentsModule],
+      imports: [DatabaseModule, ContactsModule, OrdersModule, SegmentsModule, SendingModule],
       providers: [
         AutomationEntryService,
         AutomationEntryRepository,
         { provide: Clock, useValue: { now: () => eventAt } },
+        { provide: ConversationIntentService, useValue: {} },
+        { provide: CommentsService, useValue: {} },
+        { provide: CommentPostProductsService, useValue: {} },
       ],
     })(TestModule);
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });

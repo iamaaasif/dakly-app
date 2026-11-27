@@ -12,6 +12,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
+import { AutomationActionsService } from './automation-actions.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationMessengerSendService } from './automation-messenger-send.service';
 import { AutomationOrderTextService } from './automation-order-text.service';
@@ -41,8 +42,7 @@ import {
   holdsClaim,
   isLateSend,
   messageBody,
-  randomPath,
-  runAction,
+  runRandomSplit,
   scheduleWait,
   sendLateness,
   shouldPrepareSender,
@@ -81,6 +81,7 @@ export class AutomationRunsService {
     private readonly messengerSend: AutomationMessengerSendService,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
     @Inject(AutomationsService) private readonly automations: AutomationsService,
+    @Inject(AutomationActionsService) private readonly actions: AutomationActionsService,
   ) {}
 
   attributionSources(storeId: string, contactId: string, ids: string[]) {
@@ -142,16 +143,13 @@ export class AutomationRunsService {
     const held = holdOrEnd(run, now);
     if (held) return started ? endWithUnknownOutcome(held) : held;
     const facts: RunFacts = {
+      ...run,
       storeId,
-      graph: run.graph,
-      automationId: run.automationId,
-      templateKey: run.templateKey,
       runId: claim.runId,
-      contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
-      wakeAt: run.wakeAt,
       orderId: run.triggerOrderId,
+      commentId: run.triggerCommentId,
     };
     if (step.kind === 'send' && started)
       return isChatChannel(started.channel)
@@ -189,20 +187,15 @@ export class AutomationRunsService {
           step: { stepKey, kind: 'condition', outcome: choice.outcome },
         };
       }
-      case 'random_split': {
-        const choice = randomPath(claim.runId, stepKey, step.paths);
-        return {
-          ...goOn(choice.next, now),
-          step: { stepKey, kind: 'random_split', outcome: choice.outcome },
-        };
-      }
+      case 'random_split':
+        return runRandomSplit(claim.runId, stepKey, step, now);
       case 'send':
         // Versions published before the guard still fail instead of sending without review.
         if (step.reviewBeforeSending)
           return failed('Review before sending is not available yet', now);
         return this.startSend(claim, step, facts);
       case 'action':
-        return runAction(stepKey, step, now);
+        return this.actions.run(stepKey, step, facts, now);
       case 'exit':
         return {
           run: { status: 'done', finishedAt: now },

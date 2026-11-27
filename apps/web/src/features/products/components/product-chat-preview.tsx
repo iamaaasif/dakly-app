@@ -18,15 +18,36 @@ export function ProductChatPreview({ product }: ProductChatPreviewProps) {
       inStock: !product.isStockTracked || variant.available > 0,
     })),
   });
-  const photo = product.photos[0];
+  return (
+    <ProductCardPreview
+      name={product.name}
+      card={card}
+      photoUrl={product.photos[0]?.url}
+      note={
+        product.status === 'hidden'
+          ? 'Hidden products are not sent in chats. This is how it looks once shown.'
+          : 'Dakly sends this card with the same name, price and photo. Sold-out sizes are never offered.'
+      }
+    />
+  );
+}
+
+type ProductCardPreviewProps = {
+  name: string;
+  card: ReturnType<typeof buildProductCardElement>;
+  photoUrl: string | undefined;
+  note: string;
+};
+
+export function ProductCardPreview({ name, card, photoUrl, note }: ProductCardPreviewProps) {
   return (
     <Card className="space-y-3">
-      <h2 className="text-base font-semibold text-text">How it looks in chat</h2>
+      <h2 className="text-base font-semibold text-text">How Dakly shows this in chat</h2>
       <div className="overflow-hidden rounded-lg border border-border bg-surface">
-        {photo ? (
+        {photoUrl ? (
           <Image
-            src={photo.url}
-            alt={`${product.name} in chat`}
+            src={photoUrl}
+            alt={`${name} in chat`}
             width={320}
             height={320}
             unoptimized
@@ -49,11 +70,7 @@ export function ProductChatPreview({ product }: ProductChatPreviewProps) {
           ))}
         </ul>
       </div>
-      <p className="text-xs text-text-muted">
-        {product.status === 'hidden'
-          ? 'Hidden products are not sent in chats. This is how it looks once shown.'
-          : 'Dakly sends this card with the same name, price and photo. Sold-out sizes are never offered.'}
-      </p>
+      <p className="text-xs text-text-muted">{note}</p>
     </Card>
   );
 }

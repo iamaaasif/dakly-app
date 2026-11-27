@@ -35,6 +35,15 @@ export class ProductSearchSourceService {
     }));
   }
 
+  listPostProductNames(storeId: string, limit: number) {
+    return this.repository.listPostProductNames(storeId, limit);
+  }
+
+  async postProductsByPhotos(storeId: string, fileIds: string[]) {
+    if (!fileIds.length) return [];
+    return this.repository.findPostProductsByPhotos(storeId, fileIds);
+  }
+
   nearestForChat(
     storeId: string,
     input: { embedding: readonly number[]; model: string; limit: number },
