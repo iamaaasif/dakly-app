@@ -4,7 +4,6 @@ export const customersKeys = {
   all: ['customers'] as const,
   list: (tag: string | undefined, query: ContactListQuery) =>
     ['customers', tag, 'list', query] as const,
-  counts: (tag: string | undefined) => ['customers', tag, 'counts'] as const,
   detail: (tag: string | undefined, contactId: string) =>
     ['customers', tag, 'detail', contactId] as const,
   import: (tag: string | undefined, importId: string) =>

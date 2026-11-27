@@ -7,22 +7,13 @@ import { type ContactListQuery, contactListQuerySchema } from '@dakly/contracts/
 import { formatCount } from '@dakly/contracts/money';
 import { ApiError } from '@dakly/ui/api-client';
 import { Button } from '@dakly/ui/button';
-import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 import { TableToolbar } from '@dakly/ui/table';
 import { useToast } from '@dakly/ui/toast';
 
 import { useExportCustomers } from '../api/export-customers';
 import type { CustomerColumn } from '../customer-columns';
-import {
-  purchaseWindowOptions,
-  sortOptions,
-  sourceOptions,
-  spendRangeOf,
-  spendRanges,
-} from '../customer-filter-options';
-import { type CustomerFilterChange, customersHref } from '../customers-query';
+import { customersHref } from '../customers-query';
 import { CustomerColumnsMenu } from './customer-columns-menu';
 import { useSessionContext } from '@/lib/session-context';
 import { useUrlRouter } from '@/lib/use-url-query';
@@ -37,88 +28,14 @@ type CustomerToolbarProps = {
 };
 
 export function CustomerToolbar({ query, columns, searchError }: CustomerToolbarProps) {
-  const router = useUrlRouter();
-  const change = (next: CustomerFilterChange) => router.push(customersHref(query, columns, next));
-  const anyValue = 'any';
-  const pick = (value: string) => (value === anyValue ? undefined : value);
-  const spend = spendRangeOf(query);
-
   return (
     <TableToolbar className="gap-3 p-4">
       <SearchField query={query} columns={columns} searchError={searchError} />
-      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
-        <FilterSelect
-          label="Source"
-          value={query.source ?? anyValue}
-          onChange={(value) => change({ source: pick(value) as ContactListQuery['source'] })}
-          options={[{ value: anyValue, label: 'Any source' }, ...sourceOptions]}
-        />
-        <FilterSelect
-          label="Spending"
-          value={spend?.id ?? anyValue}
-          onChange={(value) => {
-            const range = spendRanges.find((each) => each.id === value);
-            change({
-              minSpendPoisha: range && 'min' in range ? range.min : undefined,
-              maxSpendPoisha: range && 'max' in range ? range.max : undefined,
-            });
-          }}
-          options={[
-            { value: anyValue, label: 'Any spending' },
-            ...spendRanges.map(({ id, label }) => ({ value: id, label })),
-          ]}
-        />
-        <FilterSelect
-          label="Time"
-          value={query.lastPurchase ?? anyValue}
-          onChange={(value) =>
-            change({ lastPurchase: pick(value) as ContactListQuery['lastPurchase'] })
-          }
-          options={[{ value: anyValue, label: 'Any time' }, ...purchaseWindowOptions]}
-        />
-        <FilterSelect
-          label="Sort"
-          className="col-span-2 sm:col-span-1"
-          prefix="Sort:"
-          value={query.sort}
-          onChange={(value) => change({ sort: value as ContactListQuery['sort'] })}
-          options={sortOptions}
-        />
-      </div>
       <div className="ml-auto flex items-center gap-2">
         <ExportButton query={query} />
         <CustomerColumnsMenu query={query} columns={columns} />
       </div>
     </TableToolbar>
-  );
-}
-
-type FilterSelectProps = {
-  label: string;
-  className?: string;
-  prefix?: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-};
-
-function FilterSelect({ label, className, prefix, value, onChange, options }: FilterSelectProps) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label={label} className={cn('text-sm sm:w-auto sm:min-w-0', className)}>
-        <span className="flex min-w-0 gap-1">
-          {prefix ? <span className="text-text-muted">{prefix}</span> : null}
-          <SelectValue />
-        </span>
-      </SelectTrigger>
-      <SelectContent position="popper" align="start">
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 
