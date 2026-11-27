@@ -2,7 +2,11 @@ import { randomBytes } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { OrderConfirmationAnswer } from '@dakly/contracts/orders';
+import type {
+  OrderConfirmationAnswer,
+  OrderConfirmationMethod,
+  OrderStage,
+} from '@dakly/contracts/orders';
 
 import { RateLimiter } from '../platform/cache/rate-limiter';
 import { Clock } from '../platform/clock';
@@ -94,27 +98,44 @@ export class OrderConfirmationService {
     return this.transaction.run(storeId, async () => {
       if (!(await this.repository.markUsed(storeId, confirmationId, this.clock.now())))
         return 'closed';
-      try {
-        await this.orders.changeStage(
-          storeId,
-          orderId,
-          answer === 'confirm'
-            ? { to: 'to_pack' }
-            : { to: 'cancelled', reason: 'customer_cancelled' },
-          {
-            actor: { kind: 'system' },
-            access: noPhone,
-            onlyFrom: 'to_confirm',
-            confirmationMethod: 'sms_link',
-          },
-        );
-      } catch (error) {
-        // The order moved on, or was synced from a store, before the customer answered.
-        if (error instanceof AppError && error.code === 'ORDER_STAGE_NOT_ALLOWED') return 'closed';
-        throw error;
-      }
-      return answer === 'confirm' ? 'confirmed' : 'cancelled';
+      const stage = await this.applyAnswer(storeId, orderId, answer, 'sms_link');
+      return stage === 'to_pack' ? 'confirmed' : (stage ?? 'closed');
     });
+  }
+
+  answerFromMessenger(
+    storeId: string,
+    orderId: string,
+    contactId: string,
+    answer: OrderConfirmationAnswer | undefined,
+  ): Promise<OrderStage | undefined> {
+    return this.transaction.run(storeId, async () => {
+      const order = await this.repository.lockBuyersOrder(storeId, orderId, contactId);
+      if (!order || !answer || order.stage !== 'to_confirm') return order?.stage;
+      return (await this.applyAnswer(storeId, orderId, answer, 'chat_reply')) ?? order.stage;
+    });
+  }
+
+  private async applyAnswer(
+    storeId: string,
+    orderId: string,
+    answer: OrderConfirmationAnswer,
+    confirmationMethod: OrderConfirmationMethod,
+  ) {
+    const to = answer === 'confirm' ? 'to_pack' : 'cancelled';
+    try {
+      await this.orders.changeStage(
+        storeId,
+        orderId,
+        to === 'to_pack' ? { to } : { to, reason: 'customer_cancelled' },
+        { actor: { kind: 'system' }, access: noPhone, onlyFrom: 'to_confirm', confirmationMethod },
+      );
+      return to;
+    } catch (error) {
+      // The order moved on, or was synced from a store, before the customer answered.
+      if (error instanceof AppError && error.code === 'ORDER_STAGE_NOT_ALLOWED') return undefined;
+      throw error;
+    }
   }
 
   // An unknown, used and expired token all look the same to the customer.

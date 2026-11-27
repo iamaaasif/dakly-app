@@ -222,7 +222,7 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `campaign.approved`             | CAMP-13, the approval job                                         | `campaignId`, `status` (`scheduled` or `sending`)                       | None yet                                                            |
 | `conversation.started`          | CHAT-1, `MessagingService.receiveInboundMessage`                  | `conversationId`, `contactId`, `connectionId`, `channel`                | CAMP-11 chat started trigger (M3b)                                  |
 | `message.received`              | CHAT-1, `MessagingService.receiveInboundMessage`                  | `messageId`, `conversationId`, `contactId`, `channel`                   | CUS-3 contact stats; AI-4 reply debounce                            |
-| `message.postback_received`     | CAMP-7, `MessagingService.receivePostback`                        | `conversationId`, `contactId`, `channel`, `postback`                    | None yet; ORD-4 Confirm or Cancel replies                           |
+| `message.postback_received`     | CAMP-7, `MessagingService.receivePostback`                        | `conversationId`, `contactId`, `channel`, `postback`                    | `AnswerCardTap` and `AnswerAutomationConfirmationTap`               |
 | `conversation.handed_over`      | AI-4, `AiAgentService` hands over a conversation                  | `conversationId`, `reason`                                              | None yet                                                            |
 | `campaign.sent`                 | CAMP-3, campaign sender                                           | `campaignId`                                                            | None yet                                                            |
 | `message.attachments_requested` | CHAT-7, `MessagingService.receiveInboundMessage` with attachments | `messageId`                                                             | CHAT-7 `CopyMessageAttachmentsJob` on `inbound`                     |
@@ -239,6 +239,8 @@ The schemas are in `packages/contracts/src/events/`, one file per area, and `dak
 | `channel.needs_reconnect`       | CHN-4, `ChannelTokenHealthService`                                | `channelConnectionId`                                                   | None yet                                                            |
 | `notification.created`          | HOME-1, `NotificationsService.notify`, one per notification row   | `notificationId`, `userId`, `category`                                  | HOME-1 live stream (`GET /events/stream`) for that user             |
 | `wallet.credited`               | PAY-11, `WalletService.credit`                                    | `wallet`, `entryId`                                                     | CAMP-5 `ResumeWorkflowsOnWalletCredited` (workflow)                 |
+
+Workflow postback events also carry the verified `identityId` and a stable `tapKey` for retries.
 
 Segment counts are computed live for now, so `rebuild-segment-count` and stored counts (rule 5 in [scale.md](../rules/scale.md)) wait until live counts are too slow.
 

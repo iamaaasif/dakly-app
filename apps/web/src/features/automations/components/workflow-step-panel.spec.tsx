@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { AutomationStep } from '@dakly/contracts/automations/graph';
+import { automationTemplates } from '@dakly/contracts/automations/templates';
 
 import { WorkflowStepPanel } from './workflow-step-panel';
 
@@ -44,6 +45,25 @@ describe('WorkflowStepPanel', () => {
       next: 'end',
     });
     expect(screen.getByRole('alert').textContent).toBe('Write the message.');
+  });
+
+  it('edits the COD Messenger text separately from the SMS link', () => {
+    const step = automationTemplates.cod_order_confirmation.graph.steps.ask!;
+    const onChange = open(step);
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Fallback message').value).toContain(
+      '{confirm_link}',
+    );
+    fireEvent.change(screen.getByLabelText('Messenger message'), {
+      target: { value: 'Your order is ready to confirm.' },
+    });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.objectContaining({
+          text: expect.stringContaining('{confirm_link}'),
+          messengerText: 'Your order is ready to confirm.',
+        }),
+      }),
+    );
   });
 
   it('changes a delay in minutes and refuses a wait of zero', () => {

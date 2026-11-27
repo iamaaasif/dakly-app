@@ -8,6 +8,7 @@ import type { FileStorageDriver } from '@dakly/providers/file-storage/file-stora
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { ContactIdentitiesService } from '../contacts/contact-identities.service';
 import { Clock } from '../platform/clock';
+import { hashToken } from '../platform/crypto/token-hash';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { AppError } from '../platform/errors/app-error';
 import { FILE_STORAGE_DRIVER } from '../platform/file-storage/file-storage.provider';
@@ -73,6 +74,32 @@ export class ChannelDispatchService {
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
   ) {}
+
+  async messengerSendTarget(
+    storeId: string,
+    {
+      operationKey,
+      ...route
+    }: {
+      operationKey: string;
+      conversationId: string;
+      contactId: string;
+      identityId: string;
+    },
+  ) {
+    const idempotencyKey = `outbound:${hashToken(operationKey).toString('hex')}`;
+    const connectionId = await this.outbound.messengerSendConnection(storeId, {
+      ...route,
+      idempotencyKey,
+    });
+    if (connectionId)
+      return {
+        channel: 'messenger' as const,
+        contactId: route.contactId,
+        connectionId,
+        identityId: route.identityId,
+      };
+  }
 
   async sendQueuedMessage(storeId: string, messageId: string): Promise<void> {
     if (this.transaction.isOpen()) throw messagingError('MESSAGING_INSIDE_TRANSACTION');

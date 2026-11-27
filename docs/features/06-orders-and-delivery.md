@@ -356,6 +356,8 @@ Order link: a public page per store and product (`dakly.shop/{store}/{product}`)
 
 `GET /l/c/<token>` shows the order and changes nothing, because phones fetch links to draw previews. Confirm and Cancel are `POST /l/c/<token>?answer=confirm|cancel`. The store comes only from the token: `order_confirmation_for_token` (SECURITY DEFINER, like `tracked_link_for_code`) finds the row by its sha256. The answer acts only on an order still in To confirm, marks the token used in the same transaction, and goes through `OrdersService.changeStage` with a system actor. Confirm records `confirmation_method = sms_link`; Cancel uses the reason `customer_cancelled` and releases the stock. An order in on hold, to pack (including one saved as confirmed) or any later stage, or one synced from a store, is left alone and the page shows the closed state. The answer never reads or changes the contact (D26). Limits: 60 taps a minute per IP and 10 per token.
 
+In Messenger, the COD workflow sends Confirm order and Cancel order buttons. The button points to the send step, and the run supplies the order. The tap must come from the shop, buyer and Messenger identity that received the message. The same stage rules apply. Confirm records `confirmation_method = chat_reply`, and a repeated tap or a tap after the order moves on only replies with the current stage.
+
 ### Delivery zones
 
 ORD-2 adds delivery-zone create, list, edit and delete routes under Store settings,

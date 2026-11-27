@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 
 import type { Database } from '@dakly/db/client';
-import { orderConfirmations } from '@dakly/db/schema/orders';
+import { orderConfirmations, orders } from '@dakly/db/schema/orders';
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { newId } from '../platform/database/new-id';
@@ -54,5 +54,22 @@ export class OrderConfirmationRepository {
         .returning({ id: orderConfirmations.id }),
     );
     return rows.length > 0;
+  }
+
+  async lockBuyersOrder(storeId: string, orderId: string, buyerContactId: string) {
+    const [order] = await this.tenant.forStore(storeId, (tx) =>
+      tx
+        .select({ stage: orders.stage })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.id, orderId),
+            eq(orders.buyerContactId, buyerContactId),
+          ),
+        )
+        .for('update'),
+    );
+    return order;
   }
 }

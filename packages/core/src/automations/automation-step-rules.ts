@@ -33,6 +33,7 @@ export type RunFacts = {
   preparedSender?: PreparedSmsSender;
   graph: AutomationGraph;
   automationId: string;
+  templateKey: string | null;
   storeId: string;
   runId: string;
   contactId: string;
@@ -94,7 +95,7 @@ export type StepResult = {
 
 type ExitCondition = AutomationGraph['exitConditions'][number];
 
-export function operationKey({ runId, stepKey }: RunClaim) {
+export function operationKey({ runId, stepKey }: Pick<RunClaim, 'runId' | 'stepKey'>) {
   return `run:${runId}:${stepKey}`;
 }
 

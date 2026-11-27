@@ -32,6 +32,7 @@ function facts(orderId: string | null): RunFacts {
   return {
     graph,
     automationId: 'a',
+    templateKey: 'cod_order_confirmation',
     storeId: 's',
     runId: 'r',
     contactId: 'c',
@@ -84,5 +85,16 @@ describe('COD confirmation exits', () => {
     const onHold = { isConfirmed: false, isCancelled: false, isAwaitingConfirmation: false };
     const plain = { ...reminder, message: { text: 'ধন্যবাদ {first_name}', buttons: [] } };
     expect(await conditions(onHold).refreshExitReason(facts('o'), plain, at)).toBeUndefined();
+  });
+
+  it('holds a message with COD buttons even when the fallback link was removed', async () => {
+    const onHold = { isConfirmed: false, isCancelled: false, isAwaitingConfirmation: false };
+    const step = {
+      ...reminder,
+      message: { ...reminder.message, text: 'অর্ডারটি এখনো নিশ্চিত হয়নি।' },
+    };
+    expect(await conditions(onHold).refreshExitReason(facts('o'), step, at)).toBe(
+      'order_not_awaiting_confirmation',
+    );
   });
 });

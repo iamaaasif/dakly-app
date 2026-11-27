@@ -83,8 +83,9 @@ export class AutomationMessengerSendService {
     times: { sentAt: Date; firstTriedAt: Date },
   ): Promise<GateResult> {
     if (!route) return { decision: skipped('no_address') };
-    const prepared = await this.orderText.prepare(storeId, orderId, step.message.text);
-    const body = (await prepared?.render()) ?? step.message.text;
+    const text = step.message.messengerText ?? step.message.text;
+    const prepared = await this.orderText.prepare(storeId, orderId, text);
+    const body = (await prepared?.render()) ?? text;
     const stepId = newId();
     await this.repository.insertStep(storeId, claim.runId, contactId, {
       stepKey: claim.stepKey,
