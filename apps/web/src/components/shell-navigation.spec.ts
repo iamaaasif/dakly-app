@@ -132,6 +132,14 @@ describe('navigationGroups', () => {
     ]);
   });
 
+  it('lists All customers, Contacts and Segments under Customers', () => {
+    const links = navigationGroups(makeSession({}))
+      .find((group) => group.heading === 'Customers')
+      ?.links.filter((link) => link.visible)
+      .map((link) => link.href);
+    expect(links).toEqual(['/customers', '/contacts', '/segments']);
+  });
+
   it('shows the Social hub, My posts and Content Studio only to people who can view social posts', () => {
     const links = (canViewSocial: boolean) =>
       navigationGroups(makeSession({ canViewSocial }))
