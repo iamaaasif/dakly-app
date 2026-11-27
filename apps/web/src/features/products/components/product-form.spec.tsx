@@ -14,6 +14,7 @@ import { sessionContextKey } from '@/lib/session-context';
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 const product: ProductResponse = {
@@ -151,26 +152,25 @@ describe('Product form on a full page', () => {
     expect(screen.getByText('Save the product to add photos.')).toBeTruthy();
     expect(screen.getByText('Hidden')).toBeTruthy();
     for (const title of [
-      'Basics',
       'Price',
       'Variations',
-      'Inventory',
+      'Inventory management',
       'Organisation',
-      'Delivery',
+      'Packaging',
       'Where it appears',
     ])
       expect(screen.getByRole('heading', { name: title })).toBeTruthy();
   });
 
   it.each([
-    [null, '2450.50', ''],
-    [300000, '3000.00', '2450.50'],
+    [null, '2,450.50', ''],
+    [300000, '3,000', '2,450.50'],
   ])(
     'loads the regular and sale price with an old price of %s',
     (compareAtPricePoisha, regular, sale) => {
       show({ ...product, compareAtPricePoisha }, page);
-      expect(screen.getByLabelText<HTMLInputElement>('Regular price ৳').value).toBe(regular);
-      expect(screen.getByLabelText<HTMLInputElement>('Sell price ৳').value).toBe(sale);
+      expect(screen.getByLabelText<HTMLInputElement>('Regular price').value).toBe(regular);
+      expect(screen.getByLabelText<HTMLInputElement>('Sell price').value).toBe(sale);
     },
   );
 
@@ -186,9 +186,9 @@ describe('Product form on a full page', () => {
         return Response.json(product, { headers: { 'x-session-context': 'verified' } });
       });
       const { onSaved } = show(undefined, page);
-      fireEvent.change(screen.getByLabelText('Product name'), { target: { value: product.name } });
-      fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '3000.25' } });
-      fireEvent.change(screen.getByLabelText('Sell price ৳'), { target: { value: sale } });
+      fireEvent.change(screen.getByLabelText('Title'), { target: { value: product.name } });
+      fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '3000.25' } });
+      fireEvent.change(screen.getByLabelText('Sell price'), { target: { value: sale } });
       await userEvent.click(screen.getByRole('button', { name: 'Create' }));
       await waitFor(() => expect(onSaved).toHaveBeenCalled());
       expect(submitted).toMatchObject({ pricePoisha, compareAtPricePoisha, status: 'hidden' });
@@ -205,8 +205,8 @@ describe('Product form on a full page', () => {
     const { onSaved } = show(undefined, page, {
       photos: { fileIds: ids, uploading: 0, failed: 0 },
     });
-    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: product.name } });
-    fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '300' } });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: product.name } });
+    fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '300' } });
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({ imageFileIds: ids });
@@ -218,11 +218,75 @@ describe('Product form on a full page', () => {
     expect((button as HTMLButtonElement).disabled).toBe(true);
     cleanup();
     show(undefined, page, { photos: { fileIds: [], uploading: 0, failed: 1 } });
-    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: product.name } });
-    fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '300' } });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: product.name } });
+    fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '300' } });
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(await screen.findByText(/A photo did not upload/)).toBeTruthy();
     expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it('takes 1,850 or 1850 as the same price and groups the digits when you leave the field', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(undefined, page);
+    const regular = screen.getByLabelText<HTMLInputElement>('Regular price');
+    await userEvent.type(regular, '1,850');
+    expect(regular.value).toBe('1,850');
+    await userEvent.tab();
+    expect(regular.value).toBe('1,850');
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: product.name } });
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toMatchObject({ pricePoisha: 185000 });
+  });
+
+  it('flags a sell price above the regular price while typing', async () => {
+    show(undefined, page);
+    fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '400' } });
+    fireEvent.change(screen.getByLabelText('Sell price'), { target: { value: '500' } });
+    expect(await screen.findByText('Enter a sell price below the regular price.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Sell price'), { target: { value: '300' } });
+    await waitFor(() =>
+      expect(screen.queryByText('Enter a sell price below the regular price.')).toBeNull(),
+    );
+  });
+
+  it('says what the AI will do with the opening offer and the minimum price', async () => {
+    show(undefined, page);
+    fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '2000' } });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Eligible AI negotiation' }));
+    fireEvent.change(screen.getByLabelText('Opening offer price'), { target: { value: '1800' } });
+    fireEvent.change(screen.getByLabelText('Min price'), { target: { value: '1650' } });
+    expect(await screen.findByText(/^Opens at/)).toBeTruthy();
+    expect(screen.getByText('৳1,800')).toBeTruthy();
+    expect(screen.getByText('৳1,650')).toBeTruthy();
+  });
+
+  it('saves with Ctrl+S from anywhere on the page', async () => {
+    vi.stubGlobal('fetch', async () =>
+      Response.json(product, { headers: { 'x-session-context': 'verified' } }),
+    );
+    const { onSaved } = show(undefined, page);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: product.name } });
+    fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '300' } });
+    fireEvent.keyDown(document, { key: 's', ctrlKey: true });
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  });
+
+  it('brings back a new product that was typed before a reload', async () => {
+    window.sessionStorage.setItem(
+      'dakly:new-product-draft',
+      JSON.stringify({ name: 'Linen shirt', pricePoisha: '950' }),
+    );
+    show(undefined, page);
+    await waitFor(() =>
+      expect(screen.getByLabelText<HTMLInputElement>('Title').value).toBe('Linen shirt'),
+    );
+    expect(screen.getByText('Restored what you had typed before.')).toBeTruthy();
+    window.sessionStorage.clear();
   });
 
   it('clears the old price when an edit removes the sell price', async () => {
@@ -232,7 +296,7 @@ describe('Product form on a full page', () => {
       return Response.json(product, { headers: { 'x-session-context': 'verified' } });
     });
     const { onSaved } = show({ ...product, compareAtPricePoisha: 300000 }, page);
-    await userEvent.clear(screen.getByLabelText('Sell price ৳'));
+    await userEvent.clear(screen.getByLabelText('Sell price'));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toEqual({ pricePoisha: 300000, compareAtPricePoisha: null });
@@ -248,7 +312,7 @@ describe('Product form on a full page', () => {
     Element.prototype.scrollIntoView = () => undefined;
     screen.getByRole('combobox', { name: 'Weight unit' }).focus();
     await userEvent.keyboard('{Enter}{ArrowDown}{Enter}');
-    const weight = screen.getByLabelText<HTMLInputElement>('Parcel weight');
+    const weight = screen.getByLabelText<HTMLInputElement>('Product weight');
     expect(weight.value).toBe('0.5');
     fireEvent.change(weight, { target: { value: '1.2345' } });
     expect(weight.value).toBe('1.2345');
@@ -262,11 +326,11 @@ describe('Product form on a full page', () => {
 
   it('shows the product details without editing controls on a read-only page', () => {
     show(product, { ...page, readOnly: true });
-    const name = screen.getByLabelText<HTMLInputElement>('Product name');
+    const name = screen.getByLabelText<HTMLInputElement>('Title');
     expect(name.value).toBe(product.name);
     expect(name.matches(':disabled')).toBe(true);
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
-    expect(screen.queryByRole('switch', { name: 'Let the AI negotiate' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Eligible AI negotiation' })).toBeNull();
   });
 
   it('warns about selling below cost and still saves negotiation prices', async () => {
@@ -276,11 +340,13 @@ describe('Product form on a full page', () => {
       return Response.json(product, { headers: { 'x-session-context': 'verified' } });
     });
     const { onSaved } = show(product, page);
-    const toggle = screen.getByRole('switch', { name: 'Let the AI negotiate' });
+    const toggle = screen.getByRole('checkbox', { name: 'Eligible AI negotiation' });
     expect(toggle.getAttribute('aria-checked')).toBe('false');
     await userEvent.click(toggle);
-    fireEvent.change(screen.getByLabelText('Opening offer ৳'), { target: { value: '2000.50' } });
-    fireEvent.change(screen.getByLabelText('Lowest price ৳'), { target: { value: '1200.50' } });
+    fireEvent.change(screen.getByLabelText('Opening offer price'), {
+      target: { value: '2000.50' },
+    });
+    fireEvent.change(screen.getByLabelText('Min price'), { target: { value: '1200.50' } });
     expect(screen.getByText('The lowest price is below the product cost.')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
@@ -297,16 +363,18 @@ describe('Product form on a full page', () => {
       page,
     );
     expect(
-      screen.getByRole<HTMLButtonElement>('switch', { name: 'Let the AI negotiate' }).disabled,
+      screen.getByRole<HTMLButtonElement>('checkbox', { name: 'Eligible AI negotiation' }).disabled,
     ).toBe(true);
     expect(screen.getByText('A variant has its own price.')).toBeTruthy();
   });
 
   it('compares the opening offer with the price the customer pays', async () => {
     const { onSaved } = show({ ...product, compareAtPricePoisha: 300000 }, page);
-    await userEvent.click(screen.getByRole('switch', { name: 'Let the AI negotiate' }));
-    fireEvent.change(screen.getByLabelText('Opening offer ৳'), { target: { value: '2450.50' } });
-    fireEvent.change(screen.getByLabelText('Lowest price ৳'), { target: { value: '1800' } });
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Eligible AI negotiation' }));
+    fireEvent.change(screen.getByLabelText('Opening offer price'), {
+      target: { value: '2450.50' },
+    });
+    fireEvent.change(screen.getByLabelText('Min price'), { target: { value: '1800' } });
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(await screen.findByText('Enter an opening offer below the selling price.')).toBeTruthy();
     expect(onSaved).not.toHaveBeenCalled();
@@ -314,13 +382,13 @@ describe('Product form on a full page', () => {
 
   it('rejects a sell price equal to the regular price', async () => {
     const { onSaved } = show(undefined, page);
-    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: product.name } });
-    fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '400' } });
-    fireEvent.change(screen.getByLabelText('Sell price ৳'), { target: { value: '400' } });
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: product.name } });
+    fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '400' } });
+    fireEvent.change(screen.getByLabelText('Sell price'), { target: { value: '400' } });
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(await screen.findByText('Enter a sell price below the regular price.')).toBeTruthy();
     expect(onSaved).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '500' } });
     await waitFor(() =>
       expect(screen.queryByText('Enter a sell price below the regular price.')).toBeNull(),
     );
@@ -343,11 +411,9 @@ describe('Product form on a full page', () => {
         variants: [{ ...product.variants[0]!, imageFileIds: ['original-variant-photo'] }],
       },
     });
-    expect(screen.getByLabelText<HTMLInputElement>('Product name').value).toBe(
-      'Cotton Panjabi copy',
-    );
-    expect(screen.getByLabelText<HTMLInputElement>('Regular price ৳').value).toBe('2950.00');
-    expect(screen.getByLabelText<HTMLInputElement>('Sell price ৳').value).toBe('2450.50');
+    expect(screen.getByLabelText<HTMLInputElement>('Title').value).toBe('Cotton Panjabi copy');
+    expect(screen.getByLabelText<HTMLInputElement>('Regular price').value).toBe('2,950');
+    expect(screen.getByLabelText<HTMLInputElement>('Sell price').value).toBe('2,450.50');
     expect(writes).toHaveLength(0);
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(writes).toHaveLength(1));
@@ -385,7 +451,7 @@ describe('Product form', () => {
     show();
     expect(screen.queryByLabelText('Other names')).toBeNull();
     expect(screen.queryByLabelText('Show in chat replies')).toBeNull();
-    expect(screen.getByLabelText('Track stock')).toBeTruthy();
+    expect(screen.getByLabelText('Track stock availability')).toBeTruthy();
   });
 
   it.each(['hidden', 'active'])('creates through %s with integer poisha', async (status) => {

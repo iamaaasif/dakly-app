@@ -13,12 +13,14 @@ import { useChangeProduct } from '../api/change-product';
 import { useGetProduct } from '../api/get-product';
 import { assistantFilledFields } from '../product-assistant-draft';
 import type { QuickAddHandoff } from '../quick-add-handoff';
+import { clearProductDraft } from '../use-product-draft';
 import { useStagedPhotos } from '../use-staged-photos';
 import { ChangeStockDialog } from './change-stock-dialog';
 import { ProductActionsMenu } from './product-actions-menu';
 import { ProductChatPreview } from './product-chat-preview';
 import { ProductForm } from './product-form';
 import { ProductSaveError } from './product-form-layout';
+import { ProductLivePreview } from './product-live-preview';
 import { ProductPhotos } from './product-photos';
 import { ProductReadiness } from './product-readiness';
 import { ProductStagedPhotos } from './product-staged-photos';
@@ -62,13 +64,17 @@ function NewProductForm({ initial, assistantDraft, duplicateSource }: NewProduct
       photos={staged}
       assistantDraft={assistantDraft}
       duplicateSource={duplicateSource}
-      onSaved={(product) => router.replace(`/products/${product.id}`)}
+      onSaved={(product) => {
+        clearProductDraft();
+        router.replace(`/products/${product.id}`);
+      }}
       page={{
         title: 'New product',
         backHref: '/products',
         notice: assistantDraft ? <AssistantNotice draft={assistantDraft} /> : undefined,
         photos: <ProductStagedPhotos staged={staged} />,
         status: <StatusCard />,
+        preview: <ProductLivePreview photoUrl={staged.photos[0]?.previewUrl} />,
       }}
     />
   );
