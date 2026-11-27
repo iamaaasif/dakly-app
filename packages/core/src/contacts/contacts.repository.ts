@@ -4,7 +4,6 @@ import {
   arrayOverlaps,
   asc,
   count,
-  desc,
   eq,
   exists,
   gt,
@@ -22,9 +21,7 @@ import type {
   ConsentChannel,
   ContactIdentityResponse,
   ContactKind,
-  ContactListQuery,
   ContactSource,
-  CreateContactInput,
   UpdateContactInput,
 } from '@dakly/contracts/contacts';
 import type { SegmentCondition, SegmentInnerGroup, SegmentRules } from '@dakly/contracts/segments';
@@ -33,7 +30,6 @@ import { contactIdentities, contacts } from '@dakly/db/schema/contacts';
 
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
-import { cursorCondition, matchingConditions } from './contact-filters.repository';
 
 export type Contact = {
   id: string;
@@ -42,15 +38,6 @@ export type Contact = {
   kind: ContactKind;
   tags: string[];
   createdAt: Date;
-};
-
-// A list row carries the columns the Columns picker can show.
-export type ListedContact = Contact & {
-  whatsappPhone: string | null;
-  email: string | null;
-  district: string | null;
-  source: ContactSource;
-  consentedChannels: ConsentChannel[];
 };
 
 // What the send gate needs; the phone itself stays here.
@@ -69,22 +56,24 @@ export type AudienceRecipient = Omit<ContactRecipient, 'hasPhone'> & {
 
 export type TagChange = { tag: string; change: 'add' | 'remove' };
 
-export type NewContact = Omit<CreateContactInput, 'phone'> & {
+export type NewContact = {
+  name: string;
   phone: string | null;
   source: ContactSource;
   kind: ContactKind;
+  whatsappPhone?: string;
+  email?: string;
+  gender?: 'female' | 'male' | 'other';
+  birthYear?: number;
+  address?: string;
+  district?: string;
+  tags?: string[];
+  notes?: string;
 };
 
 export type ContactChange = UpdateContactInput & { phoneVerifiedAt?: null };
 
-// The service decides what a search means; each search field has its own index.
-export type ContactFilter = Omit<ContactListQuery, 'search'> & {
-  name?: string;
-  phone?: string;
-  phonePrefix?: string;
-};
-
-const contactColumns = {
+export const contactColumns = {
   id: contacts.id,
   name: contacts.name,
   phone: contacts.phone,
@@ -150,30 +139,6 @@ export class ContactsRepository {
         .where(
           and(eq(contacts.storeId, storeId), inArray(contacts.id, ids), isNull(contacts.deletedAt)),
         ),
-    );
-  }
-
-  list(storeId: string, filter: ContactFilter): Promise<ListedContact[]> {
-    return this.database.forStore(storeId, (tx) =>
-      tx
-        .select({
-          ...contactColumns,
-          whatsappPhone: contacts.whatsappPhone,
-          email: contacts.email,
-          district: contacts.district,
-          source: contacts.source,
-          consentedChannels: sql<ConsentChannel[]>`coalesce(array(
-            select ${contactConsentCurrent.channel} from ${contactConsentCurrent}
-            where ${contactConsentCurrent.storeId} = ${storeId}
-              and ${contactConsentCurrent.contactId} = ${contacts.id}
-              and ${contactConsentCurrent.status} = 'granted'
-            order by ${contactConsentCurrent.channel}
-          ), '{}')`,
-        })
-        .from(contacts)
-        .where(and(...matchingConditions(storeId, filter), cursorCondition(storeId, filter.cursor)))
-        .orderBy(desc(contacts.createdAt), desc(contacts.id))
-        .limit(filter.limit + 1),
     );
   }
 

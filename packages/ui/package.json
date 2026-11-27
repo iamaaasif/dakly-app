@@ -27,7 +27,10 @@
     "./table": "./src/table.tsx",
     "./select": "./src/select.tsx",
     "./switch": "./src/switch.tsx",
-    "./toast": "./src/toast.tsx"
+    "./toast": "./src/toast.tsx",
+    "./page-header": "./src/page-header.tsx",
+    "./empty-state": "./src/empty-state.tsx",
+    "./row-actions-menu": "./src/row-actions-menu.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

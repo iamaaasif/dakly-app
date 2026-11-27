@@ -24,7 +24,20 @@ export function TabsTrigger({ className, ...props }: TabsTriggerProps) {
     <TabsPrimitive.Trigger
       {...props}
       className={cn(
-        '-mb-px min-h-10 shrink-0 border-b-2 border-transparent px-3 text-base text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50 data-[state=active]:border-action data-[state=active]:font-medium data-[state=active]:text-text',
+        'group motion-tab relative -mb-px inline-flex min-h-10 shrink-0 items-center gap-2 px-3 text-base text-text-muted after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-center after:scale-x-0 after:bg-action hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-50 data-[state=active]:font-medium data-[state=active]:text-text data-[state=active]:after:scale-x-100',
+        className,
+      )}
+    />
+  );
+}
+
+// The count sits inside the tab label, so the tab keeps one accessible name such as "Pending 4".
+export function TabCount({ className, ...props }: ComponentProps<'span'>) {
+  return (
+    <span
+      {...props}
+      className={cn(
+        'rounded-full bg-border px-2 text-xs font-semibold text-text-secondary tabular-nums group-data-[state=active]:bg-primary-soft group-data-[state=active]:text-action-hover',
         className,
       )}
     />

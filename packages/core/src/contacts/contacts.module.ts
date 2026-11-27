@@ -11,6 +11,8 @@ import { ContactExportRepository } from './contact-export.repository';
 import { ContactExportService } from './contact-export.service';
 import { ContactIdentitiesRepository } from './contact-identities.repository';
 import { ContactIdentitiesService } from './contact-identities.service';
+import { ContactListRepository } from './contact-list.repository';
+import { ContactListService } from './contact-list.service';
 import { ContactMatchSuggestionsController } from './contact-match-suggestions.controller';
 import { ContactMatchSuggestionsService } from './contact-match-suggestions.service';
 import { ContactPhoneAccessService } from './contact-phone-access.service';
@@ -28,6 +30,8 @@ import { OrderContactsRepository } from './order-contacts.repository';
   imports: [AuditModule, CacheModule, ClockModule, OutboxModule, TeamModule, ContactErasureModule],
   controllers: [ContactsController, ContactMatchSuggestionsController],
   providers: [
+    ContactListRepository,
+    ContactListService,
     ContactSearchRepository,
     ContactTagsRepository,
     ContactTagsService,

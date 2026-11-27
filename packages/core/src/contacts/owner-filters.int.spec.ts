@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
+import { ContactListRepository } from './contact-list.repository';
 import { ContactsRepository } from './contacts.repository';
 import { ImportContactsRepository } from './import-contacts.repository';
 
@@ -12,6 +13,7 @@ const manualCustomer = { source: 'manual', kind: 'customer' } as const;
 describe('contact filters without RLS assistance', () => {
   const f = new OwnerIsolationFixture();
   const repository = new ContactsRepository(f.tenant);
+  const listing = new ContactListRepository(f.tenant);
   const imports = new ImportContactsRepository(f.tenant);
   beforeAll(() => f.setup());
   afterAll(() => f.close());
@@ -82,7 +84,7 @@ describe('contact filters without RLS assistance', () => {
       [f.a, a!.id, connectionId],
     );
 
-    const listed = await repository.list(f.b, { limit: 50, phone: '01711000002' });
+    const listed = await listing.list(f.b, { limit: 50, phone: '01711000002' });
     expect(listed.map((row) => row.id)).toEqual([b!.id]);
     expect(await repository.findIdentities(f.b, a!.id)).toEqual([]);
     expect(await repository.update(f.b, a!.id, { name: 'করিম' })).toBeUndefined();
