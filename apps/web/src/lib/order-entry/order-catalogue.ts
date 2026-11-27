@@ -10,7 +10,7 @@ import { productsKeys } from '@/lib/product-query-keys';
 import { useSessionContext } from '@/lib/session-context';
 import { useStoreRequest } from '@/lib/store-request';
 
-export function useOrderCatalogue(search?: string) {
+export function useOrderCatalogue(search?: string, enabled = true) {
   const { request, contextTag } = useStoreRequest();
   const { data } = useSessionContext();
   return useInfiniteQuery({
@@ -23,7 +23,7 @@ export function useOrderCatalogue(search?: string) {
       return request<OrderCataloguePage>(`/orders/catalogue?${params}`, { signal });
     },
     getNextPageParam: (page) => page.nextCursor ?? undefined,
-    enabled: Boolean(contextTag && data?.currentStore?.canEditOrders),
+    enabled: Boolean(enabled && contextTag && data?.currentStore?.canEditOrders),
   });
 }
 
@@ -50,5 +50,16 @@ export function useOrderCatalogueStock(ids: string[]) {
     queryFn: ({ signal }) =>
       request<OrderCatalogueStock>(`/orders/catalogue/stock?${args}`, { signal }),
     enabled: Boolean(contextTag && data?.currentStore?.canEditOrders && variantIds.length),
+  });
+}
+
+export function useRecentOrderProducts() {
+  const { request, contextTag } = useStoreRequest();
+  const { data } = useSessionContext();
+  return useQuery({
+    queryKey: [...productsKeys.all, contextTag, 'order-catalogue-recent'],
+    queryFn: ({ signal }) =>
+      request<OrderCatalogueProduct[]>('/orders/catalogue/recent', { signal }),
+    enabled: Boolean(contextTag && data?.currentStore?.canEditOrders),
   });
 }

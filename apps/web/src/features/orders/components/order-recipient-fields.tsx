@@ -155,7 +155,7 @@ function ChargeHint({ chargePoisha }: { chargePoisha?: number }) {
   );
 }
 
-function SetupDeliveryZones({ retryQuote }: { retryQuote: () => void }) {
+export function SetupDeliveryZones({ retryQuote }: { retryQuote: () => void }) {
   const { data } = useSessionContext();
   const setup = useSetupDeliveryZones(retryQuote);
   if (!data?.currentStore?.canEditStoreSettings)

@@ -6,9 +6,7 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 export type ToastAction = { label: string; onClick: () => void };
 type ShownToast = { id: number; message: string; action?: ToastAction };
 
-const ToastContext = createContext<((message: string, action?: ToastAction) => void) | null>(
-  null,
-);
+const ToastContext = createContext<((message: string, action?: ToastAction) => void) | null>(null);
 
 export type ToastProviderProps = { children: ReactNode };
 
