@@ -82,7 +82,7 @@ export function checkReplyFacts(
   const known = numbersIn(toolResults);
   if (
     hasIncorrectAmount(text, toolResults, {
-      known,
+      known: amountsIn(toolResults),
       customerNumbers: numbersIn(customerTexts),
       offerQuotes: shop.offerQuotes ?? [],
     })
@@ -214,6 +214,22 @@ function claimedNumbers(text: string, patterns: RegExp[]) {
   return patterns.flatMap((pattern) =>
     [...text.matchAll(pattern)].map((match) => parseNumber(match[1]!)),
   );
+}
+
+const amountKey = /taka|poisha|price|charge|total|fee|cost|amount|discount|subtotal/i;
+
+// An amount is known only from a money field or an amount written in a passage. A date, phone
+// number, SKU or stock count that equals an invented price must not make it look checked.
+function amountsIn(value: unknown, key = '', found = new Set<number>()) {
+  if (typeof value === 'number') {
+    if (!amountKey.test(key)) return found;
+    found.add(/poisha/i.test(key) ? value / 100 : value);
+  } else if (typeof value === 'string') {
+    for (const { value: amount } of claimedAmounts(toAsciiDigits(value))) found.add(amount);
+  } else if (Array.isArray(value)) for (const item of value) amountsIn(item, key, found);
+  else if (value && typeof value === 'object')
+    for (const [name, item] of Object.entries(value)) amountsIn(item, name, found);
+  return found;
 }
 
 const idPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;

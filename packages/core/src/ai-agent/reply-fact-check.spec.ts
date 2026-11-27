@@ -382,3 +382,35 @@ describe('checkReplyFacts numbers inside ids', () => {
     expect(check('পাঞ্জাবির দাম ৳1,200।', withIds)).toEqual({ isSafe: true });
   });
 });
+
+describe('checkReplyFacts amounts from money fields only', () => {
+  const colliding = [
+    {
+      products: [
+        {
+          name: 'কটন পাঞ্জাবি',
+          sku: 'SKU-777',
+          restockedOn: '2026-11-20',
+          supplierPhone: '01712345999',
+          variants: [{ priceTaka: 1200, stock: 45, pricePoisha: 120000 }],
+        },
+      ],
+    },
+  ];
+  const rejects = (reply: string) =>
+    expect(check(reply, colliding), reply).toEqual({ isSafe: false, failure: 'amount' });
+
+  it('rejects a price equal to a stock count', () => rejects('দাম ৳45 only'));
+  it('rejects a price equal to a day or year in a date', () => {
+    rejects('দাম ৳20 only');
+    rejects('দাম ৳2026 only');
+  });
+  it('rejects a price equal to digits of a phone number or SKU', () => {
+    rejects('দাম ৳999 only');
+    rejects('দাম ৳777 only');
+  });
+  it('still accepts the price from a money field, in poisha too', () => {
+    expect(check('দাম ৳1200', colliding)).toEqual({ isSafe: true });
+    expect(check('Stock e 45 pcs ache, ৳1,200', colliding)).toEqual({ isSafe: true });
+  });
+});
