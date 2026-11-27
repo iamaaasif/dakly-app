@@ -216,6 +216,19 @@ describe('Segments list', () => {
     );
   });
 
+  it('archives several selected segments at once', async () => {
+    const user = userEvent.setup();
+    const requests = listServer([vip]);
+    show(<SegmentsScreen view={emptyView} canEdit />);
+    await user.click((await screen.findAllByRole('checkbox', { name: 'Select VIP in Dhaka' }))[0]!);
+    const bar = screen.getByRole('region', { name: 'Selected segments' });
+    expect(within(bar).getByText('1 selected')).toBeTruthy();
+    await user.click(within(bar).getByRole('button', { name: 'Archive' }));
+    await vi.waitFor(() =>
+      expect(requests.some(({ path }) => path === `/segments/${vip.id}/archive`)).toBe(true),
+    );
+  });
+
   it('offers a member who cannot edit only View', async () => {
     listServer([vip]);
     show(<SegmentsScreen view={{ ...emptyView, edit: vip.id }} canEdit={false} />);
