@@ -147,7 +147,7 @@ describe('AutomationsService (Postgres)', () => {
   it.each([
     [
       'a trigger whose source no task emits yet',
-      { ...welcome, trigger: { key: 'comment_on_post', filters: [] } },
+      { ...welcome, trigger: { key: 'lead_captured', filters: [] } },
       'AUTOMATION_TRIGGER_UNAVAILABLE',
     ],
     [

@@ -323,4 +323,51 @@ describe('automationGraphSchema', () => {
       expect(messages(result)).toContain('consent_given has no keywords filter');
     });
   });
+  describe('comment_on_post trigger', () => {
+    const parse = (filters: unknown[]) =>
+      automationGraphSchema.safeParse(
+        workflow(
+          { start: send, end: { kind: 'exit' } },
+          { trigger: { key: 'comment_on_post', filters } },
+        ),
+      );
+
+    it('accepts post, product, keyword and intent filters together', () => {
+      const result = parse([
+        { field: 'post', externalPostIds: ['1001_2002'] },
+        { field: 'product', productIds: ['019c01ea-cf15-7d31-a7f5-d73d66007ae6'] },
+        { field: 'keywords', keywords: ['দাম কত', 'dam koto', 'price', 'pp'] },
+        { field: 'comment_intent', intents: ['price', 'order', 'question'] },
+      ]);
+      expect(messages(result)).toEqual([]);
+    });
+
+    it('accepts no filters', () => {
+      expect(messages(parse([]))).toEqual([]);
+    });
+
+    it('rejects an unknown intent, an empty post list and a filter the trigger lacks', () => {
+      expect(parse([{ field: 'comment_intent', intents: ['spam'] }]).success).toBe(false);
+      expect(parse([{ field: 'comment_intent', intents: [] }]).success).toBe(false);
+      expect(parse([{ field: 'post', externalPostIds: [] }]).success).toBe(false);
+      expect(messages(parse([{ field: 'channel', channels: ['messenger'] }]))).toContain(
+        'comment_on_post has no channel filter',
+      );
+    });
+
+    it('is not a filter other triggers have', () => {
+      const result = automationGraphSchema.safeParse(
+        workflow(
+          { start: send, end: { kind: 'exit' } },
+          {
+            trigger: {
+              key: 'message_received',
+              filters: [{ field: 'comment_intent', intents: ['price'] }],
+            },
+          },
+        ),
+      );
+      expect(messages(result)).toContain('message_received has no comment_intent filter');
+    });
+  });
 });
