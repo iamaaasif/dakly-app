@@ -58,3 +58,10 @@ export function photoSnapshot(storeId: string) {
     from ${files} f where f.store_id = ${storeId} and f.id = any(${productImagesColumn})
     and f.purpose = 'product_image' and f.status = 'ready')`;
 }
+
+// The tag names a product carries, read with it so a list needs no second query.
+export const tagColumns = {
+  tags: sql<
+    string[]
+  >`(select coalesce(array_agg(t.name order by lower(t.name)), '{}') from product_tag_links l join product_tags t on t.store_id = l.store_id and t.id = l.tag_id where l.product_id = ${productIdColumn})`,
+};

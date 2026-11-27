@@ -19,6 +19,7 @@ import { ConsentsModule } from '@dakly/core/consents/consents.module';
 import { ContactMergeModule } from '@dakly/core/contacts/contact-merge.module';
 import { ContactsModule } from '@dakly/core/contacts/contacts.module';
 import { ContentModule } from '@dakly/core/content/content.module';
+import { CustomerProfileModule } from '@dakly/core/customer-profile/customer-profile.module';
 import { DashboardModule } from '@dakly/core/dashboard/dashboard.module';
 import { DeliveryModule } from '@dakly/core/delivery/delivery.module';
 import { DueBookModule } from '@dakly/core/due-book/due-book.module';
@@ -53,6 +54,7 @@ import { HealthController } from './health.controller';
     AuthModule,
     SessionsModule,
     ContactsModule,
+    CustomerProfileModule,
     ContactMergeModule,
     ContentModule,
     AnalyticsOverviewModule,

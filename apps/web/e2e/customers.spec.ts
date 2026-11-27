@@ -46,7 +46,8 @@ test('adds a contact, lists it as a customer after an order and opens the profil
     await expect(page.getByText('No customers match')).toBeVisible();
     await database.pool.query(
       `insert into contact_stats(contact_id,store_id,orders_count,net_spend_poisha,last_order_at,lifecycle_stage)
-       select id,store_id,1,150000,now(),'new' from contacts where store_id=$1 and name=$2`,
+       select id,store_id,1,150000,now(),'new' from contacts where store_id=$1 and name=$2
+       on conflict (contact_id) do update set orders_count=1, net_spend_poisha=150000, last_order_at=now(), lifecycle_stage='new'`,
       [fixture.storeIds[0], name],
     );
     await page.reload();

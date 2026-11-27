@@ -28,7 +28,7 @@ export function ConnectChannelEmpty() {
           href="/integrations"
           className={cn(
             buttonVariants(),
-            'min-h-0 gap-1.5 rounded-md bg-primary px-3.5 text-sm font-semibold hover:bg-primary-hover',
+            'min-h-0 gap-1.5 rounded-md px-3.5 text-sm font-semibold',
             'h-[2.375rem]',
           )}
         >

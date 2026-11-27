@@ -24,7 +24,7 @@ import { WorkflowPageHeader } from './workflow-page-header';
 import { WorkflowPalette } from './workflow-palette';
 import { WorkflowPublishDialog } from './workflow-publish-dialog';
 import { WorkflowSettingsSheet } from './workflow-settings-sheet';
-import { WorkflowStatsToggle } from './workflow-stats-toggle';
+import { WorkflowStatsMenuItem, WorkflowStatsToggle } from './workflow-stats-toggle';
 import { WorkflowStepPanel } from './workflow-step-panel';
 import { useSessionContext } from '@/lib/session-context';
 
@@ -104,13 +104,13 @@ function EditorActions({
   );
 }
 
-function useStats(id: string) {
+function useStats(id: string, showButton: boolean) {
   const [value, setValue] = useCanvasParam('stats');
   const on = value === '1';
   const query = useStepStats(id, on);
   return {
     stats: on ? query.data?.steps : undefined,
-    control: (
+    control: showButton && (
       <WorkflowStatsToggle
         on={on}
         failed={query.isError}
@@ -181,7 +181,7 @@ type ViewportProps = {
 
 function CanvasMain({ workflow, graph, layout, editing }: ViewportProps) {
   const recentEntries = useCanvasPreview(workflow);
-  const { stats, control } = useStats(workflow.id);
+  const { stats, control } = useStats(workflow.id, !editing);
   return (
     <main className="relative flex-1">
       <WorkflowCanvasViewport
@@ -233,6 +233,7 @@ function EditorTop({
         name={workflow.name}
         badge={<StatusBadge workflow={workflow} />}
         onOpenSettings={onOpenSettings}
+        statsItem={<WorkflowStatsMenuItem id={workflow.id} />}
         onRename={(name) =>
           rename.mutateAsync(name).then(
             () => true,

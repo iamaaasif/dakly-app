@@ -116,6 +116,8 @@ Each product with "Order link" on gets a URL. A buyer picks size and quantity, e
 | ORD-R7 | Cancelling or returning puts stock back and records the reason; returned orders update the customer's return risk at once.                                  |
 | ORD-R8 | Orders synced from Shopify or WooCommerce follow that store's status and are read-only in Dakly except courier details and notes.                           |
 
+ORD-R3 status: the tick is stored as `orders.is_oversell_allowed`, but no order create or edit input carries it yet. Until it does, only manual orders may include an untracked product marked out of stock, and other sources are refused with `ORDER_ITEM_OUT_OF_STOCK`.
+
 ### States and edge cases
 
 - Later release (D21): courier API error on booking: the order stays in To pack with "Booking failed: reason" and Retry.
@@ -416,7 +418,7 @@ Removing a line from an editable order deletes that `order_items` row, adjusts i
 
 ### Orders tabs, inquiries and notes (DSN-8)
 
-- `GET /orders/tab-counts` returns the tab counts in one call: `inquiries`, `to_confirm`, `on_hold`, `to_pack`, `with_courier`, `delivered` (partly delivered included), `pending` and `returned`. On hold is its own tab; To confirm no longer includes held orders.
+- `GET /orders/tab-counts` returns the tab counts in one call: `inquiries`, `to_confirm`, `on_hold`, `to_pack`, `with_courier`, `delivered` (partly delivered included), `pending` and `returned`. On hold is its own tab; To confirm no longer includes held orders. An order in To confirm that is waiting for an advance payment shows only in Pending, not in To confirm, in both the count and the list.
 - Pending is an order with `paymentStatus` `advance_requested` that is still To confirm, On hold or To pack. `GET /orders?paymentStatus=advance_requested` lists them.
 - `GET /orders/inquiries` lists chats with buying intent and no order since: an open, snoozed or needs-you chat of a customer whose `hasBuyingInterest` is set or whose intent tag is price, size or stock, order or confirm, with no order from that customer (cancelled ones excluded) made after their last message. Each row has the channel, customer name, New, Repeat or Vip badge (Vip is lifecycle stage Best, as in the customer list), time of the last message, and the product the AI showed last with its price today. It takes `search` (name or phone) and `cursor`. A shop without Chats, or a member without chat access, gets an empty list and a zero count.
 - Orders carry two free-text fields, each up to 500 characters: `note` (for the courier and the buyer) and `teamNote` (internal, never printed). Both are set when the order is created and while it can still be edited.
