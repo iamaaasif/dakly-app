@@ -32,7 +32,6 @@ export const staffConfirmation = { to: 'to_pack' } as const;
 export const productArchiveStages: OrderStage[] = ['to_confirm', 'on_hold', 'to_pack'];
 
 const groupedStages: Partial<Record<OrderStage, OrderStage[]>> = {
-  to_confirm: ['to_confirm', 'on_hold'],
   delivered: ['delivered', 'partially_delivered'],
 };
 

@@ -1,11 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import type {
-  OrderCatalogueProduct,
   OrderLinkUrlResponse,
   PlaceOrderLinkOrderInput,
   PlacedOrderLinkOrder,
-} from '@dakly/contracts/orders';
+} from '@dakly/contracts/order-link';
+import type { OrderCatalogueProduct } from '@dakly/contracts/orders';
 import type { BotCheckDriver } from '@dakly/providers/bot-check/bot-check-driver';
 
 import { DeliveryService } from '../delivery/delivery.service';

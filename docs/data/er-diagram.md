@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0112_snapshot.json`: **111 tables, 1461 columns, 442 explicit indexes and 344 foreign keys**.
+Built from `packages/db/migrations/meta/0114_snapshot.json`: **111 tables, 1463 columns, 442 explicit indexes and 344 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1006,6 +1006,7 @@ erDiagram
         boolean is_visible_in_chats "NOT NULL; boolean"
         boolean is_visible_in_order_link "NOT NULL; boolean"
         text status "NOT NULL; text"
+        text source "NOT NULL; text"
         integer ask_count "NOT NULL; integer"
         vector_512_ search_embedding "NULL; vector(512)"
         vector_512_ image_embedding "NULL; vector(512)"
@@ -1168,6 +1169,7 @@ erDiagram
         smallint attributed_window_days "NULL; smallint"
         uuid possible_duplicate_of_order_id FK "NULL; uuid"
         text note "NULL; text"
+        text team_note "NULL; text"
         text external_ref "NULL; text"
         text idempotency_key "NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"

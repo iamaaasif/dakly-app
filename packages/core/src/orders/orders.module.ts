@@ -39,6 +39,7 @@ import { OrderReportingService } from './order-reporting.service';
 import { OrderShippingLabelsController } from './order-shipping-labels.controller';
 import { OrderShippingLabelsRepository } from './order-shipping-labels.repository';
 import { OrderShippingLabelsService } from './order-shipping-labels.service';
+import { OrderStageCountsRepository } from './order-stage-counts.repository';
 import { OrderStageCountsService } from './order-stage-counts.service';
 import { OrdersController } from './orders.controller';
 import { OrdersRepository } from './orders.repository';
@@ -77,6 +78,7 @@ import { OrdersService } from './orders.service';
     OrdersRepository,
     OrderExportRepository,
     OrderExportService,
+    OrderStageCountsRepository,
     OrderStageCountsService,
     OrdersService,
     OrderInvoiceRepository,

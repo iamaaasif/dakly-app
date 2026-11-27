@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useRef } from 'react';
 
 import type { WriteConversationReplyInput, WrittenConversationReply } from '@dakly/contracts/chats';
-import type { OrderLinkUrlResponse } from '@dakly/contracts/orders';
+import type { OrderLinkUrlResponse } from '@dakly/contracts/order-link';
 import type { ProductListResponse } from '@dakly/contracts/products';
 import { ApiError } from '@dakly/ui/api-client';
 

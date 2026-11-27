@@ -10,6 +10,8 @@ import { Clock } from '../platform/clock';
 import { DatabaseModule } from '../platform/database/database.module';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OrderReportingRepository } from './order-reporting.repository';
+import { OrderStageCountsRepository } from './order-stage-counts.repository';
+import { OrderStageCountsService } from './order-stage-counts.service';
 import { OrdersModule } from './orders.module';
 import { OrdersRepository } from './orders.repository';
 import { OrdersService } from './orders.service';
@@ -28,8 +30,8 @@ describe('OrdersService', () => {
     await fixture.connection.pool.query(
       `insert into orders (id, store_id, number, buyer_name, source, created_by_type,
         recipient_name, recipient_phone, recipient_address, recipient_district, stage, on_hold_reason,
-        items_subtotal_poisha, cod_amount_poisha)
-       values ($1,$2,$3,'রিনা','manual','user','করিম','01712458903','ধানমন্ডি','Dhaka',$4,case when $4='on_hold' then 'pre_order' end,50000,50000)`,
+        cancel_reason, items_subtotal_poisha, cod_amount_poisha)
+       values ($1,$2,$3,'রিনা','manual','user','করিম','01712458903','ধানমন্ডি','Dhaka',$4,case when $4='on_hold' then 'pre_order' end,case when $4='cancelled' then 'other' end,50000,50000)`,
       [id, storeId, number, stage],
     );
     return id;
@@ -300,7 +302,7 @@ describe('OrdersService', () => {
     });
   });
 
-  it('groups held and partly delivered orders into their pipeline tabs and counts only this store', async () => {
+  it('lists held orders in their own tab, groups partly delivered ones with delivered, and counts only this store', async () => {
     const previous = (await service.list(fixture.a, { limit: 20 })).counts;
     const held = await order(fixture.a, 1100, 'on_hold');
     const delivered = await order(fixture.a, 1101, 'delivered');
@@ -308,20 +310,46 @@ describe('OrdersService', () => {
     await order(fixture.b, 1100, 'on_hold');
     await order(fixture.b, 1102, 'partially_delivered');
     const confirm = await service.list(fixture.a, { stage: 'to_confirm', limit: 20 });
-    expect(confirm.items).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: held, stage: 'on_hold', totalPoisha: 50000 }),
-      ]),
-    );
+    expect(confirm.items.map(({ id }) => id)).not.toContain(held);
+    const onHold = await service.list(fixture.a, { stage: 'on_hold', limit: 20 });
+    expect(onHold.items.map(({ id }) => id)).toContain(held);
+    expect(onHold.items.every(({ stage }) => stage === 'on_hold')).toBe(true);
     const complete = await service.list(fixture.a, { stage: 'delivered', limit: 20 });
     expect(complete.items.map(({ id }) => id)).toEqual([partial, delivered]);
     expect(complete.counts).toMatchObject({
       delivered: previous.delivered + 2,
       partially_delivered: previous.partially_delivered + 1,
       on_hold: previous.on_hold + 1,
+      to_confirm: previous.to_confirm,
     });
-    expect(confirm.counts.to_confirm).toBe(previous.to_confirm + 1);
     expect(confirm.items).toHaveLength(confirm.counts.to_confirm);
+  });
+
+  it('counts and lists orders waiting for an advance, leaving out cancelled ones and other shops', async () => {
+    const stages = new OrderStageCountsService(
+      new OrdersRepository(fixture.tenant),
+      new OrderStageCountsRepository(fixture.tenant),
+    );
+    const before = await stages.awaitingAdvance(fixture.a);
+    const waiting = await order(fixture.a, 1300, 'to_confirm');
+    const held = await order(fixture.a, 1301, 'on_hold');
+    const cancelled = await order(fixture.a, 1302, 'cancelled');
+    const paid = await order(fixture.a, 1303, 'to_confirm');
+    const foreign = await order(fixture.b, 1300, 'to_confirm');
+    await fixture.connection.pool.query(
+      "update orders set payment_status = 'advance_requested' where id = any($1::uuid[])",
+      [[waiting, held, cancelled, foreign]],
+    );
+    await fixture.connection.pool.query(
+      "update orders set payment_status = 'advance_paid' where id = $1",
+      [paid],
+    );
+    expect(await stages.awaitingAdvance(fixture.a)).toBe(before + 2);
+    const pending = await service.list(fixture.a, {
+      paymentStatus: 'advance_requested',
+      limit: 20,
+    });
+    expect(pending.items.map(({ id }) => id)).toEqual([held, waiting]);
   });
 
   it('finds open order items only in the verified store on an owner connection', async () => {
