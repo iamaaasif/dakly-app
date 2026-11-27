@@ -63,6 +63,11 @@ let sent: Sent[] = [];
 function respond(reply: (path: string, method: string) => Reply | Promise<never>) {
   vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
     const method = init.method ?? 'GET';
+    // The shop's tags are the same in every test.
+    if (path === '/api/contacts/tags')
+      return Response.json(['eid buyer', 'kurti lover'], {
+        headers: { 'x-session-context': 'verified' },
+      });
     sent.push({
       path,
       method,
@@ -171,11 +176,10 @@ const stats = {
 
 // The list and the tab counts come from the same fake API.
 function respondWithList(items: ContactListItemResponse[], extra: Record<string, unknown> = {}) {
-  respond((path) =>
-    path.startsWith('/api/contacts/counts')
-      ? { body: counts }
-      : { body: { items, nextCursor: null, total: items.length, ...extra } },
-  );
+  respond((path) => {
+    if (path.startsWith('/api/contacts/counts')) return { body: counts };
+    return { body: { items, nextCursor: null, total: items.length, ...extra } };
+  });
 }
 
 describe('All customers', () => {
@@ -344,6 +348,9 @@ function respondToContactPost(reply: Reply) {
 
 describe('All contacts', () => {
   beforeEach(() => {
+    // Radix selects need these in jsdom.
+    Element.prototype.hasPointerCapture = () => false;
+    Element.prototype.scrollIntoView = () => undefined;
     // The form's checkbox and selects measure themselves; jsdom has no ResizeObserver.
     vi.stubGlobal(
       'ResizeObserver',
@@ -373,6 +380,16 @@ describe('All contacts', () => {
     ).toBeTruthy();
     expect(screen.getByRole('tab', { name: /^VIP\s*42$/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /^At-risk\s*96$/ })).toBeTruthy();
+  });
+
+  it('offers every tag of the shop in the tag filter, not only the ones on screen', async () => {
+    respondWithList([{ ...rahimaInList, tags: ['wholesale'] }]);
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('combobox', { name: 'Tag' }));
+    await user.click(await screen.findByRole('option', { name: 'kurti lover' }));
+    expect(screen.queryByRole('option', { name: 'wholesale' })).toBeNull();
+    expect(push).toHaveBeenCalledWith('/contacts?tag=kurti+lover');
   });
 
   it('says there are no contacts yet and offers to add one', async () => {

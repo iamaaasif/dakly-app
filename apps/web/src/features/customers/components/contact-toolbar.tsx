@@ -17,7 +17,7 @@ type ContactToolbarProps = {
   query: ContactListQuery;
   columns: CustomerColumn[];
   hrefFor: ListHref;
-  // Tags on the rows now on screen; the API has no list of every tag yet.
+  // Every tag the shop uses.
   tags: string[];
   searchError?: string;
   onImport: () => void;
