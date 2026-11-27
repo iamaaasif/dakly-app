@@ -8,7 +8,7 @@ import {
   contactBirthdayEventSchema,
   contactTagAddedEventSchema,
 } from '@dakly/contracts/events/contacts';
-import { messageIntentClassifiedEventSchema } from '@dakly/contracts/events/messaging';
+import { messageBurstReceivedEventSchema } from '@dakly/contracts/events/messaging';
 import {
   orderCreatedEventSchema,
   orderStageChangedEventSchema,
@@ -29,7 +29,7 @@ import { matchesAnyKeyword } from './message-keywords';
 export const automationConsentEvent = consentChangedEventSchema.extend({ id: z.uuid() });
 export const automationTagEvent = contactTagAddedEventSchema.extend({ id: z.uuid() });
 export const automationBirthdayEvent = contactBirthdayEventSchema.extend({ id: z.uuid() });
-export const automationMessageIntentEvent = messageIntentClassifiedEventSchema.extend({
+export const automationMessageBurstEvent = messageBurstReceivedEventSchema.extend({
   id: z.uuid(),
 });
 export const automationOrderCreatedEvent = orderCreatedEventSchema.extend({ id: z.uuid() });
@@ -43,10 +43,10 @@ type WithFacts<E> = E extends { payload: infer P }
   ? Omit<E, 'payload'> & { payload: P & OrderFacts }
   : never;
 type OrderTriggerEvent = WithFacts<OrderEvent>;
-type MessageIntentEvent = Omit<z.infer<typeof automationMessageIntentEvent>, 'storeId'>;
+type MessageBurstEvent = Omit<z.infer<typeof automationMessageBurstEvent>, 'storeId'>;
 // The keyword filter reads the words, which the event leaves out.
-type MessageTriggerEvent = Omit<MessageIntentEvent, 'payload'> & {
-  payload: MessageIntentEvent['payload'] & { text: string };
+type MessageTriggerEvent = Omit<MessageBurstEvent, 'payload'> & {
+  payload: MessageBurstEvent['payload'] & { text: string };
 };
 type TriggerEvent =
   | Omit<z.infer<typeof automationConsentEvent>, 'storeId'>
@@ -81,7 +81,7 @@ export class AutomationEntryService {
     for (const { id } of workflows) await this.start(storeId, id, event);
   }
 
-  async startMatchingMessage(storeId: string, event: MessageIntentEvent): Promise<void> {
+  async startMatchingMessage(storeId: string, event: MessageBurstEvent): Promise<void> {
     const { conversationId, messageIds } = event.payload;
     const text = await this.conversations.burstText(storeId, conversationId, messageIds);
     await this.startMatching(storeId, { ...event, payload: { ...event.payload, text } });
@@ -125,7 +125,7 @@ export class AutomationEntryService {
         automationId,
         contactId,
         versionId: version.id,
-        triggerKey: event.id,
+        triggerKey: triggerKeyOf(event),
         triggerOrderId: orderIdOf(event),
         currentStepKey: version.graph.firstStepKey,
         enteredAt: now,
@@ -154,7 +154,7 @@ function orderTriggerFor(event: OrderEvent): TriggerKey | undefined {
 function triggerFor(event: TriggerEvent) {
   if (event.type === 'contact.tag_added') return 'tag_added';
   if (event.type === 'contact.birthday') return 'birthday';
-  if (event.type === 'message.intent_classified') return 'message_received';
+  if (event.type === 'message.burst_received') return 'message_received';
   if (isOrderEvent(event)) return orderTriggerFor(event);
   if (event.payload.status === 'granted' && event.payload.source !== 'import')
     return 'consent_given';
@@ -165,7 +165,7 @@ function matchesTrigger(trigger: AutomationGraph['trigger'], event: TriggerEvent
   if (trigger.key !== triggerFor(event)) return false;
   return trigger.filters.every((filter) => {
     if (isOrderEvent(event)) return matchesOrderFilter(filter, event);
-    if (event.type === 'message.intent_classified') return matchesMessageFilter(filter, event);
+    if (event.type === 'message.burst_received') return matchesMessageFilter(filter, event);
     return matchesContactFilter(filter, event);
   });
 }
@@ -195,7 +195,7 @@ function matchesMessageFilter(filter: TriggerFilter, { payload }: MessageTrigger
     case 'channel':
       return filter.channels.includes(payload.channel);
     case 'intent':
-      return filter.intents.includes(payload.intent);
+      return payload.intent !== null && filter.intents.includes(payload.intent);
     case 'keywords':
       return matchesAnyKeyword(payload.text, filter.keywords);
     default:
@@ -220,6 +220,14 @@ function matchesOrderFilter(filter: TriggerFilter, { payload }: OrderTriggerEven
     default:
       return false;
   }
+}
+
+// A retried reply announces the same burst again; its newest message makes the repeat the same
+// entry.
+function triggerKeyOf(event: TriggerEvent) {
+  return event.type === 'message.burst_received'
+    ? (event.payload.messageIds[0] ?? event.id)
+    : event.id;
 }
 
 function orderIdOf(event: TriggerEvent) {

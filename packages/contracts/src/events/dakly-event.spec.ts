@@ -211,7 +211,7 @@ const examples: DaklyEvent[] = [
   },
   { type: 'message.received', storeId, occurredAt, payload: message },
   {
-    type: 'message.intent_classified',
+    type: 'message.burst_received',
     storeId,
     occurredAt,
     payload: {

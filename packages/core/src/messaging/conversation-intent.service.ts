@@ -12,7 +12,7 @@ import { InboxRepository } from './inbox.repository';
 type IntentRead = {
   contactId: string;
   channel: (typeof chatChannels)[number];
-  intent: ChatIntent;
+  intent: ChatIntent | null;
   // The burst's messages, newest first.
   messageIds: string[];
 };
@@ -35,18 +35,19 @@ export class ConversationIntentService {
   }
 
   // The tag and the event commit together, so an automation never starts on an intent the chat
-  // does not show.
+  // does not show. A burst nobody classified still gets its event, with no intent.
   async record(storeId: string, conversationId: string, read: IntentRead) {
     const now = this.clock.now();
     await this.transaction.run(storeId, async () => {
-      await this.repository.update(
-        storeId,
-        conversationId,
-        { intentTag: read.intent },
-        { now, bumpVersion: false },
-      );
+      if (read.intent)
+        await this.repository.update(
+          storeId,
+          conversationId,
+          { intentTag: read.intent },
+          { now, bumpVersion: false },
+        );
       await this.outbox.publish({
-        type: 'message.intent_classified',
+        type: 'message.burst_received',
         storeId,
         occurredAt: now.toISOString(),
         payload: {

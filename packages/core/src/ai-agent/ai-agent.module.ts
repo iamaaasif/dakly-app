@@ -27,6 +27,7 @@ import { RestartReturnOnStaffReply } from './jobs/restart-return-on-staff-reply.
 import { ScheduleAiReplyOnMessage } from './jobs/schedule-ai-reply-on-message.job';
 import { SalesAgentModule } from './sales-agent.module';
 import { SuggestedReplyService } from './suggested-reply.service';
+import { UnreadBurstService } from './unread-burst.service';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { SuggestedReplyService } from './suggested-reply.service';
     RestartReturnOnStaffReply,
     ScheduleAiReplyOnMessage,
     SuggestedReplyService,
+    UnreadBurstService,
   ],
 })
 export class AiAgentModule {}

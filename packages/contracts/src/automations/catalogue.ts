@@ -114,7 +114,7 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
   },
   // Fires once per burst of customer messages, after the chat classifier reads it.
   message_received: {
-    source: { event: 'message.intent_classified' },
+    source: { event: 'message.burst_received' },
     filters: { channel: 'optional', intent: 'optional', keywords: 'optional' },
     needs: 'channels',
     availableBefore: 'orders',

@@ -30,15 +30,16 @@ export const messageReceivedEventSchema = z.strictObject({
   payload: messagePayloadSchema,
 });
 
-// One per customer burst, after the classifier read it. Events carry no message text, so a
-// consumer that needs the words reads the burst's messages by id. The classifier only runs when
-// the AI agent reads the chat.
-export const messageIntentClassifiedEventSchema = z.strictObject({
-  type: z.literal('message.intent_classified'),
+// One per burst of customer messages, whether or not the AI agent reads the chat. Events carry no
+// message text, so a consumer that needs the words reads the burst's messages by id, newest first.
+export const messageBurstReceivedEventSchema = z.strictObject({
+  type: z.literal('message.burst_received'),
   storeId: z.uuid(),
   occurredAt: z.iso.datetime(),
   payload: messagePayloadSchema.omit({ messageId: true }).extend({
-    intent: z.enum(chatIntents),
+    // Null when the classifier did not read the burst: AI replies off, a chat with a person, or
+    // a message the AI stopped on before classifying.
+    intent: z.enum(chatIntents).nullable(),
     messageIds: z.array(z.uuid()).min(1).max(50),
   }),
 });

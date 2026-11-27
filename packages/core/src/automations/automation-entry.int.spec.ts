@@ -242,15 +242,16 @@ describe('AutomationEntryService (Postgres)', () => {
     // A finished run lets the next message start another, so each message is judged alone.
     const receive = async (
       text: string,
-      intent: ChatIntent,
-      channel: 'messenger' | 'instagram',
+      intent: ChatIntent | null,
+      channel: 'messenger' | 'instagram' | 'whatsapp',
+      newestMessageId = randomUUID(),
     ) => {
       spoken = text;
       await entries.startMatchingMessage(storeId, {
         id: randomUUID(),
-        type: 'message.intent_classified',
+        type: 'message.burst_received',
         occurredAt: now.toISOString(),
-        payload: { conversationId, contactId, channel, intent, messageIds: [randomUUID()] },
+        payload: { conversationId, contactId, channel, intent, messageIds: [newestMessageId] },
       });
       await admin.pool.query("update automation_runs set status='done' where store_id=$1", [
         storeId,
@@ -283,6 +284,29 @@ describe('AutomationEntryService (Postgres)', () => {
       await receive('size ১২ আছে?', 'size_or_stock', 'messenger');
       expect(await runCount(id)).toBe(0);
       await receive('size ১২ আছে?', 'size_or_stock', 'instagram');
+      expect(await runCount(id)).toBe(1);
+    });
+
+    it('matches keywords and channel on a burst nobody classified, but never an intent', async () => {
+      const byIntent = await messageGraph([{ field: 'intent', intents: ['price'] }]);
+      const byWords = await messageGraph([
+        { field: 'channel', channels: ['whatsapp'] },
+        { field: 'keywords', keywords: ['দাম', 'dam'] },
+      ]);
+      now = new Date(firstDay.getTime() + 63 * DAY_MS);
+      await receive('dam koto', null, 'whatsapp');
+      await receive('এটার দামটা কত', null, 'whatsapp');
+      await receive('dam koto', null, 'messenger');
+      expect(await runCount(byIntent)).toBe(0);
+      expect(await runCount(byWords)).toBe(2);
+    });
+
+    it('starts one run when a retried reply announces the same burst again', async () => {
+      const id = await messageGraph([]);
+      now = new Date(firstDay.getTime() + 64 * DAY_MS);
+      const newest = randomUUID();
+      await receive('hi', null, 'messenger', newest);
+      await receive('hi', 'greeting', 'messenger', newest);
       expect(await runCount(id)).toBe(1);
     });
 
