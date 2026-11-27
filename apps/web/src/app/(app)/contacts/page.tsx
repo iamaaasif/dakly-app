@@ -1,10 +1,14 @@
-import { PageHeader } from '@dakly/ui/page-header';
+import Link from 'next/link';
 
-import { AddContactsFlow } from '@/features/customers/components/add-contacts-flow';
+import { ContactsScreen } from '@/features/customers/components/contacts-screen';
+import { parseContactsAddress } from '@/features/customers/contacts-query';
 import { requireSession } from '@/lib/require-session';
 
-// DSN-21 builds the list on this page; until then it holds the Add and Import flows.
-export default async function ContactsPage() {
+export default async function ContactsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const session = await requireSession();
   if (!session.currentStore?.canViewCustomers)
     return (
@@ -12,9 +16,12 @@ export default async function ContactsPage() {
         You do not have Customers access in this shop.
       </p>
     );
-  return (
-    <main className="mx-auto max-w-7xl p-4 md:p-8">
-      <PageHeader title="All contacts" actions={<AddContactsFlow />} />
-    </main>
-  );
+  const state = parseContactsAddress(await searchParams);
+  if (!state)
+    return (
+      <p role="alert" className="p-6">
+        This contacts page address is invalid. <Link href="/contacts">Open all contacts</Link>.
+      </p>
+    );
+  return <ContactsScreen {...state} />;
 }

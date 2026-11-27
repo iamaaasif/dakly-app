@@ -117,6 +117,7 @@ function CustomerResults({ customers, query, columns }: CustomerResultsProps) {
         shown={items.length}
         total={total}
         selected={selected}
+        noun="customers"
         firstHref={query.cursor ? customersHref(query, columns) : undefined}
         nextHref={nextCursor ? customersHref(query, columns, { cursor: nextCursor }) : undefined}
       />
