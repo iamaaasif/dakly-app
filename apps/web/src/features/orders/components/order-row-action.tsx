@@ -7,10 +7,8 @@ import {
   canMarkOrderDelivered,
   isFinishedOrder,
 } from '../order-actions';
+import { rowActionClass } from './order-row-styles';
 import { UrlLink } from '@/components/url-link';
-
-const actionStyle =
-  'inline-flex min-h-11 w-fit items-center justify-center rounded-md bg-inverse px-3.5 text-sm font-medium text-on-primary hover:bg-inverse/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:h-9 md:min-h-9';
 
 type OrderRowActionProps = { order: OrderListItem; href: string; canEdit: boolean };
 
@@ -18,14 +16,14 @@ export function OrderRowAction({ order, href, canEdit }: OrderRowActionProps) {
   const stage = useOrderStage();
   if (canMarkOrderDelivered(order, canEdit)) {
     return (
-      <div className="col-start-2 md:col-start-auto">
+      <div>
         <button
           type="button"
           data-order-row-action={order.id}
           disabled={stage.isPending}
           aria-label={`Mark order #${order.number} delivered`}
           onClick={() => stage.mutate({ id: order.id, body: { to: 'delivered' } })}
-          className={`${actionStyle} disabled:opacity-60`}
+          className={`${rowActionClass} disabled:opacity-60`}
         >
           {stage.isPending ? 'Saving' : 'Mark delivered'}
         </button>
@@ -44,7 +42,7 @@ export function OrderRowAction({ order, href, canEdit }: OrderRowActionProps) {
       href={href}
       data-order-row-action={order.id}
       aria-label={accessibleName}
-      className={`col-start-2 md:col-start-auto ${actionStyle}`}
+      className={rowActionClass}
     >
       {text}
     </UrlLink>
