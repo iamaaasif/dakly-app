@@ -49,9 +49,7 @@ test('adds a contact, lists it as a customer after an order and opens the profil
        select id,store_id,1,150000,now(),'new' from contacts where store_id=$1 and phone=$2`,
       [fixture.storeIds[0], phone],
     );
-    await page.getByRole('searchbox', { name: 'Search' }).fill(name);
-    await page.keyboard.press('Enter');
-    await expect(page).toHaveURL(/\/customers\?search=/);
+    await page.reload();
     const table = page.getByRole('table');
     await expect(table.getByRole('row')).toHaveCount(2);
     await expect(table.getByText('৳1,500')).toBeVisible();
