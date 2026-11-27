@@ -106,7 +106,7 @@ export const orderTabs = [
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 export type OrderParcelHistory = { parcels: number; returned: number };
 
-export const orderListQuerySchema = z
+export const orderFiltersSchema = z
   .strictObject({
     stage: z.enum(orderStages).optional(),
     source: z.enum(orderSources).optional(),
@@ -117,17 +117,17 @@ export const orderListQuerySchema = z
     search: searchText.max(120).optional(),
     // One customer's orders, for the chat's customer panel.
     buyerContactId: z.uuid().optional(),
-    cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
-    limit: z.coerce.number<string>().int().min(1).max(100).default(50),
   })
   .refine(
     ({ createdFrom, createdThrough }) =>
       !createdFrom || !createdThrough || createdFrom <= createdThrough,
-    {
-      path: ['createdThrough'],
-      message: 'End date must be on or after the start date',
-    },
+    { path: ['createdThrough'], message: 'End date must be on or after the start date' },
   );
+
+export const orderListQuerySchema = orderFiltersSchema.safeExtend({
+  cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
+  limit: z.coerce.number<string>().int().min(1).max(100).default(50),
+});
 
 export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
 export const orderScreenQuerySchema = orderListQuerySchema.safeExtend({

@@ -95,32 +95,32 @@ export type StageWrite = Partial<
   >
 >;
 
-type OrderFilters = Omit<OrderListQuery, 'stage'> & {
+export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
   stages?: OrderStage[];
   timeZone: string | null;
+  phone?: string;
+  overdueBefore: Date;
 };
+
+type OrderPage = Pick<OrderListQuery, 'cursor' | 'limit'>;
 
 @Injectable()
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(storeId: string, query: OrderFilters, overdueBefore: Date, phone?: string) {
+  list(storeId: string, filter: OrderMatch, { cursor, limit }: OrderPage) {
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ ...summaryColumns, itemPreview })
         .from(orders)
         .where(
           and(
-            eq(orders.storeId, storeId),
-            query.stages ? inArray(orders.stage, query.stages) : undefined,
-            query.cursor ? lt(orders.number, query.cursor) : undefined,
-            orderSearch(query.search, phone),
-            orderFilters(query),
-            query.alert ? orderAlertFilter(tx, storeId, query.alert, overdueBefore) : undefined,
+            orderMatchingConditions(tx, storeId, filter),
+            cursor ? lt(orders.number, cursor) : undefined,
           ),
         )
         .orderBy(desc(orders.number))
-        .limit(query.limit + 1),
+        .limit(limit + 1),
     );
   }
 
@@ -362,6 +362,16 @@ const itemPreview = sql<string | null>`(
   ) lines
 )`;
 
+export function orderMatchingConditions(tx: Transaction, storeId: string, filter: OrderMatch) {
+  return and(
+    eq(orders.storeId, storeId),
+    filter.stages ? inArray(orders.stage, filter.stages) : undefined,
+    orderSearch(filter.search, filter.phone),
+    orderFilters(filter),
+    filter.alert ? orderAlertFilter(tx, storeId, filter.alert, filter.overdueBefore) : undefined,
+  );
+}
+
 const parcelOutcome = sql`${orders.stage} in ('delivered', 'partially_delivered', 'returned')`;
 
 function orderFilters({
@@ -371,7 +381,7 @@ function orderFilters({
   createdFrom,
   createdThrough,
   timeZone,
-}: OrderFilters) {
+}: OrderMatch) {
   return and(
     buyerContactId ? eq(orders.buyerContactId, buyerContactId) : undefined,
     source ? eq(orders.source, source) : undefined,

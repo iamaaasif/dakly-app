@@ -26,6 +26,11 @@ const ORDER_ERRORS = {
   },
   ORDER_NOT_PAYABLE: { status: 409, message: 'This order cannot take a payment link' },
   ORDER_COD_NOT_COLLECTABLE: { status: 409, message: 'COD cannot be recorded for this order' },
+  ORDER_EXPORT_NOT_ALLOWED: { status: 403, message: 'You cannot download order lists' },
+  ORDER_EXPORT_TOO_LARGE: {
+    status: 400,
+    message: 'Too many order lines to download at once. Narrow the filters',
+  },
   ORDER_NOT_FOUND: { status: 404, message: 'Order not found' },
   ORDER_CONFIRMATION_RATE_LIMITED: {
     status: 429,
