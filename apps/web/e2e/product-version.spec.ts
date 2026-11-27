@@ -39,11 +39,11 @@ test('keeps a stale edit and reloads the latest saved product', async ({
     await page.setViewportSize({ width: 360, height: 800 });
     await page.goto(`/products/${id}`);
     const product = (await (await loaded).json()) as ProductResponse;
-    const name = page.getByLabel('Product name', { exact: true });
+    const name = page.getByLabel('Title', { exact: true });
     const description = page.getByLabel('Description', { exact: true });
     await name.fill('My unsaved scarf');
     await description.fill('My unsaved description');
-    const price = page.getByLabel('Regular price ৳', { exact: true });
+    const price = page.getByLabel('Regular price', { exact: true });
     await price.fill('475');
     const changed = await context.request.patch(path, {
       headers,

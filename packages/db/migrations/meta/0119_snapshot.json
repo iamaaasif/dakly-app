@@ -1,5 +1,5 @@
 {
-  "id": "a234c6c2-3698-4e82-84b8-e1baa8591722",
+  "id": "5fb86e4d-4a0e-43ef-b3cf-577e9f0ba579",
   "prevId": "25186499-eb35-4ee9-8d58-6a4d72d332be",
   "version": "7",
   "dialect": "postgresql",
@@ -3618,7 +3618,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'rewrite_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan', 'order_fill')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'rewrite_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -5715,7 +5715,7 @@
         },
         "automation_runs_exit_reason": {
           "name": "automation_runs_exit_reason",
-          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable', 'order_not_awaiting_confirmation')"
+          "value": "\"automation_runs\".\"exit_reason\" in ('version_stopped', 'archived', 'goal', 'exit_condition', 'workflow_filter', 'not_reachable', 'order_not_awaiting_confirmation', 'staff_replied')"
         },
         "automation_runs_waiting_has_wake": {
           "name": "automation_runs_waiting_has_wake",
