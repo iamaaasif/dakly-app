@@ -216,7 +216,7 @@ describe('ContactListRepository (Postgres)', () => {
       'Rakib',
     ]);
     expect(await names({ lastPurchase: 'over_90_days' })).toEqual(['Ayesha']);
-    expect(await names({ lastPurchase: 'never' })).toEqual(['Lead Lina']);
+    expect(await names({ lastPurchase: 'never', sort: 'name' })).toEqual(['Ishrat', 'Lead Lina']);
   });
 
   it('finds a text in the name, the email or the area when asked to', async () => {

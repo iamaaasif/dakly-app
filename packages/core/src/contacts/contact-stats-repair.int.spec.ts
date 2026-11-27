@@ -64,6 +64,14 @@ describe('Nightly contact stats repair', () => {
     return rows.map(({ id }) => String(id)).sort();
   }
 
+  async function importedContactIds(storeId: string) {
+    const { rows } = await fixture.connection.pool.query(
+      'select id from contacts where store_id=$1 order by id',
+      [storeId],
+    );
+    return rows.map(({ id }) => String(id));
+  }
+
   async function stored(contactId: string) {
     const { rows } = await fixture.connection.pool.query(
       'select lifecycle_stage, net_spend_poisha from contact_stats where contact_id=$1',
@@ -89,7 +97,8 @@ describe('Nightly contact stats repair', () => {
     );
     await totalsPage(fixture.a);
     expect(await stored(removedId)).toMatchObject({ lifecycle_stage: 'best' });
-    expect(await stored(ids[99]!)).toMatchObject({ lifecycle_stage: 'bought_once' });
+    // Imported contacts with no orders are contacts, not customers, so they have no stage.
+    expect(await stored(ids[99]!)).toMatchObject({ lifecycle_stage: 'none' });
     const next = await queue.getJob(
       `${RECONCILE_CONTACT_STATS}-${fixture.a}-${day}-totals-${ids[99]}`,
     );
@@ -116,6 +125,19 @@ describe('Nightly contact stats repair', () => {
          ($1,$2,1001,$3,'manual','user','delivered','রিনা','01710000005','Mirpur','Dhaka',2500000,2500000,'paid','2026-11-11T06:00:00Z'),
          ($4,$2,1002,$5,'manual','user','delivered','নাবিলা','01710000006','Mirpur','Dhaka',2400000,2400000,'paid','2026-11-11T06:00:00Z')`,
       [firstOrder, fixture.b, firstId, randomUUID(), secondId],
+    );
+    // The top tenth is ranked among customers, so the other eighteen each place a small order.
+    await fixture.connection.pool.query(
+      `insert into orders(id,store_id,number,buyer_contact_id,source,created_by_type,stage,
+         recipient_name,recipient_phone,recipient_address,recipient_district,
+         items_subtotal_poisha,cod_amount_poisha,payment_status,created_at)
+       select gen_random_uuid(),$1,1002+n,id,'manual','user','delivered','রিনা','01710000005','Mirpur','Dhaka',
+         100000,100000,'paid','2026-11-11T06:00:00Z'
+       from unnest($2::uuid[]) with ordinality as t(id,n)`,
+      [
+        fixture.b,
+        (await importedContactIds(fixture.b)).filter((id) => id !== firstId && id !== secondId),
+      ],
     );
     await fixture.connection.pool.query(
       "update stores set time_zone='Atlantic/Azores' where id=$1",
