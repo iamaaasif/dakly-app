@@ -1,10 +1,11 @@
 'use client';
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import { consentChannels, type ContactListItemResponse } from '@dakly/contracts/contacts';
 import { formatMoney } from '@dakly/contracts/money';
 import { Badge } from '@dakly/ui/badge';
+import { Checkbox } from '@dakly/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@dakly/ui/table';
 
 import {
@@ -25,6 +26,7 @@ const trailingColumns = ['source', 'tags', 'consent'] as const;
 type CustomerListProps = {
   customers: ContactListItemResponse[];
   columns: CustomerColumn[];
+  onSelectionChange: (count: number) => void;
   // The Contacts page lists people who may never have ordered, so it leaves the order columns out.
   withOrders?: boolean;
 };
@@ -45,31 +47,71 @@ function shownColumns(columns: CustomerColumn[], list: readonly CustomerColumn[]
   return list.filter((column) => columns.includes(column));
 }
 
-function CustomerTable({ customers, columns, withOrders = true }: CustomerListProps) {
+function selectAllState(customers: ContactListItemResponse[], selected: ReadonlySet<string>) {
+  if (customers.every((customer) => selected.has(customer.id))) return true;
+  return selected.size ? 'indeterminate' : false;
+}
+
+function ColumnHeads({
+  columns,
+  list,
+}: {
+  columns: CustomerColumn[];
+  list: readonly CustomerColumn[];
+}) {
+  return shownColumns(columns, list).map((column) => (
+    <TableHead key={column} className={headClass}>
+      {customerColumnLabels[column]}
+    </TableHead>
+  ));
+}
+
+function OrderHeads() {
+  return (
+    <>
+      <TableHead className={`${headClass} text-right`}>Orders</TableHead>
+      <TableHead className={`${headClass} text-right`}>Spent</TableHead>
+      <TableHead className={headClass}>Last purchase</TableHead>
+    </>
+  );
+}
+
+function CustomerTable({
+  customers,
+  columns,
+  onSelectionChange,
+  withOrders = true,
+}: CustomerListProps) {
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const choose = (next: Set<string>) => {
+    setSelected(next);
+    onSelectionChange(next.size);
+  };
+  const toggle = (id: string, on: boolean) => {
+    const next = new Set(selected);
+    if (on) next.add(id);
+    else next.delete(id);
+    choose(next);
+  };
   return (
     <div className="hidden md:block">
       <Table bare>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
+            <TableHead className="w-10 pl-4">
+              <Checkbox
+                aria-label="Select all customers on this page"
+                checked={selectAllState(customers, selected)}
+                onCheckedChange={(on) =>
+                  choose(on === true ? new Set(customers.map((each) => each.id)) : new Set())
+                }
+              />
+            </TableHead>
             <TableHead className={headClass}>Customer</TableHead>
-            {shownColumns(columns, leadingColumns).map((column) => (
-              <TableHead key={column} className={headClass}>
-                {customerColumnLabels[column]}
-              </TableHead>
-            ))}
+            <ColumnHeads columns={columns} list={leadingColumns} />
             <TableHead className={headClass}>Type</TableHead>
-            {withOrders ? (
-              <>
-                <TableHead className={`${headClass} text-right`}>Orders</TableHead>
-                <TableHead className={`${headClass} text-right`}>Spent</TableHead>
-                <TableHead className={headClass}>Last purchase</TableHead>
-              </>
-            ) : null}
-            {shownColumns(columns, trailingColumns).map((column) => (
-              <TableHead key={column} className={headClass}>
-                {customerColumnLabels[column]}
-              </TableHead>
-            ))}
+            {withOrders ? <OrderHeads /> : null}
+            <ColumnHeads columns={columns} list={trailingColumns} />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -79,6 +121,8 @@ function CustomerTable({ customers, columns, withOrders = true }: CustomerListPr
               customer={customer}
               columns={columns}
               withOrders={withOrders}
+              selected={selected.has(customer.id)}
+              onToggle={(on) => toggle(customer.id, on)}
             />
           ))}
         </TableBody>
@@ -87,17 +131,30 @@ function CustomerTable({ customers, columns, withOrders = true }: CustomerListPr
   );
 }
 
+type CustomerTableRowProps = {
+  customer: ContactListItemResponse;
+  columns: CustomerColumn[];
+  selected: boolean;
+  withOrders: boolean;
+  onToggle: (on: boolean) => void;
+};
+
 function CustomerTableRow({
   customer,
   columns,
+  selected,
   withOrders,
-}: {
-  customer: ContactListItemResponse;
-  columns: CustomerColumn[];
-  withOrders: boolean;
-}) {
+  onToggle,
+}: CustomerTableRowProps) {
   return (
-    <TableRow>
+    <TableRow data-state={selected ? 'selected' : undefined}>
+      <TableCell className="pl-4">
+        <Checkbox
+          aria-label={`Select ${customer.name ?? 'No name'}`}
+          checked={selected}
+          onCheckedChange={(on) => onToggle(on === true)}
+        />
+      </TableCell>
       <TableCell>
         <div className="flex items-center gap-3">
           <Avatar name={customer.name} />
@@ -132,7 +189,11 @@ function CustomerTableRow({
   );
 }
 
-function CustomerMobileList({ customers, columns, withOrders = true }: CustomerListProps) {
+function CustomerMobileList({
+  customers,
+  columns,
+  withOrders = true,
+}: Omit<CustomerListProps, 'onSelectionChange'>) {
   return (
     <ul className="divide-y divide-border md:hidden">
       {customers.map((customer) => (

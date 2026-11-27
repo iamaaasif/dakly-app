@@ -92,7 +92,7 @@ function countsLine(counts: ContactCountsResponse) {
   return `${formatCount(counts.all)} contacts · ${formatCount(counts.boughtMoreThanOnce)} bought more than once · ${formatCount(counts.canReceiveMarketing)} can receive marketing messages`;
 }
 
-type ContactsTableProps = ContactResultsProps & {
+type ContactsTableProps = Omit<ContactResultsProps, 'selected' | 'onSelectionChange'> & {
   counts: ContactCountsResponse | undefined;
   hrefFor: ListHref;
   onImport: () => void;
@@ -106,6 +106,7 @@ function ContactsTable({
   hrefFor,
   onImport,
 }: ContactsTableProps) {
+  const [selected, setSelected] = useState(0);
   const searchError =
     contacts.error instanceof ApiError && contacts.error.code === 'CONTACT_SEARCH_TOO_SHORT'
       ? contacts.error.message
@@ -124,18 +125,34 @@ function ContactsTable({
         searchError={searchError}
         onImport={onImport}
       />
-      {searchError ? null : <ContactResults contacts={contacts} query={query} columns={columns} />}
+      {searchError ? null : (
+        <ContactResults
+          contacts={contacts}
+          query={query}
+          columns={columns}
+          selected={selected}
+          onSelectionChange={setSelected}
+        />
+      )}
     </>
   );
 }
 
 type ContactResultsProps = {
+  selected: number;
+  onSelectionChange: (count: number) => void;
   contacts: ReturnType<typeof useCustomers>;
   query: ContactsScreenState['query'];
   columns: ContactsScreenState['columns'];
 };
 
-function ContactResults({ contacts, query, columns }: ContactResultsProps) {
+function ContactResults({
+  contacts,
+  query,
+  columns,
+  selected,
+  onSelectionChange,
+}: ContactResultsProps) {
   if (contacts.error)
     return (
       <div className="p-4">
@@ -166,10 +183,16 @@ function ContactResults({ contacts, query, columns }: ContactResultsProps) {
     );
   return (
     <Refreshing active={contacts.isPlaceholderData}>
-      <CustomerList customers={items} columns={columns} withOrders={false} />
+      <CustomerList
+        customers={items}
+        columns={columns}
+        withOrders={false}
+        onSelectionChange={onSelectionChange}
+      />
       <CustomerFooter
         shown={items.length}
         total={total}
+        selected={selected}
         noun="contacts"
         firstHref={query.cursor ? contactsHref(query, columns) : undefined}
         nextHref={nextCursor ? contactsHref(query, columns, { cursor: nextCursor }) : undefined}

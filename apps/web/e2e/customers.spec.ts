@@ -46,8 +46,8 @@ test('adds a contact, lists it as a customer after an order and opens the profil
     await expect(page.getByText('No customers match')).toBeVisible();
     await database.pool.query(
       `insert into contact_stats(contact_id,store_id,orders_count,net_spend_poisha,last_order_at,lifecycle_stage)
-       select id,store_id,1,150000,now(),'new' from contacts where store_id=$1 and phone=$2`,
-      [fixture.storeIds[0], phone],
+       select id,store_id,1,150000,now(),'new' from contacts where store_id=$1 and name=$2`,
+      [fixture.storeIds[0], name],
     );
     await page.reload();
     const table = page.getByRole('table');
@@ -60,9 +60,9 @@ test('adds a contact, lists it as a customer after an order and opens the profil
     await expect(page.getByText('No chat channels yet.', { exact: false })).toBeVisible();
   } finally {
     // The shell test counts every contact in these stores, so this one leaves no row behind.
-    await database.pool.query('delete from contacts where store_id=$1 and phone=$2', [
+    await database.pool.query('delete from contacts where store_id=$1 and name=$2', [
       fixture.storeIds[0],
-      phone,
+      name,
     ]);
     await database.pool.end();
   }
