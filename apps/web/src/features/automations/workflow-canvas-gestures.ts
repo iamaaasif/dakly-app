@@ -49,10 +49,11 @@ function spread(points: Point[]) {
   return first && second ? Math.hypot(first.x - second.x, first.y - second.y) : 0;
 }
 
-// A mouse drag that starts on a step is not a pan; a finger always is, since steps fill a phone.
-function startsPan(event: PointerEvent, onNode: boolean) {
-  if (event.pointerType !== 'mouse') return true;
-  return !onNode && (event.button === 0 || event.button === 1);
+// Only the left and middle buttons pan, and never from a text field. A press on a step still
+// counts as a click until it moves, so a short press opens the step and a long drag pans.
+function startsPan(event: PointerEvent) {
+  if ((event.target as Element).closest(editableTarget)) return false;
+  return event.pointerType !== 'mouse' || event.button === 0 || event.button === 1;
 }
 
 function isStillAClick(start: Point[], now: Point[]) {
@@ -95,7 +96,7 @@ function trackPointers(region: HTMLElement, engine: CameraEngine) {
 
   function onDown(event: PointerEvent) {
     const onNode = (event.target as Element).closest(interactiveTarget) !== null;
-    if (pointers.size === 0 && !startsPan(event, onNode)) return;
+    if (pointers.size === 0 && !startsPan(event)) return;
     if (pointers.size === 0) {
       moved = false;
       if (!onNode) region.focus({ preventScroll: true });
@@ -228,8 +229,13 @@ function trackKeyboard({ region, engine, getFlow, onSpace }: Gestures) {
   const isActive = (target: Element) =>
     (hovering || region.contains(target) || target.closest('[data-canvas-controls]')) &&
     !target.closest(`${editableTarget}, [role="dialog"], [role="menu"]`);
-  // Space on a focused step presses it, so it only pans when focus is somewhere else.
-  const pressesStep = (target: Element) => region.contains(target) && target.closest('button, a');
+  // Space on a step reached by keyboard presses it. With the pointer over the canvas it pans, even
+  // when a click or a closed panel left focus on a step.
+  const pressesStep = (target: Element) =>
+    !hovering &&
+    region.contains(target) &&
+    target.matches(':focus-visible') &&
+    target.closest('button, a');
   function onKeyDown(event: KeyboardEvent) {
     const target = event.target as Element;
     if (!isActive(target)) return;

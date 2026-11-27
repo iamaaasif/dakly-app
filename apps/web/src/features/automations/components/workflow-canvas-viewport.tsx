@@ -62,10 +62,12 @@ function useCanvasCamera(layout: CanvasLayout, storageKey: string) {
       onRest: (rested) => saveCamera(storageKey, rested),
     });
     engine.current = camera;
-    camera.set(readSavedCamera(storageKey) ?? openingCamera(camera.view(), flow.current));
-    // Until the user moves, a resize or rotation re-opens the view at the new size.
+    const saved = readSavedCamera(storageKey);
+    camera.set(saved ?? openingCamera(camera.view(), flow.current));
+    // Until the user moves, a resize or rotation re-opens the view at the new size. A restored
+    // view is the user's own, and the observer's first call would otherwise reset it.
     const observer = new ResizeObserver(() => {
-      if (!camera.isTouched()) camera.set(openingCamera(camera.view(), flow.current));
+      if (!saved && !camera.isTouched()) camera.set(openingCamera(camera.view(), flow.current));
     });
     observer.observe(regionNode);
     const detach = attachCanvasGestures({

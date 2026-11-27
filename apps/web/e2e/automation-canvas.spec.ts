@@ -421,3 +421,57 @@ test('pans, zooms and fits the canvas like a design tool', async ({ page, contex
     await db.pool.end();
   }
 });
+
+test('keeps the view after a reload and pans from a step', async ({ page, context, baseURL }) => {
+  const { headers } = await signIn(context, baseURL!);
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const created = await context.request.post('/api/automations', {
+    headers,
+    data: { name: 'Pan from a step', templateKey: 'welcome_new_subscriber' },
+  });
+  const { id } = (await created.json()) as { id: string };
+  try {
+    await page.goto(`/automations/${id}/canvas`);
+    const trigger = page.getByRole('list', { name: 'Workflow steps' }).getByText('Trigger', {
+      exact: true,
+    });
+    const step = page.getByRole('button', { name: 'Edit step 1' });
+    await expect(trigger).toBeVisible();
+
+    // A long drag that starts on a step pans and does not open the step.
+    const start = (await trigger.boundingBox())!;
+    const box = (await step.boundingBox())!;
+    await page.mouse.move(box.x + 20, box.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 120, box.y + 10, { steps: 6 });
+    await page.mouse.up();
+    expect(Math.abs((await trigger.boundingBox())!.x - start.x - 100)).toBeLessThan(2);
+    await expect(page).not.toHaveURL(/step=/);
+
+    // Space + drag pans even while a step has focus, as it does after a panel closes.
+    await step.click();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await step.focus();
+    const before = (await trigger.boundingBox())!;
+    const point = (await step.boundingBox())!;
+    await page.mouse.move(point.x + 20, point.y + 10);
+    await page.keyboard.down('Space');
+    await page.mouse.down();
+    await page.mouse.move(point.x + 20, point.y + 70, { steps: 4 });
+    await page.mouse.up();
+    await page.keyboard.up('Space');
+    expect(Math.abs((await trigger.boundingBox())!.y - before.y - 60)).toBeLessThan(2);
+
+    // The moved view comes back after a reload.
+    await page.waitForTimeout(400);
+    const moved = (await trigger.boundingBox())!;
+    await page.reload();
+    await expect(trigger).toBeVisible();
+    const restored = (await trigger.boundingBox())!;
+    expect(Math.abs(restored.x - moved.x)).toBeLessThan(2);
+    expect(Math.abs(restored.y - moved.y)).toBeLessThan(2);
+  } finally {
+    await db.pool.query('delete from automations where id=$1', [id]);
+    await db.pool.end();
+  }
+});
