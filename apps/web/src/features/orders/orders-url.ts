@@ -48,9 +48,9 @@ export function orderTabQuery(
   tab: OrderTab,
   query: OrderListQuery,
 ): OrderListQuery & { tab?: 'inquiries' } {
-  const { search, courier, createdFrom, createdThrough, limit } = query;
+  const { search, courier, createdFrom, createdThrough, limit, sort } = query;
   if (tab === 'inquiries') return { search, limit, tab };
-  const kept = { search, limit, source: query.source, courier, createdFrom, createdThrough };
+  const kept = { search, limit, sort, source: query.source, courier, createdFrom, createdThrough };
   if (tab === 'pending') return { ...kept, paymentStatus: 'advance_requested' };
   return { ...kept, stage: tab };
 }

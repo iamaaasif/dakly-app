@@ -1,12 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 import {
   and,
+  asc,
   count,
   desc,
   eq,
   type SQL,
   gte,
   ilike,
+  gt,
   inArray,
   lt,
   ne,
@@ -98,7 +100,7 @@ export type StageWrite = Partial<
   >
 >;
 
-export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
+export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit' | 'sort'> & {
   stages?: OrderStage[];
   // To confirm leaves out orders waiting for an advance; they show in Pending.
   withoutAdvanceRequest?: boolean;
@@ -107,24 +109,21 @@ export type OrderMatch = Omit<OrderListQuery, 'stage' | 'cursor' | 'limit'> & {
   overdueBefore: Date;
 };
 
-type OrderPage = Pick<OrderListQuery, 'cursor' | 'limit'>;
+type OrderPage = Pick<OrderListQuery, 'cursor' | 'limit' | 'sort'>;
 
 @Injectable()
 export class OrdersRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  list(storeId: string, filter: OrderMatch, { cursor, limit }: OrderPage) {
+  list(storeId: string, filter: OrderMatch, { cursor, limit, sort }: OrderPage) {
+    const oldest = sort === 'oldest';
+    const afterCursor = oldest ? gt(orders.number, cursor ?? 0) : lt(orders.number, cursor ?? 0);
     return this.database.forStore(storeId, (tx) =>
       tx
         .select({ ...summaryColumns, itemPreview })
         .from(orders)
-        .where(
-          and(
-            orderMatchingConditions(tx, storeId, filter),
-            cursor ? lt(orders.number, cursor) : undefined,
-          ),
-        )
-        .orderBy(desc(orders.number))
+        .where(and(orderMatchingConditions(tx, storeId, filter), cursor ? afterCursor : undefined))
+        .orderBy(oldest ? asc(orders.number) : desc(orders.number))
         .limit(limit + 1),
     );
   }
