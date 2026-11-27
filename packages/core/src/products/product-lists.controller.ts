@@ -21,6 +21,7 @@ import {
   type ProductBrandListResponse,
   type ProductBrandResponse,
   type ProductCategoryListResponse,
+  type ProductCollectionListResponse,
   type ProductTagListResponse,
   type ProductCategoryResponse,
 } from '@dakly/contracts/product-lists';
@@ -30,6 +31,7 @@ import { CurrentStore } from '../platform/tenancy/current-store.decorator';
 import { ZodValidationPipe } from '../platform/validation/zod-validation.pipe';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesService } from './product-categories.service';
+import { ProductCollectionsService } from './product-collections.service';
 import { ProductTagsService } from './product-tags.service';
 
 @Controller('products')
@@ -38,6 +40,7 @@ export class ProductListsController {
     @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
     @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
     @Inject(ProductTagsService) private readonly tags: ProductTagsService,
+    @Inject(ProductCollectionsService) private readonly collections: ProductCollectionsService,
   ) {}
 
   @Get('categories')
@@ -114,5 +117,11 @@ export class ProductListsController {
   @RequirePermission('products.view')
   listTags(@CurrentStore() storeId: string): Promise<ProductTagListResponse> {
     return this.tags.list(storeId);
+  }
+
+  @Get('collections')
+  @RequirePermission('products.view')
+  listCollections(@CurrentStore() storeId: string): Promise<ProductCollectionListResponse> {
+    return this.collections.list(storeId);
   }
 }

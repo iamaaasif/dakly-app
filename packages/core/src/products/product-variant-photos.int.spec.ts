@@ -84,7 +84,7 @@ describe('variant photos with Postgres', () => {
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    { save: async () => undefined } as never,
     { attach: async () => undefined } as never,
   );
   const photos = () =>

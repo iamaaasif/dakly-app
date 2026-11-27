@@ -39,6 +39,7 @@ export class ProductDuplicateService {
         shortDescription: source.shortDescription,
         barcode: null,
         tags: source.tags,
+        collections: source.collections,
         stockStatus: source.stockStatus,
         pricePoisha: source.pricePoisha,
         compareAtPricePoisha: source.compareAtPricePoisha,

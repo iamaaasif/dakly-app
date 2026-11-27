@@ -56,6 +56,7 @@ const product: ProductListItem = {
   shortDescription: null,
   barcode: null,
   tags: [],
+  collections: [],
   isVisibleInChats: true,
   isVisibleInOrderLink: true,
   status: 'active',

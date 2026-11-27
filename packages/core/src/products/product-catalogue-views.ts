@@ -91,6 +91,7 @@ export function productResponse(
 ): ProductResponse {
   const variants = rows.map(({ productId: _productId, ...variant }) => ({
     ...variant,
+    imageFileId: variant.imageFileIds[0] ?? null,
     photos: variant.photos.map((photo) => ({
       id: photo.id,
       url: storage.createDownloadUrl(photo.objectKey, 15 * 60),
