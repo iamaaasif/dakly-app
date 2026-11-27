@@ -1,5 +1,5 @@
 {
-  "id": "887d870c-8d30-4e6c-b0c1-db81f4ea3460",
+  "id": "25186499-eb35-4ee9-8d58-6a4d72d332be",
   "prevId": "8c384830-c5f6-421c-b3da-97651bfad6d4",
   "version": "7",
   "dialect": "postgresql",
@@ -3618,7 +3618,7 @@
       "checkConstraints": {
         "ai_runs_purpose": {
           "name": "ai_runs_purpose",
-          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'rewrite_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan', 'order_fill')"
+          "value": "\"ai_runs\".\"purpose\" in ('chat_reply', 'suggest_reply', 'rewrite_reply', 'classify', 'comment_reply', 'summary', 'transcribe', 'describe_image', 'content', 'ask', 'segment_rules', 'voice_add', 'teach', 'embedding', 'contact_memory', 'grade_test', 'tag_product_photo', 'suggest_product_options', 'khata_scan')"
         },
         "ai_runs_tier": {
           "name": "ai_runs_tier",
@@ -11927,6 +11927,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "author_external_id": {
+          "name": "author_external_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "author_name": {
           "name": "author_name",
           "type": "text",
@@ -11942,6 +11948,12 @@
         "classification": {
           "name": "classification",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "automation_claimed_at": {
+          "name": "automation_claimed_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

@@ -17,6 +17,7 @@ export type NewComment = Pick<
   | 'externalCommentId'
   | 'parentExternalCommentId'
   | 'contactId'
+  | 'authorExternalId'
   | 'authorName'
   | 'body'
   | 'commentedAt'
@@ -31,6 +32,8 @@ const fields = {
   externalCommentId: socialComments.externalCommentId,
   parentExternalCommentId: socialComments.parentExternalCommentId,
   contactId: socialComments.contactId,
+  authorExternalId: socialComments.authorExternalId,
+  automationClaimedAt: socialComments.automationClaimedAt,
   postCaption: sql<string | null>`coalesce(${postTargets.captionOverride}, ${posts.caption})`,
   authorName: socialComments.authorName,
   body: socialComments.body,
@@ -111,7 +114,12 @@ export class CommentsRepository {
     return row;
   }
 
-  async claimPrivateReply(storeId: string, id: string, now: Date): Promise<boolean> {
+  async claimPrivateReply(
+    storeId: string,
+    id: string,
+    now: Date,
+    onlyUnanswered: boolean,
+  ): Promise<boolean> {
     const claimed = await this.database.forStore(storeId, (tx) =>
       tx
         .update(socialComments)
@@ -121,6 +129,9 @@ export class CommentsRepository {
             eq(socialComments.storeId, storeId),
             eq(socialComments.id, id),
             isNull(socialComments.privateRepliedAt),
+            onlyUnanswered
+              ? and(eq(socialComments.status, 'new'), isNull(socialComments.publicReplyExternalId))
+              : undefined,
           ),
         )
         .returning({ id: socialComments.id }),
@@ -129,7 +140,12 @@ export class CommentsRepository {
   }
 
   // A placeholder id holds the single public reply while Meta answers; markReplied swaps in the real one.
-  async claimPublicReply(storeId: string, id: string, now: Date): Promise<boolean> {
+  async claimPublicReply(
+    storeId: string,
+    id: string,
+    now: Date,
+    onlyVisible: boolean,
+  ): Promise<boolean> {
     const claimed = await this.database.forStore(storeId, (tx) =>
       tx
         .update(socialComments)
@@ -139,6 +155,7 @@ export class CommentsRepository {
             eq(socialComments.storeId, storeId),
             eq(socialComments.id, id),
             isNull(socialComments.publicReplyExternalId),
+            onlyVisible ? eq(socialComments.status, 'replied') : undefined,
           ),
         )
         .returning({ id: socialComments.id }),

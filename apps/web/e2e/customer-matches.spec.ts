@@ -51,8 +51,9 @@ test('shows a possible same person on the profile and dismisses it', async ({
     await page.goto(`/customers/${chat}`);
     const note = page.getByRole('heading', { name: 'Possible same person' });
     await expect(note).toBeVisible();
+    await page.getByRole('button', { name: 'Possible same person' }).click();
     await expect(page.getByRole('link', { name: 'করিম উদ্দিন' })).toBeVisible();
-    await expect(page.getByText(/has the same phone number/)).toBeVisible();
+    await expect(page.getByText(/shares a phone number/)).toBeVisible();
 
     await page.evaluate(async () => document.fonts.ready);
     const evidence = process.env.CUS4_EVIDENCE;
@@ -142,6 +143,7 @@ test('merges two customers from the profile and undoes it', async ({ page, conte
 
     await page.goto(`/customers/${newer}`);
     await expect(page.getByRole('heading', { name: 'Possible same person' })).toBeVisible();
+    await page.getByRole('button', { name: 'Possible same person' }).click();
     await capture('profile-merge-button');
 
     await page.getByRole('button', { name: 'Merge', exact: true }).click();

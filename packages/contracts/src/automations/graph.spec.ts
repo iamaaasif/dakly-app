@@ -278,4 +278,49 @@ describe('automationGraphSchema', () => {
     const fromOrder = workflow(steps, { trigger: { key: 'order_placed', filters: [] } });
     expect(automationGraphSchema.safeParse(fromOrder).success).toBe(true);
   });
+  describe('message_received trigger', () => {
+    const trigger = (filters: unknown[]) => ({ key: 'message_received', filters });
+    const parse = (filters: unknown[]) =>
+      automationGraphSchema.safeParse(
+        workflow({ start: send, end: { kind: 'exit' } }, { trigger: trigger(filters) }),
+      );
+
+    it('accepts channel, intent and keyword filters together', () => {
+      const result = parse([
+        { field: 'channel', channels: ['messenger', 'instagram'] },
+        { field: 'intent', intents: ['price', 'size_or_stock'] },
+        { field: 'keywords', keywords: ['দাম', 'dam koto', 'price', 'pp'] },
+      ]);
+      expect(messages(result)).toEqual([]);
+    });
+
+    it('accepts no filters', () => {
+      expect(messages(parse([]))).toEqual([]);
+    });
+
+    it('rejects an unknown intent and empty keyword lists', () => {
+      expect(parse([{ field: 'intent', intents: ['spam'] }]).success).toBe(false);
+      expect(parse([{ field: 'intent', intents: [] }]).success).toBe(false);
+      expect(parse([{ field: 'keywords', keywords: [] }]).success).toBe(false);
+      expect(parse([{ field: 'keywords', keywords: ['   '] }]).success).toBe(false);
+    });
+
+    it('rejects a filter the trigger does not have', () => {
+      expect(messages(parse([{ field: 'tag', tag: 'vip' }]))).toContain(
+        'message_received has no tag filter',
+      );
+    });
+
+    it('rejects intent and keyword filters on other triggers', () => {
+      const result = automationGraphSchema.safeParse(
+        workflow(
+          { start: send, end: { kind: 'exit' } },
+          {
+            trigger: { key: 'consent_given', filters: [{ field: 'keywords', keywords: ['dam'] }] },
+          },
+        ),
+      );
+      expect(messages(result)).toContain('consent_given has no keywords filter');
+    });
+  });
 });

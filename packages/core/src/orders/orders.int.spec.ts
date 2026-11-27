@@ -121,6 +121,39 @@ describe('OrdersService', () => {
     expect(second.nextCursor).toBeNull();
   });
 
+  it('marks each listed order as a first order, a repeat buyer or a best customer, per shop', async () => {
+    const phone = '01999000031';
+    const first = await order(fixture.a, 3031, 'returned');
+    const again = await order(fixture.a, 3032, 'returned');
+    const best = await order(fixture.a, 3033, 'returned');
+    const elsewhere = await order(fixture.b, 3034, 'returned');
+    await fixture.connection.pool.query(
+      'update orders set recipient_phone=$2 where id = any($1::uuid[])',
+      [[first, again, elsewhere], phone],
+    );
+    const contactId = randomUUID();
+    await fixture.connection.pool.query(
+      "insert into contacts(id,store_id,name,kind,source) values($1,$2,'রিনা','customer','manual')",
+      [contactId, fixture.a],
+    );
+    await fixture.connection.pool.query(
+      "insert into contact_stats(store_id,contact_id,lifecycle_stage) values($1,$2,'best')",
+      [fixture.a, contactId],
+    );
+    await fixture.connection.pool.query('update orders set buyer_contact_id=$2 where id=$1', [
+      best,
+      contactId,
+    ]);
+
+    const page = await service.list(fixture.a, { stage: 'returned', sort: 'oldest', limit: 50 });
+    const badges = Object.fromEntries(page.items.map((item) => [item.number, item.customerBadge]));
+    expect(badges[3031]).toBe('new');
+    expect(badges[3032]).toBe('repeat');
+    expect(badges[3033]).toBe('vip');
+    const other = await service.list(fixture.b, { stage: 'returned', limit: 50 });
+    expect(other.items.find(({ number }) => number === 3034)?.customerBadge).toBe('new');
+  });
+
   it('reads the recipient snapshot separately from the buyer and hides a foreign order', async () => {
     const id = await order(fixture.a, 1005, 'on_hold');
     expect(await service.getById(fixture.a, id, access)).toMatchObject({
