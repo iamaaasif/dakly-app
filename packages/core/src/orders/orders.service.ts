@@ -26,7 +26,7 @@ import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
-import { orderItemSnapshots } from './order-item-snapshots';
+import { editedItemSnapshots } from './order-item-snapshots';
 import { toOrderListItem } from './order-list-item';
 import { orderListMatch } from './order-list-match';
 import { orderParcelWeightGrams } from './order-parcel-weight';
@@ -81,6 +81,10 @@ export class OrdersService {
     @Inject(PriceOffersService) private readonly priceOffers: PriceOffersService,
   ) {}
 
+  private get snapshotTools() {
+    return { products: this.products, offers: this.priceOffers, clock: this.clock };
+  }
+
   archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
     return this.transaction.run(storeId, async () => {
       const variantIds = await this.products.lockArchiveVariants(storeId, productId);
@@ -112,7 +116,7 @@ export class OrdersService {
         storeId,
         input.items,
         { conversationId: placed.offerConversationId, contactId: contact.id },
-        { products: this.products, offers: this.priceOffers, clock: this.clock },
+        { ...this.snapshotTools, isManualOrder: source === 'manual' },
       );
       const totals = orderTotals(items, {
         ...input,
@@ -143,6 +147,8 @@ export class OrdersService {
         ...createdStageWrite(input.confirm, now),
         paymentStatus: input.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         possibleDuplicateOfOrderId: duplicate,
+        note: input.note ?? null,
+        teamNote: input.teamNote ?? null,
         createdAt: now,
       } satisfies OrderWrite;
       await this.saveNewOrder(storeId, order, items, actor);
@@ -163,9 +169,7 @@ export class OrdersService {
       requireEditableOrder(order, expectedUpdatedAt);
       const delivery = await this.editedDelivery(storeId, input, order);
       const previous = await this.repository.items(storeId, orderId);
-      const items = input.items
-        ? await orderItemSnapshots(storeId, this.products, input.items, previous)
-        : previous;
+      const items = await editedItemSnapshots(storeId, this.products, { order, input, previous });
       const totals = editedOrderTotals(items, order, input, delivery.deliveryChargePoisha);
       const now = this.clock.now();
       const possibleDuplicateOfOrderId = await this.repository.findDuplicate(storeId, {
@@ -192,6 +196,8 @@ export class OrdersService {
         ...totals,
         possibleDuplicateOfOrderId,
         paymentStatus: totals.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
+        note: input.note,
+        teamNote: input.teamNote,
         updatedAt: now,
       });
       await recordOrderEdit(

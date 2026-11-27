@@ -171,6 +171,35 @@ export const stockDeliveryGoldenCases: GoldenCase[] = [
     mentionsAnyOf: ['নেই', 'nai', 'স্টক', 'stock'],
     neverOffer: ['লোফার', 'loafer'],
   },
+  // An untracked product the owner marked out of stock is sold out: not offered, not quoted, and
+  // the answer points to an in-stock alternative or the restock list.
+  {
+    id: 'untracked-sold-out-bn',
+    language: 'bangla',
+    question: 'এই স্যান্ডেলটা আছে?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500],
+    mentionsAnyOf: ['নেই', 'স্টক', 'ক্যানভাস', 'canvas'],
+    neverOffer: ['স্যান্ডেল', 'sandal'],
+  },
+  {
+    id: 'untracked-sold-out-banglish',
+    language: 'banglish',
+    question: 'ei sandal ta ache?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500],
+    mentionsAnyOf: ['নেই', 'nai', 'stock', 'ক্যানভাস', 'canvas'],
+    neverOffer: ['স্যান্ডেল', 'sandal'],
+  },
+  {
+    id: 'untracked-sold-out-mixed',
+    language: 'banglish',
+    question: 'sandal ta কি stock e আছে? দাম কত?',
+    expectedHandover: null,
+    allowedAmountsTaka: [1500],
+    mentionsAnyOf: ['নেই', 'nai', 'স্টক', 'ক্যানভাস', 'canvas'],
+    neverOffer: ['স্যান্ডেল', 'sandal'],
+  },
 ];
 
 export const stockDeliveryRecordedOutcomes: Record<string, EvalOutcome> = {
@@ -182,6 +211,18 @@ export const stockDeliveryRecordedOutcomes: Record<string, EvalOutcome> = {
   },
   'photo-match-sold-out-bn': { kind: 'reply', text: 'এই লোফারটা এখন স্টকে নেই।' },
   'photo-match-sold-out-mixed': { kind: 'reply', text: 'এই স্নিকার্স এখন স্টকে নেই।' },
+  'untracked-sold-out-bn': {
+    kind: 'reply',
+    text: 'স্যান্ডেলটা এখন স্টকে নেই। ক্যানভাস জুতা আছে, ৳১,৫০০। নতুন স্টক এলে জানাতে পারি।',
+  },
+  'untracked-sold-out-banglish': {
+    kind: 'reply',
+    text: 'Sandal ta ekhon stock e nai. Canvas jutha ache, 1500 tk. Stock ele jaanabo.',
+  },
+  'untracked-sold-out-mixed': {
+    kind: 'reply',
+    text: 'Sandal ta এখন stock এ নেই। চাইলে canvas jutha দেখাতে পারি, ৳১৫০০।',
+  },
   'budget-over-bn': { kind: 'reply', text: 'কুর্তির দাম ৳১,৪৫০।' },
   'budget-over-banglish': { kind: 'reply', text: 'Kurti 1450 tk.' },
   'budget-over-english': { kind: 'reply', text: 'The kurti is ৳1,450.' },

@@ -276,6 +276,7 @@ fixture('GET /orders/catalogue', async () => {
         id: own.id,
         name: 'Panjabi',
         isStockTracked: true,
+        stockStatus: 'in_stock',
         variants: [
           {
             id: own.variants[0].id,
@@ -957,6 +958,24 @@ async function productCategory(shop: Shop, name: string) {
 async function productBrand(shop: Shop, name: string) {
   return (await success(shop, 'POST', '/products/brands', 201, { name })).json().id as string;
 }
+fixture('GET /products/tags', async () => {
+  const { a, b } = await pair();
+  for (const [shop, tag] of [
+    [a, 'Eid'],
+    [b, 'Winter'],
+  ] as const)
+    await success(shop, 'POST', '/products', 201, {
+      name: 'Panjabi',
+      pricePoisha: 1000,
+      tags: [tag],
+    });
+  const names = async (shop: Shop) =>
+    (await success(shop, 'GET', '/products/tags', 200))
+      .json()
+      .items.map((row: { name: string }) => row.name);
+  expect(await names(a)).toEqual(['Eid']);
+  expect(await names(b)).toEqual(['Winter']);
+});
 fixture('GET /products/categories', async () => {
   const { a, b } = await pair();
   await productCategory(a, 'Clothing');
@@ -1077,6 +1096,23 @@ for (const method of ['PATCH', 'DELETE'] as const)
     );
     expect(await f.row('products', foreignId)).toEqual(before);
   });
+fixture('POST /products/:productId/duplicate', async () => {
+  const { a, b } = await pair(),
+    foreignId = await product(a),
+    own = await product(b);
+  const before = await f.row('products', foreignId);
+  const copy = (await success(b, 'POST', `/products/${own}/duplicate`, 201, {})).json();
+  expect(copy).toMatchObject({ status: 'hidden' });
+  expect(copy.id).not.toBe(own);
+  await hidden(
+    b,
+    'POST',
+    (id) => `/products/${id}/duplicate`,
+    foreignId,
+    () => ({}),
+  );
+  expect(await f.row('products', foreignId)).toEqual(before);
+});
 fixture('POST /products/bulk-edits', async () => {
   const { a, b } = await pair(),
     foreignId = await product(a),
@@ -4242,6 +4278,24 @@ fixture('POST /posts/:postId/approve', async () => {
   expect(await f.row('posts', foreign)).toEqual(before);
 });
 
+fixture('POST /posts/:postId/duplicate', async () => {
+  const { a, b } = await pair();
+  const channel = await seedChannel(b);
+  const own = await postDraft(b, channel, 'ঈদ অফার');
+  const foreign = await postDraft(a, await seedChannel(a));
+  const copy = await success(b, 'POST', `/posts/${own}/duplicate`, 201);
+  expect(copy.json().id).not.toBe(own);
+  expect(copy.json()).toMatchObject({
+    caption: 'নতুন পাঞ্জাবি',
+    createdByUserId: b.owner.id,
+    targets: [{ channelConnectionId: channel, captionOverride: 'ঈদ অফার', status: 'draft' }],
+  });
+  expect(await f.row('posts', copy.json().id)).toMatchObject({ store_id: b.id });
+  const before = await f.admin.pool.query('select count(*) from posts');
+  await hidden(b, 'POST', (id) => `/posts/${id}/duplicate`, foreign);
+  expect(await f.admin.pool.query('select count(*) from posts')).toEqual(before);
+});
+
 fixture('POST /posts/:postId/schedule', async () => {
   const { a, b } = await pair();
   const own = await aiPostDraft(a);
@@ -4437,6 +4491,46 @@ fixture('GET /conversations/counts', async () => {
     needsYou: 0,
     snoozed: 0,
     resolved: 0,
+  });
+});
+
+async function seedInquiry(shop: Shop) {
+  const id = await seedConversation(shop);
+  await f.admin.pool.query("update conversations set intent_tag='price' where id=$1", [id]);
+  return id;
+}
+
+fixture('GET /orders/inquiries', async () => {
+  const { a, b } = await pair();
+  await seedInquiry(a);
+  await seedInquiry(a);
+  const own = await seedInquiry(b);
+  await enableChats(a);
+  await enableChats(b);
+  const result = (await success(b, 'GET', '/orders/inquiries', 200)).json();
+  expect(result.items).toEqual([expect.objectContaining({ conversationId: own })]);
+  expect(result.nextCursor).toBeNull();
+});
+
+fixture('GET /orders/tab-counts', async () => {
+  const { a, b } = await pair();
+  await order(a);
+  await order(a, 1002);
+  await order(b);
+  await seedInquiry(a);
+  await seedInquiry(a);
+  await seedInquiry(b);
+  await enableChats(a);
+  await enableChats(b);
+  expect((await success(b, 'GET', '/orders/tab-counts', 200)).json()).toEqual({
+    inquiries: 1,
+    to_confirm: 1,
+    on_hold: 0,
+    to_pack: 0,
+    with_courier: 0,
+    delivered: 0,
+    pending: 0,
+    returned: 0,
   });
 });
 

@@ -125,6 +125,10 @@ The Products list starts with **Newest**. **Best selling** counts units ordered 
 
 Members who can edit products have a More actions menu on each desktop row and phone card. Duplicate opens `/products/new` with the source details and a “copy” suffix on the name. The new draft starts hidden with empty stock, photos and product codes. It is saved only when the member chooses a save action. Archive asks for confirmation and removes the product from the catalogue while keeping past orders. An open order that uses one of its variants blocks Archive. The dialog offers to hide an active product from customers while the open orders are finished.
 
+Products list API (DSN-2): `GET /products` also returns `totalCount` (every product that matches the filters, for the "Showing 12 of 2,486" footer) and, on each item, `code` (the SKU of its first variant that has one), `source` (`manual`, `import` or `chat`) and `waitingToConfirmCount` (units on orders in To confirm). Search matches the name or the SKU of any variant. `POST /products/:productId/duplicate` creates the copy described above on the server: hidden, name plus " (copy)", the same price, options, negotiation terms and variant costs, and no stock, photos or SKUs. Archive stays `DELETE /products/:productId`. Nothing sets source `chat` yet; the "Found in chats" badge waits for the task that creates products from chats.
+
+Products list rows (DSN-4): each row shows a checkbox, a photo or a tinted letter tile, the name with "Category · code" and a Found in chats badge, the price with the old price struck through and the profit percent, stock chips (neutral, amber at or under the low stock threshold, red at zero) with "N waiting to confirm" or Not tracked, a Draft or Active pill, Restock, an Edit pencil and a menu with Duplicate, Change stock and Archive. A hidden product shows as Draft. Duplicate creates the copy on the server and opens it.
+
 When the catalogue has no products, it says “No products yet” and offers Add product to members who can edit. Add product opens the quick add. Empty search and filter results offer Clear filters.
 
 ### Full page for add and edit (PROD-11)
@@ -224,6 +228,16 @@ A shop keeps its own list of categories (two levels, such as `Clothing > T-shirt
 - **Import.** The Category column accepts `Clothing > T-shirts` with the same matching. More than two levels is a row error. The optional Brand column uses the shop's spelling when the name matches, ignoring case and surrounding spaces. Import adds a missing brand. A blank Brand cell keeps the product's brand. The dry run shows rows whose brand would change.
 - **Manage lists.** `/products/lists` shows both lists with product counts. Members who can edit products rename an item, move a category under another top-level category (`PATCH /products/categories/:id`, `PATCH /products/brands/:id`) and delete an item (`DELETE` on the same paths). A delete is refused with `PRODUCT_CATEGORY_IN_USE` or `PRODUCT_BRAND_IN_USE` while products use it, and a category with sub-categories cannot be deleted or moved under another. A category moves only when it has no sub-categories, so the list stays two levels.
 - **Filters.** The product list has Category and Brand filters in the address (`categoryId`, `brandId`); a parent category also shows its sub-categories.
+
+### Editor fields (DSN-3)
+
+The product editor design adds these fields. All of them are optional on create and kept as they are when a PATCH leaves them out.
+
+- **Short description and barcode.** `shortDescription` (up to 300 characters) and `barcode` (up to 64), both text on the product.
+- **Stock status for untracked products.** `stockStatus` is `in_stock` or `out_of_stock` and is read only when "Track stock" is off. A tracked product follows its available count. The list's Out of stock filter and readiness chip include an untracked product set to out of stock.
+- **Out of stock is never offered.** Chats, the AI, photo matches and the order link never offer an out-of-stock product. An untracked product set to out of stock is refused on every order that does not come from staff typing it (`ORDER_ITEM_OUT_OF_STOCK`). Selling a tracked item past its stock stays the per-order choice in ORD-R3, not a product setting.
+- **Option value colour.** An option may carry `colors`, a map from a value to a `#RRGGBB` swatch, for example `{ "Red": "#D32F2F" }`. A colour must belong to one of the option's values.
+- **Product-level SKU.** A product with no options uses its one variant's `sku`. Generate is a client helper.
 
 ### Export products (PROD-14)
 

@@ -1,4 +1,4 @@
-import { productNegotiationIssues } from '@dakly/contracts/products';
+import { productNegotiationIssue, productNegotiationIssues } from '@dakly/contracts/products';
 
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
@@ -79,4 +79,9 @@ export function assertProductVersion<T extends { version: number; status: string
   if (expectedVersion !== undefined && expectedVersion !== product.version)
     throw productError('PRODUCT_CHANGED');
   if (product.status === 'archived') throw productError('PRODUCT_NOT_FOUND');
+}
+
+export function assertNegotiationTerms(terms: Parameters<typeof productNegotiationIssue>[0]): void {
+  const issue = productNegotiationIssue(terms);
+  if (issue) throw productError(issue);
 }

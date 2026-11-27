@@ -13,6 +13,7 @@ import { contacts, contactStats } from '@dakly/db/schema/contacts';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import {
   cursorCondition,
+  hasOrderedCondition,
   isHighValue,
   listOrdering,
   matchingConditions,
@@ -36,6 +37,7 @@ export type ListedContact = Contact & {
 
 export type ContactCountsRow = {
   all: number;
+  customers: number;
   new: number;
   returning: number;
   vip: number;
@@ -112,13 +114,14 @@ export class ContactListRepository {
     return row!.count;
   }
 
-  async counts(storeId: string): Promise<ContactCountsRow> {
+  async counts(storeId: string, hasOrdered = false): Promise<ContactCountsRow> {
     const inStage = (stage: LifecycleStage) =>
       sql<number>`(count(*) filter (where ${contactStats.lifecycleStage} = ${stage}))::int`;
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
           all: sql<number>`count(*)::int`,
+          customers: sql<number>`(count(*) filter (where ${hasOrderedCondition()}))::int`,
           new: inStage('new'),
           returning: inStage('regulars'),
           vip: inStage('best'),
@@ -138,7 +141,13 @@ export class ContactListRepository {
           contactStats,
           and(eq(contactStats.storeId, contacts.storeId), eq(contactStats.contactId, contacts.id)),
         )
-        .where(and(eq(contacts.storeId, storeId), isNull(contacts.deletedAt))),
+        .where(
+          and(
+            eq(contacts.storeId, storeId),
+            isNull(contacts.deletedAt),
+            hasOrdered ? hasOrderedCondition() : undefined,
+          ),
+        ),
     );
     return row!;
   }

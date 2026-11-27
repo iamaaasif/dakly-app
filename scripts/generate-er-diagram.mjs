@@ -39,7 +39,7 @@ const groups = [
       'due-book',
     ],
   ],
-  ['Products, orders and payments', ['products', 'orders', 'payments']],
+  ['Products, orders and payments', ['products', 'product-tags', 'orders', 'payments']],
   ['AI', ['ai', 'khata-scans']],
   ['Content, campaigns and automations', ['social', 'campaigns', 'automations']],
   ['Billing', ['billing']],

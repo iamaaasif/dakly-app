@@ -46,8 +46,8 @@ export class ContactListService {
     return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null, total };
   }
 
-  counts(storeId: string): Promise<ContactCountsResponse> {
-    return this.repository.counts(storeId);
+  counts(storeId: string, hasOrdered = false): Promise<ContactCountsResponse> {
+    return this.repository.counts(storeId, hasOrdered);
   }
 }
 

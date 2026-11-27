@@ -183,7 +183,7 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
       page.getByRole('row', { name: /Silk scarf/ }).getByText('Active', { exact: true }),
     ).toBeVisible();
     await expect(
-      page.getByRole('row', { name: /Leather sandal/ }).getByText('Hidden', { exact: true }),
+      page.getByRole('row', { name: /Leather sandal/ }).getByText('Draft', { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('table').getByRole('img', { name: 'Silk scarf' })).toBeVisible();
     await expect

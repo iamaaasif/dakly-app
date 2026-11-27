@@ -39,21 +39,25 @@ The `contacts/` feature in `packages/core` owns the `contacts` table. The FND-1
   (default 50, at most 100). `sort` is `newest` (default), `last_purchase`, `highest_spend`,
   `most_orders` or `name`; the cursor is the last row's id, and its sort key is read back from
   the database. Filters: `kind`, one `tag`, `source`, `type`, `minSpendPoisha`,
-  `maxSpendPoisha`, `lastPurchase` (`7_days`, `30_days`, `90_days`, `over_90_days`, `never`) and
+  `maxSpendPoisha`, `hasOrdered=true`, `lastPurchase` (`7_days`, `30_days`, `90_days`, `over_90_days`, `never`) and
   `search`, which finds a name, an email or an area (3 letters or more) or a phone as before.
   `type` is a customer list tab: `new`, `returning` (regulars), `vip` (best), `inactive`
   (stopped buying), `at_risk` (slipping away) or `high_value`, the top 10% of customers by net
   spend whatever their stage (at least one customer). The response carries `total`, the
-  number of contacts the filters match, not just this page. Deleted contacts are never listed.
+  number of contacts the filters match, not just this page. `hasOrdered=true` keeps only
+  contacts with at least one non-cancelled order (`contact_stats.orders_count > 0`, which includes orders brought in
+  by store sync, POS and khata); this is the Customers page, and without it the list is every contact. Deleted contacts are never listed.
   Each row also carries `whatsappPhone` (masked like `phone`), `email`, `district`, `source`
   and `consentedChannels`, the channels whose latest consent answer is granted, and from
   `contact_stats` `ordersCount`, `netSpendPoisha`, `lastOrderAt`, `lifecycleStage` and
   `isHighValue` (zero, null and `none` for a contact with no stats row). The profile and the
   other routes keep the short contact shape.
-- `GET /contacts/counts` (`customers.view`) returns the tab counts `all`, `new`, `returning`,
+- `GET /contacts/counts` (`customers.view`) returns the tab counts `all` (every contact), `new`, `returning`,
   `vip`, `inactive`, `highValue`, `atRisk`, plus `boughtMoreThanOnce` and `canReceiveMarketing`
-  (consent granted on any channel) for the page subtitle. It counts the whole shop, not the
-  current filters.
+  (consent granted on any channel) for the page subtitle, and `customers`, the contacts with at
+  least one non-cancelled order. It counts the whole shop, not the current filters; with
+  `hasOrdered=true` every count covers only people who ordered. The export takes the same
+  `hasOrdered` filter.
 - `GET /contacts/:contactId` (`customers.view`) returns one contact with its channel
   identities (channel, connection and profile name), read only. A deleted contact
   reads as not found.

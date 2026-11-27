@@ -22,4 +22,8 @@ export class OrderProductSalesService {
       excluded: ['cancelled', 'returned'],
     });
   }
+
+  unitsToConfirm(storeId: string, variantIds: string[]) {
+    return this.sales.unitsToConfirm(storeId, variantIds);
+  }
 }
