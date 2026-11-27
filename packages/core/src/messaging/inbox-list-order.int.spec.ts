@@ -57,7 +57,7 @@ describe('inbox list order and filters', () => {
 
   afterAll(async () => {
     try {
-      for (const table of ['conversations', 'channel_connections', 'contacts'])
+      for (const table of ['messages', 'conversations', 'channel_connections', 'contacts'])
         await f.connection.pool.query(`delete from ${table} where store_id = any($1::uuid[])`, [
           [f.a, f.b],
         ]);
@@ -171,5 +171,44 @@ describe('inbox list order and filters', () => {
       resolved: 1,
     });
     expect((await repository.counts(f.b, f.userA)).all).toBe(0);
+  });
+
+  it('returns who wrote the newest sent message, the contact kind and the intent tag', async () => {
+    const message = (authorType: string, kind: string, status: string, minute: number) =>
+      f.connection.pool.query(
+        `insert into messages (id, store_id, conversation_id, direction, author_type, author_user_id, kind, body, status, created_at)
+         values ($7, $1, $2, 'out', $3, $8, $4, 'text', $5, '2026-11-19T09:00:00Z'::timestamptz + make_interval(mins => $6))`,
+        [
+          f.a,
+          ids.newestDone,
+          authorType,
+          kind,
+          status,
+          minute,
+          randomUUID(),
+          authorType === 'user' ? f.userA : null,
+        ],
+      );
+    await message('ai', 'text', 'sent', 1);
+    await message('user', 'note', 'sent', 2);
+    await message('user', 'text', 'failed', 3);
+    await f.connection.pool.query("update conversations set intent_tag = 'price' where id = $1", [
+      ids.newestDone,
+    ]);
+    const rows = await repository.list(f.a, f.userA, query({ state: 'resolved' }));
+    const fields = ({ lastMessageFrom, contactKind, intentTag }: (typeof rows)[number]) => ({
+      lastMessageFrom,
+      contactKind,
+      intentTag,
+    });
+    expect(rows.map(fields)).toEqual([
+      { lastMessageFrom: 'ai', contactKind: 'customer', intentTag: 'price' },
+    ]);
+    const [quiet] = await repository.list(f.a, f.userA, query({ folder: 'spam' }));
+    expect(quiet && fields(quiet)).toEqual({
+      lastMessageFrom: null,
+      contactKind: 'not_customer',
+      intentTag: null,
+    });
   });
 });

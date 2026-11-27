@@ -186,6 +186,14 @@ function script(output: ChatClassification, duringCall?: () => Promise<void>, ca
   return inputs;
 }
 
+async function intentTags({ storeId }: Shop) {
+  const { rows } = await admin.pool.query<{ intent_tag: string | null }>(
+    'select intent_tag from conversations where store_id = $1',
+    [storeId],
+  );
+  return rows.map(({ intent_tag }) => intent_tag);
+}
+
 async function observe({ storeId }: Shop) {
   const { rows: conversations } = await admin.pool.query(
     'select status, responder, handover_reason from conversations where store_id = $1',
@@ -290,6 +298,7 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v4' }],
     usage: [],
   });
+  expect(await intentTags(active)).toEqual(['greeting']);
 });
 
 it('hands over an exhausted allowance without calling the model or spending a unit', async () => {
@@ -302,6 +311,7 @@ it('hands over an exhausted allowance without calling the model or spending a un
     runs: [],
     usage: [],
   });
+  expect(await intentTags(active)).toEqual([null]);
 });
 
 it('hands a chat to people without calling the model while staff pause AI replies', async () => {

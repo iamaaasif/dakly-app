@@ -38,13 +38,6 @@ These need no backend and are in the Inbox now: the icon rail and the fixed page
 
 CHAT-9 is Done (#619). Build order for the rest, one PR each: CHAT-10, CHAT-12, CHAT-13 part 1, CHAT-13 part 2. CHAT-11 and CHAT-14 follow.
 
-### CHAT-10 Row chips
-
-- The Figma rows show, in order: Waiting for them or No reply, the AI chip, Lead saved, and the assignee mark. They show no intent chips, so the intent tag drives the Order request folder and is not drawn on the row.
-- List response gains `contactKind` (Lead saved is a `lead` contact), `intentTag`, and `lastMessageFrom` (`customer`, `ai` or `shop`, from the newest sent message that is not a note or a system line). The preview reads "Dakly AI: ..." or "You: ..." when the shop wrote last.
-- Waiting for them: the shop wrote last. No reply: the shop wrote last more than 24 hours ago.
-- AI-4 writes `intent_tag` from the classification it already makes, on every classified burst; a burst the screen hands over before the model leaves it as it was, and staff replies leave it.
-
 ### CHAT-11 System lines
 
 - `messages` of kind `system` written in the same transaction as the event: the AI hands over (with the reason), an order is created from the chat, the contact is marked not a customer. The web already draws system messages as a centred line.
