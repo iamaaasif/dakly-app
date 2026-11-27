@@ -2,8 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
 
 import type { AutomationStep } from '@dakly/contracts/automations/graph';
-import { orderStageLabels } from '@dakly/contracts/order-stage-labels';
-import { orderConfirmationAnswerSchema } from '@dakly/contracts/orders';
+import { orderConfirmationAnswerSchema, type OrderStage } from '@dakly/contracts/orders';
 
 import { ChannelDispatchService } from '../messaging/channel-dispatch.service';
 import { MessagingService } from '../messaging/messaging.service';
@@ -73,7 +72,7 @@ export class AutomationConfirmationTapService {
       await this.messaging
         .queueChannelMessage(storeId, {
           ...target,
-          content: `Order status: ${orderStageLabels[stage]}.`,
+          content: tapReply(stage),
           category: 'transactional',
           actor: { kind: 'system' },
           operationKey: `order-confirmation-tap:${tapKey}`,
@@ -89,4 +88,11 @@ export class AutomationConfirmationTapService {
 
 function hasAnswerButton(step: AutomationStep | undefined, answer: 'confirm' | 'cancel'): boolean {
   return step?.kind === 'send' && step.message.buttons.some(({ key }) => key === answer);
+}
+
+// The buyer sees the same words as the confirm page, never the staff stage names.
+function tapReply(stage: OrderStage): string {
+  if (stage === 'to_pack') return 'অর্ডার নিশ্চিত হয়েছে। দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।';
+  if (stage === 'cancelled') return 'অর্ডার বাতিল হয়েছে। দোকানকে জানিয়ে দেওয়া হয়েছে।';
+  return 'এই অর্ডার এখন আর বদলানো যাবে না। দোকানের সঙ্গে যোগাযোগ করুন।';
 }

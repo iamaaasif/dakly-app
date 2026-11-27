@@ -282,11 +282,21 @@ describe('Workflow Messenger send steps (Postgres and Valkey)', () => {
   });
 
   it.each([
-    { key: 'confirm', number: 1043, stage: 'to_pack', status: 'To pack' },
-    { key: 'cancel', number: 1044, stage: 'cancelled', status: 'Cancelled' },
+    {
+      key: 'confirm',
+      number: 1043,
+      stage: 'to_pack',
+      reply: 'অর্ডার নিশ্চিত হয়েছে। দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।',
+    },
+    {
+      key: 'cancel',
+      number: 1044,
+      stage: 'cancelled',
+      reply: 'অর্ডার বাতিল হয়েছে। দোকানকে জানিয়ে দেওয়া হয়েছে।',
+    },
   ])(
     'answers $key in Messenger and leaves a repeated tap idempotent',
-    async ({ key, number, stage, status }) => {
+    async ({ key, number, stage, reply }) => {
       const { orderId, contactId, runId } = await confirmationRun(number);
       const provider = vi
         .spyOn(FakeMetaChannelDriver.prototype, 'send')
@@ -312,7 +322,7 @@ describe('Workflow Messenger send steps (Postgres and Valkey)', () => {
         "select body from messages where conversation_id=$1 and direction='out' and status='queued'",
         [event.payload.conversationId],
       );
-      expect(rows).toEqual([{ body: `Order status: ${status}.` }]);
+      expect(rows).toEqual([{ body: reply }]);
 
       await handler.handle(await tapEvent(storeId, contactId, postback!));
       expect(await orderState(orderId)).toEqual(result);
@@ -320,10 +330,7 @@ describe('Workflow Messenger send steps (Postgres and Valkey)', () => {
         "select body from messages where conversation_id=$1 and direction='out' and status='queued'",
         [event.payload.conversationId],
       );
-      expect(replies.rows).toEqual([
-        { body: `Order status: ${status}.` },
-        { body: `Order status: ${status}.` },
-      ]);
+      expect(replies.rows).toEqual([{ body: reply }, { body: reply }]);
 
       await admin.pool.query(
         "update automation_runs set wake_at=now() - interval '1 minute' where id=$1",
@@ -385,7 +392,7 @@ describe('Workflow Messenger send steps (Postgres and Valkey)', () => {
       "select body from messages where conversation_id=$1 and status='queued'",
       [unlocked.payload.conversationId],
     );
-    expect(rows).toEqual([{ body: 'Order status: To pack.' }]);
+    expect(rows).toEqual([{ body: 'অর্ডার নিশ্চিত হয়েছে। দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।' }]);
   });
 
   it('answers on the Page where the contact wrote last, with its buttons', async () => {
