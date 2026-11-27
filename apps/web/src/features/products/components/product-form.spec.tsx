@@ -113,6 +113,12 @@ function show(
   client.setQueryData(sessionContextKey, session);
   client.setQueryData(productsKeys.categories(session.contextTag), { items: [] });
   client.setQueryData(productsKeys.brands(session.contextTag), { items: [] });
+  client.setQueryData(productsKeys.tags(session.contextTag), {
+    items: [
+      { id: 't1', name: 'women', productCount: 9 },
+      { id: 't2', name: 'men', productCount: 4 },
+    ],
+  });
   const onSaved = vi.fn();
   const tree = (current?: ProductResponse) => (
     <QueryClientProvider client={client}>
@@ -265,6 +271,33 @@ describe('Product form on a full page', () => {
     expect(await screen.findByText(/^Opens at/)).toBeTruthy();
     expect(screen.getByText('৳1,800')).toBeTruthy();
     expect(screen.getByText('৳1,650')).toBeTruthy();
+  });
+
+  it('saves the short description, barcode, tags and a bulleted description', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(undefined, page);
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: product.name } });
+    fireEvent.change(screen.getByLabelText('Regular price'), { target: { value: '300' } });
+    await userEvent.type(screen.getByLabelText('Description'), 'Soft cotton');
+    await userEvent.click(screen.getByRole('button', { name: 'Bullet list' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add short description' }));
+    await userEvent.type(screen.getByLabelText('Short description'), 'Eid special');
+    await userEvent.type(screen.getByLabelText(/Barcode/), '8901234567890');
+    await userEvent.click(screen.getByRole('button', { name: 'Add tags' }));
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'women' }));
+    await userEvent.type(screen.getByLabelText('Search or add tags'), 'eid{Enter}');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toMatchObject({
+      description: '• Soft cotton',
+      shortDescription: 'Eid special',
+      barcode: '8901234567890',
+      tags: ['women', 'eid'],
+    });
   });
 
   it('saves with Ctrl+S from anywhere on the page', async () => {
