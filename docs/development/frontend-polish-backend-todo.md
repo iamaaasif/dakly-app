@@ -18,14 +18,6 @@ Entry format:
 
 The three entries from the auth screens were built in ACC-19 parts 5 and 6: sign-up saves the source, business name, website and offering and creates the first shop, Continue with Facebook is a real redirect flow, and the reset code error shows on the password step. See [01-account-and-team.md](../features/01-account-and-team.md).
 
-### Product version check
-
-- Screen: `/products/[productId]`.
-- Missing: the editor cannot tell if another update reached the product after it was opened.
-- Why: sellers should keep their typed changes when another edit reaches the server first.
-- Expected API: `PATCH /products/:productId` takes the version read by the editor and refuses a stale write. The editor keeps the typed values and offers to reload.
-- Workaround in the UI: saves send the changed fields and keep the two stored prices together.
-
 ### Unsaved changes in the app shell
 
 - Screen: the app shell on pages with an editor.

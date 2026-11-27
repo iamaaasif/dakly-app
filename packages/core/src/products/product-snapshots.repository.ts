@@ -4,6 +4,15 @@ import type { CreateProductInput } from '@dakly/contracts/products';
 import { files } from '@dakly/db/schema/platform';
 import { products, productVariants } from '@dakly/db/schema/products';
 
+export type Product = Omit<CreateProductInput, 'variants'> & {
+  id: string;
+  version: number;
+  category: string | null;
+  brand: string | null;
+  imageFileIds: string[];
+  createdAt: Date;
+  updatedAt: Date;
+};
 export type Variant = CreateProductInput['variants'][number] & {
   id: string;
   productId: string;

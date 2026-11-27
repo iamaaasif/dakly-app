@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gt, inArray, isNull, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 
 import type { ProductBulkEditChange } from '@dakly/contracts/product-bulk-edits';
 import { productBulkEdits, products, productVariants } from '@dakly/db/schema/products';
@@ -114,7 +114,7 @@ export class ProductBulkEditsRepository {
     await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ ...change, updatedAt: now })
+        .set({ ...change, updatedAt: now, version: sql`${products.version} + 1` })
         .where(and(eq(products.storeId, storeId), eq(products.id, productId))),
     );
   }
