@@ -95,6 +95,7 @@ function CustomerResults({ customers, query, columns }: CustomerResultsProps) {
       <CustomerFooter
         shown={items.length}
         total={total}
+        noun="customers"
         firstHref={query.cursor ? customersHref(query, columns) : undefined}
         nextHref={nextCursor ? customersHref(query, columns, { cursor: nextCursor }) : undefined}
       />

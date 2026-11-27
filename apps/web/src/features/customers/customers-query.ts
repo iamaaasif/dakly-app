@@ -25,13 +25,15 @@ export function parseCustomersAddress(raw: Record<string, string | undefined>) {
 
 export type CustomersScreenState = NonNullable<ReturnType<typeof parseCustomersAddress>>;
 
-export type CustomerFilterChange = Partial<Pick<ContactListQuery, 'search' | 'sort' | 'cursor'>>;
+export type ListFilterChange = Partial<
+  Pick<ContactListQuery, 'search' | 'sort' | 'cursor' | 'type' | 'source' | 'tag'>
+>;
 
 // A filter change starts from the first page, so the cursor is dropped unless the change names one.
 export function customersHref(
   query: ContactListQuery,
   columns: CustomerColumn[],
-  change: CustomerFilterChange = {},
+  change: ListFilterChange = {},
 ) {
   const next = { ...query, cursor: undefined, ...change };
   const search = customersSearch({
@@ -42,6 +44,8 @@ export function customersHref(
   });
   return search ? `/customers?${search}` : '/customers';
 }
+
+export type ListHref = (columns: CustomerColumn[], change: ListFilterChange) => string;
 
 export function hasCustomerFilters(query: ContactListQuery) {
   return Boolean(query.search);

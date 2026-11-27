@@ -1,47 +1,36 @@
 'use client';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
-
-import { Badge } from '@dakly/ui/badge';
-import { Button } from '@dakly/ui/button';
-
-import { AddCustomersChooser } from './add-customers-chooser';
+import { AddContactsChooser } from './add-contacts-chooser';
+import { ContactForm } from './contact-form';
 import { ImportCustomersDialog } from './import-customers-dialog';
-import { NewCustomerForm } from './new-customer-form';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
-import { useSessionContext } from '@/lib/session-context';
 
-// The Contacts page mounts this; the Customers page only lists people who already ordered.
-export function AddContactsFlow() {
-  const [adding, setAdding] = useState<'choose' | 'manual' | 'import' | null>(null);
-  const [added, setAdded] = useState(false);
-  const { data: context } = useSessionContext();
-  if (!context?.currentStore?.canCreateCustomer) return null;
+export type AddingContacts = 'choose' | 'manual' | 'import' | null;
+
+type AddContactsDialogsProps = {
+  adding: AddingContacts;
+  onAdding: (next: AddingContacts) => void;
+  onAdded: () => void;
+};
+
+// The Contacts page owns which dialog is open, because its header, toolbar and empty state all open one.
+export function AddContactsDialogs({ adding, onAdding, onAdded }: AddContactsDialogsProps) {
   return (
     <>
-      <Button onClick={() => setAdding('choose')} className="gap-2">
-        <Plus aria-hidden="true" size={16} strokeWidth={1.75} /> Add customers
-      </Button>
-      {added ? (
-        <p role="status">
-          <Badge variant="success">Customer added</Badge>
-        </p>
-      ) : null}
       {adding === 'choose' ? (
-        <AddCustomersChooser onChoose={setAdding} onClose={() => setAdding(null)} />
+        <AddContactsChooser onChoose={onAdding} onClose={() => onAdding(null)} />
       ) : null}
       {adding === 'manual' ? (
-        <Dialog open title="Add customer" onClose={() => setAdding(null)}>
-          <NewCustomerForm
+        <Dialog open title="Add contact" className="max-w-2xl" onClose={() => onAdding(null)}>
+          <ContactForm
             onAdded={() => {
-              setAdding(null);
-              setAdded(true);
+              onAdding(null);
+              onAdded();
             }}
-            onCancel={() => setAdding(null)}
+            onCancel={() => onAdding(null)}
           />
         </Dialog>
       ) : null}
-      {adding === 'import' ? <ImportCustomersDialog onClose={() => setAdding(null)} /> : null}
+      {adding === 'import' ? <ImportCustomersDialog onClose={() => onAdding(null)} /> : null}
     </>
   );
 }

@@ -28,7 +28,7 @@ export function customerPhone(customer: Pick<ContactResponse, 'phone'>) {
   return customer.phone ? formatPhone(customer.phone) : 'No phone yet';
 }
 
-const customerTypeLabels: Record<ContactListType, string> = {
+export const customerTypeLabels: Record<ContactListType, string> = {
   new: 'New',
   returning: 'Returning',
   vip: 'VIP',

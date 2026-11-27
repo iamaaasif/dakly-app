@@ -13,7 +13,7 @@ import { useToast } from '@dakly/ui/toast';
 
 import { useExportCustomers } from '../api/export-customers';
 import type { CustomerColumn } from '../customer-columns';
-import { customersHref } from '../customers-query';
+import { customersHref, type ListHref } from '../customers-query';
 import { CustomerColumnsMenu } from './customer-columns-menu';
 import { useSessionContext } from '@/lib/session-context';
 import { useUrlRouter } from '@/lib/use-url-query';
@@ -28,18 +28,21 @@ type CustomerToolbarProps = {
 };
 
 export function CustomerToolbar({ query, columns, searchError }: CustomerToolbarProps) {
+  const hrefFor: ListHref = (chosen, change) => customersHref(query, chosen, change);
   return (
     <TableToolbar className="gap-3 p-4">
-      <SearchField query={query} columns={columns} searchError={searchError} />
+      <SearchField query={query} columns={columns} hrefFor={hrefFor} searchError={searchError} />
       <div className="ml-auto flex items-center gap-2">
-        <ExportButton query={query} />
-        <CustomerColumnsMenu query={query} columns={columns} />
+        <ExportButton query={query} noun="customer" />
+        <CustomerColumnsMenu query={query} columns={columns} hrefFor={hrefFor} />
       </div>
     </TableToolbar>
   );
 }
 
-function SearchField({ query, columns, searchError }: CustomerToolbarProps) {
+type SearchFieldProps = CustomerToolbarProps & { hrefFor: ListHref };
+
+export function SearchField({ query, columns, hrefFor, searchError }: SearchFieldProps) {
   const router = useUrlRouter();
   const form = useForm<SearchInput>({
     resolver: zodResolver(searchSchema),
@@ -47,7 +50,7 @@ function SearchField({ query, columns, searchError }: CustomerToolbarProps) {
     errors: searchError ? { search: { type: 'server', message: searchError } } : undefined,
   });
   const submit = form.handleSubmit((values) =>
-    router.push(customersHref(query, columns, { search: values.search })),
+    router.push(hrefFor(columns, { search: values.search })),
   );
   const { onChange, ...field } = form.register('search', {
     setValueAs: (value: string) => value.trim() || undefined,
@@ -83,15 +86,23 @@ function SearchField({ query, columns, searchError }: CustomerToolbarProps) {
   );
 }
 
-function ExportButton({ query }: { query: ContactListQuery }) {
+export function ExportButton({
+  query,
+  noun,
+}: {
+  query: ContactListQuery;
+  noun: 'customer' | 'contact';
+}) {
   const { data: context } = useSessionContext();
   const exportCustomers = useExportCustomers();
   const showToast = useToast();
   if (!context?.currentStore?.canExportCustomers) return null;
-  const { type, source, minSpendPoisha, maxSpendPoisha, lastPurchase, search, hasOrdered } = query;
+  const { type, source, tag, minSpendPoisha, maxSpendPoisha, lastPurchase, search, hasOrdered } =
+    query;
   const filters = {
     type,
     source,
+    tag,
     minSpendPoisha,
     maxSpendPoisha,
     lastPurchase,
@@ -107,7 +118,7 @@ function ExportButton({ query }: { query: ContactListQuery }) {
         exportCustomers.mutate(filters, {
           onSuccess: (count) =>
             showToast(
-              `Exporting ${formatCount(count)} ${count === 1 ? 'customer' : 'customers'} to Excel. Check your downloads in a moment.`,
+              `Exporting ${formatCount(count)} ${count === 1 ? noun : `${noun}s`} to Excel. Check your downloads in a moment.`,
             ),
           onError: (error) =>
             showToast(

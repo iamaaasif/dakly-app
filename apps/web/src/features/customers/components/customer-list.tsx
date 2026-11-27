@@ -25,13 +25,15 @@ const trailingColumns = ['source', 'tags', 'consent'] as const;
 type CustomerListProps = {
   customers: ContactListItemResponse[];
   columns: CustomerColumn[];
+  // The Contacts page lists people who may never have ordered, so it leaves the order columns out.
+  withOrders?: boolean;
 };
 
-export function CustomerList({ customers, columns }: CustomerListProps) {
+export function CustomerList(props: CustomerListProps) {
   return (
     <>
-      <CustomerMobileList customers={customers} columns={columns} />
-      <CustomerTable customers={customers} columns={columns} />
+      <CustomerMobileList {...props} />
+      <CustomerTable {...props} />
     </>
   );
 }
@@ -43,7 +45,7 @@ function shownColumns(columns: CustomerColumn[], list: readonly CustomerColumn[]
   return list.filter((column) => columns.includes(column));
 }
 
-function CustomerTable({ customers, columns }: CustomerListProps) {
+function CustomerTable({ customers, columns, withOrders = true }: CustomerListProps) {
   return (
     <div className="hidden md:block">
       <Table bare>
@@ -56,9 +58,13 @@ function CustomerTable({ customers, columns }: CustomerListProps) {
               </TableHead>
             ))}
             <TableHead className={headClass}>Type</TableHead>
-            <TableHead className={`${headClass} text-right`}>Orders</TableHead>
-            <TableHead className={`${headClass} text-right`}>Spent</TableHead>
-            <TableHead className={headClass}>Last purchase</TableHead>
+            {withOrders ? (
+              <>
+                <TableHead className={`${headClass} text-right`}>Orders</TableHead>
+                <TableHead className={`${headClass} text-right`}>Spent</TableHead>
+                <TableHead className={headClass}>Last purchase</TableHead>
+              </>
+            ) : null}
             {shownColumns(columns, trailingColumns).map((column) => (
               <TableHead key={column} className={headClass}>
                 {customerColumnLabels[column]}
@@ -68,7 +74,12 @@ function CustomerTable({ customers, columns }: CustomerListProps) {
         </TableHeader>
         <TableBody>
           {customers.map((customer) => (
-            <CustomerTableRow key={customer.id} customer={customer} columns={columns} />
+            <CustomerTableRow
+              key={customer.id}
+              customer={customer}
+              columns={columns}
+              withOrders={withOrders}
+            />
           ))}
         </TableBody>
       </Table>
@@ -79,9 +90,11 @@ function CustomerTable({ customers, columns }: CustomerListProps) {
 function CustomerTableRow({
   customer,
   columns,
+  withOrders,
 }: {
   customer: ContactListItemResponse;
   columns: CustomerColumn[];
+  withOrders: boolean;
 }) {
   return (
     <TableRow>
@@ -99,13 +112,17 @@ function CustomerTableRow({
       <TableCell>
         <TypePill customer={customer} />
       </TableCell>
-      <TableCell className="text-right">{customer.ordersCount}</TableCell>
-      <TableCell className="text-right font-medium whitespace-nowrap">
-        {formatMoney(customer.netSpendPoisha)}
-      </TableCell>
-      <TableCell className="whitespace-nowrap">
-        <LastPurchase customer={customer} />
-      </TableCell>
+      {withOrders ? (
+        <>
+          <TableCell className="text-right">{customer.ordersCount}</TableCell>
+          <TableCell className="text-right font-medium whitespace-nowrap">
+            {formatMoney(customer.netSpendPoisha)}
+          </TableCell>
+          <TableCell className="whitespace-nowrap">
+            <LastPurchase customer={customer} />
+          </TableCell>
+        </>
+      ) : null}
       {shownColumns(columns, trailingColumns).map((column) => (
         <TableCell key={column} className="whitespace-nowrap">
           <ColumnValue customer={customer} column={column} />
@@ -115,7 +132,7 @@ function CustomerTableRow({
   );
 }
 
-function CustomerMobileList({ customers, columns }: CustomerListProps) {
+function CustomerMobileList({ customers, columns, withOrders = true }: CustomerListProps) {
   return (
     <ul className="divide-y divide-border md:hidden">
       {customers.map((customer) => (
@@ -130,11 +147,13 @@ function CustomerMobileList({ customers, columns }: CustomerListProps) {
             </div>
             <TypePill customer={customer} />
           </div>
-          <p className="text-sm text-text-muted tabular-nums">
-            {customer.ordersCount} {customer.ordersCount === 1 ? 'order' : 'orders'} ·{' '}
-            <span className="font-medium text-text">{formatMoney(customer.netSpendPoisha)}</span> ·
-            Last purchase <LastPurchase customer={customer} />
-          </p>
+          {withOrders ? (
+            <p className="text-sm text-text-muted tabular-nums">
+              {customer.ordersCount} {customer.ordersCount === 1 ? 'order' : 'orders'} ·{' '}
+              <span className="font-medium text-text">{formatMoney(customer.netSpendPoisha)}</span>{' '}
+              · Last purchase <LastPurchase customer={customer} />
+            </p>
+          ) : null}
           <dl className="space-y-1 text-sm">
             {columns
               .filter((column) => column !== 'phone')
