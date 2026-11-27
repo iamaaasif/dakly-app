@@ -1,7 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import type { ContactSource } from '@dakly/contracts/contacts';
-
 import { OrderReportingService } from '../orders/order-reporting.service';
 import { Clock } from '../platform/clock';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -17,15 +15,6 @@ type RepairPhase = { kind: 'totals' } | { kind: 'rank'; cutoff: BestSpendCutoff 
 
 const BATCH_SIZE = 100;
 const BEST_SPEND_POISHA = 2_000_000n;
-const INTENTIONAL_SOURCES: readonly ContactSource[] = [
-  'manual',
-  'voice',
-  'import',
-  'shopify',
-  'woocommerce',
-  'pos',
-  'khata_import',
-];
 
 @Injectable()
 export class ContactStatsService {
@@ -150,9 +139,8 @@ function isCustomer(
   ordersCount: number,
 ): boolean {
   if (contact.isBlocked || contact.deletedAt || contact.kind === 'not_customer') return false;
-  return (
-    ordersCount > 0 || (contact.kind === 'customer' && INTENTIONAL_SOURCES.includes(contact.source))
-  );
+  // A customer has ordered; contacts added by hand or by import with no orders stay contacts.
+  return ordersCount > 0;
 }
 
 function purchaseStage(

@@ -15,6 +15,7 @@ import {
 import type { FastifyReply } from 'fastify';
 
 import {
+  type ContactCountsQuery,
   type ContactCountsResponse,
   type ContactDetailResponse,
   type ContactExportQuery,
@@ -23,6 +24,7 @@ import {
   type ContactResponse,
   type CreateContactInput,
   type UpdateContactInput,
+  contactCountsQuerySchema,
   contactExportQuerySchema,
   contactListQuerySchema,
   createContactSchema,
@@ -74,8 +76,11 @@ export class ContactsController {
   // Declared before `:contactId`, which would otherwise take "counts" or "export" for an id.
   @Get('counts')
   @RequirePermission('customers.view')
-  counts(@CurrentStore() storeId: string): Promise<ContactCountsResponse> {
-    return this.listService.counts(storeId);
+  counts(
+    @CurrentStore() storeId: string,
+    @Query(new ZodValidationPipe(contactCountsQuerySchema)) query: ContactCountsQuery,
+  ): Promise<ContactCountsResponse> {
+    return this.listService.counts(storeId, query.hasOrdered);
   }
 
   @Get('export')

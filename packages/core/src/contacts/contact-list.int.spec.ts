@@ -104,6 +104,17 @@ describe('ContactListRepository (Postgres)', () => {
         lifecycleStage: seed.stage,
       });
     }
+    // Added on purpose with no orders: a contact, not someone who ordered.
+    const [ishrat] = await admin.db
+      .insert(contacts)
+      .values({ storeId, name: 'Ishrat', phone: '01711009999', kind: 'customer', source: 'manual' })
+      .returning({ id: contacts.id });
+    await admin.db.insert(contactStats).values({
+      storeId,
+      contactId: ishrat!.id,
+      ordersCount: 0,
+      lifecycleStage: 'none',
+    });
     // A lead with no orders and no stats row, and a customer of another shop with big spend.
     await admin.db
       .insert(contacts)
@@ -162,7 +173,8 @@ describe('ContactListRepository (Postgres)', () => {
 
   it('counts the tabs for this shop only', async () => {
     expect(await repository.counts(storeId)).toEqual({
-      all: 11,
+      all: 12,
+      customers: 10,
       new: 2,
       returning: 4,
       vip: 1,
@@ -172,6 +184,21 @@ describe('ContactListRepository (Postgres)', () => {
       boughtMoreThanOnce: 7,
       canReceiveMarketing: 0,
     });
+  });
+
+  it('counts only people who ordered when asked', async () => {
+    expect(await repository.counts(storeId, true)).toMatchObject({ all: 10, customers: 10 });
+    expect(await repository.counts(otherStoreId, true)).toMatchObject({ all: 1, customers: 1 });
+  });
+
+  it('lists only people with a non-cancelled order for hasOrdered', async () => {
+    const ordered = await names({ hasOrdered: true, sort: 'name' });
+    expect(ordered).toHaveLength(10);
+    expect(ordered).not.toContain('Ishrat');
+    expect(ordered).not.toContain('Lead Lina');
+    expect(await names({ sort: 'name' })).toContain('Ishrat');
+    expect(await repository.countListed(storeId, { limit: 1, hasOrdered: true })).toBe(10);
+    expect(await names({ hasOrdered: true, type: 'returning', sort: 'name' })).toHaveLength(4);
   });
 
   it('filters by source, spend range and last purchase window', async () => {
@@ -216,13 +243,13 @@ describe('ContactListRepository (Postgres)', () => {
         cursor = page[3]!.id;
       }
       expect(seen.slice(0, 3)).toEqual(expected);
-      expect(new Set(seen).size).toBe(11);
+      expect(new Set(seen).size).toBe(12);
     }
   });
 
   it('counts every match whatever the cursor', async () => {
     const [first] = await repository.list(storeId, { limit: 1 });
-    expect(await repository.countListed(storeId, { limit: 1, cursor: first!.id })).toBe(11);
+    expect(await repository.countListed(storeId, { limit: 1, cursor: first!.id })).toBe(12);
     expect(await repository.countListed(storeId, { limit: 1, type: 'returning' })).toBe(4);
   });
 
