@@ -4,7 +4,6 @@ import { useId } from 'react';
 
 import type { UserStorePage, SessionContext } from '@dakly/contracts/sessions';
 import { Button } from '@dakly/ui/button';
-import { cn } from '@dakly/ui/cn';
 
 import { storeSwitcherKeys } from './store-switcher-keys';
 import { apiRequest } from '@/lib/api-client';
@@ -13,37 +12,30 @@ import { initialsOf } from '@/lib/initials';
 type StoreSwitcherProps = {
   session: SessionContext;
   onSwitch: (storeId: string) => Promise<void>;
-  // The collapsed rail shows only the shop's initials.
-  compact?: boolean;
 };
-export function StoreSwitcher({ session, onSwitch, compact }: StoreSwitcherProps) {
+export function StoreSwitcher({ session, onSwitch }: StoreSwitcherProps) {
   const { shops, options } = useStoreOptions(session);
   const selectId = useId();
   const current = session.currentStore;
-  if (!session.hasMemberships)
-    return <p className={compact ? 'sr-only' : 'px-2 text-text-muted'}>No shop yet</p>;
+  if (!session.hasMemberships) return <p className="px-2 text-sm text-text-muted">No shop yet</p>;
   return (
-    <div className="w-full min-w-0 space-y-2">
-      <div className="relative flex min-h-10 items-center gap-2.5 rounded-lg border border-border bg-surface-muted/60 px-1.5 hover:border-border-strong has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-focus">
+    <div className="relative w-full min-w-0">
+      <div className="shadow-sm relative flex min-h-10 items-center gap-2.5 rounded-lg border border-border bg-surface px-2 hover:border-border-strong has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-focus">
         <span
           aria-hidden="true"
           className="grid size-7 shrink-0 place-items-center rounded-md bg-inverse text-xs font-semibold text-on-primary"
         >
           {current ? initialsOf(current.name) : ''}
         </span>
-        <div className={cn('min-w-0 flex-1', compact && 'sr-only')}>
+        <div className="min-w-0 flex-1">
           <label htmlFor={selectId} className="block text-xs leading-4 text-text-muted">
             Current shop
           </label>
-          <p aria-hidden="true" className="text-sm leading-5 font-semibold break-words">
+          <p aria-hidden="true" className="truncate text-sm leading-5 font-semibold">
             {current?.name ?? 'Choose a shop'}
           </p>
         </div>
-        <ChevronDown
-          aria-hidden="true"
-          size={16}
-          className={cn('shrink-0 text-text-muted', compact && 'hidden')}
-        />
+        <ChevronDown aria-hidden="true" size={16} className="shrink-0 text-text-muted" />
         <select
           id={selectId}
           value={session.currentStore?.storeId ?? ''}
@@ -66,8 +58,9 @@ export function StoreSwitcher({ session, onSwitch, compact }: StoreSwitcherProps
 }
 
 function ShopListStatus({ shops }: { shops: ReturnType<typeof useStoreOptions>['shops'] }) {
+  if (!shops.isPending && !shops.error && !shops.hasNextPage) return null;
   return (
-    <>
+    <div className="shadow-md absolute top-full left-0 z-40 mt-1 space-y-2 rounded-lg border border-border bg-surface p-2 text-sm">
       {shops.isPending ? <p role="status">Loading shops…</p> : null}
       {shops.error ? (
         <p role="alert">
@@ -86,7 +79,7 @@ function ShopListStatus({ shops }: { shops: ReturnType<typeof useStoreOptions>['
           Load more shops
         </Button>
       ) : null}
-    </>
+    </div>
   );
 }
 
