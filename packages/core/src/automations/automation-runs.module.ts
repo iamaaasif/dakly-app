@@ -15,6 +15,7 @@ import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { AutomationActionsService } from './automation-actions.service';
 import { AutomationBirthdaySweepService } from './automation-birthday-sweep.service';
 import { AutomationBirthdaysService } from './automation-birthdays.service';
 import { AutomationConditionsService } from './automation-conditions.service';
@@ -50,6 +51,7 @@ import { AnswerAutomationConfirmationTap } from './jobs/answer-automation-confir
     WalletsModule,
   ],
   providers: [
+    AutomationActionsService,
     AutomationConditionsService,
     AutomationConfirmationTapService,
     AnswerAutomationConfirmationTap,

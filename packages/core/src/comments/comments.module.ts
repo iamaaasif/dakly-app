@@ -11,6 +11,7 @@ import { ProductsModule } from '../products/products.module';
 import { SendingModule } from '../sending/sending.module';
 import { SocialModule } from '../social/social.module';
 import { StoresModule } from '../stores/stores.module';
+import { CommentAutomationRepliesService } from './comment-automation-replies.service';
 import { CommentPostProductsService } from './comment-post-products.service';
 import { CommentsController } from './comments.controller';
 import { CommentsRepository } from './comments.repository';
@@ -31,7 +32,12 @@ import { CommentsService } from './comments.service';
     StoresModule,
   ],
   controllers: [CommentsController],
-  providers: [CommentPostProductsService, CommentsRepository, CommentsService],
-  exports: [CommentPostProductsService, CommentsService],
+  providers: [
+    CommentAutomationRepliesService,
+    CommentPostProductsService,
+    CommentsRepository,
+    CommentsService,
+  ],
+  exports: [CommentAutomationRepliesService, CommentPostProductsService, CommentsService],
 })
 export class CommentsModule {}

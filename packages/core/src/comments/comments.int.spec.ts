@@ -14,6 +14,7 @@ import { resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { DatabaseModule } from '../platform/database/database.module';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { CommentAutomationRepliesService } from './comment-automation-replies.service';
 import { CommentsModule } from './comments.module';
 import { CommentsService, type ReceiveCommentInput } from './comments.service';
 
@@ -382,4 +383,26 @@ it('sends nothing for the AI when an automation claims the comment after the AI 
   });
   expect(sendPrivate).not.toHaveBeenCalled();
   expect((await comments.list(storeId, { limit: 50 })).items[0]).toMatchObject({ status: 'new' });
+});
+
+it('answers a claimed comment in the automation order: private reply first, then one public reply', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-steps', { text: 'dam koto' });
+  const replies = app.get(CommentAutomationRepliesService);
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  const sendPublic = vi.spyOn(connections, 'replyToMetaComment');
+  expect(await comments.claimForAutomation(storeId, comment.id)).toBe(true);
+  expect(
+    await replies.replyPrivately(storeId, comment.id, {
+      text: 'Details niche',
+      includeProduct: false,
+    }),
+  ).toBe('sent');
+  expect(
+    await replies.replyPrivately(storeId, comment.id, { text: 'Again', includeProduct: false }),
+  ).toBe('skipped');
+  expect(await replies.replyPublicly(storeId, comment.id, 'Inbox e dilam')).toBe('sent');
+  expect(await replies.replyPublicly(storeId, comment.id, 'Inbox e dilam')).toBe('skipped');
+  expect(sendPrivate.mock.calls.map(([, payload]) => payload.text)).toEqual(['Details niche']);
+  expect(sendPublic.mock.calls).toHaveLength(1);
 });

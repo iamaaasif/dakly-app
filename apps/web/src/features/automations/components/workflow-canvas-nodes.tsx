@@ -52,6 +52,8 @@ const actionIcons: Record<
   notify_team: Bell,
   hand_to_person: Hand,
   give_coupon: Ticket,
+  reply_to_comment: MessageCircle,
+  send_private_reply: MessageSquareText,
 };
 
 function IconBox({ icon: Icon, tone = 'brand' }: { icon: LucideIcon; tone?: 'brand' | 'neutral' }) {

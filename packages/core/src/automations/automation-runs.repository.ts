@@ -31,6 +31,7 @@ export type ClaimedRun = {
   templateKey: string | null;
   contactId: string;
   triggerOrderId: string | null;
+  triggerCommentId: string | null;
   enteredAt: Date;
   status: AutomationRunStatus;
   currentStepKey: string;
@@ -145,6 +146,7 @@ export class AutomationRunsRepository {
           templateKey: automations.templateKey,
           contactId: automationRuns.contactId,
           triggerOrderId: automationRuns.triggerOrderId,
+          triggerCommentId: automationRuns.triggerCommentId,
           enteredAt: automationRuns.enteredAt,
           status: automationRuns.status,
           currentStepKey: automationRuns.currentStepKey,
