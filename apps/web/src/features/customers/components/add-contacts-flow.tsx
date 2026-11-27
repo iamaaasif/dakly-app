@@ -1,7 +1,7 @@
 'use client';
-import { AddContactsChooser } from './add-contacts-chooser';
-import { ContactForm } from './contact-form';
+import { AddCustomersChooser } from './add-customers-chooser';
 import { ImportCustomersDialog } from './import-customers-dialog';
+import { NewCustomerForm } from './new-customer-form';
 import { SessionDialog as Dialog } from '@/components/session-dialog';
 
 export type AddingContacts = 'choose' | 'manual' | 'import' | null;
@@ -17,11 +17,11 @@ export function AddContactsDialogs({ adding, onAdding, onAdded }: AddContactsDia
   return (
     <>
       {adding === 'choose' ? (
-        <AddContactsChooser onChoose={onAdding} onClose={() => onAdding(null)} />
+        <AddCustomersChooser onChoose={onAdding} onClose={() => onAdding(null)} />
       ) : null}
       {adding === 'manual' ? (
-        <Dialog open title="Add contact" className="max-w-2xl" onClose={() => onAdding(null)}>
-          <ContactForm
+        <Dialog open title="Add customer" onClose={() => onAdding(null)}>
+          <NewCustomerForm
             onAdded={() => {
               onAdding(null);
               onAdded();

@@ -3,10 +3,9 @@ import { useFormContext } from 'react-hook-form';
 import { howYouSellOptions, customerListSizes } from '@dakly/contracts/stores';
 
 import type { BusinessDraft } from '../auth.types';
-import { businessTypes, salesLabels, sizeLabels } from '../business-options';
+import { businessTypes, districts, salesLabels, sizeLabels } from '../business-options';
 import { BusinessSelect } from './business-select';
 import { FormField as AuthField } from '@/components/form-field';
-import { districts } from '@/lib/districts';
 
 export function BusinessFields() {
   const {

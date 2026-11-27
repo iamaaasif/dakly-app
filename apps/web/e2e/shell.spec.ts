@@ -12,7 +12,7 @@ async function verifyOnFocus(page: Page) {
 }
 
 async function verifyQuietDraft(page: Page) {
-  const input = await page.getByLabel('Full name', { exact: true }).elementHandle();
+  const input = await page.getByLabel('Name', { exact: true }).elementHandle();
   let release!: () => void;
   let entered!: () => void;
   const held = new Promise<void>((resolve) => {
@@ -35,10 +35,10 @@ async function verifyQuietDraft(page: Page) {
     expect(
       await input!.evaluate((element) => element.isConnected && !element.closest('[inert]')),
     ).toBe(true);
-    await expect(page.getByLabel('Full name', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Name', { exact: true })).toBeVisible();
     release();
     expect((await verified).status()).toBe(200);
-    await expect(page.getByLabel('Full name', { exact: true })).toHaveValue('Unfinished draft');
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Unfinished draft');
     expect(
       await input!.evaluate((element) => element === document.querySelector('input[name="name"]')),
     ).toBe(true);
@@ -114,7 +114,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
 
     await page.getByRole('button', { name: 'Add contact', exact: true }).click();
     await page.getByRole('button', { name: /Add manually/ }).click();
-    const name = page.getByLabel('Full name', { exact: true });
+    const name = page.getByLabel('Name', { exact: true });
     await name.fill('Unfinished draft');
     await verifyQuietDraft(page);
 
@@ -136,7 +136,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await expect(page.getByRole('combobox', { name: 'Current shop' })).toHaveValue(
       fixture.storeIds[1],
     );
-    await expect(page.getByRole('dialog', { name: 'Add contact' })).toBeHidden();
+    await expect(page.getByRole('dialog', { name: 'Add customer' })).toBeHidden();
     expect(await oldInput!.evaluate((element) => element.isConnected)).toBe(false);
     await oldInput!.dispose();
     const unwrittenDraft = await database.pool.query('select name from contacts where name=$1', [
@@ -153,10 +153,10 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await page.getByRole('button', { name: 'Add contact', exact: true }).click();
     await page.getByRole('button', { name: /Add manually/ }).click();
     const customer = { name: 'সাবিনা', phone: `018${randomInt(10000000, 99999999)}` };
-    await page.getByLabel('Full name', { exact: true }).fill(customer.name);
-    await page.getByLabel('Mobile number', { exact: true }).fill(customer.phone);
-    await page.getByRole('button', { name: 'Save contact', exact: true }).click();
-    await expect(page.getByRole('status')).toHaveText('Contact added');
+    await page.getByLabel('Name', { exact: true }).fill(customer.name);
+    await page.getByLabel('Phone', { exact: true }).fill(customer.phone);
+    await page.getByRole('button', { name: 'Add customer', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Customer added');
     const created = await database.pool.query(
       'select store_id, name from contacts where store_id=any($1::uuid[])',
       [fixture.storeIds],
@@ -174,7 +174,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     );
     expect(after.rows).toEqual(created.rows);
     await verifyOnFocus(page);
-    await expect(page.getByRole('status')).toHaveText('Contact added');
+    await expect(page.getByRole('status')).toHaveText('Customer added');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );

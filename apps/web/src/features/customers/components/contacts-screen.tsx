@@ -56,7 +56,7 @@ export function ContactsScreen(initial: ContactsScreenState) {
           <>
             {added ? (
               <p role="status">
-                <Badge variant="success">Contact added</Badge>
+                <Badge variant="success">Customer added</Badge>
               </p>
             ) : null}
             {addButton}
