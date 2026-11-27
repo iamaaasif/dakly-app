@@ -358,6 +358,19 @@ Order link: a public page per store and product (`dakly.shop/{store}/{product}`)
 
 In Messenger, the COD workflow sends Confirm order and Cancel order buttons. The button points to the send step, and the run supplies the order. The tap must come from the shop, buyer and Messenger identity that received the message. The same stage rules apply. Confirm records `confirmation_method = chat_reply`, and a repeated tap or a tap after the order moves on only replies with the current stage.
 
+| Order stage      | Messenger reply                                           |
+| ---------------- | --------------------------------------------------------- |
+| To confirm       | এই অর্ডার এখন আর বদলানো যাবে না। দোকানের সঙ্গে যোগাযোগ করুন। |
+| On hold          | অর্ডারটি আপাতত স্থগিত আছে।                                  |
+| To pack          | অর্ডার নিশ্চিত হয়েছে। দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।      |
+| With courier     | অর্ডারটি কুরিয়ারের কাছে দেওয়া হয়েছে।                        |
+| Delivered        | অর্ডারটি পৌঁছে দেওয়া হয়েছে।                                 |
+| Partly delivered | অর্ডারের কিছু পণ্য পৌঁছে দেওয়া হয়েছে।                         |
+| Returned         | অর্ডারটি ফেরত এসেছে।                                       |
+| Cancelled        | অর্ডার বাতিল হয়েছে। দোকানকে জানিয়ে দেওয়া হয়েছে।            |
+
+The To confirm reply applies when the button can no longer change the order, such as after a previous tap. It is also the fallback for any stage without its own reply.
+
 ### Delivery zones
 
 ORD-2 adds delivery-zone create, list, edit and delete routes under Store settings,

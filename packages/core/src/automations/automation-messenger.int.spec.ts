@@ -393,6 +393,23 @@ describe('Workflow Messenger send steps (Postgres and Valkey)', () => {
       [unlocked.payload.conversationId],
     );
     expect(rows).toEqual([{ body: 'অর্ডার নিশ্চিত হয়েছে। দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।' }]);
+
+    await admin.pool.query("update orders set stage='with_courier', shipped_at=$2 where id=$1", [
+      orderId,
+      noon,
+    ]);
+    await handler.handle(unlocked);
+    await handler.handle(await tapEvent(storeId, contactId, postback!));
+    expect(await orderState(orderId)).toMatchObject({
+      stage: 'with_courier',
+      confirmation_method: 'staff',
+    });
+    const laterReplies = await admin.pool.query(
+      "select body from messages where conversation_id=$1 and status='queued'",
+      [unlocked.payload.conversationId],
+    );
+    expect(laterReplies.rows).toHaveLength(2);
+    expect(laterReplies.rows).toContainEqual({ body: 'অর্ডারটি কুরিয়ারের কাছে দেওয়া হয়েছে।' });
   });
 
   it('answers on the Page where the contact wrote last, with its buttons', async () => {

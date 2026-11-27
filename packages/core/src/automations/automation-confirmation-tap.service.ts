@@ -15,6 +15,16 @@ import { AutomationRunsRepository } from './automation-runs.repository';
 import { operationKey } from './automation-step-rules';
 
 const confirmationTap = z.tuple([z.literal('workflow'), z.uuid(), orderConfirmationAnswerSchema]);
+const closedReply = 'এই অর্ডার এখন আর বদলানো যাবে না। দোকানের সঙ্গে যোগাযোগ করুন।';
+const tapReplies: Partial<Record<OrderStage, string>> = {
+  on_hold: 'অর্ডারটি আপাতত স্থগিত আছে।',
+  to_pack: 'অর্ডার নিশ্চিত হয়েছে। দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।',
+  with_courier: 'অর্ডারটি কুরিয়ারের কাছে দেওয়া হয়েছে।',
+  delivered: 'অর্ডারটি পৌঁছে দেওয়া হয়েছে।',
+  partially_delivered: 'অর্ডারের কিছু পণ্য পৌঁছে দেওয়া হয়েছে।',
+  returned: 'অর্ডারটি ফেরত এসেছে।',
+  cancelled: 'অর্ডার বাতিল হয়েছে। দোকানকে জানিয়ে দেওয়া হয়েছে।',
+};
 
 @Injectable()
 export class AutomationConfirmationTapService {
@@ -72,7 +82,7 @@ export class AutomationConfirmationTapService {
       await this.messaging
         .queueChannelMessage(storeId, {
           ...target,
-          content: tapReply(stage),
+          content: tapReplies[stage] ?? closedReply,
           category: 'transactional',
           actor: { kind: 'system' },
           operationKey: `order-confirmation-tap:${tapKey}`,
@@ -88,11 +98,4 @@ export class AutomationConfirmationTapService {
 
 function hasAnswerButton(step: AutomationStep | undefined, answer: 'confirm' | 'cancel'): boolean {
   return step?.kind === 'send' && step.message.buttons.some(({ key }) => key === answer);
-}
-
-// The buyer sees the same words as the confirm page, never the staff stage names.
-function tapReply(stage: OrderStage): string {
-  if (stage === 'to_pack') return 'অর্ডার নিশ্চিত হয়েছে। দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।';
-  if (stage === 'cancelled') return 'অর্ডার বাতিল হয়েছে। দোকানকে জানিয়ে দেওয়া হয়েছে।';
-  return 'এই অর্ডার এখন আর বদলানো যাবে না। দোকানের সঙ্গে যোগাযোগ করুন।';
 }
