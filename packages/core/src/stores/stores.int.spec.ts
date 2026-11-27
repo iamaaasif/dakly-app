@@ -11,8 +11,8 @@ import { createDatabase } from '@dakly/db/client';
 import { users, sessions } from '@dakly/db/schema/auth';
 import { plans, subscriptions } from '@dakly/db/schema/billing';
 import { contacts } from '@dakly/db/schema/contacts';
-import { auditLog } from '@dakly/db/schema/platform';
 import { deliveryZones } from '@dakly/db/schema/orders';
+import { auditLog } from '@dakly/db/schema/platform';
 import { stores, storeCounters } from '@dakly/db/schema/stores';
 import { memberships, roles } from '@dakly/db/schema/team';
 
