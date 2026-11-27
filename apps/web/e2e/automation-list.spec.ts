@@ -162,25 +162,36 @@ test('offers the three starter workflows when the shop has none', async ({
     headers: { Origin: baseURL!, 'X-Session-Context': session.contextTag },
   });
   expect(response.status()).toBe(204);
-  await page.goto('/automations');
-  await expect(page.getByRole('heading', { name: 'You have no workflows yet' })).toBeVisible();
-  const starters = page.getByRole('region', { name: 'Start your first workflow' });
-  for (const name of [
-    'Comment to DM: price on request',
-    'Price question in chat',
-    'Order intent follow-up',
-  ])
-    await expect(starters.getByRole('heading', { name })).toBeVisible();
-  const evidence = process.env.CAMP12_LIST_EVIDENCE;
-  if (evidence) await mkdir(evidence, { recursive: true });
-  for (const [width, height] of [
-    [1440, 900],
-    [360, 800],
-  ] as const) {
-    await page.setViewportSize({ width, height });
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
-      .toBe(true);
-    if (evidence) await page.screenshot({ path: resolve(evidence, `empty-${width}.png`) });
+  try {
+    await page.goto('/automations');
+    await expect(page.getByRole('heading', { name: 'You have no workflows yet' })).toBeVisible();
+    const starters = page.getByRole('region', { name: 'Start your first workflow' });
+    for (const name of [
+      'Comment to DM: price on request',
+      'Price question in chat',
+      'Order intent follow-up',
+    ])
+      await expect(starters.getByRole('heading', { name })).toBeVisible();
+    const evidence = process.env.CAMP12_LIST_EVIDENCE;
+    if (evidence) await mkdir(evidence, { recursive: true });
+    for (const [width, height] of [
+      [1440, 900],
+      [360, 800],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true);
+      if (evidence) await page.screenshot({ path: resolve(evidence, `empty-${width}.png`) });
+    }
+  } finally {
+    // The active shop is saved on the shared session, so later specs would run in the other shop.
+    // Switching shops changes the context tag, so read it again.
+    const current = await (await context.request.get('/api/me/context')).json();
+    const back = await context.request.post('/api/me/active-store', {
+      data: { storeId: fixture.storeIds[0] },
+      headers: { Origin: baseURL!, 'X-Session-Context': current.contextTag },
+    });
+    expect(back.status()).toBe(204);
   }
 });

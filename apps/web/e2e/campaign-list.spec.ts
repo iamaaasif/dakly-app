@@ -311,16 +311,27 @@ test('shows an empty state with a create button when the shop has no campaigns',
     headers: { Origin: baseURL!, 'X-Session-Context': session.contextTag },
   });
   expect(response.status()).toBe(204);
-  await page.goto('/campaigns');
-  await expect(
-    page.getByRole('heading', { name: 'You have not sent a campaign yet' }),
-  ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Create campaign' })).toHaveAttribute(
-    'href',
-    '/campaigns/new',
-  );
-  await expect(page.getByRole('search')).toHaveCount(0);
-  await captureCampaignList(page, 'empty');
-  await page.goto('/campaigns?search=zzzz');
-  await expect(page.getByRole('heading', { name: 'No campaigns match' })).toBeVisible();
+  try {
+    await page.goto('/campaigns');
+    await expect(
+      page.getByRole('heading', { name: 'You have not sent a campaign yet' }),
+    ).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Create campaign' })).toHaveAttribute(
+      'href',
+      '/campaigns/new',
+    );
+    await expect(page.getByRole('search')).toHaveCount(0);
+    await captureCampaignList(page, 'empty');
+    await page.goto('/campaigns?search=zzzz');
+    await expect(page.getByRole('heading', { name: 'No campaigns match' })).toBeVisible();
+  } finally {
+    // The active shop is saved on the shared session, so later specs would run in the other shop.
+    // Switching shops changes the context tag, so read it again.
+    const current = await (await context.request.get('/api/me/context')).json();
+    const back = await context.request.post('/api/me/active-store', {
+      data: { storeId: fixture.storeIds[0] },
+      headers: { Origin: baseURL!, 'X-Session-Context': current.contextTag },
+    });
+    expect(back.status()).toBe(204);
+  }
 });
