@@ -14,13 +14,16 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
   const registration = browserRegistration(database, mailpitUrl);
   const team = browserTeam(database, mailpitUrl);
   const security = browserSecurity(database, mailpitUrl);
-  const userIds = [randomUUID(), randomUUID()];
-  const storeIds = [randomUUID(), randomUUID()];
+  const shopNames = ['Dhaka Threads', 'Sylhet Books', 'Notification Test Shop'];
+  const userIds = shopNames.map(() => randomUUID());
+  const storeIds = shopNames.map(() => randomUUID());
   const token = randomBytes(32).toString('base64url');
+  const notificationToken = randomBytes(32).toString('base64url');
   return {
     browser: {
       token,
-      storeIds,
+      storeIds: storeIds.slice(0, 2),
+      notificationToken,
       review: review.browser,
       registration: registration.browser,
       team: team.browser,
@@ -43,7 +46,7 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
           // Pages hide while their extension is off, so browser shops start with all of them on.
           await client.query('insert into stores(id,name,extensions) values($1,$2,$3)', [
             id,
-            index === 0 ? 'Dhaka Threads' : 'Sylhet Books',
+            shopNames[index],
             ['sales', 'chats', 'social_auto_post', 'physical_shop'],
           ]);
           await client.query(
@@ -55,10 +58,19 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
           "insert into memberships(id,store_id,user_id,built_in_role,status) values($3,$1,$2,'marketer','active')",
           [storeIds[1], userIds[0], randomUUID()],
         );
-        await client.query(
-          "insert into sessions(id,user_id,active_store_id,token_hash,expires_at) values($4,$1,$2,$3,now()+interval '1 hour')",
-          [userIds[0], storeIds[0], createHash('sha256').update(token).digest(), randomUUID()],
-        );
+        for (const [index, sessionToken] of [
+          [0, token],
+          [2, notificationToken],
+        ])
+          await client.query(
+            "insert into sessions(id,user_id,active_store_id,token_hash,expires_at) values($4,$1,$2,$3,now()+interval '1 hour')",
+            [
+              userIds[index],
+              storeIds[index],
+              createHash('sha256').update(sessionToken).digest(),
+              randomUUID(),
+            ],
+          );
         await client.query('commit');
       } catch (error) {
         await client.query('rollback');
