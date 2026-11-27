@@ -50,10 +50,7 @@ export function TableHead({ className, ...props }: TableHeadProps) {
   return (
     <th
       {...props}
-      className={cn(
-        'h-10 px-3 text-left text-xs font-semibold tracking-wide text-text-muted uppercase',
-        className,
-      )}
+      className={cn('h-10 px-3 text-left text-xs font-semibold text-text-secondary', className)}
     />
   );
 }
