@@ -44,8 +44,8 @@ export function ProductFilters({ query }: ProductFiltersProps) {
       </FormProvider>
       <CategoryFilter query={query} onChoose={choose} />
       <Select
-        value={query.sort ?? 'newest'}
-        onValueChange={(sort) => choose({ sort: sort === 'best_selling' ? sort : 'newest' })}
+        value={query.sort ?? 'best_selling'}
+        onValueChange={(sort) => choose({ sort: sort === 'newest' ? sort : 'best_selling' })}
       >
         <SelectTrigger aria-label="Sort products" className={selectClass}>
           <SelectValue />
