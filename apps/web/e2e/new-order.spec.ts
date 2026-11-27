@@ -2,12 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import type { DeliveryZoneListResponse } from '@dakly/contracts/delivery';
 import { createDatabase } from '@dakly/db/client';
 
-const evidence = resolve(process.cwd(), '../../docs/design/evidence/ord-5-new-order');
+const evidence = resolve(process.cwd(), '../../docs/design/evidence/dsn-10-new-order');
 
 async function capture(page: Page, name: string) {
   await mkdir(evidence, { recursive: true });
@@ -20,54 +20,15 @@ async function capture(page: Page, name: string) {
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(width);
-    if (name === 'edit-detail') {
-      await expect(page.getByRole('button', { name: 'Edit', exact: true })).toBeInViewport();
-    } else if (name !== 'pipeline') {
-      const dialog = page.getByRole('dialog', {
-        name: name === 'edit' ? 'Edit order' : 'New order',
-      });
-      if (width === 1440)
-        await dialog
-          .locator('form > div.overflow-y-auto')
-          .evaluate((node) => node.scrollTo({ top: 0 }));
-      if (width === 360) {
-        await dialog.getByText('Cash on delivery').scrollIntoViewIfNeeded();
-        await expect(dialog.getByRole('button', { name: 'Save order' })).toBeInViewport();
-      }
-      await expect
-        .poll(() => dialog.evaluate((element) => element.scrollWidth - element.clientWidth))
-        .toBe(0);
-    }
     await page.screenshot({
       path: resolve(evidence, `${name}-${width}.png`),
       animations: 'disabled',
     });
   }
+  await page.setViewportSize({ width: 1440, height: 900 });
 }
 
-async function captureNewOrder(page: Page, dialog: Locator) {
-  const evidence = resolve(process.cwd(), '../../docs/design/evidence/web-7-new-order');
-  await mkdir(evidence, { recursive: true });
-  for (const [width, height] of [
-    [1440, 900],
-    [360, 800],
-  ] as const) {
-    await page.setViewportSize({ width, height });
-    await dialog
-      .locator('form > div.overflow-y-auto')
-      .evaluate((node) => node.scrollTo({ top: 0 }));
-    await expect(dialog.getByLabel('Phone', { exact: true })).toBeInViewport();
-    await expect(dialog.getByRole('button', { name: 'Save order' })).toBeInViewport();
-    if (width === 1440) await expect(dialog.getByText(/^Cash on delivery/)).toBeInViewport();
-    await page.mouse.move(width - 1, height - 1);
-    await page.screenshot({
-      path: resolve(evidence, `new-order-${width}x${height}.png`),
-      animations: 'disabled',
-    });
-  }
-}
-
-test('creates a staff order with the zone charge, stock and computed COD', async ({
+test('takes a staff order on the new order page and edits it', async ({
   page,
   context,
   baseURL,
@@ -77,11 +38,12 @@ test('creates a staff order with the zone charge, stock and computed COD', async
   const storeId = fixture.storeIds[0]!;
   const database = createDatabase(process.env.DATABASE_ADMIN_URL!);
   const productId = `0${randomUUID().slice(1)}`;
-  const otherProducts = Array.from({ length: 50 }, () => `f${randomUUID().slice(1)}`);
+  const soldOutId = `0${randomUUID().slice(1)}`;
   const variantId = randomUUID();
   const largerVariantId = randomUUID();
-  let zoneId: string | undefined;
+  const soldOutVariantId = randomUUID();
   let zoneIds: string[] = [];
+  let zoneId: string | undefined;
   let insertedCounter = false;
   let existingBuyerId: string | undefined;
   await context.addCookies([
@@ -90,9 +52,10 @@ test('creates a staff order with the zone charge, stock and computed COD', async
   try {
     const current = await context.request.get('/api/me/context');
     const { contextTag } = await current.json();
+    const headers = { Origin: baseURL!, 'X-Session-Context': contextTag };
     const selected = await context.request.post('/api/me/active-store', {
       data: { storeId },
-      headers: { Origin: baseURL!, 'X-Session-Context': contextTag },
+      headers,
     });
     expect(selected.status()).toBe(204);
     const counter = await database.pool.query(
@@ -101,14 +64,8 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     );
     insertedCounter = counter.rowCount === 1;
     await database.pool.query(
-      "insert into products (id,store_id,name,price_poisha) values ($1,$2,'Cotton Panjabi',125000)",
-      [productId, storeId],
-    );
-    await database.pool.query(
-      `insert into products (id,store_id,name,price_poisha)
-       select id,$1,'Catalogue product ' || number,1000
-       from unnest($2::uuid[]) with ordinality as catalogue(id, number)`,
-      [storeId, otherProducts],
+      "insert into products (id,store_id,name,price_poisha) values ($1,$2,'Cotton Panjabi',125000),($3,$2,'Sold Out Shirt',99000)",
+      [productId, storeId, soldOutId],
     );
     await database.pool.query(
       "insert into product_variants (id,store_id,product_id,title,on_hand) values ($1,$2,$3,'M',5)",
@@ -118,186 +75,152 @@ test('creates a staff order with the zone charge, stock and computed COD', async
       "insert into product_variants (id,store_id,product_id,title,on_hand,price_override_poisha,position) values ($1,$2,$3,'L',2,190000,1)",
       [largerVariantId, storeId, productId],
     );
-    await page.goto('/orders');
-    await expect(page.getByRole('button', { name: 'New order' })).toBeVisible();
-    await capture(page, 'pipeline');
-    await page.getByRole('button', { name: 'New order' }).click();
-    const create = page.getByRole('dialog', { name: 'New order' });
-    await expect(create.getByLabel('Phone', { exact: true })).toBeVisible();
-    await expect(create.getByLabel('Name', { exact: true })).toBeVisible();
-    await expect(create.getByLabel('Buyer name')).toHaveCount(0);
-    await create.getByLabel('Name', { exact: true }).fill('Rahim Ahmed');
-    const gift = create.getByLabel('Deliver to someone else');
-    const recipientPhone = create.getByLabel('Recipient phone');
-    await create.getByLabel('Phone', { exact: true }).fill('01701000014');
-    await gift.check();
-    await expect(create.getByLabel('Buyer name')).toHaveValue('Rahim Ahmed');
-    await expect(recipientPhone).toHaveValue('');
-    await create.getByLabel('Recipient name').fill('Karim Ahmed');
-    await recipientPhone.fill('01701000015');
-    await create.getByLabel('Address').fill('House 14, Mirpur');
-    await create.getByRole('button', { name: 'Save order' }).click();
-    await expect(create.getByText('Choose a district or upazila')).toBeVisible();
-    await expect(create.getByLabel('District')).toHaveAttribute('aria-invalid', 'true');
-    await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
-    await create.getByLabel('District').selectOption({ label: 'Dhaka' });
-    const zonesCreated = page.waitForResponse(
-      (response) =>
-        response.url().endsWith('/api/delivery-zones/initialize-defaults') &&
-        response.request().method() === 'POST',
+    await database.pool.query(
+      "insert into product_variants (id,store_id,product_id,title,on_hand) values ($1,$2,$3,'M',0)",
+      [soldOutVariantId, storeId, soldOutId],
     );
-    await create.getByRole('button', { name: 'Set up delivery zones' }).click();
-    const zonesResponse = await zonesCreated;
-    expect(zonesResponse.status()).toBe(201);
-    const zones = (await zonesResponse.json()) as DeliveryZoneListResponse;
+    const zonesCreated = await context.request.post('/api/delivery-zones/initialize-defaults', {
+      headers,
+    });
+    expect(zonesCreated.status()).toBe(201);
+    const zones = (await zonesCreated.json()) as DeliveryZoneListResponse;
     zoneIds = zones.items.map(({ id }) => id);
     zoneId = zones.items.find(({ name }) => name === 'Inside Dhaka')?.id;
     expect(zoneId).toBeDefined();
-    await expect(create.getByLabel('Delivery (৳)')).toHaveAttribute('placeholder', '60.00');
-    const product = create.getByLabel('Product 1', { exact: true });
-    const size = create.getByLabel('Size 1', { exact: true });
-    await expect(product.getByRole('option', { name: /Cotton Panjabi/ })).toHaveCount(0);
-    await create.getByRole('button', { name: 'Load more products' }).click();
-    await product.selectOption(productId);
-    await expect(size).toHaveValue('');
-    await create.getByRole('button', { name: 'Save order' }).click();
-    await expect(size).toHaveAttribute('aria-invalid', 'true');
-    await expect(size.getByRole('option', { name: 'M · 5 left' })).toHaveCount(1);
-    await size.selectOption(variantId);
-    await expect(size).toHaveAttribute('aria-invalid', 'false');
-    await expect(create.getByText('5 in stock')).toBeVisible();
-    const cod = create.getByText(/^Cash on delivery/);
-    await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
-    await create.getByRole('button', { name: 'Add product' }).click();
-    await expect(create.getByText('Cash on delivery')).toHaveCount(0);
-    await create.getByRole('button', { name: 'Remove' }).last().click();
-    const catalogueSearch = create.getByText('Search products', { exact: true });
-    await catalogueSearch.click();
-    const search = create.getByLabel('Product name');
-    const catalogueFiltered = page.waitForResponse((response) =>
-      response.url().includes('/orders/catalogue?search=Missing+product'),
-    );
-    await search.fill('Missing product');
-    await catalogueFiltered;
-    await size.selectOption({ label: 'L · 2 left' });
-    await expect(cod.getByText('৳1,960', { exact: true })).toBeVisible();
-    await size.selectOption(variantId);
-    await expect(create.getByText('5 in stock')).toBeVisible();
-    await expect(cod.getByText('৳1,310', { exact: true })).toBeVisible();
-    await search.clear();
-    await catalogueSearch.click();
-    await create.getByLabel('Delivery (৳)').fill('90.25');
-    await expect(cod.getByText('৳1,340.25', { exact: true })).toBeVisible();
-    await capture(page, 'new');
-    if (process.env.WEB_7_ORDER_EVIDENCE === '1') {
-      await gift.uncheck();
-      await captureNewOrder(page, create);
-      await gift.check();
-      await create.getByLabel('Recipient name').fill('Karim Ahmed');
-      await recipientPhone.fill('01701000015');
-    }
-    let firstKey: string | undefined;
-    let firstBody: string | null;
-    await page.route('**/api/orders', async (route) => {
-      const request = route.request();
-      if (request.method() !== 'POST') return route.continue();
-      const key = request.headers()['idempotency-key'];
-      if (firstKey) {
-        expect(key).toBe(firstKey);
-        expect(request.postData()).toBe(firstBody);
-        return route.continue();
-      }
-      firstKey = key;
-      firstBody = request.postData();
-      expect(firstKey).toBeTruthy();
-      const saved = await route.fetch();
-      expect(saved.status()).toBe(201);
-      await route.abort();
-    });
-    await create.getByRole('button', { name: 'Save order' }).click();
-    await expect(create.getByText('Could not confirm the save')).toBeVisible();
-    await expect(recipientPhone).toBeDisabled();
-    await expect(create.getByRole('button', { name: 'Cancel', exact: true })).toBeDisabled();
-    await expect(create.getByRole('button', { name: 'Close dialog', exact: true })).toBeDisabled();
-    await page.keyboard.press('Escape');
-    await expect(create).toBeVisible();
-    await create.getByRole('button', { name: 'Retry save' }).click();
-    const detail = page.getByRole('dialog', { name: /^Order #/ });
-    await expect(detail.getByText('Karim Ahmed', { exact: true })).toBeVisible();
-    await expect(detail.getByText('Buyer Rahim Ahmed')).toBeVisible();
-    await expect(detail.getByRole('status', { name: 'Order stage' })).toHaveText('To confirm');
-    await expect(detail.getByText('৳1,340.25').first()).toBeVisible();
-    await page.unroute('**/api/orders');
 
+    await page.goto('/orders');
+    await page.getByRole('link', { name: 'New order' }).click();
+    await expect(page).toHaveURL(/\/orders\/new$/);
+    await expect(page.getByRole('heading', { name: 'Create new order' })).toBeVisible();
+    await capture(page, 'empty');
+
+    // Product search: keyboard only, variant chips, stock limits.
+    const search = page.getByRole('combobox', { name: 'Add products' });
+    await search.fill('cotton');
+    const list = page.getByRole('listbox', { name: 'Matching products' });
+    await expect(list.getByRole('option', { name: 'M' })).toBeVisible();
+    await expect(list.getByRole('option', { name: 'L' })).toBeVisible();
+    await search.press('ArrowDown');
+    await expect(list.getByRole('option', { name: 'L' })).toHaveAttribute('aria-selected', 'true');
+    await search.press('ArrowUp');
+    await search.press('Enter');
+    const lines = page.getByRole('list').filter({ hasText: 'Cotton Panjabi' });
+    await expect(lines.getByText('5 in stock')).toBeVisible();
+    await search.fill('sold out');
+    await expect(list.getByRole('option', { name: /Sold Out Shirt/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    await expect(list.getByText('Out of stock')).toBeVisible();
+    await search.press('Enter');
+    await expect(page.getByText('Sold Out Shirt is out of stock')).toHaveCount(0);
+    await expect(lines.getByText('Sold Out Shirt')).toHaveCount(0);
+    await search.fill('');
+    const quantity = page.getByLabel('Quantity of Cotton Panjabi M');
+    await quantity.fill('9');
+    await expect(quantity).toHaveValue('5');
+    await page
+      .getByRole('button', { name: 'One more' })
+      .click({ force: true })
+      .catch(() => undefined);
+    await quantity.fill('2');
+    await expect(quantity).toHaveValue('2');
+
+    // Customer, area and delivery charge from the shop's zones.
+    await page.getByLabel('Phone', { exact: true }).fill('01701000014');
+    await page.getByLabel('Name', { exact: true }).fill('Rahim Ahmed');
+    await page.getByLabel('Address').fill('House 14, Mirpur');
+    await page.getByRole('button', { name: 'Create', exact: true }).first().click();
+    await expect(page.getByText('Choose a district or upazila')).toBeVisible();
+    await page.getByRole('combobox', { name: 'City' }).click();
+    await page.getByRole('option', { name: 'Dhaka', exact: true }).click();
+    await expect(page.getByLabel('Delivery charge')).toHaveAttribute('placeholder', '60.00');
+    const summary = page.getByRole('heading', { name: 'Summary' }).locator('..').locator('..');
+    await expect(summary.getByText('৳2,560', { exact: true }).first()).toBeVisible();
+    await page.getByLabel('Advance payment').fill('200');
+    await expect(
+      summary.getByText('Cash to collect').locator('..').getByText('৳2,360'),
+    ).toBeVisible();
+    await capture(page, 'filled');
+
+    // The test server has no AI model, so a pasted chat fails. The form keeps what was typed.
+    await page
+      .getByLabel('Paste a chat to fill the details')
+      .fill('Name: Karim, 01712345678, Mirpur, Dhaka');
+    await page.getByRole('button', { name: 'Fill with Dakly AI' }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Something went wrong' })).toBeVisible();
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Rahim Ahmed');
+
+    // Removing a line can be undone.
+    await page.getByRole('button', { name: 'Remove Cotton Panjabi M' }).click();
+    await expect(page.getByText('Cotton Panjabi removed', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(quantity).toHaveValue('2');
+
+    // Ctrl+Enter creates the order, and the toast offers another.
+    await page.getByLabel('Name', { exact: true }).press('Control+Enter');
+    await expect(page).toHaveURL(/\/orders\?selected=/);
+    await expect(
+      page.getByRole('button', { name: 'Create another', includeHidden: true }),
+    ).toBeVisible();
+    const detail = page.getByRole('dialog', { name: /^Order #/ });
+    await expect(detail.getByText('Rahim Ahmed', { exact: true }).first()).toBeVisible();
+    await expect(detail.getByRole('status', { name: 'Order stage' })).toHaveText('To confirm');
     await detail.getByRole('button', { name: 'Close', exact: true }).click();
-    const storeContext = await context.request.get('/api/me/context');
-    const { contextTag: storeTag } = await storeContext.json();
+
+    // A returning customer: the phone finds them, fills the details and warns about open orders.
+    await page.getByRole('button', { name: 'Create another' }).click();
+    await expect(page).toHaveURL(/\/orders\/new$/);
+    await page.getByLabel('Phone', { exact: true }).fill('01701000014');
+    await expect(page.getByText('Returning customer Rahim Ahmed')).toBeVisible();
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Rahim Ahmed');
+    await expect(page.getByLabel('Address')).toHaveValue('House 14, Mirpur');
+    await expect(page.getByText('1 open order already go to this number.')).toBeVisible();
+    await capture(page, 'returning');
+
+    // Recently sold products show with nothing typed.
+    await page.getByRole('combobox', { name: 'Add products' }).click();
+    await expect(page.getByRole('listbox', { name: 'Recently sold products' })).toContainText(
+      'Cotton Panjabi',
+    );
+    await page.getByRole('combobox', { name: 'Add products' }).press('Escape');
+
+    // An existing contact is picked from the list as the number is typed.
     const buyer = await context.request.post('/api/contacts', {
       data: { name: 'Sonia Akter', phone: '01701000024' },
-      headers: { Origin: baseURL!, 'X-Session-Context': storeTag },
+      headers,
     });
     expect(buyer.status()).toBe(201);
-    const { id: buyerId } = await buyer.json();
-    existingBuyerId = buyerId;
-    await page.getByRole('button', { name: 'New order' }).click();
-    await create.getByText('Find a customer', { exact: true }).click();
-    await create.getByLabel('Customer name or phone').fill('Sonia Akter');
-    await create.getByRole('button', { name: /Sonia Akter/ }).click();
-    await expect(create.getByLabel('Phone', { exact: true })).toHaveValue('01701000024');
-    await gift.check();
-    await expect(recipientPhone).toHaveValue('');
-    await create.getByLabel('Recipient name').fill('Nusrat Akter');
-    await recipientPhone.fill('01701000025');
-    await create.getByLabel('Address').fill('Road 4, Dhanmondi');
-    await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
-    await create.getByLabel('District').selectOption({ label: 'Dhaka' });
-    await expect(create.getByLabel('Delivery (৳)')).toHaveAttribute('placeholder', '60.00');
-    await create.getByLabel('Product 1', { exact: true }).selectOption(productId);
-    await create.getByLabel('Size 1', { exact: true }).selectOption(variantId);
-    await expect(create.getByText('4 in stock')).toBeVisible();
-    await create.getByLabel('Discount (৳)').fill('1260');
-    await expect(create.getByText('Discount cannot exceed the item total.')).toBeVisible();
-    await expect(cod).toHaveCount(0);
-    await create.getByLabel('Discount (৳)').fill('50');
-    await expect(create.getByText(/^Total/).getByText('৳1,260', { exact: true })).toBeVisible();
-    await create.getByLabel('Discount (৳)').clear();
-    await create.getByLabel('Advance paid (৳)').fill('200');
-    await expect(cod.getByText('৳1,110', { exact: true })).toBeVisible();
-    await capture(page, 'buyer-and-advance');
-    let confirmKey: string | undefined;
-    let confirmBody: string | null;
-    await page.route('**/api/orders', async (route) => {
-      const request = route.request();
-      if (request.method() !== 'POST') return route.continue();
-      expect(request.postDataJSON()).toMatchObject({ confirm: true });
-      if (confirmKey) {
-        expect(request.headers()['idempotency-key']).toBe(confirmKey);
-        expect(request.postData()).toBe(confirmBody);
-        return route.continue();
-      }
-      confirmKey = request.headers()['idempotency-key'];
-      confirmBody = request.postData();
-      expect(confirmKey).toBeTruthy();
-      const confirmed = await route.fetch();
-      expect(confirmed.status()).toBe(201);
-      expect(await confirmed.json()).toMatchObject({ stage: 'to_pack' });
-      await route.abort();
+    existingBuyerId = (await buyer.json()).id;
+    await page.getByLabel('Phone', { exact: true }).fill('017010000');
+    await page
+      .getByRole('option', { name: /Sonia Akter/ })
+      .getByRole('button')
+      .click();
+    await expect(page.getByLabel('Phone', { exact: true })).toHaveValue('01701000024');
+    await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Sonia Akter');
+    await page.getByRole('combobox', { name: 'City' }).click();
+    await page.getByRole('option', { name: 'Dhaka', exact: true }).click();
+    await page.getByLabel('Address').fill('Road 4, Dhanmondi');
+    const productSearch = page.getByRole('combobox', { name: 'Add products' });
+    await productSearch.fill('cotton');
+    await productSearch.press('Enter');
+    await page.getByLabel('Advance payment').fill('200');
+    await page.getByLabel('Confirm now and send it to To pack').check();
+    await page.getByLabel('Name', { exact: true }).press('Control+Enter');
+    await expect(page).toHaveURL(/\/orders\?selected=/);
+    await expect(detail.getByText('Sonia Akter').first()).toBeVisible();
+    const linked = await context.request.get(`/api/orders/customer-lookup?phone=01701000024`, {
+      headers,
     });
-    await create.getByRole('button', { name: 'Save as confirmed' }).click();
-    await expect(create.getByText('Could not confirm the save')).toBeVisible();
-    await create.getByRole('button', { name: 'Retry save' }).click();
-    await expect(detail.getByText('Nusrat Akter', { exact: true })).toBeVisible();
-    await page.unroute('**/api/orders');
-    await expect(detail.getByRole('link', { name: 'Open profile' })).toHaveAttribute(
-      'href',
-      `/customers/${buyerId}`,
-    );
+    expect((await linked.json()).customer.contactId).toBe(existingBuyerId);
+    expect((await linked.json()).openOrders).toBe(1);
     await expect(detail.getByText('To confirm → To pack')).toBeVisible();
     await expect(detail.getByText('৳1,110')).toBeVisible();
 
     const newPrice = await context.request.patch(`/api/products/${productId}`, {
       data: { pricePoisha: 140000, isStockTracked: false },
-      headers: { Origin: baseURL!, 'X-Session-Context': storeTag },
+      headers: { Origin: baseURL!, 'X-Session-Context': contextTag },
     });
     expect(newPrice.status()).toBe(200);
     await page.reload();
@@ -307,7 +230,7 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await editButton.click();
     const edit = page.getByRole('dialog', { name: 'Edit order' });
     await expect(edit.getByText('Sonia Akter')).toBeVisible();
-    await expect(edit.getByText('৳1,250 · 3 in stock', { exact: true })).toBeVisible();
+    await expect(edit.getByText('৳1,250 · 2 in stock', { exact: true })).toBeVisible();
     await expect(edit.getByLabel('Advance paid (৳)')).toHaveValue('200.00');
     await expect(edit.getByRole('button', { name: 'Save order' })).toBeDisabled();
     await edit.getByLabel('Quantity 1').fill('2');
@@ -345,32 +268,6 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     await expect(edit).toBeHidden();
     await expect(detail.getByText('Updated delivery address')).toBeVisible();
     await expect(detail.getByText('৳2,360')).toBeVisible();
-
-    await detail.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByRole('button', { name: 'New order' }).click();
-    await create.getByLabel('Name', { exact: true }).fill('Mina Akter');
-    await create.getByLabel('Phone', { exact: true }).fill('01701000026');
-    await create.getByLabel('Address').fill('House 10, Mirpur');
-    await create.getByLabel('Division').selectOption({ label: 'Dhaka' });
-    await create.getByLabel('District').selectOption({ label: 'Dhaka' });
-    await create.getByText('Search products', { exact: true }).click();
-    await create.getByLabel('Product name').fill('Cotton Panjabi');
-    await create.getByLabel('Product 1', { exact: true }).selectOption(productId);
-    await create.getByLabel('Size 1', { exact: true }).selectOption(variantId);
-    const selfDelivery = page.waitForResponse(
-      (response) =>
-        response.url().endsWith('/api/orders') && response.request().method() === 'POST',
-    );
-    await create.getByRole('button', { name: 'Save order' }).click();
-    const saved = await selfDelivery;
-    expect(saved.status()).toBe(201);
-    expect(await saved.json()).toMatchObject({
-      buyerName: 'Mina Akter',
-      isRecipientBuyer: true,
-      recipientName: 'Mina Akter',
-      recipientPhone: '01701000026',
-    });
-    await expect(detail.getByText('House 10, Mirpur')).toBeVisible();
   } finally {
     const orders = await database.pool.query<{ id: string; buyer_contact_id: string | null }>(
       'select id,buyer_contact_id from orders where store_id=$1 and delivery_zone_id=$2',
@@ -398,11 +295,11 @@ test('creates a staff order with the zone charge, stock and computed COD', async
     ]);
     await database.pool.query(
       'delete from product_variants where store_id=$1 and id=any($2::uuid[])',
-      [storeId, [variantId, largerVariantId]],
+      [storeId, [variantId, largerVariantId, soldOutVariantId]],
     );
     await database.pool.query('delete from products where store_id=$1 and id=any($2::uuid[])', [
       storeId,
-      [productId, ...otherProducts],
+      [productId, soldOutId],
     ]);
     await database.pool.query(
       'delete from delivery_zones where store_id=$1 and id=any($2::uuid[])',

@@ -1,26 +1,14 @@
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import {
-  FormProvider,
-  useFieldArray,
-  useForm,
-  useFormContext,
-  useWatch,
-  type Resolver,
-} from 'react-hook-form';
+import { useRef, useState } from 'react';
+import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 
 import { formatMoney } from '@dakly/contracts/money';
 import {
-  createOrderFormSchema,
-  type CreateOrderInput,
-  type CreateOrderValues,
   type OrderDetail,
   type OrderCatalogueProduct,
   type OrderCatalogueStock,
   type OrderEditorValues,
 } from '@dakly/contracts/orders';
 import { takaInput } from '@dakly/contracts/products';
-import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
@@ -32,8 +20,6 @@ import {
   type VariantChoice,
 } from './order-product-fields';
 import { OrderRecipientFields } from './order-recipient-fields';
-import { SessionDialog } from '@/components/session-dialog';
-import { useCreateOrder } from '@/lib/order-entry/create-order';
 import { useOrderDelivery } from '@/lib/order-entry/get-delivery-charge';
 import {
   useOrderCatalogueProducts,
@@ -41,125 +27,6 @@ import {
 } from '@/lib/order-entry/order-catalogue';
 
 const newLine = { variantId: '', quantity: 1, lineDiscountPoisha: 0 };
-const newOrderDefaults: CreateOrderValues = {
-  buyer: { name: '' },
-  recipient: { name: '', phone: '', address: '', areaId: 0, isBuyer: true },
-  items: [newLine],
-};
-const parseNewOrder = zodResolver(createOrderFormSchema);
-const resolveNewOrder: Resolver<CreateOrderValues, undefined, CreateOrderInput> = (
-  values,
-  context,
-  options,
-) =>
-  parseNewOrder(
-    values.recipient.isBuyer && 'name' in values.buyer
-      ? { ...values, buyer: { name: values.recipient.name } }
-      : values,
-    context,
-    options,
-  );
-
-type NewOrderDialogProps = { onClose: () => void; onSaved: (id: string) => void };
-
-export function NewOrderDialog({ onClose, onSaved }: NewOrderDialogProps) {
-  const create = useCreateOrder();
-  const form = useForm<CreateOrderValues, undefined, CreateOrderInput>({
-    resolver: resolveNewOrder,
-    defaultValues: newOrderDefaults,
-  });
-  const busy = create.isPending || create.mustRetry;
-  const { reset: clearCreateError } = create;
-  // A stock error is about the lines as they were saved, so it goes once a line changes.
-  useEffect(() => {
-    const subscription = form.watch((_values, { name }) => {
-      if (name?.startsWith('items')) clearCreateError();
-    });
-    return () => subscription.unsubscribe();
-  }, [form, clearCreateError]);
-  function save(input: CreateOrderInput) {
-    create.mutate(input, { onSuccess: (order) => onSaved(order.id) });
-  }
-  function submit(event: FormEvent<HTMLFormElement>) {
-    if (!create.mustRetry) return void form.handleSubmit(save)(event);
-    event.preventDefault();
-    if (create.variables) save(create.variables);
-  }
-
-  return (
-    <SessionDialog
-      title="New order"
-      open
-      onClose={onClose}
-      closeDisabled={busy}
-      className="max-h-[calc(100dvh-1rem)] max-w-160 p-4 open:flex open:flex-col sm:p-6"
-    >
-      <FormProvider {...form}>
-        <form className="flex min-h-0 flex-col gap-3" onSubmit={submit}>
-          <div className="min-h-0 overflow-y-auto px-0.5">
-            <fieldset disabled={busy} className="space-y-3">
-              <OrderEditorFields />
-            </fieldset>
-          </div>
-          {create.error && (
-            <p role="alert" className="text-danger">
-              {create.mustRetry
-                ? 'Could not confirm the save. Retry with the same order details.'
-                : create.error.message}
-            </p>
-          )}
-          <NewOrderActions
-            busy={busy}
-            isPending={create.isPending}
-            mustRetry={create.mustRetry}
-            onClose={onClose}
-            onSaveConfirmed={form.handleSubmit((input) => save({ ...input, confirm: true }))}
-          />
-        </form>
-      </FormProvider>
-    </SessionDialog>
-  );
-}
-
-type NewOrderActionsProps = {
-  busy: boolean;
-  isPending: boolean;
-  mustRetry: boolean;
-  onClose: () => void;
-  onSaveConfirmed: () => void;
-};
-
-function NewOrderActions({
-  busy,
-  isPending,
-  mustRetry,
-  onClose,
-  onSaveConfirmed,
-}: NewOrderActionsProps) {
-  return (
-    <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-border pt-3">
-      <Button
-        variant="secondary"
-        onClick={onClose}
-        disabled={busy}
-        className="min-h-11 sm:min-h-10"
-      >
-        Cancel
-      </Button>
-      <Button type="submit" loading={isPending} className="min-h-11 sm:min-h-10">
-        {mustRetry ? 'Retry save' : 'Save order'}
-      </Button>
-      <Button
-        variant="secondary"
-        disabled={busy}
-        className="min-h-11 sm:min-h-10"
-        onClick={onSaveConfirmed}
-      >
-        Save as confirmed
-      </Button>
-    </div>
-  );
-}
 
 export type OrderEditorFieldsProps = { order?: OrderDetail };
 
