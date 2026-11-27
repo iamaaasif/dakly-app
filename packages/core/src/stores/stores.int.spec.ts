@@ -12,6 +12,7 @@ import { users, sessions } from '@dakly/db/schema/auth';
 import { plans, subscriptions } from '@dakly/db/schema/billing';
 import { contacts } from '@dakly/db/schema/contacts';
 import { auditLog } from '@dakly/db/schema/platform';
+import { deliveryZones } from '@dakly/db/schema/orders';
 import { stores, storeCounters } from '@dakly/db/schema/stores';
 import { memberships, roles } from '@dakly/db/schema/team';
 
@@ -105,6 +106,7 @@ describe('Store onboarding and settings (Fastify and Postgres)', () => {
     await admin.db.delete(memberships).where(inArray(memberships.userId, userIds));
     await admin.db.delete(roles).where(inArray(roles.storeId, storeIds));
     await admin.db.delete(contacts).where(inArray(contacts.storeId, storeIds));
+    await admin.db.delete(deliveryZones).where(inArray(deliveryZones.storeId, storeIds));
     await admin.db.delete(storeCounters).where(inArray(storeCounters.storeId, storeIds));
     await admin.db.delete(stores).where(inArray(stores.id, storeIds));
     await admin.db.delete(users).where(inArray(users.id, userIds));
