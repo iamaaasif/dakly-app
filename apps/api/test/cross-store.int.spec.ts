@@ -5132,6 +5132,18 @@ fixture('POST /products/:productId/photos/upload-url', async () => {
     ).statusCode,
   ).toBe(400);
 });
+fixture('POST /conversations/:conversationId/photos/upload-url', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/photos/upload-url`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  const issued = (await success(b, 'POST', url(own), 200, photoInput)).json();
+  expect(new URL(issued.uploadUrl).pathname).toBe(
+    `/dakly-local/stores/${b.id}/chat_photos/${issued.fileId}`,
+  );
+  await hidden(b, 'POST', url, foreign, () => photoInput);
+});
 fixture('POST /products/:productId/photos/confirm', async () => {
   const { a, b } = await pair(),
     foreignId = await product(a),
