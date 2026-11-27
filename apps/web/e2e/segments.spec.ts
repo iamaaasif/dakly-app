@@ -43,8 +43,10 @@ test('creates a segment with one tag condition and sees its count', async ({
     await page.goto('/segments');
     await page.getByRole('link', { name: 'Create segment' }).click();
     await page.getByLabel('Segment name').fill(`Tagged ${tag}`);
-    await page.getByRole('group', { name: 'Condition 1' }).getByLabel('Value').fill(tag);
-    await expect(page.getByText('1 customer matches')).toBeVisible();
+    await page.getByRole('group', { name: 'Group 1, condition 1' }).getByLabel('Value').fill(tag);
+    await expect(
+      page.getByText('Estimated contacts').locator('xpath=following-sibling::p'),
+    ).toHaveText('1');
     await page.setViewportSize({ width: 360, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,

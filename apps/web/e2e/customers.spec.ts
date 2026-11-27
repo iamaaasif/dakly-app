@@ -34,7 +34,7 @@ test('adds a contact, lists it as a customer after an order and opens the profil
     });
     expect(selected.status()).toBe(204);
     await page.goto('/contacts');
-    await page.getByRole('button', { name: 'Add customers' }).click();
+    await page.getByRole('button', { name: 'Add contact', exact: true }).click();
     await page.getByRole('button', { name: /Add manually/ }).click();
     await page.getByLabel('Name', { exact: true }).fill(name);
     await page.getByLabel('Phone', { exact: true }).fill(phone);

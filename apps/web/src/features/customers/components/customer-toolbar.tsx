@@ -22,7 +22,7 @@ import {
   spendRangeOf,
   spendRanges,
 } from '../customer-filter-options';
-import { type CustomerFilterChange, customersHref } from '../customers-query';
+import { type CustomerFilterChange, type ListHref, customersHref } from '../customers-query';
 import { CustomerColumnsMenu } from './customer-columns-menu';
 import { useSessionContext } from '@/lib/session-context';
 import { useUrlRouter } from '@/lib/use-url-query';
@@ -38,14 +38,15 @@ type CustomerToolbarProps = {
 
 export function CustomerToolbar({ query, columns, searchError }: CustomerToolbarProps) {
   const router = useUrlRouter();
-  const change = (next: CustomerFilterChange) => router.push(customersHref(query, columns, next));
+  const hrefFor: ListHref = (chosen, next) => customersHref(query, chosen, next);
+  const change = (next: CustomerFilterChange) => router.push(hrefFor(columns, next));
   const anyValue = 'any';
   const pick = (value: string) => (value === anyValue ? undefined : value);
   const spend = spendRangeOf(query);
 
   return (
     <TableToolbar className="gap-3 p-4">
-      <SearchField query={query} columns={columns} searchError={searchError} />
+      <SearchField query={query} columns={columns} hrefFor={hrefFor} searchError={searchError} />
       <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
         <FilterSelect
           label="Source"
@@ -86,8 +87,8 @@ export function CustomerToolbar({ query, columns, searchError }: CustomerToolbar
         />
       </div>
       <div className="ml-auto flex items-center gap-2">
-        <ExportButton query={query} />
-        <CustomerColumnsMenu query={query} columns={columns} />
+        <ExportButton query={query} noun="customer" />
+        <CustomerColumnsMenu query={query} columns={columns} hrefFor={hrefFor} />
       </div>
     </TableToolbar>
   );
@@ -102,7 +103,14 @@ type FilterSelectProps = {
   options: { value: string; label: string }[];
 };
 
-function FilterSelect({ label, className, prefix, value, onChange, options }: FilterSelectProps) {
+export function FilterSelect({
+  label,
+  className,
+  prefix,
+  value,
+  onChange,
+  options,
+}: FilterSelectProps) {
   return (
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger aria-label={label} className={cn('text-sm sm:w-auto sm:min-w-0', className)}>
@@ -122,7 +130,9 @@ function FilterSelect({ label, className, prefix, value, onChange, options }: Fi
   );
 }
 
-function SearchField({ query, columns, searchError }: CustomerToolbarProps) {
+type SearchFieldProps = CustomerToolbarProps & { hrefFor: ListHref };
+
+export function SearchField({ query, columns, hrefFor, searchError }: SearchFieldProps) {
   const router = useUrlRouter();
   const form = useForm<SearchInput>({
     resolver: zodResolver(searchSchema),
@@ -130,7 +140,7 @@ function SearchField({ query, columns, searchError }: CustomerToolbarProps) {
     errors: searchError ? { search: { type: 'server', message: searchError } } : undefined,
   });
   const submit = form.handleSubmit((values) =>
-    router.push(customersHref(query, columns, { search: values.search })),
+    router.push(hrefFor(columns, { search: values.search })),
   );
   const { onChange, ...field } = form.register('search', {
     setValueAs: (value: string) => value.trim() || undefined,
@@ -166,15 +176,23 @@ function SearchField({ query, columns, searchError }: CustomerToolbarProps) {
   );
 }
 
-function ExportButton({ query }: { query: ContactListQuery }) {
+export function ExportButton({
+  query,
+  noun,
+}: {
+  query: ContactListQuery;
+  noun: 'customer' | 'contact';
+}) {
   const { data: context } = useSessionContext();
   const exportCustomers = useExportCustomers();
   const showToast = useToast();
   if (!context?.currentStore?.canExportCustomers) return null;
-  const { type, source, minSpendPoisha, maxSpendPoisha, lastPurchase, search, hasOrdered } = query;
+  const { type, source, tag, minSpendPoisha, maxSpendPoisha, lastPurchase, search, hasOrdered } =
+    query;
   const filters = {
     type,
     source,
+    tag,
     minSpendPoisha,
     maxSpendPoisha,
     lastPurchase,
@@ -190,7 +208,7 @@ function ExportButton({ query }: { query: ContactListQuery }) {
         exportCustomers.mutate(filters, {
           onSuccess: (count) =>
             showToast(
-              `Exporting ${formatCount(count)} ${count === 1 ? 'customer' : 'customers'} to Excel. Check your downloads in a moment.`,
+              `Exporting ${formatCount(count)} ${count === 1 ? noun : `${noun}s`} to Excel. Check your downloads in a moment.`,
             ),
           onError: (error) =>
             showToast(

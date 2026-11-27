@@ -67,7 +67,10 @@ describe('SegmentsService', () => {
       run: (_: string, work: () => unknown) => work(),
       runLocked: (_: string, work: () => unknown) => work(),
     };
-    const contacts = { countMatching: async () => 7 };
+    const contacts = {
+      countMatching: async () => 7,
+      countReachable: async () => ({ whatsapp: 5, sms: 4, messenger: 2 }),
+    };
     service = new SegmentsService(
       repository as unknown as SegmentsRepository,
       contacts as unknown as ContactsService,
@@ -124,6 +127,9 @@ describe('SegmentsService', () => {
   });
 
   it('counts through the contacts service', async () => {
-    expect(await service.count(STORE_ID, vip)).toEqual({ count: 7 });
+    expect(await service.count(STORE_ID, vip)).toEqual({
+      count: 7,
+      reachable: { whatsapp: 5, sms: 4, messenger: 2 },
+    });
   });
 });

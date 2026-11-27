@@ -10,18 +10,22 @@ import {
 } from '@dakly/ui/dropdown-menu';
 
 import { type CustomerColumn, customerColumnLabels, customerColumns } from '../customer-columns';
-import { customersHref } from '../customers-query';
+import type { ListHref } from '../customers-query';
 import { useUrlRouter } from '@/lib/use-url-query';
 
-type CustomerColumnsMenuProps = { query: ContactListQuery; columns: CustomerColumn[] };
+type CustomerColumnsMenuProps = {
+  query: ContactListQuery;
+  columns: CustomerColumn[];
+  hrefFor: ListHref;
+};
 
-export function CustomerColumnsMenu({ query, columns }: CustomerColumnsMenuProps) {
+export function CustomerColumnsMenu({ query, columns, hrefFor }: CustomerColumnsMenuProps) {
   const router = useUrlRouter();
   const choose = (column: CustomerColumn, on: boolean) => {
     const chosen = customerColumns.filter((each) =>
       each === column ? on : columns.includes(each),
     );
-    router.replace(customersHref(query, chosen, { cursor: query.cursor }));
+    router.replace(hrefFor(chosen, { cursor: query.cursor }));
   };
   return (
     <DropdownMenu>
