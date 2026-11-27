@@ -1,3 +1,4 @@
+import type { AuditEntry } from '@dakly/contracts/audit';
 import type { CommentResponse } from '@dakly/contracts/comments';
 import { privateReplyWindowDays } from '@dakly/contracts/comments';
 
@@ -33,3 +34,20 @@ export function toResponse(row: CommentRow, now: Date): CommentResponse {
     commentedAt: row.commentedAt,
   };
 }
+
+// Another reply already won, or the private window closed: the comment is settled, not failed.
+export const automaticReplySkips = [
+  'COMMENT_ALREADY_REPLIED',
+  'COMMENT_PRIVATE_REPLY_USED',
+  'COMMENT_PRIVATE_REPLY_EXPIRED',
+  'COMMENT_PRIVATE_REPLY_BLOCKED',
+  'CHANNEL_NOT_CONNECTED',
+];
+
+// Who sends decides which claims apply: the AI agent yields to an automation that claimed the
+// comment, an automation answers its own claim, and staff always may.
+export type ReplyBy = { actor: AuditEntry['actor']; scope: 'staff' | 'ai' | 'automation' };
+export const staffBy = (userId: string): ReplyBy => ({
+  actor: { kind: 'user', userId },
+  scope: 'staff',
+});

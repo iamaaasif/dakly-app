@@ -16,7 +16,15 @@ import { OutboxService } from '../platform/outbox/outbox.service';
 import { MINUTE_MS } from '../platform/time';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
-import { canReplyPrivately, channelOf, privateReplyClosesAt, toResponse } from './comment-rows';
+import {
+  automaticReplySkips,
+  type ReplyBy,
+  staffBy,
+  canReplyPrivately,
+  channelOf,
+  privateReplyClosesAt,
+  toResponse,
+} from './comment-rows';
 import { commentError } from './comments.errors';
 import { CommentsRepository, type CommentRow } from './comments.repository';
 
@@ -38,23 +46,12 @@ type ReceiveOutcome =
 
 // Who sends decides which claims apply: the AI agent yields to an automation that claimed the
 // comment, an automation answers its own claim, and staff always may.
-type ReplyBy = { actor: AuditEntry['actor']; scope: 'staff' | 'ai' | 'automation' };
-const staffBy = (userId: string): ReplyBy => ({ actor: { kind: 'user', userId }, scope: 'staff' });
 
 type AutomaticReply = {
   privateBody?: string;
   publicBody: string;
   stillAllowed: () => Promise<boolean>;
 };
-
-// Another reply already won, or the private window closed: the comment is settled, not failed.
-const automaticReplySkips = [
-  'COMMENT_ALREADY_REPLIED',
-  'COMMENT_PRIVATE_REPLY_USED',
-  'COMMENT_PRIVATE_REPLY_EXPIRED',
-  'COMMENT_PRIVATE_REPLY_BLOCKED',
-  'CHANNEL_NOT_CONNECTED',
-];
 
 function isDefiniteRejection(error: unknown) {
   return error instanceof MetaRequestError && ['rejected', 'auth_error'].includes(error.code);
@@ -261,7 +258,7 @@ export class CommentsService {
     await this.sendPublicReply(storeId, by, id, publicBody);
   }
 
-  private async sendPublicReply(storeId: string, by: ReplyBy, id: string, body: string) {
+  async sendPublicReply(storeId: string, by: ReplyBy, id: string, body: string) {
     const row = await this.require(storeId, id);
     if (row.publicReplyExternalId) throw commentError('COMMENT_ALREADY_REPLIED');
     const channel = channelOf(row.kind);
@@ -300,7 +297,7 @@ export class CommentsService {
     });
   }
 
-  private async sendPrivateReply(storeId: string, by: ReplyBy, id: string, body: string) {
+  async sendPrivateReply(storeId: string, by: ReplyBy, id: string, body: string) {
     const row = await this.require(storeId, id);
     const now = this.clock.now();
     if (row.privateRepliedAt) throw commentError('COMMENT_PRIVATE_REPLY_USED');
