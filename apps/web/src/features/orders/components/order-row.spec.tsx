@@ -57,6 +57,18 @@ afterEach(() => {
 });
 
 describe('order row', () => {
+  it('names the buyer and shows who the parcel goes to when it is someone else', () => {
+    renderRow({ ...order, buyerName: 'Nusrat Jahan' }, false);
+    expect(screen.getByRole('link', { name: 'Nusrat Jahan' })).toBeTruthy();
+    expect(screen.getByText(/to Tanvir Hasan/)).toBeTruthy();
+  });
+
+  it('falls back to the recipient when no buyer is known and adds no "to" line', () => {
+    renderRow(order, false);
+    expect(screen.getByRole('link', { name: 'Tanvir Hasan' })).toBeTruthy();
+    expect(screen.queryByText(/ to /)).toBeNull();
+  });
+
   it('marks a parcel with the courier as delivered from the row', async () => {
     request.mockResolvedValue({ ...order, stage: 'delivered' });
     renderRow(order, true);

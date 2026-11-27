@@ -63,7 +63,9 @@ export function OrderTabs({ query, counts, children }: OrderTabsProps) {
           >
             {orderTabLabels[tab]}
             {counts ? (
-              <TabCount>{counts[tab]}</TabCount>
+              <TabCount className="group-data-[state=active]:bg-action group-data-[state=active]:text-on-primary">
+                {counts[tab]}
+              </TabCount>
             ) : (
               <Skeleton className="h-[18px] w-5 rounded-full" />
             )}
