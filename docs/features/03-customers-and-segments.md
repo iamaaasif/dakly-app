@@ -140,8 +140,7 @@ The web app has two customer screens.
   Export and the Columns menu sit beside them. The table is the Customers table without Orders,
   Spent and Last purchase, with the same cards on a phone. Add contact opens the chooser (Add
   manually, Import, Scan your khata); the redesigned chooser and form follow in the next DSN-21 PR. A new
-  contact has no orders, so it shows here and not on Customers. Row checkboxes follow the
-  Customers screen (DSN-12).
+  contact has no orders, so it shows here and not on Customers. Row checkboxes and the selected count work as on the Customers screen.
 - The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
   chat channels the contact wrote from, read only. A deleted contact, or one from another
   store, reads as not found.
