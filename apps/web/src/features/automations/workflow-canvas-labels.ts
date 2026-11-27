@@ -48,6 +48,8 @@ export function actionLabel(action: ActionStep) {
     notify_team: 'Notify team',
     hand_to_person: 'Hand to a person',
     give_coupon: 'Give a coupon',
+    reply_to_comment: 'Reply to comment',
+    send_private_reply: 'Send private reply',
   };
   return labels[action.action];
 }
@@ -57,6 +59,8 @@ export function actionDetail(action: ActionStep) {
   if (action.action === 'remove_tag') return `Remove “${action.tag}”`;
   if (action.action === 'create_task') return action.title;
   if (action.action === 'notify_team') return action.text;
+  if (action.action === 'reply_to_comment') return pluralize(action.lines.length, 'wording');
+  if (action.action === 'send_private_reply') return action.text;
   if (action.action !== 'give_coupon') return undefined;
   return `${discountLabel(action.discount)}, valid ${pluralize(action.validDays, 'day')}`;
 }

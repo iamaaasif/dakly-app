@@ -36,6 +36,14 @@ export function priceQuestion(text: string): Language | undefined {
   return /[a-z]/u.test(normalized) ? 'banglish' : 'bangla';
 }
 
+// For text that is more than a bare price question, such as "ami nibo, dam koto vai".
+export function commentLanguage(text: string): Language {
+  if (/[ঀ-৿]/u.test(text)) return 'bangla';
+  return /(?<![a-z])(?:dam|daam|koto|kto|ami|nibo|lagbe|bhai|vai)(?![a-z])/iu.test(text)
+    ? 'banglish'
+    : 'english';
+}
+
 export const publicPriceAcknowledgement = {
   bangla: 'মেসেঞ্জারে দাম জানিয়েছি।',
   banglish: 'Messenger e dam janiyechi.',

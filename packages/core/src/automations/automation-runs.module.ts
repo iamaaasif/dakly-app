@@ -17,6 +17,7 @@ import { StoresModule } from '../stores/stores.module';
 import { WalletsModule } from '../wallets/wallets.module';
 import { AutomationBirthdaySweepService } from './automation-birthday-sweep.service';
 import { AutomationBirthdaysService } from './automation-birthdays.service';
+import { AutomationCommentStepsService } from './automation-comment-steps.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationConfirmationTapService } from './automation-confirmation-tap.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
@@ -50,6 +51,7 @@ import { AnswerAutomationConfirmationTap } from './jobs/answer-automation-confir
     WalletsModule,
   ],
   providers: [
+    AutomationCommentStepsService,
     AutomationConditionsService,
     AutomationConfirmationTapService,
     AnswerAutomationConfirmationTap,

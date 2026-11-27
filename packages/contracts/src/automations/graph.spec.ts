@@ -370,4 +370,70 @@ describe('automationGraphSchema', () => {
       expect(messages(result)).toContain('message_received has no comment_intent filter');
     });
   });
+  describe('comment reply steps', () => {
+    const publicStep = (next: string) => ({
+      kind: 'action',
+      action: {
+        action: 'reply_to_comment',
+        lines: ['ইনবক্সে দাম জানিয়ে দিয়েছি', 'Inbox e details dilam', 'Sent you the details'],
+      },
+      next,
+    });
+    const privateStep = (next: string, text = 'ধন্যবাদ! Details niche', includeProduct = true) => ({
+      kind: 'action',
+      action: { action: 'send_private_reply', text, includeProduct },
+      next,
+    });
+    const parse = (steps: Record<string, unknown>, key = 'comment_on_post') =>
+      automationGraphSchema.safeParse({
+        ...workflow({ start: send, end: { kind: 'exit' } }, { trigger: { key, filters: [] } }),
+        firstStepKey: 'a',
+        steps,
+      });
+    const end = { kind: 'exit' };
+
+    it('accepts the private reply first and the public reply after it', () => {
+      expect(messages(parse({ a: privateStep('b'), b: publicStep('end'), end }))).toEqual([]);
+    });
+
+    it('refuses the private reply after the public one', () => {
+      expect(messages(parse({ a: publicStep('b'), b: privateStep('end'), end }))).toContain(
+        'Send the private reply before the public one',
+      );
+    });
+
+    it('refuses either reply outside a comment workflow', () => {
+      const result = parse({ a: publicStep('end'), end }, 'message_received');
+      expect(messages(result)).toContain('Only a comment_on_post workflow can answer a comment');
+    });
+
+    it('refuses a second reply of the same kind', () => {
+      const result = parse({ a: publicStep('b'), b: publicStep('end'), end });
+      expect(messages(result)).toContain('A comment gets one of each reply');
+    });
+
+    it.each([
+      ['a price in Bangla', '৪৫০ টাকা, inbox dekhun'],
+      ['a price in Banglish', 'Price 450 tk'],
+      ['a phone number', 'Call 01712345678'],
+    ])('refuses a public wording with %s', (_name, line) => {
+      const action = { action: 'reply_to_comment', lines: [line, 'Inbox e dilam'] };
+      expect(parse({ a: { kind: 'action', action, next: 'end' }, end }).success).toBe(false);
+    });
+
+    it('refuses repeated or too few wordings', () => {
+      const lines = (value: string[]) =>
+        parse({
+          a: { kind: 'action', action: { action: 'reply_to_comment', lines: value }, next: 'end' },
+          end,
+        }).success;
+      expect(lines(['Inbox e dilam'])).toBe(false);
+      expect(lines(['Inbox e dilam', 'Inbox e dilam'])).toBe(false);
+    });
+
+    it('refuses a typed price in the private reply but allows the product card', () => {
+      expect(parse({ a: privateStep('end', 'দাম ৫০০ টাকা'), end }).success).toBe(false);
+      expect(parse({ a: privateStep('end', 'Details niche', true), end }).success).toBe(true);
+    });
+  });
 });

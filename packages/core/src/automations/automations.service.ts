@@ -336,7 +336,12 @@ function checkPublishable(graph: AutomationGraph) {
 
 type ActionKind = Extract<AutomationStep, { kind: 'action' }>['action']['action'];
 // The runner's actions; the others wait for the feature that owns them.
-const RUNNABLE_ACTIONS: readonly ActionKind[] = ['add_tag', 'remove_tag'];
+const RUNNABLE_ACTIONS: readonly ActionKind[] = [
+  'add_tag',
+  'remove_tag',
+  'reply_to_comment',
+  'send_private_reply',
+];
 
 // What the runner cannot do yet: taps on workflow messages are not recorded, the review list does
 // not exist, and only tag actions have an owning service.

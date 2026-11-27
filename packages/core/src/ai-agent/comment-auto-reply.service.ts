@@ -14,7 +14,7 @@ import {
   priceQuestion,
   replyLanguageFor,
   publicPriceAcknowledgement,
-} from './comment-price-reply';
+} from '../comments/comment-price-reply';
 
 @Injectable()
 export class CommentAutoReplyService {

@@ -11,6 +11,7 @@ import {
   triggerFilterFields,
   triggerKeys,
 } from './catalogue';
+import { privateReplyProblem, publicReplyProblem } from './comment-reply';
 import { usesOrderFields } from './text';
 
 // Campaigns send on three channels. A workflow also sends on Instagram, because it answers where
@@ -152,6 +153,16 @@ const discountSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('free_delivery') }),
 ]);
 
+const publicLineSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(300)
+  .superRefine((text, context) => {
+    const problem = publicReplyProblem(text);
+    if (problem) context.addIssue({ code: 'custom', message: problem });
+  });
+
 export const actionSettingsSchema = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('add_tag'), tag: tagSchema }),
   z.strictObject({ action: z.literal('remove_tag'), tag: tagSchema }),
@@ -162,6 +173,25 @@ export const actionSettingsSchema = z.discriminatedUnion('action', [
     action: z.literal('give_coupon'),
     discount: discountSchema,
     validDays: z.number().int().min(1).max(90),
+  }),
+  // Wordings rotate between people, so Meta does not see the same text again and again.
+  z.strictObject({
+    action: z.literal('reply_to_comment'),
+    lines: z.array(publicLineSchema).min(2).max(5).refine(isUnique, 'Lines repeat'),
+  }),
+  z.strictObject({
+    action: z.literal('send_private_reply'),
+    text: z
+      .string()
+      .trim()
+      .min(1)
+      .max(640)
+      .superRefine((text, context) => {
+        const problem = privateReplyProblem(text);
+        if (problem) context.addIssue({ code: 'custom', message: problem });
+      }),
+    // Adds the product's name and price from the catalogue when the post shows one product.
+    includeProduct: z.boolean(),
   }),
 ]);
 
@@ -337,6 +367,43 @@ function checkOrderFields({ trigger, steps }: GraphShape, context: Context) {
   }
 }
 
+function actionKeys(steps: GraphShape['steps'], action: string) {
+  return Object.entries(steps).flatMap(([key, step]) =>
+    step.kind === 'action' && step.action.action === action ? [key] : [],
+  );
+}
+
+// Meta lets a comment have one private reply, and it must come before the public one.
+function checkCommentSteps({ trigger, steps }: GraphShape, context: Context) {
+  const publicKeys = actionKeys(steps, 'reply_to_comment');
+  const privateKeys = actionKeys(steps, 'send_private_reply');
+  if (trigger.key !== 'comment_on_post') {
+    for (const key of [...publicKeys, ...privateKeys])
+      addIssue(context, ['steps', key], 'Only a comment_on_post workflow can answer a comment');
+    return;
+  }
+  for (const keys of [publicKeys, privateKeys])
+    if (keys.length > 1) addIssue(context, ['steps', keys[1]!], 'A comment gets one of each reply');
+  const [publicKey] = publicKeys;
+  const [privateKey] = privateKeys;
+  if (publicKey && privateKey && isReachable(steps, publicKey, privateKey))
+    addIssue(context, ['steps', privateKey], 'Send the private reply before the public one');
+}
+
+function isReachable(steps: GraphShape['steps'], from: string, to: string): boolean {
+  const seen = new Set<string>();
+  const queue = [from];
+  for (let key = queue.pop(); key !== undefined; key = queue.pop()) {
+    if (seen.has(key) || !steps[key]) continue;
+    seen.add(key);
+    for (const next of nextStepKeys(steps[key])) {
+      if (next === to) return true;
+      queue.push(next);
+    }
+  }
+  return false;
+}
+
 // The format templates in code and the canvas both produce (A5). Every path ends at an exit.
 export const automationGraphSchema = graphShapeSchema.superRefine((graph, context) => {
   if (Object.keys(graph.steps).length > MAX_WORKFLOW_STEPS) {
@@ -344,6 +411,7 @@ export const automationGraphSchema = graphShapeSchema.superRefine((graph, contex
   }
   checkTriggerFilters(graph.trigger, context);
   checkOrderFields(graph, context);
+  checkCommentSteps(graph, context);
   checkReferences(graph, context);
   checkPaths(graph, context);
 });

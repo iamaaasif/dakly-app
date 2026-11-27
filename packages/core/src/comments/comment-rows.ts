@@ -33,3 +33,12 @@ export function toResponse(row: CommentRow, now: Date): CommentResponse {
     commentedAt: row.commentedAt,
   };
 }
+
+// Another reply already won, or the private window closed: the comment is settled, not failed.
+export const automaticReplySkips = [
+  'COMMENT_ALREADY_REPLIED',
+  'COMMENT_PRIVATE_REPLY_USED',
+  'COMMENT_PRIVATE_REPLY_EXPIRED',
+  'COMMENT_PRIVATE_REPLY_BLOCKED',
+  'CHANNEL_NOT_CONNECTED',
+];

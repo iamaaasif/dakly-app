@@ -274,6 +274,8 @@ export const actionKinds = [
   'notify_team',
   'hand_to_person',
   'give_coupon',
+  'reply_to_comment',
+  'send_private_reply',
 ] as const;
 export type ActionKind = (typeof actionKinds)[number];
 
@@ -288,4 +290,7 @@ export const automationActions: Record<
   hand_to_person: { needs: 'chats_extension', availableBefore: 'orders' },
   // Discount codes live in Orders.
   give_coupon: { needs: 'orders', availableBefore: null },
+  // Only a comment_on_post workflow has a comment to answer.
+  reply_to_comment: { needs: 'chats_extension', availableBefore: 'orders' },
+  send_private_reply: { needs: 'chats_extension', availableBefore: 'orders' },
 };

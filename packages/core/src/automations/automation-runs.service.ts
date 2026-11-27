@@ -12,6 +12,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
+import { AutomationCommentStepsService } from './automation-comment-steps.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationMessengerSendService } from './automation-messenger-send.service';
 import { AutomationOrderTextService } from './automation-order-text.service';
@@ -79,6 +80,8 @@ export class AutomationRunsService {
     @Inject(AutomationSendRetryService) private readonly smsRetry: AutomationSendRetryService,
     @Inject(AutomationMessengerSendService)
     private readonly messengerSend: AutomationMessengerSendService,
+    @Inject(AutomationCommentStepsService)
+    private readonly commentSteps: AutomationCommentStepsService,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
     @Inject(AutomationsService) private readonly automations: AutomationsService,
   ) {}
@@ -152,6 +155,7 @@ export class AutomationRunsService {
       tappedStepKeys: await this.repository.listTappedStepKeys(storeId, claim.runId),
       wakeAt: run.wakeAt,
       orderId: run.triggerOrderId,
+      commentId: run.triggerCommentId,
     };
     if (step.kind === 'send' && started)
       return isChatChannel(started.channel)
@@ -202,7 +206,10 @@ export class AutomationRunsService {
           return failed('Review before sending is not available yet', now);
         return this.startSend(claim, step, facts);
       case 'action':
-        return runAction(stepKey, step, now);
+        return step.action.action === 'reply_to_comment' ||
+          step.action.action === 'send_private_reply'
+          ? this.commentSteps.run(stepKey, step, facts, now)
+          : runAction(stepKey, step, now);
       case 'exit':
         return {
           run: { status: 'done', finishedAt: now },

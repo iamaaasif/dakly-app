@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { commentPriceReply, priceQuestion } from './comment-price-reply';
+import { commentLanguage, commentPriceReply, priceQuestion } from './comment-price-reply';
 
 describe('Facebook price comments', () => {
   it.each([
@@ -57,4 +57,15 @@ describe('Facebook price comments', () => {
   ])('skips sold-out products and prices that depend on the variant', ({ variants }) =>
     expect(commentPriceReply('english', { ...product, variants })).toBeUndefined(),
   );
+});
+
+describe('commentLanguage', () => {
+  it.each([
+    ['এটার দাম কত, আমি নিব', 'bangla'],
+    ['ami nibo, dam koto vai', 'banglish'],
+    ['এটার price koto', 'bangla'],
+    ['Is this available? I want to order', 'english'],
+  ])('reads %s as %s', (text, expected) => {
+    expect(commentLanguage(text)).toBe(expected);
+  });
 });
