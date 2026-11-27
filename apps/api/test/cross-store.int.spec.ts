@@ -958,6 +958,24 @@ async function productCategory(shop: Shop, name: string) {
 async function productBrand(shop: Shop, name: string) {
   return (await success(shop, 'POST', '/products/brands', 201, { name })).json().id as string;
 }
+fixture('GET /products/tags', async () => {
+  const { a, b } = await pair();
+  for (const [shop, tag] of [
+    [a, 'Eid'],
+    [b, 'Winter'],
+  ] as const)
+    await success(shop, 'POST', '/products', 201, {
+      name: 'Panjabi',
+      pricePoisha: 1000,
+      tags: [tag],
+    });
+  const names = async (shop: Shop) =>
+    (await success(shop, 'GET', '/products/tags', 200))
+      .json()
+      .items.map((row: { name: string }) => row.name);
+  expect(await names(a)).toEqual(['Eid']);
+  expect(await names(b)).toEqual(['Winter']);
+});
 fixture('GET /products/categories', async () => {
   const { a, b } = await pair();
   await productCategory(a, 'Clothing');
