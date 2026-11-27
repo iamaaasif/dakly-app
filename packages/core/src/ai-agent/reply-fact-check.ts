@@ -223,7 +223,9 @@ const idPattern = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
 function numbersIn(value: unknown, found = new Set<number>()) {
   if (typeof value === 'number') found.add(value);
   else if (typeof value === 'string')
-    for (const match of toAsciiDigits(value.replace(idPattern, ' ')).matchAll(new RegExp(number, 'g')))
+    for (const match of toAsciiDigits(value.replace(idPattern, ' ')).matchAll(
+      new RegExp(number, 'g'),
+    ))
       found.add(parseNumber(match[1]!));
   else if (Array.isArray(value)) for (const item of value) numbersIn(item, found);
   else if (value && typeof value === 'object')
