@@ -2,17 +2,23 @@ import { formatMoney } from '@dakly/contracts/money';
 
 import type { ChatProduct } from '../products/products.service';
 
-const priceQuestions = {
-  bangla: /^(?:দাম|মূল্য|প্রাইস) ?(?:কত|কতো|জানাবেন|please)?$|^(?:কত|কতো) দাম$/u,
-  banglish: /^(?:(?:price|dam|daam) (?:koto|koto hobe|bolben|janaben)|koto (?:dam|daam|price))$/u,
-  english: /^(?:price(?: please)?|how much(?: is (?:it|this|that))?|what is the price)$/u,
-};
-type Language = keyof typeof priceQuestions;
+// Both scripts share one word list because shoppers mix them in a single comment.
+const price = '(?:price|dam|daam|দাম|মূল্য|প্রাইস)';
+const ask = '(?:koto|kto|কত|কতো)';
+const taka = '(?:taka|টাকা)';
+const filler = '(?:hobe|হবে|bolben|janaben|বলবেন|জানাবেন|please|pls|plz)';
+const address = '(?:vai|bhai|bhaiya|apu|apa|ভাই|ভাইয়া|আপু|আপা)';
+const mixedPriceQuestion = new RegExp(
+  `^(?:${price}(?: ${ask})?(?: ${taka})?|${ask} (?:${price}|${taka}))(?: ${filler})?(?: ${address})?$`,
+  'u',
+);
+const englishPriceQuestion =
+  /^(?:price(?: please| pls| plz)?|pp|p\.p|how much(?: is (?:it|this|that))?|what is the price)$/u;
+type Language = 'bangla' | 'banglish' | 'english';
+export type CommentLanguage = Language;
 type PriceProduct = Pick<ChatProduct, 'name' | 'isStockTracked'> & {
   variants: Pick<ChatProduct['variants'][number], 'pricePoisha' | 'available'>[];
 };
-
-export type CommentLanguage = Language;
 
 export function replyLanguageFor(detected: Language, setting: 'match_customer' | 'bn' | 'en') {
   return { match_customer: detected, bn: 'bangla', en: 'english' }[setting] as Language;
@@ -23,11 +29,11 @@ export function priceQuestion(text: string): Language | undefined {
     .normalize('NFKC')
     .toLowerCase()
     .trim()
-    .replace(/[?!।]+$/u, '')
+    .replace(/[?!।.]+$/u, '')
     .trim();
-  return (Object.keys(priceQuestions) as Language[]).find((language) =>
-    priceQuestions[language].test(normalized),
-  );
+  if (englishPriceQuestion.test(normalized)) return 'english';
+  if (!mixedPriceQuestion.test(normalized)) return;
+  return /[a-z]/u.test(normalized) ? 'banglish' : 'bangla';
 }
 
 export const publicPriceAcknowledgement = {

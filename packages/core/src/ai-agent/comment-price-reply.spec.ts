@@ -5,9 +5,22 @@ import { commentPriceReply, priceQuestion } from './comment-price-reply';
 describe('Facebook price comments', () => {
   it.each([
     ['দাম কত?', 'bangla'],
-    ['দাম please?', 'bangla'],
+    ['দাম কতো?', 'bangla'],
+    ['কত টাকা', 'bangla'],
+    ['কতো দাম ভাই', 'bangla'],
+    ['দাম please?', 'banglish'],
     ['Price koto?', 'banglish'],
+    ['dam?', 'banglish'],
+    ['daam koto', 'banglish'],
+    ['koto taka', 'banglish'],
+    ['price কত', 'banglish'],
+    ['dam কত', 'banglish'],
+    ['দাম koto', 'banglish'],
+    ['Price কতো ভাই', 'banglish'],
     ['How much is this?', 'english'],
+    ['pp', 'english'],
+    ['p.p', 'english'],
+    ['price pls', 'english'],
   ] as const)('recognises %s without guessing the product', (text, language) => {
     expect(priceQuestion(text)).toBe(language);
   });
@@ -18,6 +31,9 @@ describe('Facebook price comments', () => {
     'buy here https://example.test',
     '😡',
     'Inbox me',
+    'dam koto ar delivery charge koto?',
+    'price কত https://example.test',
+    'koto taka lagbe discount hole',
   ])('leaves %s for staff', (text) => expect(priceQuestion(text)).toBeUndefined());
 
   const product = { name: 'Blue Kurti', isStockTracked: true };
