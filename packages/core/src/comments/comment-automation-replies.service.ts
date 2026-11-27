@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { AppError } from '../platform/errors/app-error';
 import { ProductsService } from '../products/products.service';
 import { CommentPostProductsService } from './comment-post-products.service';
-import { commentLanguage, commentPriceReply } from './comment-price-reply';
+import { commentLanguage, commentPriceReply } from './comment-price-reply.service';
 import { automaticReplySkips, type ReplyBy } from './comment-rows';
 import { CommentsService } from './comments.service';
 

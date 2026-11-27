@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { commentLanguage, commentPriceReply, priceQuestion } from './comment-price-reply';
+import { commentLanguage, commentPriceReply, priceQuestion } from './comment-price-reply.service';
 
 describe('Facebook price comments', () => {
   it.each([

@@ -9,7 +9,7 @@ import {
   priceQuestion,
   replyLanguageFor,
   publicPriceAcknowledgement,
-} from '../comments/comment-price-reply';
+} from '../comments/comment-price-reply.service';
 import { CommentsService } from '../comments/comments.service';
 import { KillSwitchesService } from '../kill-switches/kill-switches.service';
 import { ProductsService } from '../products/products.service';
