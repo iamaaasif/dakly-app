@@ -119,7 +119,10 @@ function trackPointers(region: HTMLElement, engine: CameraEngine) {
   }
 
   function onUp(event: PointerEvent) {
-    if (!pointers.delete(event.pointerId)) return;
+    if (!pointers.has(event.pointerId)) return;
+    // Browsers batch moves per frame, so the release can carry a position the last move missed.
+    if (moved && event.type === 'pointerup') onMove(event);
+    pointers.delete(event.pointerId);
     if (pointers.size === 0) {
       region.dataset.panning = 'false';
       engine.hold(false);
