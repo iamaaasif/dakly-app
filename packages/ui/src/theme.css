@@ -216,6 +216,11 @@
     animation: motion-shimmer 1.4s linear infinite;
   }
 
+  /* A card or list that arrives after the page fades in once. */
+  .motion-enter {
+    animation: motion-fade-in 200ms var(--motion-ease);
+  }
+
   /* The active tab underline grows from the centre instead of jumping. */
   .motion-tab[data-state='active']::after {
     animation: motion-tab-underline 200ms var(--motion-ease);

@@ -1,4 +1,10 @@
-import type { ContactKind, ContactResponse } from '@dakly/contracts/contacts';
+import type {
+  ContactKind,
+  ContactListItemResponse,
+  ContactListType,
+  ContactResponse,
+  LifecycleStage,
+} from '@dakly/contracts/contacts';
 
 import { formatPhone } from '@/lib/format-phone';
 
@@ -20,4 +26,45 @@ export const channelLabels = {
 // The API sends a masked phone to members without See full phone numbers; show it as sent.
 export function customerPhone(customer: Pick<ContactResponse, 'phone'>) {
   return customer.phone ? formatPhone(customer.phone) : 'No phone yet';
+}
+
+export const customerTypeLabels: Record<ContactListType, string> = {
+  new: 'New',
+  returning: 'Returning',
+  vip: 'VIP',
+  inactive: 'Inactive',
+  high_value: 'High-value',
+  at_risk: 'At-risk',
+};
+
+const stageLabels: Record<LifecycleStage, string> = {
+  none: 'Contact',
+  new: 'New',
+  bought_once: 'One-time',
+  regulars: 'Returning',
+  best: 'VIP',
+  slipping_away: 'At-risk',
+  stopped_buying: 'Inactive',
+};
+
+type CustomerType = Pick<ContactListItemResponse, 'lifecycleStage' | 'isHighValue'>;
+type CustomerTypePill = {
+  label: string;
+  variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'ai';
+};
+
+// One pill, as in the design: VIP wins over High-value, which wins over the lifecycle stage.
+export function customerTypePill({ lifecycleStage, isHighValue }: CustomerType): CustomerTypePill {
+  if (lifecycleStage === 'best') return { label: stageLabels.best, variant: 'ai' };
+  if (isHighValue) return { label: customerTypeLabels.high_value, variant: 'success' };
+  const variants: Record<LifecycleStage, CustomerTypePill['variant']> = {
+    none: 'neutral',
+    new: 'info',
+    bought_once: 'neutral',
+    regulars: 'neutral',
+    best: 'ai',
+    slipping_away: 'warning',
+    stopped_buying: 'danger',
+  };
+  return { label: stageLabels[lifecycleStage], variant: variants[lifecycleStage] };
 }
