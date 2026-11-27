@@ -30,7 +30,6 @@ type OrdersScreenProps = { query: OrderListQuery; selected?: string; labelOrderI
 export function OrdersScreen(initial: OrdersScreenProps) {
   const { query, selected, labelOrderIds = [] } = useUrlQuery(initial, parseOrdersScreen);
   const orders = useOrders(query);
-  const pendingListRefresh = orders.fetchStatus !== 'idle';
   const router = useUrlRouter();
   const heading = useRef<HTMLHeadingElement>(null);
   const navigationQuery = { ...query, labelOrderIds };
@@ -82,7 +81,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
             key={selected}
             id={selected}
             restoreFocusTo={() =>
-              orderRowFocus(heading.current, pendingListRefresh ? undefined : selected)
+              orderRowFocus(heading.current, orders.fetchStatus === 'idle' ? selected : undefined)
             }
             onClose={() => router.replace(listHref)}
           />
