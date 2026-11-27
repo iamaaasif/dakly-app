@@ -3,8 +3,13 @@ import type { OrderListItem } from '@dakly/contracts/orders';
 import { QueryError } from '@dakly/ui/query-error';
 
 import { ordersSearch, type useOrders } from '../api/orders';
-import { orderStageLabels } from '../order-labels';
-import { isNarrowedOrderList, type OrdersNavigationQuery } from '../orders-url';
+import { orderTabLabels } from '../order-labels';
+import {
+  currentOrderTab,
+  isNarrowedOrderList,
+  orderTabQuery,
+  type OrdersNavigationQuery,
+} from '../orders-url';
 import { usePageTrail } from '../use-page-trail';
 import { OrderRow } from './order-row';
 import { OrdersEmpty } from './orders-empty';
@@ -27,7 +32,8 @@ export function OrdersList({ orders, query, total, onToggleLabel }: OrdersListPr
   const trail = usePageTrail(query.cursor, (cursor) =>
     router.push(`/orders?${ordersSearch({ ...query, cursor })}`),
   );
-  const label = query.stage ? orderStageLabels[query.stage].toLowerCase() : 'orders';
+  const tab = currentOrderTab(query);
+  const label = tab ? orderTabLabels[tab].toLowerCase() : 'orders';
   if (orders.isPending) return <OrdersLoading label={label} />;
   if (orders.error)
     return (
@@ -59,8 +65,9 @@ export function OrdersList({ orders, query, total, onToggleLabel }: OrdersListPr
 type NoOrdersProps = { label: string; query: OrdersNavigationQuery; narrowed: boolean };
 
 function NoOrders({ label, query, narrowed }: NoOrdersProps) {
-  const { stage, limit, labelOrderIds } = query;
-  const clearHref = `/orders?${ordersSearch({ stage, limit, labelOrderIds })}`;
+  const tab = currentOrderTab(query);
+  const first = tab ? orderTabQuery(tab, { limit: query.limit }) : {};
+  const clearHref = `/orders?${ordersSearch({ ...first, labelOrderIds: query.labelOrderIds })}`;
   return narrowed ? (
     <OrdersEmpty
       title="No orders match"

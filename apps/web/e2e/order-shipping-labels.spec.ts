@@ -53,7 +53,7 @@ test('keeps selected orders across stages and prints one page per label', async 
     await page.setViewportSize({ width: 360, height: 800 });
     await page.goto('/orders');
     await page.getByRole('checkbox', { name: /1056.*shipping labels/ }).check();
-    await page.getByRole('link', { name: /To pack/ }).click();
+    await page.getByRole('tab', { name: /To pack/ }).click();
     await page.getByRole('checkbox', { name: /1057.*shipping labels/ }).check();
     await expect(page.getByText('2 of 100 orders selected')).toBeVisible();
     await page.reload();
