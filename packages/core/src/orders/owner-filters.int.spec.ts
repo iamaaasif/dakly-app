@@ -5,11 +5,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OwnerIsolationFixture } from '../../test/owner-isolation-fixture';
 import { OrderInvoiceRepository } from './order-invoice.repository';
 import { OrderReportingRepository } from './order-reporting.repository';
+import { OrderShippingLabelsRepository } from './order-shipping-labels.repository';
 
 describe('order summaries without RLS assistance', () => {
   const fixture = new OwnerIsolationFixture();
   const repository = new OrderReportingRepository(fixture.tenant);
   const invoices = new OrderInvoiceRepository(fixture.tenant);
+  const shippingLabels = new OrderShippingLabelsRepository(fixture.tenant);
   const timeZone = 'Asia/Dhaka';
   const day = '2026-11-05';
 
@@ -42,6 +44,9 @@ describe('order summaries without RLS assistance', () => {
       { order: { codAmountPoisha: 12000 }, item: null },
     ]);
     expect(await invoices.find(fixture.a, foreignOrder)).toEqual([]);
+    expect(await shippingLabels.find(fixture.a, [ownOrder, foreignOrder])).toMatchObject([
+      { id: ownOrder, codAmountPoisha: 12000, itemCount: 0 },
+    ]);
     expect(await repository.buyerActivityDays(fixture.a, foreignBuyer, timeZone, day)).toEqual([]);
     expect(
       await repository.dailyOrderMetrics(fixture.a, { from: day, through: day, timeZone }),

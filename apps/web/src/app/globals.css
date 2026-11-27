@@ -9,9 +9,44 @@
   margin: 12mm;
 }
 
+@page shipping-label {
+  size: 100mm 150mm;
+  margin: 0;
+}
+
 @media print {
   body:has(.order-invoice) {
     background: var(--color-surface);
     page: order-invoice;
+  }
+  body:has(.shipping-label) {
+    background: var(--color-surface);
+    page: shipping-label;
+  }
+
+  .shipping-label-long-address {
+    gap: 2mm;
+  }
+
+  .shipping-label-long-address header {
+    padding-bottom: 2mm;
+  }
+
+  .shipping-label-long-address :is(header, section) p {
+    font-size: 7.5pt;
+    line-height: 1.3;
+  }
+
+  .shipping-label-long-address .shipping-label-payment {
+    padding-block: 2mm;
+  }
+
+  .shipping-label-long-address .shipping-label-amount {
+    font-size: 14pt;
+    line-height: 1.2;
+  }
+
+  .shipping-label:not(:last-child) {
+    break-after: page;
   }
 }
