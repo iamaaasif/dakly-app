@@ -49,7 +49,7 @@ export function OrderLinesCard({
         </p>
       )}
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" tabIndex={-1} data-form-error className="text-sm text-danger">
           {error}
         </p>
       )}
