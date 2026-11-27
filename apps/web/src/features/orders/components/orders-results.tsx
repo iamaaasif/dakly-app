@@ -37,13 +37,14 @@ export function OrdersResults({ query, orders, counts, selected }: OrdersResults
   return (
     <TabsContent value={current ?? noTabValue} className="space-y-3 pt-3">
       <OrderLabelSelection orderIds={selectedIds} onClear={() => changeLabelSelection([])} />
-      {/* A new tab or filter starts its own page trail, so the card is keyed by them. */}
-      <TableCard key={cardKey(query)}>
+      {/* A new tab or filter starts its own page trail, so the list is keyed by them. */}
+      <TableCard>
         <OrdersToolbar query={query} />
         {query.tab === 'inquiries' ? (
-          <OrderInquiries query={query} total={counts?.inquiries} />
+          <OrderInquiries key={cardKey(query)} query={query} total={counts?.inquiries} />
         ) : (
           <OrdersList
+            key={cardKey(query)}
             orders={orders}
             query={query}
             total={current ? counts?.[current] : undefined}
