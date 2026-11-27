@@ -160,6 +160,33 @@ async function screenshotBoth(page: Page, directory: string | undefined, name: s
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 
+test('shows separate Messenger and fallback messages in a COD confirmation', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const { headers } = await signIn(context, baseURL!);
+  const db = createDatabase(process.env.DATABASE_ADMIN_URL!);
+  const created = await context.request.post('/api/automations', {
+    headers,
+    data: { name: 'Confirm a COD order', templateKey: 'cod_order_confirmation' },
+  });
+  expect(created.status()).toBe(201);
+  const { id } = (await created.json()) as { id: string };
+  try {
+    await page.goto(`/automations/${id}/canvas`);
+    await page.getByRole('button', { name: 'Edit step 1' }).click();
+    await expect(page.getByLabel('Messenger message')).toHaveValue(/\{order_number\}/u);
+    await expect(page.getByLabel('Fallback message')).toHaveValue(/\{confirm_link\}/u);
+    const evidence = resolve(process.cwd(), 'e2e-artifacts/ord-4-messenger');
+    await mkdir(evidence, { recursive: true });
+    await screenshotBoth(page, evidence, 'message');
+  } finally {
+    await db.pool.query('delete from automations where id=$1', [id]);
+    await db.pool.end();
+  }
+});
+
 test('adds, deletes and saves steps on the canvas', async ({ page, context, baseURL }) => {
   const { headers } = await signIn(context, baseURL!);
   const db = createDatabase(process.env.DATABASE_ADMIN_URL!);

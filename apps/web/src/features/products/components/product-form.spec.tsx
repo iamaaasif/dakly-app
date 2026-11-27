@@ -12,8 +12,13 @@ import { ProductForm } from './product-form';
 import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 const product: ProductResponse = {
   ...createProductSchema.parse({ name: 'Cotton Panjabi', pricePoisha: 245050, status: 'hidden' }),
+  version: 1,
   id: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',
   category: null,
   brand: null,
@@ -42,7 +47,11 @@ const product: ProductResponse = {
   updatedAt: '2026-11-18T04:00:00Z',
 };
 
-function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductForm>['page']) {
+function show(
+  initial?: ProductResponse,
+  page?: ComponentProps<typeof ProductForm>['page'],
+  duplicateSource?: ProductResponse,
+) {
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -65,6 +74,7 @@ function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductFor
       canEditProducts: true,
       canViewOrders: false,
       canEditOrders: false,
+      canExportOrders: false,
       canViewDueBook: false,
       canEditDueBook: false,
       canViewCampaigns: false,
@@ -97,7 +107,12 @@ function show(initial?: ProductResponse, page?: ComponentProps<typeof ProductFor
   const onSaved = vi.fn();
   const tree = (current?: ProductResponse) => (
     <QueryClientProvider client={client}>
-      <ProductForm product={current} onSaved={onSaved} page={page} />
+      <ProductForm
+        product={current}
+        onSaved={onSaved}
+        page={page}
+        duplicateSource={duplicateSource}
+      />
     </QueryClientProvider>
   );
   const rendered = render(tree(initial));
@@ -123,18 +138,205 @@ describe('Product form on a full page', () => {
     expect(screen.getByRole('link', { name: 'Back to products' }).getAttribute('href')).toBe(
       '/products',
     );
-    expect(screen.getByRole('button', { name: 'Save as hidden' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Save and show' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Create' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Cancel' })).toBeTruthy();
     expect(screen.getByText('Save the product to add photos.')).toBeTruthy();
     expect(screen.getByText('Hidden')).toBeTruthy();
-    for (const title of ['Basics', 'Price', 'Variants', 'Stock settings'])
+    for (const title of [
+      'Basics',
+      'Price',
+      'Variations',
+      'Inventory',
+      'Organisation',
+      'Delivery',
+      'Where it appears',
+    ])
       expect(screen.getByRole('heading', { name: title })).toBeTruthy();
+  });
+
+  it.each([
+    [null, '2450.50', ''],
+    [300000, '3000.00', '2450.50'],
+  ])(
+    'loads the regular and sale price with an old price of %s',
+    (compareAtPricePoisha, regular, sale) => {
+      show({ ...product, compareAtPricePoisha }, page);
+      expect(screen.getByLabelText<HTMLInputElement>('Regular price ৳').value).toBe(regular);
+      expect(screen.getByLabelText<HTMLInputElement>('Sell price ৳').value).toBe(sale);
+    },
+  );
+
+  it.each([
+    ['', 300025, null],
+    ['2450.50', 245050, 300025],
+  ])(
+    'saves the regular price and a sell price of %s',
+    async (sale, pricePoisha, compareAtPricePoisha) => {
+      let submitted: unknown;
+      vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+        submitted = JSON.parse(String(init.body));
+        return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+      });
+      const { onSaved } = show(undefined, page);
+      fireEvent.change(screen.getByLabelText('Product name'), { target: { value: product.name } });
+      fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '3000.25' } });
+      fireEvent.change(screen.getByLabelText('Sell price ৳'), { target: { value: sale } });
+      await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+      await waitFor(() => expect(onSaved).toHaveBeenCalled());
+      expect(submitted).toMatchObject({ pricePoisha, compareAtPricePoisha, status: 'hidden' });
+    },
+  );
+
+  it('clears the old price when an edit removes the sell price', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show({ ...product, compareAtPricePoisha: 300000 }, page);
+    await userEvent.clear(screen.getByLabelText('Sell price ৳'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toEqual({ pricePoisha: 300000, compareAtPricePoisha: null });
+  });
+
+  it('keeps an invalid kilogram amount in view and saves a valid amount as grams', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show({ ...product, weightGrams: 500 }, page);
+    Element.prototype.scrollIntoView = () => undefined;
+    screen.getByRole('combobox', { name: 'Weight unit' }).focus();
+    await userEvent.keyboard('{Enter}{ArrowDown}{Enter}');
+    const weight = screen.getByLabelText<HTMLInputElement>('Parcel weight');
+    expect(weight.value).toBe('0.5');
+    fireEvent.change(weight, { target: { value: '1.2345' } });
+    expect(weight.value).toBe('1.2345');
+    expect(screen.getByText('Enter the weight in kg, for example 0.5')).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Save' }).disabled).toBe(true);
+    fireEvent.change(weight, { target: { value: '1.25' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toEqual({ weightGrams: 1250 });
+  });
+
+  it('shows the product details without editing controls on a read-only page', () => {
+    show(product, { ...page, readOnly: true });
+    const name = screen.getByLabelText<HTMLInputElement>('Product name');
+    expect(name.value).toBe(product.name);
+    expect(name.matches(':disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.queryByRole('switch', { name: 'Let the AI negotiate' })).toBeNull();
+  });
+
+  it('warns about selling below cost and still saves negotiation prices', async () => {
+    let submitted: unknown;
+    vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
+      submitted = JSON.parse(String(init.body));
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    const { onSaved } = show(product, page);
+    const toggle = screen.getByRole('switch', { name: 'Let the AI negotiate' });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    await userEvent.click(toggle);
+    fireEvent.change(screen.getByLabelText('Opening offer ৳'), { target: { value: '2000.50' } });
+    fireEvent.change(screen.getByLabelText('Lowest price ৳'), { target: { value: '1200.50' } });
+    expect(screen.getByText('The lowest price is below the product cost.')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(submitted).toEqual({
+      negotiationEnabled: true,
+      negotiationOpeningPoisha: 200050,
+      negotiationFloorPoisha: 120050,
+    });
+  });
+
+  it('disables negotiation when the product has a variant with its own price', () => {
+    show(
+      { ...product, variants: [{ ...product.variants[0]!, priceOverridePoisha: 200000 }] },
+      page,
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>('switch', { name: 'Let the AI negotiate' }).disabled,
+    ).toBe(true);
+    expect(screen.getByText('A variant has its own price.')).toBeTruthy();
+  });
+
+  it('compares the opening offer with the price the customer pays', async () => {
+    const { onSaved } = show({ ...product, compareAtPricePoisha: 300000 }, page);
+    await userEvent.click(screen.getByRole('switch', { name: 'Let the AI negotiate' }));
+    fireEvent.change(screen.getByLabelText('Opening offer ৳'), { target: { value: '2450.50' } });
+    fireEvent.change(screen.getByLabelText('Lowest price ৳'), { target: { value: '1800' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Enter an opening offer below the selling price.')).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it('rejects a sell price equal to the regular price', async () => {
+    const { onSaved } = show(undefined, page);
+    fireEvent.change(screen.getByLabelText('Product name'), { target: { value: product.name } });
+    fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '400' } });
+    fireEvent.change(screen.getByLabelText('Sell price ৳'), { target: { value: '400' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(await screen.findByText('Enter a sell price below the regular price.')).toBeTruthy();
+    expect(onSaved).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Regular price ৳'), { target: { value: '500' } });
+    await waitFor(() =>
+      expect(screen.queryByText('Enter a sell price below the regular price.')).toBeNull(),
+    );
+  });
+
+  it('fills a new copy with the selling details and leaves stock and product codes blank', async () => {
+    const writes: unknown[] = [];
+    vi.stubGlobal('fetch', async (path: string, init: RequestInit) => {
+      if (init.method === 'POST') writes.push([path, JSON.parse(String(init.body))]);
+      return Response.json(product, { headers: { 'x-session-context': 'verified' } });
+    });
+    show(undefined, page, {
+      ...product,
+      description: 'Handwoven cotton',
+      status: 'active',
+      compareAtPricePoisha: 295000,
+      weightGrams: 1250,
+      imageFileIds: ['original-photo'],
+      variants: [{ ...product.variants[0]!, imageFileIds: ['original-variant-photo'] }],
+    });
+    expect(screen.getByLabelText<HTMLInputElement>('Product name').value).toBe(
+      'Cotton Panjabi copy',
+    );
+    expect(screen.getByLabelText<HTMLInputElement>('Regular price ৳').value).toBe('2950.00');
+    expect(screen.getByLabelText<HTMLInputElement>('Sell price ৳').value).toBe('2450.50');
+    expect(writes).toHaveLength(0);
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0]).toEqual([
+      '/api/products',
+      expect.objectContaining({
+        name: 'Cotton Panjabi copy',
+        description: 'Handwoven cotton',
+        pricePoisha: 245050,
+        compareAtPricePoisha: 295000,
+        weightGrams: 1250,
+        status: 'hidden',
+        variants: [
+          {
+            optionValues: {},
+            sku: null,
+            priceOverridePoisha: null,
+            costPoisha: 120075,
+            lowStockThreshold: null,
+          },
+        ],
+      }),
+    ]);
   });
 
   it('shows one Save product button for a saved product', () => {
     show(product, { ...page, title: 'Cotton Panjabi' });
-    expect(screen.getByRole('button', { name: 'Save product' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Save as hidden' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Create' })).toBeNull();
   });
 });
 
@@ -146,10 +348,7 @@ describe('Product form', () => {
     expect(screen.getByLabelText('Track stock')).toBeTruthy();
   });
 
-  it.each([
-    ['Save as hidden', 'hidden'],
-    ['Save and show', 'active'],
-  ])('creates through %s with integer poisha', async (label, status) => {
+  it.each(['hidden', 'active'])('creates through %s with integer poisha', async (status) => {
     let submitted: unknown;
     vi.stubGlobal('fetch', async (_path: string, init: RequestInit) => {
       expect(init.method).toBe('POST');
@@ -161,7 +360,12 @@ describe('Product form', () => {
     await userEvent.type(screen.getByLabelText('Name'), 'Cotton Panjabi');
     await userEvent.clear(screen.getByLabelText('Selling price ৳'));
     await userEvent.type(screen.getByLabelText('Selling price ৳'), '2450.50');
-    await userEvent.click(screen.getByRole('button', { name: label }));
+    if (status === 'active') {
+      Element.prototype.scrollIntoView = () => undefined;
+      screen.getByRole('combobox', { name: 'Status' }).focus();
+      await userEvent.keyboard('{Enter}{ArrowUp}{Enter}');
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
     expect(submitted).toMatchObject({ name: 'Cotton Panjabi', pricePoisha: 245050, status });
   });
@@ -176,7 +380,7 @@ describe('Product form', () => {
     const { onSaved } = show(product);
     expect((screen.getByLabelText('Selling price ৳') as HTMLInputElement).value).toBe('2450.50');
     await userEvent.type(screen.getByLabelText('Product code'), '-1');
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
     expect(submitted).toMatchObject({
       variants: [{ id: product.variants[0]!.id, sku: 'PAN-M-1', costPoisha: 120075 }],
@@ -202,7 +406,7 @@ describe('Product form', () => {
       const { onSaved } = show(withOption);
       await userEvent.clear(screen.getByLabelText('Option 1 name'));
       await userEvent.type(screen.getByLabelText('Option 1 name'), name);
-      await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(onSaved).toHaveBeenCalled());
       expect(submitted).toMatchObject({
         options: [{ name: 'Fit', values: ['M'] }],
@@ -235,7 +439,7 @@ describe('Product form', () => {
         .value,
     ).toBe('M');
     await userEvent.type(screen.getByLabelText('Product code for variant 1'), '-1');
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({ variants: [{ optionValues: { 'Size (U.S.)': 'M' } }] });
   });
@@ -260,7 +464,7 @@ describe('Product form', () => {
     const name = screen.getByLabelText('Option 1 name');
     await userEvent.clear(name);
     await userEvent.type(name, 'Size type');
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({
       variants: [{ id: product.variants[0]!.id, optionValues: { 'Size type': 'M', S: 'Silk' } }],
@@ -286,7 +490,7 @@ describe('Product form', () => {
     fireEvent.change(values, { target: { value: 'L' } });
     expect(choice.value).toBe('');
     await userEvent.selectOptions(choice, 'L');
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({
       variants: [{ id: product.variants[0]!.id, optionValues: { Size: 'L' } }],
@@ -314,7 +518,7 @@ describe('Product form', () => {
     expect(onSaved).not.toHaveBeenCalled();
     expect(requests).toEqual([{ method: 'POST', body: { tone: 'friendly', language: 'bn' } }]);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(product, []));
     expect(requests.at(-1)).toEqual({ method: 'PATCH', body: { description: 'Made with cotton' } });
   });
@@ -356,8 +560,12 @@ describe('Product form', () => {
     });
     const { onSaved, refresh } = show({ ...product, status: 'active' });
     await userEvent.type(screen.getByLabelText('Description'), 'Made with cotton');
-    refresh(product);
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    refresh({
+      ...product,
+      version: 2,
+      variants: product.variants.map((variant) => ({ ...variant, onHand: 6, available: 4 })),
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toEqual({ description: 'Made with cotton' });
   });
@@ -370,7 +578,7 @@ describe('Product form', () => {
     });
     const { onSaved } = show(product);
     await userEvent.type(screen.getByLabelText('Other names'), 'পাঞ্জাবি{Enter}Panjabi');
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({ aliases: ['পাঞ্জাবি', 'Panjabi'] });
   });
@@ -379,7 +587,7 @@ describe('Product form', () => {
     show(product);
     const aliases = screen.getByLabelText('Other names');
     fireEvent.change(aliases, { target: { value: 'Scarf\n' + 'A'.repeat(201) } });
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect((await screen.findByRole('alert')).textContent).toContain('200');
     expect(aliases.getAttribute('aria-invalid')).toBe('true');
   });
@@ -419,7 +627,7 @@ describe('Product form', () => {
     const override = screen.getByLabelText('Default price override (Taka)');
     expect((override as HTMLInputElement).value).toBe('450.25');
     await userEvent.clear(override);
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(submitted).toMatchObject({
       variants: [{ id: product.variants[0]!.id, priceOverridePoisha: null }],
@@ -447,7 +655,7 @@ describe('Product form', () => {
     });
     show(optioned);
     await userEvent.click(screen.getByRole('button', { name: 'Remove option 1' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect((await screen.findByRole('alert')).textContent).toContain('must be different');
     expect(submitted).toBe(false);
   });
@@ -464,7 +672,7 @@ describe('Product form', () => {
     await userEvent.type(screen.getByLabelText('Your cost ৳'), '300');
     await userEvent.click(screen.getByRole('button', { name: 'S, M, L, XL' }));
     expect((screen.getByLabelText('Your cost ৳') as HTMLInputElement).value).toBe('300');
-    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(bodies[0]!.variants.map((variant) => variant.costPoisha)).toEqual([
       30000, 30000, 30000, 30000,
@@ -508,7 +716,7 @@ describe('Product form', () => {
 
     await userEvent.click(screen.getByLabelText('Delete size M'));
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct, []));
     expect(adjustments).toEqual([
@@ -549,7 +757,7 @@ describe('Product form', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add size' }));
     await userEvent.type(screen.getByLabelText('Size 1'), 'L');
     await userEvent.type(screen.getByLabelText('Stock for size L'), '3');
-    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct, ['L']));
   });
@@ -585,7 +793,7 @@ describe('Product form', () => {
     const stockInput = screen.getByLabelText('Stock for size M');
     await userEvent.type(stockInput, '5');
     await userEvent.clear(stockInput);
-    await userEvent.click(screen.getByRole('button', { name: 'Save as hidden' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(savedProduct, []));
     expect(adjustments).toEqual([]);
@@ -603,7 +811,7 @@ describe('Product form', () => {
     await userEvent.type(screen.getByLabelText('Name'), 'My unsaved name');
     refresh({ ...product, name: 'Another saved name' });
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('My unsaved name');
-    await userEvent.click(screen.getByRole('button', { name: 'Save product' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect((await screen.findByRole('alert')).textContent).toContain('already in use');
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('My unsaved name');
   });

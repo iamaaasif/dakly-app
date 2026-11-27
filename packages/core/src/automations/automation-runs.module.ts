@@ -16,6 +16,7 @@ import { WalletsModule } from '../wallets/wallets.module';
 import { AutomationBirthdaySweepService } from './automation-birthday-sweep.service';
 import { AutomationBirthdaysService } from './automation-birthdays.service';
 import { AutomationConditionsService } from './automation-conditions.service';
+import { AutomationConfirmationTapService } from './automation-confirmation-tap.service';
 import { AutomationEntryRepository } from './automation-entry.repository';
 import { AutomationEntryService } from './automation-entry.service';
 import { AutomationMessengerSendService } from './automation-messenger-send.service';
@@ -25,6 +26,7 @@ import { AutomationRunsService } from './automation-runs.service';
 import { AutomationSendRetryService } from './automation-send-retry.service';
 import { AutomationSmsDeliveryService } from './automation-sms-delivery.service';
 import { AutomationsModule } from './automations.module';
+import { AnswerAutomationConfirmationTap } from './jobs/answer-automation-confirmation-tap.job';
 
 // Only the worker runs workflows; the API's AutomationsModule edits and publishes them.
 @Module({
@@ -45,6 +47,8 @@ import { AutomationsModule } from './automations.module';
   ],
   providers: [
     AutomationConditionsService,
+    AutomationConfirmationTapService,
+    AnswerAutomationConfirmationTap,
     AutomationOrderTextService,
     AutomationRunsRepository,
     AutomationRunsService,

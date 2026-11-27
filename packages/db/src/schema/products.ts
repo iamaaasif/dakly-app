@@ -99,6 +99,9 @@ export const products = pgTable(
     // (PROD-R1): such a product is not offered in chats, shop sales or the order link.
     pricePoisha: poisha('price_poisha').notNull().default(0),
     compareAtPricePoisha: poisha('compare_at_price_poisha'),
+    negotiationEnabled: boolean('negotiation_enabled').notNull().default(false),
+    negotiationOpeningPoisha: poisha('negotiation_opening_poisha'),
+    negotiationFloorPoisha: poisha('negotiation_floor_poisha'),
     imageFileIds: uuid('image_file_ids')
       .array()
       .notNull()
@@ -119,6 +122,7 @@ export const products = pgTable(
     // Hash of the text the embedding was built from; a change queues a rebuild.
     searchTextHash: text('search_text_hash'),
     externalRef: text('external_ref'),
+    version: integer('version').notNull().default(1),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -145,6 +149,10 @@ export const products = pgTable(
       .where(sql`${table.externalRef} is not null`),
     check('products_status', isOneOf(table.status, productStatuses)),
     check(
+      'products_negotiation_price_order',
+      sql`${table.negotiationFloorPoisha} <= ${table.negotiationOpeningPoisha}`,
+    ),
+    check(
       'products_price',
       sql`${table.pricePoisha} >= 0 and coalesce(${table.compareAtPricePoisha}, 0) >= 0`,
     ),
@@ -153,6 +161,58 @@ export const products = pgTable(
       sql`${table.weightGrams} is null or ${table.weightGrams} between 1 and 100000`,
     ),
     check('products_name_length', sql`char_length(${table.name}) between 1 and 200`),
+  ],
+);
+
+export const priceOffers = pgTable(
+  'price_offers',
+  {
+    id: id(),
+    storeId: uuid('store_id')
+      .notNull()
+      .references(() => stores.id),
+    conversationId: uuid('conversation_id').notNull(),
+    contactId: uuid('contact_id').notNull(),
+    productId: uuid('product_id').notNull(),
+    // The turn remains used even when older chat messages move to an archive.
+    customerMessageId: uuid('customer_message_id').notNull(),
+    offeredPricePoisha: poisha('offered_price_poisha').notNull(),
+    step: text('step', { enum: ['opening', 'final'] }).notNull(),
+    expiresAt: timestamptz('expires_at').notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: 'price_offers_conversation_store_fk',
+      columns: [table.storeId, table.conversationId],
+      foreignColumns: [conversations.storeId, conversations.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'price_offers_contact_store_fk',
+      columns: [table.storeId, table.contactId],
+      foreignColumns: [contacts.storeId, contacts.id],
+    }).onDelete('cascade'),
+    foreignKey({
+      name: 'price_offers_product_store_fk',
+      columns: [table.storeId, table.productId],
+      foreignColumns: [products.storeId, products.id],
+    }).onDelete('cascade'),
+    uniqueIndex('price_offers_customer_turn_key').on(
+      table.storeId,
+      table.conversationId,
+      table.productId,
+      table.customerMessageId,
+    ),
+    index('price_offers_scope_expiry_idx').on(
+      table.storeId,
+      table.conversationId,
+      table.contactId,
+      table.productId,
+      table.expiresAt,
+    ),
+    index('price_offers_contact_idx').on(table.storeId, table.contactId),
+    index('price_offers_product_idx').on(table.storeId, table.productId),
+    check('price_offers_step', isOneOf(table.step, ['opening', 'final'])),
+    check('price_offers_nonnegative_price', sql`${table.offeredPricePoisha} >= 0`),
   ],
 );
 

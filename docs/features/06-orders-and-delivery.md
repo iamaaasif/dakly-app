@@ -79,6 +79,8 @@ Inquiry-only outcomes recorded for reporting: Lost inquiry, No response.
 
 The confirm message is a WhatsApp utility template with order number, items, total including delivery, address and "reply হ্যাঁ to confirm". A "হ্যাঁ" (or yes, ji, ok, confirm, ঠিক আছে) reply moves the order to To pack. Without WhatsApp it goes by SMS with a one-tap confirm link instead, because Bangladesh A2P SMS cannot receive replies. No reply in 24 hours raises the "waiting over 12 hours" alert at 12 hours and suggests a call at 24.
 
+When the AI opens the same draft again in the same chat, a later price offer it already sent can lower a line while the draft waits for confirmation and the saved regular price still matches. The AI gives the new total and asks the customer to confirm. The order history shows **AI price offer**. A retry does not raise a price or change a confirmed order.
+
 **Return risk**
 
 Computed from this store's own past parcels for the phone (Glossary). High return risk orders show "Ask for a small advance first"; Book delivery warns before booking a high-risk order with no advance. Cross-store or courier-network lookups are not used in release 1 (privacy decision).
@@ -256,6 +258,42 @@ Staff with Orders edit can enter the buyer and delivery details, select variants
 
 The order link page customers see is not designed yet. Hide the prototype's courier connections and Book courier buttons in release 1; show a simple "Sent with courier" form instead.
 
+### Print an order invoice (ORD-10)
+
+Staff with Orders view can choose **Print invoice** in the order drawer. The invoice
+opens in a new tab and brings up the browser print dialog once it loads. The preview
+also has a Print invoice button. The invoice uses A4 portrait and shows the shop
+name and phone, order number and date in the shop's time zone, the buyer and
+delivery recipient, the saved item quantities, unit prices and line discounts, and
+the item subtotal, delivery charge, order discount, advance paid and COD amount.
+For a partial delivery it uses the saved delivered quantities, discounts and
+subtotal, with the original unit prices. It leaves out lines with zero delivered
+units. Staff without full-phone access see a masked recipient number.
+
+The print page at `/orders/[orderId]/print` loads its data in the browser through
+`GET /orders/:orderId/invoice`. [Desktop, phone and print evidence](../design/evidence/ord-10-invoice/).
+
+### Print shipping labels (ORD-10)
+
+Staff with Orders view can select up to 100 orders using the checkboxes next to
+the order rows. The address keeps the selection when staff change the stage,
+filters or page. The selected count and Clear selection are shown above the list.
+Print shipping labels opens the batch preview in a new tab and starts the browser
+print dialog after the labels load.
+
+Each label gets one 100 × 150 mm portrait page. It shows the shop name and phone,
+the saved recipient name, phone, address and district, the item count and the
+order number as a Code 128 barcode with the number printed below it. The item
+count uses saved delivered quantities where available.
+The label shows the saved COD amount less any recorded collection. It shows Paid
+when nothing is due, including for returned or cancelled orders. Staff
+with Orders view can see their shop phone. The recipient phone uses the same masking
+as the order drawer.
+
+The print page at `/orders/shipping-labels/print` loads through
+`GET /orders/shipping-labels`. If any selected order can no longer be read in the
+current shop, return to Orders and revise the selection before printing.
+
 ### How it works
 
 An order has two state fields: `stage` for fulfilment and `paymentStatus` for money.
@@ -318,6 +356,21 @@ Order link: a public page per store and product (`dakly.shop/{store}/{product}`)
 
 `GET /l/c/<token>` shows the order and changes nothing, because phones fetch links to draw previews. Confirm and Cancel are `POST /l/c/<token>?answer=confirm|cancel`. The store comes only from the token: `order_confirmation_for_token` (SECURITY DEFINER, like `tracked_link_for_code`) finds the row by its sha256. The answer acts only on an order still in To confirm, marks the token used in the same transaction, and goes through `OrdersService.changeStage` with a system actor. Confirm records `confirmation_method = sms_link`; Cancel uses the reason `customer_cancelled` and releases the stock. An order in on hold, to pack (including one saved as confirmed) or any later stage, or one synced from a store, is left alone and the page shows the closed state. The answer never reads or changes the contact (D26). Limits: 60 taps a minute per IP and 10 per token.
 
+In Messenger, the COD workflow sends Confirm order and Cancel order buttons. The button points to the send step, and the run supplies the order. The tap must come from the shop, buyer and Messenger identity that received the message. The same stage rules apply. Confirm records `confirmation_method = chat_reply`, and a repeated tap or a tap after the order moves on only replies with the current stage.
+
+| Order stage      | Messenger reply                                           |
+| ---------------- | --------------------------------------------------------- |
+| To confirm       | এই অর্ডার এখন আর বদলানো যাবে না। দোকানের সঙ্গে যোগাযোগ করুন। |
+| On hold          | অর্ডারটি আপাতত স্থগিত আছে।                                  |
+| To pack          | অর্ডার নিশ্চিত হয়েছে। দোকান শীঘ্রই পাঠানোর ব্যবস্থা করবে।      |
+| With courier     | অর্ডারটি কুরিয়ারের কাছে দেওয়া হয়েছে।                        |
+| Delivered        | অর্ডারটি পৌঁছে দেওয়া হয়েছে।                                 |
+| Partly delivered | অর্ডারের কিছু পণ্য পৌঁছে দেওয়া হয়েছে।                         |
+| Returned         | অর্ডারটি ফেরত এসেছে।                                       |
+| Cancelled        | অর্ডার বাতিল হয়েছে। দোকানকে জানিয়ে দেওয়া হয়েছে।            |
+
+The To confirm reply applies when the button can no longer change the order, such as after a previous tap. It is also the fallback for any stage without its own reply.
+
 ### Delivery zones
 
 ORD-2 adds delivery-zone create, list, edit and delete routes under Store settings,
@@ -379,3 +432,11 @@ Removing a line from an editable order deletes that `order_items` row, adjusts i
 ## Open questions
 
 Q7 (Inquiry as a stage).
+
+## Orders pipeline export (ORD-10)
+
+Export in the Orders header downloads a CSV or Excel file for the current stage, search and filters across all pages. Staff need both Orders view and Download customer lists. The recipient phone stays masked unless the staff member can see full phone numbers. The rules for exact phone search are the same as in the pipeline.
+
+The file carries one row per saved order line. The columns are Order number, Order date, Stage, Buyer, Recipient, Phone, District, Product, Variant, Quantity, Unit price, Line discount, Delivery charge, Order discount, Advance and COD to collect. Order dates follow the shop time zone. Amounts come from the saved order and line snapshots, in taka. Each order-level amount is repeated on every line of the order. For a partial delivery, the file uses saved delivered quantities and discounts, keeping the saved unit prices.
+
+CSV escapes text that could run as a spreadsheet formula, and Excel stores that content as text. A file can hold up to 50,000 order lines. Larger results ask staff to narrow the filters. Each successful export records who downloaded it and the number of rows.

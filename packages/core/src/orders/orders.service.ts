@@ -10,7 +10,7 @@ import {
   type OrderListResponse,
   type OrderStageChange,
 } from '@dakly/contracts/orders';
-import { bdMobileSchema, maskPhone } from '@dakly/contracts/phone';
+import { maskPhone } from '@dakly/contracts/phone';
 import type { StoreAccess } from '@dakly/contracts/team';
 
 import { AuditService } from '../audit/audit.service';
@@ -20,13 +20,17 @@ import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
 import { OutboxService } from '../platform/outbox/outbox.service';
+import { PriceOffersService } from '../price-offers/price-offers.service';
 import { ProductStockService } from '../products/product-stock.service';
 import { ProductsService } from '../products/products.service';
 import { StoresService } from '../stores/stores.service';
 import { OrderAttributionService } from './order-attribution.service';
 import { applyOrderFulfilment } from './order-fulfilment';
+import { orderItemSnapshots } from './order-item-snapshots';
 import { toOrderListItem } from './order-list-item';
+import { orderListMatch } from './order-list-match';
 import { orderParcelWeightGrams } from './order-parcel-weight';
+import { draftItemSnapshots, recordPriceOffer } from './order-price-offers';
 import { moveOrderReservations } from './order-reservations';
 import { orderRiskFields } from './order-risk';
 import {
@@ -42,7 +46,6 @@ import {
   requireStageChange,
   type StageEditor,
   stageWrite,
-  stagesForOrderTab,
 } from './order-stage';
 import { isoTime } from './order-time';
 import { editedOrderTotals, orderTotalPoisha, orderTotals } from './order-totals';
@@ -58,6 +61,7 @@ type PlacedBy = {
   actor: AuditEntry['actor'];
   source?: OrderWrite['source'];
   createdByType?: OrderWrite['createdByType'];
+  offerConversationId?: string;
 };
 
 @Injectable()
@@ -74,6 +78,7 @@ export class OrdersService {
     @Inject(DeliveryService) private readonly delivery: DeliveryService,
     @Inject(StoresService) private readonly stores: StoresService,
     @Inject(OrderAttributionService) private readonly attribution: OrderAttributionService,
+    @Inject(PriceOffersService) private readonly priceOffers: PriceOffersService,
   ) {}
 
   archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
@@ -85,17 +90,14 @@ export class OrdersService {
     });
   }
 
-  createOrder(
-    storeId: string,
-    input: CreateOrderInput,
-    { idempotencyKey, access, actor, source = 'manual', createdByType = 'user' }: PlacedBy,
-  ): Promise<OrderDetail> {
+  createOrder(storeId: string, input: CreateOrderInput, placed: PlacedBy) {
+    const { idempotencyKey, access, actor, source = 'manual', createdByType = 'user' } = placed;
     return this.transaction.runLocked(storeId, async () => {
       const existing = await this.repository.findByIdempotencyKey(storeId, idempotencyKey);
       if (existing) return this.getById(storeId, existing.id, access);
 
       const id = newId();
-      const { buyer, recipient } = input;
+      const { buyer, recipient, deliveryChargePoisha } = input;
       const contact = await this.contacts.resolveOrderBuyer(
         storeId,
         {
@@ -105,12 +107,13 @@ export class OrdersService {
         },
         actor,
       );
-      const delivery = await this.quoteDelivery(
+      const delivery = await this.quoteDelivery(storeId, recipient.areaId, deliveryChargePoisha);
+      const items = await draftItemSnapshots(
         storeId,
-        recipient.areaId,
-        input.deliveryChargePoisha,
+        input.items,
+        { conversationId: placed.offerConversationId, contactId: contact.id },
+        { products: this.products, offers: this.priceOffers, clock: this.clock },
       );
-      const items = await this.orderItems(storeId, input.items);
       const totals = orderTotals(items, {
         ...input,
         deliveryChargePoisha: delivery.deliveryChargePoisha,
@@ -160,7 +163,9 @@ export class OrdersService {
       requireEditableOrder(order, expectedUpdatedAt);
       const delivery = await this.editedDelivery(storeId, input, order);
       const previous = await this.repository.items(storeId, orderId);
-      const items = input.items ? await this.orderItems(storeId, input.items, previous) : previous;
+      const items = input.items
+        ? await orderItemSnapshots(storeId, this.products, input.items, previous)
+        : previous;
       const totals = editedOrderTotals(items, order, input, delivery.deliveryChargePoisha);
       const now = this.clock.now();
       const possibleDuplicateOfOrderId = await this.repository.findDuplicate(storeId, {
@@ -204,19 +209,12 @@ export class OrdersService {
     query: OrderListQuery,
     seeFullPhone = false,
   ): Promise<OrderListResponse> {
-    const overdueBefore = new Date(this.clock.now().getTime() - 12 * 60 * 60 * 1000);
-    const parsedPhone = bdMobileSchema.safeParse(query.search);
-    const phone = seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined;
-    const { stage, ...filters } = query;
-    const stages = stage === undefined ? undefined : stagesForOrderTab(stage);
+    const { cursor, limit, ...filters } = query;
     const timeZone =
-      query.createdFrom || query.createdThrough ? await this.stores.timeZone(storeId) : null;
-    const rows = await this.repository.list(
-      storeId,
-      { ...filters, stages, timeZone },
-      overdueBefore,
-      phone,
-    );
+      filters.createdFrom || filters.createdThrough ? await this.stores.timeZone(storeId) : null;
+    const match = orderListMatch(filters, { seeFullPhone, timeZone, now: this.clock.now() });
+    const { overdueBefore } = match;
+    const rows = await this.repository.list(storeId, match, { cursor, limit });
     const page = rows.slice(0, query.limit);
     const outcomes = await this.repository.parcelOutcomes(storeId, [
       ...new Set(page.map(({ recipientPhone }) => recipientPhone)),
@@ -234,8 +232,9 @@ export class OrdersService {
   }
 
   async getById(storeId: string, orderId: string, access: Access): Promise<OrderDetail> {
-    const order = await this.repository.find(storeId, orderId);
-    if (!order) throw orderError('ORDER_NOT_FOUND');
+    const row = await this.repository.find(storeId, orderId);
+    if (!row) throw orderError('ORDER_NOT_FOUND');
+    const { createdByType, ...order } = row;
     const outcomes = await this.repository.parcelOutcomes(storeId, [order.recipientPhone]);
     const items = await this.repository.items(storeId, orderId);
     return {
@@ -256,7 +255,7 @@ export class OrdersService {
       ...orderRiskFields(outcomes[0]),
       items,
       parcelWeightGrams: await orderParcelWeightGrams(this.products, storeId, items),
-      timeline: await orderStageHistory(storeId, orderId, this.audit),
+      timeline: await orderStageHistory(storeId, orderId, this.audit, createdByType === 'ai'),
     };
   }
 
@@ -364,6 +363,11 @@ export class OrdersService {
       items.map((item) => ({ ...item, createdAt })),
     );
     await this.contacts.markOrderLinked(storeId, buyerContactId, actor);
+    if (
+      order.createdByType === 'ai' &&
+      items.some(({ lineDiscountPoisha }) => (lineDiscountPoisha ?? 0) > 0)
+    )
+      await recordPriceOffer(storeId, id, this.audit);
     await recordOrderCreation(storeId, order, actor, { audit: this.audit, outbox: this.outbox });
   }
 
@@ -398,22 +402,5 @@ export class OrdersService {
       deliveryChargePoisha: override ?? zone.chargePoisha,
       isDeliveryChargeOverridden: override !== undefined,
     };
-  }
-
-  private async orderItems(
-    storeId: string,
-    items: CreateOrderInput['items'],
-    previous: OrderItemWrite[] = [],
-  ): Promise<OrderItemWrite[]> {
-    const byId = new Map(previous.map((item) => [item.variantId, item]));
-    const newIds = items
-      .filter(({ variantId }) => !byId.has(variantId))
-      .map(({ variantId }) => variantId);
-    const variants = await this.products.orderVariants(storeId, newIds, [...byId.keys()]);
-    for (const variant of variants) {
-      if (!variant.unitPricePoisha) throw orderError('ORDER_PRICE_REQUIRED');
-      byId.set(variant.variantId, { ...variant, quantity: 0 });
-    }
-    return items.map((item) => ({ ...byId.get(item.variantId)!, ...item }));
   }
 }

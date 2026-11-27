@@ -29,6 +29,7 @@ function show(child: ReactNode, edit = false) {
       canEditProducts: false,
       canViewOrders: false,
       canEditOrders: false,
+      canExportOrders: false,
       canViewDueBook: false,
       canEditDueBook: false,
       canViewCampaigns: false,

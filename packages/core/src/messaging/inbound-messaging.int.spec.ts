@@ -249,7 +249,7 @@ it('reopens a conversation when its timer fires while the inbound message is bei
   expect(rows).toEqual([{ status: 'open', responder: 'ai', ai_resumes_at: null }]);
 });
 
-it('counts the inbox tabs for one shop and shows the contact name in the list', async () => {
+it('counts the inbox folders for one shop and shows the contact name in the list', async () => {
   const storeId = await store();
   const otherStore = await store();
   const connectionId = await connection(storeId);
@@ -277,22 +277,22 @@ it('counts the inbox tabs for one shop and shows the contact name in the list', 
     [storeId],
   );
   const inbox = app.get(InboxService);
-  expect(await inbox.counts(storeId)).toEqual({
-    all: 3,
+  const actor = { kind: 'user', userId: randomUUID() } as const;
+  expect(await inbox.counts(storeId, actor)).toEqual({
+    all: 2,
+    mine: 0,
+    unassigned: 2,
+    unreplied: 2,
+    ai_handling: 2,
+    order_request: 0,
+    not_customers: 0,
+    spam: 0,
+    unread: 2,
     needsYou: 1,
-    aiHandling: 2,
-    followUp: 1,
-    done: 0,
-    notCustomers: 0,
+    snoozed: 1,
+    resolved: 0,
   });
-  expect(await inbox.counts(otherStore)).toEqual({
-    all: 0,
-    needsYou: 0,
-    aiHandling: 0,
-    followUp: 0,
-    done: 0,
-    notCustomers: 0,
-  });
+  expect((await inbox.counts(otherStore, actor)).all).toBe(0);
   await admin.pool.query("update contacts set name = 'Sadia Islam' where store_id = $1", [storeId]);
   const { items } = await inbox.list(
     storeId,
@@ -614,6 +614,26 @@ it('turns a button tap from a known customer into one event and stores no messag
     [storeId],
   );
   expect(messages.rows[0].count).toBe(1);
+});
+
+it('keeps a workflow tap key stable when Meta sends the same tap again', async () => {
+  const storeId = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  await service.receiveInboundMessage(storeId, inbound(connectionId, 'first'));
+  const pressed = { ...tap(connectionId), payload: `workflow:${randomUUID()}:confirm` };
+  await service.receivePostback(storeId, pressed);
+  await service.receivePostback(storeId, pressed);
+  const { rows } = await admin.pool.query<{ payload: { identityId: string; tapKey: string } }>(
+    "select payload from outbox_events where store_id=$1 and type='message.postback_received'",
+    [storeId],
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows[0]?.payload).toMatchObject({
+    identityId: expect.any(String),
+    tapKey: expect.stringMatching(/^[a-f0-9]{64}$/u),
+  });
+  expect(rows[1]).toEqual(rows[0]);
 });
 
 it('ignores a tap from someone with no chat, another store and a delivery before connecting', async () => {

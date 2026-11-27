@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 
 import { products, productVariants } from '@dakly/db/schema/products';
 
-import { categoryPathSql } from './product-list-names.repository';
+import { brandNameSql, categoryPathSql } from './product-list-names.repository';
 
 export type SkuMatch = {
   id: string;
@@ -16,6 +16,7 @@ export type SkuMatch = {
     onHand: number;
     isStockTracked: boolean;
     category: string | null;
+    brand: string | null;
     description: string | null;
     status: 'active' | 'hidden' | 'archived';
   };
@@ -33,6 +34,7 @@ export const skuMatchColumns = {
     onHand: productVariants.onHand,
     isStockTracked: products.isStockTracked,
     category: categoryPathSql,
+    brand: brandNameSql,
     description: products.description,
     status: products.status,
   },

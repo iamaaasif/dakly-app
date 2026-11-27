@@ -10,6 +10,7 @@ export type ImportVariant = {
 export type ImportProduct = {
   name: string;
   category: string | null;
+  brand: string | null;
   description: string | null;
   status: 'active' | 'hidden' | undefined;
   pricePoisha: number;

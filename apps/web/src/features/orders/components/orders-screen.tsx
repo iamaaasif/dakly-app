@@ -2,6 +2,7 @@
 
 import { useRef, useState, type RefObject } from 'react';
 
+import { maxOrderShippingLabels } from '@dakly/contracts/order-shipping-labels';
 import { orderTabs, type OrderListQuery, type OrderStage } from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
@@ -10,11 +11,13 @@ import { QueryError } from '@dakly/ui/query-error';
 
 import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
-import { parseOrdersScreen } from '../orders-url';
+import { parseOrdersScreen, type OrdersNavigationQuery } from '../orders-url';
 import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
 import { NewOrderDialog } from './order-editor-dialog';
+import { OrderExportMenu } from './order-export-menu';
 import { OrderFilters } from './order-filters';
+import { OrderLabelSelection } from './order-label-selection';
 import { OrdersList } from './orders-list';
 import { Refreshing } from '@/components/refreshing';
 import { StorePage } from '@/components/store-page';
@@ -22,26 +25,43 @@ import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
 import { useUrlQuery, useUrlRouter } from '@/lib/use-url-query';
 
-type OrdersScreenProps = { query: OrderListQuery; selected?: string };
+type OrdersScreenProps = { query: OrderListQuery; selected?: string; labelOrderIds?: string[] };
 
 export function OrdersScreen(initial: OrdersScreenProps) {
-  const { query, selected } = useUrlQuery(initial, parseOrdersScreen);
+  const { query, selected, labelOrderIds = [] } = useUrlQuery(initial, parseOrdersScreen);
   const orders = useOrders(query);
   const pendingListRefresh = orders.fetchStatus !== 'idle';
   const router = useUrlRouter();
   const heading = useRef<HTMLHeadingElement>(null);
-  const listHref = `/orders?${ordersSearch(query)}`;
+  const navigationQuery = { ...query, labelOrderIds };
+
+  function changeLabelSelection(ids: string[]) {
+    router.replace(`/orders?${ordersSearch({ ...query, selected, labelOrderIds: ids })}`);
+  }
+
+  function toggleLabel(id: string) {
+    if (labelOrderIds.includes(id))
+      changeLabelSelection(labelOrderIds.filter((value) => value !== id));
+    else if (labelOrderIds.length < maxOrderShippingLabels)
+      changeLabelSelection([...labelOrderIds, id]);
+  }
 
   return (
     <StorePage permission="canViewOrders">
       <main className="mx-auto max-w-7xl space-y-4 p-6 md:p-8">
         <OrdersHeader
           heading={heading}
-          onSaved={(id) => router.replace(`/orders?${ordersSearch({ ...query, selected: id })}`)}
+          query={query}
+          onSaved={(id) =>
+            router.replace(`/orders?${ordersSearch({ ...navigationQuery, selected: id })}`)
+          }
         />
-        {orders.data ? <OrderAlerts alerts={orders.data.alerts} /> : null}
-        <OrderStageNav query={query} counts={orders.data?.counts} />
-        <OrderFilters query={query} />
+        {orders.data ? (
+          <OrderAlerts alerts={orders.data.alerts} labelOrderIds={labelOrderIds} />
+        ) : null}
+        <OrderStageNav query={navigationQuery} counts={orders.data?.counts} />
+        <OrderFilters query={navigationQuery} />
+        <OrderLabelSelection orderIds={labelOrderIds} onClear={() => changeLabelSelection([])} />
         {orders.isPending ? <p role="status">Loading orders…</p> : null}
         {orders.error ? (
           <QueryError
@@ -52,7 +72,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
         ) : null}
         {orders.data ? (
           <Refreshing active={orders.isPlaceholderData}>
-            <OrdersList page={orders.data} query={query} />
+            <OrdersList page={orders.data} query={navigationQuery} onToggleLabel={toggleLabel} />
           </Refreshing>
         ) : null}
         <p className="text-xs text-text-muted">Return risk is based on your past orders.</p>
@@ -63,7 +83,7 @@ export function OrdersScreen(initial: OrdersScreenProps) {
             restoreFocusTo={() =>
               orderRowFocus(heading.current, pendingListRefresh ? undefined : selected)
             }
-            onClose={() => router.replace(listHref)}
+            onClose={() => router.replace(`/orders?${ordersSearch(navigationQuery)}`)}
           />
         ) : null}
       </main>
@@ -73,13 +93,15 @@ export function OrdersScreen(initial: OrdersScreenProps) {
 
 type OrdersHeaderProps = {
   heading: RefObject<HTMLHeadingElement | null>;
+  query: OrderListQuery;
   onSaved: (id: string) => void;
 };
 
-function OrdersHeader({ heading, onSaved }: OrdersHeaderProps) {
+function OrdersHeader({ heading, query, onSaved }: OrdersHeaderProps) {
   const { data } = useSessionContext();
   const [open, setOpen] = useState(false);
-  const canCreate = data?.currentStore?.canEditOrders;
+  const store = data?.currentStore;
+  const canCreate = store?.canEditOrders;
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -95,11 +117,14 @@ function OrdersHeader({ heading, onSaved }: OrdersHeaderProps) {
           in hand.
         </p>
       </div>
-      {canCreate && (
-        <Button className="min-h-11 sm:min-h-10" onClick={() => setOpen(true)}>
-          <span aria-hidden="true">+ </span>New order
-        </Button>
-      )}
+      <div className="flex flex-wrap items-start gap-2">
+        {store?.canExportOrders ? <OrderExportMenu query={query} /> : null}
+        {canCreate ? (
+          <Button className="min-h-11 sm:min-h-10" onClick={() => setOpen(true)}>
+            <span aria-hidden="true">+ </span>New order
+          </Button>
+        ) : null}
+      </div>
       {open && (
         <NewOrderDialog
           onClose={() => setOpen(false)}
@@ -123,7 +148,7 @@ function orderRowFocus(heading: HTMLHeadingElement | null, orderId: string | und
 }
 
 type OrderStageNavProps = {
-  query: OrderListQuery;
+  query: OrdersNavigationQuery;
   counts?: Record<OrderStage, number>;
 };
 

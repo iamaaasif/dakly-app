@@ -21,7 +21,7 @@ export function LabelMenu({ conversation }: { conversation: ConversationResponse
       <PopoverTrigger asChild>
         <Button variant="secondary" size="sm">
           <Tag aria-hidden="true" size={16} />
-          Label
+          <span className="sr-only @xl:not-sr-only">Label</span>
           {conversation.labels.length ? ` (${conversation.labels.length})` : ''}
         </Button>
       </PopoverTrigger>

@@ -2,6 +2,8 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 
 import type {
+  ChatIntent,
+  ConversationCountsResponse,
   ConversationListQuery,
   ConversationMessageListQuery,
   UpdateConversationInput,
@@ -14,33 +16,8 @@ import { contacts } from '@dakly/db/schema/contacts';
 
 import { DATABASE } from '../platform/database/database.tokens';
 import { TenantDatabase } from '../platform/database/tenant-database';
-
-const fields = {
-  id: conversations.id,
-  channel: conversations.channel,
-  contactId: conversations.contactId,
-  contactName: sql<
-    string | null
-  >`(select ${contacts.name} from ${contacts} where ${contacts.storeId} = ${conversations.storeId} and ${contacts.id} = ${conversations.contactId})`,
-  // The shop's labels on a chat are the contact's tags.
-  labels: sql<
-    string[]
-  >`(select ${contacts.tags} from ${contacts} where ${contacts.storeId} = ${conversations.storeId} and ${contacts.id} = ${conversations.contactId})`,
-  status: conversations.status,
-  responder: conversations.responder,
-  assigneeUserId: conversations.assigneeUserId,
-  handoverReason: conversations.handoverReason,
-  handoverSummary: conversations.handoverSummary,
-  handedOverAt: conversations.handedOverAt,
-  aiResumesAt: conversations.aiResumesAt,
-  // Keep PostgreSQL's microseconds in cursor timestamps.
-  lastMessageAt: sql<
-    string | null
-  >`to_char(${conversations.lastMessageAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
-  lastMessagePreview: conversations.lastMessagePreview,
-  windowExpiresAt: conversations.windowExpiresAt,
-  unreadCount: conversations.unreadCount,
-};
+import { conversationFields as fields } from './conversation-fields.repository';
+import { folderCondition, folderCounts, statusOfState } from './conversation-folders.repository';
 
 // A ranked cursor reads rank_time_id; the plain one reads time_id. A chat with no message has "none".
 function afterCursor(query: ConversationListQuery, group: SQL, activityAt: SQL) {
@@ -84,6 +61,7 @@ type ConversationChange = UpdateConversationInput & {
   handoverReason?: (typeof handoverReasons)[number] | null;
   handoverSummary?: string | null;
   handedOverAt?: Date | null;
+  intentTag?: ChatIntent;
 };
 
 @Injectable()
@@ -100,7 +78,7 @@ export class InboxRepository {
     return result.rows;
   }
 
-  list(storeId: string, query: ConversationListQuery, contactIds?: string[]) {
+  list(storeId: string, userId: string, query: ConversationListQuery, contactIds?: string[]) {
     const waitingLongest = query.sort === 'waiting';
     // Chats with no message sort last in both directions.
     const activityAt = sql`coalesce(${conversations.lastMessageAt}, ${waitingLongest ? sql`'infinity'` : sql`'-infinity'`}::timestamptz)`;
@@ -122,10 +100,9 @@ export class InboxRepository {
             eq(conversations.storeId, storeId),
             isNull(contacts.deletedAt),
             beforeCursor,
-            query.status ? eq(conversations.status, query.status) : undefined,
-            query.responder ? eq(conversations.responder, query.responder) : undefined,
+            query.folder ? folderCondition(query.folder, userId) : undefined,
+            query.state ? statusOfState[query.state] : undefined,
             query.channel ? eq(conversations.channel, query.channel) : undefined,
-            query.contactKind ? eq(contacts.kind, query.contactKind) : undefined,
             query.label ? sql`${query.label} = any(${contacts.tags})` : undefined,
             query.assigneeUserId
               ? eq(conversations.assigneeUserId, query.assigneeUserId)
@@ -142,17 +119,10 @@ export class InboxRepository {
     );
   }
 
-  async counts(storeId: string) {
+  async counts(storeId: string, userId: string): Promise<ConversationCountsResponse> {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
-        .select({
-          all: sql<number>`count(*)::int`,
-          needsYou: sql<number>`(count(*) filter (where ${conversations.status} = 'needs_you'))::int`,
-          aiHandling: sql<number>`(count(*) filter (where ${conversations.responder} = 'ai'))::int`,
-          followUp: sql<number>`(count(*) filter (where ${conversations.status} = 'later'))::int`,
-          done: sql<number>`(count(*) filter (where ${conversations.status} = 'done'))::int`,
-          notCustomers: sql<number>`(count(*) filter (where ${contacts.kind} = 'not_customer'))::int`,
-        })
+        .select(folderCounts(userId))
         .from(conversations)
         .innerJoin(
           contacts,
@@ -222,7 +192,13 @@ export class InboxRepository {
     return row;
   }
 
-  aiReplyTurn(storeId: string, id: string, lock: boolean) {
+  // The AI's own chats, or the chats it just handed to people, for the draft it leaves them.
+  aiReplyTurn(
+    storeId: string,
+    id: string,
+    lock: boolean,
+    responder: 'ai' | 'human' | 'any' = 'ai',
+  ) {
     return this.database.forStore(storeId, async (tx) => {
       const query = tx
         .select({
@@ -237,7 +213,7 @@ export class InboxRepository {
           and(
             eq(conversations.storeId, storeId),
             eq(conversations.id, id),
-            eq(conversations.responder, 'ai'),
+            responder === 'any' ? undefined : eq(conversations.responder, responder),
           ),
         );
       const [conversation] = await (lock ? query.for('no key update') : query);
@@ -398,6 +374,30 @@ export class InboxRepository {
         .returning(messageFields),
     );
     return row!;
+  }
+
+  // Saved only while people hold the chat and nobody, the customer included, wrote after the burst
+  // the draft answers.
+  async saveSuggestedReply(storeId: string, id: string, text: string, burstAt: Date) {
+    const answered = sql`exists (select 1 from ${messages} where ${messages.storeId} = ${storeId}
+      and ${messages.conversationId} = ${id} and ${messages.createdAt} > ${burstAt.toISOString()}::timestamptz
+      and (${messages.direction} = 'in' or ${messages.authorType} in ('user', 'ai')))`;
+    const saved = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(conversations)
+        .set({ suggestedReply: text })
+        .where(
+          and(
+            eq(conversations.storeId, storeId),
+            eq(conversations.id, id),
+            eq(conversations.status, 'needs_you'),
+            eq(conversations.responder, 'human'),
+            sql`not ${answered}`,
+          ),
+        )
+        .returning({ id: conversations.id }),
+    );
+    return saved.length > 0;
   }
 
   async update(

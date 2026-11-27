@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, getTableName, inArray, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, getTableName, inArray, ne, sql } from 'drizzle-orm';
 
 import type {
   CreateProductInput,
@@ -13,10 +13,12 @@ import { products, productVariants } from '@dakly/db/schema/products';
 import { isConstraintViolation } from '../platform/database/error-code';
 import { TenantDatabase } from '../platform/database/tenant-database';
 import { brandNameSql, categoryPathSql } from './product-list-names.repository';
+import { productListRank } from './product-list-rank.repository';
 import {
   photoSnapshot,
   type CatalogueVariant,
   type PhotoRef,
+  type Product,
   type Variant,
   variantSnapshot,
 } from './product-snapshots.repository';
@@ -28,6 +30,7 @@ const productIdColumn = sql`${sql.identifier(getTableName(products))}.${sql.iden
 
 const productColumns = {
   id: products.id,
+  version: products.version,
   name: products.name,
   description: products.description,
   categoryId: products.categoryId,
@@ -47,6 +50,11 @@ const productColumns = {
   createdAt: products.createdAt,
   updatedAt: products.updatedAt,
 };
+const negotiationColumns = {
+  negotiationEnabled: products.negotiationEnabled,
+  negotiationOpeningPoisha: products.negotiationOpeningPoisha,
+  negotiationFloorPoisha: products.negotiationFloorPoisha,
+};
 const variantColumns = {
   id: productVariants.id,
   productId: productVariants.productId,
@@ -60,10 +68,12 @@ const variantColumns = {
   reserved: productVariants.reserved,
   isDefault: productVariants.isDefault,
 };
-export type CatalogueProduct = Product & {
+export type CatalogueProduct = Omit<Product, keyof typeof negotiationColumns> & {
   variants: CatalogueVariant[];
   photos: PhotoRef[];
 };
+export type EditableCatalogueProduct = CatalogueProduct &
+  Pick<Product, keyof typeof negotiationColumns>;
 type PhotoWrite = ConfirmProductPhotoInput & {
   objectKey: string;
   uploadedByUserId: string | null;
@@ -71,15 +81,7 @@ type PhotoWrite = ConfirmProductPhotoInput & {
 };
 
 type ProductDetails = Omit<CreateProductInput, 'variants'>;
-export type Product = ProductDetails & {
-  id: string;
-  category: string | null;
-  brand: string | null;
-  imageFileIds: string[];
-  createdAt: Date;
-  updatedAt: Date;
-};
-export type { CatalogueVariant, Variant };
+export type { CatalogueVariant, Product, Variant };
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
   position: number;
@@ -89,11 +91,12 @@ type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & 
 export class ProductsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
-  async findById(storeId: string, id: string): Promise<CatalogueProduct | undefined> {
+  async findById(storeId: string, id: string): Promise<EditableCatalogueProduct | undefined> {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
           ...productColumns,
+          ...negotiationColumns,
           variants: variantSnapshot(storeId),
           photos: photoSnapshot(storeId),
         })
@@ -109,15 +112,21 @@ export class ProductsRepository {
     storeId: string,
     query: ProductListQuery,
     lowStockThreshold: number,
-  ): Promise<CatalogueProduct[]> {
-    return this.database.forStore(storeId, (tx) =>
-      tx
+    sales?: { variantId: string; units: number }[],
+  ) {
+    const rank = productListRank(storeId, query.cursor, sales);
+    return this.database.forStore(storeId, (tx) => {
+      const list = tx
         .select({
           ...productColumns,
+          ...negotiationColumns,
           variants: variantSnapshot(storeId),
           photos: photoSnapshot(storeId),
+          unitsSold: rank.unitsSold,
+          rankCreatedAt: rank.rankCreatedAt,
         })
-        .from(products)
+        .from(products);
+      return (rank.join ? list.leftJoin(rank.join, sql`sales.product_id = ${products.id}`) : list)
         .where(
           and(
             eq(products.storeId, storeId),
@@ -137,12 +146,12 @@ export class ProductsRepository {
               ? sql`(${products.categoryId} = ${query.categoryId} or ${products.categoryId} in (select id from product_categories where store_id = ${storeId} and parent_id = ${query.categoryId}))`
               : undefined,
             query.brandId ? eq(products.brandId, query.brandId) : undefined,
-            query.cursor ? lt(products.id, query.cursor) : undefined,
+            rank.after,
           ),
         )
-        .orderBy(desc(products.id))
-        .limit(query.limit + 1),
-    );
+        .orderBy(...rank.order)
+        .limit(query.limit + 1);
+    });
   }
 
   // The AI agent may only offer active products the shop shows in chats.
@@ -234,7 +243,7 @@ export class ProductsRepository {
       tx
         .insert(products)
         .values({ storeId, ...input, createdAt: now, updatedAt: now })
-        .returning(productColumns),
+        .returning({ ...productColumns, ...negotiationColumns }),
     );
     return rows[0]!;
   }
@@ -248,11 +257,11 @@ export class ProductsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ ...input, updatedAt: now })
+        .set({ ...input, updatedAt: now, version: sql`${products.version} + 1` })
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )
-        .returning(productColumns),
+        .returning({ ...productColumns, ...negotiationColumns }),
     );
     return rows[0];
   }
@@ -354,7 +363,7 @@ export class ProductsRepository {
     const rows = await this.database.forStore(storeId, (tx) =>
       tx
         .update(products)
-        .set({ status: 'archived', updatedAt: now })
+        .set({ status: 'archived', updatedAt: now, version: sql`${products.version} + 1` })
         .where(
           and(eq(products.storeId, storeId), eq(products.id, id), ne(products.status, 'archived')),
         )

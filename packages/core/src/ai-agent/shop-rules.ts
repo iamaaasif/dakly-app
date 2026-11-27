@@ -11,6 +11,8 @@ import {
 } from '@dakly/contracts/ai-agent-settings';
 import type { handoverReasons } from '@dakly/contracts/chats';
 
+import { summaryOf } from './shop-block';
+
 type Reason = (typeof handoverReasons)[number];
 
 // What the owner saved on the AI agent screen that changes how a chat reply is written.
@@ -88,6 +90,8 @@ export function refuseToolCall(
   if (call.name === 'send_product_card' && !rules.showProducts)
     return error('SHOW_PRODUCTS_OFF', 'Do not send a card. Describe the product in words.');
   if (isOrderToolOff(rules, call.name)) return { kind: 'handover', reason: 'ready_to_buy' };
+  if (call.name === 'offer_lower_price' && rules.handover.discounts)
+    return { kind: 'handover', reason: 'discount' };
   return call.name === 'hand_over' && answersItself(rules, call.argumentsJson)
     ? error(
         'HANDOVER_OFF',
@@ -120,4 +124,15 @@ function handOverReasonOf(argumentsJson: string) {
   } catch {
     return undefined;
   }
+}
+
+export function toolHandover(
+  name: string,
+  result: object,
+): { handover: Reason; summary?: string } | undefined {
+  if (name === 'hand_over' && 'reason' in result)
+    return { handover: result.reason as Reason, summary: summaryOf(result) };
+  if (name === 'offer_lower_price' && 'kind' in result && result.kind === 'handover')
+    return { handover: 'discount' };
+  return undefined;
 }

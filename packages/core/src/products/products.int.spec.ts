@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { createProductSchema } from '@dakly/contracts/products';
+import type { StoreAccess } from '@dakly/contracts/team';
 import { createDatabase } from '@dakly/db/client';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
@@ -13,15 +14,24 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 import { OutboxRepository } from '../platform/outbox/outbox.repository';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
+import { TeamService } from '../team/team.service';
 import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
+import { ProductsController } from './products.controller';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
 
 const actor = { kind: 'system' } as const;
+const productEditor: StoreAccess = {
+  role: 'owner',
+  areas: { products: 'edit' },
+  seeFullPhone: true,
+  exportLists: true,
+  refund: true,
+};
 const instant = new Date('2026-11-17T08:00:00Z');
 
 describe('ProductsService with Postgres', () => {
@@ -67,8 +77,11 @@ describe('ProductsService with Postgres', () => {
     {} as FileStorageDriver,
     categories,
     brands,
+    {} as never,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
+  const team = new TeamService({} as ConstructorParameters<typeof TeamService>[0]);
+  const controller = new ProductsController(service, team);
   beforeAll(() => f.setup());
   afterAll(async () => {
     for (const table of [
@@ -113,6 +126,89 @@ describe('ProductsService with Postgres', () => {
       [f.a, 'product.updated'],
     );
     expect(events.rows.map((row) => row.payload)).toContainEqual({ productId: product.id });
+  });
+
+  it('only exposes negotiation prices to product editors', async () => {
+    const settings = {
+      negotiationEnabled: true,
+      negotiationOpeningPoisha: 180025,
+      negotiationFloorPoisha: 150050,
+    };
+    const input = createProductSchema.parse({
+      name: 'Negotiable panjabi',
+      pricePoisha: 200000,
+      ...settings,
+    });
+    const product = await service.create(f.a, input, actor);
+    const viewer = {
+      ...productEditor,
+      role: 'custom' as const,
+      areas: { products: 'view' as const },
+    };
+
+    expect(await controller.getById(f.a, productEditor, product.id)).toMatchObject(settings);
+    expect(
+      (await controller.list(f.a, productEditor, { limit: 1, search: input.name })).items[0],
+    ).toMatchObject(settings);
+    const publicViews = [
+      await controller.getById(f.a, viewer, product.id),
+      (await controller.list(f.a, viewer, { limit: 1, search: input.name })).items[0],
+      await service.getById(f.a, product.id),
+      await service.getForChat(f.a, product.id),
+      await service.getForOrderLink(f.a, product.id),
+    ];
+    for (const view of publicViews) {
+      expect(view).toHaveProperty('id', product.id);
+      expect(view).not.toHaveProperty('negotiationOpeningPoisha');
+      expect(view).not.toHaveProperty('negotiationFloorPoisha');
+    }
+  });
+
+  it('validates changes against the saved prices and the resulting variant list', async () => {
+    const input = createProductSchema.parse({
+      name: 'Price changes',
+      pricePoisha: 200000,
+      negotiationEnabled: true,
+      negotiationOpeningPoisha: 170000,
+      negotiationFloorPoisha: 140000,
+    });
+    const product = await service.create(f.a, input, actor);
+    const variant = {
+      id: product.variants[0]!.id,
+      optionValues: {},
+      sku: null,
+      priceOverridePoisha: 175000,
+      costPoisha: null,
+      lowStockThreshold: null,
+    };
+    await expect(
+      service.edit(f.a, product.id, { pricePoisha: 170000 }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_OPENING_PRICE' });
+    await expect(
+      service.edit(f.a, product.id, { negotiationFloorPoisha: 180000 }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_FLOOR_PRICE' });
+    await expect(
+      service.edit(f.a, product.id, { options: [], variants: [variant] }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_VARIANT_PRICE' });
+    const edited = await service.edit(
+      f.a,
+      product.id,
+      {
+        negotiationEnabled: false,
+        options: [],
+        variants: [variant],
+      },
+      actor,
+    );
+    expect(edited).toMatchObject({ pricePoisha: 200000, negotiationEnabled: false });
+    await expect(
+      service.edit(f.a, product.id, { negotiationEnabled: true }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_NEGOTIATION_VARIANT_PRICE' });
+    expect(await controller.getById(f.a, productEditor, product.id)).toMatchObject({
+      negotiationEnabled: false,
+      negotiationOpeningPoisha: 170000,
+      negotiationFloorPoisha: 140000,
+    });
   });
 
   it('edits variant prices while preserving variant ids and stock', async () => {
@@ -164,6 +260,50 @@ describe('ProductsService with Postgres', () => {
     const edited = await service.edit(f.a, product.id, { name: 'After edit' }, actor);
     expect(edited).toMatchObject({ name: 'After edit', pricePoisha: 42000, aliases: ['kurti'] });
     expect(edited.variants).toEqual(product.variants);
+  });
+
+  it('refuses a stale save without changing the product, variants or events', async () => {
+    const input = createProductSchema.parse({ name: 'Versioned product', pricePoisha: 50000 });
+    const loaded = await service.create(f.a, input, actor);
+    expect(loaded.version).toBe(1);
+    const fresh = await service.edit(
+      f.a,
+      loaded.id,
+      { name: 'Saved elsewhere', expectedVersion: loaded.version },
+      actor,
+    );
+    expect(fresh).toMatchObject({ version: 2, name: 'Saved elsewhere', pricePoisha: 50000 });
+    const variant = loaded.variants[0]!;
+    await expect(
+      service.edit(
+        f.a,
+        loaded.id,
+        {
+          expectedVersion: loaded.version,
+          pricePoisha: 100,
+          options: [],
+          variants: [{ ...input.variants[0]!, id: variant.id, sku: 'STALE' }],
+        },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED', status: 409 });
+    expect(await service.getById(f.a, loaded.id, true)).toEqual(fresh);
+    const events = await f.connection.pool.query(
+      "select id from outbox_events where store_id=$1 and type='product.updated' and payload->>'productId'=$2",
+      [f.a, loaded.id],
+    );
+    expect(events.rows).toHaveLength(2);
+
+    await expect(
+      service.edit(f.a, loaded.id, { status: 'hidden', expectedVersion: loaded.version }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED', status: 409 });
+    const hidden = await service.edit(
+      f.a,
+      loaded.id,
+      { status: 'hidden', expectedVersion: fresh.version },
+      actor,
+    );
+    expect(hidden).toMatchObject({ status: 'hidden', version: 3 });
   });
 
   it('keeps the default variant when details change without explicit variants', async () => {
@@ -238,7 +378,14 @@ describe('ProductsService with Postgres', () => {
       actor,
     );
     await service.remove(f.a, product.id, actor);
+    expect(await f.row('products', product.id)).toMatchObject({ version: product.version + 1 });
     await expect(service.getById(f.a, product.id)).rejects.toMatchObject({
+      code: 'PRODUCT_NOT_FOUND',
+    });
+    await expect(
+      service.edit(f.a, product.id, { name: 'Stale', expectedVersion: product.version }, actor),
+    ).rejects.toMatchObject({ code: 'PRODUCT_CHANGED', status: 409 });
+    await expect(service.edit(f.a, product.id, { name: 'Archived' }, actor)).rejects.toMatchObject({
       code: 'PRODUCT_NOT_FOUND',
     });
     expect(await f.row('product_variants', product.variants[0]!.id)).toMatchObject({
@@ -454,9 +601,11 @@ describe('ProductsService with Postgres', () => {
       actor,
     );
     const repository = new ProductOrderVariantsRepository(f.tenant);
-    await expect(repository.lockArchiveVariants(f.a, product.id)).resolves.toEqual([
-      product.variants[0]!.id,
-    ]);
+    await expect(repository.lockArchiveVariants(f.a, product.id)).resolves.toEqual({
+      variantIds: [product.variants[0]!.id],
+      version: product.version,
+      status: product.status,
+    });
     await expect(repository.lockArchiveVariants(f.b, product.id)).resolves.toBeNull();
   });
 

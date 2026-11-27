@@ -144,6 +144,7 @@ export class AutomationRunsService {
       storeId,
       graph: run.graph,
       automationId: run.automationId,
+      templateKey: run.templateKey,
       runId: claim.runId,
       contactId: run.contactId,
       tags: await this.contacts.findTags(storeId, run.contactId),

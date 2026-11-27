@@ -5,6 +5,7 @@ import { AdminModule } from '@dakly/core/admin/admin.module';
 import { KnowledgeModule } from '@dakly/core/ai/knowledge/knowledge.module';
 import { AiAgentSettingsModule } from '@dakly/core/ai-agent/ai-agent-settings.module';
 import { AiPracticeModule } from '@dakly/core/ai-agent/ai-practice.module';
+import { ReplyToolsModule } from '@dakly/core/ai-agent/reply-tools.module';
 import { AnalyticsOverviewModule } from '@dakly/core/analytics/analytics-overview.module';
 import { AssistantModule } from '@dakly/core/assistant/assistant.module';
 import { AuditLogModule } from '@dakly/core/audit/audit-log.module';
@@ -73,6 +74,7 @@ import { HealthController } from './health.controller';
     KhataScansModule,
     AiAgentSettingsModule,
     AiPracticeModule,
+    ReplyToolsModule,
     KnowledgeModule,
     LinksModule,
     CommentsModule,

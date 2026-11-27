@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 import { chatChannels } from './channels';
-import { contactKinds } from './contacts';
+import type { ContactKind } from './contacts';
+import { confirmProductPhotoSchema } from './products';
 import { searchText } from './search-text';
 
 export const conversationStatuses = ['open', 'needs_you', 'later', 'done'] as const;
@@ -18,6 +19,22 @@ export const handoverReasons = [
   'allowance_used',
   'ai_paused',
   'store_read_only',
+  'other',
+] as const;
+// What the customer's latest messages are about, as the classifier reads them.
+export const chatIntents = [
+  'greeting',
+  'price',
+  'size_or_stock',
+  'delivery',
+  'payment',
+  'order',
+  'confirm',
+  'order_status',
+  'exchange',
+  'complaint',
+  'photo',
+  'special_request',
   'other',
 ] as const;
 export const leadTemperatures = ['hot', 'warm', 'cold'] as const;
@@ -156,6 +173,19 @@ export const conversationMessageListQuerySchema = z.strictObject({
 });
 
 export const conversationSorts = ['recent', 'needs_you', 'unread', 'waiting'] as const;
+// The Inbox folders. Snoozed and Resolved are states, not folders: see conversationStates.
+export const conversationFolders = [
+  'all',
+  'mine',
+  'unassigned',
+  'unreplied',
+  'ai_handling',
+  'order_request',
+  'not_customers',
+  'spam',
+] as const;
+// Open covers needs_you, Snoozed is later and Resolved is done.
+export const conversationStates = ['open', 'snoozed', 'resolved'] as const;
 const conversationCursorSchema = z.union([
   messageCursorSchema,
   z.templateLiteral(['none_', z.uuid()]),
@@ -172,9 +202,8 @@ export const conversationListQuerySchema = conversationMessageListQuerySchema.ex
   sort: z.enum(conversationSorts).default('recent'),
   // A name, a full phone number, or the start of a number for members who see full phones.
   q: z.string().trim().min(1).max(120).optional(),
-  contactKind: z.enum(contactKinds).optional(),
-  status: z.enum(conversationStatuses).optional(),
-  responder: z.enum(conversationResponders).optional(),
+  folder: z.enum(conversationFolders).optional(),
+  state: z.enum(conversationStates).optional(),
   channel: z.enum(chatChannels).optional(),
   assigneeUserId: z.uuid().optional(),
   label: labelText.optional(),
@@ -192,11 +221,28 @@ export const changeConversationLabelSchema = z.strictObject({
   change: z.enum(['add', 'remove']),
 });
 export const createConversationNoteSchema = z.strictObject({ body: searchText.max(4000) });
-export const createConversationReplySchema = z.strictObject({
-  body: searchText.max(2000),
-  // One per send press, so a retried request does not send the reply twice.
+// A photo a person attaches is uploaded first, then named here by the file id it was given.
+export const createConversationReplySchema = z
+  .strictObject({
+    body: z.string().trim().max(2000),
+    // One per send press, so a retried request does not send the reply twice.
+    operationKey: z.uuid(),
+    photo: confirmProductPhotoSchema.optional(),
+  })
+  .refine(({ body, photo }) => body || photo, {
+    path: ['body'],
+    message: 'Write a reply or attach a photo',
+  });
+// A person sends a product from the reply box as the same card the AI sends.
+export const sendConversationProductSchema = z.strictObject({
+  productId: z.uuid(),
   operationKey: z.uuid(),
 });
+// Write with AI drafts a reply to the customer's latest messages; AI rewrite polishes what is typed.
+export const writeConversationReplySchema = z.discriminatedUnion('mode', [
+  z.strictObject({ mode: z.literal('write') }),
+  z.strictObject({ mode: z.literal('rewrite'), text: z.string().trim().min(1).max(2000) }),
+]);
 export const takeOverConversationSchema = z
   .strictObject({ returnAfterMinutes: z.literal([30, 60, 360]).optional() })
   .default({});
@@ -207,6 +253,9 @@ export type ChangeConversationLabelInput = z.infer<typeof changeConversationLabe
 export type UpdateConversationInput = z.infer<typeof updateConversationSchema>;
 export type CreateConversationNoteInput = z.infer<typeof createConversationNoteSchema>;
 export type CreateConversationReplyInput = z.infer<typeof createConversationReplySchema>;
+export type SendConversationProductInput = z.infer<typeof sendConversationProductSchema>;
+export type WriteConversationReplyInput = z.infer<typeof writeConversationReplySchema>;
+export type WrittenConversationReply = { text: string };
 export type TakeOverConversationInput = z.infer<typeof takeOverConversationSchema>;
 
 // What the Chats header shows for the shop's day so far. The order figures are null for members who
@@ -220,6 +269,7 @@ export type ConversationResponse = {
   id: string;
   contactId: string;
   contactName: string | null;
+  contactKind: ContactKind;
   labels: string[];
   channel: (typeof chatChannels)[number];
   status: (typeof conversationStatuses)[number];
@@ -231,9 +281,17 @@ export type ConversationResponse = {
   aiResumesAt: string | null;
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
+  // Who wrote the newest sent message: Waiting for them and the preview's "You:" read it.
+  lastMessageFrom: (typeof messageAuthorTypes)[number] | null;
+  intentTag: ChatIntent | null;
+  // The AI's draft for the team after a hand-over, until someone or the AI writes, or the customer
+  // writes again.
+  suggestedReply: string | null;
   windowExpiresAt: string | null;
   unreadCount: number;
 };
+
+export type ChatIntent = (typeof chatIntents)[number];
 
 export type ConversationMessageResponse = {
   id: string;
@@ -248,13 +306,12 @@ export type ConversationMessageResponse = {
   sentAt: string | null;
 };
 
-export type ConversationCountsResponse = {
-  all: number;
+// Folder counts are of open chats; the rest count All conversations. The dashboard reads needsYou.
+export type ConversationCountsResponse = Record<(typeof conversationFolders)[number], number> & {
+  unread: number;
   needsYou: number;
-  aiHandling: number;
-  followUp: number;
-  done: number;
-  notCustomers: number;
+  snoozed: number;
+  resolved: number;
 };
 
 export type ConversationAssigneeResponse = { userId: string; name: string };

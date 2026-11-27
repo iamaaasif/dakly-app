@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
-import { ZodError } from 'zod';
+import { type z, ZodError } from 'zod';
 
 import {
   browseProductsTool,
@@ -14,13 +14,12 @@ import {
   getProductTool,
   handOverTool,
   joinRestockListTool,
-  salesAgentTools,
+  offerLowerPriceTool,
   searchKnowledgeTool,
   searchProductsTool,
   sendProductCardTool,
 } from '@dakly/contracts/ai-agent-tools';
 import { formatMoney } from '@dakly/contracts/money';
-import type { LlmTool } from '@dakly/providers/llm/llm-driver';
 
 import { KnowledgeSearchService } from '../ai/knowledge-search.service';
 import { ContactMatchSuggestionsService } from '../contacts/contact-match-suggestions.service';
@@ -28,24 +27,16 @@ import { DeliveryService } from '../delivery/delivery.service';
 import { BuyerOrdersService } from '../orders/buyer-orders.service';
 import { ChatOrdersService } from '../orders/chat-orders.service';
 import { AppError } from '../platform/errors/app-error';
+import { PriceOffersService } from '../price-offers/price-offers.service';
 import { ProductSearchService } from '../product-search/product-search.service';
 import { type ChatProduct, ProductsService } from '../products/products.service';
 import { RestockRequestsService } from '../products/restock-requests.service';
+import { offerLowerPrice, type OfferQuote } from './offer-lower-price';
 import { describeAlternatives, describePhotoMatch } from './product-match-results';
 import type { CompactDeliveryZone } from './shop-block';
-import type { ShopRules } from './shop-rules';
+import type { ToolScope } from './tool-scope';
 
-// The agent job supplies both ids. No tool argument can name another store or customer.
-export type ToolScope = {
-  storeId: string;
-  contactId: string;
-  // A practice question has no chat, so it can read but cannot take an order.
-  chat?: { conversationId: string; channel: 'messenger' | 'instagram' };
-  // Set while the chat is answered from an ad: search and product reads stay inside these products.
-  adProductIds?: readonly string[];
-  // The owner's Suggest add-ons switch; confirming an order then returns what goes with it.
-  suggestAddOns?: boolean;
-};
+export type { ToolScope };
 type Handler = (scope: ToolScope, raw: unknown) => Promise<object>;
 
 const SEARCH_PRODUCT_LIMIT = 3;
@@ -54,36 +45,6 @@ const AREA_LIMIT = 3;
 const ZONE_LIMIT = 20;
 const KNOWLEDGE_LIMIT = 4;
 const OWN_ORDER_LIMIT = 5;
-
-const ALIAS_LIMIT = 3;
-
-// The field names already say taka, so only the units that add something go to the model.
-export const salesAgentLlmTools: readonly LlmTool[] = salesAgentTools.map((tool) => ({
-  name: tool.name,
-  input: tool.input,
-  description: [
-    tool.description,
-    `Words customers use: ${tool.aliases.slice(0, ALIAS_LIMIT).join(', ')}.`,
-    ...Object.entries(tool.units)
-      .filter(([, unit]) => !unit.endsWith('converted from poisha'))
-      .map(([field, unit]) => `${field}: ${unit}.`),
-  ].join(' '),
-}));
-
-export function salesAgentToolsFor(
-  rules: Pick<ShopRules, 'showProducts' | 'takeOrders'>,
-): readonly LlmTool[] {
-  if (rules.showProducts && rules.takeOrders) return salesAgentLlmTools;
-  return salesAgentLlmTools.filter((tool) => {
-    if (!rules.showProducts && tool.name === sendProductCardTool.name) return false;
-    if (
-      !rules.takeOrders &&
-      (tool.name === draftOrderTool.name || tool.name === confirmOrderTool.name)
-    )
-      return false;
-    return true;
-  });
-}
 
 @Injectable()
 export class SalesAgentToolsService {
@@ -113,17 +74,29 @@ export class SalesAgentToolsService {
     @Inject(ChatOrdersService) private readonly chatOrders: ChatOrdersService,
     @Inject(ContactMatchSuggestionsService)
     private readonly phoneMatches: ContactMatchSuggestionsService,
+    @Inject(PriceOffersService) private readonly priceOffers: PriceOffersService,
   ) {}
 
   // The result goes back to the model, so a failure the model can act on is a result, not a throw.
-  async run(scope: ToolScope, name: string, argumentsJson: string): Promise<object> {
+  async run(
+    scope: ToolScope,
+    name: string,
+    argumentsJson: string,
+  ): Promise<{ result: object; quote?: OfferQuote }> {
     const handler = Object.hasOwn(this.handlers, name) ? this.handlers[name] : undefined;
-    if (!handler) return { error: 'UNKNOWN_TOOL' };
     try {
-      return await handler(scope, parseJson(argumentsJson));
+      if (name === offerLowerPriceTool.name)
+        return await offerLowerPrice(
+          this.priceOffers,
+          this.productSearch,
+          scope,
+          parseJson(argumentsJson),
+        );
+      if (!handler) return { result: { error: 'UNKNOWN_TOOL' } };
+      return { result: await handler(scope, parseJson(argumentsJson)) };
     } catch (error) {
-      if (error instanceof ZodError) return { error: 'INVALID_ARGUMENTS' };
-      if (error instanceof AppError && error.status < 500) return { error: error.code };
+      if (error instanceof ZodError) return { result: { error: 'INVALID_ARGUMENTS' } };
+      if (error instanceof AppError && error.status < 500) return { result: { error: error.code } };
       throw error;
     }
   }
@@ -283,8 +256,15 @@ export class SalesAgentToolsService {
     };
   }
 
-  private async sendProductCard({ storeId }: ToolScope, raw: unknown) {
-    const { productId, variantId, photoId, withoutPhoto } = sendProductCardTool.input.parse(raw);
+  private sendProductCard({ storeId }: ToolScope, raw: unknown) {
+    return this.productCard(storeId, sendProductCardTool.input.parse(raw));
+  }
+
+  // The card the AI sends, which a person can also send from the reply box.
+  async productCard(
+    storeId: string,
+    { productId, variantId, photoId, withoutPhoto }: z.infer<typeof sendProductCardTool.input>,
+  ) {
     const product = await this.products.getForChat(storeId, productId);
     const variant = variantId ? product.variants.find(({ id }) => id === variantId) : undefined;
     if (variantId && !variant) return { error: 'PRODUCT_VARIANT_NOT_FOUND' };
@@ -316,7 +296,7 @@ export class SalesAgentToolsService {
       storeId,
       {
         contactId,
-        items: items.map((item) => ({ ...item, lineDiscountPoisha: 0 })),
+        items,
         recipient: {
           name: input.recipientName,
           phone: input.phone,
@@ -327,7 +307,11 @@ export class SalesAgentToolsService {
         orderDiscountPoisha: 0,
         advancePaidPoisha: 0,
       },
-      { channel: chat.channel, idempotencyKey: draftKey(chat.conversationId, input, areaId) },
+      {
+        channel: chat.channel,
+        conversationId: chat.conversationId,
+        idempotencyKey: draftKey(chat.conversationId, input, areaId),
+      },
     );
     return {
       orderNumber: order.number,
@@ -336,7 +320,8 @@ export class SalesAgentToolsService {
         product: item.productName,
         variant: item.variantTitle,
         quantity: item.quantity,
-        unitPriceTaka: taka(item.unitPricePoisha),
+        unitPriceTaka: taka(item.unitPricePoisha - item.lineDiscountPoisha / item.quantity),
+        ...(item.lineDiscountPoisha > 0 ? { lineDiscountTaka: taka(item.lineDiscountPoisha) } : {}),
       })),
       deliveryTo: `${order.recipientAddress}, ${order.recipientDistrict}`,
       deliveryChargeTaka: taka(order.deliveryChargePoisha),
@@ -404,7 +389,6 @@ function draftKey(
   const details = [...items, input.phone, input.address, areaId].join('|');
   return `ai-order:${conversationId}:${createHash('sha256').update(details).digest('hex').slice(0, 32)}`;
 }
-
 function productResult(product: ChatProduct) {
   return {
     productId: product.id,

@@ -5,7 +5,7 @@ import type { ConversationMessageResponse } from '@dakly/contracts/chats';
 import { Badge } from '@dakly/ui/badge';
 import { cn } from '@dakly/ui/cn';
 
-import { formatTime } from '@/lib/format-date';
+import { formatDate, formatTime } from '@/lib/format-date';
 
 const kindLabels: Partial<Record<ConversationMessageResponse['kind'], string>> = {
   image: 'Photo',
@@ -46,7 +46,7 @@ export function MessageBubble({ message }: { message: ConversationMessageRespons
     <li className={cn('flex flex-col gap-1', outgoing ? 'items-end' : 'items-start')}>
       <div
         className={cn(
-          'max-w-[85%] rounded-lg px-3 py-1.5 text-base break-words whitespace-pre-wrap',
+          'rounded-xl max-w-[85%] px-3 py-2 text-base break-words whitespace-pre-wrap',
           bubbleStyle(message),
         )}
       >
@@ -56,7 +56,7 @@ export function MessageBubble({ message }: { message: ConversationMessageRespons
             Internal note
           </span>
         ) : null}
-        {message.body ?? kindLabels[message.kind] ?? ''}
+        {message.body || kindLabels[message.kind] || ''}
       </div>
       <MessageMeta message={message} />
     </li>
@@ -68,11 +68,17 @@ function MessageMeta({ message }: { message: ConversationMessageResponse }) {
   return (
     <div className="flex items-center gap-2 px-1 text-xs text-text-muted">
       {message.authorType === 'ai' ? <Badge variant="inverse">AI</Badge> : null}
-      <time dateTime={message.createdAt}>{formatTime(message.createdAt)}</time>
+      <time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
       {delivery ? <span>{statusLabels[message.status]}</span> : null}
       {message.body ? <CopyMessageButton body={message.body} /> : null}
     </div>
   );
+}
+
+// Today's messages show the time; older ones show the day.
+function messageTime(value: string) {
+  const day = formatDate(value, new Date().toISOString());
+  return day === 'Today' ? formatTime(value) : day;
 }
 
 function CopyMessageButton({ body }: { body: string }) {

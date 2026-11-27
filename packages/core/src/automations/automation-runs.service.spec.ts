@@ -180,6 +180,7 @@ describe('AutomationRunsService', () => {
     repository.run = {
       id: runId,
       automationId: AUTOMATION_ID,
+      templateKey: null,
       contactId: CONTACT_ID,
       status: 'running',
       currentStepKey: 'first',

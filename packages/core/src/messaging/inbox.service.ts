@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 
 import type { AuditEntry } from '@dakly/contracts/audit';
 import type {
+  ChatIntent,
   ChangeConversationLabelInput,
   ConversationAssigneeResponse,
   ConversationCountsResponse,
@@ -58,7 +59,7 @@ export class InboxService {
       ? await this.contacts.searchIds(storeId, query.q, access, actor)
       : undefined;
     if (contactIds && !contactIds.length) return { items: [], nextCursor: null };
-    const rows = await this.repository.list(storeId, query, contactIds);
+    const rows = await this.repository.list(storeId, actor.userId, query, contactIds);
     const page = rows.slice(0, query.limit);
     const items = page.map(({ sortGroup: _group, ...row }) => conversationResponse(row));
     const last = page.at(-1);
@@ -79,9 +80,9 @@ export class InboxService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async counts(storeId: string): Promise<ConversationCountsResponse> {
+  async counts(storeId: string, actor: UserActor): Promise<ConversationCountsResponse> {
     await this.requireChats(storeId);
-    return this.repository.counts(storeId);
+    return this.repository.counts(storeId, actor.userId);
   }
 
   async summary(storeId: string, access: StoreAccess): Promise<ConversationSummaryResponse> {
@@ -316,6 +317,32 @@ export class InboxService {
       if (after) await this.recordChange(storeId, { kind: 'system' }, before, after);
       return after;
     });
+  }
+
+  // The classifier's reading of the customer's latest messages. It fills the Order request folder and
+  // is not a change a member makes, so the chat keeps its version.
+  async setIntentTag(storeId: string, id: string, intentTag: ChatIntent) {
+    await this.repository.update(
+      storeId,
+      id,
+      { intentTag },
+      { now: this.clock.now(), bumpVersion: false },
+    );
+  }
+
+  saveSuggestedReply(storeId: string, id: string, text: string, burstAt: Date) {
+    return this.repository.saveSuggestedReply(storeId, id, text, burstAt);
+  }
+
+  // The burst the AI handed to people, read the way the reply job read it.
+  // The customer's latest messages, whoever answers the chat, for a draft a person asked for.
+  latestTurn(storeId: string, id: string) {
+    return this.repository.aiReplyTurn(storeId, id, false, 'any');
+  }
+
+  async handedOverTurn(storeId: string, id: string) {
+    const turn = await this.repository.aiReplyTurn(storeId, id, false, 'human');
+    return turn?.windowExpiresAt && turn.windowExpiresAt > this.clock.now() ? turn : undefined;
   }
 
   // A staff reply puts the chat with people and restarts the return timer, unless staff took over

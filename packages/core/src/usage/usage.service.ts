@@ -10,7 +10,8 @@ import { type UsageEvent, UsageRepository } from './usage.repository';
 
 export type ConsumeUsageInput = { unit: UsageUnit; quantity: number; reference: string };
 
-const unitNames: Record<UsageUnit, string> = {
+// Free reply drafts fall back to content credits, so running out of them needs no warning.
+const unitNames: Record<Exclude<UsageUnit, 'ai_reply_draft'>, string> = {
   ai_conversation: 'AI conversations',
   ai_content: 'AI content drafts',
   ai_ask: 'Ask Dakly AI answers',
@@ -61,11 +62,12 @@ export class UsageService {
         reference,
         periodStart: period,
       });
-      for (const percent of thresholdPercents) {
-        const line = allowance * percent;
-        if (used * 100 < line && (used + quantity) * 100 >= line)
-          await this.notifyThreshold(storeId, unit, period, percent);
-      }
+      if (unit !== 'ai_reply_draft')
+        for (const percent of thresholdPercents) {
+          const line = allowance * percent;
+          if (used * 100 < line && (used + quantity) * 100 >= line)
+            await this.notifyThreshold(storeId, unit, period, percent);
+        }
       return event;
     });
   }
@@ -81,7 +83,12 @@ export class UsageService {
     return { allowance, period, periodEnd, used };
   }
 
-  private notifyThreshold(storeId: string, unit: UsageUnit, period: string, percent: number) {
+  private notifyThreshold(
+    storeId: string,
+    unit: keyof typeof unitNames,
+    period: string,
+    percent: number,
+  ) {
     const name = unitNames[unit];
     return this.notifications.notify(storeId, {
       type: 'usage.threshold_reached',

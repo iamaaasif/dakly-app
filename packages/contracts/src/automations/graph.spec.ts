@@ -39,6 +39,24 @@ describe('automationGraphSchema', () => {
     expect(automationGraphSchema.parse(template.graph)).toEqual(template.graph);
   });
 
+  it('uses Messenger buttons with an SMS link fallback in both COD confirmation steps', () => {
+    const { steps } = automationTemplates.cod_order_confirmation.graph;
+    for (const step of [steps.ask, steps.remind]) {
+      expect(step).toMatchObject({
+        channels: ['messenger', 'sms'],
+        category: 'transactional',
+        message: {
+          text: expect.stringContaining('{confirm_link}'),
+          messengerText: expect.stringContaining('{order_number}'),
+          buttons: [
+            { key: 'confirm', label: 'Confirm order' },
+            { key: 'cancel', label: 'Cancel order' },
+          ],
+        },
+      });
+    }
+  });
+
   it('accepts a random split whose paths add up to 100%', () => {
     const graph = workflow({
       start: {

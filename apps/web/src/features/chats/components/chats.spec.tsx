@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import type { CommentResponse } from '@dakly/contracts/comments';
@@ -11,6 +11,7 @@ import { ToastProvider } from '@dakly/ui/toast';
 
 import { chatScreenQuerySchema } from '../chat-filters';
 import { ChatsScreen } from './chats-screen';
+import { ShellNavigationCollapse } from '@/components/shell-navigation-collapse';
 import { sessionContextKey } from '@/lib/session-context';
 
 vi.mock('next/navigation', () => ({
@@ -22,6 +23,7 @@ const sadia: ConversationResponse = {
   id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e5f',
   contactId: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e60',
   contactName: 'Sadia Islam',
+  contactKind: 'customer',
   labels: [],
   channel: 'messenger',
   status: 'open',
@@ -33,10 +35,26 @@ const sadia: ConversationResponse = {
   aiResumesAt: null,
   lastMessageAt: '2026-11-19T04:03:00.000000Z',
   lastMessagePreview: 'Price koto? Mirpur e delivery charge koto?',
+  lastMessageFrom: 'customer',
+  intentTag: 'price',
+  suggestedReply: null,
   windowExpiresAt: null,
   unreadCount: 3,
 };
-const counts = { all: 13, needsYou: 1, aiHandling: 9, followUp: 1 };
+const counts = {
+  all: 13,
+  mine: 6,
+  unassigned: 3,
+  unreplied: 2,
+  ai_handling: 9,
+  order_request: 4,
+  not_customers: 0,
+  spam: 2,
+  unread: 1,
+  needsYou: 1,
+  snoozed: 0,
+  resolved: 1,
+};
 const defaults = chatScreenQuerySchema.parse({});
 
 let paths: string[] = [];
@@ -65,14 +83,12 @@ const ok = (items: ConversationResponse[]) =>
   Response.json({ items, nextCursor: null }, { headers: { 'x-session-context': 'verified' } });
 
 let pastOrders: unknown[] = [];
-let summary: unknown = { aiRepliesToday: 49, chatOrdersToday: { count: 7, totalPoisha: 2478000 } };
 let autoReplyOn = true;
 
 // The answers every chats screen asks for besides the chat itself.
 function sidebarResponse(path: string) {
   const verified = { headers: { 'x-session-context': 'verified' } };
   if (path.startsWith('/api/conversations/counts')) return Response.json(counts, verified);
-  if (path.startsWith('/api/conversations/summary')) return Response.json(summary, verified);
   if (path.startsWith('/api/conversations/assignees')) return Response.json([], verified);
   if (path.startsWith('/api/conversations/labels'))
     return Response.json(['VIP', 'Wholesale'], verified);
@@ -82,6 +98,8 @@ function sidebarResponse(path: string) {
     return Response.json({ items: pastOrders }, verified);
   return undefined;
 }
+
+let setNavigationCollapsed = vi.fn();
 
 function show(query = defaults, access: Partial<SessionContext['currentStore']> = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -94,6 +112,7 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
       canEditProducts: false,
       canViewOrders: false,
       canEditOrders: false,
+      canExportOrders: false,
       canViewDueBook: false,
       canEditDueBook: false,
       canViewCampaigns: false,
@@ -126,41 +145,35 @@ function show(query = defaults, access: Partial<SessionContext['currentStore']> 
   client.setQueryData(sessionContextKey, context);
   return render(<ChatsScreen query={query} />, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>
-        <ToastProvider>{children}</ToastProvider>
-      </QueryClientProvider>
+      <ShellNavigationCollapse value={setNavigationCollapsed}>
+        <QueryClientProvider client={client}>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryClientProvider>
+      </ShellNavigationCollapse>
     ),
   });
 }
 
+let wideScreen = true;
+
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: wideScreen,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  wideScreen = true;
+  setNavigationCollapsed = vi.fn();
   paths = [];
   connectionKinds = [];
   connectionsForbidden = false;
   pastOrders = [];
   autoReplyOn = true;
-  summary = { aiRepliesToday: 49, chatOrdersToday: { count: 7, totalPoisha: 2478000 } };
-});
-
-describe('Header pills', () => {
-  it('shows how many chats need you, the AI auto-reply state and the orders from chats today', async () => {
-    respond(() => ok([sadia]));
-    show();
-    expect(await screen.findByText('1 need you')).toBeTruthy();
-    expect(await screen.findByText('AI auto-reply on · 49 replies today')).toBeTruthy();
-    expect(await screen.findByText('7 orders from chats today · ৳24,780')).toBeTruthy();
-  });
-
-  it('says the auto-reply is off and leaves out the order figures a member may not see', async () => {
-    autoReplyOn = false;
-    summary = { aiRepliesToday: 0, chatOrdersToday: null };
-    respond(() => ok([sadia]));
-    show();
-    expect(await screen.findByText('AI auto-reply off · 0 replies today')).toBeTruthy();
-    expect(screen.queryByText(/orders from chats today/)).toBeNull();
-  });
 });
 
 describe('Bulk select', () => {
@@ -192,7 +205,7 @@ describe('Bulk select', () => {
   it('marks the ticked chats done and leaves select mode', async () => {
     respondToList();
     show();
-    await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Select chats' }));
     expect(screen.getByText('0 selected')).toBeTruthy();
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Sadia Islam' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Rumana Akter' }));
@@ -210,7 +223,7 @@ describe('Bulk select', () => {
   it('keeps the chats selected and says so when some could not change', async () => {
     respondToList('chat-rumana');
     show();
-    await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Select chats' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Sadia Islam' }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select Rumana Akter' }));
     await userEvent.click(screen.getByRole('button', { name: 'Mark done' }));
@@ -218,11 +231,22 @@ describe('Bulk select', () => {
     expect(screen.getByText('2 selected')).toBeTruthy();
   });
 
-  it('offers no Select button to a member who can only read chats', async () => {
+  it('starts picking with the chat whose avatar box was ticked', async () => {
+    respondToList();
+    show();
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Rumana Akter' }));
+    expect(screen.getByText('1 selected')).toBeTruthy();
+    expect(
+      screen.getByRole('checkbox', { name: 'Select Rumana Akter' }).getAttribute('aria-checked'),
+    ).toBe('true');
+  });
+
+  it('offers no way to pick chats to a member who can only read them', async () => {
     respondToList();
     show(defaults, { canEditChats: false });
     expect(await screen.findByText('Sadia Islam')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Select' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Select chats' })).toBeNull();
+    expect(screen.queryByRole('checkbox')).toBeNull();
   });
 });
 
@@ -231,12 +255,12 @@ describe('Chat list', () => {
     respond(() => ok([sadia]));
     show();
     const toggle = screen.getByRole('button', { name: 'Collapse inbox folders' });
-    expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Chat folders' })).toBeTruthy();
     await userEvent.click(toggle);
     expect(
       screen.getByRole('button', { name: 'Expand inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('false');
-    expect(screen.queryByRole('navigation', { name: 'Chat tabs' })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Chat folders' })).toBeNull();
     const toolbar = screen.getByRole('group', { name: 'Inbox controls' });
     expect(within(toolbar).getByRole('heading', { name: 'Inbox' })).toBeTruthy();
     expect(document.activeElement).toBe(
@@ -247,28 +271,109 @@ describe('Chat list', () => {
     expect(
       screen.getByRole('button', { name: 'Collapse inbox folders' }).getAttribute('aria-expanded'),
     ).toBe('true');
-    expect(screen.getByRole('navigation', { name: 'Chat tabs' })).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Chat folders' })).toBeTruthy();
   });
 
-  it('shows each chat with its name, last message and unread count, and the tab counts', async () => {
+  it('shows the main navigation as an icon rail while the Inbox is open', async () => {
+    respond(() => ok([sadia]));
+    const { unmount } = show();
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    expect(setNavigationCollapsed).toHaveBeenLastCalledWith(true);
+    unmount();
+    expect(setNavigationCollapsed).toHaveBeenLastCalledWith(false);
+  });
+
+  it('starts with the Inbox folders collapsed on a narrow screen', async () => {
+    wideScreen = false;
+    respond(() => ok([sadia]));
+    show();
+    expect(await screen.findByText('Sadia Islam')).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Chat folders' })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Expand inbox folders' }).getAttribute('aria-expanded'),
+    ).toBe('false');
+    expect(screen.getByRole('combobox', { name: 'Chat folder' })).toBeTruthy();
+  });
+
+  it('says why a chat needs the team on its row', async () => {
+    respond(() =>
+      ok([{ ...sadia, status: 'needs_you', responder: 'human', handoverReason: 'refund' }]),
+    );
+    show();
+    expect(await screen.findByText('Needs you · Refund or exchange')).toBeTruthy();
+  });
+
+  it('says who wrote last and whether the customer still owes an answer', async () => {
+    const recent = new Date(Date.now() - 5 * 60_000).toISOString();
+    respond(() =>
+      ok([
+        { ...sadia, lastMessageFrom: 'ai', lastMessageAt: recent, contactKind: 'lead' },
+        {
+          ...sadia,
+          id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e61',
+          contactName: 'Mitu Akter',
+          lastMessageFrom: 'user',
+          lastMessageAt: '2026-11-09T04:03:00.000000Z',
+        },
+      ]),
+    );
+    show();
+    expect(await screen.findByText(`Dakly AI: ${sadia.lastMessagePreview}`)).toBeTruthy();
+    expect(screen.getByText(`You: ${sadia.lastMessagePreview}`)).toBeTruthy();
+    expect(screen.getByText('Waiting for them')).toBeTruthy();
+    expect(screen.getByText('No reply')).toBeTruthy();
+    expect(screen.getAllByText('Lead saved')).toHaveLength(1);
+  });
+
+  it('marks the chats assigned to you and shows recent activity in minutes', async () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    respond(() =>
+      ok([
+        { ...sadia, assigneeUserId: 'member', lastMessageAt: fiveMinutesAgo },
+        { ...sadia, id: '0193a3c0-7b1e-7c3a-9f00-5a1b2c3d4e61', contactName: 'Rumana Akter' },
+      ]),
+    );
+    show();
+    expect(await screen.findByText('5 min')).toBeTruthy();
+    expect(screen.getAllByText('Assigned to you')).toHaveLength(1);
+  });
+
+  it('shows each chat with its name, last message and unread count, and the folder counts', async () => {
     respond(() => ok([sadia]));
     show();
     expect(await screen.findByText('Sadia Islam')).toBeTruthy();
     expect(screen.getByText('Price koto? Mirpur e delivery charge koto?')).toBeTruthy();
     expect(screen.getByText('Unread:').parentElement?.textContent).toBe('Unread: 3');
     expect(await screen.findByRole('link', { name: /AI handling\s*9/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /All\s*13/ }).getAttribute('aria-current')).toBe(
-      'page',
+    expect(
+      screen
+        .getByRole('link', { name: /All conversations\s*1\s*unread\s*13/ })
+        .getAttribute('aria-current'),
+    ).toBe('page');
+    expect(screen.getByRole('link', { name: /Spam\s*2/ })).toBeTruthy();
+  });
+
+  it('marks Resolved, not All conversations, while the resolved chats are shown', async () => {
+    respond(() => ok([]));
+    show(chatScreenQuerySchema.parse({ state: 'resolved' }));
+    const resolved = await screen.findByRole('link', { name: /Resolved\s*1/ });
+    expect(resolved.getAttribute('aria-current')).toBe('page');
+    expect(
+      screen.getByRole('link', { name: /All conversations/ }).getAttribute('aria-current'),
+    ).toBeNull();
+    expect(screen.getByRole('link', { name: /Mine\s*6/ }).getAttribute('href')).toBe(
+      '/chats?folder=mine',
     );
   });
 
-  it('asks for the chats of the chosen tab and channel', async () => {
+  it('asks for the chats of the chosen folder, state and channel', async () => {
     respond(() => ok([]));
-    show(chatScreenQuerySchema.parse({ tab: 'needs-you', channel: 'whatsapp' }));
+    show(chatScreenQuerySchema.parse({ folder: 'mine', state: 'snoozed', channel: 'whatsapp' }));
     expect(await screen.findByText('No chats here yet.')).toBeTruthy();
     const list = paths.find((path) => path.startsWith('/api/conversations?'))!;
     const params = new URL(list, 'http://shop.test').searchParams;
-    expect(params.get('status')).toBe('needs_you');
+    expect(params.get('folder')).toBe('mine');
+    expect(params.get('state')).toBe('snoozed');
     expect(params.get('channel')).toBe('whatsapp');
   });
 
@@ -334,48 +439,103 @@ describe('Conversation', () => {
   const verified = { headers: { 'x-session-context': 'verified' } };
   const posts: { path: string; body: unknown }[] = [];
   const saved: (typeof inbound)[] = [];
+  const kurti = {
+    id: 'p1',
+    name: 'Women Kurti',
+    pricePoisha: 125000,
+    status: 'active',
+    isVisibleInChats: true,
+    isVisibleInOrderLink: true,
+  };
+  const photoId = '0190a0b1-0000-7000-8000-000000000001';
+  const hiddenKurti = { ...kurti, id: 'p2', name: 'Old Kurti', status: 'hidden' };
+  // What the reply box tools read, by path prefix.
+  const referenceData = {
+    '/api/products': { items: [kurti, hiddenKurti], nextCursor: null },
+    '/api/order-links/p1': { url: 'https://dakly.shop/o/wowapps/p1' },
+    '/api/saved-replies': {
+      items: [{ id: 's1', title: 'Delivery time', body: 'Dhaka te 2 din lagbe', shortcut: null }],
+    },
+  };
 
-  function respondToThread(windowExpiresAt: string | null, failures = 0) {
+  // The browser asks the API for an upload link, then puts the photo straight into storage.
+  function photoUpload(path: string, init?: RequestInit) {
+    if (init?.method === 'PUT') return new Response(null, { status: 200 });
+    if (path.endsWith('/photos/upload-url'))
+      return Response.json({ fileId: photoId, uploadUrl: 'https://storage.test/up' }, verified);
+  }
+
+  // AI rewrite answers with the typed reply polished; Write with AI with a fresh answer.
+  function replyDraft(path: string, init?: RequestInit) {
+    if (!path.endsWith('/reply-drafts')) return undefined;
+    const input = JSON.parse(String(init?.body)) as { mode: string; text?: string };
+    const text = input.mode === 'rewrite' ? `Ji apu, ${input.text}.` : 'Ji apu, M ar L size ache.';
+    return Response.json({ text }, verified);
+  }
+
+  // Records what the screen sent and answers like the API, failing the first `failures` sends.
+  function savePost(path: string, body: string, failures: number) {
+    posts.push({ path, body: JSON.parse(body) });
+    if (posts.length <= failures)
+      return Response.json(
+        { error: { code: 'CHAT_SEND_FAILED', message: 'Could not send reply' } },
+        { ...verified, status: 503 },
+      );
+    saved.push({
+      ...inbound,
+      id: 'm2',
+      direction: 'out',
+      authorType: 'user',
+      status: 'sent',
+      body: (JSON.parse(body) as { body: string }).body,
+    });
+    return Response.json({ messageId: 'sent' }, verified);
+  }
+
+  function respondToThread(
+    windowExpiresAt: string | null,
+    failures = 0,
+    change: Partial<ConversationResponse> = {},
+  ) {
     vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
-      if (init?.method === 'POST') {
-        posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) });
-        if (posts.length <= failures)
-          return Response.json(
-            { error: { code: 'CHAT_SEND_FAILED', message: 'Could not send reply' } },
-            { ...verified, status: 503 },
-          );
-        saved.push({
-          ...inbound,
-          id: 'm2',
-          direction: 'out',
-          authorType: 'user',
-          status: 'sent',
-          body: (JSON.parse(String(init.body ?? '{}')) as { body: string }).body,
-        });
-        return Response.json({ messageId: 'sent' }, verified);
-      }
-      const sidebar = sidebarResponse(path);
-      if (sidebar) return sidebar;
+      const fixed = photoUpload(path, init) ?? replyDraft(path, init) ?? sidebarResponse(path);
+      if (fixed) return fixed;
+      if (init?.method === 'POST') return savePost(path, String(init.body ?? '{}'), failures);
       if (path.startsWith(`/api/conversations/${chatId}/messages`))
         return Response.json({ items: [...saved, inbound], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
-        return Response.json({ ...sadia, unreadCount: 0, windowExpiresAt }, verified);
-      if (path.startsWith('/api/saved-replies'))
-        return Response.json(
-          {
-            items: [
-              { id: 's1', title: 'Delivery time', body: 'Dhaka te 2 din lagbe', shortcut: null },
-            ],
-          },
-          verified,
-        );
-      return ok([sadia]);
+        return Response.json({ ...sadia, unreadCount: 0, windowExpiresAt, ...change }, verified);
+      const reference = Object.entries(referenceData).find(([prefix]) => path.startsWith(prefix));
+      return reference ? Response.json(reference[1], verified) : ok([sadia]);
     });
   }
 
   afterEach(() => {
     posts.length = 0;
     saved.length = 0;
+  });
+
+  it("sends the AI's suggested reply or puts it in the box to edit", async () => {
+    const open = new Date(Date.now() + 22 * 3_600_000).toISOString();
+    const draft = { suggestedReply: 'Ji, size bodlano jabe.', handoverReason: 'refund' as const };
+    respondToThread(open, 0, draft);
+    const view = show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const card = await screen.findByRole('region', { name: 'Suggested reply' });
+    expect(within(card).getByText('Refund or exchange · suggested reply')).toBeTruthy();
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+    expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe(
+      'Ji, size bodlano jabe.',
+    );
+    expect(screen.queryByRole('region', { name: 'Suggested reply' })).toBeNull();
+    expect(posts).toEqual([]);
+    view.unmount();
+
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const again = await screen.findByRole('region', { name: 'Suggested reply' });
+    await userEvent.click(within(again).getByRole('button', { name: 'Send' }));
+    expect(posts.map(({ body }) => (body as { body: string }).body)).toEqual([
+      'Ji, size bodlano jabe.',
+    ]);
   });
 
   it('shows the thread with the reply window and sends a reply', async () => {
@@ -446,6 +606,71 @@ describe('Conversation', () => {
     expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe(
       'Dhaka te 2 din lagbe',
     );
+  });
+
+  it('sends a product card and adds an order link under the typed reply', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    const view = show(chatScreenQuerySchema.parse({ chat: chatId }));
+    await screen.findByRole('button', { name: 'Saved replies' });
+    expect(screen.queryByRole('button', { name: 'Send product' })).toBeNull();
+    view.unmount();
+
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canViewProducts: true });
+    await userEvent.click(await screen.findByRole('button', { name: 'Send product' }));
+    const products = await screen.findByRole('menu', { name: 'Send product' });
+    expect(within(products).queryByText('Old Kurti')).toBeNull();
+    await userEvent.click(within(products).getByRole('menuitem', { name: /Women Kurti/ }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({
+      path: `/api/conversations/${chatId}/products`,
+      body: { productId: 'p1' },
+    });
+
+    await userEvent.type(screen.getByLabelText('Write a reply'), 'Order korte link e jan');
+    await userEvent.click(screen.getByRole('button', { name: 'Order link' }));
+    const links = await screen.findByRole('menu', { name: 'Order link' });
+    await userEvent.click(within(links).getByRole('menuitem', { name: /Women Kurti/ }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe(
+        'Order korte link e jan\nhttps://dakly.shop/o/wowapps/p1',
+      ),
+    );
+  });
+
+  it('sends an attached photo on its own and adds an emoji to the reply', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const photo = new File([new Uint8Array(1200)], 'kurti.jpg', { type: 'image/jpeg' });
+    await userEvent.upload(await screen.findByLabelText('Photo to attach'), photo);
+    expect(await screen.findByText('kurti.jpg')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Send reply' }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({
+      path: `/api/conversations/${chatId}/replies`,
+      body: {
+        body: '',
+        photo: { fileId: photoId, contentType: 'image/jpeg', sizeBytes: 1200 },
+      },
+    });
+    expect(screen.queryByText('kurti.jpg')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add emoji' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: '🙏' }));
+    expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe('🙏');
+  });
+
+  it('polishes the typed reply with AI rewrite and drafts one with Write with AI', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    show(chatScreenQuerySchema.parse({ chat: chatId }));
+    const box = (await screen.findByLabelText('Write a reply')) as HTMLTextAreaElement;
+    const rewrite = screen.getByRole('button', { name: 'AI rewrite' });
+    expect((rewrite as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.type(box, 'size ase');
+    await userEvent.click(rewrite);
+    await waitFor(() => expect(box.value).toBe('Ji apu, size ase.'));
+    await userEvent.click(screen.getByRole('button', { name: 'Write with AI' }));
+    await waitFor(() => expect(box.value).toBe('Ji apu, M ar L size ache.'));
+    expect(posts).toEqual([]);
   });
 
   it('saves an internal note and keeps the reply box off when the window is closed', async () => {
@@ -559,7 +784,7 @@ describe('Conversation actions', () => {
   it('hands a chat back to the AI', async () => {
     respondToActions({ responder: 'human' });
     show(chatScreenQuerySchema.parse({ chat: chatId }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Hand back to Dakly AI' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Back to AI' }));
     await waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]!.path).toBe(`/api/conversations/${chatId}/return-to-ai`);
     expect(await screen.findByText('Dakly AI is handling this chat again.')).toBeTruthy();
@@ -570,6 +795,7 @@ describe('Conversation actions', () => {
     respondToActions({ responder: 'human', handoverReason: 'complaint', handoverSummary: summary });
     show(chatScreenQuerySchema.parse({ chat: chatId }));
     expect(await screen.findByText('Your team is handling this chat')).toBeTruthy();
+    expect(screen.getByText('· Complaint')).toBeTruthy();
     expect(screen.getByText(summary)).toBeTruthy();
     cleanup();
     respondToActions({ responder: 'ai', handoverSummary: null });
@@ -688,8 +914,8 @@ describe('Customer panel', () => {
       canEditOrders: true,
     });
     expect(await screen.findByText('Not a lead yet')).toBeTruthy();
-    expect(await screen.findByText('01712345678')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open profile' }).getAttribute('href')).toBe(
+    expect(await screen.findByText('01712-345678')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'View in Customers' }).getAttribute('href')).toBe(
       `/customers/${sadia.contactId}`,
     );
   });

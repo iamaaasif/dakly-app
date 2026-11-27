@@ -1,3 +1,5 @@
+import { productNegotiationIssues } from '@dakly/contracts/products';
+
 import { AppError, type ErrorCatalog } from '../platform/errors/app-error';
 
 const PRODUCT_ERRORS = {
@@ -19,8 +21,21 @@ const PRODUCT_ERRORS = {
     status: 503,
     message: 'Photo tagging is not available right now',
   },
+  PRODUCT_CHANGED: { status: 409, message: 'This product changed since you opened it.' },
   PRODUCT_NOT_FOUND: { status: 404, message: 'Product not found' },
   PRODUCT_VARIANT_NOT_FOUND: { status: 404, message: 'Product variant not found' },
+  PRODUCT_NEGOTIATION_VARIANT_PRICE: {
+    status: 400,
+    message: productNegotiationIssues.PRODUCT_NEGOTIATION_VARIANT_PRICE.message,
+  },
+  PRODUCT_NEGOTIATION_OPENING_PRICE: {
+    status: 400,
+    message: productNegotiationIssues.PRODUCT_NEGOTIATION_OPENING_PRICE.message,
+  },
+  PRODUCT_NEGOTIATION_FLOOR_PRICE: {
+    status: 400,
+    message: productNegotiationIssues.PRODUCT_NEGOTIATION_FLOOR_PRICE.message,
+  },
   RESTOCK_CONTACT_NOT_FOUND: { status: 404, message: 'Customer not found' },
   RESTOCK_REQUEST_NOT_FOUND: { status: 404, message: 'Restock request not found' },
   RESTOCK_VARIANT_STILL_OUT: { status: 409, message: 'This size is still out of stock' },
@@ -54,4 +69,14 @@ const PRODUCT_ERRORS = {
 
 export function productError(code: keyof typeof PRODUCT_ERRORS): AppError {
   return new AppError(code, PRODUCT_ERRORS[code]);
+}
+
+export function assertProductVersion<T extends { version: number; status: string }>(
+  product: T | null | undefined,
+  expectedVersion?: number,
+): asserts product is T {
+  if (!product) throw productError('PRODUCT_NOT_FOUND');
+  if (expectedVersion !== undefined && expectedVersion !== product.version)
+    throw productError('PRODUCT_CHANGED');
+  if (product.status === 'archived') throw productError('PRODUCT_NOT_FOUND');
 }

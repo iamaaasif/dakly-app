@@ -27,6 +27,10 @@ import { toRedisConnection } from '../platform/queue/redis-connection';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
 import { AiAgentModule } from './ai-agent.module';
 import { AiAgentService } from './ai-agent.service';
+import { ProductCardRepliesService } from './product-card-replies.service';
+import { ReplyDraftsService } from './reply-drafts.service';
+import { ReplyToolsModule } from './reply-tools.module';
+import { SuggestedReplyService } from './suggested-reply.service';
 
 const admin = createDatabase(process.env.DATABASE_ADMIN_URL!);
 const storeIds: string[] = [];
@@ -39,6 +43,7 @@ Module({
   imports: [
     DatabaseModule,
     AiAgentModule,
+    ReplyToolsModule,
     BullModule.forRoot({
       connection: toRedisConnection(loadEnv().REDIS_URL),
       prefix: `agent-int-${randomUUID()}`,
@@ -186,6 +191,14 @@ function script(output: ChatClassification, duringCall?: () => Promise<void>, ca
   return inputs;
 }
 
+async function intentTags({ storeId }: Shop) {
+  const { rows } = await admin.pool.query<{ intent_tag: string | null }>(
+    'select intent_tag from conversations where store_id = $1',
+    [storeId],
+  );
+  return rows.map(({ intent_tag }) => intent_tag);
+}
+
 async function observe({ storeId }: Shop) {
   const { rows: conversations } = await admin.pool.query(
     'select status, responder, handover_reason from conversations where store_id = $1',
@@ -281,7 +294,7 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     ],
     replies: [
       {
-        body: 'আপনার বিষয়টি নোট করা হয়েছে। আমাদের টিম খুব শীঘ্রই আপনার সাথে কথা বলবে।',
+        body: 'নোট করে রাখলাম। আমাদের টিম থেকে একটু পরই আপনার সাথে কথা বলবে।',
         author_type: 'system',
         recipient_identity_id: message.sender_identity_id,
       },
@@ -290,6 +303,7 @@ it('classifies a burst without internal notes and sends one fixed hand-over repl
     runs: [{ tier: 'fast', purpose: 'classify', prompt_version: 'classify-chat.v4' }],
     usage: [],
   });
+  expect(await intentTags(active)).toEqual(['greeting']);
 });
 
 it('hands over an exhausted allowance without calling the model or spending a unit', async () => {
@@ -302,6 +316,7 @@ it('hands over an exhausted allowance without calling the model or spending a un
     runs: [],
     usage: [],
   });
+  expect(await intentTags(active)).toEqual([null]);
 });
 
 it('hands a chat to people without calling the model while staff pause AI replies', async () => {
@@ -578,9 +593,9 @@ it('answers price and delivery from tool results, saves the run and sources, and
     runs: [
       { purpose: 'classify' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v16' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v18' },
       { purpose: 'embedding' },
-      { purpose: 'chat_reply', prompt_version: 'chat-reply.v16' },
+      { purpose: 'chat_reply', prompt_version: 'chat-reply.v18' },
     ],
     usage: [{ id: expect.any(String) }],
   });
@@ -955,4 +970,134 @@ it("returns the chat to the AI 30 minutes after a person's last reply, without c
     await staffReply(permanent, third.conversation_id, third.sender_identity_id),
   );
   expect(await conversationTimer(permanent)).toEqual({ responder: 'human', minutes: null });
+});
+
+function scriptReplies(...replies: string[]) {
+  const driver = new FakeLlmDriver(
+    replies.map((reply) => ({
+      kind: 'output' as const,
+      output: { reply },
+      usage: { inputTokens: 5, cachedInputTokens: 0, outputTokens: 5 },
+      responseId: 'fake-suggestion',
+      model: 'gpt-6-luna',
+    })),
+  );
+  vi.spyOn(FakeLlmDriver.prototype, 'respond').mockImplementation((request) =>
+    fakeRespond.call(driver, request),
+  );
+}
+
+async function suggestedReply({ storeId }: Shop) {
+  const { rows } = await admin.pool.query<{ suggested_reply: string | null }>(
+    'select suggested_reply from conversations where store_id = $1',
+    [storeId],
+  );
+  return rows[0]?.suggested_reply;
+}
+
+it('leaves the team a draft after a hand-over until the customer or a person writes', async () => {
+  const active = await shop();
+  const first = await receive(active, 'ekjon manush er sathe kotha bolbo');
+  script({ ...classification, asksForPerson: true });
+  await agent.reply(active.storeId, first.conversation_id, first.id);
+  const suggestions = app.get(SuggestedReplyService);
+  await suggestions.draft(active.storeId, first.conversation_id, 'ai_unavailable');
+  expect(await suggestedReply(active)).toBeNull();
+
+  // The holding line the hand-over sent is automatic, so the draft still answers the customer.
+  scriptReplies('Ji, amader team er ekjon achen. Kivabe help korte pari?');
+  await suggestions.draft(active.storeId, first.conversation_id, 'asked_for_person');
+  expect(await suggestedReply(active)).toBe(
+    'Ji, amader team er ekjon achen. Kivabe help korte pari?',
+  );
+  const { rows: runs } = await admin.pool.query(
+    "select prompt_version from ai_runs where store_id = $1 and purpose = 'suggest_reply'",
+    [active.storeId],
+  );
+  expect(runs).toEqual([{ prompt_version: 'suggest-reply.v2' }]);
+
+  await receive(active, 'hello?');
+  expect(await suggestedReply(active)).toBeNull();
+  scriptReplies('Ji bolun, ami achi.', 'Late draft');
+  await suggestions.draft(active.storeId, first.conversation_id, 'asked_for_person');
+  expect(await suggestedReply(active)).toBe('Ji bolun, ami achi.');
+  await staffReply(active, first.conversation_id, first.sender_identity_id);
+  expect(await suggestedReply(active)).toBeNull();
+  // A draft that finishes after a person answered is not saved.
+  await suggestions.draft(active.storeId, first.conversation_id, 'asked_for_person');
+  expect(await suggestedReply(active)).toBeNull();
+});
+
+it('sends the card a person picks once per press, as the AI would, and never an unknown product', async () => {
+  const active = await sellingShop();
+  const message = await receive(active, 'panjabi ache?');
+  const cards = app.get(ProductCardRepliesService);
+  const press = { productId: active.productId, operationKey: randomUUID() };
+  const first = await cards.send(active.storeId, message.conversation_id, active.owner, press);
+  const again = await cards.send(active.storeId, message.conversation_id, active.owner, press);
+  expect(again.messageId).toBe(first.messageId);
+  expect(await sent(active)).toMatchObject([
+    { body: 'কটন পাঞ্জাবি\nDefault: ৳1,200', author_type: 'user' },
+  ]);
+  await expect(
+    cards.send(active.storeId, message.conversation_id, active.owner, {
+      productId: randomUUID(),
+      operationKey: randomUUID(),
+    }),
+  ).rejects.toMatchObject({ code: 'PRODUCT_NOT_FOUND' });
+});
+
+async function usageOf({ storeId }: Shop) {
+  const { rows } = await admin.pool.query(
+    'select unit, sum(quantity)::int as quantity from usage_events where store_id = $1 group by unit order by unit',
+    [storeId],
+  );
+  return rows;
+}
+
+it('writes and polishes a reply on request, free first and then for content credits', async () => {
+  const quiet = await shop(1, false);
+  await admin.pool.query(
+    'update plans set limits = $2 where id = (select plan_id from subscriptions where store_id = $1)',
+    [quiet.storeId, { ai_reply_draft: 1, ai_reply_draft_credits: 2, ai_content: 3 }],
+  );
+  const drafts = app.get(ReplyDraftsService);
+  const message = await receive(quiet, 'kurti te ki size ache?');
+  const { conversation_id: chat } = message;
+  scriptReplies('Ji apu, M ar L size ache. Kon size lagbe?');
+  expect(await drafts.write(quiet.storeId, chat, { mode: 'write' })).toEqual({
+    text: 'Ji apu, M ar L size ache. Kon size lagbe?',
+  });
+  expect(await usageOf(quiet)).toEqual([{ unit: 'ai_reply_draft', quantity: 1 }]);
+
+  scriptReplies('Ji apu, M ar L size ache.');
+  expect(
+    await drafts.write(quiet.storeId, chat, { mode: 'rewrite', text: 'ji M ar L size ase' }),
+  ).toEqual({ text: 'Ji apu, M ar L size ache.' });
+  expect(await usageOf(quiet)).toEqual([
+    { unit: 'ai_content', quantity: 2 },
+    { unit: 'ai_reply_draft', quantity: 1 },
+  ]);
+  // One credit is left and a draft now costs two, so no model is called.
+  await expect(
+    drafts.write(quiet.storeId, chat, { mode: 'rewrite', text: 'ji ase' }),
+  ).rejects.toMatchObject({ code: 'REPLY_DRAFT_CREDITS_UNAVAILABLE' });
+
+  // A plan may make every draft free; a rewrite that adds a price is never returned.
+  await admin.pool.query(
+    'update plans set limits = $2 where id = (select plan_id from subscriptions where store_id = $1)',
+    [quiet.storeId, { ai_reply_draft_credits: 0 }],
+  );
+  scriptReplies(...Array(4).fill('Ji apu, M size ache, dam ৳500.'));
+  await expect(
+    drafts.write(quiet.storeId, chat, { mode: 'rewrite', text: 'ji M size ase' }),
+  ).rejects.toMatchObject({ code: 'REPLY_DRAFT_UNAVAILABLE' });
+  const other = await shop();
+  await expect(drafts.write(other.storeId, chat, { mode: 'write' })).rejects.toMatchObject({
+    code: 'CONVERSATION_NOT_FOUND',
+  });
+  expect(await usageOf(quiet)).toEqual([
+    { unit: 'ai_content', quantity: 2 },
+    { unit: 'ai_reply_draft', quantity: 1 },
+  ]);
 });

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 import type { ProductResponse } from '@dakly/contracts/products';
 import { createDatabase } from '@dakly/db/client';
@@ -23,8 +23,16 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
   const fileIds: string[] = [];
   const evidence = resolve(process.cwd(), '../../docs/design/evidence/prod-4');
   const restockEvidence = resolve(process.cwd(), '../../docs/design/evidence/web-7-restock');
+  const redesignEvidence = resolve(process.cwd(), '../../docs/design/evidence/prod-17-4');
+  const salesEvidence = resolve(
+    process.cwd(),
+    '../../docs/design/evidence/prod-20-best-selling-sort',
+  );
   await mkdir(evidence, { recursive: true });
   await mkdir(restockEvidence, { recursive: true });
+  await mkdir(redesignEvidence, { recursive: true });
+  await mkdir(salesEvidence, { recursive: true });
+  const salesOrderId = randomUUID();
   const contactIds = [randomUUID(), randomUUID(), randomUUID()];
   await context.addCookies([
     { name: 'dakly_session', value: fixture.token, url: baseURL!, httpOnly: true, sameSite: 'Lax' },
@@ -38,23 +46,60 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
       headers: { Origin: baseURL!, 'X-Session-Context': contextTag },
     });
   }
-  async function capture(name: string, directory = evidence) {
+  async function capture(
+    name: string,
+    directory = evidence,
+    state?: { target: Locator; openMenu?: boolean },
+  ) {
+    const menuTrigger = state?.openMenu ? state.target : undefined;
     for (const [width, height] of [
       [1440, 900],
       [360, 800],
     ] as const) {
       await page.setViewportSize({ width, height });
       await page.mouse.move(width - 1, height - 1);
-      await expect
-        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
-        .toBe(true);
-      await page.screenshot({ path: resolve(directory, `${name}-${width}.png`) });
+      if (state) {
+        await state.target.scrollIntoViewIfNeeded();
+        await expect(state.target).toBeInViewport({ ratio: 1 });
+      }
+      if (menuTrigger) await menuTrigger.click();
+      try {
+        if (menuTrigger) await expect(page.getByRole('menu')).toBeInViewport({ ratio: 1 });
+        await expect
+          .poll(() =>
+            page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+          )
+          .toBe(true);
+        await page.screenshot({ path: resolve(directory, `${name}-${width}.png`) });
+      } finally {
+        if (menuTrigger) {
+          await page.keyboard.press('Escape');
+          await expect(page.getByRole('menu')).toHaveCount(0);
+        }
+      }
+      if (menuTrigger) await checkArchiveFocus(menuTrigger);
     }
   }
+  async function checkArchiveFocus(trigger: Locator) {
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Archive', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: /^Archive .*\?$/ });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  }
+  const catalogue = page.getByRole('region', { name: 'Product catalogue' });
+  const emptyHeading = catalogue.getByRole('heading', { name: 'No products yet' });
+  const emptyAddProduct = catalogue.getByRole('button', { name: 'Add product', exact: true });
   try {
     expect((await request('/me/active-store', { storeId: fixture.storeIds[0] })).status()).toBe(
       204,
     );
+    await page.goto('/products');
+    await expect(emptyHeading).toBeVisible();
+    await capture('empty', redesignEvidence, { target: emptyAddProduct });
+
     const categoryIds: Record<string, string> = {};
     for (const name of ['Men', 'Accessories'])
       categoryIds[name] = (await (await request('/products/categories', { name })).json()).id;
@@ -134,7 +179,12 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await page.goto('/products');
     await expect(page.getByRole('table', { name: 'Products' })).toBeVisible();
     await expect(page.getByRole('table').getByRole('row')).toHaveCount(4);
-    await expect(page.getByRole('table').getByText('Selling', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('row', { name: /Silk scarf/ }).getByText('Active', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('row', { name: /Leather sandal/ }).getByText('Hidden', { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('table').getByRole('img', { name: 'Silk scarf' })).toBeVisible();
     await expect
       .poll(() =>
@@ -145,9 +195,41 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
       )
       .toBeGreaterThan(1);
     await capture('list');
+    await capture('list', redesignEvidence, {
+      target: page.getByRole('heading', { name: 'Products', exact: true }),
+    });
+    await capture('row-menu', redesignEvidence, {
+      target: page.getByRole('button', { name: 'More actions for Leather sandal', exact: true }),
+      openMenu: true,
+    });
+
+    await database.pool.query(
+      `insert into orders(id,store_id,number,source,created_by_type,recipient_name,recipient_phone,
+        recipient_address,recipient_district,items_subtotal_poisha,cod_amount_poisha)
+       values ($1,$2,900001,'manual','user','Rina','01710000005','Mirpur','Dhaka',490000,490000)`,
+      [salesOrderId, fixture.storeIds[0]],
+    );
+    await database.pool.query(
+      `insert into order_items(id,store_id,order_id,variant_id,product_name,variant_title,quantity,
+        unit_price_poisha,is_stock_tracked) values ($1,$2,$3,$4,'Cotton Panjabi','M',2,245000,true)`,
+      [randomUUID(), fixture.storeIds[0], salesOrderId, panjabi.variants[0]!.id],
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const sort = page.getByRole('combobox', { name: 'Sort products' });
+    await expect(sort).toHaveText('Newest');
+    await sort.click();
+    await page.getByRole('option', { name: 'Best selling' }).click();
+    await expect(page).toHaveURL(/sort=best_selling/);
+    await expect(page.getByRole('table').getByRole('row').nth(1)).toContainText('Cotton Panjabi');
+    await capture('best-selling', salesEvidence, {
+      target: catalogue.getByText('Cotton Panjabi', { exact: true }).filter({ visible: true }),
+    });
+    await page.reload();
+    await expect(sort).toHaveText('Best selling');
 
     await page.getByRole('link', { name: 'Running low', exact: true }).click();
     await expect(page).toHaveURL(/readiness=running_low/);
+    await expect(page).toHaveURL(/sort=best_selling/);
     await page.setViewportSize({ width: 1440, height: 900 });
     await expect(page.getByRole('table').getByRole('row')).toHaveCount(2);
     await capture('running-low');
@@ -201,12 +283,20 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByText('No products on this page.')).toBeVisible();
     await expect(page.getByRole('button', { name: /Adjust stock/ })).toHaveCount(0);
+
+    await page.goto('/products');
+    await expect(emptyHeading).toBeVisible();
+    await expect(emptyAddProduct).toHaveCount(0);
   } finally {
     try {
       await request('/me/active-store', { storeId: fixture.storeIds[0] });
     } finally {
       const ids = products.map((product) => product.id);
       const variants = products.flatMap((product) => product.variants.map((variant) => variant.id));
+      await database.pool.query('delete from orders where store_id=$1 and id=$2', [
+        fixture.storeIds[0],
+        salesOrderId,
+      ]);
       await database.pool.query(
         "delete from outbox_events where store_id=$1 and (payload->>'productId'=any($2::text[]) or payload->>'variantId'=any($3::text[]))",
         [fixture.storeIds[0], ids, variants],

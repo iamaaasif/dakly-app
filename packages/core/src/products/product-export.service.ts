@@ -7,20 +7,18 @@ import type { ProductResponse } from '@dakly/contracts/products';
 
 import { AuditService } from '../audit/audit.service';
 import { Clock } from '../platform/clock';
-import { csvCell } from '../platform/csv-cell';
 import { StoreTransaction } from '../platform/database/store-transaction';
+import { CSV_TYPE, spreadsheetCsv, spreadsheetXlsx, XLSX_TYPE } from '../platform/spreadsheet';
 import { ProductsService } from './products.service';
 
 type Actor = Extract<AuditEntry['actor'], { kind: 'user' }>;
 
 const PAGE_SIZE = 100;
-const BYTE_ORDER_MARK = String.fromCharCode(0xfeff);
-const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const CSV_TYPE = 'text/csv; charset=utf-8';
 const FIELD_HEADERS = [
   'Name',
   'Price',
   'Category',
+  'Brand',
   'Description',
   'Status',
   'SKU',
@@ -63,7 +61,7 @@ export class ProductExportService {
     return {
       filename: `dakly-products-${day}.${format}`,
       type: format === 'csv' ? CSV_TYPE : XLSX_TYPE,
-      body: format === 'csv' ? toCsv(rows) : await toXlsx(rows),
+      body: format === 'csv' ? spreadsheetCsv(rows) : await spreadsheetXlsx(rows),
       rowCount: rows.length - 1,
     };
   }
@@ -85,6 +83,7 @@ function productRows(product: ProductResponse, optionNames: string[]): string[][
     product.name,
     poishaToTakaText(variant.pricePoisha),
     product.category ?? '',
+    product.brand ?? '',
     product.description ?? '',
     product.status,
     variant.sku ?? '',
@@ -93,18 +92,4 @@ function productRows(product: ProductResponse, optionNames: string[]): string[][
     product.isStockTracked ? String(variant.onHand) : '',
     ...optionNames.map((name) => variant.optionValues[name] ?? ''),
   ]);
-}
-
-function toCsv(rows: string[][]): string {
-  // The byte order mark lets Excel read Bangla text as UTF-8.
-  return `${BYTE_ORDER_MARK}${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`;
-}
-
-async function toXlsx(rows: string[][]): Promise<Buffer> {
-  const sheet = rows.map((row, index) =>
-    row.map((value) => (index === 0 ? { value, fontWeight: 'bold' as const } : { value })),
-  );
-  // The package ships as an ES module, which this CommonJS build can only load this way.
-  const { default: writeXlsxFile } = await import('write-excel-file/node');
-  return writeXlsxFile(sheet).toBuffer();
 }

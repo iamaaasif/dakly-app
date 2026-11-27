@@ -4,10 +4,12 @@ import { AiModule } from '../ai/ai.module';
 import { AuditModule } from '../audit/audit.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { MessagingModule } from '../messaging/messaging.module';
+import { OrderProductSalesModule } from '../orders/order-product-sales.module';
 import { ClockModule } from '../platform/clock.module';
 import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { OutboxModule } from '../platform/outbox/outbox.module';
 import { StoresModule } from '../stores/stores.module';
+import { TeamModule } from '../team/team.module';
 import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductBulkEditsController } from './product-bulk-edits.controller';
@@ -46,8 +48,10 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ClockModule,
     ContactsModule,
     MessagingModule,
+    OrderProductSalesModule,
     OutboxModule,
     StoresModule,
+    TeamModule,
     FileStorageModule,
   ],
   controllers: [

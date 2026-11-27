@@ -13,7 +13,6 @@ import { ExportProductsButtons } from './export-products-buttons';
 import { ImportProductsDialog } from './import-products-dialog';
 import { ProductBulkPanel } from './product-bulk-panel';
 import { ProductBulkSection } from './product-bulk-section';
-import { ProductFilters } from './product-filters';
 import { ProductResults } from './product-results';
 import { QuickAddModal } from './quick-add-modal';
 import { RestockDialog } from './restock-dialog';
@@ -33,30 +32,36 @@ export function ProductsScreen(initial: ProductsScreenProps) {
   const products = useProducts(query);
   const router = useUrlRouter();
   const [changingStockOf, setChangingStockOf] = useState<string>();
+  const [quickAdding, setQuickAdding] = useState(false);
   const listHref = `/products?${productsSearch(query)}`;
   const onAdjust = (id: string) => router.push(`${listHref}&adjust=${encodeURIComponent(id)}`);
   const changingStock = products.data?.items.find((item) => item.id === changingStockOf);
   const canEdit = Boolean(session?.currentStore?.canEditProducts);
   const bulk = useBulkSelection(canEdit);
+  const editActions = canEdit
+    ? { onAddProduct: () => setQuickAdding(true), onAdjust, onChangeStock: setChangingStockOf }
+    : {};
   return (
     <StorePage permission="canViewProducts">
       <main className="space-y-6 p-6 md:p-8">
-        <ProductsHeader canEdit={canEdit} query={query} listHref={listHref} importing={importing} />
+        <ProductsHeader
+          query={query}
+          listHref={listHref}
+          importing={importing}
+          onAddProduct={editActions.onAddProduct}
+        />
         <section aria-label="Product catalogue" className="space-y-4 md:space-y-0">
-          <ProductFilters
-            key={`${query.search}|${query.readiness}|${query.categoryId}|${query.brandId}`}
-            query={query}
-          />
-          <AssistantChange canEdit={canEdit} />
-          <ProductBulkSection bulk={bulk} />
           <ProductResults
             query={query}
             products={products}
-            onAdjust={canEdit ? onAdjust : undefined}
-            onChangeStock={canEdit ? setChangingStockOf : undefined}
+            {...editActions}
             selection={bulk.selection}
-          />
+          >
+            <AssistantChange canEdit={canEdit} />
+            <ProductBulkSection bulk={bulk} />
+          </ProductResults>
         </section>
+        {quickAdding && canEdit ? <QuickAddModal onClose={() => setQuickAdding(false)} /> : null}
         {changingStock ? (
           <ChangeStockDialog
             product={changingStock}
@@ -74,15 +79,14 @@ export function ProductsScreen(initial: ProductsScreenProps) {
 }
 
 type ProductsHeaderProps = {
-  canEdit: boolean;
+  onAddProduct?: () => void;
   query: ProductListQuery;
   listHref: string;
   importing?: '1';
 };
 
-function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderProps) {
+function ProductsHeader({ onAddProduct, query, listHref, importing }: ProductsHeaderProps) {
   const router = useUrlRouter();
-  const [quickAdding, setQuickAdding] = useState(false);
   return (
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -100,19 +104,18 @@ function ProductsHeader({ canEdit, query, listHref, importing }: ProductsHeaderP
           Categories and brands
         </Link>
         <ExportProductsButtons query={query} />
-        {canEdit ? (
+        {onAddProduct ? (
           <>
             <Button variant="secondary" onClick={() => router.push(`${listHref}&import=1`)}>
               Import from Excel or CSV
             </Button>
-            <Button onClick={() => setQuickAdding(true)}>
+            <Button onClick={onAddProduct}>
               <span aria-hidden="true">+ </span>Add product
             </Button>
           </>
         ) : null}
       </div>
-      {quickAdding && canEdit ? <QuickAddModal onClose={() => setQuickAdding(false)} /> : null}
-      {importing && canEdit ? (
+      {importing && onAddProduct ? (
         <ImportProductsDialog onClose={() => router.replace(listHref)} />
       ) : null}
     </header>

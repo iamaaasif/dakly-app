@@ -8,7 +8,7 @@ const banglaDigits = (text: string) =>
 
 const phonePattern = /(?:\+?880|0)1[3-9](?:[\s-]?\d){8}/;
 const orderPattern =
-  /(?:order(?:\s*(?:number|no|id|#))?|অর্ডার\s*(?:নম্বর|নং)?)\s*[:#-]?\s*([a-z0-9-]{2,20})/iu;
+  /(?:order(?:\s*(?:number|no|id|#))?|অর্ডার\s*(?:নম্বর|নং)?)\s*[:#-]?\s*((?=[a-z0-9-]*\d)[a-z0-9-]{2,20})/iu;
 const namePattern =
   /(?:amar\s+nam|my\s+name\s+is|name\s*[:=-]|আমার\s+নাম)\s+([\p{L}\p{M}]+(?:\s+[\p{L}\p{M}]+){0,2})/iu;
 

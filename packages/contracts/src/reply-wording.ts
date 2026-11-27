@@ -1,11 +1,10 @@
 // Shared by the reply check and the eval, so both judge a reply by the same words.
-// A discount, offer or percentage is never a tool result, so a reply that names one must have it
-// in a shop's own policy text.
+// A reply that promises a discount, free item or percentage needs wording from the shop policy.
 const offerPattern =
   /\d+(?:\.\d+)?\s*(?:%|percent|শতাংশ|পার্সেন্ট|শতকরা)\s*(?:off|discount|less|cheaper|ছাড়|ডিসকাউন্ট|কম)|\b(?:discount|off(?![\s-]*white)|free(?![\s-]*(?:size|সাইজ))|coupon|voucher|cashback|chhar)\b|ছাড়(?!া)|ডিসকাউন্ট|ফ্রি(?![\s-]*সাইজ)|ফ্রী(?![\s-]*সাইজ)|কুপন|ক্যাশব্যাক|বিনামূল্যে/giu;
 // Words only these instructions and tool descriptions contain.
 const leakPattern =
-  /system prompt|my instructions|untrusted|hand_over|draft_order|confirm_order|search_products|get_product|search_knowledge|send_product_card|tool_results|product_candidates|<\/?(?:shop|conversation)\b|সিস্টেম প্রম্পট|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu;
+  /system prompt|my instructions|untrusted|hand_over|offer_lower_price|negotiation floor|negotiation settings|configured (?:opening|lowest) price|draft_order|confirm_order|search_products|get_product|search_knowledge|send_product_card|tool_results|product_candidates|<\/?(?:shop|conversation|negotiation)\b|সিস্টেম প্রম্পট|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/iu;
 
 // "ছাড় নেই", "discount dite parbo na" and "no discount" refuse an offer, so a reply that holds the
 // price can name the word. A number with a percent is never treated as refused.
@@ -61,7 +60,17 @@ export const amountPatterns = [
   new RegExp(String.raw`৳\s*${number}`, 'giu'),
   new RegExp(String.raw`${notASize}${number}\s*(?:৳|tk\b|taka[yr]?\b|টাকা)`, 'giu'),
   new RegExp(String.raw`\b(?:tk\.?|bdt|taka|rs\.?)\s*${number}`, 'giu'),
+  new RegExp(
+    String.raw`(?:\b(?:price|dam)\b|দাম(?:টি|টাই|ই)?)[\s:]+(?:(?:is|at)\s+)?(?:(?:just|only|exactly)\s+)?${number}`,
+    'giu',
+  ),
   // A limit with no currency word, such as "১০০০ এর মধ্যে" or "under 1000".
   new RegExp(String.raw`${notASize}${number}\s*(?:এর|er)?\s*(?:মধ্যে|নিচে|moddhe|niche)`, 'giu'),
   new RegExp(String.raw`\b(?:under|below|within|up to)\s*${number}`, 'giu'),
 ];
+
+// On a negotiation turn these phrases can carry an amount without a currency word.
+export const bareOfferPattern = new RegExp(
+  String.raw`\b(?:can (?:do|offer|give|take)|would take)\s+(?:it at\s+)?(?:(?:just|only)\s+)?${number}`,
+  'giu',
+);

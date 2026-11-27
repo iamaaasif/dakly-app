@@ -6,6 +6,10 @@ const MESSAGING_ERRORS = {
   AI_REPLY_NOT_BAD: { status: 409, message: 'Only a reply rated bad can be fixed' },
   AI_REPLY_ALREADY_FIXED: { status: 409, message: 'This reply is already fixed' },
   CONVERSATION_NOT_FOUND: { status: 404, message: 'Conversation not found' },
+  CONVERSATION_PHOTO_INVALID: {
+    status: 422,
+    message: 'The photo did not finish uploading. Attach it again',
+  },
   CONVERSATION_REPLY_UNSUPPORTED: {
     status: 422,
     message: 'Replies to this channel are not available yet',

@@ -9,28 +9,44 @@ import { TenantDatabase } from '../platform/database/tenant-database';
 export class ProductOrderVariantsRepository {
   constructor(@Inject(TenantDatabase) private readonly database: TenantDatabase) {}
 
+  lockProducts(storeId: string, productIds: string[]) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          id: products.id,
+          version: products.version,
+          pricePoisha: products.pricePoisha,
+          status: products.status,
+          isVisibleInChats: products.isVisibleInChats,
+          negotiationEnabled: products.negotiationEnabled,
+          negotiationOpeningPoisha: products.negotiationOpeningPoisha,
+          negotiationFloorPoisha: products.negotiationFloorPoisha,
+        })
+        .from(products)
+        .where(and(eq(products.storeId, storeId), inArray(products.id, productIds)))
+        .orderBy(products.id)
+        .for('no key update'),
+    );
+  }
+
   lockArchiveVariants(storeId: string, productId: string) {
     return this.database.forStore(storeId, async (tx) => {
       // Product edits already lock the product before changing its variants.
-      const [product] = await tx
-        .select({ id: products.id })
-        .from(products)
-        .where(
-          and(
-            eq(products.storeId, storeId),
-            eq(products.id, productId),
-            ne(products.status, 'archived'),
-          ),
-        )
-        .for('no key update');
+      const [product] = await this.lockProducts(storeId, [productId]);
       if (!product) return null;
+      if (product.status === 'archived')
+        return { version: product.version, status: product.status, variantIds: [] };
       const variants = await tx
         .select({ id: productVariants.id })
         .from(productVariants)
         .where(and(eq(productVariants.storeId, storeId), eq(productVariants.productId, productId)))
         .orderBy(productVariants.id)
         .for('no key update');
-      return variants.map(({ id }) => id);
+      return {
+        variantIds: variants.map(({ id }) => id),
+        version: product.version,
+        status: product.status,
+      };
     });
   }
 

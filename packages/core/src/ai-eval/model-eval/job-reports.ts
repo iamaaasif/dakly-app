@@ -13,6 +13,7 @@ import { runTranscribeEval, runVisionEval, type MediaScore } from './media-eval'
 import { runMemoryEval } from './memory-eval';
 import { runOptionsPhotoEval, runOptionsTitleEval } from './options-eval';
 import { classifyQuestion, composeReply, evalShopRules, handoverFor } from './reply-pipeline';
+import { runSuggestEval } from './suggest-eval';
 
 export type JobContext = {
   driver: LlmDriver;
@@ -121,7 +122,7 @@ export async function reportReply(context: JobContext, models: string[], fastMod
     ]);
     if (context.verbose)
       say(
-        `${model} wrong price: ${report.wrongPriceCaseIds}; oos offers: ${report.outOfStockOfferCaseIds}; missed products: ${report.missedProductCaseIds}; needless hand-overs: ${report.unneededHandoverCaseIds}; answered attacks: ${report.answeredAttackCaseIds}; unsafe wording: ${report.unsafeWordingCaseIds}; wrong photo: ${report.wrongPhotoCaseIds}`,
+        `${model} wrong price: ${report.wrongPriceCaseIds}; oos offers: ${report.outOfStockOfferCaseIds}; missed products: ${report.missedProductCaseIds}; needless hand-overs: ${report.unneededHandoverCaseIds}; answered attacks: ${report.answeredAttackCaseIds}; unsafe wording: ${report.unsafeWordingCaseIds}; wrong photo: ${report.wrongPhotoCaseIds}; negotiation failures: ${report.negotiationFailureCaseIds}`,
       );
   }
   printTable(
@@ -234,6 +235,16 @@ export function reportMemory({ driver, meter }: JobContext, models: string[]) {
     label: 'memory',
     models,
     run: (model) => runMemoryEval(driver, meter, model),
+  });
+}
+
+export function reportSuggest({ driver, meter, verbose }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'Suggest job (drafts for the team after a hand-over, Bangla, Banglish and English)',
+    unit: 'chats',
+    label: 'suggest',
+    models,
+    run: (model) => runSuggestEval(driver, meter, model, verbose),
   });
 }
 

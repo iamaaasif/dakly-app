@@ -51,14 +51,20 @@ export class AutomationConditionsService {
     return readsOrder && orderId ? this.orders.progress(storeId, orderId) : undefined;
   }
 
-  // Read again inside the send gate. A message with the confirm link goes out only while the order
+  // Read again inside the send gate. A confirmation message goes out only while the order
   // still waits in To confirm, so on hold, confirmed or cancelled ends the run before the send.
   async refreshExitReason(facts: RunFacts, step: SendStep, at: Date) {
     const { storeId, contactId, runId, orderId } = facts;
     const tags = await this.contacts.findTags(storeId, contactId);
     const tappedStepKeys = await this.repository.listTappedStepKeys(storeId, runId);
     const exit = await this.exitReason(facts.graph, { ...facts, tags, tappedStepKeys }, at);
-    if (exit || !orderId || !usesConfirmLink(step.message.text)) return exit;
+    if (exit || !orderId) return exit;
+    if (
+      !hasConfirmationButtons(facts.templateKey, step) &&
+      !usesConfirmLink(step.message.text) &&
+      !usesConfirmLink(step.message.messengerText ?? '')
+    )
+      return undefined;
     const order = await this.orders.progress(storeId, orderId);
     return order?.isAwaitingConfirmation ? undefined : 'order_not_awaiting_confirmation';
   }
@@ -101,4 +107,12 @@ export class AutomationConditionsService {
         return false;
     }
   }
+}
+
+function hasConfirmationButtons(templateKey: string | null, step: SendStep): boolean {
+  return (
+    templateKey === 'cod_order_confirmation' &&
+    step.channels.includes('messenger') &&
+    step.message.buttons.some(({ key }) => key === 'confirm' || key === 'cancel')
+  );
 }

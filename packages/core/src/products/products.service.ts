@@ -17,11 +17,11 @@ import type {
   ProductPhotoUploadResponse,
   ConfirmProductPhotoInput,
   ReorderProductPhotosInput,
-  ProductReadiness,
 } from '@dakly/contracts/products';
-import { MAX_PRODUCT_PHOTOS } from '@dakly/contracts/products';
+import { MAX_PRODUCT_PHOTOS, productNegotiationIssue } from '@dakly/contracts/products';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
+import { OrderProductSalesService } from '../orders/order-product-sales.service';
 import { Clock } from '../platform/clock';
 import { newId } from '../platform/database/new-id';
 import { StoreTransaction } from '../platform/database/store-transaction';
@@ -30,17 +30,16 @@ import { measureVendorCall } from '../platform/logging/vendor-call-metric';
 import { OutboxService } from '../platform/outbox/outbox.service';
 import { StoresService } from '../stores/stores.service';
 import { ProductBrandsService } from './product-brands.service';
-import { chatProduct, orderCatalogueProduct, type ChatProduct } from './product-catalogue-views';
+import {
+  chatProduct,
+  orderCatalogueProduct,
+  productResponse,
+  type ChatProduct,
+} from './product-catalogue-views';
 import { ProductCategoriesService } from './product-categories.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
-import { productError } from './products.errors';
-import {
-  type CatalogueProduct,
-  type CatalogueVariant,
-  type Product,
-  ProductsRepository,
-  type Variant,
-} from './products.repository';
+import { assertProductVersion, productError } from './products.errors';
+import { type Product, ProductsRepository, type Variant } from './products.repository';
 
 export type { ChatProduct };
 type Actor = AuditEntry['actor'];
@@ -59,16 +58,24 @@ export class ProductsService {
     @Inject(FILE_STORAGE_DRIVER) private readonly storage: FileStorageDriver,
     @Inject(ProductCategoriesService) private readonly categories: ProductCategoriesService,
     @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
+    @Inject(OrderProductSalesService) private readonly sales: OrderProductSalesService,
   ) {}
 
-  create(storeId: string, input: CreateProductInput, _actor: Actor): Promise<ProductResponse> {
+  create(
+    storeId: string,
+    input: CreateProductInput,
+    _actor: Actor,
+    showNegotiationPrices = false,
+  ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
       const { variants, ...details } = input;
+      const issue = productNegotiationIssue(input);
+      if (issue) throw productError(issue);
       await this.assertListsExist(storeId, details);
       const product = await this.repository.insert(storeId, details, this.clock.now());
       await this.saveVariants(storeId, product, variants, []);
       await this.publishUpdated(storeId, product.id);
-      return this.getById(storeId, product.id);
+      return this.getById(storeId, product.id, showNegotiationPrices);
     });
   }
 
@@ -79,16 +86,22 @@ export class ProductsService {
     _actor: Actor,
   ): Promise<ProductResponse> {
     return this.transaction.run(storeId, async () => {
-      const { variants, ...details } = input;
+      const { variants, expectedVersion, ...details } = input;
+      const [current] = await this.orderVariantRepository.lockProducts(storeId, [id]);
+      assertProductVersion(current, expectedVersion);
       await this.assertListsExist(storeId, details);
+      const settings = { ...current, ...details };
+      const currentVariants =
+        variants || settings.negotiationEnabled
+          ? await this.repository.findVariants(storeId, [id])
+          : [];
+      const issue = productNegotiationIssue({ ...settings, variants: variants ?? currentVariants });
+      if (issue) throw productError(issue);
       const product = await this.repository.update(storeId, id, details, this.clock.now());
       if (!product) throw productError('PRODUCT_NOT_FOUND');
-      if (variants) {
-        const current = await this.repository.findVariants(storeId, [id]);
-        await this.saveVariants(storeId, product, variants, current);
-      }
+      if (variants) await this.saveVariants(storeId, product, variants, currentVariants);
       await this.publishUpdated(storeId, id);
-      return this.getById(storeId, id);
+      return this.getById(storeId, id, true);
     });
   }
 
@@ -100,25 +113,40 @@ export class ProductsService {
     if (brandId) await this.brands.assertExists(storeId, brandId);
   }
 
-  async getById(storeId: string, id: string): Promise<ProductResponse> {
+  async getById(
+    storeId: string,
+    id: string,
+    showNegotiationPrices = false,
+  ): Promise<ProductResponse> {
     const product = await this.repository.findById(storeId, id);
     if (!product) throw productError('PRODUCT_NOT_FOUND');
-    return toResponse(
+    return productResponse(
       product,
-      product.variants,
       (await this.stores.settings(storeId)).stock.lowStockThreshold,
       this.storage,
+      showNegotiationPrices,
     );
   }
 
-  async list(storeId: string, query: ProductListQuery): Promise<ProductListResponse> {
+  async list(
+    storeId: string,
+    query: ProductListQuery,
+    showNegotiationPrices = false,
+  ): Promise<ProductListResponse> {
     const { stock } = await this.stores.settings(storeId);
-    const rows = await this.repository.list(storeId, query, stock.lowStockThreshold);
+    const sales = query.sort === 'best_selling' ? await this.sales.recentUnits(storeId) : undefined;
+    const rows = await this.repository.list(storeId, query, stock.lowStockThreshold, sales);
     const page = rows.slice(0, query.limit);
     const items = page.map((product) =>
-      toResponse(product, product.variants, stock.lowStockThreshold, this.storage),
+      productResponse(product, stock.lowStockThreshold, this.storage, showNegotiationPrices),
     );
-    return { items, nextCursor: rows.length > query.limit ? items.at(-1)!.id : null };
+    const last = page.at(-1);
+    if (!last || rows.length <= query.limit) return { items, nextCursor: null };
+    const nextCursor =
+      query.sort === 'best_selling'
+        ? `${last.unitsSold}_${last.rankCreatedAt}_${last.id}`
+        : last.id;
+    return { items, nextCursor };
   }
 
   async listForOrders(storeId: string, query: OrderCatalogueQuery): Promise<OrderCataloguePage> {
@@ -191,10 +219,28 @@ export class ProductsService {
     });
   }
 
-  async lockArchiveVariants(storeId: string, productId: string): Promise<string[]> {
-    const ids = await this.orderVariantRepository.lockArchiveVariants(storeId, productId);
-    if (!ids) throw productError('PRODUCT_NOT_FOUND');
-    return ids;
+  lockNegotiationTerms(storeId: string, productIds: string[]) {
+    return this.transaction.run(storeId, async () => {
+      const products = await this.orderVariantRepository.lockProducts(storeId, productIds);
+      const visible = products.filter(
+        ({ status, isVisibleInChats }) => status === 'active' && isVisibleInChats,
+      );
+      if (!visible.length) return [];
+      const variants = await this.repository.findVariants(
+        storeId,
+        visible.map(({ id }) => id),
+      );
+      return visible.map((product) => ({
+        ...product,
+        variants: variants.filter(({ productId }) => productId === product.id),
+      }));
+    });
+  }
+
+  async lockArchiveVariants(storeId: string, productId: string, expectedVersion?: number) {
+    const product = await this.orderVariantRepository.lockArchiveVariants(storeId, productId);
+    assertProductVersion(product, expectedVersion);
+    return product.variantIds;
   }
 
   orderVariants(storeId: string, variantIds: string[], existingIds: string[]) {
@@ -381,50 +427,4 @@ export class ProductsService {
       payload: { productId },
     });
   }
-}
-
-function toResponse(
-  product: CatalogueProduct,
-  rows: CatalogueVariant[],
-  lowStockThreshold: number,
-  storage: FileStorageDriver,
-): ProductResponse {
-  const variants = rows.map(({ productId: _productId, ...variant }) => ({
-    ...variant,
-    photos: variant.photos.map((photo) => ({
-      id: photo.id,
-      url: storage.createDownloadUrl(photo.objectKey, 15 * 60),
-    })),
-    pricePoisha: variant.priceOverridePoisha ?? product.pricePoisha,
-    available: variant.onHand - variant.reserved,
-  }));
-  const readiness: ProductReadiness[] = [];
-  if (variants.some((variant) => variant.pricePoisha === 0)) readiness.push('needs_price');
-  if (!product.imageFileIds.length) readiness.push('needs_photo');
-  if (product.status === 'hidden') readiness.push('hidden');
-  if (
-    product.isStockTracked &&
-    variants.length &&
-    variants.every((variant) => variant.available <= 0)
-  )
-    readiness.push('out_of_stock');
-  else if (
-    product.isStockTracked &&
-    variants.some(
-      (variant) => variant.available <= (variant.lowStockThreshold ?? lowStockThreshold),
-    )
-  )
-    readiness.push('running_low');
-  return {
-    ...product,
-    status: product.status,
-    photos: product.photos.map((photo) => ({
-      id: photo.id,
-      url: storage.createDownloadUrl(photo.objectKey, 15 * 60),
-    })),
-    variants,
-    readiness,
-    createdAt: product.createdAt.toISOString(),
-    updatedAt: product.updatedAt.toISOString(),
-  };
 }

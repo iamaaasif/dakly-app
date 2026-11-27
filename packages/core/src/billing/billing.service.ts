@@ -49,6 +49,12 @@ export class BillingService {
     return (await this.repository.currentLimits(storeId))?.seats ?? 0;
   }
 
+  // Content credits one AI reply draft costs once the plan's free drafts for the month are used.
+  // A plan that does not set it charges one; 0 keeps every draft free.
+  async replyDraftCredits(storeId: string): Promise<number> {
+    return (await this.repository.currentLimits(storeId))?.ai_reply_draft_credits ?? 1;
+  }
+
   // Only the base plan's limits count; add-ons carry no allowance until their purchase flow exists.
   async currentAllowance(storeId: string, unit: UsageUnit) {
     const period = await this.repository.currentPeriod(storeId);

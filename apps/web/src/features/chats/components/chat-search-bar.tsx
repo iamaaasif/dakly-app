@@ -1,18 +1,20 @@
 'use client';
-import { ArrowUpDown, ListFilter, MessageSquare, Search } from 'lucide-react';
+import { ArrowUpDown, Inbox, MessageSquare, Plus, Search } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
 
+import { conversationFolders, conversationStates } from '@dakly/contracts/chats';
 import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { Input } from '@dakly/ui/input';
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from '@dakly/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 
 import { useConversationAssignees, useConversationLabels } from '../api/conversations';
 import {
+  chatFolderLabels,
   chatSortLabels,
   chatSorts,
-  chatTabLabels,
-  chatTabs,
+  chatStateLabels,
   chatsHref,
   type ChatScreenQuery,
 } from '../chat-filters';
@@ -40,7 +42,7 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
       <Input
         type="search"
         aria-label="Search chats"
-        placeholder="Search name or phone"
+        placeholder="Search name or phone…"
         maxLength={120}
         value={words}
         onChange={(event) => setWords(event.target.value)}
@@ -50,20 +52,28 @@ export function ChatSearchBar({ query }: { query: ChatScreenQuery }) {
   );
 }
 
-export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channel: ReactNode }) {
+// Toolbar pickers match the compact secondary buttons beside them.
+const toolbarSelect = 'min-h-9 w-auto px-2.5 py-1 text-sm font-medium';
+
+type ChatToolbarProps = { query: ChatScreenQuery; foldersOpen: boolean; channel: ReactNode };
+
+export function ChatToolbar({ query, foldersOpen, channel }: ChatToolbarProps) {
   const router = useUrlRouter();
   return (
     <>
-      <ChatFolderSelect query={query} />
+      <ChatFolderSelect query={query} foldersOpen={foldersOpen} />
+      <ChatStateSelect query={query} />
       <Select
         value={query.sort}
         onValueChange={(sort) =>
           router.replace(chatsHref({ ...query, sort: sort as ChatScreenQuery['sort'] }))
         }
       >
-        <SelectTrigger aria-label="Sort chats" className="w-auto">
+        <SelectTrigger aria-label="Sort chats" className={toolbarSelect}>
           <ArrowUpDown aria-hidden="true" size={16} />
-          <SelectValue />
+          <span>
+            Sort: <SelectValue />
+          </span>
         </SelectTrigger>
         <SelectContent>
           {chatSorts.map((sort) => (
@@ -77,7 +87,7 @@ export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channe
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="secondary" size="sm">
-            <ListFilter aria-hidden="true" size={16} />
+            <Plus aria-hidden="true" size={16} />
             Filter
           </Button>
         </PopoverTrigger>
@@ -89,16 +99,23 @@ export function ChatToolbar({ query, channel }: { query: ChatScreenQuery; channe
   );
 }
 
-function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
+// The folder column replaces this picker when it is open; phones always pick the folder here.
+function ChatFolderSelect({
+  query,
+  foldersOpen,
+}: {
+  query: ChatScreenQuery;
+  foldersOpen: boolean;
+}) {
   const router = useUrlRouter();
   return (
     <Select
-      value={query.tab}
-      onValueChange={(tab) =>
+      value={query.folder}
+      onValueChange={(folder) =>
         router.push(
           chatsHref({
             ...query,
-            tab: tab as ChatScreenQuery['tab'],
+            folder: folder as ChatScreenQuery['folder'],
             channel: query.channel === 'comments' ? undefined : query.channel,
             chat: undefined,
             panel: undefined,
@@ -107,14 +124,43 @@ function ChatFolderSelect({ query }: { query: ChatScreenQuery }) {
         )
       }
     >
-      <SelectTrigger aria-label="Chat folder" className="hidden w-auto xl:flex">
+      <SelectTrigger
+        aria-label="Chat folder"
+        className={cn(toolbarSelect, foldersOpen && 'lg:hidden')}
+      >
+        <Inbox aria-hidden="true" size={16} />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {conversationFolders.map((folder) => (
+          <SelectItem key={folder} value={folder}>
+            {chatFolderLabels[folder]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function ChatStateSelect({ query }: { query: ChatScreenQuery }) {
+  const router = useUrlRouter();
+  return (
+    <Select
+      value={query.state}
+      onValueChange={(state) =>
+        router.push(
+          chatsHref({ ...query, state: state as ChatScreenQuery['state'], chat: undefined }),
+        )
+      }
+    >
+      <SelectTrigger aria-label="Chat state" className={toolbarSelect}>
         <MessageSquare aria-hidden="true" size={16} />
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {chatTabs.map((tab) => (
-          <SelectItem key={tab} value={tab}>
-            {tab === 'all' ? 'All chats' : chatTabLabels[tab]}
+        {conversationStates.map((state) => (
+          <SelectItem key={state} value={state}>
+            {chatStateLabels[state]}
           </SelectItem>
         ))}
       </SelectContent>

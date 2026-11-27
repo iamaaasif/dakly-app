@@ -9,6 +9,8 @@ export const aiTiers = [
 ] as const;
 export const aiRunPurposes = [
   'chat_reply',
+  'suggest_reply',
+  'rewrite_reply',
   'classify',
   'comment_reply',
   'summary',

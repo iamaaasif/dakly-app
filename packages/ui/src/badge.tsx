@@ -3,10 +3,11 @@ import type { ComponentProps } from 'react';
 
 import { cn } from './cn';
 
-const badgeVariants = cva('inline-flex items-center rounded-sm px-2 py-1 text-xs font-medium', {
+const badgeVariants = cva('inline-flex items-center rounded-sm text-xs font-medium', {
   variants: {
+    size: { md: 'px-2 py-1', sm: 'px-1.5 py-px' },
     variant: {
-      neutral: 'bg-surface-muted text-text',
+      neutral: 'bg-neutral-soft text-text',
       success: 'bg-success-soft text-success',
       warning: 'bg-warning-soft text-warning',
       danger: 'bg-danger-soft text-danger',
@@ -15,11 +16,11 @@ const badgeVariants = cva('inline-flex items-center rounded-sm px-2 py-1 text-xs
       inverse: 'bg-inverse text-on-primary',
     },
   },
-  defaultVariants: { variant: 'neutral' },
+  defaultVariants: { variant: 'neutral', size: 'md' },
 });
 
 export type BadgeProps = ComponentProps<'span'> & VariantProps<typeof badgeVariants>;
 
-export function Badge({ className, variant, ...props }: BadgeProps) {
-  return <span {...props} className={cn(badgeVariants({ variant }), className)} />;
+export function Badge({ className, variant, size, ...props }: BadgeProps) {
+  return <span {...props} className={cn(badgeVariants({ variant, size }), className)} />;
 }

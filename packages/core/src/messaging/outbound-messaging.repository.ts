@@ -50,6 +50,43 @@ export class OutboundMessagingRepository {
     return row;
   }
 
+  async messengerSendConnection(
+    storeId: string,
+    {
+      conversationId,
+      contactId,
+      identityId,
+      idempotencyKey,
+    }: {
+      conversationId: string;
+      contactId: string;
+      identityId: string;
+      idempotencyKey: string;
+    },
+  ) {
+    const [row] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ connectionId: conversations.channelConnectionId })
+        .from(conversations)
+        .innerJoin(
+          messages,
+          and(eq(messages.storeId, storeId), eq(messages.conversationId, conversations.id)),
+        )
+        .where(
+          and(
+            eq(conversations.storeId, storeId),
+            eq(conversations.id, conversationId),
+            eq(conversations.contactId, contactId),
+            eq(conversations.channel, 'messenger'),
+            eq(messages.direction, 'out'),
+            eq(messages.recipientIdentityId, identityId),
+            eq(messages.idempotencyKey, idempotencyKey),
+          ),
+        ),
+    );
+    return row?.connectionId;
+  }
+
   async queue(
     storeId: string,
     input: Pick<
@@ -83,7 +120,7 @@ export class OutboundMessagingRepository {
             { kind: 'image', status: 'stored', ...input.image, read: 'done' },
           ],
           direction: 'out',
-          kind: 'text',
+          kind: content || !input.image ? 'text' : 'image',
           status: 'queued',
           createdAt: now,
         })
@@ -181,6 +218,15 @@ export class OutboundMessagingRepository {
         .returning({ id: messages.id }),
     );
     return updated !== undefined;
+  }
+
+  clearSuggestedReply(storeId: string, conversationId: string) {
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .update(conversations)
+        .set({ suggestedReply: null })
+        .where(and(eq(conversations.storeId, storeId), eq(conversations.id, conversationId))),
+    );
   }
 
   advanceConversation(

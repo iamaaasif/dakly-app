@@ -5,6 +5,7 @@ import { UsersModule } from '../auth/users.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { OrdersModule } from '../orders/orders.module';
 import { ClockModule } from '../platform/clock.module';
+import { FileStorageModule } from '../platform/file-storage/file-storage.module';
 import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { TeamModule } from '../team/team.module';
@@ -21,6 +22,7 @@ import { MessagingModule } from './messaging.module';
     AuditModule,
     ClockModule,
     ContactsModule,
+    FileStorageModule,
     MessagingModule,
     OrdersModule,
     SendingModule,
@@ -36,6 +38,6 @@ import { MessagingModule } from './messaging.module';
     ConversationReplyService,
     ConversationOrdersService,
   ],
-  exports: [InboxRepository, InboxService],
+  exports: [ConversationReplyService, InboxRepository, InboxService],
 })
 export class InboxModule {}

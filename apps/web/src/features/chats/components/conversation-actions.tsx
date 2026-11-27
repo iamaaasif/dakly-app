@@ -28,7 +28,7 @@ export function ConversationActions({ conversation }: { conversation: Conversati
           onClick={() => update.mutate({ status: 'open' })}
         >
           <RotateCcw aria-hidden="true" size={16} strokeWidth={1.75} />
-          Reopen
+          <span className="sr-only @xl:not-sr-only">Reopen</span>
         </Button>
       ) : (
         <Button
@@ -38,7 +38,7 @@ export function ConversationActions({ conversation }: { conversation: Conversati
           onClick={() => update.mutate({ status: 'later' })}
         >
           <Bell aria-hidden="true" size={16} />
-          Remind me
+          <span className="sr-only @xl:not-sr-only">Remind me</span>
         </Button>
       )}
       {done ? null : (
@@ -68,12 +68,16 @@ function AssigneePicker({ conversation }: { conversation: ConversationResponse }
   const me = session?.user.id;
   return (
     <Select
-      value={conversation.assigneeUserId ?? nobody}
+      value={conversation.assigneeUserId ?? ''}
       onValueChange={(value) => update.mutate({ assigneeUserId: value === nobody ? null : value })}
     >
-      <SelectTrigger aria-label="Assigned to" className="w-auto max-w-28 sm:max-w-40">
+      {/* Looks like the buttons beside it: the design has no picker arrow here. */}
+      <SelectTrigger
+        aria-label="Assigned to"
+        className="min-h-9 w-auto max-w-28 px-2.5 py-1 text-sm data-[placeholder]:text-text sm:max-w-40 [&>svg:last-child]:hidden"
+      >
         <UserPlus aria-hidden="true" size={16} />
-        <SelectValue />
+        <SelectValue placeholder="Assign" />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={nobody}>Nobody</SelectItem>

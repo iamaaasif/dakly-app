@@ -4,7 +4,7 @@ import { calendarDate } from './calendar-date';
 import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
 import {
-  productListQuerySchema,
+  productListBaseQuerySchema,
   takaInput,
   type ProductResponse,
   type ProductVariantResponse,
@@ -106,7 +106,7 @@ export const orderTabs = [
 export type OrderReturnRisk = (typeof returnRiskLevels)[number] | null;
 export type OrderParcelHistory = { parcels: number; returned: number };
 
-export const orderListQuerySchema = z
+export const orderFiltersSchema = z
   .strictObject({
     stage: z.enum(orderStages).optional(),
     source: z.enum(orderSources).optional(),
@@ -117,17 +117,17 @@ export const orderListQuerySchema = z
     search: searchText.max(120).optional(),
     // One customer's orders, for the chat's customer panel.
     buyerContactId: z.uuid().optional(),
-    cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
-    limit: z.coerce.number<string>().int().min(1).max(100).default(50),
   })
   .refine(
     ({ createdFrom, createdThrough }) =>
       !createdFrom || !createdThrough || createdFrom <= createdThrough,
-    {
-      path: ['createdThrough'],
-      message: 'End date must be on or after the start date',
-    },
+    { path: ['createdThrough'], message: 'End date must be on or after the start date' },
   );
+
+export const orderListQuerySchema = orderFiltersSchema.safeExtend({
+  cursor: z.coerce.number<string>().int().positive().max(2147483647).optional(),
+  limit: z.coerce.number<string>().int().min(1).max(100).default(50),
+});
 
 export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
 export const orderScreenQuerySchema = orderListQuerySchema.safeExtend({
@@ -178,7 +178,7 @@ export type OrderListResponse = {
   nextCursor: number | null;
 };
 
-export const orderCatalogueQuerySchema = productListQuerySchema.pick({
+export const orderCatalogueQuerySchema = productListBaseQuerySchema.pick({
   cursor: true,
   limit: true,
   search: true,
@@ -246,7 +246,9 @@ export type OrderDetail = OrderSummary & {
   items: OrderItem[];
   // Packed weight of all items in grams; null when any item's product has no weight set.
   parcelWeightGrams: number | null;
-  timeline: OrderStageHistoryEntry[];
+  timeline: (
+    OrderStageHistoryEntry | { id: string; reason: 'AI price offer'; occurredAt: string }
+  )[];
 };
 
 const courierText = z.string().trim().min(1).max(100).optional();
@@ -402,6 +404,8 @@ export const placeOrderLinkOrderSchema = z.strictObject({
 });
 export type PlaceOrderLinkOrderInput = z.infer<typeof placeOrderLinkOrderSchema>;
 export type PlacedOrderLinkOrder = { orderNumber: number; totalPoisha: number };
+// The public page where a customer orders one product themselves.
+export type OrderLinkUrlResponse = { url: string };
 
 export const orderIdempotencyKeySchema = z.string().trim().min(1).max(128);
 export const editOrderSchema = z

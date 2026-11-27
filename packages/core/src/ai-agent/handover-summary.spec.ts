@@ -34,4 +34,13 @@ describe('formatHandoverSummary', () => {
       'Reason: refund | Customer: করিম | Phone: 01712345678 | Order: #1042 | Issue: আমার নাম করিম, ফোন ০১৭১২৩৪৫৬৭৮, অর্ডার ১০৪২, টাকা ফেরত চাই',
     );
   });
+
+  it('does not read a plain word after "order" as an order number', () => {
+    expect(
+      formatHandoverSummary({ reason: 'asked_for_person', latestText: 'order korte chai' }),
+    ).toBe('Reason: asked_for_person | Issue: order korte chai');
+    expect(
+      formatHandoverSummary({ reason: 'asked_for_person', latestText: 'অর্ডার করতে চাই' }),
+    ).toBe('Reason: asked_for_person | Issue: অর্ডার করতে চাই');
+  });
 });
