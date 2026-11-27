@@ -28,7 +28,23 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
   useCollapsedShellNavigation();
   // A disconnected channel keeps its past chats, so only a shop with no connection at all sees this.
   // Staff who cannot read the connections get an error here and keep the inbox.
-  if (connections.data && connections.data.items.length === 0) return <ConnectChannelEmpty />;
+  // The AI agent drawer stays reachable from the shell menu before any channel is connected.
+  const agentDrawer = (
+    <AiAgentDrawer
+      tab={query.agent}
+      feedbackFilter={query.feedback}
+      onTabChange={(agent) => router.push(chatsHref({ ...query, agent }))}
+      onFeedbackFilterChange={(feedback) => router.replace(chatsHref({ ...query, feedback }))}
+      onClose={() => router.push(chatsHref(withoutAgent))}
+    />
+  );
+  if (connections.data && connections.data.items.length === 0)
+    return (
+      <>
+        <ConnectChannelEmpty />
+        {agentDrawer}
+      </>
+    );
   return (
     <main
       data-full-width
@@ -59,13 +75,7 @@ export function ChatsScreen({ query: initial }: { query: ChatScreenQuery }) {
           </>
         )}
       </div>
-      <AiAgentDrawer
-        tab={query.agent}
-        feedbackFilter={query.feedback}
-        onTabChange={(agent) => router.push(chatsHref({ ...query, agent }))}
-        onFeedbackFilterChange={(feedback) => router.replace(chatsHref({ ...query, feedback }))}
-        onClose={() => router.push(chatsHref(withoutAgent))}
-      />
+      {agentDrawer}
     </main>
   );
 }
