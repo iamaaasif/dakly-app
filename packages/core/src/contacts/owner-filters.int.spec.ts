@@ -114,6 +114,11 @@ describe('contact filters without RLS assistance', () => {
     } as const;
 
     expect(await repository.countMatching(f.b, rules)).toBe(1);
+    expect(await repository.countReachable(f.b, rules)).toEqual({
+      whatsapp: 0,
+      sms: 1,
+      messenger: 0,
+    });
     expect(await repository.listIdsMatching(f.b, rules, { limit: 100 })).toEqual([b!.id]);
     expect(await repository.isMatching(f.b, b!.id, rules)).toBe(true);
     expect(await repository.isMatching(f.b, a!.id, rules)).toBe(false);

@@ -72,7 +72,11 @@ export class SegmentsService {
 
   // Counted live on each call: membership is not stored (feature 03).
   async count(storeId: string, rules: SegmentRules): Promise<SegmentCountResponse> {
-    return { count: await this.contacts.countMatching(storeId, rules) };
+    const [count, reachable] = await Promise.all([
+      this.contacts.countMatching(storeId, rules),
+      this.contacts.countReachable(storeId, rules),
+    ]);
+    return { count, reachable };
   }
 
   // Refuses a segment id that does not exist, without counting its contacts.
