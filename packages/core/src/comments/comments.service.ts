@@ -46,8 +46,6 @@ type ReceiveOutcome =
 
 // Who sends decides which claims apply: the AI agent yields to an automation that claimed the
 // comment, an automation answers its own claim, and staff always may.
-type ReplyBy = { actor: AuditEntry['actor']; scope: 'staff' | 'ai' | 'automation' };
-const staffBy = (userId: string): ReplyBy => ({ actor: { kind: 'user', userId }, scope: 'staff' });
 
 type AutomaticReply = {
   privateBody?: string;
