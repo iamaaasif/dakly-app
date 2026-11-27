@@ -351,3 +351,17 @@ it('offers only top-level comments that await an answer', async () => {
   const reply = await stored(storeId, 'c-nested', { parentExternalCommentId: 'c-claim' });
   expect(await comments.triggerFacts(storeId, reply.id)).toBeUndefined();
 });
+
+it('sends nothing for the AI when an automation claims the comment after the AI checked it', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-race', { text: 'দাম কত' });
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  await comments.replyAutomatically(storeId, comment.id, {
+    privateBody: 'Blue Kurti costs ৳1,200.',
+    publicBody: 'I sent the price in Messenger.',
+    // The AI's check passes, then the automation claims before the send.
+    stillAllowed: async () => comments.claimForAutomation(storeId, comment.id),
+  });
+  expect(sendPrivate).not.toHaveBeenCalled();
+  expect((await comments.list(storeId, { limit: 50 })).items[0]).toMatchObject({ status: 'new' });
+});
