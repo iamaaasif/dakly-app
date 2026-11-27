@@ -62,9 +62,9 @@ function nameCondition(name: string, matchEmailAndArea: boolean | undefined) {
 }
 
 // For queries that left join contact_stats on the contact.
-export function statsConditions(filter: MatchFilter): (SQL | undefined)[] {
+export function statsConditions(storeId: string, filter: MatchFilter): (SQL | undefined)[] {
   return [
-    filter.type ? typeCondition(filter.type) : undefined,
+    filter.type ? typeCondition(filter.type, storeId) : undefined,
     filter.minSpendPoisha === undefined
       ? undefined
       : gte(sql`coalesce(${contactStats.netSpendPoisha}, 0)`, filter.minSpendPoisha),
@@ -78,22 +78,25 @@ export function statsConditions(filter: MatchFilter): (SQL | undefined)[] {
 // Top 10% of customers by net spend, at least one customer, whatever their stage. A customer is
 // anyone the stats count, as in the best customers rule. Nobody qualifies with no spend or no
 // customers.
-export const isHighValue = sql<boolean>`coalesce(${contactStats.netSpendPoisha} > 0 and ${contactStats.netSpendPoisha} >= (
+// The threshold depends only on the store, so it is bound as a parameter and Postgres runs it once.
+export function isHighValue(storeId: string) {
+  return sql<boolean>`coalesce(${contactStats.netSpendPoisha} > 0 and ${contactStats.netSpendPoisha} >= (
   select s.net_spend_poisha
   from contact_stats s join contacts c on c.store_id = s.store_id and c.id = s.contact_id
-  where s.store_id = ${contacts.storeId} and s.lifecycle_stage <> 'none'
+  where s.store_id = ${storeId}::uuid and s.lifecycle_stage <> 'none'
     and c.deleted_at is null and not c.is_blocked and c.kind <> 'not_customer'
   order by s.net_spend_poisha desc
   offset (
     select greatest(count(*) / 10 - 1, 0)
     from contact_stats s2 join contacts c2 on c2.store_id = s2.store_id and c2.id = s2.contact_id
-    where s2.store_id = ${contacts.storeId} and s2.lifecycle_stage <> 'none'
+    where s2.store_id = ${storeId}::uuid and s2.lifecycle_stage <> 'none'
       and c2.deleted_at is null and not c2.is_blocked and c2.kind <> 'not_customer'
   ) limit 1
 ), false)`;
+}
 
-function typeCondition(type: ContactListType) {
-  if (type === 'high_value') return isHighValue;
+function typeCondition(type: ContactListType, storeId: string) {
+  if (type === 'high_value') return isHighValue(storeId);
   return sql`${contactStats.lifecycleStage} in (${sql.join(
     lifecycleStagesByType[type].map((stage) => sql`${stage}`),
     sql`, `,

@@ -79,7 +79,7 @@ export class ContactListRepository {
           netSpendPoisha: sql`coalesce(${contactStats.netSpendPoisha}, 0)`.mapWith(Number),
           lastOrderAt: contactStats.lastOrderAt,
           lifecycleStage: sql<LifecycleStage>`coalesce(${contactStats.lifecycleStage}, 'none')`,
-          isHighValue,
+          isHighValue: isHighValue(storeId),
         })
         .from(contacts)
         .leftJoin(
@@ -89,7 +89,7 @@ export class ContactListRepository {
         .where(
           and(
             ...matchingConditions(storeId, filter),
-            ...statsConditions(filter),
+            ...statsConditions(storeId, filter),
             cursorCondition(storeId, filter.cursor, filter.sort ?? 'newest'),
           ),
         )
@@ -107,7 +107,7 @@ export class ContactListRepository {
           contactStats,
           and(eq(contactStats.storeId, contacts.storeId), eq(contactStats.contactId, contacts.id)),
         )
-        .where(and(...matchingConditions(storeId, filter), ...statsConditions(filter))),
+        .where(and(...matchingConditions(storeId, filter), ...statsConditions(storeId, filter))),
     );
     return row!.count;
   }
@@ -124,7 +124,7 @@ export class ContactListRepository {
           vip: inStage('best'),
           inactive: inStage('stopped_buying'),
           atRisk: inStage('slipping_away'),
-          highValue: sql<number>`(count(*) filter (where ${isHighValue}))::int`,
+          highValue: sql<number>`(count(*) filter (where ${isHighValue(storeId)}))::int`,
           boughtMoreThanOnce: sql<number>`(count(*) filter (where ${contactStats.ordersCount} >= 2))::int`,
           canReceiveMarketing: sql<number>`(count(*) filter (where exists (
             select 1 from ${contactConsentCurrent}

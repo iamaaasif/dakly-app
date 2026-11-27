@@ -50,7 +50,7 @@ export class ContactExportRepository {
         .where(
           and(
             ...matchingConditions(storeId, filter),
-            ...statsConditions(filter),
+            ...statsConditions(storeId, filter),
             cursorCondition(storeId, filter.cursor),
           ),
         )
