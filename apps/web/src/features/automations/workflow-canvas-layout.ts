@@ -254,6 +254,8 @@ export function layoutWorkflow(graph: AutomationGraph): CanvasLayout {
   );
   const edges = links.map(({ from, to, label }, index) => {
     const target = spots.get(to)!;
+    const merging = mergeKeys.has(to);
+    const source = spots.get(from)!;
     return {
       id: `${index}:${from}:${to}`,
       from,
@@ -263,8 +265,11 @@ export function layoutWorkflow(graph: AutomationGraph): CanvasLayout {
       labelX: target.centerX,
       labelY: target.top - ROW_GAP / 4,
       // Where the add button of this line sits: above the label, in the last gap before the target.
-      midX: target.centerX,
-      midY: target.top - (label || mergeKeys.has(to) ? (ROW_GAP * 3) / 4 : ROW_GAP / 2),
+      // Lines that join another path get it under their own card, so each branch has its own.
+      midX: merging ? source.centerX : target.centerX,
+      midY: merging
+        ? source.bottom + ROW_GAP / 3
+        : target.top - (label ? (ROW_GAP * 3) / 4 : ROW_GAP / 2),
     };
   });
   const merges = [...spots]

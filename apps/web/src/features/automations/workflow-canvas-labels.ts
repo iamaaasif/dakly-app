@@ -39,7 +39,7 @@ export function waitParts(wait: WaitStep): [string, string] {
 
 export function actionLabel(action: ActionStep) {
   const labels = {
-    add_tag: 'Add tag',
+    add_tag: 'Tag contact',
     remove_tag: 'Remove tag',
     create_task: 'Create task',
     notify_team: 'Notify team',
