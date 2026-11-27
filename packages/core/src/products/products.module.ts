@@ -17,9 +17,11 @@ import { ProductBulkEditsRepository } from './product-bulk-edits.repository';
 import { ProductBulkEditsService } from './product-bulk-edits.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
+import { ProductDuplicateService } from './product-duplicate.service';
 import { ProductExportController } from './product-export.controller';
 import { ProductExportService } from './product-export.service';
 import { ProductImportService } from './product-import.service';
+import { ProductListService } from './product-list.service';
 import { ProductListsController } from './product-lists.controller';
 import { ProductOptionSuggestionsController } from './product-option-suggestions.controller';
 import { ProductOptionSuggestionsService } from './product-option-suggestions.service';
@@ -75,6 +77,8 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductsRepository,
     ProductOrderVariantsRepository,
     ProductsService,
+    ProductDuplicateService,
+    ProductListService,
     ProductVariantPhotosRepository,
     ProductVariantPhotosService,
     ProductImportService,

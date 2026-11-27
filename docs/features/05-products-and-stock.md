@@ -125,6 +125,8 @@ The Products list starts with **Newest**. **Best selling** counts units ordered 
 
 Members who can edit products have a More actions menu on each desktop row and phone card. Duplicate opens `/products/new` with the source details and a “copy” suffix on the name. The new draft starts hidden with empty stock, photos and product codes. It is saved only when the member chooses a save action. Archive asks for confirmation and removes the product from the catalogue while keeping past orders. An open order that uses one of its variants blocks Archive. The dialog offers to hide an active product from customers while the open orders are finished.
 
+Products list API (DSN-2): `GET /products` also returns `totalCount` (every product that matches the filters, for the "Showing 12 of 2,486" footer) and, on each item, `code` (the SKU of its first variant that has one), `source` (`manual`, `import` or `chat`) and `waitingToConfirmCount` (units on orders in To confirm). Search matches the name or the SKU of any variant. `POST /products/:productId/duplicate` creates the copy described above on the server: hidden, name plus " (copy)", the same price, options, negotiation terms and variant costs, and no stock, photos or SKUs. Archive stays `DELETE /products/:productId`. Nothing sets source `chat` yet; the "Found in chats" badge waits for the task that creates products from chats.
+
 When the catalogue has no products, it says “No products yet” and offers Add product to members who can edit. Add product opens the quick add. Empty search and filter results offer Clear filters.
 
 ### Full page for add and edit (PROD-11)

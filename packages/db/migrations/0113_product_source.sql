@@ -1,0 +1,2 @@
+ALTER TABLE "products" ADD COLUMN "source" text DEFAULT 'manual' NOT NULL;--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_source" CHECK ("products"."source" in ('manual', 'import', 'chat'));

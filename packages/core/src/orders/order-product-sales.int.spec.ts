@@ -80,4 +80,20 @@ describe('product sales for the catalogue', () => {
     expect(await sales.recentUnits(f.a)).toEqual([{ variantId, units: 5 }]);
     expect(await sales.recentUnits(f.b)).toEqual([{ variantId: other, units: 100 }]);
   });
+
+  it('sums units on orders in To confirm per variant, for the variants asked and this shop only', async () => {
+    const variantId = await addProduct(f.a);
+    const untouched = await addProduct(f.a);
+    const other = await addProduct(f.b);
+    await sell(f.a, variantId, 8001, ['2026-11-20T10:00:00Z', 2]);
+    await sell(f.a, variantId, 8002, ['2026-11-21T10:00:00Z', 3]);
+    await sell(f.a, variantId, 8003, ['2026-11-21T11:00:00Z', 9, 'confirmed']);
+    await sell(f.a, variantId, 8004, ['2026-11-21T12:00:00Z', 9, 'cancelled']);
+    await sell(f.b, other, 8005, ['2026-11-21T12:00:00Z', 7]);
+
+    expect(await sales.unitsToConfirm(f.a, [variantId, untouched, other])).toEqual([
+      { variantId, units: 5 },
+    ]);
+    expect(await sales.unitsToConfirm(f.a, [])).toEqual([]);
+  });
 });

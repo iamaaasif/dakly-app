@@ -23,6 +23,8 @@ const page = {
 };
 
 const saved: ProductResponse = {
+  source: 'manual',
+  code: null,
   ...createProductSchema.parse({ name: 'Cotton T-shirt', pricePoisha: 120000 }),
   version: 1,
   id: '019c01ea-cf15-7d31-a7f5-d73d66007ae2',

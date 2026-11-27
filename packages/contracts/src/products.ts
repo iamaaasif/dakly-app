@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const productStatuses = ['active', 'hidden', 'archived'] as const;
+export const productSources = ['manual', 'import', 'chat'] as const;
 export const stockMovementKinds = [
   'reserve',
   'release',
@@ -332,12 +333,16 @@ export type ProductVariantResponse = z.infer<typeof variantSchema> & {
   reserved: number;
   available: number;
 };
+export type ProductSource = (typeof productSources)[number];
 export type ProductResponse = Omit<
   CreateProductInput,
   'variants' | 'negotiationOpeningPoisha' | 'negotiationFloorPoisha'
 > & {
   id: string;
   version: number;
+  source: ProductSource;
+  // The product code: the SKU of its first variant, null when no variant has one.
+  code: string | null;
   negotiationOpeningPoisha?: number | null;
   negotiationFloorPoisha?: number | null;
   // The category's name, with its parent first ("Clothing > T-shirts"), and the brand's name.
@@ -350,7 +355,17 @@ export type ProductResponse = Omit<
   createdAt: string;
   updatedAt: string;
 };
-export type ProductListResponse = { items: ProductResponse[]; nextCursor: string | null };
+export type ProductPage = { items: ProductResponse[]; nextCursor: string | null };
+export type ProductListItem = ProductResponse & {
+  // Units on orders in the To confirm stage.
+  waitingToConfirmCount: number;
+};
+export type ProductListResponse = {
+  items: ProductListItem[];
+  nextCursor: string | null;
+  // All products that match the filters, for the "Showing 12 of 2,486" footer.
+  totalCount: number;
+};
 
 export type StockMovementKind = (typeof stockMovementKinds)[number];
 export const stockAdjustmentSchema = z.strictObject({

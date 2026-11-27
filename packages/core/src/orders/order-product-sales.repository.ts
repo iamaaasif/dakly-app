@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, eq, lte, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, lte, notInArray, sql } from 'drizzle-orm';
 
 import type { OrderStage } from '@dakly/contracts/orders';
 import { orderItems, orders } from '@dakly/db/schema/orders';
@@ -43,6 +43,30 @@ export class OrderProductSalesRepository {
             sql`${orders.createdAt} >= ${since}`,
             lte(orders.createdAt, through),
             notInArray(orders.stage, excluded),
+          ),
+        )
+        .groupBy(orderItems.variantId),
+    );
+  }
+
+  unitsToConfirm(storeId: string, variantIds: string[]) {
+    if (!variantIds.length) return Promise.resolve([]);
+    return this.database.forStore(storeId, (tx) =>
+      tx
+        .select({
+          variantId: orderItems.variantId,
+          units: sql`sum(${orderItems.quantity})`.mapWith(Number),
+        })
+        .from(orders)
+        .innerJoin(
+          orderItems,
+          and(eq(orderItems.storeId, orders.storeId), eq(orderItems.orderId, orders.id)),
+        )
+        .where(
+          and(
+            eq(orders.storeId, storeId),
+            eq(orders.stage, 'to_confirm'),
+            inArray(orderItems.variantId, variantIds),
           ),
         )
         .groupBy(orderItems.variantId),
