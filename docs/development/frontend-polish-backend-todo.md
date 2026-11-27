@@ -33,3 +33,11 @@ The three entries from the auth screens were built in ACC-19 parts 5 and 6: sign
 - Why: A seller can keep the columns they use visible and reclaim space from the others.
 - Expected API: Read and update the visible product column keys. The endpoint and whether preferences belong to a shop or a member need to be defined before implementation.
 - Workaround in the UI: The list shows its standard columns.
+
+### Bulk actions on selected contacts
+
+- Screen: `/customers` and `/contacts`, the bar that shows when rows are ticked.
+- Missing: Add tag, Add to segment, Send campaign and Export selected need an API that takes a list of contact ids.
+- Why: sellers act on a hand-picked group. Add tag must append one tag on the server and skip contacts whose tag list is full, because a PATCH replaces the whole tag list and would drop a tag added since the list loaded.
+- Expected API: `POST /contacts/bulk-tags` with up to 100 contact ids and one tag, appending when missing and emitting `contact.tag_added` for each; ids as a filter for segment, campaign and export.
+- Workaround in the UI: the bar shows the count and Clear.

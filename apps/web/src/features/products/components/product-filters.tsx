@@ -1,8 +1,8 @@
 'use client';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Search } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import { useFormContext, FormProvider, useForm, useWatch, type Control } from 'react-hook-form';
+import { Search, X } from 'lucide-react';
+import { useEffect } from 'react';
+import { useFormContext, FormProvider, useForm, useWatch } from 'react-hook-form';
 
 import {
   productListBaseQuerySchema,
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { categoryOptions, useProductCategories } from '../api/get-categories';
 import { productsSearch } from '../api/products';
 import { readinessLabels } from '../product-labels';
+import { useSearchAsYouType } from '@/lib/use-search-as-you-type';
 import { useUrlRouter } from '@/lib/use-url-query';
 
 const searchSchema = productListBaseQuerySchema.pick({ search: true });
@@ -33,9 +34,15 @@ export function ProductFilters({ query }: ProductFiltersProps) {
   });
   const choose = (change: Partial<ProductListQuery>) =>
     router.push(`/products?${productsSearch({ ...query, ...change, cursor: undefined })}`);
-  useSearchAsYouType(form.control, query, (search) =>
+  const typed = useWatch({ control: form.control, name: 'search' });
+  useSearchAsYouType(typed, query.search, (search) =>
     router.replace(`/products?${productsSearch({ ...query, search, cursor: undefined })}`),
   );
+  // Back and Forward change the address; the box follows it.
+  useEffect(() => {
+    if ((form.getValues('search')?.trim() || undefined) !== query.search)
+      form.reset({ search: query.search });
+  }, [form, query.search]);
   return (
     <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto sm:flex-1">
       <FormProvider {...form}>
@@ -81,27 +88,9 @@ export function ProductFilters({ query }: ProductFiltersProps) {
   );
 }
 
-const searchDelayMs = 300;
-
-// Typing searches after a short pause. The server needs three letters, so shorter text waits.
-function useSearchAsYouType(
-  control: Control<Pick<ProductListQuery, 'search'>>,
-  query: ProductListQuery,
-  apply: (search: string | undefined) => void,
-) {
-  const typed = useWatch({ control, name: 'search' });
-  const latest = useRef({ query, apply });
-  latest.current = { query, apply };
-  useEffect(() => {
-    const search = typed?.trim() || undefined;
-    if (search === latest.current.query.search || (search && search.length < 3)) return;
-    const timer = setTimeout(() => latest.current.apply(search), searchDelayMs);
-    return () => clearTimeout(timer);
-  }, [typed]);
-}
-
 function SearchField() {
   const form = useFormContext<Pick<ProductListQuery, 'search'>>();
+  const typed = useWatch({ control: form.control, name: 'search' });
   return (
     <>
       <Label htmlFor="product-search" className="sr-only">
@@ -118,11 +107,21 @@ function SearchField() {
           id="product-search"
           type="search"
           placeholder="Search name or code"
-          className="pl-9"
+          className="pl-9 [&::-webkit-search-cancel-button]:hidden"
           {...form.register('search', {
             setValueAs: (value: string) => value.trim() || undefined,
           })}
         />
+        {typed ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => form.setValue('search', undefined, { shouldDirty: true })}
+            className="absolute top-0 right-0 flex size-10 items-center justify-center text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-focus"
+          >
+            <X aria-hidden="true" size={16} strokeWidth={1.75} />
+          </button>
+        ) : null}
       </div>
     </>
   );
