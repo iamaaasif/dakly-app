@@ -238,6 +238,8 @@ export const evalChatProducts: ChatProduct[] = evalProducts.map((item) => ({
   id: item.productId,
   name: item.name,
   isStockTracked: true,
+  stockStatus: 'in_stock',
+  allowOrdersWhenOutOfStock: false,
   description: item.description,
   category: item.category,
   photos: item.photos.map(({ photoId, variantId, description, tags }) => ({

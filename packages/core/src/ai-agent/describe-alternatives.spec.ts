@@ -15,6 +15,8 @@ const polo: ChatProduct = {
   id: 'polo',
   name: 'Polo',
   isStockTracked: true,
+  stockStatus: 'in_stock',
+  allowOrdersWhenOutOfStock: false,
   description: null,
   category: 'men',
   variants: [variant('M', 5), variant('L', 0), variant('XL', -2)],
@@ -28,5 +30,30 @@ describe('describeAlternatives', () => {
     };
     expect(result.inStockSizes.map(({ variantId }) => variantId)).toEqual(['M']);
     expect(result.soldOutVariants.map(({ variantId }) => variantId)).toEqual(['L', 'XL']);
+  });
+
+  it('never offers an untracked product the owner marked out of stock, even if orders are allowed', () => {
+    const scarf: ChatProduct = {
+      ...polo,
+      isStockTracked: false,
+      stockStatus: 'out_of_stock',
+      allowOrdersWhenOutOfStock: true,
+      variants: [variant('One size', 0)],
+    };
+    const result = describeAlternatives(scarf, [], () => ({})) as {
+      inStockSizes: unknown[];
+      soldOutVariants: { variantId: string }[];
+    };
+    expect(result.inStockSizes).toEqual([]);
+    expect(result.soldOutVariants.map(({ variantId }) => variantId)).toEqual(['One size']);
+  });
+
+  it('does not offer a tracked product with no stock when orders are allowed', () => {
+    const result = describeAlternatives(
+      { ...polo, allowOrdersWhenOutOfStock: true, variants: [variant('M', 0)] },
+      [],
+      () => ({}),
+    ) as { inStockSizes: unknown[] };
+    expect(result.inStockSizes).toEqual([]);
   });
 });

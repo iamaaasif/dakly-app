@@ -109,6 +109,11 @@ export class ProductOrderVariantsRepository {
             ),
           unitCostPoisha: productVariants.costPoisha,
           isStockTracked: products.isStockTracked,
+          stockStatus: products.stockStatus,
+          allowOrdersWhenOutOfStock: products.allowOrdersWhenOutOfStock,
+          available: sql<number>`${productVariants.onHand} - ${productVariants.reserved}`.mapWith(
+            Number,
+          ),
         })
         .from(productVariants)
         .innerJoin(

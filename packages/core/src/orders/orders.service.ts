@@ -81,6 +81,10 @@ export class OrdersService {
     @Inject(PriceOffersService) private readonly priceOffers: PriceOffersService,
   ) {}
 
+  private get snapshotTools() {
+    return { products: this.products, offers: this.priceOffers, clock: this.clock };
+  }
+
   archiveProduct(storeId: string, productId: string, actor: AuditEntry['actor']): Promise<void> {
     return this.transaction.run(storeId, async () => {
       const variantIds = await this.products.lockArchiveVariants(storeId, productId);
@@ -112,7 +116,7 @@ export class OrdersService {
         storeId,
         input.items,
         { conversationId: placed.offerConversationId, contactId: contact.id },
-        { products: this.products, offers: this.priceOffers, clock: this.clock },
+        { ...this.snapshotTools, isManualOrder: source === 'manual' },
       );
       const totals = orderTotals(items, {
         ...input,
@@ -164,7 +168,13 @@ export class OrdersService {
       const delivery = await this.editedDelivery(storeId, input, order);
       const previous = await this.repository.items(storeId, orderId);
       const items = input.items
-        ? await orderItemSnapshots(storeId, this.products, input.items, previous)
+        ? await orderItemSnapshots({
+            storeId,
+            products: this.products,
+            items: input.items,
+            previous,
+            isManualOrder: order.source === 'manual',
+          })
         : previous;
       const totals = editedOrderTotals(items, order, input, delivery.deliveryChargePoisha);
       const now = this.clock.now();

@@ -661,4 +661,62 @@ describe('Staff order creation', () => {
     );
     expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1, on_hand: 1 });
   });
+
+  async function setProduct(variantId: string, columns: string) {
+    await f.connection.pool.query(
+      `update products set ${columns} where id=(select product_id from product_variants where id=$1)`,
+      [variantId],
+    );
+  }
+
+  it('sells an out-of-stock item on a manual order only when the product allows it', async () => {
+    const variantId = await variant(1);
+    await expect(
+      orders.createOrder(f.a, draft(variantId, { items: [{ variantId, quantity: 3 }] }), editor()),
+    ).rejects.toMatchObject({ code: 'STOCK_NOT_AVAILABLE' });
+
+    await setProduct(variantId, 'allow_orders_when_out_of_stock=true');
+    const order = await orders.createOrder(
+      f.a,
+      draft(variantId, { items: [{ variantId, quantity: 3 }] }),
+      editor(),
+    );
+    expect(order.items).toMatchObject([{ variantId, quantity: 3, isStockTracked: false }]);
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 0, on_hand: 1 });
+  });
+
+  it('still reserves stock when a product that allows out-of-stock orders has enough', async () => {
+    const variantId = await variant(5);
+    await setProduct(variantId, 'allow_orders_when_out_of_stock=true');
+    const order = await orders.createOrder(f.a, draft(variantId), editor());
+    expect(order.items).toMatchObject([{ variantId, isStockTracked: true }]);
+    expect(await f.row('product_variants', variantId)).toMatchObject({ reserved: 1 });
+  });
+
+  it('refuses an out-of-stock item from the order link even when the product allows it', async () => {
+    const variantId = await variant(0);
+    await setProduct(variantId, 'allow_orders_when_out_of_stock=true');
+    await expect(
+      orders.createOrder(f.a, draft(variantId), { ...editor(), source: 'order_link' }),
+    ).rejects.toMatchObject({ code: 'STOCK_NOT_AVAILABLE' });
+  });
+
+  it('follows the stock status of an untracked product', async () => {
+    const variantId = await variant(0);
+    await setProduct(variantId, "is_stock_tracked=false, stock_status='out_of_stock'");
+    await expect(orders.createOrder(f.a, draft(variantId), editor())).rejects.toMatchObject({
+      code: 'ORDER_ITEM_OUT_OF_STOCK',
+    });
+    await expect(
+      orders.createOrder(f.a, draft(variantId), { ...editor(), source: 'order_link' }),
+    ).rejects.toMatchObject({ code: 'ORDER_ITEM_OUT_OF_STOCK' });
+
+    await setProduct(variantId, 'allow_orders_when_out_of_stock=true');
+    await expect(
+      orders.createOrder(f.a, draft(variantId), { ...editor(), source: 'order_link' }),
+    ).rejects.toMatchObject({ code: 'ORDER_ITEM_OUT_OF_STOCK' });
+    expect(await orders.createOrder(f.a, draft(variantId), editor())).toMatchObject({
+      items: [{ variantId }],
+    });
+  });
 });

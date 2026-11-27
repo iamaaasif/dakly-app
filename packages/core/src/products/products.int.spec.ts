@@ -19,7 +19,12 @@ import { ProductBrandsRepository } from './product-brands.repository';
 import { ProductBrandsService } from './product-brands.service';
 import { ProductCategoriesRepository } from './product-categories.repository';
 import { ProductCategoriesService } from './product-categories.service';
+import { ProductCollectionsRepository } from './product-collections.repository';
+import { ProductCollectionsService } from './product-collections.service';
+import { ProductLabelsService } from './product-labels.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
+import { ProductTagsRepository } from './product-tags.repository';
+import { ProductTagsService } from './product-tags.service';
 import { ProductsController } from './products.controller';
 import { ProductsRepository } from './products.repository';
 import { ProductsService } from './products.service';
@@ -45,6 +50,11 @@ describe('ProductsService with Postgres', () => {
     transaction,
   );
   const brands = new ProductBrandsService(new ProductBrandsRepository(tenant), transaction);
+  const tags = new ProductTagsService(new ProductTagsRepository(tenant));
+  const collections = new ProductCollectionsService(
+    new ProductCollectionsRepository(tenant),
+    transaction,
+  );
   const service = new ProductsService(
     repository,
     new ProductOrderVariantsRepository(tenant),
@@ -75,8 +85,7 @@ describe('ProductsService with Postgres', () => {
       }),
     } as StoresService,
     {} as FileStorageDriver,
-    categories,
-    brands,
+    new ProductLabelsService(categories, brands, tags, collections),
     {} as never,
   );
   const ownerRepository = new ProductsRepository(f.tenant);
@@ -86,6 +95,10 @@ describe('ProductsService with Postgres', () => {
   afterAll(async () => {
     for (const table of [
       'outbox_events',
+      'product_tag_links',
+      'product_collection_links',
+      'product_tags',
+      'product_collections',
       'product_variants',
       'products',
       'product_categories',
@@ -693,5 +706,73 @@ describe('ProductsService with Postgres', () => {
     await expect(categories.resolvePath(f.a, 'A > B > C')).rejects.toMatchObject({
       code: 'PRODUCT_CATEGORY_TOO_DEEP',
     });
+  });
+
+  it('saves the editor fields and returns tags and collections', async () => {
+    const collection = await collections.create(f.a, { name: 'Eid collection' });
+    const product = await service.create(
+      f.a,
+      createProductSchema.parse({
+        name: 'Silk scarf',
+        pricePoisha: 45000,
+        shortDescription: 'Soft and light',
+        barcode: '8901234567890',
+        tags: ['Eid', 'eid', 'Gift'],
+        collectionIds: [collection.id],
+        isStockTracked: false,
+        stockStatus: 'out_of_stock',
+        allowOrdersWhenOutOfStock: true,
+        options: [{ name: 'Colour', values: ['Red', 'Blue'], colors: { Red: '#D32F2F' } }],
+        variants: [{ optionValues: { Colour: 'Red' } }, { optionValues: { Colour: 'Blue' } }],
+      }),
+      actor,
+    );
+    expect(product).toMatchObject({
+      shortDescription: 'Soft and light',
+      barcode: '8901234567890',
+      tags: ['Eid', 'Gift'],
+      collections: [{ id: collection.id, name: 'Eid collection' }],
+      stockStatus: 'out_of_stock',
+      allowOrdersWhenOutOfStock: true,
+      options: [{ colors: { Red: '#D32F2F' } }],
+      readiness: expect.arrayContaining(['out_of_stock']),
+    });
+    const changed = await service.edit(
+      f.a,
+      product.id,
+      { tags: ['gift'], collectionIds: [] },
+      actor,
+    );
+    expect(changed).toMatchObject({ tags: ['Gift'], collections: [] });
+    expect((await tags.list(f.a)).items.map(({ name }) => name).sort()).toEqual(['Eid', 'Gift']);
+  });
+
+  it('rejects a collection that belongs to another shop', async () => {
+    const other = await collections.create(f.b, { name: 'Other shop only' });
+    await expect(
+      service.create(
+        f.a,
+        createProductSchema.parse({ name: 'Cap', pricePoisha: 1000, collectionIds: [other.id] }),
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: 'PRODUCT_COLLECTION_NOT_FOUND' });
+  });
+
+  it('keeps a collection name unique per shop and lists product counts', async () => {
+    const created = await collections.create(f.a, { name: 'Winter' });
+    await expect(collections.create(f.a, { name: 'winter' })).rejects.toMatchObject({
+      code: 'PRODUCT_COLLECTION_NAME_TAKEN',
+    });
+    await service.create(
+      f.a,
+      createProductSchema.parse({ name: 'Shawl', pricePoisha: 9000, collectionIds: [created.id] }),
+      actor,
+    );
+    expect((await collections.list(f.a)).items).toContainEqual({
+      id: created.id,
+      name: 'Winter',
+      productCount: 1,
+    });
+    expect((await collections.list(f.b)).items.map(({ id }) => id)).not.toContain(created.id);
   });
 });

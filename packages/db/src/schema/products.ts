@@ -16,6 +16,7 @@ import {
 } from 'drizzle-orm/pg-core';
 
 import type { ProductBulkEditChange } from '@dakly/contracts/product-bulk-edits';
+import { productStockStatuses } from '@dakly/contracts/product-editor-fields';
 import {
   productStatuses,
   restockRequestStatuses,
@@ -86,6 +87,8 @@ export const products = pgTable(
       .references(() => stores.id),
     name: text('name').notNull(),
     description: text('description'),
+    shortDescription: text('short_description'),
+    barcode: text('barcode'),
     categoryId: uuid('category_id'),
     brandId: uuid('brand_id'),
     // Packed parcel weight in grams for courier charges; null means the seller has not set one.
@@ -109,6 +112,10 @@ export const products = pgTable(
     // Up to three option types and their values, for example Size: S, M, L.
     options: jsonb('options').notNull().default([]),
     isStockTracked: boolean('is_stock_tracked').notNull().default(true),
+    // Read only when stock is not tracked.
+    stockStatus: text('stock_status', { enum: productStockStatuses }).notNull().default('in_stock'),
+    // Staff may put the product on a manual order with no stock; chats and the order link never do.
+    allowOrdersWhenOutOfStock: boolean('allow_orders_when_out_of_stock').notNull().default(false),
     isVisibleInChats: boolean('is_visible_in_chats').notNull().default(true),
     isVisibleInOrderLink: boolean('is_visible_in_order_link').notNull().default(true),
     status: text('status', { enum: productStatuses }).notNull().default('active'),
@@ -148,6 +155,15 @@ export const products = pgTable(
       .on(table.storeId, table.externalRef)
       .where(sql`${table.externalRef} is not null`),
     check('products_status', isOneOf(table.status, productStatuses)),
+    check('products_stock_status', isOneOf(table.stockStatus, productStockStatuses)),
+    check(
+      'products_short_description_length',
+      sql`${table.shortDescription} is null or char_length(${table.shortDescription}) <= 300`,
+    ),
+    check(
+      'products_barcode_length',
+      sql`${table.barcode} is null or char_length(${table.barcode}) <= 64`,
+    ),
     check(
       'products_negotiation_price_order',
       sql`${table.negotiationFloorPoisha} <= ${table.negotiationOpeningPoisha}`,

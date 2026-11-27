@@ -3,12 +3,8 @@ import { z } from 'zod';
 import { calendarDate } from './calendar-date';
 import type { returnRiskLevels } from './contacts';
 import { bdMobileSchema } from './phone';
-import {
-  productListBaseQuerySchema,
-  takaInput,
-  type ProductResponse,
-  type ProductVariantResponse,
-} from './products';
+import type { ProductCatalogueHead } from './product-editor-fields';
+import { productListBaseQuerySchema, takaInput, type ProductVariantResponse } from './products';
 import { searchText } from './search-text';
 
 export const orderSources = [
@@ -184,7 +180,7 @@ export const orderCatalogueQuerySchema = productListBaseQuerySchema.pick({
   search: true,
 });
 export type OrderCatalogueQuery = z.infer<typeof orderCatalogueQuerySchema>;
-export type OrderCatalogueProduct = Pick<ProductResponse, 'id' | 'name' | 'isStockTracked'> & {
+export type OrderCatalogueProduct = ProductCatalogueHead & {
   variants: (Pick<
     ProductVariantResponse,
     'id' | 'title' | 'isDefault' | 'pricePoisha' | 'available'

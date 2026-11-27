@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { isInStock } from './product-editor-fields';
 import {
   changeProductSchema,
   createProductSchema,
@@ -141,5 +142,36 @@ describe('product contracts', () => {
     expect(productListQuerySchema.parse({})).toEqual({ limit: 50 });
     expect(productListQuerySchema.safeParse({ limit: 101 }).success).toBe(false);
     expect(productListQuerySchema.safeParse({ readiness: 'popular' }).success).toBe(false);
+  });
+
+  it('keeps tags and collections when a PATCH leaves them out', () => {
+    expect(changeProductSchema.parse({ barcode: '8901234567890' })).toEqual({
+      barcode: '8901234567890',
+    });
+    expect(createProductSchema.parse({ name: 'Scarf' })).toMatchObject({
+      tags: [],
+      collectionIds: [],
+      stockStatus: 'in_stock',
+      allowOrdersWhenOutOfStock: false,
+    });
+  });
+
+  it('accepts a swatch colour only for a listed value', () => {
+    const colours = (colors: Record<string, string>) =>
+      createProductSchema.safeParse({
+        name: 'Scarf',
+        options: [{ name: 'Colour', values: ['Red', 'Blue'], colors }],
+        variants: [{ optionValues: { Colour: 'Red' } }, { optionValues: { Colour: 'Blue' } }],
+      }).success;
+    expect(colours({ Red: '#D32F2F' })).toBe(true);
+    expect(colours({ Green: '#00FF00' })).toBe(false);
+    expect(colours({ Red: 'red' })).toBe(false);
+  });
+
+  it('offers a product to customers by its count when tracked and by its status when not', () => {
+    expect(isInStock({ isStockTracked: true, stockStatus: 'in_stock' }, 0)).toBe(false);
+    expect(isInStock({ isStockTracked: true, stockStatus: 'out_of_stock' }, 2)).toBe(true);
+    expect(isInStock({ isStockTracked: false, stockStatus: 'out_of_stock' }, 9)).toBe(false);
+    expect(isInStock({ isStockTracked: false, stockStatus: 'in_stock' }, 0)).toBe(true);
   });
 });

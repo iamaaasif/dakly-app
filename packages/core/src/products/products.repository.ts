@@ -17,6 +17,7 @@ import { productListRank } from './product-list-rank.repository';
 import {
   photoSnapshot,
   type CatalogueVariant,
+  labelColumns,
   type PhotoRef,
   type Product,
   type Variant,
@@ -33,6 +34,9 @@ const productColumns = {
   version: products.version,
   name: products.name,
   description: products.description,
+  shortDescription: products.shortDescription,
+  barcode: products.barcode,
+  ...labelColumns,
   categoryId: products.categoryId,
   category: categoryPathSql,
   brandId: products.brandId,
@@ -44,6 +48,8 @@ const productColumns = {
   options: sql<ProductOption[]>`${products.options}`,
   imageFileIds: products.imageFileIds,
   isStockTracked: products.isStockTracked,
+  stockStatus: products.stockStatus,
+  allowOrdersWhenOutOfStock: products.allowOrdersWhenOutOfStock,
   isVisibleInChats: products.isVisibleInChats,
   isVisibleInOrderLink: products.isVisibleInOrderLink,
   status: sql<'active' | 'hidden'>`${products.status}`,
@@ -80,7 +86,7 @@ type PhotoWrite = ConfirmProductPhotoInput & {
   createdAt: Date;
 };
 
-type ProductDetails = Omit<CreateProductInput, 'variants'>;
+type ProductDetails = Omit<CreateProductInput, 'variants' | 'tags' | 'collectionIds'>;
 export type { CatalogueVariant, Product, Variant };
 type VariantWrite = Omit<Variant, 'id' | 'productId' | 'onHand' | 'reserved'> & {
   id?: string;
