@@ -290,7 +290,8 @@ export const automationTemplates = {
     },
   },
   // Prices go only in the private reply and come from the catalogue, so the public lines hold no
-  // number, price or link. The private reply is first because Meta allows one per comment.
+  // number, price or link. They also do not say a DM or a price was sent, because the private reply
+  // can be skipped. The private reply is first because Meta allows one per comment.
   comment_to_dm_price: {
     name: 'Comment to DM: price on request',
     description: 'Answer a price comment in the inbox and say so under the post.',
@@ -327,9 +328,9 @@ export const automationTemplates = {
           action: {
             action: 'reply_to_comment',
             lines: [
-              'ইনবক্সে দাম জানিয়ে দিয়েছি',
-              'Inbox e details dilam',
-              'Sent you the details in Messenger',
+              'আপনাকে ইনবক্সে জানাচ্ছি',
+              'Inbox e janacchi',
+              'We will message you',
             ],
           },
           next: 'end',
