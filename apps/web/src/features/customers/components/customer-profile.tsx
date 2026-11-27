@@ -23,6 +23,10 @@ import {
 } from '../customer-labels';
 import { EditCustomerAction } from './customer-actions';
 import { PossibleSamePerson } from './possible-same-person';
+import { ProfileActivity } from './profile-activity';
+import { ProfileCampaigns } from './profile-campaigns';
+import { ProfileMarketing } from './profile-marketing';
+import { ProfileNotes } from './profile-notes';
 import { ProfileOrders } from './profile-orders';
 import { ProfileOverview } from './profile-overview';
 import { RecentMerges } from './recent-merges';
@@ -53,7 +57,7 @@ export function CustomerProfile({ contactId, tab: initialTab = 'overview' }: Cus
           <StatCards summary={summary.data} />
           <PossibleSamePerson contactId={contactId} canEdit={canEdit} />
           <RecentMerges contactId={contactId} canEdit={canEdit} />
-          <ProfileTabs tab={tab} contactId={contactId}>
+          <ProfileTabs tab={tab} contactId={contactId} summary={summary.data}>
             <ProfileOverview summary={summary.data} detail={detail.data} canEdit={canEdit} />
           </ProfileTabs>
         </>
@@ -68,9 +72,16 @@ function SummaryError({ error, onRetry }: { error: Error; onRetry: () => void })
   return <QueryError message={error.message} onRetry={onRetry} retryLabel="Retry customer" />;
 }
 
-type ProfileTabsProps = { tab: ProfileTab; contactId: string; children: React.ReactNode };
+type ProfileTabsProps = {
+  tab: ProfileTab;
+  contactId: string;
+  summary: CustomerSummaryResponse;
+  children: React.ReactNode;
+};
 
-function ProfileTabs({ tab, contactId, children }: ProfileTabsProps) {
+function ProfileTabs({ tab, contactId, summary, children }: ProfileTabsProps) {
+  const { data: context } = useSessionContext();
+  const canEdit = Boolean(context?.currentStore?.canCreateCustomer);
   const panel = 'p-4 md:p-6';
   return (
     <Card className="overflow-hidden p-0">
@@ -90,6 +101,18 @@ function ProfileTabs({ tab, contactId, children }: ProfileTabsProps) {
         </TabsContent>
         <TabsContent value="orders" className={panel}>
           <ProfileOrders contactId={contactId} />
+        </TabsContent>
+        <TabsContent value="activity" className={panel}>
+          <ProfileActivity contactId={contactId} />
+        </TabsContent>
+        <TabsContent value="campaigns" className={panel}>
+          <ProfileCampaigns contactId={contactId} />
+        </TabsContent>
+        <TabsContent value="notes" className={panel}>
+          <ProfileNotes contactId={contactId} canEdit={canEdit} />
+        </TabsContent>
+        <TabsContent value="marketing" className={panel}>
+          <ProfileMarketing contactId={contactId} summary={summary} canEdit={canEdit} />
         </TabsContent>
       </Tabs>
     </Card>

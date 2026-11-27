@@ -182,6 +182,13 @@ export function formatDateWithYear(value: string, timeZone = 'Asia/Dhaka'): stri
   }).format(parseInstant(value));
 }
 
+// "Oct 30" this year, "Jun 8, 2024" before, for timelines that run over many months.
+export function formatDateSmart(value: string, now = Date.now(), timeZone = 'Asia/Dhaka'): string {
+  return calendarDate(parseInstant(value), timeZone).year === calendarDate(now, timeZone).year
+    ? formatShortDate(value, timeZone)
+    : formatDateWithYear(value, timeZone);
+}
+
 // "Nov 26, 2026 at 5:14 AM", the way tables show when something was last edited.
 export function formatDateAtTime(value: string, timeZone = 'Asia/Dhaka'): string {
   const instant = parseInstant(value);

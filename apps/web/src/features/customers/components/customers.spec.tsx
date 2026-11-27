@@ -12,7 +12,10 @@ import type {
   ContactListItemResponse,
   ContactResponse,
 } from '@dakly/contracts/contacts';
-import type { CustomerSummaryResponse } from '@dakly/contracts/customer-profile';
+import type {
+  CustomerSummaryResponse,
+  MarketingPreferenceResponse,
+} from '@dakly/contracts/customer-profile';
 import type { SessionContext } from '@dakly/contracts/sessions';
 import { ToastProvider } from '@dakly/ui/toast';
 
@@ -465,10 +468,22 @@ describe('Customer profile', () => {
     lastPurchaseAt: '2026-11-04T08:00:00Z',
     lifetimeValuePoisha: null,
   };
+  const preferences: MarketingPreferenceResponse[] = [
+    {
+      channel: 'whatsapp',
+      status: 'granted',
+      source: 'checkout',
+      changedAt: null,
+      canSwitch: true,
+    },
+    { channel: 'sms', status: 'not_answered', source: null, changedAt: null, canSwitch: true },
+    { channel: 'email', status: 'granted', source: null, changedAt: null, canSwitch: false },
+  ];
   // The tabs read their own routes; every other path answers as the contact detail.
   function serveProfile(reply: (path: string, method: string) => Reply | Promise<never>) {
     respond((path, method) => {
       if (path.endsWith('/summary')) return { body: summary };
+      if (path.endsWith('/marketing-preferences') && method === 'GET') return { body: preferences };
       return reply(path, method);
     });
   }
@@ -554,6 +569,57 @@ describe('Customer profile', () => {
     expect(within(row).getByText('+2 more')).toBeTruthy();
     expect(within(row).getByText('Delivered')).toBeTruthy();
     expect(within(row).getByText('৳1,607')).toBeTruthy();
+  });
+
+  it('saves a note and shows it at the top with the toast', async () => {
+    serveProfile((path, method) =>
+      path.endsWith('/notes')
+        ? {
+            body:
+              method === 'POST'
+                ? {
+                    id: 'n1',
+                    body: 'Call before delivery',
+                    authorName: 'Jakir',
+                    createdAt: '2026-11-27T08:00:00Z',
+                  }
+                : [],
+          }
+        : { body: detail },
+    );
+    show(<CustomerProfile contactId={contactId} tab="notes" />);
+    const user = userEvent.setup();
+    const save = await screen.findByRole('button', { name: 'Save note' });
+    expect((save as HTMLButtonElement).disabled).toBe(true);
+    await user.type(screen.getByLabelText('New note'), 'Call before delivery');
+    await user.click(save);
+    expect(await screen.findByText('Note saved')).toBeTruthy();
+    expect(screen.getByText(/Jakir · /)).toBeTruthy();
+    expect(sent.find((call) => call.method === 'POST')?.body).toEqual({
+      body: 'Call before delivery',
+    });
+  });
+
+  it('switches SMS on at once and keeps Email read only', async () => {
+    serveProfile((path, method) =>
+      path.includes('/marketing-preferences/sms') && method === 'PUT'
+        ? {
+            body: preferences.map((row) =>
+              row.channel === 'sms' ? { ...row, status: 'granted' } : row,
+            ),
+          }
+        : { body: detail },
+    );
+    show(<CustomerProfile contactId={contactId} tab="marketing" />);
+    const user = userEvent.setup();
+    const sms = await screen.findByRole('switch', { name: 'SMS' });
+    expect(sms.getAttribute('aria-checked')).toBe('false');
+    expect((screen.getByRole('switch', { name: 'Email' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    await user.click(sms);
+    await waitFor(() => expect(sms.getAttribute('aria-checked')).toBe('true'));
+    expect(sent.find((call) => call.method === 'PUT')?.body).toEqual({ subscribed: true });
   });
 
   describe('possible same person', () => {
@@ -765,7 +831,7 @@ describe('Customer profile', () => {
 
   it('offers only a withdrawal on Messenger and asks how the customer answered', async () => {
     serveProfile(() => ({ body: detail }));
-    show(<CustomerProfile contactId={contactId} />);
+    show(<CustomerProfile contactId={contactId} tab="marketing" />);
     const user = userEvent.setup();
     await user.selectOptions(await screen.findByLabelText('Channel'), 'messenger');
     const agreed = screen.getByRole('option', { name: 'Agreed to marketing messages' });
@@ -793,7 +859,7 @@ describe('Customer profile', () => {
           }
         : { body: detail },
     );
-    show(<CustomerProfile contactId={contactId} />);
+    show(<CustomerProfile contactId={contactId} tab="marketing" />);
     const user = userEvent.setup();
     await user.type(await screen.findByLabelText('How they told you'), 'Said yes on a call');
     await user.click(screen.getByRole('button', { name: 'Save answer' }));
