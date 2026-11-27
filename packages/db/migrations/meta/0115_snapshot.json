@@ -1,6 +1,6 @@
 {
-  "id": "7b92ee69-50c2-4839-ba97-6471260e0e7b",
-  "prevId": "ecfcb683-f617-4b78-b616-eee13feb353d",
+  "id": "f659cfdb-4883-494a-8bda-54222edcc550",
+  "prevId": "89d205ce-9372-4c86-a874-068c1dadfa89",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -17783,6 +17783,12 @@
         },
         "note": {
           "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "team_note": {
+          "name": "team_note",
           "type": "text",
           "primaryKey": false,
           "notNull": false

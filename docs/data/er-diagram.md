@@ -1,6 +1,6 @@
 # ER diagram
 
-Built from `packages/db/migrations/meta/0115_snapshot.json`: **113 tables, 1472 columns, 445 explicit indexes and 348 foreign keys**.
+Built from `packages/db/migrations/meta/0115_snapshot.json`: **113 tables, 1473 columns, 445 explicit indexes and 348 foreign keys**.
 
 Regenerate with `node scripts/generate-er-diagram.mjs`; verify with `node scripts/generate-er-diagram.mjs --check`.
 
@@ -1187,6 +1187,7 @@ erDiagram
         smallint attributed_window_days "NULL; smallint"
         uuid possible_duplicate_of_order_id FK "NULL; uuid"
         text note "NULL; text"
+        text team_note "NULL; text"
         text external_ref "NULL; text"
         text idempotency_key "NULL; text"
         timestamp_with_time_zone created_at "NOT NULL; timestamp with time zone"

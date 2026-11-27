@@ -187,3 +187,29 @@ it.each([
   });
   expect(result.error?.issues).toMatchObject([{ path: ['items', 0, 'quantity'], message }]);
 });
+
+describe('order notes', () => {
+  const draft = {
+    buyer: { name: 'Rahim' },
+    recipient: { name: 'Rahim', phone: '01712458903', address: 'Dhanmondi', areaId: 301 },
+    items: [{ variantId: '7f0e6c3a-9b4d-4c52-8a7e-1d2f3a4b5c6d', quantity: 1 }],
+  };
+
+  it('trims both notes and turns empty text into no note', () => {
+    expect(
+      createOrderSchema.parse({ ...draft, note: ' Call first ', teamNote: '   ' }),
+    ).toMatchObject({ note: 'Call first', teamNote: null });
+    expect(createOrderSchema.parse(draft)).not.toHaveProperty('teamNote');
+  });
+
+  it('refuses a note over 500 characters', () => {
+    expect(createOrderSchema.safeParse({ ...draft, teamNote: 'a'.repeat(501) }).success).toBe(
+      false,
+    );
+  });
+
+  it('counts a note alone as a change to the order', () => {
+    expect(editOrderSchema.safeParse({ teamNote: 'Regular buyer' }).success).toBe(true);
+    expect(editOrderSchema.safeParse({}).success).toBe(false);
+  });
+});

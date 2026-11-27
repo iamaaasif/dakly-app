@@ -4427,6 +4427,46 @@ fixture('GET /conversations/counts', async () => {
   });
 });
 
+async function seedInquiry(shop: Shop) {
+  const id = await seedConversation(shop);
+  await f.admin.pool.query("update conversations set intent_tag='price' where id=$1", [id]);
+  return id;
+}
+
+fixture('GET /orders/inquiries', async () => {
+  const { a, b } = await pair();
+  await seedInquiry(a);
+  await seedInquiry(a);
+  const own = await seedInquiry(b);
+  await enableChats(a);
+  await enableChats(b);
+  const result = (await success(b, 'GET', '/orders/inquiries', 200)).json();
+  expect(result.items).toEqual([expect.objectContaining({ conversationId: own })]);
+  expect(result.nextCursor).toBeNull();
+});
+
+fixture('GET /orders/tab-counts', async () => {
+  const { a, b } = await pair();
+  await order(a);
+  await order(a, 1002);
+  await order(b);
+  await seedInquiry(a);
+  await seedInquiry(a);
+  await seedInquiry(b);
+  await enableChats(a);
+  await enableChats(b);
+  expect((await success(b, 'GET', '/orders/tab-counts', 200)).json()).toEqual({
+    inquiries: 1,
+    to_confirm: 1,
+    on_hold: 0,
+    to_pack: 0,
+    with_courier: 0,
+    delivered: 0,
+    pending: 0,
+    returned: 0,
+  });
+});
+
 fixture('GET /conversations/summary', async () => {
   const { a, b } = await pair();
   for (const [shop, replies, orderNumbers] of [

@@ -147,6 +147,8 @@ export class OrdersService {
         ...createdStageWrite(input.confirm, now),
         paymentStatus: input.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
         possibleDuplicateOfOrderId: duplicate,
+        note: input.note ?? null,
+        teamNote: input.teamNote ?? null,
         createdAt: now,
       } satisfies OrderWrite;
       await this.saveNewOrder(storeId, order, items, actor);
@@ -202,6 +204,8 @@ export class OrdersService {
         ...totals,
         possibleDuplicateOfOrderId,
         paymentStatus: totals.advancePaidPoisha > 0 ? 'advance_paid' : 'cod_pending',
+        note: input.note,
+        teamNote: input.teamNote,
         updatedAt: now,
       });
       await recordOrderEdit(
