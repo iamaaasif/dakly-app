@@ -17,6 +17,7 @@ type Props = {
   badge: ReactNode;
   onRename: (name: string) => Promise<boolean>;
   onOpenSettings: () => void;
+  statsItem: ReactNode;
   children: ReactNode;
 };
 
@@ -51,7 +52,14 @@ function RenameForm({
   );
 }
 
-export function WorkflowEditorHeader({ name, badge, onRename, onOpenSettings, children }: Props) {
+export function WorkflowEditorHeader({
+  name,
+  badge,
+  onRename,
+  onOpenSettings,
+  statsItem,
+  children,
+}: Props) {
   const [renaming, setRenaming] = useState(false);
   return (
     <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border bg-surface px-4 py-3 md:h-15 md:flex-nowrap md:py-0">
@@ -86,6 +94,7 @@ export function WorkflowEditorHeader({ name, badge, onRename, onOpenSettings, ch
                   Rename workflow
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={onOpenSettings}>Workflow settings</DropdownMenuItem>
+                {statsItem}
               </DropdownMenuContent>
             </DropdownMenu>
           </>
