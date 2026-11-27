@@ -44,6 +44,7 @@ export function browserRegistration(database, mailpitUrl) {
         'memberships',
         'subscriptions',
         'store_counters',
+        'delivery_zones',
       ])
         await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [stores]);
       await database.pool.query('delete from stores where id=any($1::uuid[])', [stores]);

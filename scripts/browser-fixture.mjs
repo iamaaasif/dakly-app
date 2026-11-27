@@ -101,7 +101,6 @@ export function browserFixture(databaseUrl, mailpitUrl, environment, accessKey) 
               'notifications',
               'memberships',
               'ai_runs',
-              'delivery_zones',
             ])
               await database.pool.query(`delete from ${table} where store_id=any($1::uuid[])`, [
                 storeIds,
