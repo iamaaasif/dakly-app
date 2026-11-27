@@ -199,7 +199,6 @@ describe('Segments screen', () => {
   });
 });
 
-
 const reachable = { whatsapp: 5, sms: 4, messenger: 2 };
 
 // The list and the live count, with a handler for anything else.

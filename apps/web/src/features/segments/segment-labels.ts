@@ -82,7 +82,7 @@ export function newGroup(): SegmentInnerGroup {
   return { match: 'all', conditions: [newCondition('tag')] };
 }
 
-export function countConditions(rules: SegmentRules): number {
+function countConditions(rules: SegmentRules): number {
   return rules.conditions.reduce(
     (total, item) => total + ('match' in item ? item.conditions.length : 1),
     0,
@@ -111,8 +111,3 @@ export function groupLooseConditions(rules: SegmentRules): SegmentRules {
 export function matchText(count: number): string {
   return `${count} ${count === 1 ? 'customer matches' : 'customers match'}`;
 }
-
-export const matchOptions = [
-  ['all', 'All of these'],
-  ['any', 'Any of these'],
-] as const;
