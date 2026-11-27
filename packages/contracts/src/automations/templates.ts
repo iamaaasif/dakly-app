@@ -289,5 +289,120 @@ export const automationTemplates = {
       },
     },
   },
+  // Prices go only in the private reply and come from the catalogue, so the public lines hold no
+  // number, price or link. They also do not say a DM or a price was sent, because the private reply
+  // can be skipped. The private reply is first because Meta allows one per comment.
+  comment_to_dm_price: {
+    name: 'Comment to DM: price on request',
+    description: 'Answer a price comment in the inbox and say so under the post.',
+    libraryGoal: 'convert_subscribers',
+    category: 'welcome',
+    needs: ['channels'],
+    graph: {
+      trigger: {
+        key: 'comment_on_post',
+        filters: [
+          {
+            field: 'keywords',
+            keywords: ['price', 'dam', 'dam koto', 'rate', 'pp', 'দাম', 'দাম কত', 'প্রাইস'],
+          },
+        ],
+      },
+      reEntry: { rule: 'once' },
+      workflowFilters: [],
+      goal: { kind: 'placed_order' },
+      exitConditions: [],
+      firstStepKey: 'private',
+      steps: {
+        private: {
+          kind: 'action',
+          action: {
+            action: 'send_private_reply',
+            text: 'আসসালামু আলাইকুম! আপনার প্রশ্নের জন্য ধন্যবাদ। দাম আর ডিটেইল নিচে দিলাম, অর্ডার করতে চাইলে এখানেই জানান।',
+            includeProduct: true,
+          },
+          next: 'public',
+        },
+        public: {
+          kind: 'action',
+          action: {
+            action: 'reply_to_comment',
+            lines: ['আপনাকে ইনবক্সে জানাচ্ছি', 'Inbox e janacchi', 'We will message you'],
+          },
+          next: 'end',
+        },
+        end,
+      },
+    },
+  },
+  // Messenger and Instagram allow a free-form message for 24 hours after the customer's last one.
+  price_question_in_chat: {
+    name: 'Price question in chat',
+    description: 'Tag shoppers who ask a price and check in if they go quiet.',
+    libraryGoal: 'recover_sales',
+    category: 'abandoned',
+    needs: ['channels'],
+    graph: {
+      trigger: {
+        key: 'message_received',
+        filters: [
+          { field: 'channel', channels: ['messenger', 'instagram'] },
+          { field: 'intent', intents: ['price'] },
+        ],
+      },
+      reEntry: DEFAULT_RE_ENTRY,
+      workflowFilters: [],
+      goal: { kind: 'placed_order' },
+      exitConditions: [{ kind: 'replied' }],
+      firstStepKey: 'tag',
+      steps: {
+        tag: { kind: 'action', action: { action: 'add_tag', tag: 'asked_price' }, next: 'wait' },
+        wait: wait(3 * HOUR, 'follow_up'),
+        follow_up: send(
+          'marketing',
+          ['messenger', 'instagram'],
+          '{first_name}, দামের বিষয়ে আর কিছু জানতে চান? পছন্দ হলে এখানেই অর্ডার করতে পারেন।',
+          'end',
+        ),
+        end,
+      },
+    },
+  },
+  order_intent_follow_up: {
+    name: 'Order intent follow-up',
+    description: 'Tell the team when a shopper wants to order, then check in.',
+    libraryGoal: 'recover_sales',
+    category: 'abandoned',
+    needs: ['channels'],
+    graph: {
+      trigger: {
+        key: 'message_received',
+        filters: [
+          { field: 'channel', channels: ['messenger', 'instagram'] },
+          { field: 'intent', intents: ['order'] },
+        ],
+      },
+      reEntry: DEFAULT_RE_ENTRY,
+      workflowFilters: [],
+      goal: { kind: 'placed_order' },
+      exitConditions: [{ kind: 'replied' }],
+      firstStepKey: 'notify',
+      steps: {
+        notify: {
+          kind: 'action',
+          action: { action: 'notify_team', text: 'A customer wants to order. Check the chat.' },
+          next: 'wait',
+        },
+        wait: wait(HOUR, 'follow_up'),
+        follow_up: send(
+          'marketing',
+          ['messenger', 'instagram'],
+          '{first_name}, অর্ডারটা কনফার্ম করতে নাম, ফোন নম্বর আর ঠিকানা পাঠিয়ে দিন।',
+          'end',
+        ),
+        end,
+      },
+    },
+  },
 } satisfies Record<string, AutomationTemplate>;
 export type TemplateKey = keyof typeof automationTemplates;
