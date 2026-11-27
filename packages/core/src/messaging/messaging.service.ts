@@ -163,6 +163,12 @@ export class MessagingService {
           contactId: identity.contactId,
           channel,
           postback: input.payload,
+          ...(input.payload.startsWith('workflow:') && {
+            identityId: identity.id,
+            tapKey: hashToken(
+              JSON.stringify([connection.id, identity.id, input.sentAt, input.payload]),
+            ).toString('hex'),
+          }),
         },
       });
       return 'stored';

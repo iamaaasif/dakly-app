@@ -118,6 +118,7 @@ const waitSchema = z.discriminatedUnion('until', [
 
 const messageSchema = z.strictObject({
   text: z.string().trim().min(1).max(1024),
+  messengerText: z.string().trim().min(1).max(640).optional(),
   // WhatsApp allows 3 reply buttons of up to 20 characters.
   buttons: z
     .array(z.strictObject({ key: buttonKeySchema, label: z.string().trim().min(1).max(20) }))
@@ -308,7 +309,10 @@ function checkPaths({ firstStepKey, steps }: GraphShape, context: Context) {
 function checkOrderFields({ trigger, steps }: GraphShape, context: Context) {
   if (orderTriggerKeys.includes(trigger.key)) return;
   for (const [key, step] of Object.entries(steps)) {
-    if (step.kind === 'send' && usesOrderFields(step.message.text))
+    if (
+      step.kind === 'send' &&
+      (usesOrderFields(step.message.text) || usesOrderFields(step.message.messengerText ?? ''))
+    )
       addIssue(context, ['steps', key], 'Order fields need a trigger that starts from an order');
   }
 }

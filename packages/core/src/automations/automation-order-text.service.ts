@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { usesOrderFields } from '@dakly/contracts/automations/text';
+import { usesConfirmLink, usesOrderFields } from '@dakly/contracts/automations/text';
 
 import { OrderConfirmationService } from '../orders/order-confirmation.service';
 import { OrderReportingService } from '../orders/order-reporting.service';
@@ -31,8 +31,12 @@ export class AutomationOrderTextService {
     if (!orderId || !order) throw automationError('AUTOMATION_ORDER_MISSING');
     return {
       counted: renderOrderText(text, order, this.confirmations.sampleUrl()),
-      render: async () =>
-        renderOrderText(text, order, await this.confirmations.issueUrl(storeId, orderId)),
+      render: async () => {
+        const link = usesConfirmLink(text)
+          ? await this.confirmations.issueUrl(storeId, orderId)
+          : '';
+        return renderOrderText(text, order, link);
+      },
     };
   }
 }

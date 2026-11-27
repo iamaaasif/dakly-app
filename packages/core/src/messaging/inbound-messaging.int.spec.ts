@@ -616,6 +616,26 @@ it('turns a button tap from a known customer into one event and stores no messag
   expect(messages.rows[0].count).toBe(1);
 });
 
+it('keeps a workflow tap key stable when Meta sends the same tap again', async () => {
+  const storeId = await store();
+  const connectionId = await connection(storeId);
+  const service = app.get(MessagingService);
+  await service.receiveInboundMessage(storeId, inbound(connectionId, 'first'));
+  const pressed = { ...tap(connectionId), payload: `workflow:${randomUUID()}:confirm` };
+  await service.receivePostback(storeId, pressed);
+  await service.receivePostback(storeId, pressed);
+  const { rows } = await admin.pool.query<{ payload: { identityId: string; tapKey: string } }>(
+    "select payload from outbox_events where store_id=$1 and type='message.postback_received'",
+    [storeId],
+  );
+  expect(rows).toHaveLength(2);
+  expect(rows[0]?.payload).toMatchObject({
+    identityId: expect.any(String),
+    tapKey: expect.stringMatching(/^[a-f0-9]{64}$/u),
+  });
+  expect(rows[1]).toEqual(rows[0]);
+});
+
 it('ignores a tap from someone with no chat, another store and a delivery before connecting', async () => {
   const storeId = await store();
   const otherStore = await store();

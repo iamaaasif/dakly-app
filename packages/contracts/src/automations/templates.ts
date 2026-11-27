@@ -40,10 +40,24 @@ function send(
   channels: readonly (typeof campaignChannels)[number][],
   text: string,
   next: string,
-): AutomationStep {
+): Extract<AutomationStep, { kind: 'send' }> {
   const message = { text, buttons: [] };
   const settings = { ifNotReachable: 'skip', reviewBeforeSending: false } as const;
   return { kind: 'send', category, channels: [...channels], message, next, ...settings };
+}
+
+function confirmOrderSend(text: string, messengerText: string, next: string): AutomationStep {
+  return {
+    ...send('transactional', ['messenger', 'sms'], text, next),
+    message: {
+      text,
+      messengerText,
+      buttons: [
+        { key: 'confirm', label: 'Confirm order' },
+        { key: 'cancel', label: 'Cancel order' },
+      ],
+    },
+  };
 }
 
 function wait(minutes: number, next: string): AutomationStep {
@@ -162,10 +176,10 @@ export const automationTemplates = {
     },
   },
   // Runs on every new COD order, and leaves as soon as the order is confirmed or cancelled, so an
-  // order saved as confirmed gets no message. Messenger buttons come with their own task.
+  // order saved as confirmed gets no message.
   cod_order_confirmation: {
     name: 'COD order confirmation',
-    description: 'Ask the customer to confirm or cancel a cash on delivery order with a link.',
+    description: 'Ask the customer to confirm or cancel a cash on delivery order.',
     libraryGoal: 'build_trust',
     category: 'transactional',
     needs: ['orders'],
@@ -180,17 +194,15 @@ export const automationTemplates = {
       exitConditions: [{ kind: 'order_confirmed' }, { kind: 'order_cancelled' }],
       firstStepKey: 'ask',
       steps: {
-        ask: send(
-          'transactional',
-          ['sms'],
+        ask: confirmOrderSend(
           '{first_name}, আপনার অর্ডার #{order_number} ({order_total}) পেয়েছি। নিশ্চিত বা বাতিল করুন: {confirm_link}',
+          'আপনার অর্ডার #{order_number} ({order_total}) পেয়েছি। নিশ্চিত বা বাতিল করতে নিচের বোতাম চাপুন।',
           'wait',
         ),
         wait: wait(6 * HOUR, 'remind'),
-        remind: send(
-          'transactional',
-          ['sms'],
+        remind: confirmOrderSend(
           '{first_name}, অর্ডার #{order_number} এখনো নিশ্চিত হয়নি। নিশ্চিত বা বাতিল করুন: {confirm_link}',
+          'অর্ডার #{order_number} এখনো নিশ্চিত হয়নি। নিশ্চিত বা বাতিল করতে নিচের বোতাম চাপুন।',
           'end',
         ),
         end,

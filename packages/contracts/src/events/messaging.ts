@@ -37,6 +37,11 @@ export const messagePostbackReceivedEventSchema = z.strictObject({
   occurredAt: z.iso.datetime(),
   payload: messagePayloadSchema.omit({ messageId: true }).extend({
     postback: z.string().min(1).max(1000),
+    identityId: z.uuid().optional(),
+    tapKey: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .optional(),
   }),
 });
 
