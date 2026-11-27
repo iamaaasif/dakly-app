@@ -296,6 +296,7 @@ describe('CampaignsService', () => {
   let approvals: CampaignApprovalService;
   // Segment members and the send gate's answer for each contact; a contact with no answer sends.
   let members: Map<string, string[]>;
+  let archivedSegments: Set<string>;
   let decisions: Map<string, SendDecision>;
   let onlyOwnersAndAdminsApprove: boolean;
   let balance: number;
@@ -307,6 +308,7 @@ describe('CampaignsService', () => {
   beforeEach(() => {
     repository = new FakeCampaignsRepository();
     members = new Map();
+    archivedSegments = new Set();
     decisions = new Map();
     onlyOwnersAndAdminsApprove = true;
     balance = 1000;
@@ -329,6 +331,14 @@ describe('CampaignsService', () => {
       contactCount: async (_storeId: string, segmentId: string) =>
         members.get(segmentId)?.length ?? 0,
       assertExists: async () => undefined,
+      assertNotArchived: async (
+        _storeId: string,
+        audience: { includeSegmentIds?: string[]; excludeSegmentIds?: string[] },
+      ) => {
+        const ids = [...(audience.includeSegmentIds ?? []), ...(audience.excludeSegmentIds ?? [])];
+        if (ids.some((segmentId) => archivedSegments.has(segmentId)))
+          throw new AppError('SEGMENT_ARCHIVED', { status: 409, message: 'archived' });
+      },
     };
     const sendPolicy = {
       checkAudience: async (_storeId: string, request: AudienceRequest) =>
@@ -456,6 +466,18 @@ describe('CampaignsService', () => {
     const last = await service.list(STORE_ID, { limit: 2 });
     expect(last.items).toHaveLength(2);
     expect(last.nextCursor).toBeNull();
+  });
+
+  it('refuses an archived segment in a new or changed draft', async () => {
+    archivedSegments.add('old');
+    const campaign = repository.add('draft');
+    await expect(
+      service.changeDraft(STORE_ID, campaign.id, { includeSegmentIds: ['live', 'old'] }, actor),
+    ).rejects.toMatchObject({ code: 'SEGMENT_ARCHIVED' });
+    await expect(
+      service.changeDraft(STORE_ID, campaign.id, { excludeSegmentIds: ['old'] }, actor),
+    ).rejects.toMatchObject({ code: 'SEGMENT_ARCHIVED' });
+    expect(repository.rows.get(campaign.id)?.includeSegmentIds).not.toContain('old');
   });
 
   it('reports a missing campaign as not found when changing it', async () => {

@@ -132,6 +132,7 @@ export class CampaignsService {
   ): Promise<CampaignResponse> {
     const channelConnectionId = input.channel === 'messenger' ? input.channelConnectionId : null;
     if (channelConnectionId) await this.channels.requireFacebookPage(storeId, channelConnectionId);
+    await this.segments.assertNotArchived(storeId, input);
     const campaign = await this.repository.insert(storeId, {
       ...input,
       channelConnectionId,
@@ -148,6 +149,7 @@ export class CampaignsService {
     _actor: Actor,
   ): Promise<CampaignResponse> {
     await this.checkChangeFitsChannel(storeId, campaignId, input);
+    await this.segments.assertNotArchived(storeId, input);
     const campaign = await this.repository.changeDraft(storeId, campaignId, {
       ...input,
       ...(scheduledFor !== undefined && {
