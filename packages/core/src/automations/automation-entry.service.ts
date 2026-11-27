@@ -131,16 +131,7 @@ export class AutomationEntryService {
       productIds,
     };
     const probe = { ...event, payload: { ...facts, contactId: event.payload.commentId } };
-    const matching: string[] = [];
-    for (const { id } of workflows) {
-      const version = await this.repository.lockPublishedVersion(storeId, id);
-      if (
-        version &&
-        new Date(event.occurredAt) >= version.publishedAt &&
-        matchesTrigger(version.graph.trigger, probe)
-      )
-        matching.push(id);
-    }
+    const matching = await this.matchingWorkflows(storeId, workflows, probe);
     if (!matching.length) return;
     const { contactId } = await this.contacts.findOrCreateByIdentity(storeId, {
       connectionId: comment.channelConnectionId,
@@ -150,6 +141,24 @@ export class AutomationEntryService {
     // A workflow that cannot enter this person, or cannot answer them, falls through to the next.
     for (const id of matching)
       if (await this.start(storeId, id, { ...event, payload: { ...facts, contactId } })) return;
+  }
+
+  private async matchingWorkflows(
+    storeId: string,
+    workflows: { id: string }[],
+    event: CommentTriggerEvent,
+  ) {
+    const matching: string[] = [];
+    for (const { id } of workflows) {
+      const version = await this.repository.lockPublishedVersion(storeId, id);
+      if (
+        version &&
+        new Date(event.occurredAt) >= version.publishedAt &&
+        matchesTrigger(version.graph.trigger, event)
+      )
+        matching.push(id);
+    }
+    return matching;
   }
 
   async startMatchingOrder(storeId: string, event: OrderEvent): Promise<void> {
@@ -174,18 +183,9 @@ export class AutomationEntryService {
         if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
         throw error;
       }
-      const version = await this.repository.lockPublishedVersion(storeId, automationId);
-      if (!version || new Date(event.occurredAt) < version.publishedAt) return false;
-      if (!(await this.matchesTrigger(storeId, version.graph.trigger, event))) return false;
-
       const now = this.clock.now();
-      if (
-        await this.isBlockedFromEntry(storeId, { automationId, graph: version.graph, event, now })
-      )
-        return false;
-      // The claim comes last, so a comment that starts no run stays free for the AI agent.
-      if (event.type === 'comment.received' && !(await this.claimComment(storeId, event)))
-        return false;
+      const version = await this.mayEnter(storeId, automationId, event, now);
+      if (!version) return false;
 
       await this.repository.insert(storeId, {
         automationId,
@@ -200,6 +200,17 @@ export class AutomationEntryService {
       });
       return true;
     });
+  }
+
+  private async mayEnter(storeId: string, automationId: string, event: TriggerEvent, now: Date) {
+    const version = await this.repository.lockPublishedVersion(storeId, automationId);
+    if (!version || new Date(event.occurredAt) < version.publishedAt) return;
+    if (!(await this.matchesTrigger(storeId, version.graph.trigger, event))) return;
+    const graph = version.graph;
+    if (await this.isBlockedFromEntry(storeId, { automationId, graph, event, now })) return;
+    // The claim comes last, so a comment that starts no run stays free for the AI agent.
+    if (event.type === 'comment.received' && !(await this.claimComment(storeId, event))) return;
+    return version;
   }
 
   private async claimComment(storeId: string, event: CommentTriggerEvent) {
