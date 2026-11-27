@@ -14,6 +14,10 @@ const PRODUCT_ERRORS = {
     message: 'Upload a photo with the expected type and size before confirming it',
   },
   PRODUCT_PHOTO_ALREADY_ADDED: { status: 409, message: 'This photo was already added' },
+  PRODUCT_MEDIA_PENDING_LIMIT: {
+    status: 429,
+    message: 'Too many photos are waiting to be saved. Save the product or try again later.',
+  },
   PRODUCT_PHOTO_NOT_FOUND: { status: 404, message: 'Photo not found' },
   PRODUCT_PHOTO_ORDER_INVALID: { status: 400, message: 'Include every product photo once' },
   PRODUCT_VARIANT_PHOTO_LIMIT: { status: 409, message: 'A variant can have up to ten photos' },

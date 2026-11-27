@@ -10,7 +10,7 @@ export function useCreateProduct() {
   const client = useQueryClient();
   return useMutation({
     gcTime: 0,
-    mutationFn: (input: CreateProductInput) =>
+    mutationFn: (input: Omit<CreateProductInput, 'imageFileIds'>) =>
       request<ProductResponse>('/products', { method: 'POST', body: input }),
     onSuccess: () => client.invalidateQueries({ queryKey: productsKeys.all }),
   });

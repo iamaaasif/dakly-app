@@ -23,6 +23,9 @@ import { ProductExportService } from './product-export.service';
 import { ProductImportService } from './product-import.service';
 import { ProductListService } from './product-list.service';
 import { ProductListsController } from './product-lists.controller';
+import { ProductMediaController } from './product-media.controller';
+import { ProductMediaRepository } from './product-media.repository';
+import { ProductMediaService } from './product-media.service';
 import { ProductOptionSuggestionsController } from './product-option-suggestions.controller';
 import { ProductOptionSuggestionsService } from './product-option-suggestions.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
@@ -64,6 +67,7 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductListsController,
     ProductOptionSuggestionsController,
     ProductsController,
+    ProductMediaController,
     ProductPhotosController,
     ProductVariantPhotosController,
     StockAdjustmentsController,
@@ -85,6 +89,8 @@ import { StockAdjustmentsController } from './stock-adjustments.controller';
     ProductListService,
     ProductVariantPhotosRepository,
     ProductVariantPhotosService,
+    ProductMediaRepository,
+    ProductMediaService,
     ProductImportService,
     ProductExportService,
     ProductOptionSuggestionsService,

@@ -85,6 +85,7 @@ describe('variant photos with Postgres', () => {
     {} as never,
     {} as never,
     {} as never,
+    { attach: async () => undefined } as never,
   );
   const photos = () =>
     new ProductVariantPhotosService(

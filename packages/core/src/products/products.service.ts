@@ -7,19 +7,19 @@ import type {
   OrderCatalogueQuery,
   OrderCatalogueStock,
 } from '@dakly/contracts/orders';
-import type {
-  CreateProductInput,
-  ChangeProductInput,
-  ProductListQuery,
-  ProductPage,
-  ProductResponse,
-  ProductSource,
-  ProductPhotoUploadInput,
-  ProductPhotoUploadResponse,
-  ConfirmProductPhotoInput,
-  ReorderProductPhotosInput,
+import {
+  MAX_PRODUCT_PHOTOS,
+  type CreateProductInput,
+  type ChangeProductInput,
+  type ProductListQuery,
+  type ProductPage,
+  type ProductResponse,
+  type ProductSource,
+  type ProductPhotoUploadInput,
+  type ProductPhotoUploadResponse,
+  type ConfirmProductPhotoInput,
+  type ReorderProductPhotosInput,
 } from '@dakly/contracts/products';
-import { MAX_PRODUCT_PHOTOS } from '@dakly/contracts/products';
 import type { FileStorageDriver } from '@dakly/providers/file-storage/file-storage-driver';
 
 import { OrderProductSalesService } from '../orders/order-product-sales.service';
@@ -38,6 +38,7 @@ import {
   type ChatProduct,
 } from './product-catalogue-views';
 import { ProductCategoriesService } from './product-categories.service';
+import { ProductMediaService } from './product-media.service';
 import { ProductOrderVariantsRepository } from './product-order-variants.repository';
 import { ProductTagsService } from './product-tags.service';
 import { assertNegotiationTerms, assertProductVersion, productError } from './products.errors';
@@ -63,6 +64,7 @@ export class ProductsService {
     @Inject(ProductBrandsService) private readonly brands: ProductBrandsService,
     @Inject(OrderProductSalesService) private readonly sales: OrderProductSalesService,
     @Inject(ProductTagsService) private readonly tagService: ProductTagsService,
+    @Inject(ProductMediaService) private readonly media: ProductMediaService,
   ) {}
 
   create(
@@ -76,6 +78,7 @@ export class ProductsService {
       assertNegotiationTerms(input);
       await this.assertListsExist(storeId, details);
       const product = await this.repository.insert(storeId, details, source, this.clock.now());
+      await this.media.attach(storeId, product.id, details.imageFileIds);
       await this.saveVariants(storeId, product, variants, []);
       if (tags.length) await this.tagService.setForProduct(storeId, product.id, tags);
       await this.publishUpdated(storeId, product.id);
@@ -420,11 +423,10 @@ export class ProductsService {
   }
 
   private publishUpdated(storeId: string, productId: string) {
-    const occurredAt = this.clock.now().toISOString();
     return this.outbox.publish({
       type: 'product.updated',
       storeId,
-      occurredAt,
+      occurredAt: this.clock.now().toISOString(),
       payload: { productId },
     });
   }
