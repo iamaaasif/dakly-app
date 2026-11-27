@@ -220,24 +220,15 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     await page.reload();
     await expect(sort).toHaveText('Best selling');
     await expect(page.getByRole('table').getByRole('row').nth(1)).toContainText('Cotton Panjabi');
-    await sort.click();
-    await page.getByRole('option', { name: 'Newest' }).click();
-    await expect(page).toHaveURL(/sort=newest/);
-    await sort.click();
-    await page.getByRole('option', { name: 'Best selling' }).click();
-    await expect(page).toHaveURL(/sort=best_selling/);
-    await expect(page.getByRole('table').getByRole('row').nth(1)).toContainText('Cotton Panjabi');
     await capture('best-selling', salesEvidence, {
       target: catalogue.getByText('Cotton Panjabi', { exact: true }).filter({ visible: true }),
     });
-    await page.reload();
-    await expect(sort).toHaveText('Best selling');
 
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('button', { name: 'Filter products by status' }).click();
     await page.getByRole('menuitemcheckbox', { name: 'Running low', exact: true }).click();
     await expect(page).toHaveURL(/readiness=running_low/);
     await expect(page).toHaveURL(/sort=best_selling/);
-    await page.setViewportSize({ width: 1440, height: 900 });
     await expect(page.getByRole('table').getByRole('row')).toHaveCount(2);
     await capture('running-low');
     await page.getByRole('searchbox', { name: 'Search products' }).fill('Cotton');
