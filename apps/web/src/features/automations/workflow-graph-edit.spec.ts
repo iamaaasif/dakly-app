@@ -8,7 +8,13 @@ import {
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 
 import { TRIGGER_KEY } from './workflow-canvas-layout';
-import { appendStep, insertStep, moveStep, removeStep } from './workflow-graph-edit';
+import {
+  appendStep,
+  insertAfterMerge,
+  insertStep,
+  moveStep,
+  removeStep,
+} from './workflow-graph-edit';
 
 const cart: AutomationGraph = automationTemplates.welcome_new_subscriber.graph;
 
@@ -21,6 +27,29 @@ function pathFrom(graph: AutomationGraph) {
 }
 
 describe('editing a workflow graph', () => {
+  it('puts a step after a merge so every path goes through it', () => {
+    const split: AutomationGraph = {
+      ...cart,
+      firstStepKey: 'split',
+      steps: {
+        split: {
+          kind: 'condition',
+          paths: [{ condition: { kind: 'placed_order' }, next: 'tag' }],
+          elseNext: 'wait',
+        },
+        tag: { kind: 'action', action: { action: 'add_tag', tag: 'vip' }, next: 'end' },
+        wait: { kind: 'wait', wait: { until: 'duration', minutes: 60 }, next: 'end' },
+        end: { kind: 'exit' },
+      },
+    };
+    const graph = insertAfterMerge(split, 'end', 'tag');
+    expect(automationGraphSchema.safeParse(graph).success).toBe(true);
+    const added = Object.keys(graph.steps).find((key) => !(key in split.steps))!;
+    expect(nextStepKeys(graph.steps.tag!)).toEqual([added]);
+    expect(nextStepKeys(graph.steps.wait!)).toEqual([added]);
+    expect(nextStepKeys(graph.steps[added]!)).toEqual(['end']);
+  });
+
   it('adds every kind of step on the line after the trigger and stays valid', () => {
     for (const kind of ['sms', 'whatsapp', 'delay', 'tag', 'split'] as const) {
       const graph = insertStep(cart, { parent: TRIGGER_KEY, target: cart.firstStepKey }, kind);

@@ -201,6 +201,8 @@ export const orders = pgTable(
       (): AnyPgColumn => orders.id,
     ),
     note: text('note'),
+    // Internal: shown to staff only and never printed on an invoice or label.
+    teamNote: text('team_note'),
     externalRef: text('external_ref'),
     idempotencyKey: text('idempotency_key'),
     createdAt: createdAt(),

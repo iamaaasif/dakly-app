@@ -19,7 +19,7 @@ import {
   orderLinkSlugSchema,
   placeOrderLinkOrderSchema,
   type PlaceOrderLinkOrderInput,
-} from '@dakly/contracts/orders';
+} from '@dakly/contracts/order-link';
 
 import { AppError } from '../platform/errors/app-error';
 import { AllowShortLinkOrigin, Public } from '../platform/tenancy/access.decorators';

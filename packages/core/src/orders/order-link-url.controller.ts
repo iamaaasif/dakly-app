@@ -1,6 +1,6 @@
 import { Controller, Get, Inject, Param, ParseUUIDPipe } from '@nestjs/common';
 
-import type { OrderLinkUrlResponse } from '@dakly/contracts/orders';
+import type { OrderLinkUrlResponse } from '@dakly/contracts/order-link';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
 import { CurrentStore } from '../platform/tenancy/current-store.decorator';

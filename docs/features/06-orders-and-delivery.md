@@ -414,6 +414,13 @@ Removing a line from an editable order deletes that `order_items` row, adjusts i
 
 `orders` (buyer in `buyer_contact_id`; delivery recipient as a snapshot per D26; `is_recipient_buyer` for D27; manual `courier` and `tracking_code` in release 1; `discount_code_id` when a shop discount code was used), `order_items` (`line_discount_poisha` is the whole discount on the line), `discount_codes` (the shop's own codes from a campaign offer, a workflow step or by hand), `sms_messages` (confirmation and update SMS sent outside a chat, kept 13 months), `store_counters`, `delivery_zones` (district and upazila ids from `bd_areas`), `bd_areas` (global reference data). The stage timeline reads `audit_log` ([ADR 0006](../adr/0006-history-folded-into-parent-rows.md)). Courier tables come with the courier integration in a later release. Full design: [docs/data](../data/README.md).
 
+### Orders tabs, inquiries and notes (DSN-8)
+
+- `GET /orders/tab-counts` returns the tab counts in one call: `inquiries`, `to_confirm`, `on_hold`, `to_pack`, `with_courier`, `delivered` (partly delivered included), `pending` and `returned`. On hold is its own tab; To confirm no longer includes held orders.
+- Pending is an order with `paymentStatus` `advance_requested` that is still To confirm, On hold or To pack. `GET /orders?paymentStatus=advance_requested` lists them.
+- `GET /orders/inquiries` lists chats with buying intent and no order since: an open, snoozed or needs-you chat of a customer whose `hasBuyingInterest` is set or whose intent tag is price, size or stock, order or confirm, with no order from that customer (cancelled ones excluded) made after their last message. Each row has the channel, customer name, New, Repeat or Vip badge (Vip is lifecycle stage Best, as in the customer list), time of the last message, and the product the AI showed last with its price today. It takes `search` (name or phone) and `cursor`. A shop without Chats, or a member without chat access, gets an empty list and a zero count.
+- Orders carry two free-text fields, each up to 500 characters: `note` (for the courier and the buyer) and `teamNote` (internal, never printed). Both are set when the order is created and while it can still be edited.
+
 ### Edge cases to test
 
 - Marking delivered an order that is still `to_pack` is refused.

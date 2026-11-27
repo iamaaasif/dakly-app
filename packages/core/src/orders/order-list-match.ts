@@ -1,4 +1,4 @@
-import type { OrderListQuery } from '@dakly/contracts/orders';
+import { editableOrderStages, type OrderListQuery } from '@dakly/contracts/orders';
 import { bdMobileSchema } from '@dakly/contracts/phone';
 
 import { HOUR_MS } from '../platform/time';
@@ -12,9 +12,18 @@ export function orderListMatch(
   const parsedPhone = bdMobileSchema.safeParse(filters.search);
   return {
     ...filters,
-    stages: stage === undefined ? undefined : stagesForOrderTab(stage),
+    stages: listedStages(stage, filters.paymentStatus),
     phone: seeFullPhone && parsedPhone.success ? parsedPhone.data : undefined,
     overdueBefore: new Date(now.getTime() - 12 * HOUR_MS),
     timeZone,
   };
+}
+
+// Pending lists orders still waiting for the advance, so a cancelled one drops out of it.
+function listedStages(
+  stage: OrderListQuery['stage'],
+  paymentStatus: OrderListQuery['paymentStatus'],
+) {
+  if (stage !== undefined) return stagesForOrderTab(stage);
+  return paymentStatus === 'advance_requested' ? [...editableOrderStages] : undefined;
 }
