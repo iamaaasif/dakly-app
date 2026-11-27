@@ -4837,20 +4837,9 @@ fixture('POST /conversations/:conversationId/replies', async () => {
   await success(b, 'POST', url(own), 400, { body: '   ', operationKey: randomUUID() });
   // The seeded chat has no sender yet, so nobody can be messaged.
   await success(b, 'POST', url(own), 404, reply());
-  const { contact_id: contactId, channel_connection_id: connectionId } = await f.row(
-    'conversations',
-    own,
-  );
-  await f.admin.pool.query(
-    `insert into contact_identities(id,store_id,contact_id,channel_connection_id,channel,external_id)
-     values($1::uuid,$2,$3,$4,'messenger',$1::text)`,
-    [randomUUID(), b.id, contactId, connectionId],
-  );
+  await addSender(b, own);
   await success(b, 'POST', url(own), 409, reply());
-  await f.admin.pool.query(
-    "update conversations set window_expires_at = now() + interval '1 hour' where id = $1",
-    [own],
-  );
+  await openWindow(own);
   const input = reply();
   const sent = await success(b, 'POST', url(own), 201, input);
   expect((await success(b, 'POST', url(own), 201, input)).json()).toEqual(sent.json());
@@ -4865,6 +4854,62 @@ fixture('POST /conversations/:conversationId/replies', async () => {
     (await f.admin.pool.query('select 1 from messages where conversation_id = $1', [foreign]))
       .rowCount,
   ).toBe(0);
+});
+
+async function addSender(shop: Shop, conversationId: string) {
+  const { contact_id: contactId, channel_connection_id: connectionId } = await f.row(
+    'conversations',
+    conversationId,
+  );
+  await f.admin.pool.query(
+    `insert into contact_identities(id,store_id,contact_id,channel_connection_id,channel,external_id)
+     values($1::uuid,$2,$3,$4,'messenger',$1::text)`,
+    [randomUUID(), shop.id, contactId, connectionId],
+  );
+}
+
+async function openWindow(conversationId: string) {
+  await f.admin.pool.query(
+    "update conversations set window_expires_at = now() + interval '1 hour' where id = $1",
+    [conversationId],
+  );
+}
+
+fixture('POST /conversations/:conversationId/products', async () => {
+  const { a, b } = await pair();
+  await enableChats(b);
+  const url = (id: string) => `/conversations/${id}/products`;
+  const foreign = await seedConversation(a);
+  const own = await seedConversation(b);
+  await addSender(b, own);
+  await openWindow(own);
+  const ownProduct = await product(b);
+  const press = (productId: string) => ({ productId, operationKey: randomUUID() });
+  await hidden(b, 'POST', url, foreign, () => press(ownProduct));
+  await hidden(b, 'POST', () => url(own), await product(a), press);
+  const input = press(ownProduct);
+  const sent = await success(b, 'POST', url(own), 201, input);
+  expect((await success(b, 'POST', url(own), 201, input)).json()).toEqual(sent.json());
+  const messages = await f.admin.pool.query(
+    "select author_user_id, status from messages where conversation_id = $1 and direction = 'out'",
+    [own],
+  );
+  expect(messages.rows).toEqual([{ author_user_id: b.owner.id, status: 'queued' }]);
+  expect(
+    (await f.admin.pool.query('select 1 from messages where conversation_id = $1', [foreign]))
+      .rowCount,
+  ).toBe(0);
+});
+
+fixture('GET /order-links/:productId', async () => {
+  const { a, b } = await pair();
+  const url = (id: string) => `/order-links/${id}`;
+  const own = await product(b);
+  await success(b, 'GET', url(own), 404);
+  const slug = `shop-${randomUUID().slice(0, 8)}`;
+  await f.admin.pool.query('update stores set slug = $1 where id = $2', [slug, b.id]);
+  expect((await success(b, 'GET', url(own), 200)).json().url).toMatch(`/o/${slug}/${own}`);
+  await hidden(b, 'GET', url, await product(a));
 });
 
 fixture('POST /conversations/:conversationId/notes', async () => {
