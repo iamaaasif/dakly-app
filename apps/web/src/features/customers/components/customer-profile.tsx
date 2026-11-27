@@ -16,7 +16,7 @@ import { useCustomer } from '../api/customer';
 import { useCustomerSummary } from '../api/customer-profile';
 import {
   customerPhone,
-  lifecycleLabels,
+  customerTypePill,
   parseProfileTab,
   profileTabs,
   type ProfileTab,
@@ -148,9 +148,7 @@ function ProfileHeader({
       <div className="min-w-0 flex-1 basis-48">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-lg font-bold break-words">{name}</h1>
-          <Badge variant="info" className="rounded-full px-2.5">
-            {lifecycleLabels[summary.lifecycleStage]}
-          </Badge>
+          <TypePill summary={summary} />
         </div>
         {line ? <p className="text-sm break-words text-text-muted tabular-nums">{line}</p> : null}
       </div>
@@ -224,5 +222,17 @@ function ProfileSkeleton() {
       </div>
       <Skeleton className="h-64 w-full rounded-lg" />
     </div>
+  );
+}
+
+function TypePill({ summary }: { summary: CustomerSummaryResponse }) {
+  const { label, variant } = customerTypePill({
+    lifecycleStage: summary.lifecycleStage,
+    isHighValue: false,
+  });
+  return (
+    <Badge variant={variant} className="rounded-full px-2.5">
+      {label}
+    </Badge>
   );
 }

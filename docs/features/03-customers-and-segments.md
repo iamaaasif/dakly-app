@@ -113,25 +113,25 @@ with `400 CONSENT_CONTACTS_TOO_MANY`.
 
 The web app has two customer screens.
 
-- All customers (`/customers`) lists the store's contacts, 50 a page, with First page and
-  Next page links. Tabs filter by kind (All, Customer, Lead, Chat only, Not a customer). A
-  search box takes a name or a mobile number and a tag box takes one tag. The kind, search,
-  tag and page live in the URL. A name search under 3 letters shows the API's message on the
-  search field. Rows link to the profile and become cards on a phone. The Columns button, after
-  Search customers, opens a menu of Phone, WhatsApp, Email, Location, Source, Tags and Consent,
-  each a checkbox that stays open while the owner changes several. Customer and Type always
-  show. Phone and WhatsApp are on until the owner changes them; the rest start off, as in the
-  design. The choice is the `columns` value in the address (a comma list; absent means the
-  defaults, empty means none) so it survives a reload and a shared link, and it carries through
-  the tabs, search and paging. WhatsApp shows the WhatsApp number, or the phone when none is
-  set. Location is the district. Consent shows a green tag for each channel the customer
-  agreed to; a customer who agreed to none shows "None". An empty cell says what is missing
-  (No email, No location, No tags). The design also strikes through channels the customer has
-  not agreed to; the screen lists only the agreed ones. Orders, Spent and Last purchase come
-  in CUS-17 part 2, read from `contact_stats`. Members with Edit
-  Customers press Add customers and choose Add manually or Import from an Excel or CSV file. The manual
-  form shows a phone the store already has as an error on the phone field. Scan your khata opens `/customers/khata-scan` (KHT-3, feature 13). Add by voice, Connect your store and Connect your POS are not offered until their tasks ship
-  (CUS-10, release 2 and the store and POS connectors).
+- All customers (`/customers`) lists only the contacts with at least one non-cancelled order (the
+  screen always asks for `hasOrdered`), 50 a page, with First page and Next page links and a
+  footer saying how many of the total are shown. The header counts customers, those who bought
+  more than once and those who can receive marketing messages. Tabs filter by type (All, New,
+  Returning, VIP, Inactive, High-value, At-risk), each with its count. One search box takes a name,
+  email, area or mobile number and runs on Enter. Source, Spending, Time and Sort selects sit
+  beside it, with Export and the Columns button at the end. Everything lives in the URL
+  (`type`, `source`, `minSpendPoisha`, `maxSpendPoisha`, `lastPurchase`, `sort`, `search`,
+  `cursor`, `columns`); sort defaults to last purchase. A name search under 3 letters shows the
+  API's message on the search field. Rows link to the profile, carry a checkbox (the footer
+  counts the rows picked) and become cards on a phone. Customer, Type, Orders, Spent and Last
+  purchase always show; the Columns menu turns Phone, WhatsApp, Email, Location, Source, Tags and
+  Consent on or off, all but Consent on by default, as in the design. The choice is the `columns`
+  value in the address (a comma list; absent means the defaults, empty means none). WhatsApp shows
+  the WhatsApp number, or the phone when none is set. Location is the district. Type is one
+  pill: VIP, else High-value, else the lifecycle stage. An empty cell says what is missing (No
+  email, No location, No tags). There is no Add button here, because a customer comes from an
+  order. The Contacts page (DSN-21) lists everyone and owns Add contact and Import. Scan your
+  khata opens `/customers/khata-scan` (KHT-3, feature 13).
 - The customer profile (`/customers/<contact id>`) has a header (back, avatar, name, a type pill
   from the lifecycle stage, "phone · email · district", Edit and Create campaign), six stat cards
   (Total spending, Orders, Average order value, Last purchase, First purchase, Lifetime value,
@@ -498,7 +498,7 @@ The orders, timeline and campaigns routes take `limit` (up to 50) and the `curso
 
 ### States and edge cases
 
-- Empty store: list shows the Add customers chooser inline.
+- No customer yet: the page shows "You don't have any customer yet" with no tabs or filters.
 - Customer without phone (Instagram-only): shows "No phone yet" and only Instagram as a channel.
 - Import file with Bangla digits (০১৭১২…): converted to Latin digits.
 - Import file with 2 phones in one cell: first is phone, second becomes WhatsApp number if it differs.
@@ -680,8 +680,9 @@ Segments
 4. `ContactsService.countMatching` and `listIdsMatching` compile the tree to a Drizzle `where` in the contacts repository, because contacts owns the table; consent conditions read the `contact_consent_current` view in the same query, a read-only exception listed in [module-boundaries.md](../rules/module-boundaries.md). Every value is a bound parameter. Not a customer and deleted contacts never match.
 5. `SegmentsService.count` counts live on each call, and `POST /segments/preview` returns it; `contactIds` pages through a saved segment's contacts by id. Membership is not stored, so there is no segment joined or left yet; it is frozen into campaign recipients only when a campaign is approved. The 60-second count cache waits until counts are slow.
 6. Saving a segment, new or changed, writes the `segment.saved` event. SEG-R2 (a segment in use cannot be deleted) waits for CAMP-2 and CAMP-5. Ready-made segments (SEG-R1) wait for the order fields from CUS-3, since all eight are built from orders and spend.
-7. The Segments page (`/segments`) lists saved segments 50 to a page with the rule in words and a live count for each, from `POST /segments/preview`. Delete asks first, naming the segment. The Segments link shows only to members whose role can view segments, and Create segment, Edit and Delete only to members who can edit them; an edit link opened by anyone else shows the list.
-8. Create segment and Edit open the builder at `/segments?edit=new` or `/segments?edit=<id>`: a name, all or any at the top, condition rows and groups one level deep with only the fields in point 2, and a live count that asks `POST /segments/preview` 400 ms after the last change, once every row is complete. Saving sends the name and the whole tree. There is no route for one segment, so Edit reads the segment from the list page that linked to it. Reachable counts per channel, the 10-customer preview, duplicate and the AI rules box are not built; no route returns that data yet.
+   6a. Archive (DSN-15): `segments.archived_at` is null for a live segment. `POST /segments/:segmentId/archive` and `POST /segments/:segmentId/unarchive` (`segments.edit`, 200, return the segment) set or clear it; repeating either is harmless and archiving keeps the first archive time. Archiving does not change `updatedAt` (the Last edited column) and an archived segment can still be edited or deleted. `GET /segments` takes `status` (`all` by default, `active`, `archived`) and `search` (part of the name, case-insensitive, `%` and `_` match themselves), and each item now carries `archivedAt` and its live `contactCount`. `GET /segments/counts` (`segments.view`) returns `{ all, active, archived }` for the tabs. A campaign draft cannot include or exclude an archived segment: create and change answer `SEGMENT_ARCHIVED` (409). A campaign that already holds the segment keeps it.
+7. The Segments page (`/segments`, DSN-16) is a table card with the tabs All, Active and Archive, each with its count from `GET /segments/counts`, and a name search. The tab, search and page are in the address (`?status=archived&search=vip&cursor=…`) and read through `useUrlQuery`, so a tab change shows at once and Back works. Rows show the segment name, its contacts ("24 contacts", the list's `contactCount`) and Last edited, with an edit pencil and a menu: View, Create campaign (not for an archived segment), Archive or Restore, Delete. Paging is 12 a page with "Showing 12 of 24"; the empty shop shows "You don't have any segment yet" with Add Segment. The Segments link shows only to members whose role can view segments; Add Segment, the pencil, Archive and Delete only to members who can edit them. A member who cannot edit can still open View, which is the builder with every field locked.
+8. Add Segment, the pencil and View open the builder at `/segments?edit=new`, `?edit=<id>` or `?view=<id>`: a name and groups, each a tinted box "IF contacts match ALL or ANY of these" with its condition rows (field, operator, value, trash) and Remove group, joined by an AND pill (pressing it switches all groups to OR), then Add condition group. A segment saved with loose conditions at the top opens with them in one group that matches the same way, so the saved rules select the same people. The Summary card shows the estimated contacts and, below it, how many can be messaged on WhatsApp, SMS and Messenger (people with granted consent on that channel); both come from `POST /segments/preview` 400 ms after the last change, once every row is complete. Saving sends the name and the whole tree. There is no route for one segment, so Edit and View read the segment from the list page that linked to them. The 10-customer preview, duplicate and the AI rules box are not built. Order and spend fields from the Figma builder wait for CUS-3.
 9. Indexes, measured with 50,000 contacts in one store of a 500,000-row table: every count starts from an index on `store_id` (`contacts_store_id_kind_idx` for kind, otherwise a bitmap scan on a `store_id` index) and filters tag, district and source on those rows; consent reads `consents_contact_channel_idx`. Each condition and an AND/OR mix counted in under 40 ms.
 
 Import: CSV of customers (and POS sales, D6) with a preview, column mapping and a result report. Rows with bad phones are reported, not dropped silently.
