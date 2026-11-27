@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { automationTemplates } from '@dakly/contracts/automations/templates';
+
 import { matchesAnyKeyword } from './message-keywords';
 
 describe('matchesAnyKeyword', () => {
@@ -22,5 +24,23 @@ describe('matchesAnyKeyword', () => {
     ['1+1 offer', ['1+1'], true],
   ])('%s with %j is %s', (text, keywords, expected) => {
     expect(matchesAnyKeyword(text, keywords)).toBe(expected);
+  });
+});
+
+describe('the Comment to DM template keywords', () => {
+  const [filter] = automationTemplates.comment_to_dm_price.graph.trigger.filters;
+  const keywords = filter?.field === 'keywords' ? filter.keywords : [];
+
+  it.each([
+    ['দাম কত', true],
+    ['dam koto bhai', true],
+    ['Price?', true],
+    ['pp', true],
+    ['প্রাইস কত', true],
+    ['😍😍😍', false],
+    ['Adam bhai ke dekhlam', false],
+    ['দারুণ কালেকশন', false],
+  ])('%s is %s', (comment, expected) => {
+    expect(matchesAnyKeyword(comment, keywords)).toBe(expected);
   });
 });

@@ -14,7 +14,7 @@ import { useAutomation, useStepStats, useTriggerPreview } from '../api/automatio
 import { statusLabels } from '../automation-labels';
 import { useCanvasParam } from '../use-canvas-param';
 import { useWorkflowEditor } from '../use-workflow-editor';
-import { type CanvasLayout, layoutWorkflow } from '../workflow-canvas-layout';
+import { type CanvasLayout, layoutWorkflow, TRIGGER_KEY } from '../workflow-canvas-layout';
 import { checkWorkflow, type WorkflowCheck } from '../workflow-checks';
 import type { CanvasEditing } from './workflow-canvas-nodes';
 import { WorkflowCanvasViewport } from './workflow-canvas-viewport';
@@ -26,6 +26,7 @@ import { WorkflowPublishDialog } from './workflow-publish-dialog';
 import { WorkflowSettingsSheet } from './workflow-settings-sheet';
 import { WorkflowStatsMenuItem, WorkflowStatsToggle } from './workflow-stats-toggle';
 import { WorkflowStepPanel } from './workflow-step-panel';
+import { WorkflowTriggerPanel } from './workflow-trigger-panel';
 import { useSessionContext } from '@/lib/session-context';
 
 export function WorkflowCanvas({ id }: { id: string }) {
@@ -131,6 +132,8 @@ function StepPanelHost({
   stepKey: string | null;
   onClose: () => void;
 }) {
+  if (stepKey === TRIGGER_KEY)
+    return <WorkflowTriggerPanel graph={editor.graph} onChange={editor.apply} onClose={onClose} />;
   const step = stepKey ? editor.graph.steps[stepKey] : undefined;
   if (!stepKey || !step || step.kind === 'exit') return null;
   return (
