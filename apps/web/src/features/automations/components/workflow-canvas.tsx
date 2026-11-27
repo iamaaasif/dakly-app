@@ -281,7 +281,11 @@ function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Re
         onOpenSettings={() => setSettingsOpen(true)}
       />
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <WorkflowPalette disabled={!editor.canAdd || editor.pending} onAdd={editor.append} />
+        <WorkflowPalette
+          disabled={!editor.canAdd || editor.pending}
+          canAddKind={editor.canAddKind}
+          onAdd={editor.append}
+        />
         <CanvasMain
           workflow={workflow}
           graph={editor.graph}
