@@ -10,6 +10,7 @@ import { automationTemplates } from '@dakly/contracts/automations/templates';
 import { TRIGGER_KEY } from './workflow-canvas-layout';
 import {
   appendStep,
+  canAddKind,
   insertAfterMerge,
   insertStep,
   moveStep,
@@ -139,4 +140,31 @@ describe('the canvas and the settings form', () => {
       expect(automationGraphSchema.parse(edited)).toEqual(saved);
     },
   );
+
+  describe('comment reply steps', () => {
+    const comment: AutomationGraph = {
+      ...cart,
+      trigger: { key: 'comment_on_post', filters: [] },
+      firstStepKey: 'end',
+      steps: { end: { kind: 'exit' } },
+    };
+
+    it('are offered only in a comment flow, once each', () => {
+      expect(canAddKind(cart, 'public_reply')).toBe(false);
+      expect(canAddKind(comment, 'public_reply')).toBe(true);
+      const withPublic = appendStep(comment, 'public_reply');
+      expect(canAddKind(withPublic, 'public_reply')).toBe(false);
+      expect(canAddKind(withPublic, 'private_reply')).toBe(true);
+    });
+
+    it('put the private reply before the public one whichever is added first', () => {
+      const both = appendStep(appendStep(comment, 'public_reply'), 'private_reply');
+      expect(automationGraphSchema.safeParse(both).success).toBe(true);
+      const kinds = pathFrom(both).length;
+      expect(kinds).toBe(3);
+      expect(both.steps[both.firstStepKey]).toMatchObject({
+        action: { action: 'send_private_reply' },
+      });
+    });
+  });
 });

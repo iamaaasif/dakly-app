@@ -1,15 +1,23 @@
 import { useState } from 'react';
 
-import { type AutomationStep, MAX_WAIT_MINUTES } from '@dakly/contracts/automations/graph';
+import { isChannelSendable } from '@dakly/contracts/automations/catalogue';
+import {
+  type AutomationChannel,
+  automationChannels,
+  type AutomationStep,
+  MAX_WAIT_MINUTES,
+} from '@dakly/contracts/automations/graph';
 import { Button } from '@dakly/ui/button';
+import { Checkbox } from '@dakly/ui/checkbox';
 import { Input } from '@dakly/ui/input';
-import { Label } from '@dakly/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
 import { Sheet } from '@dakly/ui/sheet';
 import { Textarea } from '@dakly/ui/textarea';
 
 import { channelLabels } from '../automation-labels';
 import { delayUnit, delayUnits, type DelayUnit, minutesPerUnit } from '../workflow-library';
+import { Field } from './workflow-panel-field';
+import { PrivateReplyFields, PublicReplyFields } from './workflow-reply-fields';
 
 type Props = {
   step: AutomationStep;
@@ -17,28 +25,6 @@ type Props = {
   onChange: (step: AutomationStep) => void;
   onClose: () => void;
 };
-
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {children}
-      {error && (
-        <p role="alert" className="text-sm text-danger">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
 
 function DelayFields({
   label,
@@ -95,6 +81,40 @@ function DelayFields({
 
 type SendStep = Extract<AutomationStep, { kind: 'send' }>;
 type WaitStep = Extract<AutomationStep, { kind: 'wait' }>;
+
+function ChannelPicker({ step, onChange }: { step: SendStep; onChange: Props['onChange'] }) {
+  // A channel that cannot send yet stays listed only when the step already holds it.
+  const choices = automationChannels.filter(
+    (channel) => isChannelSendable(channel) || step.channels.includes(channel),
+  );
+  function toggle(channel: AutomationChannel) {
+    const channels = step.channels.includes(channel)
+      ? step.channels.filter((item) => item !== channel)
+      : [...step.channels, channel];
+    if (channels.length > 0) onChange({ ...step, channels });
+  }
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Send on</legend>
+      {choices.map((channel) => (
+        <label key={channel} className="flex items-center gap-2">
+          <Checkbox
+            checked={step.channels.includes(channel)}
+            onCheckedChange={() => toggle(channel)}
+            disabled={step.channels.length === 1 && step.channels.includes(channel)}
+          />
+          {channelLabels[channel]}
+        </label>
+      ))}
+      {step.channels.includes('instagram') && (
+        <p className="text-sm text-text-muted">
+          Instagram sends text only, with no reply buttons, and only within 24 hours of the
+          customer’s last message.
+        </p>
+      )}
+    </fieldset>
+  );
+}
 
 function ChannelOrder({ step, onChange }: { step: SendStep; onChange: Props['onChange'] }) {
   if (step.channels.length < 2) return null;
@@ -178,9 +198,7 @@ function SendFields({
   const label = messengerText === undefined ? 'Message' : 'Fallback message';
   return (
     <>
-      <p className="text-sm text-text-muted">
-        Sends on {step.channels.map((channel) => channelLabels[channel]).join(', ')}.
-      </p>
+      <ChannelPicker step={step} onChange={onChange} />
       {messengerText === undefined ? null : (
         <Field
           label="Messenger message"
@@ -213,13 +231,14 @@ function SendFields({
   );
 }
 
-function stepFields({ step, onChange }: Pick<Props, 'step' | 'onChange'>) {
-  if (step.kind === 'send') return <SendFields step={step} onChange={onChange} />;
-  if (step.kind === 'wait') return <WaitFields step={step} onChange={onChange} />;
-  if (
-    step.kind === 'action' &&
-    (step.action.action === 'add_tag' || step.action.action === 'remove_tag')
-  ) {
+function ActionFields({
+  step,
+  onChange,
+}: {
+  step: Extract<AutomationStep, { kind: 'action' }>;
+  onChange: Props['onChange'];
+}) {
+  if (step.action.action === 'add_tag' || step.action.action === 'remove_tag') {
     const { tag, action: kind } = step.action;
     return (
       <Field label="Tag" error={tag.trim() ? undefined : 'Write the tag.'}>
@@ -235,6 +254,27 @@ function stepFields({ step, onChange }: Pick<Props, 'step' | 'onChange'>) {
       </Field>
     );
   }
+  if (step.action.action === 'reply_to_comment')
+    return (
+      <PublicReplyFields
+        action={step.action}
+        onChange={(action) => onChange({ ...step, action })}
+      />
+    );
+  if (step.action.action === 'send_private_reply')
+    return (
+      <PrivateReplyFields
+        action={step.action}
+        onChange={(action) => onChange({ ...step, action })}
+      />
+    );
+  return null;
+}
+
+function stepFields({ step, onChange }: Pick<Props, 'step' | 'onChange'>) {
+  if (step.kind === 'send') return <SendFields step={step} onChange={onChange} />;
+  if (step.kind === 'wait') return <WaitFields step={step} onChange={onChange} />;
+  if (step.kind === 'action') return <ActionFields step={step} onChange={onChange} />;
   return null;
 }
 
