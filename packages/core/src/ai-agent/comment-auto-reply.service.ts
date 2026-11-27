@@ -3,11 +3,6 @@ import { Inject, Injectable } from '@nestjs/common';
 import { BillingService } from '../billing/billing.service';
 import { ChannelConnectionsService } from '../channels/channel-connections.service';
 import { CommentPostProductsService } from '../comments/comment-post-products.service';
-import { CommentsService } from '../comments/comments.service';
-import { KillSwitchesService } from '../kill-switches/kill-switches.service';
-import { ProductsService } from '../products/products.service';
-import { StoresService } from '../stores/stores.service';
-import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 import {
   commentPriceReply,
   type CommentLanguage,
@@ -15,6 +10,11 @@ import {
   replyLanguageFor,
   publicPriceAcknowledgement,
 } from '../comments/comment-price-reply';
+import { CommentsService } from '../comments/comments.service';
+import { KillSwitchesService } from '../kill-switches/kill-switches.service';
+import { ProductsService } from '../products/products.service';
+import { StoresService } from '../stores/stores.service';
+import { AiAgentSettingsRepository } from './ai-agent-settings.repository';
 
 @Injectable()
 export class CommentAutoReplyService {

@@ -289,6 +289,19 @@ export function randomPath(
   return { outcome: `path_${index + 1}`, next: paths[index]!.next };
 }
 
+export function runRandomSplit(
+  runId: string,
+  stepKey: string,
+  step: Extract<AutomationStep, { kind: 'random_split' }>,
+  now: Date,
+): StepResult {
+  const choice = randomPath(runId, stepKey, step.paths);
+  return {
+    ...goOn(choice.next, now),
+    step: { stepKey, kind: 'random_split', outcome: choice.outcome },
+  };
+}
+
 export function isLateSend(wakeAt: Date | null, now: Date): boolean {
   return wakeAt !== null && now.getTime() - wakeAt.getTime() > DAY_MS;
 }

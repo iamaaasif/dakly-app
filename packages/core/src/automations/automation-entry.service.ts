@@ -131,25 +131,34 @@ export class AutomationEntryService {
       productIds,
     };
     const probe = { ...event, payload: { ...facts, contactId: event.payload.commentId } };
-    let first: string | undefined;
-    for (const { id } of workflows) {
-      const version = await this.repository.lockPublishedVersion(storeId, id);
-      if (
-        version &&
-        new Date(event.occurredAt) >= version.publishedAt &&
-        matchesTrigger(version.graph.trigger, probe)
-      ) {
-        first = id;
-        break;
-      }
-    }
-    if (!first || !(await this.comments.claimForAutomation(storeId, comment.commentId))) return;
+    const matching = await this.matchingWorkflows(storeId, workflows, probe);
+    if (!matching.length) return;
     const { contactId } = await this.contacts.findOrCreateByIdentity(storeId, {
       connectionId: comment.channelConnectionId,
       externalId: comment.authorExternalId,
       channel: comment.channel,
     });
-    await this.start(storeId, first, { ...event, payload: { ...facts, contactId } });
+    // A workflow that cannot enter this person, or cannot answer them, falls through to the next.
+    for (const id of matching)
+      if (await this.start(storeId, id, { ...event, payload: { ...facts, contactId } })) return;
+  }
+
+  private async matchingWorkflows(
+    storeId: string,
+    workflows: { id: string }[],
+    event: CommentTriggerEvent,
+  ) {
+    const matching: string[] = [];
+    for (const { id } of workflows) {
+      const version = await this.repository.lockPublishedVersion(storeId, id);
+      if (
+        version &&
+        new Date(event.occurredAt) >= version.publishedAt &&
+        matchesTrigger(version.graph.trigger, event)
+      )
+        matching.push(id);
+    }
+    return matching;
   }
 
   async startMatchingOrder(storeId: string, event: OrderEvent): Promise<void> {
@@ -165,24 +174,18 @@ export class AutomationEntryService {
     );
   }
 
-  async start(storeId: string, automationId: string, event: TriggerEvent): Promise<void> {
+  async start(storeId: string, automationId: string, event: TriggerEvent): Promise<boolean> {
     const { contactId } = event.payload;
-    await this.transaction.run(storeId, async () => {
+    return this.transaction.run(storeId, async () => {
       try {
         await this.contacts.lockForConsent(storeId, [contactId]);
       } catch (error) {
-        if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return;
+        if (error instanceof AppError && error.code === 'CONTACT_NOT_FOUND') return false;
         throw error;
       }
-      const version = await this.repository.lockPublishedVersion(storeId, automationId);
-      if (!version || new Date(event.occurredAt) < version.publishedAt) return;
-      if (!(await this.matchesTrigger(storeId, version.graph.trigger, event))) return;
-
       const now = this.clock.now();
-      if (
-        await this.isBlockedFromEntry(storeId, { automationId, graph: version.graph, event, now })
-      )
-        return;
+      const version = await this.mayEnter(storeId, automationId, event, now);
+      if (!version) return false;
 
       await this.repository.insert(storeId, {
         automationId,
@@ -195,7 +198,27 @@ export class AutomationEntryService {
         enteredAt: now,
         wakeAt: now,
       });
+      return true;
     });
+  }
+
+  private async mayEnter(storeId: string, automationId: string, event: TriggerEvent, now: Date) {
+    const version = await this.repository.lockPublishedVersion(storeId, automationId);
+    if (!version || new Date(event.occurredAt) < version.publishedAt) return;
+    if (!(await this.matchesTrigger(storeId, version.graph.trigger, event))) return;
+    const graph = version.graph;
+    if (await this.isBlockedFromEntry(storeId, { automationId, graph, event, now })) return;
+    // The claim comes last, so a comment that starts no run stays free for the AI agent.
+    if (event.type === 'comment.received' && !(await this.claimComment(storeId, event))) return;
+    return version;
+  }
+
+  private async claimComment(storeId: string, event: CommentTriggerEvent) {
+    const { commentId } = event.payload;
+    return (
+      (await this.comments.canAnswerAutomatically(storeId, commentId)) &&
+      (await this.comments.claimForAutomation(storeId, commentId))
+    );
   }
 
   // A comment's rule is one entry per person per post, so the re-entry setting does not apply.

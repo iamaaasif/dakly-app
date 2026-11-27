@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { CommentAutomationRepliesService } from '../comments/comment-automation-replies.service';
 import { AppError } from '../platform/errors/app-error';
-import { AutomationCommentStepsService, pickLine } from './automation-comment-steps.service';
+import { AutomationActionsService, pickLine } from './automation-actions.service';
 import type { RunFacts } from './automation-step-rules';
 
 const now = new Date('2026-11-27T10:00:00.000Z');
@@ -10,7 +10,7 @@ const lines = ['ইনবক্সে দাম জানিয়ে দিয�
 const facts = { storeId: 's', runId: 'run-1', commentId: 'c-1' } as RunFacts;
 
 function service(replies: Partial<CommentAutomationRepliesService>) {
-  return new AutomationCommentStepsService(replies as CommentAutomationRepliesService);
+  return new AutomationActionsService(replies as CommentAutomationRepliesService);
 }
 const publicStep = (next = 'end') =>
   ({ kind: 'action', action: { action: 'reply_to_comment', lines }, next }) as const;

@@ -26,6 +26,7 @@ const now = new Date('2026-11-27T10:00:00.000Z');
 const productId = randomUUID();
 const otherProductId = randomUUID();
 const claimed = new Set<string>();
+let isReachable = true;
 const spoken = new Map<string, { text: string; author: string; postId: string }>();
 const finished = {
   kind: 'exit' as const,
@@ -132,8 +133,8 @@ describe('comment_on_post entry (Postgres)', () => {
                 classification: null,
               };
             },
-            claimForAutomation: async (_store: string, id: string) =>
-              !claimed.has(id) && !!claimed.add(id),
+            canAnswerAutomatically: async () => isReachable,
+            claimForAutomation: async (_store: string, id: string) => !!claimed.add(id),
           },
         },
         {
@@ -221,10 +222,27 @@ describe('comment_on_post entry (Postgres)', () => {
   it('gives one person one entry per post, however often they comment', async () => {
     const id = await workflow([]);
     const author = `psid-${randomUUID()}`;
-    for (let i = 0; i < 3; i++) await comment('দাম কত', author, 'post-1');
+    const first = await comment('দাম কত', author, 'post-1');
+    const repeats = [
+      await comment('dam koto', author, 'post-1'),
+      await comment('price?', author, 'post-1'),
+    ];
     expect(await runsOf(id)).toHaveLength(1);
+    // A repeat starts no run, so it is not claimed and the AI agent may still answer it.
+    expect(claimed.has(first)).toBe(true);
+    expect(repeats.some((repeat) => claimed.has(repeat))).toBe(false);
     await comment('দাম কত', author, 'post-2');
     expect(await runsOf(id)).toHaveLength(2);
+    await clean();
+  });
+
+  it('leaves a comment to the AI when the commenter cannot be messaged', async () => {
+    const id = await workflow([]);
+    isReachable = false;
+    const commentId = await comment('dam koto', `psid-${randomUUID()}`);
+    isReachable = true;
+    expect(await runsOf(id)).toEqual([]);
+    expect(claimed.has(commentId)).toBe(false);
     await clean();
   });
 

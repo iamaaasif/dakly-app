@@ -394,9 +394,10 @@ function isReachable(steps: GraphShape['steps'], from: string, to: string): bool
   const seen = new Set<string>();
   const queue = [from];
   for (let key = queue.pop(); key !== undefined; key = queue.pop()) {
-    if (seen.has(key) || !steps[key]) continue;
+    const step = steps[key];
+    if (seen.has(key) || !step) continue;
     seen.add(key);
-    for (const next of nextStepKeys(steps[key])) {
+    for (const next of nextStepKeys(step)) {
       if (next === to) return true;
       queue.push(next);
     }

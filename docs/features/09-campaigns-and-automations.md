@@ -598,14 +598,18 @@ Shipped means staff moved the order to With courier (D21). Lifecycle stages come
 
 Order triggers (ORD-4): `order.created` starts `order_placed`, and `order.stage_changed` starts `order_shipped` (to With courier), `order_delivered`, `order_cancelled` or `order_returned`. The subscriber reads the buyer and the filter facts (order total, products, payment status, delivery area, first order) from Orders when it runs, so an order with no buyer contact starts nothing. A first order ignores cancelled earlier orders. Payment, order link, lifecycle and the date-based order triggers are still to come.
 
-| Action           | Settings                                                        | Needs           | Ready before |
-| ---------------- | --------------------------------------------------------------- | --------------- | ------------ |
-| `add_tag`        | tag                                                             |                 | Channels     |
-| `remove_tag`     | tag                                                             |                 | Channels     |
-| `create_task`    | title                                                           |                 | Channels     |
-| `notify_team`    | text                                                            |                 | Channels     |
-| `hand_to_person` | none                                                            | Chats extension | Orders       |
-| `give_coupon`    | percent, amount in poisha or free delivery; valid for 1–90 days | Orders          |              |
+| Action               | Settings                                                        | Needs           | Ready before |
+| -------------------- | --------------------------------------------------------------- | --------------- | ------------ |
+| `add_tag`            | tag                                                             |                 | Channels     |
+| `remove_tag`         | tag                                                             |                 | Channels     |
+| `create_task`        | title                                                           |                 | Channels     |
+| `notify_team`        | text                                                            |                 | Channels     |
+| `hand_to_person`     | none                                                            | Chats extension | Orders       |
+| `give_coupon`        | percent, amount in poisha or free delivery; valid for 1–90 days | Orders          |              |
+| `reply_to_comment`   | 2 to 5 public wordings                                          | Chats extension | Orders       |
+| `send_private_reply` | message, product card on or off                                 | Chats extension | Orders       |
+
+Comment steps (CAMP-21) work only in a `comment_on_post` workflow, at most one of each, and the private reply must come before the public one on every path (Meta allows one private reply per comment, within 7 days). `reply_to_comment` posts one of 2 to 5 owner-written wordings; the run id picks the wording, so a retry repeats it and different people get different ones. The graph schema refuses a wording with a digit, a currency word or symbol, or a link, because a public reply never holds a price, phone number or address; the runner checks again before posting. `send_private_reply` sends the owner's text, and with the product card on it adds the product's name and price from the catalogue, only when the post shows one product that is in stock at one price; otherwise it sends the text alone, never a guessed price. The text itself may not name a price. A reply another reply already won, or one past Meta's window, is recorded as `skipped` and the run goes on; a reply Meta refused or did not confirm ends the run as failed and is never sent again. The run log outcomes are `replied_publicly`, `sent_dm` and `skipped`.
 
 Templates are in [`automations/templates.ts`](../../packages/contracts/src/automations/templates.ts). This catalogue holds the templates that run before Orders; each has a trigger, steps, goal, category and prerequisites. Templates that need Orders, store sync or the tracking script are added with their source ([plan](../plans/campaigns-and-automations.md#waiting-on-other-work)). Categories are the library types: transactional, abandoned, welcome, post-purchase, win back and special occasion; AUTO-R2 ranks transactional, then abandoned, then welcome, then the rest. Re-entry defaults to once every 30 days; welcome runs once ever and back in stock every time.
 

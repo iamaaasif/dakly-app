@@ -12,7 +12,7 @@ import { StoreTransaction } from '../platform/database/store-transaction';
 import { SendPolicyService } from '../sending/send-policy.service';
 import { StoresService } from '../stores/stores.service';
 import { WalletService } from '../wallets/wallet.service';
-import { AutomationCommentStepsService } from './automation-comment-steps.service';
+import { AutomationActionsService } from './automation-actions.service';
 import { AutomationConditionsService } from './automation-conditions.service';
 import { AutomationMessengerSendService } from './automation-messenger-send.service';
 import { AutomationOrderTextService } from './automation-order-text.service';
@@ -42,8 +42,7 @@ import {
   holdsClaim,
   isLateSend,
   messageBody,
-  randomPath,
-  runAction,
+  runRandomSplit,
   scheduleWait,
   sendLateness,
   shouldPrepareSender,
@@ -80,10 +79,9 @@ export class AutomationRunsService {
     @Inject(AutomationSendRetryService) private readonly smsRetry: AutomationSendRetryService,
     @Inject(AutomationMessengerSendService)
     private readonly messengerSend: AutomationMessengerSendService,
-    @Inject(AutomationCommentStepsService)
-    private readonly commentSteps: AutomationCommentStepsService,
     @Inject(AutomationConditionsService) private readonly conditions: AutomationConditionsService,
     @Inject(AutomationsService) private readonly automations: AutomationsService,
+    @Inject(AutomationActionsService) private readonly actions: AutomationActionsService,
   ) {}
 
   attributionSources(storeId: string, contactId: string, ids: string[]) {
@@ -193,23 +191,15 @@ export class AutomationRunsService {
           step: { stepKey, kind: 'condition', outcome: choice.outcome },
         };
       }
-      case 'random_split': {
-        const choice = randomPath(claim.runId, stepKey, step.paths);
-        return {
-          ...goOn(choice.next, now),
-          step: { stepKey, kind: 'random_split', outcome: choice.outcome },
-        };
-      }
+      case 'random_split':
+        return runRandomSplit(claim.runId, stepKey, step, now);
       case 'send':
         // Versions published before the guard still fail instead of sending without review.
         if (step.reviewBeforeSending)
           return failed('Review before sending is not available yet', now);
         return this.startSend(claim, step, facts);
       case 'action':
-        return step.action.action === 'reply_to_comment' ||
-          step.action.action === 'send_private_reply'
-          ? this.commentSteps.run(stepKey, step, facts, now)
-          : runAction(stepKey, step, now);
+        return this.actions.run(stepKey, step, facts, now);
       case 'exit':
         return {
           run: { status: 'done', finishedAt: now },

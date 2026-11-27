@@ -5,7 +5,7 @@ import type { AutomationStep } from '@dakly/contracts/automations/graph';
 
 import { CommentAutomationRepliesService } from '../comments/comment-automation-replies.service';
 import { AppError } from '../platform/errors/app-error';
-import { failed, goOn, type RunFacts, type StepResult } from './automation-step-rules';
+import { failed, goOn, runAction, type RunFacts, type StepResult } from './automation-step-rules';
 
 type ActionStep = Extract<AutomationStep, { kind: 'action' }>;
 
@@ -18,26 +18,39 @@ export function pickLine(lines: string[], runId: string) {
 
 // A reply Meta refused, or whose outcome is unknown, ends the run: an unknown reply may be on the
 // post already, so it is never sent again.
+const SENT = { reply_to_comment: 'replied_publicly', send_private_reply: 'sent_dm' } as const;
+
 const endingErrors = ['COMMENT_REJECTED', 'COMMENT_UNCONFIRMED'];
 
 @Injectable()
-export class AutomationCommentStepsService {
+export class AutomationActionsService {
   constructor(
     @Inject(CommentAutomationRepliesService)
     private readonly replies: CommentAutomationRepliesService,
   ) {}
 
-  async run(stepKey: string, { action, next }: ActionStep, facts: RunFacts, now: Date) {
+  // Tags are written with the step; the comment replies call Meta, so they run here.
+  async run(stepKey: string, step: ActionStep, facts: RunFacts, now: Date) {
+    const { action } = step.action;
+    return action === 'reply_to_comment' || action === 'send_private_reply'
+      ? this.answerComment(stepKey, step, facts, now)
+      : runAction(stepKey, step, now);
+  }
+
+  private async answerComment(
+    stepKey: string,
+    { action, next }: ActionStep,
+    facts: RunFacts,
+    now: Date,
+  ) {
     const { storeId, commentId } = facts;
     if (!commentId) return failed('This step needs a comment', now);
     try {
       const outcome = await this.send(storeId, commentId, action, facts.runId);
       if (typeof outcome === 'object') return failed(outcome.problem, now);
       const done =
-        outcome === 'sent'
-          ? action.action === 'reply_to_comment'
-            ? 'replied_publicly'
-            : 'sent_dm'
+        outcome === 'sent' && action.action in SENT
+          ? SENT[action.action as keyof typeof SENT]
           : 'skipped';
       return {
         ...goOn(next, now),

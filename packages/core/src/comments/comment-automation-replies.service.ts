@@ -1,14 +1,14 @@
 import { Inject, Injectable } from '@nestjs/common';
 
-import { ProductsService } from '../products/products.service';
 import { AppError } from '../platform/errors/app-error';
-import { commentLanguage, commentPriceReply } from './comment-price-reply';
+import { ProductsService } from '../products/products.service';
 import { CommentPostProductsService } from './comment-post-products.service';
-import { automaticReplySkips } from './comment-rows';
+import { commentLanguage, commentPriceReply } from './comment-price-reply';
+import { automaticReplySkips, type ReplyBy } from './comment-rows';
 import { CommentsService } from './comments.service';
 
 type Outcome = 'sent' | 'skipped';
-const system = { kind: 'system' } as const;
+const by: ReplyBy = { actor: { kind: 'system' }, scope: 'automation' };
 
 @Injectable()
 export class CommentAutomationRepliesService {
@@ -19,7 +19,7 @@ export class CommentAutomationRepliesService {
   ) {}
 
   replyPublicly(storeId: string, commentId: string, body: string) {
-    return this.settle(() => this.comments.sendPublicReply(storeId, system, commentId, body));
+    return this.settle(() => this.comments.sendPublicReply(storeId, by, commentId, body));
   }
 
   async replyPrivately(
@@ -30,7 +30,7 @@ export class CommentAutomationRepliesService {
     const comment = await this.comments.triggerFacts(storeId, commentId);
     if (!comment) return 'skipped';
     const body = includeProduct ? await this.withProduct(storeId, comment, text) : text;
-    return this.settle(() => this.comments.sendPrivateReply(storeId, system, commentId, body));
+    return this.settle(() => this.comments.sendPrivateReply(storeId, by, commentId, body));
   }
 
   // The price comes from the catalogue and only when the post shows one product that can be sold
