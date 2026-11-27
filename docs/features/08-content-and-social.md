@@ -175,6 +175,10 @@ The posts API saves, reads, edits and deletes drafts. Each target names a connec
 Facebook Page or Instagram account in the store. Drafts belong to their creator.
 Owners and Admins can read team drafts. Editing an AI-written draft keeps its
 approval requirement. Reusing a create key returns the creator's saved draft.
+Duplicating a post you can read, even a scheduled or published one, creates a new
+private draft of yours with the same caption, photos, link, first comment and
+accounts with their captions. It keeps the AI-written flag, so approval is needed
+again, and it has no time.
 
 Owners, Admins and Marketers can approve an AI-written draft. Scheduling it can
 also record their approval. Editing the draft clears an earlier approval.
