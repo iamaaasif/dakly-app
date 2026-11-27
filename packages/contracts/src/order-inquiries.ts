@@ -17,7 +17,7 @@ export type OrderInquiry = {
   contactId: string;
   contactName: string | null;
   channel: (typeof chatChannels)[number];
-  // New: no earlier order. Repeat: has one. Vip: carries the vip tag.
+  // New: no earlier order. Repeat: has one. Vip: lifecycle stage Best, the same as the customer list.
   customerKind: 'new' | 'repeat' | 'vip';
   lastMessageAt: string | null;
   // The product the AI showed last in this chat; null when none was shown or it is gone.

@@ -45,7 +45,7 @@ describe('order inquiries', () => {
       intent?: string | null;
       interest?: boolean;
       kind?: string;
-      tags?: string[];
+      vip?: boolean;
       minutes: number;
     },
   ) {
@@ -54,10 +54,15 @@ describe('order inquiries', () => {
     conversationIds[name] = randomUUID();
     names.set(conversationIds[name], name);
     await f.connection.pool.query(
-      `insert into contacts (id, store_id, name, source, kind, tags, not_customer_reason)
-       values ($1, $2, $3, 'messenger', $4, $5, case when $4 = 'not_customer' then 'supplier' end)`,
-      [contactIds[name], store, name, change.kind ?? 'customer', change.tags ?? []],
+      `insert into contacts (id, store_id, name, source, kind, not_customer_reason)
+       values ($1, $2, $3, 'messenger', $4, case when $4 = 'not_customer' then 'supplier' end)`,
+      [contactIds[name], store, name, change.kind ?? 'customer'],
     );
+    if (change.vip)
+      await f.connection.pool.query(
+        "insert into contact_stats (contact_id, store_id, lifecycle_stage) values ($1, $2, 'best')",
+        [contactIds[name], store],
+      );
     await f.connection.pool.query(
       `insert into conversations (id, store_id, contact_id, channel_connection_id, channel, status,
          intent_tag, has_buying_interest, last_inbound_at, last_message_at)
@@ -108,7 +113,7 @@ describe('order inquiries', () => {
     await chat('asked_price', { minutes: 50 });
     await chat('wants_to_order', { intent: 'order', minutes: 40 });
     await chat('repeat_buyer', { intent: 'size_or_stock', minutes: 30 });
-    await chat('vip', { intent: null, interest: true, tags: ['vip'], minutes: 20 });
+    await chat('vip', { intent: null, interest: true, vip: true, minutes: 20 });
     await chat('ordered_after', { minutes: 60 });
     await chat('cancelled_after', { minutes: 10 });
     await chat('ordered_before', { minutes: 5 });

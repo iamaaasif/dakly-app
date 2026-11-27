@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, inArray, isNotNull, ne, sql, type SQL } from 'drizzle-orm';
 
 import { conversations, messages } from '@dakly/db/schema/chats';
-import { contacts } from '@dakly/db/schema/contacts';
+import { contactStats, contacts } from '@dakly/db/schema/contacts';
 import { orders } from '@dakly/db/schema/orders';
 
 import { TenantDatabase } from '../platform/database/tenant-database';
@@ -46,7 +46,12 @@ export class OrderInquiriesRepository {
           contactName: contacts.name,
           channel: conversations.channel,
           lastMessageAt: conversations.lastMessageAt,
-          isVip: sql<boolean>`'vip' = any(${contacts.tags})`,
+          isVip: sql<boolean>`exists (
+            select 1 from ${contactStats}
+            where ${contactStats.storeId} = ${conversations.storeId}
+              and ${contactStats.contactId} = ${conversations.contactId}
+              and ${contactStats.lifecycleStage} = 'best'
+          )`,
           hasEarlierOrder: sql<boolean>`exists (
             select 1 from ${orders}
             where ${orders.storeId} = ${conversations.storeId}
