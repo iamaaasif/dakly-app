@@ -20,6 +20,8 @@ import {
   type EditableField,
   type GridOption,
   type GridVariant,
+  variantPriceNotice,
+  type PriceNotice,
   type VariantGroup,
 } from '../product-variant-grid';
 import { VariantEditorField } from './product-variant-sheet';
@@ -33,6 +35,7 @@ type VariantGroupRowsProps = {
   savedById: Map<string, ProductVariantResponse>;
   productPrice: string;
   showStock: boolean;
+  negotiationEnabled: boolean;
   readOnly?: boolean;
   selected: ReadonlySet<string>;
   collapsed: boolean;
@@ -49,29 +52,38 @@ export function VariantGroupRows(props: VariantGroupRowsProps) {
   return (
     <section aria-label={`${label} variants`}>
       <VariantGroupHeader {...props} />
-      {!collapsed && (
-        <ul>
-          {rows.map(({ variant, index }) => {
-            const key = rowKey(variant);
-            return (
-              <VariantTableRow
-                key={key}
-                index={index}
-                variant={variant}
-                label={variantLabel(variant, options)}
-                saved={savedById.get(variant.id ?? '')}
-                productPrice={productPrice}
-                showStock={showStock}
-                selected={selected.has(key)}
-                readOnly={readOnly}
-                onSelect={(checked) => props.onSelect(key, checked)}
-                onEdit={(button) => props.onEdit(key, button)}
-                onChange={(field, value) => props.onChange([index], field, value)}
-              />
-            );
-          })}
-        </ul>
-      )}
+      <div
+        inert={collapsed}
+        className={cn(
+          'grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none',
+          collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]',
+        )}
+      >
+        <div className="overflow-hidden">
+          <ul>
+            {rows.map(({ variant, index }) => {
+              const key = rowKey(variant);
+              return (
+                <VariantTableRow
+                  key={key}
+                  index={index}
+                  variant={variant}
+                  label={variantLabel(variant, options)}
+                  saved={savedById.get(variant.id ?? '')}
+                  productPrice={productPrice}
+                  showStock={showStock}
+                  negotiationEnabled={props.negotiationEnabled}
+                  selected={selected.has(key)}
+                  readOnly={readOnly}
+                  onSelect={(checked) => props.onSelect(key, checked)}
+                  onEdit={(button) => props.onEdit(key, button)}
+                  onChange={(field, value) => props.onChange([index], field, value)}
+                />
+              );
+            })}
+          </ul>
+        </div>
+      </div>
     </section>
   );
 }
@@ -163,6 +175,7 @@ type VariantTableRowProps = {
   saved?: ProductVariantResponse;
   productPrice: string;
   showStock: boolean;
+  negotiationEnabled: boolean;
   selected: boolean;
   readOnly?: boolean;
   onSelect: (checked: boolean) => void;
@@ -173,7 +186,9 @@ type VariantTableRowProps = {
 function VariantTableRow(props: VariantTableRowProps) {
   const { index, variant, label, saved, productPrice, showStock, readOnly, selected } = props;
   const fields = { index, variant, label, readOnly, onChange: props.onChange };
-  const stock = showStock ? `${availableStock(variant, saved?.reserved)} pcs` : 'Always available';
+  const pieces = availableStock(variant, saved?.reserved);
+  const stock = showStock ? `${pieces} pcs` : 'Always available';
+  const notice = variantPriceNotice(variant, props.negotiationEnabled);
   const Icon = readOnly ? Eye : Pencil;
   return (
     <li
@@ -193,7 +208,7 @@ function VariantTableRow(props: VariantTableRowProps) {
       )}
       <VariantPhoto image={saved?.photos[0]} label={label} />
       <RowSummary
-        {...{ index, label, stock }}
+        {...{ index, label, stock, notice }}
         price={variant.priceOverridePoisha || productPrice}
         onEdit={props.onEdit}
       />
@@ -208,7 +223,7 @@ function VariantTableRow(props: VariantTableRowProps) {
       <div className="hidden @lg:block">
         <VariantEditorField {...fields} inline field="costPoisha" />
       </div>
-      <span className="hidden text-xs text-text-muted tabular-nums @lg:block">{stock}</span>
+      <AvailabilityCell showStock={showStock} pieces={pieces} />
       <Button
         type="button"
         variant="secondary"
@@ -219,6 +234,22 @@ function VariantTableRow(props: VariantTableRowProps) {
         <Icon size={16} aria-hidden="true" />
       </Button>
     </li>
+  );
+}
+
+function AvailabilityCell({ showStock, pieces }: { showStock: boolean; pieces: number }) {
+  const inStock = !showStock || pieces > 0;
+  let text = 'Out of stock';
+  if (inStock) text = showStock ? `In stock · ${pieces}` : 'In stock';
+  return (
+    <span
+      className={cn(
+        'hidden text-xs font-medium tabular-nums @lg:block',
+        inStock ? 'text-success' : 'text-danger',
+      )}
+    >
+      {text}
+    </span>
   );
 }
 
@@ -250,9 +281,10 @@ function RowSummary(
   props: Pick<VariantTableRowProps, 'index' | 'label' | 'onEdit'> & {
     stock: string;
     price: string;
+    notice: PriceNotice | null;
   },
 ) {
-  const { index, label, stock, price, onEdit } = props;
+  const { index, label, stock, price, notice, onEdit } = props;
   const { errors } = useFormState<ProductFormValues>({ name: `variants.${index}` });
   const paid = takaInput.safeParse(price);
   const summary = `${paid.success ? formatMoney(paid.data) : 'No price'} · ${stock}`;
@@ -268,6 +300,14 @@ function RowSummary(
         <span className="max-w-[65%] truncate text-xs text-text-muted">{summary}</span>
       </button>
       <span className="hidden text-sm font-medium wrap-anywhere @lg:block">{label}</span>
+      {notice && (
+        <p
+          role={notice.tone === 'danger' ? 'alert' : 'status'}
+          className={cn('text-xs', notice.tone === 'danger' ? 'text-danger' : 'text-warning')}
+        >
+          {notice.text}
+        </p>
+      )}
       {errors.variants?.[index] && <p className="text-xs text-danger">Check fields</p>}
     </div>
   );

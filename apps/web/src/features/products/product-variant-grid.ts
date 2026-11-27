@@ -223,6 +223,25 @@ export function profitPercent(sellingPrice: string | undefined, cost: string | u
   return Math.round(((price - spent) / price) * 100);
 }
 
+export type PriceNotice = { tone: 'danger' | 'warning'; text: string };
+
+// Negotiation runs on the product price, so the server refuses variant prices while it is on.
+export function variantPriceNotice(
+  variant: Pick<GridVariant, 'priceOverridePoisha' | 'costPoisha'>,
+  negotiationEnabled: boolean,
+): PriceNotice | null {
+  const price = takaNumber(variant.priceOverridePoisha ?? undefined);
+  if (price === null) return null;
+  if (negotiationEnabled)
+    return {
+      tone: 'danger',
+      text: 'Negotiation uses the product price. Clear this price or turn negotiation off.',
+    };
+  const cost = takaNumber(variant.costPoisha ?? undefined);
+  if (cost !== null && price < cost) return { tone: 'warning', text: 'Price is below cost.' };
+  return null;
+}
+
 export const pasteColumns: EditableField[] = [
   'priceOverridePoisha',
   'costPoisha',

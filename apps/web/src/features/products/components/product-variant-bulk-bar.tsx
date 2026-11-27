@@ -14,6 +14,7 @@ const bulkFields: { field: EditableField; label: string }[] = [
 
 type ProductVariantBulkBarProps = {
   selectedCount: number;
+  totalCount: number;
   showStock: boolean;
   missingCount: number;
   removeBlocked: boolean;
@@ -23,22 +24,24 @@ type ProductVariantBulkBarProps = {
 };
 
 export function ProductVariantBulkBar(props: ProductVariantBulkBarProps) {
-  const { selectedCount, showStock, missingCount, removeBlocked } = props;
+  const { selectedCount, totalCount, showStock, missingCount, removeBlocked } = props;
+  // With nothing selected the same actions run on every variant.
+  const targetCount = selectedCount || totalCount;
   const [editing, setEditing] = useState<BulkField | null>(null);
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-muted p-3 text-sm">
       <span className="font-medium text-text">
-        {selectedCount ? `${selectedCount} selected` : 'None selected'}
+        {selectedCount ? `${selectedCount} selected` : 'Apply to all variants'}
       </span>
-      {selectedCount && editing ? (
+      {totalCount && editing ? (
         <BulkEditor
           editing={editing}
-          count={selectedCount}
+          count={targetCount}
           onApply={(value) => props.onSet(editing.field, value)}
           onClose={() => setEditing(null)}
         />
       ) : null}
-      {selectedCount && !editing ? (
+      {totalCount && !editing ? (
         <>
           {bulkFields
             .filter(({ field }) => showStock || field !== 'initialStock')
@@ -47,13 +50,15 @@ export function ProductVariantBulkBar(props: ProductVariantBulkBarProps) {
                 {bulk.label}
               </SmallButton>
             ))}
-          <SmallButton
-            disabled={removeBlocked}
-            title={removeBlocked ? 'A product with options keeps at least one row' : undefined}
-            onClick={props.onRemove}
-          >
-            Remove
-          </SmallButton>
+          {selectedCount ? (
+            <SmallButton
+              disabled={removeBlocked}
+              title={removeBlocked ? 'A product with options keeps at least one row' : undefined}
+              onClick={props.onRemove}
+            >
+              Remove
+            </SmallButton>
+          ) : null}
         </>
       ) : null}
       {missingCount ? (
