@@ -36,7 +36,7 @@ function AddStepButton({ x, y, disabled, onAdd }: Props) {
         <DropdownMenuTrigger
           disabled={disabled}
           aria-label="Add a step here"
-          className="shadow-sm grid size-6 place-items-center rounded-full border border-border bg-surface text-text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus enabled:hover:bg-surface-muted disabled:opacity-50"
+          className="grid size-6 place-items-center rounded-full border border-border bg-surface text-text-muted shadow-card transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus enabled:hover:bg-surface-muted disabled:opacity-50"
         >
           <Plus size={14} aria-hidden="true" />
         </DropdownMenuTrigger>

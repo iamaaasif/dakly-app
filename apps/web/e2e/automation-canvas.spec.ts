@@ -137,7 +137,8 @@ test('shows a saved workflow as a numbered canvas', async ({ page, context, base
     await page.getByRole('button', { name: 'Zoom out' }).click();
     await expect(zoom).toHaveText(/^\d+%$/);
     await page.getByRole('button', { name: 'Fit to screen' }).click();
-    await page.getByRole('button', { name: 'Workflow settings' }).click();
+    await page.getByRole('button', { name: 'Workflow options' }).click();
+    await page.getByRole('menuitem', { name: 'Workflow settings' }).click();
     await expect(page.getByRole('dialog', { name: 'Workflow settings' })).toBeVisible();
     await page.getByRole('button', { name: 'Done' }).click();
     await expect(page).toHaveURL(new RegExp(`/automations/${ids.at(-1)}/canvas$`));
@@ -244,7 +245,8 @@ test('adds, deletes and saves steps on the canvas', async ({ page, context, base
     await page.getByRole('menuitem', { name: 'Delete step' }).click();
     await expect(steps.getByText('Add tag')).toHaveCount(0);
     await expect(steps.getByRole('listitem')).toHaveCount(before + 1);
-    await page.getByRole('button', { name: 'Edit name' }).click();
+    await page.getByRole('button', { name: 'Workflow options' }).click();
+    await page.getByRole('menuitem', { name: 'Rename workflow' }).click();
     await page.getByLabel('Workflow name').fill('Renamed on the canvas');
     await page.getByRole('button', { name: 'Save name' }).click();
     await expect(page.getByRole('heading', { name: 'Renamed on the canvas' })).toBeVisible();

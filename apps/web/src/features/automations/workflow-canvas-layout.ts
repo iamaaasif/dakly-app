@@ -6,8 +6,8 @@ import {
 
 import { conditionLabel } from './workflow-canvas-labels';
 
-const TRIGGER_WIDTH = 328;
-const STEP_WIDTH = 260;
+const TRIGGER_WIDTH = 400;
+const STEP_WIDTH = 284;
 const COLUMN_GAP = 40;
 const ROW_GAP = 56;
 const PADDING = 16;
@@ -54,6 +54,8 @@ export type CanvasLayout = {
   height: number;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
+  // Where two or more lines join into one step.
+  merges: { id: string; x: number; y: number }[];
 };
 
 export const TRIGGER_KEY = 'trigger';
@@ -95,6 +97,7 @@ function rowOfEachStep(order: string[], steps: AutomationGraph['steps']) {
 }
 
 function branchLabels(step: AutomationStep, stepNumber: (key: string) => number) {
+  if (step.kind === 'condition' && step.paths.length === 1) return ['Yes', 'No'];
   if (step.kind === 'condition') {
     return [...step.paths.map((path) => conditionLabel(path.condition, stepNumber)), 'Else'];
   }
@@ -244,6 +247,11 @@ export function layoutWorkflow(graph: AutomationGraph): CanvasLayout {
 
   const { nodes, spots, width, height } = placeRows(lanes, graph, stepNumber);
 
+  const mergeKeys = new Set(
+    links
+      .filter((link) => links.filter((other) => other.to === link.to).length > 1)
+      .map((link) => link.to),
+  );
   const edges = links.map(({ from, to, label }, index) => {
     const target = spots.get(to)!;
     return {
@@ -256,11 +264,15 @@ export function layoutWorkflow(graph: AutomationGraph): CanvasLayout {
       labelY: target.top - ROW_GAP / 4,
       // Where the add button of this line sits: above the label, in the last gap before the target.
       midX: target.centerX,
-      midY: target.top - (label ? (ROW_GAP * 3) / 4 : ROW_GAP / 2),
+      midY: target.top - (label || mergeKeys.has(to) ? (ROW_GAP * 3) / 4 : ROW_GAP / 2),
     };
   });
+  const merges = [...spots]
+    .filter(([key]) => mergeKeys.has(key) && !links.some((link) => link.to === key && link.label))
+    .map(([key, spot]) => ({ id: key, x: spot.centerX, y: spot.top - ROW_GAP / 4 }));
   return {
     stepNumber,
+    merges,
     width,
     height,
     // The reading order is also the order a screen reader hears.

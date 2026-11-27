@@ -76,12 +76,10 @@ function EditorActions({
   workflow,
   editor,
   blocked,
-  onOpenSettings,
 }: {
   workflow: Workflow;
   editor: Editor;
   blocked: boolean;
-  onOpenSettings: () => void;
 }) {
   const draft = workflow.status === 'draft';
   const publishLabel = workflow.status === 'paused' ? 'Publish and enable' : 'Publish changes';
@@ -92,9 +90,6 @@ function EditorActions({
           Saved
         </p>
       )}
-      <Button variant="secondary" onClick={onOpenSettings}>
-        Workflow settings
-      </Button>
       {draft && <SaveDraftButton editor={editor} />}
       <Button
         disabled={editor.pending || blocked}
@@ -169,7 +164,7 @@ function CanvasScreen({ workflow, refresh }: { workflow: Workflow; refresh: Refr
 
 function StatusBadge({ workflow }: { workflow: Workflow }) {
   return (
-    <Badge variant={workflow.status === 'active' ? 'success' : 'neutral'}>
+    <Badge variant={workflow.status === 'active' ? 'success' : 'neutral'} className="rounded-full">
       {statusLabels[workflow.status]}
     </Badge>
   );
@@ -232,6 +227,7 @@ function EditorTop({
       <WorkflowEditorHeader
         name={workflow.name}
         badge={<StatusBadge workflow={workflow} />}
+        onOpenSettings={onOpenSettings}
         onRename={(name) =>
           rename.mutateAsync(name).then(
             () => true,
@@ -243,7 +239,6 @@ function EditorTop({
           workflow={workflow}
           editor={editor}
           blocked={checks.some((check) => check.level === 'block')}
-          onOpenSettings={onOpenSettings}
         />
       </WorkflowEditorHeader>
       <EditorAlerts
