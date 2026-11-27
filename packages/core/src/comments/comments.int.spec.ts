@@ -14,6 +14,7 @@ import { resetEnvForTests } from '../platform/config/env';
 import { EnvelopeEncryption } from '../platform/crypto/envelope-encryption';
 import { DatabaseModule } from '../platform/database/database.module';
 import { DAY_MS, MINUTE_MS } from '../platform/time';
+import { CommentAutomationRepliesService } from './comment-automation-replies.service';
 import { CommentsModule } from './comments.module';
 import { CommentsService, type ReceiveCommentInput } from './comments.service';
 
@@ -290,6 +291,24 @@ it('automatically replies once even when the comment job is delivered twice', as
   expect(sendPublic.mock.calls.map(([, payload]) => payload.text)).toEqual([reply.publicBody]);
 });
 
+it('lets an automation claim a comment, so the AI sends nothing on it, and refuses one already answered', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-claim');
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  expect(await comments.claimForAutomation(storeId, comment.id)).toBe(true);
+  expect(await comments.claimForAutomation(storeId, comment.id)).toBe(true);
+  await comments.replyAutomatically(storeId, comment.id, {
+    privateBody: 'Blue Kurti costs ৳1,200.',
+    publicBody: 'I sent the price in Messenger.',
+    stillAllowed,
+  });
+  expect(sendPrivate).not.toHaveBeenCalled();
+
+  const answered = await stored(storeId, 'c-claim-answered');
+  await comments.replyPublicly(storeId, staff, answered.id, { body: 'Inbox e dilam' });
+  expect(await comments.claimForAutomation(storeId, answered.id)).toBe(false);
+});
+
 it.each(['unavailable', 'invalid_response'] as const)(
   'leaves the public reply available when the private send is unconfirmed (%s)',
   async (errorCode) => {
@@ -335,4 +354,55 @@ it('retries a refused public reply without sending the confirmed private reply a
   expect(sendPrivate).toHaveBeenCalledTimes(1);
   const { items } = await comments.list(storeId, { limit: 50 });
   expect(items).toMatchObject([{ status: 'replied', publicReplied: true }]);
+});
+
+it('offers only top-level comments that await an answer', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-claim', { text: 'দাম কত' });
+  expect(await comments.triggerFacts(storeId, comment.id)).toMatchObject({
+    text: 'দাম কত',
+    channel: 'messenger',
+    authorExternalId: 'author-1',
+  });
+  await comments.replyPublicly(storeId, staff, comment.id, { body: 'Inbox e dilam' });
+  // Staff answered, so the comment no longer starts anything.
+  expect(await comments.triggerFacts(storeId, comment.id)).toBeUndefined();
+  const reply = await stored(storeId, 'c-nested', { parentExternalCommentId: 'c-claim' });
+  expect(await comments.triggerFacts(storeId, reply.id)).toBeUndefined();
+});
+
+it('sends nothing for the AI when an automation claims the comment after the AI checked it', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-race', { text: 'দাম কত' });
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  await comments.replyAutomatically(storeId, comment.id, {
+    privateBody: 'Blue Kurti costs ৳1,200.',
+    publicBody: 'I sent the price in Messenger.',
+    // The AI's check passes, then the automation claims before the send.
+    stillAllowed: async () => comments.claimForAutomation(storeId, comment.id),
+  });
+  expect(sendPrivate).not.toHaveBeenCalled();
+  expect((await comments.list(storeId, { limit: 50 })).items[0]).toMatchObject({ status: 'new' });
+});
+
+it('answers a claimed comment in the automation order: private reply first, then one public reply', async () => {
+  const storeId = await shop();
+  const comment = await stored(storeId, 'c-steps', { text: 'dam koto' });
+  const replies = app.get(CommentAutomationRepliesService);
+  const sendPrivate = vi.spyOn(connections, 'sendMetaPrivateReply');
+  const sendPublic = vi.spyOn(connections, 'replyToMetaComment');
+  expect(await comments.claimForAutomation(storeId, comment.id)).toBe(true);
+  expect(
+    await replies.replyPrivately(storeId, comment.id, {
+      text: 'Details niche',
+      includeProduct: false,
+    }),
+  ).toBe('sent');
+  expect(
+    await replies.replyPrivately(storeId, comment.id, { text: 'Again', includeProduct: false }),
+  ).toBe('skipped');
+  expect(await replies.replyPublicly(storeId, comment.id, 'Inbox e dilam')).toBe('sent');
+  expect(await replies.replyPublicly(storeId, comment.id, 'Inbox e dilam')).toBe('skipped');
+  expect(sendPrivate.mock.calls.map(([, payload]) => payload.text)).toEqual(['Details niche']);
+  expect(sendPublic.mock.calls).toHaveLength(1);
 });

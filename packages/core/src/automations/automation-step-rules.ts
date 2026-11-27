@@ -41,6 +41,8 @@ export type RunFacts = {
   tappedStepKeys: string[];
   wakeAt: Date | null;
   orderId: string | null;
+  commentId?: string | null;
+  enteredAt: Date;
 };
 // A Messenger or Instagram send is routed to the Page or account where the contact wrote last; its
 // buttons name the step row so a tap can be matched to it.
@@ -286,6 +288,19 @@ export function randomPath(
   let upTo = 0;
   const index = paths.findIndex((path) => (upTo += path.percent) > bucket);
   return { outcome: `path_${index + 1}`, next: paths[index]!.next };
+}
+
+export function runRandomSplit(
+  runId: string,
+  stepKey: string,
+  step: Extract<AutomationStep, { kind: 'random_split' }>,
+  now: Date,
+): StepResult {
+  const choice = randomPath(runId, stepKey, step.paths);
+  return {
+    ...goOn(choice.next, now),
+    step: { stepKey, kind: 'random_split', outcome: choice.outcome },
+  };
 }
 
 export function isLateSend(wakeAt: Date | null, now: Date): boolean {

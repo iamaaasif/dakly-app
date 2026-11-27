@@ -333,6 +333,10 @@ export class MessagingService {
     };
   }
 
+  hasStaffReplySince(storeId: string, contactId: string, since: Date) {
+    return this.inbound.hasStaffReplySince(storeId, contactId, since);
+  }
+
   queueChannelMessage(storeId: string, input: OutgoingChannelMessage) {
     return this.queueMessage(storeId, input, true);
   }

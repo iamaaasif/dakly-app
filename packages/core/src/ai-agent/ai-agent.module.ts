@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { AiModule } from '../ai/ai.module';
+import { AutomationRunsModule } from '../automations/automation-runs.module';
 import { BillingModule } from '../billing/billing.module';
 import { MetaAuthorizationModule } from '../channels/meta-authorization.module';
 import { CommentsModule } from '../comments/comments.module';
@@ -39,6 +40,7 @@ import { UnreadBurstService } from './unread-burst.service';
     BillingModule,
     BullModule.registerQueue({ name: QUEUES.aiReply }),
     AiModule,
+    AutomationRunsModule,
     ClockModule,
     CommentsModule,
     ConsentsModule,

@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 
+import { AutomationEntryService } from '../automations/automation-entry.service';
 import { ConversationIntentService } from '../messaging/conversation-intent.service';
 import { InboxService } from '../messaging/inbox.service';
 import { Clock } from '../platform/clock';
@@ -17,8 +18,18 @@ export class UnreadBurstService {
     @Inject(AiAgentSettingsRepository) private readonly settings: AiAgentSettingsRepository,
     @Inject(InboxService) private readonly inbox: InboxService,
     @Inject(ConversationIntentService) private readonly intents: ConversationIntentService,
+    @Inject(AutomationEntryService) private readonly automations: AutomationEntryService,
     @Inject(Clock) private readonly clock: Clock,
   ) {}
+
+  // An automation that replies to this burst answers it; the AI takes the chat again after it.
+  isAnsweredByAutomation(
+    storeId: string,
+    conversationId: string,
+    read: Parameters<AutomationEntryService['answersMessage']>[2] | undefined,
+  ) {
+    return read && this.automations.answersMessage(storeId, conversationId, read);
+  }
 
   async announce(storeId: string, conversationId: string, messageId: string) {
     const turn = await this.inbox.latestTurn(storeId, conversationId);

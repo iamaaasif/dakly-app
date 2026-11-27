@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
+import { CommentsModule } from '../comments/comments.module';
 import { ContactsModule } from '../contacts/contacts.module';
 import { LinksModule } from '../links/links.module';
 import { InboxModule } from '../messaging/inbox.module';
@@ -14,6 +15,7 @@ import { SegmentsModule } from '../segments/segments.module';
 import { SendingModule } from '../sending/sending.module';
 import { StoresModule } from '../stores/stores.module';
 import { WalletsModule } from '../wallets/wallets.module';
+import { AutomationActionsService } from './automation-actions.service';
 import { AutomationBirthdaySweepService } from './automation-birthday-sweep.service';
 import { AutomationBirthdaysService } from './automation-birthdays.service';
 import { AutomationConditionsService } from './automation-conditions.service';
@@ -35,6 +37,7 @@ import { AnswerAutomationConfirmationTap } from './jobs/answer-automation-confir
     AutomationsModule,
     BullModule.registerQueue({ name: QUEUES.bulk }),
     ClockModule,
+    CommentsModule,
     ContactsModule,
     ErrorReportingModule,
     OutboxModule,
@@ -48,6 +51,7 @@ import { AnswerAutomationConfirmationTap } from './jobs/answer-automation-confir
     WalletsModule,
   ],
   providers: [
+    AutomationActionsService,
     AutomationConditionsService,
     AutomationConfirmationTapService,
     AnswerAutomationConfirmationTap,

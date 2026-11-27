@@ -15,7 +15,7 @@ const graph = automationTemplates.cod_order_confirmation.graph;
 const reminder = graph.steps.remind as SendStep;
 const at = new Date('2026-11-20T10:00:00.000Z');
 
-function conditions(progress: OrderProgress | undefined) {
+function conditions(progress: OrderProgress | undefined, staffReplied = false) {
   const orders = { progress: async () => progress } as unknown as OrderReportingService;
   const unused = {} as never;
   const contacts = { findTags: async () => [] } as unknown as ContactsService;
@@ -23,7 +23,10 @@ function conditions(progress: OrderProgress | undefined) {
   return new AutomationConditionsService(
     unused as SegmentsService,
     unused as SendPolicyService,
-    { latestChatRoute: async () => undefined } as unknown as MessagingService,
+    {
+      latestChatRoute: async () => undefined,
+      hasStaffReplySince: async () => staffReplied,
+    } as unknown as MessagingService,
     contacts,
     orders,
     repository,
@@ -42,6 +45,7 @@ function facts(orderId: string | null): RunFacts {
     tappedStepKeys: [],
     wakeAt: null,
     orderId,
+    enteredAt: at,
   };
 }
 
@@ -98,5 +102,32 @@ describe('COD confirmation exits', () => {
     expect(await conditions(onHold).refreshExitReason(facts('o'), step, at)).toBe(
       'order_not_awaiting_confirmation',
     );
+  });
+});
+
+describe('staff reply exit', () => {
+  const messageGraph: RunFacts['graph'] = {
+    ...graph,
+    trigger: { key: 'message_received', filters: [] },
+    exitConditions: [],
+  };
+  const chatFacts = { ...facts(null), graph: messageGraph };
+
+  it('ends a message run before its reply when a person already answered the chat', async () => {
+    expect(await conditions(undefined, true).refreshExitReason(chatFacts, reminder, at)).toBe(
+      'staff_replied',
+    );
+  });
+
+  it('sends the reply when nobody answered', async () => {
+    expect(
+      await conditions(undefined, false).refreshExitReason(chatFacts, reminder, at),
+    ).toBeUndefined();
+  });
+
+  it('does not read staff replies for a run that did not start from a message', async () => {
+    expect(
+      await conditions(undefined, true).refreshExitReason(facts(null), reminder, at),
+    ).toBeUndefined();
   });
 });

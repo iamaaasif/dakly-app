@@ -44,6 +44,18 @@ test('adds a contact, lists it as a customer after an order and opens the profil
     // A contact is a customer once it has an order, so the list stays empty of it until then.
     await page.goto(`/customers?search=${encodeURIComponent(name)}`);
     await expect(page.getByText('No customers match')).toBeVisible();
+    // The worker recomputes stats from orders when it handles contact.created and would overwrite
+    // the row below, so wait until it has written the contact's own row.
+    await expect
+      .poll(async () => {
+        const result = await database.pool.query(
+          `select 1 from contact_stats s join contacts c on c.id=s.contact_id
+           where c.store_id=$1 and c.name=$2`,
+          [fixture.storeIds[0], name],
+        );
+        return result.rowCount;
+      })
+      .toBe(1);
     await database.pool.query(
       `insert into contact_stats(contact_id,store_id,orders_count,net_spend_poisha,last_order_at,lifecycle_stage)
        select id,store_id,1,150000,now(),'new' from contacts where store_id=$1 and name=$2

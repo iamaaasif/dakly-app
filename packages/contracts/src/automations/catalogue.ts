@@ -21,6 +21,8 @@ export const triggerFilterFields = [
   'channel',
   'intent',
   'keywords',
+  'post',
+  'comment_intent',
   'consent_source',
   'tag',
   'segment',
@@ -119,9 +121,16 @@ export const automationTriggers: Record<TriggerKey, TriggerEntry> = {
     needs: 'channels',
     availableBefore: 'orders',
   },
+  // Top-level comments on any post of a connected Page or Instagram account, one run per person
+  // per post.
   comment_on_post: {
-    source: { plannedEvent: 'comment.received' },
-    filters: {},
+    source: { event: 'comment.received' },
+    filters: {
+      post: 'optional',
+      product: 'optional',
+      keywords: 'optional',
+      comment_intent: 'optional',
+    },
     needs: 'channels',
     availableBefore: 'orders',
   },
@@ -242,7 +251,7 @@ export const orderTriggerKeys: readonly TriggerKey[] = [
 ];
 
 // Started by a subscriber on a chat event instead of an order event.
-const chatTriggerKeys: readonly TriggerKey[] = ['message_received'];
+const chatTriggerKeys: readonly TriggerKey[] = ['message_received', 'comment_on_post'];
 
 export function isTriggerAvailable(key: TriggerKey): boolean {
   const trigger = automationTriggers[key];
@@ -265,6 +274,8 @@ export const actionKinds = [
   'notify_team',
   'hand_to_person',
   'give_coupon',
+  'reply_to_comment',
+  'send_private_reply',
 ] as const;
 export type ActionKind = (typeof actionKinds)[number];
 
@@ -279,4 +290,7 @@ export const automationActions: Record<
   hand_to_person: { needs: 'chats_extension', availableBefore: 'orders' },
   // Discount codes live in Orders.
   give_coupon: { needs: 'orders', availableBefore: null },
+  // Only a comment_on_post workflow has a comment to answer.
+  reply_to_comment: { needs: 'chats_extension', availableBefore: 'orders' },
+  send_private_reply: { needs: 'chats_extension', availableBefore: 'orders' },
 };
