@@ -6,6 +6,8 @@ export const customersKeys = {
     ['customers', tag, 'list', query] as const,
   detail: (tag: string | undefined, contactId: string) =>
     ['customers', tag, 'detail', contactId] as const,
+  profile: (tag: string | undefined, contactId: string, part: string) =>
+    ['customers', tag, 'profile', contactId, part] as const,
   import: (tag: string | undefined, importId: string) =>
     ['customers', tag, 'import', importId] as const,
 };

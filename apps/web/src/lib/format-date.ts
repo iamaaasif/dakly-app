@@ -172,3 +172,19 @@ export function formatDhakaMonthDay(value: string): string {
     timeZone: 'Asia/Dhaka',
   }).format(new Date(value));
 }
+
+export function formatDateWithYear(value: string, timeZone = 'Asia/Dhaka'): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(parseInstant(value));
+}
+
+// "Oct 30" this year, "Jun 8, 2024" before, for timelines that run over many months.
+export function formatDateSmart(value: string, now = Date.now(), timeZone = 'Asia/Dhaka'): string {
+  return calendarDate(parseInstant(value), timeZone).year === calendarDate(now, timeZone).year
+    ? formatShortDate(value, timeZone)
+    : formatDateWithYear(value, timeZone);
+}

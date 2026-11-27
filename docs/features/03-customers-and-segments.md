@@ -132,9 +132,16 @@ The web app has two customer screens.
   Customers press Add customers and choose Add manually or Import from an Excel or CSV file. The manual
   form shows a phone the store already has as an error on the phone field. Scan your khata opens `/customers/khata-scan` (KHT-3, feature 13). Add by voice, Connect your store and Connect your POS are not offered until their tasks ship
   (CUS-10, release 2 and the store and POS connectors).
-- The customer profile (`/customers/<contact id>`) shows the name, phone, kind, tags and the
-  chat channels the contact wrote from, read only. A deleted contact, or one from another
-  store, reads as not found.
+- The customer profile (`/customers/<contact id>`) has a header (back, avatar, name, a type pill
+  from the lifecycle stage, "phone · email · district", Edit and Create campaign), six stat cards
+  (Total spending, Orders, Average order value, Last purchase, First purchase, Lifetime value,
+  which reads "Not enough data yet" until there is an order) and six tabs kept in the address
+  as `?tab=`: Overview (details, tags, chat channels, Delete customer), Orders (rows open the
+  order on the Orders page), Activity timeline, Campaign history, Notes (Ctrl or Cmd with Enter
+  saves) and Marketing preferences (WhatsApp and SMS switch at once and go back if the server
+  refuses; Email is shown but cannot be switched). Lists load 20 rows and Show more adds the
+  next page. Every tab shows rows shaped skeletons while it loads. A deleted contact, or one from
+  another store, reads as not found. Evidence in `docs/design/evidence/dsn-14/`.
   The browser test selects the fixture's owner shop before checking the full phone number.
 - When another contact has the same phone, the profile shows a "Possible same person" note above
   Chat channels. It names the other contact (a link to their profile), shows their phone as the
