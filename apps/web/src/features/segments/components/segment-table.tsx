@@ -12,7 +12,7 @@ import { SegmentActionsMenu } from './segment-actions-menu';
 import { formatDateAtTime } from '@/lib/format-date';
 import { pluralize } from '@/lib/pluralize';
 
-export type SegmentSelection = {
+type SegmentSelection = {
   selectedIds: ReadonlySet<string>;
   onToggle: (segmentId: string) => void;
   onTogglePage: (selected: boolean) => void;
