@@ -25,7 +25,7 @@ const area = (id: number, name: string, districtName: string, nameBn: string | n
   }) as AreaSearchResult;
 const places = [area(10, 'Mirpur', 'Dhaka', 'মিরপুর'), area(11, 'Mirpur', 'Kushtia')];
 
-function serviceReading(reading: Reading | 'unavailable') {
+function serviceReading(reading: Reading | 'unavailable', list = places) {
   const ai = {
     run: () =>
       Promise.resolve(
@@ -37,7 +37,7 @@ function serviceReading(reading: Reading | 'unavailable') {
   const delivery = {
     searchAreas: (_storeId: string, { search }: { search: string }) =>
       Promise.resolve({
-        items: places.filter(({ name, nameBn }) =>
+        items: list.filter(({ name, nameBn }) =>
           [name, nameBn ?? ''].some((text) => text.toLowerCase().startsWith(search.toLowerCase())),
         ),
       }),
@@ -98,6 +98,15 @@ describe('OrderChatFillService', () => {
       area: 'Mirp',
     }).fill('store', chat);
     expect(ambiguous).toMatchObject({ area: null });
+  });
+
+  it('finds an exact Bangla name even when it is not the first match', async () => {
+    const list = [area(12, 'Mirpur Cantonment', 'Dhaka', 'মিরপুর ক্যান্ট'), places[0]!];
+    const filled = await serviceReading(
+      { name: null, phone: null, address: null, area: 'মিরপুর' },
+      list,
+    ).fill('store', chat);
+    expect(filled).toMatchObject({ area: { id: 10 } });
   });
 
   it('tells staff to type the details when the AI cannot read the chat', async () => {
