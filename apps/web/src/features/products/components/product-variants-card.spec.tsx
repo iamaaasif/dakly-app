@@ -11,6 +11,10 @@ import { ProductForm } from './product-form';
 import { productsKeys } from '@/lib/product-query-keys';
 import { sessionContextKey } from '@/lib/session-context';
 
+// Each test renders the whole product form and types through user-event; on the shared CI
+// runner, with the full web suite running beside it, the slowest ones pass 5 seconds.
+vi.setConfig({ testTimeout: 20_000 });
+
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(window.location.search),
   useRouter: () => ({ push: vi.fn() }),
@@ -76,6 +80,9 @@ function show(product?: ProductResponse, readOnly = false) {
   } as unknown as SessionContext;
   client.setQueryData(sessionContextKey, session);
   client.setQueryData(productsKeys.categories('verified'), { items: [] });
+  client.setQueryData(productsKeys.brands('verified'), { items: [] });
+  client.setQueryData(productsKeys.tags('verified'), { items: [] });
+  client.setQueryData(productsKeys.collections('verified'), { items: [] });
   render(
     <QueryClientProvider client={client}>
       <ProductForm product={product} onSaved={vi.fn()} page={{ ...page, readOnly }} />
