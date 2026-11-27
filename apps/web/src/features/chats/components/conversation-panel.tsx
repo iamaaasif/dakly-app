@@ -137,8 +137,8 @@ function ConversationHeader({ conversation }: { conversation: ConversationRespon
         <div className="flex flex-wrap items-center gap-x-2">
           <h2 className="truncate text-base font-semibold">{name}</h2>
           {conversation.channel === 'whatsapp' ? null : (
-            <Badge variant={window.state === 'open' ? 'warning' : 'neutral'}>
-              {window.state === 'open' ? window.label : 'Window over'}
+            <Badge variant={window.state === 'closed' ? 'neutral' : 'warning'}>
+              {window.state === 'closed' ? 'Window over' : window.label}
             </Badge>
           )}
         </div>

@@ -435,6 +435,7 @@ describe('Conversation', () => {
     sourceType: 'chat',
     createdAt: '2026-11-19T04:03:00.000000Z',
     sentAt: null,
+    failureReason: null,
   };
   const verified = { headers: { 'x-session-context': 'verified' } };
   const posts: { path: string; body: unknown }[] = [];

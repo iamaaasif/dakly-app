@@ -86,6 +86,7 @@ export function useSendReply(id: string) {
         sourceType: 'chat',
         createdAt: now,
         sentAt: null,
+        failureReason: null,
       };
       // The list is newest first, so the new message goes at the front of the first page.
       if (before?.pages[0])

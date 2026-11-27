@@ -15,6 +15,12 @@ describe('reply window', () => {
     );
   });
 
+  it('counts the days left in the seven-day human-agent window', () => {
+    expect(
+      replyWindow({ channel: 'messenger', windowExpiresAt: hoursFromNow(-30) }, now).label,
+    ).toBe('Human-agent reply window: 5d left');
+  });
+
   it('allows a reply for seven days after the customer last wrote', () => {
     expect(
       replyWindow({ channel: 'instagram', windowExpiresAt: hoursFromNow(-30) }, now).state,

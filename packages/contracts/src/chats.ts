@@ -304,6 +304,8 @@ export type ConversationMessageResponse = {
   sourceType: (typeof messageSourceTypes)[number];
   createdAt: string;
   sentAt: string | null;
+  // Why a send failed, so staff can see a missing Meta permission; null when sent or unconfirmed.
+  failureReason: 'permission_missing' | 'send_rejected' | 'connection_unavailable' | null;
 };
 
 // Folder counts are of open chats; the rest count All conversations. The dashboard reads needsYou.
