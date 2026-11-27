@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { OrderListQuery, OrderListResponse } from '@dakly/contracts/orders';
 
@@ -35,4 +35,19 @@ export function useOrders(query: OrderListQuery) {
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[2] === listedTab(query) ? previous : undefined,
   });
+}
+
+// Pointing at a tab loads its first page, so opening it is instant.
+export function usePrefetchOrders() {
+  const { request, contextTag } = useStoreRequest();
+  const client = useQueryClient();
+  return (query: OrderListQuery) => {
+    if (!contextTag) return;
+    void client.prefetchQuery({
+      queryKey: [...ordersKey, contextTag, listedTab(query), query],
+      queryFn: ({ signal }) =>
+        request<OrderListResponse>(`/orders?${ordersSearch(query)}`, { signal }),
+      staleTime: 30_000,
+    });
+  };
 }

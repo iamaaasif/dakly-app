@@ -55,10 +55,10 @@ const noon = new Date(
   Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1, 6),
 );
 const end: AutomationStep = { kind: 'exit' };
-const pages = { older: randomUUID(), newer: randomUUID() };
+const pages = { older: randomUUID(), newer: randomUUID(), instagram: randomUUID() };
 let app: INestApplicationContext;
 
-async function connect(id: string, shop = storeId) {
+async function connect(id: string, shop = storeId, kind = 'facebook_page') {
   const secret = app
     .get(EnvelopeEncryption)
     .encrypt(
@@ -68,14 +68,19 @@ async function connect(id: string, shop = storeId) {
   await admin.pool.query(
     `insert into channel_connections(id,store_id,kind,external_account_id,display_name,connected_at,
       access_token_ciphertext,key_version)
-     values($1::uuid,$2,'facebook_page',$1::text,'পেজ', now() - interval '30 days',$3,$4)`,
-    [id, shop, secret.ciphertext, secret.keyVersion],
+     values($1::uuid,$2,$5,$1::text,'পেজ', now() - interval '30 days',$3,$4)`,
+    [id, shop, secret.ciphertext, secret.keyVersion, kind],
   );
 }
 
 // A consented contact who wrote to `pageId` `hoursAgo` hours before the mocked now.
 async function shopper(
-  writes: { pageId: string; psid: string; hoursAgo: number }[],
+  writes: {
+    pageId: string;
+    psid: string;
+    hoursAgo: number;
+    channel?: 'messenger' | 'instagram';
+  }[],
   shop = storeId,
 ) {
   const contactId = randomUUID();
@@ -83,25 +88,25 @@ async function shopper(
     "insert into contacts(id,store_id,name,phone,source,kind) values($1,$2,'সুমি আক্তার',$3,'messenger','customer')",
     [contactId, shop, `0171${Math.floor(Math.random() * 1e7)}`.padEnd(11, '0')],
   );
-  for (const channel of ['messenger', 'sms'])
+  for (const channel of ['messenger', 'instagram', 'sms'])
     await admin.pool.query(
       "insert into consents(id,store_id,contact_id,channel,status,source) values(gen_random_uuid(),$1,$2,$3,'granted','checkout')",
       [shop, contactId, channel],
     );
-  for (const { pageId, psid, hoursAgo } of writes) {
+  for (const { pageId, psid, hoursAgo, channel = 'messenger' } of writes) {
     await admin.pool.query(
-      "insert into contact_identities(id,store_id,contact_id,channel_connection_id,channel,external_id) values(gen_random_uuid(),$1,$2,$3,'messenger',$4)",
-      [shop, contactId, pageId, `${psid}-${contactId}`],
+      'insert into contact_identities(id,store_id,contact_id,channel_connection_id,channel,external_id) values(gen_random_uuid(),$1,$2,$3,$5,$4)',
+      [shop, contactId, pageId, `${psid}-${contactId}`, channel],
     );
     await admin.pool.query(
-      "insert into conversations(id,store_id,contact_id,channel_connection_id,channel,last_inbound_at) values(gen_random_uuid(),$1,$2,$3,'messenger',$4)",
-      [shop, contactId, pageId, new Date(noon.getTime() - hoursAgo * HOUR)],
+      'insert into conversations(id,store_id,contact_id,channel_connection_id,channel,last_inbound_at) values(gen_random_uuid(),$1,$2,$3,$5,$4)',
+      [shop, contactId, pageId, new Date(noon.getTime() - hoursAgo * HOUR), channel],
     );
   }
   return contactId;
 }
 
-function sendStep(channels: ('messenger' | 'sms')[]): AutomationStep {
+function sendStep(channels: ('messenger' | 'instagram' | 'sms')[]): AutomationStep {
   return {
     kind: 'send',
     category: 'marketing',
@@ -239,6 +244,7 @@ describe('Workflow Messenger send steps (Postgres and Valkey)', () => {
     app = await NestFactory.createApplicationContext(TestModule, { logger: false });
     await connect(pages.older);
     await connect(pages.newer);
+    await connect(pages.instagram, storeId, 'instagram');
   });
 
   beforeEach(() => {
@@ -442,6 +448,63 @@ describe('Workflow Messenger send steps (Postgres and Valkey)', () => {
         },
       ],
     });
+  });
+
+  it('sends on the Instagram account where the contact wrote, as text without buttons', async () => {
+    const contactId = await shopper([
+      { pageId: pages.newer, psid: 'psid-fb', hoursAgo: 10 },
+      { pageId: pages.instagram, psid: 'igsid-1', hoursAgo: 2, channel: 'instagram' },
+    ]);
+    const provider = vi
+      .spyOn(FakeMetaChannelDriver.prototype, 'send')
+      .mockResolvedValue({ externalMessageId: 'fake-ig-1' });
+    const runId = await dueRun(sendStep(['instagram']), contactId);
+
+    await runStep(runId);
+
+    expect(provider).toHaveBeenCalledOnce();
+    expect(provider.mock.calls[0]![1]).toMatchObject({
+      channel: 'instagram',
+      externalConversationId: expect.stringMatching(/^igsid-1-/),
+      text: 'নতুন কালেকশন এসেছে',
+    });
+    expect((provider.mock.calls[0]![1] as { buttons?: unknown[] }).buttons ?? []).toEqual([]);
+    expect((await outcome(runId)).steps).toEqual([
+      expect.objectContaining({ outcome: 'sent', channel: 'instagram' }),
+    ]);
+  });
+
+  it('skips an Instagram step as window_closed after 24 hours, without sending', async () => {
+    const contactId = await shopper([
+      { pageId: pages.instagram, psid: 'igsid-late', hoursAgo: 24, channel: 'instagram' },
+    ]);
+    const provider = vi.spyOn(FakeMetaChannelDriver.prototype, 'send');
+    const runId = await dueRun(sendStep(['instagram']), contactId);
+
+    await runStep(runId);
+
+    expect(provider).not.toHaveBeenCalled();
+    expect((await outcome(runId)).steps).toEqual([
+      expect.objectContaining({ outcome: 'skipped', skip_reason: 'window_closed' }),
+    ]);
+  });
+
+  it('falls from Messenger to Instagram when the contact wrote only on Instagram', async () => {
+    const contactId = await shopper([
+      { pageId: pages.instagram, psid: 'igsid-2', hoursAgo: 1, channel: 'instagram' },
+    ]);
+    const provider = vi
+      .spyOn(FakeMetaChannelDriver.prototype, 'send')
+      .mockResolvedValue({ externalMessageId: 'fake-ig-2' });
+    const runId = await dueRun(sendStep(['messenger', 'instagram', 'sms']), contactId);
+
+    await runStep(runId);
+
+    expect(provider).toHaveBeenCalledOnce();
+    expect(provider.mock.calls[0]![1]).toMatchObject({ channel: 'instagram' });
+    expect((await outcome(runId)).steps).toEqual([
+      expect.objectContaining({ outcome: 'sent', channel: 'instagram' }),
+    ]);
   });
 
   it('skips as window_closed when the window is over, without sending', async () => {

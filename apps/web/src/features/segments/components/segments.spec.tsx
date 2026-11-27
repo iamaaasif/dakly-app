@@ -9,17 +9,27 @@ import {
   createSegmentSchema,
   type SegmentCondition,
   type SegmentInnerGroup,
-  type SegmentResponse,
+  type SegmentListItem,
   type SegmentRules,
 } from '@dakly/contracts/segments';
 import type { SessionContext } from '@dakly/contracts/sessions';
+import { ToastProvider } from '@dakly/ui/toast';
 
 import { groupLooseConditions } from '../segment-labels';
 import { SegmentsScreen } from './segments-screen';
 import { sessionContextKey } from '@/lib/session-context';
 
 const push = vi.fn();
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
+const urlPush = vi.fn();
+const urlReplace = vi.fn();
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push }),
+  useSearchParams: () => new URLSearchParams(),
+}));
+vi.mock('@/lib/use-url-query', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useUrlRouter: () => ({ push: urlPush, replace: urlReplace }),
+}));
 
 // jsdom lacks the pointer capture and scrolling the Radix select reads, and modal dialogs.
 beforeAll(() => {
@@ -37,9 +47,11 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   push.mockReset();
+  urlPush.mockReset();
+  urlReplace.mockReset();
 });
 
-const vip: SegmentResponse = {
+const vip: SegmentListItem = {
   id: '7d0f8a52-4c7e-4b8e-9a51-0e6f3f0b2c11',
   name: 'VIP in Dhaka',
   rules: {
@@ -58,9 +70,10 @@ const vip: SegmentResponse = {
   archivedAt: null,
   createdAt: '2026-11-01T00:00:00Z',
   updatedAt: '2026-11-01T00:00:00Z',
+  contactCount: 24,
 };
 
-type Request = { method: string; path: string; body: unknown };
+type Request = { method: string; path: string; query: URLSearchParams; body: unknown };
 
 function serve(reply: (request: Request) => Response) {
   const requests: Request[] = [];
@@ -68,6 +81,7 @@ function serve(reply: (request: Request) => Response) {
     const request = {
       method: init.method ?? 'GET',
       path: new URL(url, 'http://web.test').pathname.replace(/^\/api/, ''),
+      query: new URL(url, 'http://web.test').searchParams,
       body: init.body ? JSON.parse(String(init.body)) : undefined,
     };
     requests.push(request);
@@ -122,7 +136,9 @@ function show(child: ReactNode) {
   client.setQueryData(sessionContextKey, context);
   return render(child, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <QueryClientProvider client={client}>
+        <ToastProvider>{children}</ToastProvider>
+      </QueryClientProvider>
     ),
   });
 }
@@ -133,86 +149,131 @@ async function choose(scope: HTMLElement, label: string, option: string) {
   await user.click(await screen.findByRole('option', { name: option }));
 }
 
-describe('Segments screen', () => {
-  it('lists a segment with its rule in words and its live count', async () => {
-    const requests = serve(({ path }) =>
-      path === '/segments/preview' ? json({ count: 42 }) : json({ items: [vip], nextCursor: null }),
-    );
-    show(<SegmentsScreen canEdit />);
-    expect(screen.getByRole('status', { name: 'Loading segments' })).toBeTruthy();
-    await screen.findByRole('heading', { name: 'VIP in Dhaka' });
-    expect(
-      screen.getByText('Tag is vip and (District is not Dhaka or agreed to SMS messages)'),
-    ).toBeTruthy();
-    expect(await screen.findByText('42 customers match')).toBeTruthy();
-    expect(requests.find(({ path }) => path === '/segments/preview')?.body).toEqual({
-      rules: vip.rules,
-    });
-  });
-
-  it('shows a member who cannot edit only the list, even from an edit link', async () => {
-    serve(({ path }) =>
-      path === '/segments/preview' ? json({ count: 42 }) : json({ items: [vip], nextCursor: null }),
-    );
-    show(<SegmentsScreen edit={vip.id} canEdit={false} />);
-    await screen.findByRole('heading', { name: 'VIP in Dhaka' });
-    expect(screen.queryByRole('link', { name: 'Create segment' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'Edit VIP in Dhaka' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Delete VIP in Dhaka' })).toBeNull();
-    expect(screen.queryByLabelText('Segment name')).toBeNull();
-  });
-
-  it('shows the empty list and a failed list with a retry', async () => {
-    let fail = true;
-    serve(() =>
-      fail
-        ? json({ error: { code: 'FORBIDDEN', message: 'You cannot view segments.' } }, 403)
-        : json({ items: [], nextCursor: null }),
-    );
-    show(<SegmentsScreen canEdit />);
-    expect(await screen.findByText('You cannot view segments.')).toBeTruthy();
-    fail = false;
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry segments' }));
-    expect(
-      await screen.findByText('No segments yet. Create one to group customers for a campaign.'),
-    ).toBeTruthy();
-  });
-
-  it('deletes a segment after naming it in the confirmation', async () => {
-    const user = userEvent.setup();
-    let items = [vip];
-    serve(({ path, method }) => {
-      if (path === '/segments/preview') return json({ count: 3 });
-      if (method === 'DELETE') {
-        items = [];
-        return new Response(null, { status: 204, headers: { 'x-session-context': 'verified' } });
-      }
-      return json({ items, nextCursor: null });
-    });
-    show(<SegmentsScreen canEdit />);
-    await user.click(await screen.findByRole('button', { name: 'Delete VIP in Dhaka' }));
-    const dialog = screen.getByRole('dialog', { name: 'Delete VIP in Dhaka?' });
-    await user.click(within(dialog).getByRole('button', { name: 'Delete segment' }));
-    expect(
-      await screen.findByText('No segments yet. Create one to group customers for a campaign.'),
-    ).toBeTruthy();
-  });
-});
-
+const counts = { all: 24, active: 16, archived: 8 };
 const reachable = { whatsapp: 5, sms: 4, messenger: 2 };
+const emptyView = { status: 'all' as const };
 
-// The list and the live count, with a handler for anything else.
+// The list, its tab counts and the live count, with a handler for anything else.
 function listServer(
-  items: SegmentResponse[],
+  items: SegmentListItem[],
   other: (request: Request) => Response | undefined = () => undefined,
 ) {
   return serve((request) => {
     const custom = other(request);
     if (custom) return custom;
     if (request.path === '/segments/preview') return json({ count: 7, reachable });
+    if (request.path === '/segments/counts') return json(counts);
     return json({ items, nextCursor: null });
   });
 }
+
+describe('Segments list', () => {
+  it('shows tabs with counts and each segment with its contacts and last edit', async () => {
+    const requests = listServer([vip]);
+    show(<SegmentsScreen view={emptyView} canEdit />);
+    expect(screen.getByRole('status', { name: 'Loading segments' })).toBeTruthy();
+    await screen.findAllByRole('link', { name: 'VIP in Dhaka' });
+    expect(await screen.findByRole('tab', { name: 'All 24' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Active 16' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Archive 8' })).toBeTruthy();
+    expect(screen.getAllByText('24 contacts').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Nov 1, 2026 at 6:00 AM/).length).toBeGreaterThan(0);
+    expect(requests.find(({ path }) => path === '/segments')?.query.get('status')).toBe('all');
+  });
+
+  it('moves to the archive tab and searches by name through the address', async () => {
+    const user = userEvent.setup();
+    listServer([vip]);
+    show(<SegmentsScreen view={emptyView} canEdit />);
+    await user.click(await screen.findByRole('tab', { name: /Archive/ }));
+    expect(urlPush).toHaveBeenCalledWith('/segments?status=archived');
+    await user.type(screen.getByLabelText('Search segments'), 'vip');
+    await vi.waitFor(() => expect(urlReplace).toHaveBeenCalledWith('/segments?search=vip'));
+  });
+
+  it('shows the empty state with Add Segment when the shop has none', async () => {
+    serve((request) =>
+      request.path === '/segments/counts'
+        ? json({ all: 0, active: 0, archived: 0 })
+        : json({ items: [], nextCursor: null }),
+    );
+    show(<SegmentsScreen view={emptyView} canEdit />);
+    expect(await screen.findByText('You don’t have any segment yet')).toBeTruthy();
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.getAllByRole('link', { name: 'Add Segment' })).toHaveLength(2);
+  });
+
+  it('archives from the row menu', async () => {
+    const user = userEvent.setup();
+    const requests = listServer([vip]);
+    show(<SegmentsScreen view={emptyView} canEdit />);
+    await user.click(
+      (await screen.findAllByRole('button', { name: 'More actions for VIP in Dhaka' }))[0]!,
+    );
+    await user.click(await screen.findByRole('menuitem', { name: 'Archive' }));
+    await vi.waitFor(() =>
+      expect(requests.some(({ path }) => path === `/segments/${vip.id}/archive`)).toBe(true),
+    );
+  });
+
+  it('archives several selected segments at once', async () => {
+    const user = userEvent.setup();
+    const requests = listServer([vip]);
+    show(<SegmentsScreen view={emptyView} canEdit />);
+    await user.click((await screen.findAllByRole('checkbox', { name: 'Select VIP in Dhaka' }))[0]!);
+    const bar = screen.getByRole('region', { name: 'Selected segments' });
+    expect(within(bar).getByText('1 selected')).toBeTruthy();
+    await user.click(within(bar).getByRole('button', { name: 'Archive' }));
+    await vi.waitFor(() =>
+      expect(requests.some(({ path }) => path === `/segments/${vip.id}/archive`)).toBe(true),
+    );
+  });
+
+  it('offers a member who cannot edit only View', async () => {
+    listServer([vip]);
+    show(<SegmentsScreen view={{ ...emptyView, edit: vip.id }} canEdit={false} />);
+    await screen.findByRole('heading', { name: 'VIP in Dhaka' });
+    expect(screen.queryByLabelText('Segment name')).toBeTruthy();
+    expect(screen.getByLabelText('Segment name').matches(':disabled')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Save segment' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Edit segment' })).toBeNull();
+  });
+
+  it('shows a failed list with a retry', async () => {
+    let fail = true;
+    serve((request) => {
+      if (request.path === '/segments/counts') return json(counts);
+      if (fail)
+        return json({ error: { code: 'FORBIDDEN', message: 'You cannot view segments.' } }, 403);
+      return json({ items: [vip], nextCursor: null });
+    });
+    show(<SegmentsScreen view={emptyView} canEdit />);
+    expect(await screen.findByText('You cannot view segments.')).toBeTruthy();
+    fail = false;
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry segments' }));
+    expect(await screen.findAllByRole('link', { name: 'VIP in Dhaka' })).toBeTruthy();
+  });
+
+  it('deletes a segment after naming it in the confirmation', async () => {
+    const user = userEvent.setup();
+    let items = [vip];
+    const requests = listServer(items, ({ path, method }) => {
+      if (path === `/segments/${vip.id}` && method === 'DELETE') {
+        items = [];
+        return new Response(null, { status: 204, headers: { 'x-session-context': 'verified' } });
+      }
+      return undefined;
+    });
+    show(<SegmentsScreen view={emptyView} canEdit />);
+    await user.click(
+      (await screen.findAllByRole('button', { name: 'More actions for VIP in Dhaka' }))[0]!,
+    );
+    await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete VIP in Dhaka?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Delete segment' }));
+    await vi.waitFor(() => expect(requests.some(({ method }) => method === 'DELETE')).toBe(true));
+  });
+});
 
 describe('Segment builder', () => {
   // Typing, five Radix select choices and the 400 ms count wait take about 2 s here and over 5 s on a busy CI runner.
@@ -223,7 +284,7 @@ describe('Segment builder', () => {
         ? json({ ...vip, name: 'Repeat buyers' }, 201)
         : undefined,
     );
-    show(<SegmentsScreen edit="new" canEdit />);
+    show(<SegmentsScreen view={{ ...emptyView, edit: 'new' }} canEdit />);
     expect(
       await screen.findByText('Finish each condition to see how many contacts match.'),
     ).toBeTruthy();
@@ -283,7 +344,7 @@ describe('Segment builder', () => {
           )
         : undefined,
     );
-    show(<SegmentsScreen edit={vip.id} canEdit />);
+    show(<SegmentsScreen view={{ ...emptyView, edit: vip.id }} canEdit />);
     const name = await screen.findByLabelText('Segment name');
     expect(await screen.findByText('Estimated contacts')).toBeTruthy();
     // The saved tree had one loose condition and one group; now both are groups.
