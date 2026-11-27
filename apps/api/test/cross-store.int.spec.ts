@@ -983,6 +983,24 @@ fixture('GET /products/tags', async () => {
   expect(await names(a)).toEqual(['Eid']);
   expect(await names(b)).toEqual(['Winter']);
 });
+fixture('GET /products/collections', async () => {
+  const { a, b } = await pair();
+  for (const [shop, collection] of [
+    [a, 'Eid 2026'],
+    [b, 'Winter'],
+  ] as const)
+    await success(shop, 'POST', '/products', 201, {
+      name: 'Panjabi',
+      pricePoisha: 1000,
+      collections: [collection],
+    });
+  const names = async (shop: Shop) =>
+    (await success(shop, 'GET', '/products/collections', 200))
+      .json()
+      .items.map((row: { name: string }) => row.name);
+  expect(await names(a)).toEqual(['Eid 2026']);
+  expect(await names(b)).toEqual(['Winter']);
+});
 fixture('GET /products/categories', async () => {
   const { a, b } = await pair();
   await productCategory(a, 'Clothing');
