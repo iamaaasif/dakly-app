@@ -114,6 +114,30 @@ export class CommentsRepository {
     return row;
   }
 
+  // Claiming twice is fine, so a retried run keeps its claim; a comment somebody already answered
+  // cannot be claimed.
+  async claimForAutomation(storeId: string, id: string, now: Date): Promise<boolean> {
+    const claimed = await this.database.forStore(storeId, (tx) =>
+      tx
+        .update(socialComments)
+        .set({
+          automationClaimedAt: sql`coalesce(${socialComments.automationClaimedAt}, ${now})`,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(socialComments.storeId, storeId),
+            eq(socialComments.id, id),
+            eq(socialComments.status, 'new'),
+            isNull(socialComments.privateRepliedAt),
+            isNull(socialComments.publicReplyExternalId),
+          ),
+        )
+        .returning({ id: socialComments.id }),
+    );
+    return claimed.length > 0;
+  }
+
   async claimPrivateReply(
     storeId: string,
     id: string,

@@ -7,6 +7,7 @@ import { NestFactory } from '@nestjs/core';
 import type { Queue } from 'bullmq';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
 
+import { automationTemplates } from '@dakly/contracts/automations/templates';
 import {
   chatClassificationSchema,
   type ChatClassification,
@@ -72,7 +73,16 @@ afterAll(async () => {
   try {
     await queue?.obliterate();
     await app?.close();
+    await admin.pool.query('delete from automation_runs where store_id = any($1::uuid[])', [
+      storeIds,
+    ]);
+    await admin.pool.query(
+      'update automations set published_version_id = null where store_id = any($1::uuid[])',
+      [storeIds],
+    );
     for (const table of [
+      'automation_versions',
+      'automations',
       'social_comments',
       'post_targets',
       'posts',
@@ -875,6 +885,50 @@ it('answers nobody but testers while the channel is in practice', async () => {
   expect((await observe(practice)).replies).toMatchObject([
     { body: 'Ji bolun', author_type: 'ai' },
   ]);
+});
+
+const automationReminderStep = automationTemplates.cod_order_confirmation.graph.steps.remind;
+
+async function publishMessageAutomation({ storeId }: Shop, firstStepKind: 'send' | 'exit') {
+  const automationId = randomUUID();
+  const versionId = randomUUID();
+  const graph = {
+    trigger: { key: 'message_received', filters: [] },
+    reEntry: { rule: 'every_time' },
+    workflowFilters: [],
+    goal: null,
+    exitConditions: [],
+    firstStepKey: 'first',
+    steps: { first: firstStepKind === 'send' ? automationReminderStep : { kind: 'exit' } },
+  };
+  await admin.pool.query(
+    "insert into automations (id, store_id, name, trigger_type, status, draft_graph) values ($1, $2, 'দাম', 'message_received', 'active', $3)",
+    [automationId, storeId, graph],
+  );
+  await admin.pool.query(
+    "insert into automation_versions (id, store_id, automation_id, version, graph, published_at) values ($1, $2, $3, 1, $4, now() - interval '1 day')",
+    [versionId, storeId, automationId, graph],
+  );
+  await admin.pool.query('update automations set published_version_id = $2 where id = $1', [
+    automationId,
+    versionId,
+  ]);
+}
+
+it('stays quiet on a burst an automation answers, and answers one it only tags', async () => {
+  const answered = await sellingShop();
+  await publishMessageAutomation(answered, 'send');
+  const price = await receive(answered, 'এই পাঞ্জাবির দাম কত?');
+  scriptSequence(classified);
+  await agent.reply(answered.storeId, price.conversation_id, price.id);
+  expect(await sent(answered)).toEqual([]);
+
+  const tagged = await sellingShop();
+  await publishMessageAutomation(tagged, 'exit');
+  const question = await receive(tagged, 'dam koto bhai?');
+  scriptSequence(classified, replyText('Ji bolun'));
+  await agent.reply(tagged.storeId, question.conversation_id, question.id);
+  expect((await sent(tagged)).map((row) => row.author_type)).toEqual(['ai']);
 });
 
 async function runOutcomes({ storeId }: Shop) {

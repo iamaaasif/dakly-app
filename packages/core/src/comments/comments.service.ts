@@ -182,6 +182,13 @@ export class CommentsService {
     return replies.some(({ actorType }) => actorType === 'system');
   }
 
+  // The automation that answers a comment calls this first; the AI agent then leaves it alone.
+  // False means the comment was already answered, so the automation sends nothing.
+  async claimForAutomation(storeId: string, id: string): Promise<boolean> {
+    await this.requireChats(storeId);
+    return this.repository.claimForAutomation(storeId, id, this.clock.now());
+  }
+
   async replyAutomatically(
     storeId: string,
     id: string,
