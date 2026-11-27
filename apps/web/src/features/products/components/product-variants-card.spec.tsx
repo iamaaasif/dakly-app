@@ -153,11 +153,21 @@ describe('Variants card', () => {
   });
 
   it('suggests common sizes and groups rows by the first option', async () => {
-    show(saved);
-    await choosePresets('Color', 'Black', 'White');
+    show({
+      ...saved,
+      options: [{ name: 'Color', values: ['Black', 'White'] }],
+      variants: ['Black', 'White'].map((color, index) => ({
+        ...saved.variants[0]!,
+        id: `019c01ea-cf15-7d31-a7f5-d73d66007ae${index}`,
+        title: color,
+        sku: null,
+        isDefault: false,
+        optionValues: { Color: color },
+      })),
+    });
     await choosePresets('Size', 'S', 'M');
-    const black = screen.getByRole('region', { name: 'Black variants' });
-    expect(within(black).getAllByRole('listitem')).toHaveLength(2);
+    const black = await screen.findByRole('region', { name: 'Black variants' });
+    await waitFor(() => expect(within(black).getAllByRole('listitem')).toHaveLength(2));
     await userEvent.click(within(black).getByRole('button', { name: /^Black2 variants/ }));
     expect(within(black).queryAllByRole('listitem')).toHaveLength(0);
     expect(screen.getByRole('region', { name: 'White variants' })).toBeTruthy();
