@@ -100,7 +100,7 @@ export class SendPolicyService {
     }
   }
 
-  async check(storeId: string, request: SendRequest): Promise<SendDecision> {
+  async check(storeId: string, request: SendRequest & SendWindow): Promise<SendDecision> {
     if (request.category === 'marketing') this.requireTransaction();
     const reason = await this.recipientReason(storeId, request);
     if (reason) return skip(reason);
@@ -121,7 +121,7 @@ export class SendPolicyService {
 
   private async recipientReason(
     storeId: string,
-    request: SendRequest,
+    request: SendRequest & SendWindow,
   ): Promise<SkipReason | undefined> {
     const contact = await this.contacts.findRecipient(storeId, request.contactId);
     const [consent] =

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type SegmentCondition, segmentRulesSchema } from './segments';
+import { type SegmentCondition, segmentListQuerySchema, segmentRulesSchema } from './segments';
 
 const dhaka: SegmentCondition = { field: 'district', operator: 'is_any_of', values: ['ঢাকা'] };
 
@@ -48,5 +48,20 @@ describe('segmentRulesSchema', () => {
       },
     ])
       expect(segmentRulesSchema.safeParse(rules).success).toBe(false);
+  });
+});
+
+describe('segmentListQuerySchema', () => {
+  it('lists every segment by default and trims the search', () => {
+    expect(segmentListQuerySchema.parse({})).toMatchObject({ status: 'all', limit: 50 });
+    expect(segmentListQuerySchema.parse({ status: 'archived', search: '  ঈদ ' })).toMatchObject({
+      status: 'archived',
+      search: 'ঈদ',
+    });
+  });
+
+  it('refuses an unknown status and a blank search', () => {
+    expect(segmentListQuerySchema.safeParse({ status: 'deleted' }).success).toBe(false);
+    expect(segmentListQuerySchema.safeParse({ search: '   ' }).success).toBe(false);
   });
 });

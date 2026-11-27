@@ -17,8 +17,11 @@ import {
 import type { ReactNode } from 'react';
 
 import type { AutomationStepStats } from '@dakly/contracts/automations';
-import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
-import type { CampaignChannel } from '@dakly/contracts/campaigns';
+import type {
+  AutomationChannel,
+  AutomationGraph,
+  AutomationStep,
+} from '@dakly/contracts/automations/graph';
 import { formatCount } from '@dakly/contracts/money';
 import { cn } from '@dakly/ui/cn';
 import {
@@ -305,7 +308,7 @@ function NodeExtras({
   );
 }
 
-function sendTitle(channels: readonly CampaignChannel[]) {
+function sendTitle(channels: readonly AutomationChannel[]) {
   const [only] = channels;
   return only && channels.length === 1 ? channelLabels[only] : 'Send message';
 }

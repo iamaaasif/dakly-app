@@ -172,3 +172,11 @@ export function formatDhakaMonthDay(value: string): string {
     timeZone: 'Asia/Dhaka',
   }).format(new Date(value));
 }
+
+// "Nov 26, 2026 at 5:14 AM", the way tables show when something was last edited.
+export function formatDateAtTime(value: string, timeZone = 'Asia/Dhaka'): string {
+  const instant = parseInstant(value);
+  const date = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeZone }).format(instant);
+  const time = new Intl.DateTimeFormat('en-US', { timeStyle: 'short', timeZone }).format(instant);
+  return `${date} at ${time}`;
+}

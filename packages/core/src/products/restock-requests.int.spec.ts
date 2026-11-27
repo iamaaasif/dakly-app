@@ -31,7 +31,7 @@ describe('RestockRequestsService', () => {
         : undefined,
   } as unknown as ContactsService;
   const messaging = {
-    latestMessengerRoute: async (_storeId: string, contactId: string) =>
+    latestChatRoute: async (_storeId: string, contactId: string) =>
       unreachable.has(contactId)
         ? undefined
         : { connectionId: randomUUID(), identityId: randomUUID() },
@@ -172,7 +172,7 @@ describe('RestockRequestsService', () => {
       new RestockRequestsRepository(tenant),
       contacts,
       {
-        latestMessengerRoute: messaging.latestMessengerRoute.bind(messaging),
+        latestChatRoute: messaging.latestChatRoute.bind(messaging),
         queueChannelMessage: async () => {
           throw new Error('queue down');
         },

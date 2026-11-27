@@ -2,12 +2,15 @@
 
 import { useRef, useState, type RefObject } from 'react';
 
-import { maxOrderShippingLabels } from '@dakly/contracts/order-shipping-labels';
-import { orderTabs, type OrderListQuery, type OrderStage } from '@dakly/contracts/orders';
+import {
+  orderTabs,
+  type OrderAlerts as Alerts,
+  type OrderListQuery,
+  type OrderStage,
+} from '@dakly/contracts/orders';
 import { Badge } from '@dakly/ui/badge';
 import { Button } from '@dakly/ui/button';
 import { cn } from '@dakly/ui/cn';
-import { QueryError } from '@dakly/ui/query-error';
 
 import { ordersSearch, useOrders } from '../api/orders';
 import { orderStageLabels } from '../order-labels';
@@ -16,10 +19,7 @@ import { OrderAlerts } from './order-alerts';
 import { OrderDetailSheet } from './order-detail-sheet';
 import { NewOrderDialog } from './order-editor-dialog';
 import { OrderExportMenu } from './order-export-menu';
-import { OrderFilters } from './order-filters';
-import { OrderLabelSelection } from './order-label-selection';
-import { OrdersList } from './orders-list';
-import { Refreshing } from '@/components/refreshing';
+import { OrdersResults } from './orders-results';
 import { StorePage } from '@/components/store-page';
 import { UrlLink } from '@/components/url-link';
 import { useSessionContext } from '@/lib/session-context';
@@ -30,25 +30,15 @@ type OrdersScreenProps = { query: OrderListQuery; selected?: string; labelOrderI
 export function OrdersScreen(initial: OrdersScreenProps) {
   const { query, selected, labelOrderIds = [] } = useUrlQuery(initial, parseOrdersScreen);
   const orders = useOrders(query);
-  const pendingListRefresh = orders.fetchStatus !== 'idle';
+  const alerts = useRememberedAlerts(orders.data?.alerts);
   const router = useUrlRouter();
   const heading = useRef<HTMLHeadingElement>(null);
   const navigationQuery = { ...query, labelOrderIds };
-
-  function changeLabelSelection(ids: string[]) {
-    router.replace(`/orders?${ordersSearch({ ...query, selected, labelOrderIds: ids })}`);
-  }
-
-  function toggleLabel(id: string) {
-    if (labelOrderIds.includes(id))
-      changeLabelSelection(labelOrderIds.filter((value) => value !== id));
-    else if (labelOrderIds.length < maxOrderShippingLabels)
-      changeLabelSelection([...labelOrderIds, id]);
-  }
+  const pendingListRefresh = orders.fetchStatus !== 'idle';
 
   return (
     <StorePage permission="canViewOrders">
-      <main className="mx-auto max-w-7xl space-y-4 p-6 md:p-8">
+      <main className="space-y-4 p-4 md:p-8">
         <OrdersHeader
           heading={heading}
           query={query}
@@ -56,25 +46,14 @@ export function OrdersScreen(initial: OrdersScreenProps) {
             router.replace(`/orders?${ordersSearch({ ...navigationQuery, selected: id })}`)
           }
         />
-        {orders.data ? (
-          <OrderAlerts alerts={orders.data.alerts} labelOrderIds={labelOrderIds} />
-        ) : null}
+        {alerts ? <OrderAlerts alerts={alerts} labelOrderIds={labelOrderIds} /> : null}
         <OrderStageNav query={navigationQuery} counts={orders.data?.counts} />
-        <OrderFilters query={navigationQuery} />
-        <OrderLabelSelection orderIds={labelOrderIds} onClear={() => changeLabelSelection([])} />
-        {orders.isPending ? <p role="status">Loading orders…</p> : null}
-        {orders.error ? (
-          <QueryError
-            message={orders.error.message}
-            onRetry={() => void orders.refetch()}
-            retryLabel="Retry orders"
-          />
-        ) : null}
-        {orders.data ? (
-          <Refreshing active={orders.isPlaceholderData}>
-            <OrdersList page={orders.data} query={navigationQuery} onToggleLabel={toggleLabel} />
-          </Refreshing>
-        ) : null}
+        <OrdersResults
+          query={navigationQuery}
+          orders={orders}
+          counts={orders.data?.counts}
+          selected={selected}
+        />
         <p className="text-xs text-text-muted">Return risk is based on your past orders.</p>
         {selected ? (
           <OrderDetailSheet
@@ -89,6 +68,13 @@ export function OrdersScreen(initial: OrdersScreenProps) {
       </main>
     </StorePage>
   );
+}
+
+// The alerts come with each list, so another tab's loading list must not make the row blink away.
+function useRememberedAlerts(latest: Alerts | undefined) {
+  const [alerts, setAlerts] = useState(latest);
+  if (latest && latest !== alerts) setAlerts(latest);
+  return alerts;
 }
 
 type OrdersHeaderProps = {
@@ -108,7 +94,7 @@ function OrdersHeader({ heading, query, onSaved }: OrdersHeaderProps) {
         <h1
           ref={heading}
           tabIndex={-1}
-          className="text-2xl font-bold tracking-tight text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="text-page font-bold tracking-tight text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         >
           Orders
         </h1>

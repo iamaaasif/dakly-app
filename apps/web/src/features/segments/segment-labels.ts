@@ -1,5 +1,10 @@
 import type { ConsentChannel, ContactKind, ContactSource } from '@dakly/contracts/contacts';
-import type { SegmentCondition, SegmentRules } from '@dakly/contracts/segments';
+import {
+  MAX_SEGMENT_CONDITIONS,
+  type SegmentCondition,
+  type SegmentInnerGroup,
+  type SegmentRules,
+} from '@dakly/contracts/segments';
 
 export type SegmentField = SegmentCondition['field'];
 
@@ -40,11 +45,6 @@ export const channelLabels: Record<ConsentChannel, string> = {
   email: 'Email',
 };
 
-const valueLabels: Partial<Record<SegmentField, Record<string, string>>> = {
-  source: sourceLabels,
-  kind: kindLabels,
-};
-
 export function newCondition(field: SegmentField): SegmentCondition {
   if (field === 'consent') return { field, channel: 'sms', granted: true };
   if (field === 'source') return { field, operator: 'is_any_of', values: ['messenger'] };
@@ -52,32 +52,32 @@ export function newCondition(field: SegmentField): SegmentCondition {
   return { field, operator: 'is_any_of', values: [''] };
 }
 
-export function describeRules(rules: SegmentRules): string {
-  const parts = rules.conditions.map((item) =>
-    'match' in item ? `(${joinConditions(item.conditions, item.match)})` : describe(item),
+export function newGroup(): SegmentInnerGroup {
+  return { match: 'all', conditions: [newCondition('tag')] };
+}
+
+function countConditions(rules: SegmentRules): number {
+  return rules.conditions.reduce(
+    (total, item) => total + ('match' in item ? item.conditions.length : 1),
+    0,
   );
-  return parts.join(rules.match === 'all' ? ' and ' : ' or ');
 }
 
-function joinConditions(conditions: SegmentCondition[], match: SegmentRules['match']) {
-  return conditions.map(describe).join(match === 'all' ? ' and ' : ' or ');
-}
+export const canAddCondition = (rules: SegmentRules) =>
+  countConditions(rules) < MAX_SEGMENT_CONDITIONS;
 
-function describe(condition: SegmentCondition): string {
-  if (condition.field === 'consent')
-    return `${condition.granted ? 'agreed to' : 'not agreed to'} ${channelLabels[condition.channel]} messages`;
-  const values: string[] = condition.values;
-  const labels = valueLabels[condition.field];
-  const shown = values.map((value) => labels?.[value] ?? value);
-  const verb = condition.operator === 'is_any_of' ? 'is' : 'is not';
-  return `${fieldLabels[condition.field]} ${verb} ${shown.join(', ')}`;
+// The builder shows only groups. Conditions saved loose at the top become one group that matches
+// the same way as the top, which selects the same people.
+export function groupLooseConditions(rules: SegmentRules): SegmentRules {
+  const loose = rules.conditions.filter((item): item is SegmentCondition => !('match' in item));
+  if (!loose.length) return rules;
+  const wrapped: SegmentInnerGroup = { match: rules.match, conditions: loose };
+  let placed = false;
+  const conditions = rules.conditions.flatMap((item) => {
+    if ('match' in item) return [item];
+    if (placed) return [];
+    placed = true;
+    return [wrapped];
+  });
+  return { ...rules, conditions };
 }
-
-export function matchText(count: number): string {
-  return `${count} ${count === 1 ? 'customer matches' : 'customers match'}`;
-}
-
-export const matchOptions = [
-  ['all', 'All of these'],
-  ['any', 'Any of these'],
-] as const;

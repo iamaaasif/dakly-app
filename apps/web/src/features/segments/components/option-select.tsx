@@ -11,7 +11,8 @@ type OptionSelectProps<Value extends string | boolean> = {
   options: readonly (readonly [Value, string])[];
 };
 
-// Radix items take strings only, so a boolean option is matched back to its real value.
+// Radix items take strings only, so a boolean option is matched back to its real value. The label
+// stays for screen readers: the builder rows have no visible labels.
 export function OptionSelect<Value extends string | boolean>({
   name,
   label,
@@ -19,7 +20,7 @@ export function OptionSelect<Value extends string | boolean>({
 }: OptionSelectProps<Value>) {
   const { field } = useController<CreateSegmentInput>({ name });
   return (
-    <FormField name={name} label={label}>
+    <FormField name={name} label={label} hideLabel>
       {(control) => (
         <Select
           value={String(field.value)}
