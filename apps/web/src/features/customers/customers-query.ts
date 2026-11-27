@@ -35,6 +35,7 @@ export type CustomerFilterChange = Partial<
     ContactListQuery,
     | 'type'
     | 'source'
+    | 'tag'
     | 'minSpendPoisha'
     | 'maxSpendPoisha'
     | 'lastPurchase'
@@ -43,6 +44,8 @@ export type CustomerFilterChange = Partial<
     | 'cursor'
   >
 >;
+
+export type ListHref = (columns: CustomerColumn[], change: CustomerFilterChange) => string;
 
 // A filter change starts from the first page, so the cursor is dropped unless the change names one.
 export function customersHref(
