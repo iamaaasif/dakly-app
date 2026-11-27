@@ -271,17 +271,11 @@ describe('AutomationEntryService (Postgres)', () => {
       };
       const burst = (text: string, intent: ChatIntent | null, newestMessageId = randomUUID()) => {
         spoken = text;
-        return entries.answersMessage(storeId, {
-          id: newestMessageId,
-          type: 'message.burst_received',
-          occurredAt: now.toISOString(),
-          payload: {
-            conversationId,
-            contactId,
-            channel: 'messenger',
-            intent,
-            messageIds: [newestMessageId],
-          },
+        return entries.answersMessage(storeId, conversationId, {
+          contactId,
+          channel: 'messenger',
+          intent,
+          messageIds: [newestMessageId],
         });
       };
       const priceFilters: AutomationGraph['trigger']['filters'] = [
