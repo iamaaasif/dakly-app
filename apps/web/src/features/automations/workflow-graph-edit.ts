@@ -91,6 +91,13 @@ export function insertStep(
   return { ...graph, steps: { ...steps, [parent]: redirect(steps[parent]!, target, key) } };
 }
 
+// Puts a step after a point where paths merge, so every path goes through it.
+export function insertAfterMerge(graph: AutomationGraph, target: string, kind: NewStepKind) {
+  const key = freshKey(kind, graph.steps);
+  const redirected = redirectParents(graph, target, key);
+  return { ...redirected, steps: { ...redirected.steps, [key]: newStep(kind, target) } };
+}
+
 export function insertDelay(
   graph: AutomationGraph,
   edge: { parent: string; target: string },

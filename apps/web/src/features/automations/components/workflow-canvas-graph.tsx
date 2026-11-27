@@ -39,16 +39,18 @@ function EdgeLines({ layout }: { layout: CanvasLayout }) {
             </span>
           ),
       )}
-      {layout.merges.map((merge) => (
-        <span
-          key={merge.id}
-          aria-hidden="true"
-          className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-surface px-2.5 text-xs font-medium text-text-secondary shadow-card"
-          style={{ left: merge.x, top: merge.y }}
-        >
-          Paths merge
-        </span>
-      ))}
+      {layout.merges
+        .filter((merge) => merge.pill)
+        .map((merge) => (
+          <span
+            key={merge.id}
+            aria-hidden="true"
+            className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-border bg-surface px-2.5 text-xs font-medium text-text-secondary shadow-card"
+            style={{ left: merge.x, top: merge.y }}
+          >
+            Paths merge
+          </span>
+        ))}
     </>
   );
 }

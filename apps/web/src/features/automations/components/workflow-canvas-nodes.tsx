@@ -156,6 +156,7 @@ function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
 export type CanvasEditing = {
   canAdd: boolean;
   insert: (edge: { parent: string; target: string }, kind: NewStepKind) => void;
+  insertAfterMerge: (target: string, kind: NewStepKind) => void;
   remove: (key: string) => void;
   canMove: (key: string, direction: 'up' | 'down') => boolean;
   move: (key: string, direction: 'up' | 'down') => void;
@@ -175,7 +176,7 @@ function StepMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`Options for step ${number}`}
-        className="absolute top-1/2 right-1 grid size-8 -translate-y-1/2 place-items-center rounded-md text-text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
+        className="absolute top-1/2 right-1 grid size-8 -translate-y-1/2 place-items-center rounded-md text-text-subtle transition-colors hover:bg-surface-muted hover:text-text-secondary focus-visible:outline-2 focus-visible:outline-focus"
       >
         <EllipsisVertical size={16} aria-hidden="true" />
       </DropdownMenuTrigger>

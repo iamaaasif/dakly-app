@@ -60,13 +60,26 @@ export function EdgeAddButtons({
   layout: CanvasLayout;
   editing: CanvasEditing;
 }) {
-  return layout.edges.map((edge) => (
-    <AddStepButton
-      key={edge.id}
-      x={edge.midX}
-      y={edge.midY}
-      disabled={!editing.canAdd}
-      onAdd={(kind) => editing.insert({ parent: edge.from, target: edge.to }, kind)}
-    />
-  ));
+  return (
+    <>
+      {layout.edges.map((edge) => (
+        <AddStepButton
+          key={edge.id}
+          x={edge.midX}
+          y={edge.midY}
+          disabled={!editing.canAdd}
+          onAdd={(kind) => editing.insert({ parent: edge.from, target: edge.to }, kind)}
+        />
+      ))}
+      {layout.merges.map((merge) => (
+        <AddStepButton
+          key={merge.id}
+          x={merge.x}
+          y={merge.plusY}
+          disabled={!editing.canAdd}
+          onAdd={(kind) => editing.insertAfterMerge(merge.id, kind)}
+        />
+      ))}
+    </>
+  );
 }

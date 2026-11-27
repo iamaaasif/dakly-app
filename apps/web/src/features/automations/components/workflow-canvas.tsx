@@ -48,6 +48,8 @@ type Refresh = ReturnType<typeof useAutomation>['refetch'];
 // Only these triggers have stored events to count.
 const countedTriggers = ['consent_given', 'tag_added', 'birthday'];
 
+const hasRecentEntries = (graph: AutomationGraph) => countedTriggers.includes(graph.trigger.key);
+
 function recentEntriesLabel(preview: ReturnType<typeof useTriggerPreview>) {
   if (preview.isError) return 'Could not load';
   if (!preview.data) return '…';
@@ -195,7 +197,10 @@ function CanvasMain({ workflow, graph, layout, editing }: ViewportProps) {
 }
 
 function ReadOnlyViewport({ workflow }: { workflow: Workflow }) {
-  const layout = useMemo(() => layoutWorkflow(workflow.graph), [workflow.graph]);
+  const layout = useMemo(
+    () => layoutWorkflow(workflow.graph, hasRecentEntries(workflow.graph)),
+    [workflow.graph],
+  );
   return <CanvasMain workflow={workflow} graph={workflow.graph} layout={layout} />;
 }
 
@@ -254,7 +259,10 @@ function EditableCanvas({ workflow, refresh }: { workflow: Workflow; refresh: Re
   const editor = useWorkflowEditor(workflow, refresh);
   const [stepKey, openStep] = useCanvasParam('step');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const layout = useMemo(() => layoutWorkflow(editor.graph), [editor.graph]);
+  const layout = useMemo(
+    () => layoutWorkflow(editor.graph, hasRecentEntries(editor.graph)),
+    [editor.graph],
+  );
   const checks = useMemo(
     () => checkWorkflow(editor.graph, layout.stepNumber),
     [editor.graph, layout],
