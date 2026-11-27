@@ -15,6 +15,7 @@ const ORDER_ERRORS = {
     status: 400,
     message: 'Order totals are too large or a line discount exceeds its price',
   },
+  ORDER_ITEM_OUT_OF_STOCK: { status: 409, message: 'An item on this order is out of stock' },
   ORDER_PRICE_REQUIRED: { status: 409, message: 'Set a price for each item before ordering' },
   ORDER_CHANGED: {
     status: 409,

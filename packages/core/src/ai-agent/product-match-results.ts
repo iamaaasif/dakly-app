@@ -1,3 +1,5 @@
+import { isInStock } from '@dakly/contracts/product-editor-fields';
+
 import type { PhotoMatch } from '../product-search/product-search.service';
 import type { ChatProduct } from '../products/products.service';
 
@@ -67,14 +69,12 @@ export function describeAlternatives(
   alternatives: ChatProduct[],
   present: (product: ChatProduct) => object,
 ): object {
-  const soldOut = product.isStockTracked
-    ? product.variants.filter((variant) => variant.available <= 0)
-    : [];
+  const soldOut = product.variants.filter((variant) => !isInStock(product, variant.available));
   return {
     rule: alternativesRule,
     products: [present(product)],
     inStockSizes: product.variants
-      .filter((variant) => !product.isStockTracked || variant.available > 0)
+      .filter((variant) => isInStock(product, variant.available))
       .map((variant) => ({ variantId: variant.id, title: variant.title })),
     soldOutVariants: soldOut.map((variant) => ({ variantId: variant.id, title: variant.title })),
     alternatives: alternatives.map(present),

@@ -84,6 +84,7 @@ describe('product photos with Postgres', () => {
     {} as never,
     {} as never,
     { unitsToConfirm: async () => [] } as never,
+    {} as never,
   );
   const actor = { kind: 'user', userId: f.userA } as const;
   beforeAll(() => f.setup());

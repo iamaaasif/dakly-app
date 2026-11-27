@@ -18,6 +18,7 @@ import type { ReactNode } from 'react';
 
 import type { AutomationStepStats } from '@dakly/contracts/automations';
 import type { AutomationGraph, AutomationStep } from '@dakly/contracts/automations/graph';
+import type { CampaignChannel } from '@dakly/contracts/campaigns';
 import { formatCount } from '@dakly/contracts/money';
 import { cn } from '@dakly/ui/cn';
 import {
@@ -111,7 +112,7 @@ function stepBody(step: AutomationStep, stepNumber: (key: string) => number) {
       return (
         <StepCard
           icon={step.channels[0] === 'sms' ? MessageSquareText : MessageCircle}
-          title={step.channels.map((channel) => channelLabels[channel]).join(' / ')}
+          title={sendTitle(step.channels)}
           detail={step.message.text}
         />
       );
@@ -302,6 +303,11 @@ function NodeExtras({
       {number !== null && <span className="sr-only">Step {number}</span>}
     </>
   );
+}
+
+function sendTitle(channels: readonly CampaignChannel[]) {
+  const [only] = channels;
+  return only && channels.length === 1 ? channelLabels[only] : 'Send message';
 }
 
 export function CanvasNodeItem({

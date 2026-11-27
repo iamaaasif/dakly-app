@@ -109,6 +109,7 @@ export class ProductOrderVariantsRepository {
             ),
           unitCostPoisha: productVariants.costPoisha,
           isStockTracked: products.isStockTracked,
+          stockStatus: products.stockStatus,
         })
         .from(productVariants)
         .innerJoin(

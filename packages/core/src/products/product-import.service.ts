@@ -111,6 +111,9 @@ export class ProductImportService {
           category === null ? null : (await this.categories.resolvePath(storeId, category)).id,
         brandId: brand === null ? null : await this.brands.resolveName(storeId, brand),
         status: details.status ?? 'active',
+        shortDescription: null,
+        barcode: null,
+        tags: [],
         aliases: [],
         weightGrams: null,
         compareAtPricePoisha: null,
@@ -118,6 +121,7 @@ export class ProductImportService {
         negotiationOpeningPoisha: null,
         negotiationFloorPoisha: null,
         isStockTracked: context.tracksStock,
+        stockStatus: 'in_stock',
         isVisibleInChats: true,
         isVisibleInOrderLink: true,
         variants: variants.map(({ sku, optionValues, priceOverridePoisha, costPoisha }) => ({
