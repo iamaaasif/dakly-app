@@ -1814,6 +1814,55 @@ fixture('POST /contacts/:contactId/consents', async () => {
   );
   expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id, status: 'granted' }]);
 });
+for (const part of [
+  'summary',
+  'orders',
+  'activity',
+  'campaigns',
+  'notes',
+  'marketing-preferences',
+]) {
+  fixture(`GET /contacts/:contactId/${part}`, async () => {
+    const { a, b } = await pair(),
+      id = await contact(a);
+    await success(a, 'GET', `/contacts/${id}/${part}`, 200);
+    await hidden(b, 'GET', (value) => `/contacts/${value}/${part}`, id);
+  });
+}
+fixture('POST /contacts/:contactId/notes', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  const own = await success(a, 'POST', `/contacts/${id}/notes`, 201, { body: 'শুক্রবারে ডেলিভারি' });
+  await hidden(
+    b,
+    'POST',
+    (value) => `/contacts/${value}/notes`,
+    id,
+    () => ({ body: 'অন্যের নোট' }),
+  );
+  const rows = await f.admin.pool.query(
+    'select id, store_id from contact_notes where contact_id=$1',
+    [id],
+  );
+  expect(rows.rows).toEqual([{ id: own.json().id, store_id: a.id }]);
+});
+fixture('PUT /contacts/:contactId/marketing-preferences/:channel', async () => {
+  const { a, b } = await pair(),
+    id = await contact(a);
+  const own = await success(a, 'PUT', `/contacts/${id}/marketing-preferences/sms`, 200, {
+    subscribed: true,
+  });
+  expect(own.json()[1]).toMatchObject({ channel: 'sms', status: 'granted' });
+  await hidden(
+    b,
+    'PUT',
+    (value) => `/contacts/${value}/marketing-preferences/sms`,
+    id,
+    () => ({ subscribed: false }),
+  );
+  const rows = await f.admin.pool.query('select status from consents where contact_id=$1', [id]);
+  expect(rows.rows).toEqual([{ status: 'granted' }]);
+});
 const khataPage = { contentType: 'image/jpeg', sizeBytes: 2_000_000 };
 async function newKhataPage(shop: Shop) {
   const created = await success(shop, 'POST', '/khata-scans/pages', 201, khataPage);
