@@ -12,6 +12,7 @@ import { runKhataEval } from './khata-eval';
 import { runTranscribeEval, runVisionEval, type MediaScore } from './media-eval';
 import { runMemoryEval } from './memory-eval';
 import { runOptionsPhotoEval, runOptionsTitleEval } from './options-eval';
+import { runOrderFillEval } from './order-fill-eval';
 import { classifyQuestion, composeReply, evalShopRules, handoverFor } from './reply-pipeline';
 import { runSuggestEval } from './suggest-eval';
 
@@ -225,6 +226,16 @@ export function reportAssistantProducts({ driver, meter }: JobContext, models: s
     label: 'reply',
     models,
     run: (model) => runAssistantProductEval(driver, meter, model),
+  });
+}
+
+export function reportOrderFill({ driver, meter }: JobContext, models: string[]) {
+  return reportMedia(meter, {
+    title: 'New order page (customer details from a pasted chat)',
+    unit: 'chats',
+    label: 'fast',
+    models,
+    run: (model) => runOrderFillEval(driver, meter, model),
   });
 }
 
