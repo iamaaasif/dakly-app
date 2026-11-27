@@ -53,6 +53,7 @@ const messageFields = {
   sourceType: messages.sourceType,
   createdAt: sql<string>`to_char(${messages.createdAt} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
   sentAt: messages.sentAt,
+  errorCode: messages.errorCode,
 };
 
 type ConversationChange = UpdateConversationInput & {

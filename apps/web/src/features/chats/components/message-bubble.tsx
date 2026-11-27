@@ -18,6 +18,13 @@ const kindLabels: Partial<Record<ConversationMessageResponse['kind'], string>> =
   template: 'Template',
 };
 
+const failureLabels = {
+  permission_missing:
+    'Not sent: Meta has not approved the Human Agent permission for this page, or the page connection needs renewing',
+  send_rejected: 'Not sent: Meta refused the message, usually because the reply window is over',
+  connection_unavailable: 'Not sent: the page connection is unavailable. Reconnect the channel',
+} as const;
+
 const statusLabels: Record<ConversationMessageResponse['status'], string> = {
   received: '',
   queued: 'Sending',
@@ -69,7 +76,13 @@ function MessageMeta({ message }: { message: ConversationMessageResponse }) {
     <div className="flex items-center gap-2 px-1 text-xs text-text-muted">
       {message.authorType === 'ai' ? <Badge variant="inverse">AI</Badge> : null}
       <time dateTime={message.createdAt}>{messageTime(message.createdAt)}</time>
-      {delivery ? <span>{statusLabels[message.status]}</span> : null}
+      {delivery ? (
+        <span>
+          {message.failureReason
+            ? failureLabels[message.failureReason]
+            : statusLabels[message.status]}
+        </span>
+      ) : null}
       {message.body ? <CopyMessageButton body={message.body} /> : null}
     </div>
   );

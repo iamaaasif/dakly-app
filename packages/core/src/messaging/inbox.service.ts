@@ -415,8 +415,18 @@ export class InboxService {
   }
 }
 
-function messageResponse(row: MessageRow): ConversationMessageResponse {
-  return { ...row, sentAt: row.sentAt?.toISOString() ?? null };
+const failureReasons = {
+  auth_error: 'permission_missing',
+  rejected: 'send_rejected',
+  connection_unavailable: 'connection_unavailable',
+} as const;
+
+function messageResponse({ errorCode, ...row }: MessageRow): ConversationMessageResponse {
+  const failureReason =
+    row.status === 'failed' && errorCode && errorCode in failureReasons
+      ? failureReasons[errorCode as keyof typeof failureReasons]
+      : null;
+  return { ...row, sentAt: row.sentAt?.toISOString() ?? null, failureReason };
 }
 
 function conversationResponse({
