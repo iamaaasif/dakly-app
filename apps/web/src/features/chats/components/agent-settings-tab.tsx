@@ -8,24 +8,27 @@ import {
   type SaveAgentSettingsInput,
 } from '@dakly/contracts/ai-agent-settings';
 import { ApiError } from '@dakly/ui/api-client';
-import { Button } from '@dakly/ui/button';
 import { QueryError } from '@dakly/ui/query-error';
 import { Skeleton } from '@dakly/ui/skeleton';
 import { useToast } from '@dakly/ui/toast';
 
+import { formValues } from '../agent-settings-values';
 import { useAgentSettings, useSaveAgentSettings } from '../api/agent-settings';
 import { AgentSettingsFields } from './agent-settings-fields';
+import { AgentSettingsSaveBar, type LeaveRequest } from './agent-settings-save-bar';
 import { formError } from '@/lib/form-error';
 
 // Settings, testers and test questions share one version, so any of them can make a save stale.
 const staleMessage =
   'These settings were changed somewhere else since you opened them, so your edits were not saved. Load the latest settings and make your change again.';
 
-function formValues({ handoverRulesSaved: _saved, ...values }: AgentSettingsResponse) {
-  return values;
-}
+type AgentSettingsTabProps = {
+  canEdit: boolean;
+  onDirtyChange: (dirty: boolean) => void;
+  leave: LeaveRequest | null;
+};
 
-export function AgentSettingsTab({ canEdit }: { canEdit: boolean }) {
+export function AgentSettingsTab({ canEdit, onDirtyChange, leave }: AgentSettingsTabProps) {
   const settings = useAgentSettings();
   if (settings.isPending) return <Skeleton className="h-96 w-full" />;
   if (settings.isError)
@@ -34,6 +37,8 @@ export function AgentSettingsTab({ canEdit }: { canEdit: boolean }) {
     <SettingsForm
       saved={settings.data}
       canEdit={canEdit}
+      onDirtyChange={onDirtyChange}
+      leave={leave}
       onReload={async () => (await settings.refetch()).data}
     />
   );
@@ -42,10 +47,12 @@ export function AgentSettingsTab({ canEdit }: { canEdit: boolean }) {
 type SettingsFormProps = {
   saved: AgentSettingsResponse;
   canEdit: boolean;
+  onDirtyChange: (dirty: boolean) => void;
+  leave: LeaveRequest | null;
   onReload: () => Promise<AgentSettingsResponse | undefined>;
 };
 
-function SettingsForm({ saved, canEdit, onReload }: SettingsFormProps) {
+function SettingsForm({ saved, canEdit, onDirtyChange, leave, onReload }: SettingsFormProps) {
   const form = useForm<SaveAgentSettingsInput>({
     resolver: zodResolver(saveAgentSettingsSchema),
     defaultValues: formValues(saved),
@@ -58,6 +65,16 @@ function SettingsForm({ saved, canEdit, onReload }: SettingsFormProps) {
     // reset with keepDirtyValues keeps the values but clears the dirty flag, which would disable Save.
     for (const key of dirtyKeys) form.setValue(key, typed[key], { shouldDirty: true });
   }, [form, saved]);
+  const isDirty = form.formState.isDirty;
+  useEffect(() => {
+    onDirtyChange(isDirty);
+    if (!isDirty) return;
+    // The browser's own prompt covers a reload or a closed tab, which the drawer cannot see.
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const save = useSaveAgentSettings();
   const showToast = useToast();
   const submit = form.handleSubmit(async (values) => {
@@ -78,26 +95,18 @@ function SettingsForm({ saved, canEdit, onReload }: SettingsFormProps) {
           {form.formState.errors.root.message}
         </p>
       ) : null}
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        {canEdit ? (
-          <Button type="submit" loading={save.isPending} disabled={!form.formState.isDirty}>
-            Save changes
-          </Button>
-        ) : (
-          <p className="text-text-muted">You can view these settings.</p>
-        )}
-        {form.formState.errors.root ? (
-          <Button
-            variant="secondary"
-            onClick={async () => {
-              const latest = await onReload();
-              if (latest) form.reset(formValues(latest));
-            }}
-          >
-            Load latest settings
-          </Button>
-        ) : null}
-      </div>
+      <AgentSettingsSaveBar
+        canEdit={canEdit}
+        isDirty={isDirty}
+        saving={save.isPending}
+        leave={leave}
+        hasConflict={Boolean(form.formState.errors.root)}
+        onDiscard={() => form.reset(formValues(saved))}
+        onReload={async () => {
+          const latest = await onReload();
+          if (latest) form.reset(formValues(latest));
+        }}
+      />
     </form>
   );
 }

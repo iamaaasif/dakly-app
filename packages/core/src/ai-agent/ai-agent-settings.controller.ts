@@ -3,6 +3,7 @@ import { Body, Controller, Get, Inject, Put } from '@nestjs/common';
 import {
   saveAgentSettingsSchema,
   type AgentSettingsResponse,
+  type AgentUsageResponse,
   type SaveAgentSettingsInput,
 } from '@dakly/contracts/ai-agent-settings';
 
@@ -20,6 +21,12 @@ export class AiAgentSettingsController {
   @RequirePermission('storeSettings.view')
   view(@CurrentStore() storeId: string): Promise<AgentSettingsResponse> {
     return this.settings.view(storeId);
+  }
+
+  @Get('usage')
+  @RequirePermission('storeSettings.view')
+  usage(@CurrentStore() storeId: string): Promise<AgentUsageResponse> {
+    return this.settings.aiUsage(storeId);
   }
 
   @Put()
