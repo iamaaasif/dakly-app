@@ -45,16 +45,12 @@ function OrderSummaryRows({ rows }: { rows: Row[] }) {
   );
 }
 
-// The number is keyed, so a change replays a short fade and the eye finds it.
+// One mounted live region, so a screen reader hears the new amount and typing never replays an animation.
 function CashToCollect({ poisha }: { poisha: number }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-t border-border pt-4">
       <span className="text-base text-text-secondary">Cash to collect</span>
-      <strong
-        key={poisha}
-        aria-live="polite"
-        className="text-xl font-bold tabular-nums motion-safe:animate-[motion-fade-in_200ms_var(--motion-ease)]"
-      >
+      <strong aria-live="polite" className="text-xl font-bold tabular-nums">
         {formatMoney(poisha)}
       </strong>
     </div>
@@ -116,10 +112,7 @@ export function OrderSummaryBar({
         >
           <span className="min-w-0">
             <span className="block text-sm text-text-muted">Cash to collect</span>
-            <strong
-              key={cashToCollectPoisha}
-              className="block text-md tabular-nums motion-safe:animate-[motion-fade-in_200ms_var(--motion-ease)]"
-            >
+            <strong className="block text-md tabular-nums">
               {formatMoney(cashToCollectPoisha)}
             </strong>
           </span>
