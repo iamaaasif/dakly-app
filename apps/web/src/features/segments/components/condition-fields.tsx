@@ -4,7 +4,7 @@ import { useFormContext, useWatch } from 'react-hook-form';
 
 import { consentChannels } from '@dakly/contracts/contacts';
 import type { CreateSegmentInput } from '@dakly/contracts/segments';
-import { Button } from '@dakly/ui/button';
+import { cn } from '@dakly/ui/cn';
 import { FormField } from '@dakly/ui/form-field';
 import { Input } from '@dakly/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@dakly/ui/select';
@@ -19,12 +19,14 @@ import {
 } from '../segment-labels';
 import { OptionSelect } from './option-select';
 
-type ConditionPath =
-  `rules.conditions.${number}` | `rules.conditions.${number}.conditions.${number}`;
+type ConditionPath = `rules.conditions.${number}.conditions.${number}`;
 
 type ConditionFieldsProps = {
   path: ConditionPath;
   label: string;
+  // "AND" or "OR" before every row but the first.
+  joiner?: string;
+  // Absent when this is the last condition of the last group: a segment needs one.
   onRemove?: () => void;
 };
 
@@ -43,8 +45,8 @@ const consentOptions = [
   [false, 'Not agreed'],
 ] as const;
 
-export function ConditionFields({ path, label, onRemove }: ConditionFieldsProps) {
-  const { control, register, setValue } = useFormContext<CreateSegmentInput>();
+export function ConditionFields({ path, label, joiner, onRemove }: ConditionFieldsProps) {
+  const { control, setValue } = useFormContext<CreateSegmentInput>();
   const field = useWatch({ control, name: `${path}.field` });
   const handleFieldChange = (next: string) => {
     const chosen = fields.find(([value]) => value === next);
@@ -54,9 +56,18 @@ export function ConditionFields({ path, label, onRemove }: ConditionFieldsProps)
     <div
       role="group"
       aria-label={label}
-      className="grid gap-3 rounded-md border border-border p-3 md:grid-cols-4 md:items-end"
+      className="grid items-start gap-2 rounded-lg border border-border bg-surface p-2 sm:grid-cols-[3rem_1fr_1fr_1fr_2.5rem]"
     >
-      <FormField name={`${path}.field`} label="Field">
+      <span
+        aria-hidden="true"
+        className={cn(
+          'px-1 pt-2.5 text-xs font-semibold text-text-muted sm:block sm:text-center',
+          !joiner && 'hidden',
+        )}
+      >
+        {joiner}
+      </span>
+      <FormField name={`${path}.field`} label="Field" hideLabel>
         {(controlProps) => (
           <Select value={field} onValueChange={handleFieldChange}>
             <SelectTrigger {...controlProps}>
@@ -72,28 +83,45 @@ export function ConditionFields({ path, label, onRemove }: ConditionFieldsProps)
           </Select>
         )}
       </FormField>
-      {field === 'consent' ? (
-        <>
-          <OptionSelect name={`${path}.channel`} label="Channel" options={channels} />
-          <OptionSelect name={`${path}.granted`} label="Consent" options={consentOptions} />
-        </>
-      ) : (
-        <>
-          <OptionSelect name={`${path}.operator`} label="Operator" options={operators} />
-          {field === 'source' || field === 'kind' ? (
-            <OptionSelect name={`${path}.values.0`} label="Value" options={valueOptions[field]} />
-          ) : (
-            <FormField name={`${path}.values.0`} label="Value">
-              {(controlProps) => <Input {...controlProps} {...register(`${path}.values.0`)} />}
-            </FormField>
-          )}
-        </>
-      )}
-      {onRemove ? (
-        <Button variant="secondary" aria-label={`Remove ${label.toLowerCase()}`} onClick={onRemove}>
-          <Trash2 aria-hidden="true" size={16} strokeWidth={1.75} />
-        </Button>
-      ) : null}
+      <ConditionValueFields path={path} field={field} />
+      <button
+        type="button"
+        disabled={!onRemove}
+        onClick={onRemove}
+        aria-label={`Remove ${label.toLowerCase()}`}
+        className="inline-grid size-10 place-items-center justify-self-end rounded-md text-text-muted hover:bg-danger-soft hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus disabled:pointer-events-none disabled:opacity-40"
+      >
+        <Trash2 aria-hidden="true" size={16} strokeWidth={1.75} />
+      </button>
     </div>
+  );
+}
+
+function ConditionValueFields({ path, field }: { path: ConditionPath; field: SegmentField }) {
+  const { register } = useFormContext<CreateSegmentInput>();
+  if (field === 'consent')
+    return (
+      <>
+        <OptionSelect name={`${path}.channel`} label="Channel" options={channels} />
+        <OptionSelect name={`${path}.granted`} label="Consent" options={consentOptions} />
+      </>
+    );
+  return (
+    <>
+      <OptionSelect name={`${path}.operator`} label="Operator" options={operators} />
+      {field === 'source' || field === 'kind' ? (
+        <OptionSelect name={`${path}.values.0`} label="Value" options={valueOptions[field]} />
+      ) : (
+        <FormField name={`${path}.values.0`} label="Value" hideLabel>
+          {(controlProps) => (
+            <Input
+              {...controlProps}
+              {...register(`${path}.values.0`)}
+              placeholder={field === 'tag' ? 'e.g. vip' : 'e.g. Dhaka'}
+            />
+          )}
+        </FormField>
+      )}
+    </>
   );
 }

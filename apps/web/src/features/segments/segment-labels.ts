@@ -1,5 +1,10 @@
 import type { ConsentChannel, ContactKind, ContactSource } from '@dakly/contracts/contacts';
-import type { SegmentCondition, SegmentRules } from '@dakly/contracts/segments';
+import {
+  MAX_SEGMENT_CONDITIONS,
+  type SegmentCondition,
+  type SegmentInnerGroup,
+  type SegmentRules,
+} from '@dakly/contracts/segments';
 
 export type SegmentField = SegmentCondition['field'];
 
@@ -71,6 +76,36 @@ function describe(condition: SegmentCondition): string {
   const shown = values.map((value) => labels?.[value] ?? value);
   const verb = condition.operator === 'is_any_of' ? 'is' : 'is not';
   return `${fieldLabels[condition.field]} ${verb} ${shown.join(', ')}`;
+}
+
+export function newGroup(): SegmentInnerGroup {
+  return { match: 'all', conditions: [newCondition('tag')] };
+}
+
+export function countConditions(rules: SegmentRules): number {
+  return rules.conditions.reduce(
+    (total, item) => total + ('match' in item ? item.conditions.length : 1),
+    0,
+  );
+}
+
+export const canAddCondition = (rules: SegmentRules) =>
+  countConditions(rules) < MAX_SEGMENT_CONDITIONS;
+
+// The builder shows only groups. Conditions saved loose at the top become one group that matches
+// the same way as the top, which selects the same people.
+export function groupLooseConditions(rules: SegmentRules): SegmentRules {
+  const loose = rules.conditions.filter((item): item is SegmentCondition => !('match' in item));
+  if (!loose.length) return rules;
+  const wrapped: SegmentInnerGroup = { match: rules.match, conditions: loose };
+  let placed = false;
+  const conditions = rules.conditions.flatMap((item) => {
+    if ('match' in item) return [item];
+    if (placed) return [];
+    placed = true;
+    return [wrapped];
+  });
+  return { ...rules, conditions };
 }
 
 export function matchText(count: number): string {

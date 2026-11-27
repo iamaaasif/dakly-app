@@ -5,9 +5,16 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { createSegmentSchema, type SegmentResponse } from '@dakly/contracts/segments';
+import {
+  createSegmentSchema,
+  type SegmentCondition,
+  type SegmentInnerGroup,
+  type SegmentResponse,
+  type SegmentRules,
+} from '@dakly/contracts/segments';
 import type { SessionContext } from '@dakly/contracts/sessions';
 
+import { groupLooseConditions } from '../segment-labels';
 import { SegmentsScreen } from './segments-screen';
 import { sessionContextKey } from '@/lib/session-context';
 
@@ -171,88 +178,6 @@ describe('Segments screen', () => {
     ).toBeTruthy();
   });
 
-  // Typing, five Radix select choices and the 400 ms count wait take about 2 s here and over 5 s on a busy CI runner.
-  it('builds a valid two-level tree and saves it', async () => {
-    const user = userEvent.setup();
-    const requests = serve(({ path, method }) => {
-      if (path === '/segments/preview') return json({ count: 7 });
-      if (method === 'POST') return json({ ...vip, name: 'Repeat buyers' }, 201);
-      return json({ items: [], nextCursor: null });
-    });
-    show(<SegmentsScreen edit="new" canEdit />);
-    expect(
-      await screen.findByText('Finish each condition to see how many customers match.'),
-    ).toBeTruthy();
-    await user.type(screen.getByLabelText('Segment name'), 'Repeat buyers');
-    const first = screen.getByRole('group', { name: 'Condition 1' });
-    await user.type(within(first).getByLabelText('Value'), 'vip');
-    expect(await screen.findByText('7 customers match')).toBeTruthy();
-    // Debounced: the half-typed values are never counted.
-    expect(requests.filter(({ path }) => path === '/segments/preview')).toHaveLength(1);
-    await user.click(screen.getByRole('button', { name: 'Add condition group' }));
-    const group = screen.getByRole('group', { name: 'Group 2' });
-    await choose(group, 'Field', 'Marketing consent');
-    await choose(group, 'Channel', 'WhatsApp');
-    await user.click(within(group).getByRole('button', { name: 'Add condition to group 2' }));
-    const second = screen.getByRole('group', { name: 'Group 2, condition 2' });
-    await choose(second, 'Field', 'Source');
-    await choose(second, 'Operator', 'is not');
-    await choose(second, 'Value', 'Import');
-    await user.click(screen.getByRole('button', { name: 'Save segment' }));
-    await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/segments'));
-    const saved = requests.find(({ path, method }) => path === '/segments' && method === 'POST');
-    expect(saved?.body).toEqual({
-      name: 'Repeat buyers',
-      rules: {
-        match: 'all',
-        conditions: [
-          { field: 'tag', operator: 'is_any_of', values: ['vip'] },
-          {
-            match: 'any',
-            conditions: [
-              { field: 'consent', channel: 'whatsapp', granted: true },
-              { field: 'source', operator: 'is_none_of', values: ['import'] },
-            ],
-          },
-        ],
-      },
-    });
-    expect(createSegmentSchema.safeParse(saved?.body).success).toBe(true);
-  }, 15_000);
-
-  it('refuses an empty value and shows a taken name on the name field', async () => {
-    const user = userEvent.setup();
-    const requests = serve(({ path, method }) => {
-      if (path === '/segments/preview') return json({ count: 1 });
-      if (method === 'PATCH')
-        return json(
-          {
-            error: {
-              code: 'SEGMENT_NAME_TAKEN',
-              message: 'A segment with this name already exists',
-            },
-          },
-          409,
-        );
-      return json({ items: [vip], nextCursor: null });
-    });
-    show(<SegmentsScreen edit={vip.id} canEdit />);
-    const name = await screen.findByLabelText('Segment name');
-    expect(await screen.findByText('1 customer matches')).toBeTruthy();
-    const first = screen.getByRole('group', { name: 'Condition 1' });
-    await user.clear(within(first).getByLabelText('Value'));
-    await user.click(screen.getByRole('button', { name: 'Save segment' }));
-    expect(within(first).getByRole('alert')).toBeTruthy();
-    expect(requests.some(({ method }) => method === 'PATCH')).toBe(false);
-    await user.type(within(first).getByLabelText('Value'), 'gold');
-    await user.clear(name);
-    await user.type(name, 'Gold');
-    await user.click(screen.getByRole('button', { name: 'Save segment' }));
-    expect(await screen.findByText('A segment with this name already exists')).toBeTruthy();
-    expect(name.getAttribute('aria-invalid')).toBe('true');
-    expect(push).not.toHaveBeenCalled();
-  });
-
   it('deletes a segment after naming it in the confirmation', async () => {
     const user = userEvent.setup();
     let items = [vip];
@@ -271,5 +196,128 @@ describe('Segments screen', () => {
     expect(
       await screen.findByText('No segments yet. Create one to group customers for a campaign.'),
     ).toBeTruthy();
+  });
+});
+
+
+const reachable = { whatsapp: 5, sms: 4, messenger: 2 };
+
+// The list and the live count, with a handler for anything else.
+function listServer(
+  items: SegmentResponse[],
+  other: (request: Request) => Response | undefined = () => undefined,
+) {
+  return serve((request) => {
+    const custom = other(request);
+    if (custom) return custom;
+    if (request.path === '/segments/preview') return json({ count: 7, reachable });
+    return json({ items, nextCursor: null });
+  });
+}
+
+describe('Segment builder', () => {
+  // Typing, five Radix select choices and the 400 ms count wait take about 2 s here and over 5 s on a busy CI runner.
+  it('builds a valid two-level tree and saves it', async () => {
+    const user = userEvent.setup();
+    const requests = listServer([], ({ method, path }) =>
+      method === 'POST' && path === '/segments'
+        ? json({ ...vip, name: 'Repeat buyers' }, 201)
+        : undefined,
+    );
+    show(<SegmentsScreen edit="new" canEdit />);
+    expect(
+      await screen.findByText('Finish each condition to see how many contacts match.'),
+    ).toBeTruthy();
+    await user.type(screen.getByLabelText('Segment name'), 'Repeat buyers');
+    const first = screen.getByRole('group', { name: 'Group 1, condition 1' });
+    await user.type(within(first).getByLabelText('Value'), 'vip');
+    expect(await screen.findByText('Estimated contacts')).toBeTruthy();
+    expect(screen.getByText('WhatsApp')).toBeTruthy();
+    // Debounced: the half-typed values are never counted.
+    expect(requests.filter(({ path }) => path === '/segments/preview')).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Add condition group' }));
+    const group = screen.getByRole('group', { name: 'Group 2, condition 1' });
+    await choose(group, 'Field', 'Marketing consent');
+    await choose(group, 'Channel', 'WhatsApp');
+    await user.click(screen.getByRole('button', { name: 'Add condition to group 2' }));
+    const second = screen.getByRole('group', { name: 'Group 2, condition 2' });
+    await choose(second, 'Field', 'Source');
+    await choose(second, 'Operator', 'is not');
+    await choose(second, 'Value', 'Import');
+    await user.click(
+      within(screen.getByRole('group', { name: 'Group 2 matches' })).getByText('ANY'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Save segment' }));
+    await vi.waitFor(() => expect(push).toHaveBeenCalledWith('/segments'));
+    const saved = requests.find(({ path, method }) => path === '/segments' && method === 'POST');
+    expect(saved?.body).toEqual({
+      name: 'Repeat buyers',
+      rules: {
+        match: 'all',
+        conditions: [
+          { match: 'all', conditions: [{ field: 'tag', operator: 'is_any_of', values: ['vip'] }] },
+          {
+            match: 'any',
+            conditions: [
+              { field: 'consent', channel: 'whatsapp', granted: true },
+              { field: 'source', operator: 'is_none_of', values: ['import'] },
+            ],
+          },
+        ],
+      },
+    });
+    expect(createSegmentSchema.safeParse(saved?.body).success).toBe(true);
+  }, 15_000);
+
+  it('opens a saved segment with its loose conditions in a group, and refuses an empty value', async () => {
+    const user = userEvent.setup();
+    const requests = listServer([vip], ({ method }) =>
+      method === 'PATCH'
+        ? json(
+            {
+              error: {
+                code: 'SEGMENT_NAME_TAKEN',
+                message: 'A segment with this name already exists',
+              },
+            },
+            409,
+          )
+        : undefined,
+    );
+    show(<SegmentsScreen edit={vip.id} canEdit />);
+    const name = await screen.findByLabelText('Segment name');
+    expect(await screen.findByText('Estimated contacts')).toBeTruthy();
+    // The saved tree had one loose condition and one group; now both are groups.
+    const first = screen.getByRole('group', { name: 'Group 1, condition 1' });
+    expect(screen.getByRole('group', { name: 'Group 2, condition 1' })).toBeTruthy();
+    await user.clear(within(first).getByLabelText('Value'));
+    await user.click(screen.getByRole('button', { name: 'Save segment' }));
+    expect(within(first).getByRole('alert')).toBeTruthy();
+    expect(requests.some(({ method }) => method === 'PATCH')).toBe(false);
+    await user.type(within(first).getByLabelText('Value'), 'gold');
+    await user.clear(name);
+    await user.type(name, 'Gold');
+    await user.click(screen.getByRole('button', { name: 'Save segment' }));
+    expect(await screen.findByText('A segment with this name already exists')).toBeTruthy();
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe('groupLooseConditions', () => {
+  const tag: SegmentCondition = { field: 'tag', operator: 'is_any_of', values: ['vip'] };
+  const other: SegmentCondition = { field: 'tag', operator: 'is_any_of', values: ['gold'] };
+  const inner: SegmentInnerGroup = { match: 'any', conditions: [tag, tag] };
+
+  it('wraps loose conditions in one group that matches the way the top did', () => {
+    expect(groupLooseConditions({ match: 'any', conditions: [tag, inner, other] })).toEqual({
+      match: 'any',
+      conditions: [{ match: 'any', conditions: [tag, other] }, inner],
+    });
+  });
+
+  it('leaves a tree of groups alone', () => {
+    const rules: SegmentRules = { match: 'all', conditions: [inner] };
+    expect(groupLooseConditions(rules)).toBe(rules);
   });
 });
