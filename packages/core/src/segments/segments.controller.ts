@@ -24,6 +24,7 @@ import {
   type SegmentPreviewInput,
   segmentPreviewSchema,
   type SegmentResponse,
+  type SegmentTabCountsResponse,
 } from '@dakly/contracts/segments';
 
 import { RequirePermission } from '../platform/tenancy/access.decorators';
@@ -43,6 +44,12 @@ export class SegmentsController {
     @Query(new ZodValidationPipe(segmentListQuerySchema)) query: SegmentListQuery,
   ): Promise<SegmentListResponse> {
     return this.segments.list(storeId, query);
+  }
+
+  @Get('counts')
+  @RequirePermission('segments.view')
+  counts(@CurrentStore() storeId: string): Promise<SegmentTabCountsResponse> {
+    return this.segments.tabCounts(storeId);
   }
 
   @Post()
@@ -74,6 +81,26 @@ export class SegmentsController {
     @Body(new ZodValidationPipe(changeSegmentSchema)) input: ChangeSegmentInput,
   ): Promise<SegmentResponse> {
     return this.segments.change(storeId, segmentId, input, { kind: 'user', userId });
+  }
+
+  @Post(':segmentId/archive')
+  @HttpCode(200)
+  @RequirePermission('segments.edit')
+  archive(
+    @CurrentStore() storeId: string,
+    @Param('segmentId', ParseUUIDPipe) segmentId: string,
+  ): Promise<SegmentResponse> {
+    return this.segments.archive(storeId, segmentId);
+  }
+
+  @Post(':segmentId/unarchive')
+  @HttpCode(200)
+  @RequirePermission('segments.edit')
+  unarchive(
+    @CurrentStore() storeId: string,
+    @Param('segmentId', ParseUUIDPipe) segmentId: string,
+  ): Promise<SegmentResponse> {
+    return this.segments.unarchive(storeId, segmentId);
   }
 
   @Delete(':segmentId')
