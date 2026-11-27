@@ -395,6 +395,8 @@ export const segments = pgTable(
     rules: jsonb('rules').$type<SegmentRules>().notNull(),
     aiPrompt: text('ai_prompt'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id),
+    // Set when staff archive the segment; it stays saved but cannot be picked for new campaigns.
+    archivedAt: timestamptz('archived_at'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

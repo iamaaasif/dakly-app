@@ -2379,6 +2379,40 @@ fixture('POST /segments/preview', async () => {
   expect(await count(a)).toBe(2);
   expect(await count(b)).toBe(1);
 });
+fixture('GET /segments/counts', async () => {
+  const { a, b } = await pair();
+  await segment(a);
+  await segment(a);
+  await segment(b);
+  expect((await success(a, 'GET', '/segments/counts', 200)).json()).toEqual({
+    all: 2,
+    active: 2,
+    archived: 0,
+  });
+  expect((await success(b, 'GET', '/segments/counts', 200)).json()).toEqual({
+    all: 1,
+    active: 1,
+    archived: 0,
+  });
+});
+for (const action of ['archive', 'unarchive'] as const)
+  fixture(`POST /segments/:segmentId/${action}`, async () => {
+    const { a, b } = await pair(),
+      own = await segment(b),
+      foreign = await segment(a);
+    if (action === 'unarchive') await success(b, 'POST', `/segments/${own}/archive`, 200);
+    await success(b, 'POST', `/segments/${own}/${action}`, 200);
+    expect((await f.row('segments', own)).archived_at === null).toBe(action === 'unarchive');
+    const before = await f.row('segments', foreign);
+    await hidden(
+      b,
+      'POST',
+      (id) => `/segments/${id}/${action}`,
+      foreign,
+      () => ({}),
+    );
+    expect(await f.row('segments', foreign)).toEqual(before);
+  });
 for (const method of ['PATCH', 'DELETE'] as const)
   fixture(`${method} /segments/:segmentId`, async () => {
     const { a, b } = await pair(),
