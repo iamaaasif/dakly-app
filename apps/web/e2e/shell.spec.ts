@@ -106,7 +106,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     );
     await page.locator('aside').getByRole('link', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Support access' })).toBeVisible();
-    await page.locator('aside').getByRole('link', { name: 'All customers' }).click();
+    await page.locator('aside').getByRole('link', { name: 'Contacts' }).click();
 
     await page.getByRole('button', { name: 'Collapse navigation' }).click();
     await expect(page.getByRole('button', { name: 'Expand navigation' })).toBeVisible();
@@ -147,7 +147,7 @@ test('preserves a draft on focus, disposes it on shop change and writes only to 
     await page.locator('aside').getByRole('link', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Ownership transfer' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Support access' })).toHaveCount(0);
-    await page.locator('aside').getByRole('link', { name: 'All customers' }).click();
+    await page.locator('aside').getByRole('link', { name: 'Contacts' }).click();
     await expect(page.getByRole('button', { name: 'Collapse navigation' })).toBeVisible();
 
     await page.getByRole('button', { name: 'Add customers' }).click();

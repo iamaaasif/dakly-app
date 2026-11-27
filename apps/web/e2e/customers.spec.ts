@@ -6,7 +6,7 @@ import { createDatabase } from '@dakly/db/client';
 
 test.use({ screenshot: 'off' });
 
-test('adds a customer, finds it by name and opens the profile', async ({
+test('adds a contact, lists it as a customer after an order and opens the profile', async ({
   page,
   context,
   baseURL,
@@ -33,7 +33,7 @@ test('adds a customer, finds it by name and opens the profile', async ({
       data: { storeId: fixture.storeIds[0] },
     });
     expect(selected.status()).toBe(204);
-    await page.goto('/customers');
+    await page.goto('/contacts');
     await page.getByRole('button', { name: 'Add customers' }).click();
     await page.getByRole('button', { name: /Add manually/ }).click();
     await page.getByLabel('Name', { exact: true }).fill(name);
@@ -41,11 +41,19 @@ test('adds a customer, finds it by name and opens the profile', async ({
     await page.getByRole('button', { name: 'Add customer', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText('Customer added');
 
-    await page.getByRole('searchbox', { name: 'Search' }).fill(name);
-    await page.getByRole('button', { name: 'Search customers' }).click();
-    await expect(page).toHaveURL(/\/customers\?search=/);
+    // A contact is a customer once it has an order, so the list stays empty of it until then.
+    await page.goto(`/customers?search=${encodeURIComponent(name)}`);
+    await expect(page.getByText('No customers match')).toBeVisible();
+    await database.pool.query(
+      `insert into contact_stats(contact_id,store_id,orders_count,net_spend_poisha,last_order_at,lifecycle_stage)
+       select id,store_id,1,150000,now(),'new' from contacts where store_id=$1 and name=$2
+       on conflict (contact_id) do update set orders_count=1, net_spend_poisha=150000, last_order_at=now(), lifecycle_stage='new'`,
+      [fixture.storeIds[0], name],
+    );
+    await page.reload();
     const table = page.getByRole('table');
     await expect(table.getByRole('row')).toHaveCount(2);
+    await expect(table.getByText('৳1,500')).toBeVisible();
     await table.getByRole('link', { name }).click();
 
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
@@ -53,9 +61,9 @@ test('adds a customer, finds it by name and opens the profile', async ({
     await expect(page.getByText('No chat channels yet.', { exact: false })).toBeVisible();
   } finally {
     // The shell test counts every contact in these stores, so this one leaves no row behind.
-    await database.pool.query('delete from contacts where store_id=$1 and phone=$2', [
+    await database.pool.query('delete from contacts where store_id=$1 and name=$2', [
       fixture.storeIds[0],
-      phone,
+      name,
     ]);
     await database.pool.end();
   }
