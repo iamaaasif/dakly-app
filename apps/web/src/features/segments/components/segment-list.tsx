@@ -12,7 +12,6 @@ import { TableCard, TableFooter, TableToolbar } from '@dakly/ui/table';
 
 import { type useSegments } from '../api/segments';
 import { segmentsPageSize, segmentsHref, type SegmentsView } from '../segments-view';
-import { SegmentBulkBar } from './segment-bulk-bar';
 import { SegmentSearch } from './segment-search';
 import { SegmentTable } from './segment-table';
 import { SegmentTabs } from './segment-tabs';
@@ -61,45 +60,13 @@ function AddSegment() {
 }
 
 function SegmentCard({ view, segments, counts, canEdit }: SegmentListProps) {
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const items = segments.data?.items ?? [];
-  // Ids from another tab or page may still be in the set; only what is on screen counts.
-  const onScreen = items.filter((segment) => selected.has(segment.id));
-  const archiving = view.status !== 'archived';
-  const actionable = onScreen.filter((segment) => (segment.archivedAt === null) === archiving);
   return (
     <TableCard>
       <SegmentTabs view={view} counts={counts} />
       <TableToolbar className="p-4">
         <SegmentSearch view={view} />
       </TableToolbar>
-      {canEdit && actionable.length ? (
-        <SegmentBulkBar
-          segmentIds={actionable.map((segment) => segment.id)}
-          archiving={archiving}
-          onClear={() => setSelected(new Set())}
-        />
-      ) : null}
-      <SegmentResults
-        view={view}
-        segments={segments}
-        counts={counts}
-        canEdit={canEdit}
-        selection={
-          canEdit
-            ? {
-                selectedIds: selected,
-                onToggle: (segmentId) =>
-                  setSelected((current) => {
-                    const next = new Set(current);
-                    if (!next.delete(segmentId)) next.add(segmentId);
-                    return next;
-                  }),
-                onTogglePage: (on) => setSelected(on ? new Set(items.map((s) => s.id)) : new Set()),
-              }
-            : undefined
-        }
-      />
+      <SegmentResults view={view} segments={segments} counts={counts} canEdit={canEdit} />
     </TableCard>
   );
 }
@@ -122,11 +89,7 @@ function usePageTrail(view: SegmentsView) {
   };
 }
 
-type SegmentResultsProps = SegmentListProps & {
-  selection: Parameters<typeof SegmentTable>[0]['selection'];
-};
-
-function SegmentResults({ view, segments, counts, canEdit, selection }: SegmentResultsProps) {
+function SegmentResults({ view, segments, counts, canEdit }: SegmentListProps) {
   const trail = usePageTrail(view);
   if (segments.isPending) return <SegmentRowsLoading />;
   if (segments.error)
@@ -147,7 +110,7 @@ function SegmentResults({ view, segments, counts, canEdit, selection }: SegmentR
   return (
     <Refreshing active={segments.isPlaceholderData}>
       {items.length ? (
-        <SegmentTable segments={items} view={view} canEdit={canEdit} selection={selection} />
+        <SegmentTable segments={items} view={view} canEdit={canEdit} />
       ) : (
         <NoMatches view={view} />
       )}
