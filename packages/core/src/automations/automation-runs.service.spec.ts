@@ -165,6 +165,9 @@ describe('AutomationRunsService', () => {
   let finalQuietUntil: Date | undefined;
   let contactPhone: string;
   let sent: OutgoingMessage[];
+  let chatRoutes: Record<'messenger' | 'instagram', { lastInboundAt: Date } | undefined>;
+  let chatSent: { channel: string; buttons?: unknown[]; content: string }[];
+  let unreachableChannels: string[];
   let senderLookupError: Error | undefined;
   let providerError: Error | undefined;
   let schedulerUnavailable: 'during submission' | 'after authorization' | undefined;
@@ -226,6 +229,9 @@ describe('AutomationRunsService', () => {
     finalQuietUntil = undefined;
     contactPhone = '01712345678';
     sent = [];
+    chatRoutes = { messenger: undefined, instagram: undefined };
+    chatSent = [];
+    unreachableChannels = [];
     providerError = undefined;
     schedulerUnavailable = undefined;
     submissionChecked = false;
@@ -298,9 +304,14 @@ describe('AutomationRunsService', () => {
     const sendPolicy = {
       lockForDispatch: async () => true,
       check: async () => decision,
-      checkForSend: async () => {
+      checkForSend: async (_storeId: string, request: { channel: string }) => {
         submissionChecked = true;
-        return { decision, destination: contactPhone, at: clockNow };
+        const unreachable = unreachableChannels.includes(request.channel);
+        return {
+          decision: unreachable ? ({ action: 'skip', reason: 'window_closed' } as const) : decision,
+          destination: contactPhone,
+          at: clockNow,
+        };
       },
       recheckRetryRecipient: async () => ({ decision: recheck(), at: clockNow }),
       prepareMarketingRetryCheck: async () => () => ({
@@ -313,7 +324,28 @@ describe('AutomationRunsService', () => {
     const stores = { sendingSettings: async () => ({ timeZone: 'Asia/Dhaka' }) };
     // Like the SMS driver: the same operation key sends nothing new.
     const messaging = {
-      latestMessengerRoute: async () => undefined,
+      latestChatRoute: async (
+        _storeId: string,
+        _contactId: string,
+        channel: 'messenger' | 'instagram',
+      ) => {
+        const route = chatRoutes[channel];
+        return (
+          route && {
+            connectionId: 'connection-1',
+            identityId: 'identity-1',
+            address: 'igsid-1',
+            ...route,
+          }
+        );
+      },
+      sendCampaignMessage: async (
+        _storeId: string,
+        input: { channel: string; buttons?: unknown[]; content: string },
+      ) => {
+        chatSent.push(input);
+        return { status: 'sent', externalMessageId: 'mid-1' } as const;
+      },
       prepareSender: async (storeId: string) => {
         if (senderLookupError) throw senderLookupError;
         return { storeId, name: undefined };
@@ -360,6 +392,7 @@ describe('AutomationRunsService', () => {
     const conditions = new AutomationConditionsService(
       segments as unknown as SegmentsService,
       sendPolicy as unknown as SendPolicyService,
+      messaging as unknown as MessagingService,
       contacts as unknown as ContactsService,
       {} as OrderReportingService,
       repository as unknown as AutomationRunsRepository,
@@ -672,6 +705,49 @@ describe('AutomationRunsService', () => {
       expect(repository.steps).toEqual([
         expect.objectContaining({ outcome: 'skipped', skipReason: 'no_address' }),
       ]);
+    });
+
+    it('sends an Instagram step on the Instagram chat as text, without reply buttons', async () => {
+      chatRoutes.instagram = { lastInboundAt: new Date(now.getTime() - 2 * HOUR) };
+      const buttons = [{ key: 'yes', label: 'দেখুন' }];
+
+      expect(
+        await start({ ...send, channels: ['instagram'], message: { ...send.message, buttons } }),
+      ).toMatchObject({ stepKey: 'end' });
+
+      expect(chatSent).toEqual([
+        expect.objectContaining({
+          channel: 'instagram',
+          content: 'নতুন কালেকশন এসেছে',
+          buttons: [],
+        }),
+      ]);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'sent', channel: 'instagram' }),
+      ]);
+    });
+
+    it('skips an Instagram-only step as no_address when the contact never wrote there', async () => {
+      chatRoutes.messenger = { lastInboundAt: new Date(now.getTime() - HOUR) };
+      unreachableChannels = ['instagram'];
+
+      await start({ ...send, channels: ['instagram'] });
+
+      expect(chatSent).toEqual([]);
+      expect(repository.steps).toEqual([
+        expect.objectContaining({ outcome: 'skipped', skipReason: 'no_address' }),
+      ]);
+    });
+
+    it('goes from Messenger to Instagram, then SMS, when the earlier window is closed', async () => {
+      chatRoutes.messenger = { lastInboundAt: new Date(now.getTime() - 30 * HOUR) };
+      chatRoutes.instagram = { lastInboundAt: new Date(now.getTime() - HOUR) };
+      unreachableChannels = ['messenger'];
+
+      await start({ ...send, channels: ['messenger', 'instagram', 'sms'] });
+
+      expect(chatSent.map(({ channel }) => channel)).toEqual(['instagram']);
+      expect(sent).toEqual([]);
     });
 
     it('does not expire a send early when the worker clock is fast', async () => {

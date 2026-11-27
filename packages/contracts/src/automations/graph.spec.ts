@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { isChannelSendable } from './catalogue';
 import { automationGraphSchema } from './graph';
 import { automationTemplates } from './templates';
 
@@ -251,6 +252,15 @@ describe('automationGraphSchema', () => {
   it('rejects a send step that lists a channel twice', () => {
     const graph = workflow({ start: { ...send, channels: ['sms', 'sms'] }, end: { kind: 'exit' } });
     expect(automationGraphSchema.safeParse(graph).success).toBe(false);
+  });
+
+  it('accepts Instagram as a send channel and as a reachable condition', () => {
+    const graph = workflow({
+      start: { ...send, channels: ['messenger', 'instagram', 'sms'] },
+      end: { kind: 'exit' },
+    });
+    expect(automationGraphSchema.safeParse(graph).success).toBe(true);
+    expect(isChannelSendable('instagram')).toBe(true);
   });
 
   it('accepts order fields only when an order starts the workflow', () => {

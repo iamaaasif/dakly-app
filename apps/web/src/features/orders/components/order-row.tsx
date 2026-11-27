@@ -15,18 +15,19 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { cn } from '@dakly/ui/cn';
 
 import { isFinishedOrder } from '../order-actions';
-import { orderStageLabels } from '../order-labels';
+import { orderSourceLabels, orderStageLabels } from '../order-labels';
 import { OrderRiskBadge } from './order-risk-badge';
 import { OrderRowAction } from './order-row-action';
 import { OrderRowParcel } from './order-row-parcel';
+import { rowClass, rowLinkClass } from './order-row-styles';
 import { UrlLink } from '@/components/url-link';
 import { formatDateTime, formatRelativeTime } from '@/lib/format-date';
 
 type SourceStyle = { icon: LucideIcon; bgClass: string; textClass: string };
 
 const sourceStyles: Record<OrderSummary['source'], SourceStyle> = {
-  messenger: { icon: MessageSquare, bgClass: 'bg-info-soft', textClass: 'text-info' },
-  instagram: { icon: Instagram, bgClass: 'bg-danger-soft', textClass: 'text-danger' },
+  messenger: { icon: MessageSquare, bgClass: 'bg-info-soft', textClass: 'text-facebook' },
+  instagram: { icon: Instagram, bgClass: 'bg-danger-soft', textClass: 'text-instagram' },
   whatsapp: { icon: MessageCircle, bgClass: 'bg-success-soft', textClass: 'text-success' },
   comment: { icon: MessageSquare, bgClass: 'bg-surface-muted', textClass: 'text-text-muted' },
   order_link: { icon: ShoppingBag, bgClass: 'bg-warning-soft', textClass: 'text-warning' },
@@ -44,17 +45,12 @@ type OrderRowProps = {
   selection?: { checked: boolean; disabled: boolean; onToggle: () => void };
 };
 
+// The name link covers the whole row, so a tap anywhere opens the order. The tick box and the
+// action sit above it.
 export function OrderRow({ order, href, canEdit, selection }: OrderRowProps) {
-  const style = sourceStyles[order.source] ?? {
-    icon: ClipboardList,
-    bgClass: 'bg-surface-muted',
-    textClass: 'text-text',
-  };
-  const Icon = style.icon;
-
   return (
-    <li className="grid grid-cols-[auto_1fr] items-center gap-3 p-4 md:grid-cols-[auto_1fr_auto_auto] md:gap-4">
-      <div className="flex items-center gap-1.5">
+    <li className={rowClass}>
+      <div className="relative z-10 flex items-center gap-2">
         {selection ? (
           <Checkbox
             aria-label={`Select order #${order.number} for shipping labels`}
@@ -63,29 +59,21 @@ export function OrderRow({ order, href, canEdit, selection }: OrderRowProps) {
             onCheckedChange={selection.onToggle}
           />
         ) : null}
-        <span
-          className={cn(
-            'grid size-9 shrink-0 place-items-center rounded-lg',
-            style.bgClass,
-            style.textClass,
-          )}
-        >
-          <Icon size={16} strokeWidth={2} aria-hidden="true" />
-        </span>
+        <SourceTile source={order.source} />
       </div>
-      <div className="min-w-0">
+      <div className="col-span-2 min-w-0 md:col-span-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <UrlLink
-            href={href}
-            className="inline-flex min-h-11 max-w-full items-center font-semibold wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus md:min-h-fit"
-          >
-            {order.recipientName}
+          <UrlLink href={href} data-row-link className={rowLinkClass}>
+            {order.buyerName ?? order.recipientName}
           </UrlLink>
-          <span className="text-xs text-text-muted">
+          <span className="text-xs text-text-muted tabular-nums">
             #{order.number} ·{' '}
             <time dateTime={order.createdAt} title={formatDateTime(order.createdAt)}>
               {formatRelativeTime(order.createdAt)}
             </time>
+            {order.buyerName && order.buyerName !== order.recipientName
+              ? ` · to ${order.recipientName}`
+              : null}
           </span>
           <OrderRowBadges order={order} />
         </div>
@@ -95,8 +83,27 @@ export function OrderRow({ order, href, canEdit, selection }: OrderRowProps) {
         <OrderRowParcel order={order} />
       </div>
       <OrderAmount order={order} />
-      <OrderRowAction order={order} href={href} canEdit={canEdit} />
+      <div className="relative z-10 justify-self-end">
+        <OrderRowAction order={order} href={href} canEdit={canEdit} />
+      </div>
     </li>
+  );
+}
+
+function SourceTile({ source }: { source: OrderSummary['source'] }) {
+  const style = sourceStyles[source];
+  const Icon = style.icon;
+  return (
+    <span
+      className={cn(
+        'grid size-9 shrink-0 place-items-center rounded-md',
+        style.bgClass,
+        style.textClass,
+      )}
+    >
+      <Icon size={16} strokeWidth={2} aria-hidden="true" />
+      <span className="sr-only">{orderSourceLabels[source]}</span>
+    </span>
   );
 }
 

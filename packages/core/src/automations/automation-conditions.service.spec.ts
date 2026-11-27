@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { automationTemplates } from '@dakly/contracts/automations/templates';
 
 import type { ContactsService } from '../contacts/contacts.service';
+import type { MessagingService } from '../messaging/messaging.service';
 import type { OrderReportingService } from '../orders/order-reporting.service';
 import type { SegmentsService } from '../segments/segments.service';
 import type { SendPolicyService } from '../sending/send-policy.service';
@@ -22,6 +23,7 @@ function conditions(progress: OrderProgress | undefined) {
   return new AutomationConditionsService(
     unused as SegmentsService,
     unused as SendPolicyService,
+    { latestChatRoute: async () => undefined } as unknown as MessagingService,
     contacts,
     orders,
     repository,

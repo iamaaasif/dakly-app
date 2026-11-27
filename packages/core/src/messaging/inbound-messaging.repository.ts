@@ -187,7 +187,7 @@ export class InboundMessagingRepository {
   }
 
   // The Page where the contact wrote last, for a message that is not tied to one Page.
-  async findLatestInbound(storeId: string, contactId: string) {
+  async findLatestInbound(storeId: string, contactId: string, channel: 'messenger' | 'instagram') {
     const [row] = await this.database.forStore(storeId, (tx) =>
       tx
         .select({
@@ -199,7 +199,7 @@ export class InboundMessagingRepository {
           and(
             eq(conversations.storeId, storeId),
             eq(conversations.contactId, contactId),
-            eq(conversations.channel, 'messenger'),
+            eq(conversations.channel, channel),
             isNotNull(conversations.lastInboundAt),
           ),
         )

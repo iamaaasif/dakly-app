@@ -1,12 +1,18 @@
 'use client';
 import { useWatch } from 'react-hook-form';
 
-import { type CreateSegmentInput, segmentRulesSchema } from '@dakly/contracts/segments';
+import { formatCount } from '@dakly/contracts/money';
+import {
+  type CreateSegmentInput,
+  reachableChannels,
+  segmentRulesSchema,
+} from '@dakly/contracts/segments';
 import { Button } from '@dakly/ui/button';
 import { Card } from '@dakly/ui/card';
+import { cn } from '@dakly/ui/cn';
 
 import { useSegmentCount } from '../api/segment-count';
-import { matchText } from '../segment-labels';
+import { channelLabels } from '../segment-labels';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
 export function LiveCount() {
@@ -17,8 +23,8 @@ export function LiveCount() {
   const count = useSegmentCount(parsed.success ? parsed.data : undefined);
 
   return (
-    <Card className="h-fit space-y-3 p-4">
-      <h2 className="text-md font-semibold">Estimated customers</h2>
+    <Card className="h-fit space-y-4 p-4 lg:sticky lg:top-4">
+      <h2 className="text-base font-semibold">Summary</h2>
       <div aria-live="polite">{countState(parsed.success, count)}</div>
     </Card>
   );
@@ -28,7 +34,7 @@ function countState(valid: boolean, count: ReturnType<typeof useSegmentCount>) {
   if (!valid)
     return (
       <p className="text-sm text-text-muted">
-        Finish each condition to see how many customers match.
+        Finish each condition to see how many contacts match.
       </p>
     );
   if (count.error)
@@ -40,11 +46,50 @@ function countState(valid: boolean, count: ReturnType<typeof useSegmentCount>) {
         </Button>
       </div>
     );
-  if (!count.data) return <p className="text-sm text-text-muted">Counting…</p>;
+  if (!count.data)
+    return (
+      <div role="status" className="space-y-3">
+        <p className="sr-only">Counting</p>
+        <div className="h-4 w-28 rounded-sm bg-neutral-soft" />
+        <div className="h-9 w-20 rounded-sm bg-neutral-soft" />
+      </div>
+    );
+  const { count: total, reachable } = count.data;
+  // Dimmed while a newer count loads, so the number does not jump to a spinner.
   return (
-    <div className="space-y-1">
-      <p className="text-2xl font-bold text-text tabular-nums">{matchText(count.data.count)}</p>
-      {count.isFetching ? <p className="text-xs text-text-muted">Updating…</p> : null}
+    <div className={cn('space-y-5 transition-opacity', count.isFetching && 'opacity-50')}>
+      <div className="space-y-1">
+        <p className="text-sm text-text-muted">Estimated contacts</p>
+        <p className="text-title font-bold tabular-nums">{formatCount(total)}</p>
+      </div>
+      <div className="space-y-3 border-t border-border pt-4">
+        <p className="text-sm text-text-muted">Can be messaged on</p>
+        {reachableChannels.map((channel) => (
+          <ReachableRow
+            key={channel}
+            label={channelLabels[channel]}
+            value={reachable[channel]}
+            total={total}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReachableRow({ label, value, total }: { label: string; value: number; total: number }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between text-base">
+        <span>{label}</span>
+        <span className="font-semibold tabular-nums">{formatCount(value)}</span>
+      </div>
+      <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-neutral-soft">
+        <div
+          className="h-full origin-left rounded-full bg-action transition-transform"
+          style={{ transform: `scaleX(${total ? value / total : 0})` }}
+        />
+      </div>
     </div>
   );
 }
