@@ -466,7 +466,7 @@ All routes are under `/contacts/:contactId`, need `customers.view` (`customers.e
 2. `GET /orders`: the customer's orders newest first, each with its first item, how many more lines it has, a photo link, the stage and the total.
 3. `GET /activity`: one timeline of orders placed, delivered, returned and cancelled, campaign messages sent, read and tapped, workflow runs entered, consent changes and notes. Segment joins are not shown because segments are rule based and keep no join history.
 4. `GET /campaigns`: one row per campaign message with the furthest result (tapped, read, delivered, sent or failed). Messages not yet sent are left out.
-5. `GET /notes` and `POST /notes`: staff notes with author and date, kept in `contact_notes`. They are separate from the AI memory facts, which the model may rewrite.
+5. `GET /notes` and `POST /notes`: staff notes with author and date, kept in `contact_notes`. The note typed in Add contact or an import stays on the contact and is listed last, as the oldest note, with no author. Notes move with a contact merge and come back on undo. They are separate from the AI memory facts, which the model may rewrite.
 6. `GET /marketing-preferences` and `PUT /marketing-preferences/:channel`: the current answer per channel. Staff can switch WhatsApp and SMS; each switch adds a consent row with the member who made it and publishes `consent.changed`. Email is shown but cannot be switched until email campaigns ship (D20), and Messenger or Instagram opt-in must come from the customer.
 
 The orders, timeline and campaigns routes take `limit` (up to 50) and the `cursor` from the page before.

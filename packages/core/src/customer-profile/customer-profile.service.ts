@@ -169,7 +169,18 @@ export class CustomerProfileService {
     access: Access,
   ): Promise<CustomerNoteResponse[]> {
     await this.contacts.getById(storeId, contactId, access);
-    return (await this.notes.list(storeId, contactId, NOTES_LIMIT)).map(toNoteResponse);
+    const notes = (await this.notes.list(storeId, contactId, NOTES_LIMIT)).map(toNoteResponse);
+    // The note typed in Add contact or an import is kept on the contact itself, so it shows as the
+    // oldest note, with no author.
+    const fields = await this.repository.fields(storeId, contactId);
+    if (fields?.firstNote)
+      notes.push({
+        id: contactId,
+        body: fields.firstNote,
+        authorName: null,
+        createdAt: fields.createdAt,
+      });
+    return notes;
   }
 
   async addNote(

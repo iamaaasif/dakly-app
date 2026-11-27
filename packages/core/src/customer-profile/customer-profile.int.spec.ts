@@ -312,9 +312,16 @@ describe('Customer profile (Postgres)', () => {
       userId: fixture.userA,
     });
 
+    await sql("update contacts set notes = 'যোগ করার সময় লেখা' where id = $1", [contactId]);
     const notes = await service.listNotes(fixture.a, contactId, fullAccess);
 
-    expect(notes.map((note) => note.body)).toEqual(['বড় সাইজ লাগে', 'শুক্রবারে ডেলিভারি চান']);
+    // The note typed in Add contact comes last, as the oldest, with no author.
+    expect(notes.map((note) => note.body)).toEqual([
+      'বড় সাইজ লাগে',
+      'শুক্রবারে ডেলিভারি চান',
+      'যোগ করার সময় লেখা',
+    ]);
+    expect(notes[2]).toMatchObject({ id: contactId, authorName: null });
     expect(notes[1]).toMatchObject({ id: first.id, authorName: 'রিনা' });
     expect(await app.get(ContactNotesRepository).list(fixture.b, contactId, 10)).toEqual([]);
   });

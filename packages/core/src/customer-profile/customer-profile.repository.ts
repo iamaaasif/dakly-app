@@ -29,6 +29,9 @@ export type ProfileFields = {
   email: string | null;
   address: string | null;
   district: string | null;
+  // The note typed when the contact was added or imported.
+  firstNote: string | null;
+  createdAt: string;
   source: ContactSource;
   favouriteCategory: string | null;
   lifecycleStage: (typeof lifecycleStages)[number] | null;
@@ -81,6 +84,7 @@ export class CustomerProfileRepository {
     const { rows } = await this.database.forStore(storeId, (tx) =>
       tx.execute<ProfileFields>(sql`
         select c.whatsapp_phone as "whatsappPhone", c.email::text as email, c.address, c.district,
+               c.notes as "firstNote", ${utcText(sql`c.created_at`)} as "createdAt",
                c.source, s.favourite_category as "favouriteCategory",
                s.lifecycle_stage as "lifecycleStage", coalesce(s.orders_count, 0) as "ordersCount",
                coalesce(s.net_spend_poisha, 0)::text as "netSpendPoisha",
