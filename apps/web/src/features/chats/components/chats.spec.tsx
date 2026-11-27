@@ -439,6 +439,23 @@ describe('Conversation', () => {
   const verified = { headers: { 'x-session-context': 'verified' } };
   const posts: { path: string; body: unknown }[] = [];
   const saved: (typeof inbound)[] = [];
+  const kurti = {
+    id: 'p1',
+    name: 'Women Kurti',
+    pricePoisha: 125000,
+    status: 'active',
+    isVisibleInChats: true,
+    isVisibleInOrderLink: true,
+  };
+  const hiddenKurti = { ...kurti, id: 'p2', name: 'Old Kurti', status: 'hidden' };
+  // What the reply box tools read, by path prefix.
+  const referenceData = {
+    '/api/products': { items: [kurti, hiddenKurti], nextCursor: null },
+    '/api/order-links/p1': { url: 'https://dakly.shop/o/wowapps/p1' },
+    '/api/saved-replies': {
+      items: [{ id: 's1', title: 'Delivery time', body: 'Dhaka te 2 din lagbe', shortcut: null }],
+    },
+  };
 
   function respondToThread(
     windowExpiresAt: string | null,
@@ -469,16 +486,8 @@ describe('Conversation', () => {
         return Response.json({ items: [...saved, inbound], nextCursor: null }, verified);
       if (path.startsWith(`/api/conversations/${chatId}`))
         return Response.json({ ...sadia, unreadCount: 0, windowExpiresAt, ...change }, verified);
-      if (path.startsWith('/api/saved-replies'))
-        return Response.json(
-          {
-            items: [
-              { id: 's1', title: 'Delivery time', body: 'Dhaka te 2 din lagbe', shortcut: null },
-            ],
-          },
-          verified,
-        );
-      return ok([sadia]);
+      const reference = Object.entries(referenceData).find(([prefix]) => path.startsWith(prefix));
+      return reference ? Response.json(reference[1], verified) : ok([sadia]);
     });
   }
 
@@ -577,6 +586,35 @@ describe('Conversation', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: /Delivery time/ }));
     expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe(
       'Dhaka te 2 din lagbe',
+    );
+  });
+
+  it('sends a product card and adds an order link under the typed reply', async () => {
+    respondToThread(new Date(Date.now() + 3_600_000).toISOString());
+    const view = show(chatScreenQuerySchema.parse({ chat: chatId }));
+    await screen.findByRole('button', { name: 'Saved replies' });
+    expect(screen.queryByRole('button', { name: 'Send product' })).toBeNull();
+    view.unmount();
+
+    show(chatScreenQuerySchema.parse({ chat: chatId }), { canViewProducts: true });
+    await userEvent.click(await screen.findByRole('button', { name: 'Send product' }));
+    const products = await screen.findByRole('menu', { name: 'Send product' });
+    expect(within(products).queryByText('Old Kurti')).toBeNull();
+    await userEvent.click(within(products).getByRole('menuitem', { name: /Women Kurti/ }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({
+      path: `/api/conversations/${chatId}/products`,
+      body: { productId: 'p1' },
+    });
+
+    await userEvent.type(screen.getByLabelText('Write a reply'), 'Order korte link e jan');
+    await userEvent.click(screen.getByRole('button', { name: 'Order link' }));
+    const links = await screen.findByRole('menu', { name: 'Order link' });
+    await userEvent.click(within(links).getByRole('menuitem', { name: /Women Kurti/ }));
+    await waitFor(() =>
+      expect((screen.getByLabelText('Write a reply') as HTMLTextAreaElement).value).toBe(
+        'Order korte link e jan\nhttps://dakly.shop/o/wowapps/p1',
+      ),
     );
   });
 

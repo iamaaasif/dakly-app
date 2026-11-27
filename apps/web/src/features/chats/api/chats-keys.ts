@@ -11,5 +11,6 @@ export const chatsKeys = {
     ['chats', tag, 'conversation', id] as const,
   messages: (tag: string | undefined, id: string) => ['chats', tag, 'messages', id] as const,
   savedReplies: (tag: string | undefined) => ['chats', tag, 'saved-replies'] as const,
+  products: (tag: string | undefined, term: string) => ['chats', tag, 'products', term] as const,
   counts: (tag: string | undefined) => ['chats', tag, 'counts'] as const,
 };

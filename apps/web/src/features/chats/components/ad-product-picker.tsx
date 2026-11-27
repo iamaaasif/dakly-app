@@ -6,7 +6,8 @@ import { Checkbox } from '@dakly/ui/checkbox';
 import { Dialog } from '@dakly/ui/dialog';
 import { Input } from '@dakly/ui/input';
 
-import { useAdProductSearch, useSetAdProducts } from '../api/ads';
+import { useSetAdProducts } from '../api/ads';
+import { useProductSearch } from '../api/reply-tools';
 
 const maxProducts = 4;
 
@@ -48,7 +49,7 @@ export function AdProductPicker({ adKey, selected, onDone }: AdProductPickerProp
   const [chosen, setChosen] = useState(() => new Map(selected.map((p) => [p.productId, p.name])));
   const [failure, setFailure] = useState<string>();
   const term = search.trim();
-  const products = useAdProductSearch(term);
+  const products = useProductSearch(term);
   const save = useSetAdProducts();
   const toggle = (id: string, name: string) =>
     setChosen((current) => {

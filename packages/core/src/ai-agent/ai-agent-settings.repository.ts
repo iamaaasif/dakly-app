@@ -51,6 +51,18 @@ export class AiAgentSettingsRepository {
     };
   }
 
+  // A person's card follows the owner's style even while the AI is off.
+  async productCardStyle(storeId: string) {
+    const [settings] = await this.database.forStore(storeId, (tx) =>
+      tx
+        .select({ abilities: aiAgentSettings.abilities })
+        .from(aiAgentSettings)
+        .where(eq(aiAgentSettings.storeId, storeId)),
+    );
+    const { productCardStyle } = agentAbilitiesSchema.partial().parse(settings?.abilities ?? {});
+    return productCardStyle ?? defaultAgentAbilities.productCardStyle;
+  }
+
   async testers(storeId: string): Promise<string[]> {
     const [settings] = await this.database.forStore(storeId, (tx) =>
       tx

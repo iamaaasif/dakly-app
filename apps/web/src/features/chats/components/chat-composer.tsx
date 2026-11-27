@@ -1,6 +1,6 @@
 'use client';
 import { Send } from 'lucide-react';
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 
 import type { ConversationResponse } from '@dakly/contracts/chats';
 import { Button } from '@dakly/ui/button';
@@ -11,6 +11,7 @@ import { useAddNote, useSendReply } from '../api/conversation-thread';
 import { chatChannelLabels } from '../chat-filters';
 import { contactDisplayName } from '../contact-name';
 import { replyWindow } from '../reply-window';
+import { ProductReplyTools } from './product-reply-tools';
 import { SavedRepliesPicker } from './saved-replies-picker';
 import { SuggestedReply } from './suggested-reply-card';
 import { useSessionContext } from '@/lib/session-context';
@@ -40,14 +41,14 @@ function EditableComposer({ conversation }: { conversation: ConversationResponse
   const sending = mode === 'reply' ? sendReply : addNote;
   const replyOpen = window.state !== 'closed' && window.state !== 'unsupported';
   const blocked = mode === 'reply' && !replyOpen;
+  const changeDraft = (target: Mode, change: (draft: string) => string) =>
+    setDrafts((previous) => ({ ...previous, [target]: change(previous[target]) }));
 
   function send() {
     const body = text.trim();
     if (!body || blocked || sending.isPending) return;
-    setDrafts((previous) => ({ ...previous, [mode]: '' }));
-    sending.mutate(body, {
-      onError: () => setDrafts((previous) => ({ ...previous, [mode]: body })),
-    });
+    changeDraft(mode, () => '');
+    sending.mutate(body, { onError: () => changeDraft(mode, () => body) });
   }
 
   return (
@@ -58,7 +59,7 @@ function EditableComposer({ conversation }: { conversation: ConversationResponse
           sendReply={sendReply}
           onEdit={(body) => {
             setMode('reply');
-            setDrafts((previous) => ({ ...previous, reply: body }));
+            changeDraft('reply', () => body);
           }}
         />
       ) : null}
@@ -76,18 +77,34 @@ function EditableComposer({ conversation }: { conversation: ConversationResponse
             text={text}
             disabled={blocked}
             pending={sending.isPending}
-            onChange={(value) => setDrafts((previous) => ({ ...previous, [mode]: value }))}
+            onChange={(value) => changeDraft(mode, () => value)}
             onSend={send}
+            tools={
+              <ProductReplyTools
+                conversationId={conversation.id}
+                disabled={blocked || sending.isPending}
+                onOrderLink={(url) => changeDraft('reply', (draft) => withLink(draft, url))}
+              />
+            }
           />
-          {sending.error ? (
-            <p role="alert" className="text-sm text-danger">
-              {sending.error.message}
-            </p>
-          ) : null}
+          <SendError error={sending.error} />
         </TabsContent>
       </Tabs>
     </>
   );
+}
+
+function SendError({ error }: { error: Error | null }) {
+  return error ? (
+    <p role="alert" className="text-sm text-danger">
+      {error.message}
+    </p>
+  ) : null;
+}
+
+// An order link goes after what is already typed, on its own line.
+function withLink(text: string, url: string) {
+  return text.trim() ? `${text.trimEnd()}\n${url}` : url;
 }
 
 function ComposerHint({ mode, windowLabel }: { mode: Mode; windowLabel: string | null }) {
@@ -129,6 +146,7 @@ type WriteBoxProps = {
   pending: boolean;
   onChange: (text: string) => void;
   onSend: () => void;
+  tools: ReactNode;
 };
 
 function WriteBox({
@@ -139,6 +157,7 @@ function WriteBox({
   pending,
   onChange,
   onSend,
+  tools,
 }: WriteBoxProps) {
   const reply = mode === 'reply';
   return (
@@ -164,7 +183,12 @@ function WriteBox({
         className="block max-h-32 min-h-16 resize-y rounded-b-none border-0 bg-transparent text-sm focus-visible:outline-none"
       />
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 px-2 pb-2">
-        {reply ? <SavedRepliesPicker disabled={disabled || pending} onPick={onChange} /> : null}
+        {reply ? (
+          <>
+            <SavedRepliesPicker disabled={disabled || pending} onPick={onChange} />
+            {tools}
+          </>
+        ) : null}
         <Button
           type="button"
           aria-label={reply ? 'Send reply' : 'Save note'}

@@ -29,6 +29,7 @@ import { OrderInvoiceController } from './order-invoice.controller';
 import { OrderInvoiceRepository } from './order-invoice.repository';
 import { OrderInvoiceService } from './order-invoice.service';
 import { BOT_CHECK_DRIVER, createBotCheckDriver } from './order-link-provider';
+import { OrderLinkUrlController } from './order-link-url.controller';
 import { OrderLinkController } from './order-link.controller';
 import { OrderLinkService } from './order-link.service';
 import { OrderProductArchiveController } from './order-product-archive.controller';
@@ -60,6 +61,7 @@ import { OrdersService } from './orders.service';
     OrderInvoiceController,
     OrderConfirmationController,
     OrderLinkController,
+    OrderLinkUrlController,
   ],
   providers: [
     BuyerOrdersRepository,

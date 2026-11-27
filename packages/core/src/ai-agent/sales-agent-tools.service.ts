@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { Inject, Injectable } from '@nestjs/common';
-import { ZodError } from 'zod';
+import { type z, ZodError } from 'zod';
 
 import {
   browseProductsTool,
@@ -256,8 +256,15 @@ export class SalesAgentToolsService {
     };
   }
 
-  private async sendProductCard({ storeId }: ToolScope, raw: unknown) {
-    const { productId, variantId, photoId, withoutPhoto } = sendProductCardTool.input.parse(raw);
+  private sendProductCard({ storeId }: ToolScope, raw: unknown) {
+    return this.productCard(storeId, sendProductCardTool.input.parse(raw));
+  }
+
+  // The card the AI sends, which a person can also send from the reply box.
+  async productCard(
+    storeId: string,
+    { productId, variantId, photoId, withoutPhoto }: z.infer<typeof sendProductCardTool.input>,
+  ) {
     const product = await this.products.getForChat(storeId, productId);
     const variant = variantId ? product.variants.find(({ id }) => id === variantId) : undefined;
     if (variantId && !variant) return { error: 'PRODUCT_VARIANT_NOT_FOUND' };

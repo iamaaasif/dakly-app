@@ -36,6 +36,6 @@ import { MessagingModule } from './messaging.module';
     ConversationReplyService,
     ConversationOrdersService,
   ],
-  exports: [InboxRepository, InboxService],
+  exports: [ConversationReplyService, InboxRepository, InboxService],
 })
 export class InboxModule {}
