@@ -216,7 +216,10 @@ test('filters product readiness, adjusts stock and drops drafts when the shop ch
     );
     await page.setViewportSize({ width: 1440, height: 900 });
     const sort = page.getByRole('combobox', { name: 'Sort products' });
+    // The list was loaded before the sale, so load it again to count the order.
+    await page.reload();
     await expect(sort).toHaveText('Best selling');
+    await expect(page.getByRole('table').getByRole('row').nth(1)).toContainText('Cotton Panjabi');
     await sort.click();
     await page.getByRole('option', { name: 'Newest' }).click();
     await expect(page).toHaveURL(/sort=newest/);
