@@ -5,6 +5,7 @@ import type {
 } from '@dakly/contracts/automations/graph';
 import { formatMoney } from '@dakly/contracts/money';
 
+import { chatIntentLabels, commentIntentLabels } from './automation-filter-labels';
 import { channelLabels } from './automation-labels';
 import { delayUnit, minutesPerUnit } from './workflow-library';
 import { pluralize } from '@/lib/pluralize';
@@ -112,11 +113,14 @@ type FilterLabels = {
 };
 
 const filterLabels: FilterLabels = {
-  channel: (filter) => `Channel: ${filter.channels.map(words).join(', ')}`,
-  intent: (filter) => `Intent: ${filter.intents.map(words).join(', ')}`,
+  channel: (filter) =>
+    `Channel: ${filter.channels.map((channel) => channelLabels[channel as AutomationChannel] ?? words(channel)).join(', ')}`,
+  intent: (filter) =>
+    `Asking: ${filter.intents.map((intent) => chatIntentLabels[intent]).join(', ')}`,
   keywords: (filter) => `Keywords: ${filter.keywords.join(', ')}`,
   post: (filter) => pluralize(filter.externalPostIds.length, 'post'),
-  comment_intent: (filter) => `Comment asks: ${filter.intents.map(words).join(', ')}`,
+  comment_intent: (filter) =>
+    `Comment: ${filter.intents.map((intent) => commentIntentLabels[intent]).join(', ')}`,
   consent_source: (filter) => `Source: ${filter.sources.map(words).join(', ')}`,
   tag: (filter) => `Tag: ${filter.tag}`,
   segment: () => 'In a segment',

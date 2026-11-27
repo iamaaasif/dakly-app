@@ -13,3 +13,19 @@ export function useExportCustomers() {
       downloadExport({ path: 'contacts', fallbackName: 'dakly-customers.xlsx', contextTag }, query),
   });
 }
+
+export function useExportSelectedCustomers() {
+  const { contextTag } = useStoreRequest();
+  return useMutation({
+    mutationFn: (contactIds: string[]) =>
+      downloadExport(
+        {
+          path: 'contacts',
+          fallbackName: 'dakly-customers.xlsx',
+          contextTag,
+          selected: { contactIds },
+        },
+        {},
+      ),
+  });
+}

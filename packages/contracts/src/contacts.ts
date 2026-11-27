@@ -169,6 +169,23 @@ export const contactExportQuerySchema = contactListQuerySchema.omit({
   sort: true,
 });
 
+// A hand-picked group is at most one screenful of the list, so one request stays small.
+export const MAX_BULK_CONTACTS = 100;
+const bulkContactIds = z
+  .array(z.uuid())
+  .min(1)
+  .max(MAX_BULK_CONTACTS)
+  .refine((ids) => new Set(ids).size === ids.length, 'Choose each customer once');
+
+export const bulkTagSchema = z.strictObject({
+  contactIds: bulkContactIds,
+  tag: z.string().trim().min(1).max(50),
+});
+export const bulkExportSchema = z.strictObject({ contactIds: bulkContactIds });
+
+// `changedIds` are the customers the tag was added to or removed from, which Undo sends back.
+export type BulkTagResponse = { changedIds: string[]; unchanged: number };
+
 // The Customers page counts only people who ordered; the Contacts page counts everyone.
 export const contactCountsQuerySchema = z.strictObject({ hasOrdered: z.stringbool().optional() });
 
@@ -271,6 +288,8 @@ export const startImportSchema = z.strictObject({
 
 export type CreateContactInput = z.infer<typeof createContactSchema>;
 export type UpdateContactInput = z.infer<typeof updateContactSchema>;
+export type BulkTagInput = z.infer<typeof bulkTagSchema>;
+export type BulkExportInput = z.infer<typeof bulkExportSchema>;
 export type ContactExportQuery = z.infer<typeof contactExportQuerySchema>;
 export type ContactListQuery = z.infer<typeof contactListQuerySchema>;
 export type ContactCountsQuery = z.infer<typeof contactCountsQuerySchema>;

@@ -489,6 +489,35 @@ describe('All contacts', () => {
     expect(screen.queryByRole('region', { name: 'Selected rows' })).toBeNull();
   });
 
+  it('adds one tag to the ticked customers and undoes it for only the ones it changed', async () => {
+    respond((path) => {
+      if (path.startsWith('/api/contacts/counts')) return { body: counts };
+      if (path === '/api/contacts/bulk-tags')
+        return { body: { changedIds: [contactId], unchanged: 2 } };
+      if (path === '/api/contacts/bulk-tags/remove')
+        return { body: { changedIds: [contactId], unchanged: 0 } };
+      if (path === '/api/contacts/tags') return { body: ['wholesale'] };
+      return { body: { items: [rahimaInList], nextCursor: null, total: 1 } };
+    });
+    show(<ContactsScreen query={everyone} columns={columns} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('checkbox', { name: 'Select Rahima Akter' }));
+    await user.click(screen.getByRole('button', { name: 'Add tag' }));
+    await user.type(screen.getByRole('textbox', { name: 'Tag' }), 'eid');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByText(/Tag "eid" added to 1\. 2 already had it/)).toBeTruthy();
+    expect(sent.find((request) => request.path === '/api/contacts/bulk-tags')?.body).toEqual({
+      contactIds: [contactId],
+      tag: 'eid',
+    });
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    await waitFor(() =>
+      expect(
+        sent.find((request) => request.path === '/api/contacts/bulk-tags/remove')?.body,
+      ).toEqual({ contactIds: [contactId], tag: 'eid' }),
+    );
+  });
+
   it('opens the profile from anywhere on the row but not from the checkbox', async () => {
     respondWithList([rahimaInList]);
     show(<CustomersScreen query={ordered} columns={defaultCustomerColumns} />);

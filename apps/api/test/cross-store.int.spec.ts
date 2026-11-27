@@ -757,6 +757,49 @@ fixture('GET /contacts/export', async () => {
   expect((await f.request(b.member, 'GET', '/contacts/export')).statusCode).toBe(403);
   expect((await f.request(a.owner, 'GET', '/contacts/export?limit=5')).statusCode).toBe(400);
 });
+fixture('POST /contacts/bulk-tags', async () => {
+  const { a, b } = await pair(),
+    own = await contact(a),
+    foreign = await contact(b),
+    before = await f.row('contacts', foreign);
+  const result = await success(a, 'POST', '/contacts/bulk-tags', 200, {
+    contactIds: [own, foreign],
+    tag: 'eid',
+  });
+  expect(result.json()).toEqual({ changedIds: [own], unchanged: 1 });
+  expect((await f.row('contacts', own)).tags).toEqual(['eid']);
+  expect(await f.row('contacts', foreign)).toEqual(before);
+});
+fixture('POST /contacts/bulk-tags/remove', async () => {
+  const { a, b } = await pair(),
+    own = await contact(a),
+    foreign = await contact(b);
+  await f.admin.pool.query("update contacts set tags = array['eid'] where id = any($1::uuid[])", [
+    [own, foreign],
+  ]);
+  const result = await success(a, 'POST', '/contacts/bulk-tags/remove', 200, {
+    contactIds: [own, foreign],
+    tag: 'eid',
+  });
+  expect(result.json()).toEqual({ changedIds: [own], unchanged: 1 });
+  expect((await f.row('contacts', own)).tags).toEqual([]);
+  expect((await f.row('contacts', foreign)).tags).toEqual(['eid']);
+});
+fixture('POST /contacts/export-selected', async () => {
+  const { a, b } = await pair();
+  const own = await contact(a);
+  const foreign = await contact(b);
+  const { readSheet } = await import('read-excel-file/node');
+  const result = await success(a, 'POST', '/contacts/export-selected', 200, {
+    contactIds: [own, foreign],
+  });
+  expect(result.headers['x-row-count']).toBe('1');
+  expect(await readSheet(result.rawPayload)).toHaveLength(2);
+  expect(
+    (await f.request(b.member, 'POST', '/contacts/export-selected', { contactIds: [foreign] }))
+      .statusCode,
+  ).toBe(403);
+});
 async function matchSuggestion(shop: Shop) {
   const [contactId, matchedContactId] = [await contact(shop), await contact(shop)];
   const id = randomUUID();
