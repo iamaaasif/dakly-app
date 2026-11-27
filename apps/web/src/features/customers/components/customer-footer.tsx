@@ -8,24 +8,16 @@ const pagerButton =
 type CustomerFooterProps = {
   shown: number;
   total: number;
-  selected: number;
   firstHref?: string;
   nextHref?: string;
 };
 
 // Pages follow a cursor, so there is no page number; the footer says how many of the total are on screen.
-export function CustomerFooter({
-  shown,
-  total,
-  selected,
-  firstHref,
-  nextHref,
-}: CustomerFooterProps) {
+export function CustomerFooter({ shown, total, firstHref, nextHref }: CustomerFooterProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3 text-sm text-text-muted">
       <p className="tabular-nums">
         Showing {formatCount(shown)} of {formatCount(total)} customers
-        {selected ? ` · ${formatCount(selected)} selected` : ''}
       </p>
       <nav aria-label="Customer pages" className="flex items-center gap-2">
         {firstHref ? (
